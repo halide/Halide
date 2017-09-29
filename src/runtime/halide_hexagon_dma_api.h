@@ -42,39 +42,38 @@ typedef enum halide_hexagon_user_component {
 typedef int halide_hexagon_dma_handle_t;
 
 /**
- * halide_hexagon_dma_device_interface
  * Returns hexagon dma interface  */
 extern const struct halide_device_interface_t *halide_hexagon_dma_device_interface();
 
 /**
- * nhalide_pipeline
- * Put in for test purpose
+ * nhalide_pipeline : Put in for test purpose
+ * Executes one dma transfer
  */
-int nhalide_pipeline(void *user_context, unsigned char *inframe, unsigned char *outframe);
+extern int nhalide_pipeline(void *user_context, unsigned char *inframe, unsigned char *outframe);
 
 /**
- * halide_hexagon_dmaapp_wrap_buffer
- * desc: Wraps inframe buf into the device handle
+ * Wraps inframe buf into the device handle. And attach dma context to the
+ * handle
  */
 extern int halide_hexagon_dmaapp_wrap_buffer(void *user_context, halide_buffer_t* buf, unsigned char *inframe,
-		                                    bool read=true, halide_hexagon_dma_user_fmt_t fmt=NV12);
+                                            bool read=true, halide_hexagon_dma_user_fmt_t fmt=NV12);
 
 /**
- * halide_hexagon_dmaapp_release_wrapper
- * desc: Release the buf from the device handle
+ * Release the buf from the device handle
+ * And detaches the frame from the dma context
  */
 extern int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t* buf);
 
 /**
- * halide_hexagon_dmart_get_memory
- * desc: Allocates L2 buf
+ * It allocates L2 cache based on the roi buf
+ * dimensions
  */
-extern void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf);
+extern void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf, \
+                                bool padding=false, halide_hexagon_dma_user_fmt_t fmt=NV12);
 
 /**
- * halide_buffer_copy
- * desc: copes from src to dest
- **/
+ * Executes the dma transfer
+ * Copies from src buf (DDR Buffer) to TCM (Cache) represented by roi buf*/
 extern int halide_buffer_copy(void *user_context, halide_buffer_t *src_buf, void *ptr, halide_buffer_t *dst_buf);
 
 #ifdef __cplusplus

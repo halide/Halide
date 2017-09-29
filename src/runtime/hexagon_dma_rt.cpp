@@ -21,7 +21,7 @@ using namespace Halide::Runtime::Internal::Qurt;
 /**
  *  halide_hexagon_dmart_get_frame_index
  * Get Frame Index of the Frame in the frame context  */
-int halide_hexagon_dmart_get_frame_index(void* user_context, dma_context pdma_context, uintptr_t frame) {
+int halide_hexagon_dmart_get_frame_index(void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     int index,i;
     halide_assert(user_context, pdma_context != NULL);// Search if the frame Already Exists
     // Serch if the frame Already Exists
@@ -37,8 +37,6 @@ int halide_hexagon_dmart_get_frame_index(void* user_context, dma_context pdma_co
 /**
  *  halide_hexagon_dmart_set_host_frame
  * set frame type
- * frame = VA of frame buffer
- * type = NV12/NV124R/P010/UBWC_NV12/TP10/UBWC_NV124R
  * frameID = frameID from the Video to distinguish various frames
  * d = frame direction 0:read, 1:write
  * w = frame width in pixels
@@ -47,7 +45,7 @@ int halide_hexagon_dmart_get_frame_index(void* user_context, dma_context pdma_co
  * last = last frame 0:no 1:yes *optional*
  * inform dma it is last frame of the session, and can start freeing resource when requested
  * at appropriate time (on last SW thread of that resource set) */
-int halide_hexagon_dmart_set_host_frame (void* user_context, dma_context pdma_context, uintptr_t  frame, int type, int d, int w, int h, int s, int last) {
+int halide_hexagon_dmart_set_host_frame (void* user_context, p_dma_context pdma_context, uintptr_t  frame, int type, int d, int w, int h, int s, int last) {
     int free_dma;
     int free_set;
     int i;
@@ -148,9 +146,8 @@ int halide_hexagon_dmart_set_host_frame (void* user_context, dma_context pdma_co
 /**
  * halide_hexagon_dmart_set_padding
  * set for dma padding in L2$ (8bit in DDR, 16bit in L2$) - padding '0' to LSb
- * frame = VA of frame buffer
  * flag = 0:no padding, 1:padding  */
-int halide_hexagon_dmart_set_padding (void* user_context, dma_context pdma_context, uintptr_t  frame, int flag) {
+int halide_hexagon_dmart_set_padding (void* user_context, p_dma_context pdma_context, uintptr_t  frame, int flag) {
     int index,i,frame_idx;
     halide_assert(user_context, pdma_context != NULL);
     // Serch if the frame Already Exists
@@ -176,9 +173,8 @@ int halide_hexagon_dmart_set_padding (void* user_context, dma_context pdma_conte
 /**
  *  halide_hexagon_dmart_set_component
  * set which component to dma
- * frame = VA of frame buffer
  * plane = Y/UV  */
-int halide_hexagon_dmart_set_component (void* user_context, dma_context pdma_context, uintptr_t frame, int plane) {
+int halide_hexagon_dmart_set_component (void* user_context, p_dma_context pdma_context, uintptr_t frame, int plane) {
     int index = 0;
     int i = 0;
     int frame_idx = 0;
@@ -208,7 +204,7 @@ int halide_hexagon_dmart_set_component (void* user_context, dma_context pdma_con
  *  halide_hexagon_dmart_set_parallel
  * is parallel processing (parallization of inner most loop only; must avoid nested parallelism)
  * threads = number of SW threads (one thread per Halide tile)  */
-int halide_hexagon_dmart_set_parallel (void* user_context, dma_context pdma_context, int threads) {
+int halide_hexagon_dmart_set_parallel (void* user_context, p_dma_context pdma_context, int threads) {
 
     halide_assert(user_context, pdma_context != NULL);
     pdma_context->num_threads = threads;
@@ -219,13 +215,9 @@ int halide_hexagon_dmart_set_parallel (void* user_context, dma_context pdma_cont
 /**
  *  _DmaRT_SetStorageTile
  * specify the largest folding storage size to dma tile and folding instances; to be used when malloc of device memory (L2$)
- * frame = VA of frame buffer
- * w = fold width in pixels
- * h = fold height in pixels
- * s = fold stride in pixels
  * n = number of folds (circular buffers)
  * example ping/pong fold_storage for NV12; for both Y and UV, Y only, UV only  */
-int halide_hexagon_dmart_set_max_fold_storage (void* user_context, dma_context pdma_context, uintptr_t  frame, int w, int h, int s, int n) {
+int halide_hexagon_dmart_set_max_fold_storage (void* user_context, p_dma_context pdma_context, uintptr_t  frame, int w, int h, int s, int n) {
     int frame_idx;
     int i,index;
     int padd_factor;
@@ -262,7 +254,7 @@ int halide_hexagon_dmart_set_max_fold_storage (void* user_context, dma_context p
  *  halide_hexagon_dmart_get_free_fold
  * get fold which is disassociated from frame but
  * not yet deallocated  */
-int halide_hexagon_dmart_get_free_fold (void* user_context, dma_context pdma_context, bool *free_fold, int* store_id) {
+int halide_hexagon_dmart_get_free_fold (void* user_context, p_dma_context pdma_context, bool *free_fold, int* store_id) {
     int i,fold_idx;
     halide_assert(user_context, pdma_context != NULL);    
     //Search if the fold Already Exists and not in use
@@ -291,10 +283,8 @@ int halide_hexagon_dmart_get_free_fold (void* user_context, dma_context pdma_con
 /**
  *  halide_hexagon_dmart_set_storage_linkage
  * associate host frame to device storage - one call per frame
- * frame = VA of frame buffer
- * fold = VA of device storage
  * store_id = output of storage id  */
-int halide_hexagon_dmart_set_storage_linkage (void* user_context, dma_context pdma_context, uintptr_t frame, uintptr_t fold, int store_id) {
+int halide_hexagon_dmart_set_storage_linkage (void* user_context, p_dma_context pdma_context, uintptr_t frame, uintptr_t fold, int store_id) {
     int i,index;
     halide_assert(user_context, pdma_context != NULL);
     halide_assert(user_context, frame!=0);
@@ -327,19 +317,16 @@ int halide_hexagon_dmart_set_storage_linkage (void* user_context, dma_context pd
 /**
  *  halide_hexagon_dmart_set_resource
  * lock dma resource set to thread, max number of resource set is based on available HW threads
- * lock = 0:unlock, 1:lock
  * rsc_id = lock outputs id value, unlock inputs id value */
-int halide_hexagon_dmart_set_resource (void* user_context, dma_context pdma_context, int lock, int* rsc_id) {
+int halide_hexagon_dmart_set_resource (void* user_context, p_dma_context pdma_context, int lock, int* rsc_id) {
     return HEX_SUCCESS;
 }
 
 /**
  * halide_hexagon_dmart_set_device_storage_offset
- * set the offset into folding device storage to dma - one call for each frame, per transaction
- * store_id = storage id, pin point the correct folding storage
  * offset = offset from start of L2$ (local folding storage) to dma - to id the fold (circular buffer)
  * rcs_id = locked resource ID */
-int halide_hexagon_dmart_set_device_storage_offset (void* user_context, dma_context pdma_context, uintptr_t buf_addr, int offset, int rsc_id) {
+int halide_hexagon_dmart_set_device_storage_offset (void* user_context, p_dma_context pdma_context, uintptr_t buf_addr, int offset, int rsc_id) {
     
     halide_assert(user_context, pdma_context != NULL);
     
@@ -363,12 +350,8 @@ int halide_hexagon_dmart_set_device_storage_offset (void* user_context, dma_cont
  * halide_hexagon_dmart_set_host_roi
  * set host ROI to dma
  * store_id = storage id, pin point the correct folding storage
- * x = ROI start horizontal position in pixels
- * y = ROI start vertical position in pixels
- * w = ROI width in pixels
- * h = ROI height in pixels
  * rsc_id = locked resource ID  */
-int halide_hexagon_dmart_set_host_roi (void* user_context, dma_context pdma_context, uintptr_t buf_addr, int x, int y, int w, int h, int rsc_id) {
+int halide_hexagon_dmart_set_host_roi (void* user_context, p_dma_context pdma_context, uintptr_t buf_addr, int x, int y, int w, int h, int rsc_id) {
     int type;
     int is_ubwc_dst;
     t_eDmaFmt efmt_chroma;
@@ -427,7 +410,7 @@ int halide_hexagon_dmart_set_host_roi (void* user_context, dma_context pdma_cont
  *  halide_hexagon_dmart_clr_host_frame
  * clear frame
  * frame = VA of frame buffer  */
-int halide_hexagon_dmart_clr_host_frame (void* user_context, dma_context pdma_context, uintptr_t frame) {
+int halide_hexagon_dmart_clr_host_frame (void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     int fold_idx;
     halide_assert(user_context, pdma_context != NULL);
     // Serch for the frame Entry
@@ -479,7 +462,7 @@ int halide_hexagon_dmart_clr_host_frame (void* user_context, dma_context pdma_co
 
 /**
  *  halide_hexagon_dmaapp_dma_init
- * dma_context  - pointer to Allocated DMA Context
+ * p_dma_context  - pointer to Allocated DMA Context
  * nFrmames - Total Number of frames */
 int halide_hexagon_dmart_dma_init(void *user_context, void *dma_context, int nframes) {
     int i;
@@ -559,7 +542,7 @@ int halide_hexagon_dmart_dma_init(void *user_context, void *dma_context, int nfr
  * CreateContext check if DMA Engines are available
  * Allocates Memory for a DMA Context
  * Returns Error if DMA Context is not available */
-int halide_hexagon_dmart_create_context(void* user_context, dma_context* pdma_handle, int nframes) {
+int halide_hexagon_dmart_create_context(void* user_context, p_dma_context* pdma_handle, int nframes) {
     t_dma_context *pdma_context;
 
     //Check if DMA Driver is Ready and Allocate the DMA Structure
@@ -567,7 +550,7 @@ int halide_hexagon_dmart_create_context(void* user_context, dma_context* pdma_ha
         //Alloc DMA Context
         pdma_context = (t_dma_context *) malloc(sizeof(t_dma_context));
         if (pdma_context != NULL) {
-            //initialize dma_context
+            //initialize p_dma_context
             halide_hexagon_dmart_dma_init(user_context, (void *)pdma_context, nframes);
             *pdma_handle = pdma_context;
         } else {
@@ -582,10 +565,10 @@ int halide_hexagon_dmart_create_context(void* user_context, dma_context* pdma_ha
 }
 
 /**
- *  Attach Context checks if the frame width, height and type is aligned with DMA Transfer
+ * Attach Context checks if the frame width, height and type is aligned with DMA Transfer
  * Returns Error if the frame is not aligned.
  * AttachContext needs to be called for each frame */
-int halide_hexagon_dmart_attach_context(void* user_context, dma_context pdma_context, uintptr_t  frame,int type,
+int halide_hexagon_dmart_attach_context(void* user_context, p_dma_context pdma_context, uintptr_t  frame,int type,
                                          int d, int w, int h, int s, int last) {
     int nRet;
     bool is_ubwc_dst;
@@ -627,7 +610,7 @@ int halide_hexagon_dmart_attach_context(void* user_context, dma_context pdma_con
  * This call is used when user has more frames to process
  * and does not want to free the DMA Engines
  * Return an Error if there is an error in DMA Transfer  */
-int halide_hexagon_dmart_detach_context(void* user_context, dma_context pdma_context, uintptr_t frame) {
+int halide_hexagon_dmart_detach_context(void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     int index,i;
     halide_assert(user_context, pdma_context != NULL);
 
@@ -658,7 +641,7 @@ int halide_hexagon_dmart_detach_context(void* user_context, dma_context pdma_con
 /**
  * Delete Context frees up the dma handle if not yet freed
  * and deallocates memory for the userContext */
-int halide_hexagon_dmart_delete_context(void* user_context, dma_context pdma_context) {
+int halide_hexagon_dmart_delete_context(void* user_context, p_dma_context pdma_context) {
     //De-associate all the allocated Buffers
     pdma_context->pfold_storage = NULL;
     pdma_context->pframe_table = NULL;
@@ -675,7 +658,7 @@ int halide_hexagon_dmart_delete_context(void* user_context, dma_context pdma_con
 /**
  * halide_hexagon_dmart_is_buffer_read
  * Find if data stream is input or output */
-int halide_hexagon_dmart_is_buffer_read(void* user_context, dma_context pdma_context, uintptr_t frame, bool *is_read) {
+int halide_hexagon_dmart_is_buffer_read(void* user_context, p_dma_context pdma_context, uintptr_t frame, bool *is_read) {
     halide_assert(user_context, pdma_context != NULL);
 
     int index = -1;
@@ -700,7 +683,7 @@ int halide_hexagon_dmart_is_buffer_read(void* user_context, dma_context pdma_con
 /**
  * halide_hexagon_dmart_get_fold_size
  * Get Fold Size */
-int halide_hexagon_dmart_get_fold_size(void* user_context, dma_context pdma_context, uintptr_t frame) {
+int halide_hexagon_dmart_get_fold_size(void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     halide_assert(user_context, pdma_context != NULL);
 
     int index = -1;
@@ -722,10 +705,8 @@ int halide_hexagon_dmart_get_fold_size(void* user_context, dma_context pdma_cont
 /**
  *  halide_hexagon_dmart_get_num_components
  * The Function will return the Number of Components (Planes ) in the frame
- * will retun 1 - for Y plane
- * will retun 1 - for UV plane
  * will retun 2 - for both Y and UV planes */
-int halide_hexagon_dmart_get_num_components (void* user_context, dma_context pdma_context, uintptr_t frame) {
+int halide_hexagon_dmart_get_num_components (void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     int index;
     int i;
     halide_assert(user_context, pdma_context != NULL);
@@ -754,7 +735,7 @@ int halide_hexagon_dmart_get_num_components (void* user_context, dma_context pdm
 /**
  * halide_hexagon_dmart_allocate_dma
  * Check if DMA is already allocated */
-int halide_hexagon_dmart_allocate_dma(void* user_context, dma_context pdma_context, uintptr_t frame, bool *dma_allocate) {
+int halide_hexagon_dmart_allocate_dma(void* user_context, p_dma_context pdma_context, uintptr_t frame, bool *dma_allocate) {
     halide_assert(user_context, pdma_context != NULL);
 
     int index = -1;
@@ -793,7 +774,7 @@ int halide_hexagon_dmart_allocate_dma(void* user_context, dma_context pdma_conte
 /**
  * halide_hexagon_dmart_set_dma_handle
  * Set DMA Handle called by device interface */
-int halide_hexagon_dmart_set_dma_handle(void* user_context, dma_context pdma_context, void* handle, uintptr_t frame) {
+int halide_hexagon_dmart_set_dma_handle(void* user_context, p_dma_context pdma_context, void* handle, uintptr_t frame) {
     halide_assert(user_context, pdma_context != NULL);
  
     int index = -1;
@@ -824,7 +805,7 @@ int halide_hexagon_dmart_set_dma_handle(void* user_context, dma_context pdma_con
 /**
  * halide_hexagon_dmart_get_read_handle
  * Get Handle for output buffers  */
-void* halide_hexagon_dmart_get_dma_handle(void* user_context, dma_context pdma_context, uintptr_t frame) {
+void* halide_hexagon_dmart_get_dma_handle(void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     halide_assert(user_context, pdma_context != NULL);
 
     int index = -1;
@@ -858,7 +839,7 @@ void* halide_hexagon_dmart_get_dma_handle(void* user_context, dma_context pdma_c
 /**
  * halide_hexagon_dmart_set_fold_storage
  * Link the fold with the frame */
-int halide_hexagon_dmart_set_fold_storage(void* user_context, dma_context pdma_context, uintptr_t addr, uintptr_t tcm_region, qurt_size_t size,
+int halide_hexagon_dmart_set_fold_storage(void* user_context, p_dma_context pdma_context, uintptr_t addr, uintptr_t tcm_region, qurt_size_t size,
                                           uintptr_t desc_va, uintptr_t desc_region, qurt_size_t desc_size, int *fold_id) {
     halide_assert(user_context, pdma_context != NULL);
 
@@ -879,7 +860,7 @@ int halide_hexagon_dmart_set_fold_storage(void* user_context, dma_context pdma_c
 /**
  * halide_hexagon_dmart_get_update_params
  * The params needs for updating descriptors */
-int halide_hexagon_dmart_get_update_params(void* user_context, dma_context pdma_context, uintptr_t buf_addr, t_dma_move_params* param) {
+int halide_hexagon_dmart_get_update_params(void* user_context, p_dma_context pdma_context, uintptr_t buf_addr, t_dma_move_params* param) {
     halide_assert(user_context, pdma_context != NULL);
 
     int store_id = -1;
@@ -907,7 +888,7 @@ int halide_hexagon_dmart_get_update_params(void* user_context, dma_context pdma_
  * halide_hexagon_dmart_get_tcm_desc_params
  * the descriptors need to be saved for
  * unlocking cache and free afterwards  */
-int  halide_hexagon_dmart_get_tcm_desc_params(void* user_context, dma_context pdma_context, uintptr_t dev_buf, uintptr_t *tcm_region, qurt_size_t *size_tcm, \
+int  halide_hexagon_dmart_get_tcm_desc_params(void* user_context, p_dma_context pdma_context, uintptr_t dev_buf, uintptr_t *tcm_region, qurt_size_t *size_tcm, \
                                              uintptr_t *desc_va, uintptr_t *desc_region, qurt_size_t *desc_size) {
     
     halide_assert(user_context, pdma_context != NULL);
@@ -937,7 +918,7 @@ int  halide_hexagon_dmart_get_tcm_desc_params(void* user_context, dma_context pd
  * halide_hexagon_dmart_get_last_frame
  * We keep count of frames to avoid
  * costly alloc/free of DMA Resources */
-int halide_hexagon_dmart_get_last_frame(void* user_context, dma_context pdma_context, uintptr_t frame, bool* last_frame) {
+int halide_hexagon_dmart_get_last_frame(void* user_context, p_dma_context pdma_context, uintptr_t frame, bool* last_frame) {
     halide_assert(user_context, pdma_context != NULL);
 
     int index = -1;
@@ -964,7 +945,10 @@ int halide_hexagon_dmart_get_last_frame(void* user_context, dma_context pdma_con
     return HEX_SUCCESS;
 }
 
-int halide_hexagon_dmart_get_prepare_params(void* user_context, dma_context pdma_context, uintptr_t frame, t_dma_prepare_params* prepare_param) {
+/**
+ * halide_hexagon_dmart_get_prepare_params
+ * Prepare params for dma transfer */
+int halide_hexagon_dmart_get_prepare_params(void* user_context, p_dma_context pdma_context, uintptr_t frame, t_dma_prepare_params* prepare_param) {
 
     halide_assert(user_context, pdma_context != NULL);
 
@@ -1006,30 +990,9 @@ int halide_hexagon_dmart_get_prepare_params(void* user_context, dma_context pdma
     luma_stride = dma_get_stride(luma_type, is_ubwc, pst_roi_size);
     chroma_stride = dma_get_stride(chroma_type, is_ubwc, pst_roi_size);
 
-    //Check for dma_allocation
-    bool dma_allocate;
-    if (halide_hexagon_dmart_allocate_dma(user_context, pdma_context, frame, &dma_allocate) == -1) {
-        error(user_context) << "Undefined Error";
-        return HEX_ERROR;
-    }
+    //An Allocated DMA Already Exists Re-use it
+    dma_handle = halide_hexagon_dmart_get_dma_handle(user_context, pdma_context, frame);
 
-    if (dma_allocate) {
-
-        dma_handle = dma_allocate_dma_engine();
-
-        if (dma_handle == 0) {
-            error(user_context) << "halide_hexagon_dma_device_malloc:Failed to allocate the read DMA engine.\n";
-            return HEX_ERROR;
-        }
-
-        if (halide_hexagon_dmart_set_dma_handle(user_context, pdma_context, dma_handle, frame)) {
-            error(user_context) << "Function failed to set DMA Handle to DMA context \n";
-            return HEX_ERROR;
-        }
-    } else {
-        //An Allocated DMA Already Exists Re-use it
-        dma_handle = halide_hexagon_dmart_get_dma_handle(user_context, pdma_context, frame);
-    }
 
     //Populate Work Descriptors and Prepare DMA
     //#################################################################
@@ -1052,15 +1015,20 @@ int halide_hexagon_dmart_get_prepare_params(void* user_context, dma_context pdma
     return HEX_SUCCESS;
 }
 
-extern uintptr_t halide_hexagon_dmart_get_frame(void* user_context, dma_context pdma_context) {
+/**
+ *halide_hexagon_dmart_get_frame
+ *get the current frame address */
+extern uintptr_t halide_hexagon_dmart_get_frame(void* user_context, p_dma_context pdma_context) {
     halide_assert(user_context, pdma_context != NULL);
 
     int i=0;
     return pdma_context->pframe_table[i].frame_addr;
 }
 
-
-extern uintptr_t halide_hexagon_dmart_get_fold_addr(void* user_context, dma_context pdma_context, uintptr_t frame) {
+/**
+ * halide_hexagon_dmart_get_fold_addr
+ * get the fold addr from frame */
+extern uintptr_t halide_hexagon_dmart_get_fold_addr(void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     halide_assert(user_context, pdma_context != NULL);
     uintptr_t fold_addr = NULL;
 
@@ -1084,8 +1052,10 @@ extern uintptr_t halide_hexagon_dmart_get_fold_addr(void* user_context, dma_cont
     return fold_addr;
 
 }
-
-int halide_hexagon_dmart_get_update(void* user_context, dma_context pdma_context, uintptr_t frame, bool& update) {
+/**
+ *halide_hexagon_dmart_get_update
+ *get update parameters from frame */ 
+int halide_hexagon_dmart_get_update(void* user_context, p_dma_context pdma_context, uintptr_t frame, bool& update) {
     halide_assert(user_context, pdma_context != NULL);
 
     // Serch for the frame Entry
@@ -1108,7 +1078,10 @@ int halide_hexagon_dmart_get_update(void* user_context, dma_context pdma_context
     return HEX_SUCCESS;
 }
 
-int halide_hexagon_dmart_set_update(void* user_context, dma_context pdma_context, uintptr_t frame) {
+/**
+ *halide_hexagon_dmart_set_update
+ * set update parameters */
+int halide_hexagon_dmart_set_update(void* user_context, p_dma_context pdma_context, uintptr_t frame) {
     halide_assert(user_context, pdma_context != NULL);
 
     // Serch for the frame Entry

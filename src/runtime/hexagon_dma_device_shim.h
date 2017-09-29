@@ -79,102 +79,69 @@ int dma_get_format_alignment(t_eDmaFmt fmt, bool is_ubwc, t_dma_pix_align_info &
 
 /**
  * dma_lookup_physical_address
- * in: uintptr_t virtual adrress
- * out: uintptr_t physical address
  * desc: look up the physical address
  */
 uintptr_t dma_lookup_physical_address(uintptr_t vaddr);
 
 /**
  *  Get Minimum ROI Size
- * in:t_eDmaFmt
- * in:bool UBWC Type
- * out:dma_tPixAlignInfo
- * out:int ERR if not aligned
  * desc: check if roi size is aligned
  */
 int dma_get_min_roi_size(t_eDmaFmt fmt, bool is_ubwc, t_dma_pix_align_info &pix_align);
 
 /**
  *  Allocate DMA Engine
- * in: t_EDma_WaitType waitType
- * out:void* dmaHandle;
  * allocate dma engtines
  */
 void* dma_allocate_dma_engine();
 
 /**
  * Get Descriptor Size
- * in:t_eDmaFmt* fmtType
- * out:qurt_size_t
  * get the descriptor size
  */
 qurt_size_t dma_get_descriptor_size(t_eDmaFmt* fmtType, int ncomponents, int nfolds);
 
 /**
  * Get Stride
- * in:t_eDmaFmt fmtType
- * in:bool isUBWC
- * in: dma_tPixAlignInfo roiDims
- * out: lumaStride
  * get luma and chroma stride from dma 
  */
 int dma_get_stride(t_eDmaFmt, bool is_ubwc, t_dma_pix_align_info roi_dims);
 
 /**
  * Get Memory Pool ID
- * out:qurt_mem_pool_t*
- * out:int ERR if not available
  * qurt call for alloxation of l2 cache
  */
 int dma_get_mem_pool_id(qurt_mem_pool_t* pool_tcm);
 
 /**
- * Allocate Cache for DMA
- * in:qurt_mem_pool_t pool_tcm
- * in:qurt_size_t cache_size
- * out:uintptr_t
- * allocate cache for tcm and descriptors
+ * Allocate and lock Cache for DMA
+ * allocate and lock cache for tcm and descriptors
  */
-uintptr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size, uintptr_t* region_tcm);
+int dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t tcm_size, uintptr_t* region_tcm, \
+                       uintptr_t* tcm_vaddr);
 
 /**
- * Lock Cache for DMA
- * in:qurt_addr_t
- * in:qurt_size_t
- * out: ERR if not available
- * lock cache
- */
-int dma_lock_cache(uintptr_t cache_addr, qurt_size_t cache_size);
-
-/**
- *  dma Prepare for Transfer
- * in:dma_tPrepareParams
- * out: Err if error occurs
+ * dma_prepare_for_transfer
  * prepare dma for tramsfer
  */
 int dma_prepare_for_transfer(t_dma_prepare_params params);
 
 /**
- *  Blocks new ops till other DMA operations are finished
- * in:void*
+ * dma_wait
+ * Blocks new ops till other DMA operations are finished
+ * in:dma_handle
  * need to sync with the dma 
  */
 int dma_wait(void* handle);
 
 /**
- *  DMA Move Data
- * in:dma_tMoveParams moveParams
- * out:return ERR/OK
- * actual data transfer
+ * DMA Move Data
+ * actual DMA data transfer
  */
 int dma_move_data(t_dma_move_params params);
 
 /**
  * Unlock Cache for DMA
- * in:qurt_addr_t
- * in:qurt_size_t
- * out: ERR if not available
  * unlock cache 
  */
 int dma_unlock_cache(uintptr_t cache_addr, qurt_size_t cache_size);
@@ -182,16 +149,11 @@ int dma_unlock_cache(uintptr_t cache_addr, qurt_size_t cache_size);
 /**
  *  dma_free_dma_engine
  * Free DMA
- * in: handle
- * out: Error/Success
- * free the dma engine
  */
 int dma_free_dma_engine(void* handle);
 
 /**
  *  dma_finish_frame
- * in: handle
- * out: ERR
  * signal the end of frame
  */
 int dma_finish_frame(void* handle);

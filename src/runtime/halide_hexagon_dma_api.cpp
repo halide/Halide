@@ -36,16 +36,18 @@ int halide_hexagon_dmaapp_wrap_buffer(void *user_context, halide_buffer_t *buf, 
     int last_frame = 1;     // ASSUMPTION: always new resources for each frame
 
     HexagonDmaContext hexagon_dma_context(user_context, num_of_frames);
-    halide_assert(user_context, hexagon_dma_context.context != NULL);
-    dma_context dma_ctxt = hexagon_dma_context.context;
+    halide_assert(user_context, hexagon_dma_context.get_context() != NULL);
+    p_dma_context dma_ctxt = hexagon_dma_context.get_context();
 
-    halide_hexagon_dmart_attach_context(user_context, dma_ctxt, (uintptr_t)inframe, fmt, read, \
+    int nret = halide_hexagon_dmart_attach_context(user_context, dma_ctxt, (uintptr_t)inframe, fmt, read, \
             buf->dim[0].extent, buf->dim[1].extent, buf->dim[1].stride, last_frame);
-
+    if(nret) {
+        error(user_context) << "Failure to attach the context \n";
+        return nret;
+    }
     buf->device_interface = halide_hexagon_dma_device_interface();
     buf->device = reinterpret_cast<uint64_t>(dma_ctxt);
-
-    return 0;
+    return HEX_SUCCESS;
 }
 
 /**
@@ -60,7 +62,7 @@ int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t *b
     void* handle = NULL;
 
     //////////////////////////////////////////////////////////////////////
-    dma_context dma_handle = reinterpret_cast<dma_context>(buf->device);
+    p_dma_context dma_handle = reinterpret_cast<p_dma_context>(buf->device);
     uintptr_t  frame = halide_hexagon_dmart_get_frame(user_context, dma_handle);
     //////////////////////////////////////////////////////////////////////////
     handle = halide_hexagon_dmart_get_dma_handle(user_context, dma_handle, frame);
@@ -72,7 +74,7 @@ int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t *b
     if(handle != 0) {
         dma_finish_frame(handle);
         uintptr_t fold_addr = halide_hexagon_dmart_get_fold_addr(user_context, dma_handle, frame);
-        halide_hexagon_dma_wrap_memory_free(user_context, dma_handle, (void*)fold_addr);
+        halide_hexagon_dma_memory_free(user_context, dma_handle, (void*)fold_addr);
         halide_hexagon_dmart_detach_context(user_context, dma_handle, frame);
         dma_free_dma_engine(handle);
     }
@@ -86,59 +88,57 @@ int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t *b
 /**
  * halide_hexagon_dmart_get_memory
  * desc: Calculate width, height, stride and fold from roi buf
- * Need also type and padding information. How ???
- * Allocate Memory
+ * Allocate Cache Memory from roi buf dimensions to make dma transfer
  */
-void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf) {
-    void *vret = halide_hexagon_dma_memory_get(user_context, roi_buf);
-
-    if(vret == NULL) {
+void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf, \
+                                  bool padding, halide_hexagon_dma_user_fmt_t type) {
+    halide_assert(user_context, roi_buf != NULL);
+    //Check if roi_buf is already allocated
+    if(roi_buf->host != 0) {
+        return (void*) roi_buf->host;
+    } else {
+        void *vret = NULL;
         int nCircularFold;
-        int w,h,s;
-        void* vret = NULL;
 
         halide_hexagon_dma_user_component_t comp;
         if(halide_hexagon_dma_comp_get(user_context, roi_buf, comp)) {
-            error(user_context) << "Failure to get the component" ;
+            error(user_context) << "Failure to get the component\n" ;
             return NULL;
         }
-
         /////////////////////////////////////////////////////
         //Problem with not including the inframe buf
         // Have to take the global version of dma context
         /////////////////////////////////////////////////////
         HexagonDmaContext hexagon_dma_context(user_context);
-        halide_assert(user_context, hexagon_dma_context.context != NULL);
-        dma_context dma_ctxt = hexagon_dma_context.context;
+        halide_assert(user_context, hexagon_dma_context.get_context() != NULL);
+        p_dma_context dma_ctxt = hexagon_dma_context.get_context();
 
         // ASSUMPTION: no folding
         nCircularFold = 1;
+        ////////////////////////////////////////////////////////////
         // Divide Frame to predefined tiles in Horizontal Direction
-        w = roi_buf->dim[0].extent;
+        //fold_width = roi_buf->dim[0].extent;
         // Divide Frame to predefined tiles in Vertical Direction
-        h = roi_buf->dim[1].extent;
+        //fold_height = roi_buf->dim[1].extent;
         // Each tile is again vertically split in to predefined DMA transfers
         // Stride is aligned to Predefined Value
-        s = roi_buf->dim[1].stride;
+        //fold_stride = roi_buf->dim[1].stride;
+        ///////////////////////////////////////////////////////////////
      
         /////////////////////////////////////////////////////////
         //ASSUMPTION: Assuming paddng and fmt type to be default here since we really do  not have the inframe
         //int halide_hexagon_dmart_get_padding(void* user_context, uintptr_t frame);
         //int halide_hexagon_dmart_get_fmt_type(void* user_context, uintptr_t frame)
         ///////////////////////////////////////////////////
-        int padding = 0;
-        int type = NV12;
-
         // allocate L2$
-        vret = halide_hexagon_dma_memory_alloc(user_context, dma_ctxt, comp, w, h, s, nCircularFold, padding, type);
+        vret = halide_hexagon_dma_memory_alloc(user_context, dma_ctxt, comp, roi_buf->dim[0].extent, \
+                         roi_buf->dim[1].extent, roi_buf->dim[1].stride, nCircularFold, padding, type);
         if(vret == NULL) {
             error(user_context) << "Failed to alloc host memeory." <<"\n";
             return NULL;
         }
         return vret;
     }
-
-    return vret;
 }     
 
 /**
@@ -162,10 +162,10 @@ int halide_buffer_copy(void *user_context, halide_buffer_t *frame_buf, void *ptr
     }
 
     if(roi_buf->host == 0) {
-         return HEX_ERROR;
+        return HEX_ERROR;
     } 
  
-    dma_context handle = reinterpret_cast<dma_context>(frame_buf->device);
+    p_dma_context handle = reinterpret_cast<p_dma_context>(frame_buf->device);
     uintptr_t cache_addr = (uintptr_t)roi_buf->host;
  
     nRet = halide_hexagon_dma_update(user_context, frame_buf, roi_buf);
@@ -206,7 +206,7 @@ int halide_buffer_copy(void *user_context, halide_buffer_t *frame_buf, void *ptr
 // once we can see exactly what needs to be shared and how.
 //
 // Key changes
-//      decoupled/separation of dma_context from user_context
+//      decoupled/separation of p_dma_context from user_context
 //      introduced context class
 //      swap host (locked L2$) and device (DDR) roles
 //      single frame of NV12, processing luma only
@@ -235,6 +235,8 @@ int nhalide_pipeline(void *user_context, unsigned char *inframe, unsigned char *
     const int tile_width = 256;
     const int tile_height = 32;
 
+    //The function halide_hexagon_dmaapp_get_memory is checking for roi_buf
+    // value. If it NULL allocate memory else return
     halide_buffer_t roi_buf;
     roi_buf.host = NULL;
     for(int tx = 0; tx < width / tile_width; tx++) {

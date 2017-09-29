@@ -19,19 +19,19 @@
 using namespace Halide::Runtime::Internal::Qurt;
 namespace Halide { namespace Runtime { namespace Internal { namespace Dma {
 
-dma_context WEAK pdma_context = NULL;
+p_dma_context WEAK pdma_context = NULL;
 }}}}
 
 using namespace Halide::Runtime::Internal::Dma;
 
 //The get function is necessary because in some places like get memory
 //we do not have access to the inframe buffer
-void halide_hexagon_get_dma_context (void* user_context, dma_context* context) {
+void halide_hexagon_get_dma_context (void* user_context, p_dma_context* context) {
     halide_assert(user_context, context != NULL);
     *context = pdma_context;
 }
 
-void halide_hexagon_acquire_dma_context(void* user_context, dma_context* ctx, int num_of_frames, bool create=true) {
+void halide_hexagon_acquire_dma_context(void* user_context, p_dma_context* ctx, int num_of_frames, bool create=true) {
     halide_assert(user_context, ctx != NULL);
     // If the context has not been initialized, initialize it now.
     if (!pdma_context && create) {
@@ -74,35 +74,49 @@ WEAK int halide_hexagon_dma_device_release(void *user_context) {
 
 WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *buf) {
 
-    if (buf->device) {
-        // This buffer already has a device allocation
-        return 0;
+    //////////////////////////////////////////////////////////////////////
+    p_dma_context dma_handle = reinterpret_cast<p_dma_context>(buf->device);
+    uintptr_t  frame = halide_hexagon_dmart_get_frame(user_context, dma_handle);
+    //////////////////////////////////////////////////////////////////////////
+
+    //Check for dma_allocation
+    bool dma_allocate;
+    void* handle = 0;
+    if (halide_hexagon_dmart_allocate_dma(user_context, pdma_context, frame, &dma_allocate) == -1) {
+        error(user_context) << "Undefined Error";
+        return HEX_ERROR;
     }
 
-    size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    if (dma_allocate) {
+        handle = dma_allocate_dma_engine();
+        if (handle == 0) {
+            error(user_context) << "halide_hexagon_dma_device_malloc:Failed to allocate the read DMA engine.\n";
+            return HEX_ERROR;
+        }
 
-    //TBD DMA Engine Allocation to be moved here
+        if (halide_hexagon_dmart_set_dma_handle(user_context, pdma_context, handle, frame)) {
+            error(user_context) << "halide_hexagon_dma_device_malloc:Function failed to set DMA Handle to DMA context \n";
+            return HEX_ERROR;
+        }
+    }
     return 0;
-
 }
 
 WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf) {
     halide_assert(NULL, buf!=NULL);
     HexagonDmaContext hexagon_dma_context(user_context);
-    halide_assert(user_context, hexagon_dma_context.context != NULL);
-    dma_context dma_ctxt = hexagon_dma_context.context;
+    halide_assert(user_context, hexagon_dma_context.get_context() != NULL);
+    p_dma_context dma_ctxt = hexagon_dma_context.get_context();
 
     halide_hexagon_dmart_delete_context(user_context, dma_ctxt);
     return HEX_SUCCESS;
-
 }
 
 WEAK int halide_hexagon_dma_copy_to_device(void *user_context,  halide_buffer_t *buf) {
     void* handle;
 
     //////////////////////////////////////////////////////////////////////
-    dma_context dma_handle = reinterpret_cast<dma_context>(buf->device);
+    p_dma_context dma_handle = reinterpret_cast<p_dma_context>(buf->device);
     uintptr_t  frame = halide_hexagon_dmart_get_frame(user_context, dma_handle);
     //////////////////////////////////////////////////////////////////////////
 
@@ -136,7 +150,7 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, halide_buffer_t *bu
     void* handle;
 
     //////////////////////////////////////////////////////////////////////
-    dma_context dma_handle = reinterpret_cast<dma_context>(buf->device);
+    p_dma_context dma_handle = reinterpret_cast<p_dma_context>(buf->device);
     uintptr_t frame = halide_hexagon_dmart_get_frame(user_context, dma_handle);
     //////////////////////////////////////////////////////////////////////////
 
@@ -173,19 +187,17 @@ WEAK int halide_hexagon_dma_device_sync(void* user_context, halide_buffer_t *buf
     void* handle=NULL;
 
     //////////////////////////////////////////////////////////////////////
-    dma_context dma_handle = reinterpret_cast<dma_context>(buf->device);
+    p_dma_context dma_handle = reinterpret_cast<p_dma_context>(buf->device);
     uintptr_t  frame = halide_hexagon_dmart_get_frame(user_context, dma_handle);
     //////////////////////////////////////////////////////////////////////////
 
     handle = halide_hexagon_dmart_get_dma_handle(user_context, dma_handle, frame);
-
     if (handle == 0) {
         error(user_context) << "Function failed to get DMA Write  Handle  \n";
         return HEX_ERROR;
     }
 
     nRet = dma_wait(handle);
-
     return nRet;
 }
 

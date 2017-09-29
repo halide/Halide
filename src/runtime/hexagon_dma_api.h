@@ -14,17 +14,19 @@ typedef enum {
  * DmaContext
  * global type of dma context
  */
-typedef struct t_dma_context* dma_context;
+typedef struct t_dma_context* p_dma_context;
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Dma {
 
 //Helper class to pass DMA Context
 class HexagonDmaContext {
     void* user_ctxt;
+    p_dma_context context;
 
 public:
-    dma_context context;
-
+    inline p_dma_context& get_context() {
+    	return context;
+    }
     HexagonDmaContext(void* user_context);
     HexagonDmaContext(void* user_context, int num_of_frames);
     ~HexagonDmaContext();
@@ -70,24 +72,16 @@ extern int halide_hexagon_dma_comp_get(void *user_context, halide_buffer_t *roi_
  * desc: set the comp, width, height, stride, num_folds, padding, type
  * allocate memory
  */
-extern void* halide_hexagon_dma_memory_alloc(void* user_context, dma_context pdma_context, halide_hexagon_dma_user_component_t comp,
+extern void* halide_hexagon_dma_memory_alloc(void* user_context, p_dma_context pdma_context, halide_hexagon_dma_user_component_t comp,
                                                  int w, int h, int s, int num_fold, bool padding, int type);
 
 /**
  * halide_hexagon_dma_memory_free
- * in: dma_context
+ * in: p_dma_context
  * in: cache mem description
  * free the memory allocations
  */
-extern int halide_hexagon_dma_wrap_memory_free(void* user_context, dma_context pdma_context, void* vret);
-
-/**
- * halide_hexagon_dma_memroy_get
- * out: l2 buffer
- * in: roi_buf
- * check if memory is already allocated
- */
-extern void *halide_hexagon_dma_memory_get(void *user_context, halide_buffer_t* roi_buf);
+extern int halide_hexagon_dma_memory_free(void* user_context, p_dma_context pdma_context, void* vret);
 
 /**
  * halide_hexagon_dma_update
