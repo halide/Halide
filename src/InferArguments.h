@@ -38,7 +38,7 @@ struct InferredArgument {
 };
 
 class Function;
- 
+
 std::vector<InferredArgument> infer_arguments(Stmt body, const std::vector<Function> &outputs);
 
 }  // namespace Internal
