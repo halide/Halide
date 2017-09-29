@@ -53,8 +53,8 @@ public:
             // the input/output sizes including estimates on all the parameter
             // values; otherwise, the auto-scheduler will throw an assertion.
 
-            // First, provide estimates (min and extent values) for each dimension
-            // of the input images ('input', 'filter', and 'bias') using the
+            // To provide estimates (min and extent values) for each dimension
+            // of the input images ('input', 'filter', and 'bias'), we use the
             // set_bounds_estimate() method. set_bounds_estimate() takes in
             // (min, extent) of the corresponding dimension as arguments.
             input.dim(0).set_bounds_estimate(0, 131);
@@ -69,13 +69,13 @@ public:
 
             bias.dim(0).set_bounds_estimate(0, 64);
 
-            // Next, provide estimates on the parameter values using the
+            // To provide estimates on the parameter values, we use the
             // set_estimate() method.
             min_value.set_estimate(2.0f);
 
-            // Last, provide estimates (min and extent values) for each dimension
-            // of pipeline outputs using the estimate() method. estimate() takes in
-            // (dim_name, min, extent) as arguments.
+            // To provide estimates (min and extent values) for each dimension
+            // of pipeline outputs, we use the estimate() method. estimate()
+            // takes in (dim_name, min, extent) as arguments.
             output1.estimate(x, 0, 128)
                 .estimate(y, 0, 128)
                 .estimate(z, 0, 64)
