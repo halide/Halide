@@ -371,7 +371,7 @@ public:
 
     template<typename Fn, typename ...Args>
     void for_each_value(Fn &&f, Args... other_buffers) {
-        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...); 
+        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
     }
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
@@ -472,8 +472,8 @@ public:
     }
 
     /** Wrap a native handle, using the given device API. */
-    int device_wrap_native(const DeviceAPI &d, uint64_t handle) {
-        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d), handle);
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t), handle);
     }
 
 };

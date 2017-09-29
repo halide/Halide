@@ -4,12 +4,12 @@ namespace {
 
 class ImageFromArray : public Halide::Generator<ImageFromArray> {
 public:
-   Func build() {
+    Output<Buffer<int32_t>> output{"output", 1};
+
+    void generate() {
         // Currently the test just exercises halide_image.h.
         Var x;
-        Func f;
-        f(x) = x;
-        return f;
+        output(x) = x;
     }
 };
 
