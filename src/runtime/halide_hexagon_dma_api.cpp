@@ -86,12 +86,10 @@ int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t *b
 //Allocate Cache Memory from roi buf dimensions to make dma transfer
 void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf, \
                                   bool padding, halide_hexagon_dma_user_fmt_t type) {
-    static void *pcache = NULL;     // ASSUMPTION: single frame only, lifetime scope is unknown will inner loop call
-
     halide_assert(user_context, roi_buf != NULL);
     //Check if roi_buf is already allocated
-    if(pcache != NULL) {
-        return pcache;
+    if(roi_buf->host != 0) {
+        return (void*) roi_buf->host;
     } else {
         void *vret = NULL;
         int nCircularFold;
@@ -133,7 +131,6 @@ void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_
             error(user_context) << "Failed to alloc host memeory." <<"\n";
             return NULL;
         }
-        pcache = vret;
         return vret;
     }
 }     
@@ -230,6 +227,10 @@ int nhalide_pipeline(void *user_context, unsigned char *inframe, unsigned char *
     const int tile_width = 256;
     const int tile_height = 32;
 
+    //The function halide_hexagon_dmaapp_get_memory is checking for roi_buf
+    // value. If it NULL allocate memory else return
+    halide_buffer_t roi_buf;
+    roi_buf.host = NULL;
     for(int tx = 0; tx < width / tile_width; tx++) {
         for(int ty = 0; ty < height / tile_height; ty++) {
             halide_dimension_t roi_dims[3];
@@ -237,11 +238,9 @@ int nhalide_pipeline(void *user_context, unsigned char *inframe, unsigned char *
             roi_dims[1] = halide_dimension_t(ty*tile_height, tile_height, tile_width);
             roi_dims[2] = halide_dimension_t(0, 1, tile_width*tile_height);
 
-            halide_buffer_t roi_buf;
             roi_buf.dim = roi_dims;
             roi_buf.dimensions = 3;
             roi_buf.flags = 0;
-            // ASSUMPTION: note defaulted arguments for dma padding and frame format
             roi_buf.host = (unsigned char*)halide_hexagon_dmaapp_get_memory(user_context, &roi_buf);
 
             halide_buffer_copy(user_context, &inframe_buf, NULL, &roi_buf);
