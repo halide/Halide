@@ -126,11 +126,11 @@ Buffer<Type> make_image() {
 }
 
 template <typename InputType, typename OutputType>
-void verify(const Buffer<InputType> &input, 
-            const Buffer<OutputType> &output0, 
-            const Buffer<OutputType> &output1, 
-            const Buffer<OutputType> &output_scalar, 
-            const Buffer<OutputType> &output_array0, 
+void verify(const Buffer<InputType> &input,
+            const Buffer<OutputType> &output0,
+            const Buffer<OutputType> &output1,
+            const Buffer<OutputType> &output_scalar,
+            const Buffer<OutputType> &output_array0,
             const Buffer<OutputType> &output_array1) {
     if (output_scalar.dimensions() != 0) {
         fprintf(stderr, "output_scalar should be zero-dimensional\n");
@@ -789,9 +789,9 @@ int main(int argc, char **argv) {
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>
-        input,             // Input<Func> 
-        input,             // Input<Func> 
-        input,             // Input<Func> 
+        input,             // Input<Func>
+        input,             // Input<Func>
+        input,             // Input<Func>
         input, input,      // Input<Func[]>
         input, input,      // Input<Func[2]>
         0, 0,              // Input<int8_t[]>
@@ -810,11 +810,11 @@ int main(int argc, char **argv) {
         output_array[0], output_array[1],   // Output<Func[]>
         output_array2[0], output_array2[1], // Output<Func[2]>
         output_array3[0], output_array3[1]  // Output<float[2]>
-    );  
+    );
     EXPECT_EQ(0, result);
 
     result = metadata_tester_ucon(
-        user_context, 
+        user_context,
         input,             // Input<Func>
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(uint8)
@@ -832,9 +832,9 @@ int main(int argc, char **argv) {
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>
-        input,             // Input<Func> 
-        input,             // Input<Func> 
-        input,             // Input<Func> 
+        input,             // Input<Func>
+        input,             // Input<Func>
+        input,             // Input<Func>
         input, input,      // Input<Func[]>
         input, input,      // Input<Func[2]>
         0, 0,              // Input<int8_t[]>
