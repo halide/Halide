@@ -510,9 +510,9 @@ def _halide_library_runtime_target_name(halide_target_features = []):
 def _define_halide_library_runtime(halide_target_features = []):
   target_name = _halide_library_runtime_target_name(halide_target_features)
 
-  if not native.existing_rule("halide_library_runtime_generator"):
+  if not native.existing_rule("halide_library_runtime.generator"):
     halide_generator(
-        name="halide_library_runtime_generator",
+        name="halide_library_runtime.generator",
         srcs=[],
         deps=[],
         visibility=["//visibility:private"])
@@ -530,7 +530,7 @@ def _define_halide_library_runtime(halide_target_features = []):
         name=sub_name,
         filename=sub_name,
         generate_runtime=True,
-        generator_closure="halide_library_runtime_generator_closure",
+        generator_closure="halide_library_runtime.generator_closure",
         halide_target=["-".join([halide_target] + _discard_useless_features(halide_target_features))],
         sanitizer=select({
             "@halide//:halide_config_msan": "msan",
@@ -588,11 +588,11 @@ def halide_generator(name,
                      includes=[],
                      tags=[],
                      visibility=None):
-  if not name.endswith("_generator"):
-    fail("halide_generator rules must end in _generator")
+  if not name.endswith(".generator"):
+    fail("halide_generator rules must end in .generator")
 
   if not generator_name:
-    generator_name = name[:-10]  # strip "_generator" suffix
+    generator_name = name[:-10]  # strip ".generator" suffix
 
   native.cc_library(
       name="%s_library" % name,
@@ -634,7 +634,7 @@ def halide_generator(name,
         halide_target_map={})
     _gengen(
         name="%s_stub_gen" % name,
-        filename=name[:-10],  # strip "_generator" suffix
+        filename=name[:-10],  # strip ".generator" suffix
         generator_closure=":%s_closure" % name,
         halide_target=stub_header_target,
         outputs=["cpp_stub"],
@@ -846,7 +846,7 @@ def halide_library(name,
                    namespace=None,
                    visibility=None):
   halide_generator(
-      name="%s_generator" % name,
+      name="%s.generator" % name,
       srcs=srcs,
       generator_name=generator_name,
       deps=generator_deps,
@@ -856,7 +856,7 @@ def halide_library(name,
 
   return halide_library_from_generator(
       name=name,
-      generator=":%s_generator" % name,
+      generator=":%s.generator" % name,
       deps=filter_deps,
       visibility=visibility,
       namespace=namespace,
