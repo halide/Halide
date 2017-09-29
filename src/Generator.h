@@ -2754,10 +2754,10 @@ class Generator : public Internal::GeneratorBase {
 protected:
 
     // TODO: This causes problems for existing code that declares helper
-    // methods (that use ImageParam, etc as arguments) outside the class body, 
+    // methods (that use ImageParam, etc as arguments) outside the class body,
     // as there is an ambiguity between Halide::ImageParam and Generator<T>::ImageParam.
     //
-    // Consider re-enabling this at some point in the future when the likelihood of 
+    // Consider re-enabling this at some point in the future when the likelihood of
     // collision with existing code is much smaller.
     //
     // // Add wrapper types here that exists just to allow us to tag
@@ -2821,25 +2821,25 @@ private:
     // so we use a little SFINAE to detect if there are method-shaped members.
     template<typename>
     struct type_sink { typedef void type; };
-    
+
     template<typename T2, typename = void>
     struct has_generate_method : std::false_type {};
-    
+
     template<typename T2>
     struct has_generate_method<T2, typename type_sink<decltype(std::declval<T2>().generate())>::type> : std::true_type {};
 
     template<typename T2, typename = void>
     struct has_schedule_method : std::false_type {};
-    
+
     template<typename T2>
     struct has_schedule_method<T2, typename type_sink<decltype(std::declval<T2>().schedule())>::type> : std::true_type {};
-    
+
     template <typename T2 = T,
               typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    
+
     // Implementations for build_pipeline_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
-    
+
     // MSVC apparently has some weirdness with the usual sfinae tricks
     // for detecting method-shaped things, so we can't actually use
     // the helpers above outside of static_assert. Instead we make as
@@ -2853,7 +2853,7 @@ private:
         post_build();
         return p;
     }
-    
+
     template <typename T2 = T,
               typename = decltype(std::declval<T2>().generate())>
     Pipeline build_pipeline_impl(int) {
@@ -2864,11 +2864,11 @@ private:
 
     // Implementations for call_generate_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
-    
+
     void call_generate_impl(double) {
         user_error << "Unimplemented";
     }
-    
+
     template <typename T2 = T,
               typename = decltype(std::declval<T2>().generate())>
     void call_generate_impl(int) {
@@ -2881,7 +2881,7 @@ private:
 
     // Implementations for call_schedule_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
-    
+
     void call_schedule_impl(double, double) {
         user_error << "Unimplemented";
     }
@@ -2893,7 +2893,7 @@ private:
         pre_schedule();
         post_schedule();
     }
-    
+
     template<typename T2 = T,
              typename = decltype(std::declval<T2>().generate()),
              typename = decltype(std::declval<T2>().schedule())>
@@ -2909,11 +2909,11 @@ protected:
     Pipeline build_pipeline() override {
         return this->build_pipeline_impl(0);
     }
-    
+
     void call_generate() override {
         this->call_generate_impl(0);
     }
-    
+
     void call_schedule() override {
         this->call_schedule_impl(0, 0);
     }

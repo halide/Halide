@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
                     wrap_test.device_detach_native();
                 }
             }
-        }       
+        }
 
         // Test coverage for Halide::Runtime::Buffer construction from halide_buffer_t, unmanaged
         {

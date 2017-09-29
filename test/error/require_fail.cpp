@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     Param<int> p1, p2;
     Var x;
     Func f;
-    f(x) = require((p1 + p2) == kPrime1, 
+    f(x) = require((p1 + p2) == kPrime1,
                    (p1 + p2) * kPrime2,
                    "The parameters should add to exactly", kPrime1, "but were", p1, p2);
     // choose values that will fail
