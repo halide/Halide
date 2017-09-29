@@ -38,7 +38,11 @@ public:
     OutputImageParam() : Internal::DimensionedParameter() {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    EXPORT OutputImageParam(const Internal::Parameter &p, Argument::Kind k);
+    OutputImageParam(const Internal::Parameter &p, Argument::Kind k) :
+        Internal::DimensionedParameter(), param(p), kind(k) {
+    }
+
+    ~OutputImageParam() {}
 
     /** Get the name of this Param */
     EXPORT const std::string &name() const;
@@ -54,12 +58,9 @@ public:
      * statically compiling halide pipelines. */
     EXPORT operator Argument() const;
 
-    EXPORT virtual Internal::Parameter parameter() const override;
-
-    // These seemingly-pointless overloads are necessary to get some compilers
-    // to export all the correct vtable symbols for shared-library builds.
-    EXPORT OutputImageParam(const OutputImageParam& that);
-    EXPORT ~OutputImageParam() override;
+    Internal::Parameter parameter() const {
+        return param;
+    }
 };
 
 }
