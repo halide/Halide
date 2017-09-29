@@ -17,12 +17,10 @@ using namespace Halide::Runtime::Internal::Dma;
 
 extern "C" {
 
-/**
- * halide_hexagon_dmaapp_wrap_buffer
- * desc: Create Context
- * Attach the frame to the context
- * Wrap the device handle over the context
- */
+
+// desc: Create Context
+// Attach the frame to the context
+// Wrap the device handle over the context
 int halide_hexagon_dmaapp_wrap_buffer(void *user_context, halide_buffer_t *buf, unsigned char *inframe, bool read, halide_hexagon_dma_user_fmt_t fmt) {
     halide_assert(user_context, buf->device == 0);
     if(buf->device != 0) {
@@ -50,13 +48,11 @@ int halide_hexagon_dmaapp_wrap_buffer(void *user_context, halide_buffer_t *buf, 
     return HEX_SUCCESS;
 }
 
-/**
- * halide_hexagon_dmaapp_release_wrapper
- * desc: Free DMA Engine
- * Signal to DMA end of frame remove frame references
- * Free L2 buffer allocations made for transfer
- * Remove the device handle from the context
- */
+
+//desc: Free DMA Engine
+// Signal to DMA end of frame remove frame references
+// Free L2 buffer allocations made for transfer
+// Remove the device handle from the context
 int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t *buf) {
     halide_assert(NULL, buf!=NULL);
     void* handle = NULL;
@@ -85,11 +81,9 @@ int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t *b
     return HEX_SUCCESS;
 }
 
-/**
- * halide_hexagon_dmart_get_memory
- * desc: Calculate width, height, stride and fold from roi buf
- * Allocate Cache Memory from roi buf dimensions to make dma transfer
- */
+
+//desc: Calculate width, height, stride and fold from roi buf
+//Allocate Cache Memory from roi buf dimensions to make dma transfer
 void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf, \
                                   bool padding, halide_hexagon_dma_user_fmt_t type) {
     halide_assert(user_context, roi_buf != NULL);
@@ -141,13 +135,11 @@ void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_
     }
 }     
 
-/**
- * halide_buffer_copy
- * Step 1: Updates/Prepare the DMA for transfer
- * Step 2: Update ROI (to be transfered) information to the host
- * Step 3: copy to host: Actual transfer of Data
- * Step 4: Wait for DMA to be finished
- */
+
+//Step 1: Updates/Prepare the DMA for transfer
+//Step 2: Update ROI (to be transfered) information to the host
+//Step 3: copy to host: Actual transfer of Data
+//Step 4: Wait for DMA to be finished
 int halide_buffer_copy(void *user_context, halide_buffer_t *frame_buf, void *ptr, halide_buffer_t *roi_buf) {
     int nRet;
     const halide_device_interface_t* dma_device_interface = halide_hexagon_dma_device_interface();
