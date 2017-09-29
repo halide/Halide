@@ -2,7 +2,7 @@
 
 namespace {
 
-// This Generator exists solely to verify that old-style generators (using the 
+// This Generator exists solely to verify that old-style generators (using the
 // build() method, rather than generate()/schedule()) still work. Do not
 // convert it to new-style until/unless we decide to entirely remove support
 // for those Generators.

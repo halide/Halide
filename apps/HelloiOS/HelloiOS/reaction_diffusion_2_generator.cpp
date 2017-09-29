@@ -80,8 +80,8 @@ public:
         G = clamp(G, 0.0f, 1.0f);
         B = clamp(B, 0.0f, 1.0f);
 
-        new_state(x, y, c) = select(c == 0, R, 
-                                    c == 1, G, 
+        new_state(x, y, c) = select(c == 0, R,
+                                    c == 1, G,
                                             B);
 
         // Noise at the edges
@@ -100,8 +100,8 @@ public:
         Expr dx = clobber.x - mouse_x;
         Expr dy = clobber.y - mouse_y;
         Expr radius = dx * dx + dy * dy;
-        new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 
-                                                    1.0f, 
+        new_state(clobber.x, clobber.y, c) = select(radius < 400.0f,
+                                                    1.0f,
                                                     new_state(clobber.x, clobber.y, c));
     }
 
@@ -170,7 +170,7 @@ class ReactionDiffusion2Render : public Halide::Generator<ReactionDiffusion2Rend
 public:
     Input<Buffer<float>> state{"state", 3};
     // TODO(srj): should be Input<bool>; using Input<int> to work around Issue #1760
-    Input<int> output_bgra{"output_bgra", 0, 0, 1};  
+    Input<int> output_bgra{"output_bgra", 0, 0, 1};
     Output<Buffer<uint8_t>> render{"render", 3};
 
     void generate() {
@@ -190,13 +190,13 @@ public:
         // Calculate both here and select() the right one;
         // we'll add specialize() paths in the schedule to
         // make this efficient.
-        Expr bgra = select(c == 0, cast<uint8_t>(B * 255), 
-                           c == 1, cast<uint8_t>(G * 255), 
+        Expr bgra = select(c == 0, cast<uint8_t>(B * 255),
+                           c == 1, cast<uint8_t>(G * 255),
                            c == 2, cast<uint8_t>(R * 255),
                            /*c==3*/cast<uint8_t>(A * 255));
 
-        Expr rgba = select(c == 0, cast<uint8_t>(R * 255), 
-                           c == 1, cast<uint8_t>(G * 255), 
+        Expr rgba = select(c == 0, cast<uint8_t>(R * 255),
+                           c == 1, cast<uint8_t>(G * 255),
                            c == 2, cast<uint8_t>(B * 255),
                            /*c==3*/cast<uint8_t>(A * 255));
 
