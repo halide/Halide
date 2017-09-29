@@ -2855,7 +2855,7 @@ private:
     }
     
     template <typename T2 = T,
-              typename = decltype(&T2::generate)>
+              typename = decltype(std::declval<T2>().generate())>
     Pipeline build_pipeline_impl(int) {
         ((T *)this)->call_generate_impl(0);
         ((T *)this)->call_schedule_impl(0, 0);
@@ -2870,7 +2870,7 @@ private:
     }
     
     template <typename T2 = T,
-              typename = decltype(&T2::generate)>
+              typename = decltype(std::declval<T2>().generate())>
     void call_generate_impl(int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
@@ -2887,7 +2887,7 @@ private:
     }
 
     template<typename T2 = T,
-             typename = decltype(&T2::generate)>
+             typename = decltype(std::declval<T2>().generate())>
     void call_schedule_impl(double, int) {
         // Generator has a generate() method but no schedule() method. This is ok. Just advance the phase.
         pre_schedule();
@@ -2895,8 +2895,8 @@ private:
     }
     
     template<typename T2 = T,
-             typename = decltype(&T2::generate),
-             typename = decltype(&T2::schedule)>
+             typename = decltype(std::declval<T2>().generate()),
+             typename = decltype(std::declval<T2>().schedule())>
     void call_schedule_impl(int, int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
