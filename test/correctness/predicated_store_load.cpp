@@ -394,7 +394,7 @@ int main(int argc, char **argv) {
         printf("Skipping test due to https://github.com/halide/Halide/issues/2364\n");
         return 0;
     }
-    
+
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
         return -1;

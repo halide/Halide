@@ -9,7 +9,7 @@ using namespace Halide::Runtime;
 
 void my_error_handler(void *user_context, const char *message) {
     // Don't use the word "error": if CMake sees it in the output
-    // from an add_custom_command() on Windows, it can decide that 
+    // from an add_custom_command() on Windows, it can decide that
     // the command failed, regardless of error code.
     printf("Saw: (%s)\n", message);
 }
