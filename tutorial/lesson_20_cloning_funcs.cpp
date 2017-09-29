@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
     // This lesson will be about cloning a Func using the Func::clone_in
-    // directive
+    // directive.
     {
         // Consider a simple two-stage pipeline:
         Func f("f_single"), g("g_single"), h("h_single");
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = f(x, y) + g(x, y) + 10
 
-        // Using Func::clone, we can replace calls to 'f' inside 'g' with
+        // Using Func::clone_in, we can replace calls to 'f' inside 'g' with
         // a clone of 'f' using the schedule alone:
         Func f_clone_in_g = f.clone_in(g);
         f_clone_in_g.compute_root();
