@@ -47,7 +47,7 @@ public:
     }
 
     void schedule() {
-        // nothing      
+        // nothing
     }
 };
 

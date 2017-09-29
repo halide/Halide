@@ -20,12 +20,12 @@ int main()
             buf(i, j) = i * 65536 + j * 256;
         }
     }
-      
+
     Buffer<float> out(10, 10);
     int ret_code = external_code(buf.raw_buffer(), out.raw_buffer());
 
     assert(ret_code == 0);
-    
+
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
             assert(out(i, j) == i * 65536 + j * 256 + 42);

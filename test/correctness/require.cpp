@@ -10,7 +10,7 @@ void halide_error(void *ctx, const char *msg) {
 
 using namespace Halide;
 
-static void test(int vector_width) { 
+static void test(int vector_width) {
     const int32_t kPrime1 = 7829;
     const int32_t kPrime2 = 7919;
 
@@ -21,7 +21,7 @@ static void test(int vector_width) {
     Var x;
     Func s, f;
     s(x) = p1 + p2;
-    f(x) = require(s(x) == kPrime1, 
+    f(x) = require(s(x) == kPrime1,
                    s(x) * kPrime2 + x,
                    "The parameters should add to exactly", kPrime1, "but were", s(x), "for vector_width", vector_width);
     if (vector_width) {
