@@ -149,7 +149,7 @@
  * \endcode
  *
  * A Generator can also be customized via compile-time parameters (GeneratorParams
- * or ScheduleParams), which affect code generation. 
+ * or ScheduleParams), which affect code generation.
  *
  * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
  * public and always declared at the top of the Generator class, in the order
@@ -2809,55 +2809,62 @@ public:
     }
 
 private:
-    // Implementations for build_pipeline_impl(), specialized on whether we
-    // have build() or generate()/schedule() methods.
 
     // std::is_member_function_pointer will fail if there is no member of that name,
     // so we use a little SFINAE to detect if there are method-shaped members.
     template<typename>
     struct type_sink { typedef void type; };
-
+    
     template<typename T2, typename = void>
     struct has_generate_method : std::false_type {};
-
+    
     template<typename T2>
     struct has_generate_method<T2, typename type_sink<decltype(std::declval<T2>().generate())>::type> : std::true_type {};
 
     template<typename T2, typename = void>
     struct has_schedule_method : std::false_type {};
-
+    
     template<typename T2>
     struct has_schedule_method<T2, typename type_sink<decltype(std::declval<T2>().schedule())>::type> : std::true_type {};
-
+    
     template <typename T2 = T,
               typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    Pipeline build_pipeline_impl() {
+    
+    // Implementations for build_pipeline_impl(), specialized on whether we
+    // have build() or generate()/schedule() methods.
+    
+    // MSVC apparently has some weirdness with the usual sfinae tricks
+    // for detecting method-shaped things, so we can't actually use
+    // the helpers above outside of static_assert. Instead we make as
+    // many overloads as we can exist, and then use C++'s preference
+    // for treating a 0 as an int rather than a double to choose one
+    // of them.
+    Pipeline build_pipeline_impl(double) {
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
         post_build();
         return p;
     }
+    
     template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
-    Pipeline build_pipeline_impl() {
-        ((T *)this)->call_generate_impl();
-        ((T *)this)->call_schedule_impl();
+              typename = decltype(&T2::generate)>
+    Pipeline build_pipeline_impl(int) {
+        ((T *)this)->call_generate_impl(0);
+        ((T *)this)->call_schedule_impl(0, 0);
         return get_pipeline();
     }
 
     // Implementations for call_generate_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
-
-    template <typename T2 = T,
-              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    void call_generate_impl() {
+    
+    void call_generate_impl(double) {
         user_error << "Unimplemented";
     }
-
+    
     template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
-    void call_generate_impl() {
+              typename = decltype(&T2::generate)>
+    void call_generate_impl(int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
         pre_generate();
@@ -2867,24 +2874,23 @@ private:
 
     // Implementations for call_schedule_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
-
-    template <typename T2 = T,
-              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+    
+    void call_schedule_impl(double, double) {
         user_error << "Unimplemented";
     }
 
-    template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value && !has_schedule_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+    template<typename T2 = T,
+             typename = decltype(&T2::generate)>
+    void call_schedule_impl(double, int) {
         // Generator has a generate() method but no schedule() method. This is ok. Just advance the phase.
         pre_schedule();
         post_schedule();
-    }
-
-    template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value && has_schedule_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+             }
+    
+    template<typename T2 = T,
+             typename = decltype(&T2::generate),
+             typename = decltype(&T2::schedule)>
+    void call_schedule_impl(int, int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
         pre_schedule();
@@ -2894,15 +2900,15 @@ private:
 
 protected:
     Pipeline build_pipeline() override {
-        return this->build_pipeline_impl();
+        return this->build_pipeline_impl(0);
     }
-
+    
     void call_generate() override {
-        this->call_generate_impl();
+        this->call_generate_impl(0);
     }
-
+    
     void call_schedule() override {
-        this->call_schedule_impl();
+        this->call_schedule_impl(0, 0);
     }
 
 private:
