@@ -52,10 +52,18 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
 
 void validate_custom_wrapper(Function in_func, Function wrapped, Function wrapper) {
     map<string, Function> callees = find_direct_calls(in_func);
-    user_assert(callees.count(wrapper.name()))
-        << "Cannot wrap \"" << wrapped.name() << "\" in \"" << in_func.name()
-        << "\" because \"" << in_func.name() << "\" does not call \""
-        << wrapped.name() << "\"\n";
+    if (!callees.count(wrapper.name())) {
+        std::ostringstream callees_text;
+        for (const auto &it : callees) {
+            callees_text << "  " << it.second.name() << "\n";
+        }
+
+        user_error
+            << "Cannot wrap \"" << wrapped.name() << "\" in \"" << in_func.name()
+            << "\" because \"" << in_func.name() << "\" does not call \""
+            << wrapped.name() << "\"\n"
+            << "Direct callees of \"" << in_func.name() << "\" are:\n" << callees_text.str();
+    }
 }
 
 } // anonymous namespace
