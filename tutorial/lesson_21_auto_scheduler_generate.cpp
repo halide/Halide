@@ -96,7 +96,10 @@ public:
             // for a generic CPU architecture are going to be used by the auto-scheduler.
 
             // Let's use some arbitrary but plausible values for the machine parameters.
-            MachineParams machine_params(32, 16 * 1024 * 1024, 40);
+            const int kParallelism = 32;
+            const int kLastLevelCacheSize = 16 * 1024 * 1024;
+            const int kBalance = 40;
+            MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
             // The arguments to MachineParams are the maximum level of parallelism
             // available, the size of the last-level cache (in KB), and the ratio
             // between the cost of a miss at the last level cache and the cost
@@ -138,12 +141,8 @@ public:
             //
             // {
             //     Var x = f0.args()[0];
-            //     Var y = f0.args()[1];
             //     Var z = f0.args()[2];
             //     Var n = f0.args()[3];
-            //     RVar r$x(f0.update(0).get_schedule().rvars()[0].var);
-            //     RVar r$y(f0.update(0).get_schedule().rvars()[1].var);
-            //     RVar r$z(f0.update(0).get_schedule().rvars()[2].var);
             //     f0
             //         .compute_root()
             //         .split(x, x_vo, x_vi, 8)
@@ -158,7 +157,6 @@ public:
             // }
             // {
             //     Var x = output1.args()[0];
-            //     Var y = output1.args()[1];
             //     Var z = output1.args()[2];
             //     Var n = output1.args()[3];
             //     output1
@@ -170,7 +168,6 @@ public:
             // }
             // {
             //     Var x = output2.args()[0];
-            //     Var y = output2.args()[1];
             //     Var z = output2.args()[2];
             //     Var n = output2.args()[3];
             //     output2
