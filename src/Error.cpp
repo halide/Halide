@@ -82,7 +82,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
-ErrorReport::~ErrorReport() 
+ErrorReport::~ErrorReport()
 #if __cplusplus >= 201100 || _MSC_VER >= 1900
     noexcept(false)
 #endif

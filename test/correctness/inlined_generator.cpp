@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     {
         // If you have a Generator in a visible translation unit (i.e.
         // in the same source file, or visible via #include), you can
-        // use it directly, even if it's not registered: just call 
+        // use it directly, even if it's not registered: just call
         // GeneratorContext.apply<GenType>() with values for all Inputs.
         // (Note that this uses the default values for all GeneratorParams.)
         auto gen = context.apply<Example>(kRuntimeFactor, kRuntimeOffset);  // gen's type is std::unique_ptr<Example>
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        // If you need to set GeneratorParams, it's a bit trickier: 
+        // If you need to set GeneratorParams, it's a bit trickier:
         // you must first create the Generator, then set the GeneratorParam(s),
         // than call apply().
         auto gen = context.create<Example>();  // gen's type is std::unique_ptr<Example>

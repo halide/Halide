@@ -8,7 +8,7 @@
  * either purpose, but is especially convenient to use for AOT compilation.
  *
  * A Generator explicitly declares the Inputs and Outputs associated for a given
- * pipeline, and separates the code for constructing the outputs from the code from
+ * pipeline, and (optionally) separates the code for constructing the outputs from the code from
  * scheduling them. For instance:
  *
  * \code
@@ -34,12 +34,11 @@
  * Halide can compile a Generator into the correct pipeline by introspecting these
  * values and constructing an appropriate signature based on them.
  *
- * A Generator must provide implementations of two methods:
+ * A Generator provides implementations of two methods:
  *
- *   - generate(), which must fill in all Output Func(s), but should not do any
- * scheduling
- *   - schedule(), which should do scheduling for any intermediate and
- * output Funcs
+ *   - generate(), which must fill in all Output Func(s); it may optionally also do scheduling
+ *   if no schedule() method is present.
+ *   - schedule(), which (if present) should contain all scheduling code.
  *
  * Inputs can be any C++ scalar type:
  *
@@ -150,11 +149,7 @@
  * \endcode
  *
  * A Generator can also be customized via compile-time parameters (GeneratorParams
- * or ScheduleParams), which affect code generation. While a GeneratorParam can
- * be used from anywhere inside a Generator (either the generate() or
- * schedule() method), ScheduleParam should be accessed only within the
- * schedule() method. (This is not currently a compile-time error but may become
- * one in the future.)
+ * or ScheduleParams), which affect code generation.
  *
  * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
  * public and always declared at the top of the Generator class, in the order
@@ -1733,6 +1728,7 @@ public:
     HALIDE_OUTPUT_FORWARD(store_at)
     HALIDE_OUTPUT_FORWARD(store_root)
     HALIDE_OUTPUT_FORWARD(tile)
+    HALIDE_OUTPUT_FORWARD(trace_stores)
     HALIDE_OUTPUT_FORWARD(unroll)
     HALIDE_OUTPUT_FORWARD(update)
     HALIDE_OUTPUT_FORWARD_CONST(update_args)
@@ -2443,6 +2439,12 @@ public:
     // calling from generate() as long as all Outputs have been defined.)
     EXPORT Pipeline get_pipeline();
 
+    /** Generate a schedule for the Generator's pipeline. */
+    //@{
+    EXPORT std::string auto_schedule_outputs(const MachineParams &arch_params);
+    EXPORT std::string auto_schedule_outputs();
+    //@}
+
     // Return a map in which to register external code this Generator requires
     // at link time.
     EXPORT std::shared_ptr<ExternsMap> get_externs_map() const override;
@@ -2492,7 +2494,7 @@ protected:
         // and will advance directly to ScheduleCalled.)
         GenerateCalled,
 
-        // Generator has had its schedule() method called.
+        // Generator has had its schedule() method (if any) called.
         ScheduleCalled,
     } phase{Created};
 
@@ -2751,25 +2753,32 @@ template <class T>
 class Generator : public Internal::GeneratorBase {
 protected:
 
-    // Add wrapper types here that exists just to allow us to tag
-    // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
-    // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
-    // but those are somewhat uncommon cases.)
+    // TODO: This causes problems for existing code that declares helper
+    // methods (that use ImageParam, etc as arguments) outside the class body,
+    // as there is an ambiguity between Halide::ImageParam and Generator<T>::ImageParam.
+    //
+    // Consider re-enabling this at some point in the future when the likelihood of
+    // collision with existing code is much smaller.
+    //
+    // // Add wrapper types here that exists just to allow us to tag
+    // // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
+    // // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
+    // // but those are somewhat uncommon cases.)
 
-    template<typename T2>
-    class Param : public ::Halide::Param<T2> {
-    public:
-        template <typename... Args>
-        HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
-        explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
-    };
+    // template<typename T2>
+    // class Param : public ::Halide::Param<T2> {
+    // public:
+    //     template <typename... Args>
+    //     HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
+    //     explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
+    // };
 
-    class ImageParam : public ::Halide::ImageParam {
-    public:
-        template <typename... Args>
-        HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
-        explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
-    };
+    // class ImageParam : public ::Halide::ImageParam {
+    // public:
+    //     template <typename... Args>
+    //     HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
+    //     explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
+    // };
 
 protected:
     Generator() :
@@ -2807,8 +2816,6 @@ public:
     }
 
 private:
-    // Implementations for build_pipeline_impl(), specialized on whether we
-    // have build() or generate()/schedule() methods.
 
     // std::is_member_function_pointer will fail if there is no member of that name,
     // so we use a little SFINAE to detect if there are method-shaped members.
@@ -2829,33 +2836,42 @@ private:
 
     template <typename T2 = T,
               typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    Pipeline build_pipeline_impl() {
+
+    // Implementations for build_pipeline_impl(), specialized on whether we
+    // have build() or generate()/schedule() methods.
+
+    // MSVC apparently has some weirdness with the usual sfinae tricks
+    // for detecting method-shaped things, so we can't actually use
+    // the helpers above outside of static_assert. Instead we make as
+    // many overloads as we can exist, and then use C++'s preference
+    // for treating a 0 as an int rather than a double to choose one
+    // of them.
+    Pipeline build_pipeline_impl(double) {
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
         post_build();
         return p;
     }
+
     template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
-    Pipeline build_pipeline_impl() {
-        ((T *)this)->call_generate_impl();
-        ((T *)this)->call_schedule_impl();
+              typename = decltype(std::declval<T2>().generate())>
+    Pipeline build_pipeline_impl(int) {
+        ((T *)this)->call_generate_impl(0);
+        ((T *)this)->call_schedule_impl(0, 0);
         return get_pipeline();
     }
 
     // Implementations for call_generate_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
 
-    template <typename T2 = T,
-              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    void call_generate_impl() {
+    void call_generate_impl(double) {
         user_error << "Unimplemented";
     }
 
     template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
-    void call_generate_impl() {
+              typename = decltype(std::declval<T2>().generate())>
+    void call_generate_impl(int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
         pre_generate();
@@ -2866,15 +2882,22 @@ private:
     // Implementations for call_schedule_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
 
-    template <typename T2 = T,
-              typename std::enable_if<!has_schedule_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+    void call_schedule_impl(double, double) {
         user_error << "Unimplemented";
     }
 
-    template <typename T2 = T,
-              typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+    template<typename T2 = T,
+             typename = decltype(std::declval<T2>().generate())>
+    void call_schedule_impl(double, int) {
+        // Generator has a generate() method but no schedule() method. This is ok. Just advance the phase.
+        pre_schedule();
+        post_schedule();
+    }
+
+    template<typename T2 = T,
+             typename = decltype(std::declval<T2>().generate()),
+             typename = decltype(std::declval<T2>().schedule())>
+    void call_schedule_impl(int, int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
         pre_schedule();
@@ -2884,15 +2907,15 @@ private:
 
 protected:
     Pipeline build_pipeline() override {
-        return this->build_pipeline_impl();
+        return this->build_pipeline_impl(0);
     }
 
     void call_generate() override {
-        this->call_generate_impl();
+        this->call_generate_impl(0);
     }
 
     void call_schedule() override {
-        this->call_schedule_impl();
+        this->call_schedule_impl(0, 0);
     }
 
 private:

@@ -147,7 +147,7 @@ public:
     }
 
     void schedule() {
-        Pipeline p(output); 
+        Pipeline p(output);
 
         if (!auto_schedule) {
             int vec = get_target().natural_vector_size(UInt(16));
@@ -198,7 +198,9 @@ public:
     Input<int> blackLevel{"blackLevel"};
     Input<int> whiteLevel{"whiteLevel"};
 
-    Func build();
+    Output<Buffer<uint8_t>> processed{"processed", 3};
+
+    void generate();
 
 private:
 
@@ -325,7 +327,7 @@ Func CameraPipe::apply_curve(Func input) {
     return curved;
 }
 
-Func CameraPipe::build() {
+void CameraPipe::generate() {
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
     // to make a 2560x1920 output image, just like the FCam pipe, so
@@ -335,12 +337,16 @@ Func CameraPipe::build() {
     shifted(x, y) = cast<int16_t>(input(x+16, y+12));
 
     Func denoised = hot_pixel_suppression(shifted);
+
     Func deinterleaved = deinterleave(denoised);
+
     auto demosaiced = create<Demosaic>();
     demosaiced->auto_schedule.set(auto_schedule);
     demosaiced->apply(deinterleaved);
+
     Func corrected = color_correct(demosaiced->output);
-    Func processed = apply_curve(corrected);
+
+    processed(x, y, c) = apply_curve(corrected)(x, y, c);
 
     Pipeline p(processed);
 
@@ -359,22 +365,24 @@ Func CameraPipe::build() {
         processed
             .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
-            .estimate(y, 0, 1968); 
+            .estimate(y, 0, 1968);
 
-        p.auto_schedule(get_target());
+        // Auto schedule the pipeline: this calls auto_schedule() for
+        // all of the Outputs in this Generator
+        auto_schedule_outputs();
 
     } else {
 
-        Expr out_width = processed.output_buffer().width();
-        Expr out_height = processed.output_buffer().height();
+        Expr out_width = processed.width();
+        Expr out_height = processed.height();
         // In HVX 128, we need 2 threads to saturate HVX with work,
         //and in HVX 64 we need 4 threads, and on other devices,
         // we might need many threads.
         Expr strip_size;
         if (get_target().has_feature(Target::HVX_128)) {
-            strip_size = processed.output_buffer().dim(1).extent() / 2;
+            strip_size = processed.dim(1).extent() / 2;
         } else if (get_target().has_feature(Target::HVX_64)) {
-            strip_size = processed.output_buffer().dim(1).extent() / 4;
+            strip_size = processed.dim(1).extent() / 4;
         } else {
             strip_size = 32;
         }
@@ -427,9 +435,7 @@ Func CameraPipe::build() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
             .bound(y, 0, (out_height/strip_size)*strip_size);
-    } 
-
-    return processed;
+    }
 };
 
 }  // namespace

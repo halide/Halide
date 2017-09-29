@@ -489,7 +489,7 @@ void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape) {
 }
 
 // Given a constraint Shape (generally produced by a bounds query), update
-// the input Buffer to meet those constraints, allocating and copying into 
+// the input Buffer to meet those constraints, allocating and copying into
 // a new Buffer if necessary.
 bool adapt_input_buffer_layout(const Shape &constrained_shape, Buffer<> *buf) {
     bool shape_changed = false;
@@ -664,7 +664,7 @@ struct ArgData {
 
 // Run a bounds-query call with the given args, and return the shapes
 // to which we are constrained.
-std::vector<Shape> run_bounds_query(const std::map<std::string, ArgData> &args, 
+std::vector<Shape> run_bounds_query(const std::map<std::string, ArgData> &args,
                                     const Shape &default_output_shape) {
     std::vector<void*> filter_argv(args.size(), nullptr);
     // These vectors are larger than needed, but simplifies logic downstream.
@@ -676,9 +676,9 @@ std::vector<Shape> run_bounds_query(const std::map<std::string, ArgData> &args,
         case halide_argument_kind_input_scalar:
             filter_argv[arg.index] = const_cast<halide_scalar_value_t*>(&arg.scalar_value);
             break;
-        case halide_argument_kind_input_buffer: 
+        case halide_argument_kind_input_buffer:
         case halide_argument_kind_output_buffer:
-            Shape shape = (arg.metadata->kind == halide_argument_kind_input_buffer) ? 
+            Shape shape = (arg.metadata->kind == halide_argument_kind_input_buffer) ?
                            get_shape(arg.buffer_value) :
                            choose_output_extents(arg.metadata->dimensions, default_output_shape);
             bounds_query_buffers[arg.index] = make_with_shape(arg.metadata->type, shape);
@@ -744,9 +744,9 @@ Arguments:
         some_input_buffer=/path/to/existing/file.png
         some_output_buffer=/path/to/create/output/file.png
 
-    We currently support JPG, PGM, PNG, PPM format. If the type or dimensions 
-    of the input or output file type can't support the data (e.g., your filter 
-    uses float32 input and output, and you load/save to PNG), we'll use the most 
+    We currently support JPG, PGM, PNG, PPM format. If the type or dimensions
+    of the input or output file type can't support the data (e.g., your filter
+    uses float32 input and output, and you load/save to PNG), we'll use the most
     robust approximation within the format and issue a warning to stdout.
 
     (We anticipate adding other image formats in the future, in particular,
@@ -766,7 +766,7 @@ Arguments:
 
 Flags:
 
-    --describe:     
+    --describe:
         print names and types of all arguments to stdout and exit.
 
     --output_extents=[NUM,NUM,...]
@@ -781,33 +781,33 @@ Flags:
         Note that if there are multiple outputs, all will be constrained
         to this shape.
 
-    --verbose:      
+    --verbose:
         emit extra diagnostic output.
 
     --quiet:
         Don't log calls to halide_print() to stdout.
 
-    --benchmarks=all:    
-        Run the filter with the given arguments many times to 
+    --benchmarks=all:
+        Run the filter with the given arguments many times to
         produce an estimate of average execution time; this currently
         runs "samples" sets of "iterations" each, and chooses the fastest
         sample set.
 
     --benchmark_min_time=DURATION_SECONDS [default = 0.5]:
-        Override the default minimum desired benchmarking time; ignored if 
+        Override the default minimum desired benchmarking time; ignored if
         --benchmarks is not also specified.
 
-    --benchmark_min_iters=NUM [default = 1]: 
-        Override the default minimum number of benchmarking iterations; ignored 
+    --benchmark_min_iters=NUM [default = 1]:
+        Override the default minimum number of benchmarking iterations; ignored
         if --benchmarks is not also specified.
 
-    --benchmark_max_iters=NUM [default = 1000000000]: 
-        Override the default maximum number of benchmarking iterations; ignored 
+    --benchmark_max_iters=NUM [default = 1000000000]:
+        Override the default maximum number of benchmarking iterations; ignored
         if --benchmarks is not also specified.
 
-    --track_memory: 
-        Override Halide memory allocator to track high-water mark of memory 
-        allocation during run; note that this may slow down execution, so 
+    --track_memory:
+        Override Halide memory allocator to track high-water mark of memory
+        allocation during run; note that this may slow down execution, so
         benchmarks may be inaccurate if you combine --benchmark with this.
 
 Known Issues:
@@ -1131,7 +1131,7 @@ int main(int argc, char **argv) {
             auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
             std::cout << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
-                << result.samples << " samples, " 
+                << result.samples << " samples, "
                 << result.iterations << " iterations, "
                 << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%).\n";
             std::cout << "Best output throughput is " << (megapixels / result.wall_time) << " mpix/sec.\n";

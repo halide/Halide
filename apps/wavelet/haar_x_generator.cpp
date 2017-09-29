@@ -9,16 +9,15 @@ Halide::Var x("x"), y("y"), c("c");
 class haar_x : public Halide::Generator<haar_x> {
 public:
     Input<Buffer<float>> in_{"in" , 2};
+    Output<Buffer<float>> out_{"out" , 3};
 
-    Func build() {
+    void generate() {
         Func in = Halide::BoundaryConditions::repeat_edge(in_);
 
-        Func out("out");
-        out(x, y, c) = select(c == 0,
+        out_(x, y, c) = select(c == 0,
                               (in(2*x, y) + in(2*x+1, y)),
                               (in(2*x, y) - in(2*x+1, y)))/2;
-        out.unroll(c, 2);
-        return out;
+        out_.unroll(c, 2);
     }
 };
 
