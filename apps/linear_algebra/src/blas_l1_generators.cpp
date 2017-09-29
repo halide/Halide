@@ -15,6 +15,7 @@ class AXPYGenerator :
     using Base::get_target;
     using Base::natural_vector_size;
     template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
@@ -27,6 +28,8 @@ class AXPYGenerator :
     Input<T>         a_ = {"a", 1};
     Input<Buffer<T>> x_ = {"x", 1};
     Input<Buffer<T>> y_ = {"y", 1};
+
+    Output<Buffer<T>> result_ = {"result", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
@@ -55,7 +58,7 @@ class AXPYGenerator :
         }
     }
 
-    Func build() {
+    void generate() {
         SetupTarget();
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
@@ -64,25 +67,22 @@ class AXPYGenerator :
         Expr size_tail = size - size_vecs;
 
         Var  i("i");
-        Func result("result");
         RDom vecs(0, size_vecs, "vec");
         RDom tail(size_vecs, size_tail, "tail");
-        result(i) = undef(type_of<T>());
-        result(vecs) = calc(vecs);
-        result(tail) = calc(tail);
+        result_(i) = undef(type_of<T>());
+        result_(vecs) = calc(vecs);
+        result_(tail) = calc(tail);
 
         if (vectorize_) {
             Var ii("ii");
-            result.update().vectorize(vecs, vec_size);
+            result_.update().vectorize(vecs, vec_size);
         }
 
-        result.bound(i, 0, x_.width());
-        result.output_buffer().dim(0).set_bounds(0, x_.width());
+        result_.bound(i, 0, x_.width());
+        result_.dim(0).set_bounds(0, x_.width());
 
         x_.dim(0).set_min(0);
         y_.dim(0).set_bounds(0, x_.width());
-
-        return result;
     }
 };
 
@@ -96,6 +96,7 @@ class DotGenerator :
     using Base::get_target;
     using Base::natural_vector_size;
     template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
@@ -105,6 +106,8 @@ class DotGenerator :
 
     Input<Buffer<T>> x_ = {"x", 1};
     Input<Buffer<T>> y_ = {"y", 1};
+
+    Output<Buffer<T>> result_ = {"result", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
@@ -118,7 +121,7 @@ class DotGenerator :
         }
     }
 
-    Func build() {
+    void generate() {
         SetupTarget();
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
@@ -127,7 +130,6 @@ class DotGenerator :
         Expr size_tail = size - size_vecs * vec_size;
 
         Var i("i");
-        Func result;
         if (vectorize_) {
             Func dot;
 
@@ -136,22 +138,20 @@ class DotGenerator :
 
             RDom lanes(0, vec_size);
             RDom tail(size_vecs * vec_size, size_tail);
-            result(i) = undef<T>();
-            result(0) = sum(dot(lanes));
-            result(0) += sum(x_(tail) * y_(tail));
+            result_(i) = undef<T>();
+            result_(0) = sum(dot(lanes));
+            result_(0) += sum(x_(tail) * y_(tail));
 
             dot.compute_root().vectorize(i);
             dot.update(0).vectorize(i);
         } else {
             RDom k(0, size);
-            result(i) = undef<T>();
-            result(0) = sum(x_(k) * y_(k));
+            result_(i) = undef<T>();
+            result_(0) = sum(x_(k) * y_(k));
         }
 
         x_.dim(0).set_min(0);
         y_.dim(0).set_bounds(0, size);
-
-        return result;
     }
 };
 
@@ -165,6 +165,7 @@ class AbsSumGenerator :
     using Base::get_target;
     using Base::natural_vector_size;
     template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
@@ -173,6 +174,8 @@ class AbsSumGenerator :
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
 
     Input<Buffer<T>> x_ = {"x", 1};
+
+    Output<Buffer<T>> result_ = {"result", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
@@ -186,7 +189,7 @@ class AbsSumGenerator :
         }
     }
 
-    Func build() {
+    void generate() {
         SetupTarget();
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
@@ -195,7 +198,6 @@ class AbsSumGenerator :
         Expr size_tail = size - size_vecs * vec_size;
 
         Var i("i");
-        Func result;
         if (vectorize_) {
             Func norm;
 
@@ -204,21 +206,19 @@ class AbsSumGenerator :
 
             RDom lanes(0, vec_size);
             RDom tail(size_vecs * vec_size, size_tail);
-            result(i) = undef<T>();
-            result(0) = sum(norm(lanes));
-            result(0) += sum(abs(x_(tail)));
+            result_(i) = undef<T>();
+            result_(0) = sum(norm(lanes));
+            result_(0) += sum(abs(x_(tail)));
 
             norm.compute_root().vectorize(i);
             norm.update(0).vectorize(i);
         } else {
             RDom k(0, x_.width());
-            result(i) = undef<T>();
-            result(0) = sum(abs(x_(k)));
+            result_(i) = undef<T>();
+            result_(0) = sum(abs(x_(k)));
         }
 
         x_.dim(0).set_min(0);
-
-        return result;
     }
 };
 
