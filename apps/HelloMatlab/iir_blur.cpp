@@ -64,7 +64,9 @@ public:
     // filter.
     Input<float> alpha{"alpha"};
 
-    Func build() {
+    Output<Buffer<float>> output{"output", 3};
+
+    void generate() {
         Expr width = input.width();
         Expr height = input.height();
 
@@ -75,8 +77,7 @@ public:
         Func blur = blur_cols_transpose(blury_T, width, alpha);
 
         // Scheduling is done inside blur_cols_transpose.
-
-        return blur;
+        output(x, y, c) = blur(x, y, c);
     }
 };
 
