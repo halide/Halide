@@ -4593,7 +4593,7 @@ private:
             Expr cond = mutate(op->args[0]);
             // likely(const-bool) is deliberately not reduced
             // by the simplify(), but for our purposes here, we want
-            // to ignore the likely() wrapper. (Note that this is 
+            // to ignore the likely() wrapper. (Note that this is
             // equivalent to calling can_prove() without needing to
             // create a new Simplifier instance.)
             if (const Call *c = cond.as<Call>()) {

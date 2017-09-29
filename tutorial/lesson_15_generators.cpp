@@ -29,7 +29,7 @@ using namespace Halide;
 class MyFirstGenerator : public Halide::Generator<MyFirstGenerator> {
 public:
     // We declare the Inputs to the Halide pipeline as public
-    // member variables. They'll appear in the signature of our generated 
+    // member variables. They'll appear in the signature of our generated
     // function in the same order as we declare them.
     Input<uint8_t> offset{"offset"};
     Input<Buffer<uint8_t>> input{"input", 2};

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     // choose values that will simplify the require() condition to const-false
     Expr p1 = 1;
     Expr p2 = 2;
-    f(x) = require((p1 + p2) == kPrime1, 
+    f(x) = require((p1 + p2) == kPrime1,
                    (p1 + p2) * kPrime2,
                    "The parameters should add to exactly", kPrime1, "but were", p1, p2);
     f.set_error_handler(&halide_error);

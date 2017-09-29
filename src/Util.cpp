@@ -347,7 +347,7 @@ std::string dir_make_temp() {
     #ifdef _WIN32
     std::string tmp_dir = get_windows_tmp_dir();
     // There's no direct API to do this in Windows;
-    // our clunky-but-adequate approach here is to use 
+    // our clunky-but-adequate approach here is to use
     // CoCreateGuid() to create a probably-unique name.
     // Add a limit on the number of tries just in case.
     for (int tries = 0; tries < 100; ++tries) {
@@ -365,7 +365,7 @@ std::string dir_make_temp() {
              << std::setw(2);
         for (int i = 0; i < 8; i++) {
             name << (int)guid.Data4[i];
-        }       
+        }
         std::string dir = tmp_dir + name.str();
         BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
         if (result) {
