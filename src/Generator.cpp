@@ -1374,7 +1374,7 @@ void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_outputs.size() == 0) << "May not use build() method with Output<>.";
+    user_assert(pi.filter_outputs.empty()) << "May not use build() method with Output<>.";
     if (!inputs_set) {
         for (auto input : pi.filter_inputs) {
             input->init_internals();
