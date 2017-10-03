@@ -10,7 +10,7 @@ public:
     Input<int>             scalar_param{"scalar_param", 1, 0, 64};
 
     Output<Buffer<int32_t>>  output{"output", 2};
- 
+
     void generate() {
         Func f, g;
         Var x, y;

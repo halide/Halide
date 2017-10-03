@@ -52,7 +52,7 @@ public:
         calculated_output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
-        // can really only be assigned to another Output<Buffer>; this is 
+        // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
         float32_buffer_output = stub.typed_buffer_output;

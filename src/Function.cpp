@@ -349,6 +349,11 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     }
 }
 
+void Function::deep_copy(string name, FunctionPtr copy, DeepCopyMap &copied_map) const {
+    deep_copy(copy, copied_map);
+    copy->name = name;
+}
+
 void Function::define(const vector<string> &args, vector<Expr> values) {
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new pure definition, "

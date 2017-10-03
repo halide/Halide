@@ -269,7 +269,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     int num_funcs = (int)(profiling.indices.size());
 
     Expr func_names_buf = Variable::make(Handle(), "profiling_func_names");
-    
+
     Expr start_profiler = Call::make(Int(32), "halide_profiler_pipeline_start",
                                      {pipeline_name, num_funcs, func_names_buf}, Call::Extern);
 

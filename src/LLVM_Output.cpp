@@ -25,14 +25,14 @@ namespace Internal {
 namespace Archive {
 
 // This is a bare-bones Windows .lib file writer, based on inspection
-// of the LLVM ArchiveWriter class and the documentation at 
+// of the LLVM ArchiveWriter class and the documentation at
 // https://www.microsoft.com/msj/0498/hood0498.aspx and
 // https://msdn.microsoft.com/en-us/library/windows/desktop/ms680547(v=vs.85).aspx#archive__library__file_format
 //
 // It has been compared with the output of VS2015's lib.exe and appears to be
 // bit-identical (to meaningful bits, anyway) for a sampling of Halide
 // AOT output, but it is quite possible that there are omissions, mistakes,
-// or just plain bugs.    
+// or just plain bugs.
 
 // Emit a field that is 'size' characters wide.
 // If data too small, pad on the right with spaces.
@@ -134,10 +134,10 @@ void write_symbol_table(std::ostream &out,
                         const std::vector<llvm::NewArchiveMember> &members,
                         bool windows_coff_format,
                         std::map<size_t, std::vector<PatchInfo>> *patchers) {
-    internal_assert(members.size() != 0);
+    internal_assert(!members.empty());
 
-    EmitU32 emit_u32 = windows_coff_format 
-        ? emit_little_endian_u32 
+    EmitU32 emit_u32 = windows_coff_format
+        ? emit_little_endian_u32
         : emit_big_endian_u32;
 
     // Write zero for sizes/offsets that will be patched later.
