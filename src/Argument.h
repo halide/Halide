@@ -95,7 +95,7 @@ struct Argument {
                def.same_as(rhs.def) &&
                min.same_as(rhs.min) &&
                max.same_as(rhs.max);
-    }    
+    }
 };
 
 }

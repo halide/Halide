@@ -998,7 +998,7 @@ Box box_intersection(const Box &a, const Box &b) {
 bool boxes_overlap(const Box &a, const Box &b) {
     // If one box is scalar and the other is not, the boxes cannot
     // overlap.
-    if (a.size() != b.size() && (a.size() == 0 || b.size() == 0)) {
+    if (a.size() != b.size() && (a.empty() || b.empty())) {
         return false;
     }
 

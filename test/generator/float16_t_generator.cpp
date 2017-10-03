@@ -2,13 +2,13 @@
 
 class Float16T : public Halide::Generator<Float16T> {
 public:
-    Func build() {
+    Output<Buffer<int32_t>> output{"output", 1};
+
+    void generate() {
         // Currently the float16 aot test just exercises the
         // runtime. More interesting code may go here in the future.
         Var x;
-        Func f;
-        f(x) = x;
-        return f;
+        output(x) = x;
     }
 };
 
