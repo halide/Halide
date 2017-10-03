@@ -990,19 +990,17 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
     // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
     if (!generator) return;
-    // Special-case for legacy: allow 'target' to be writable. Yikes.
-    if (name == "target") return;
-    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be written after build() or generate() is called.\n";
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be written after build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
-    user_error << "The GeneratorParam " << name << " cannot be set with a value of type " << type << ".\n";
+    user_error << "The GeneratorParam \"" << name << "\" cannot be set with a value of type " << type << ".\n";
 }
 
 /* static */
