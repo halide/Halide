@@ -224,7 +224,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(gpu_only)
   halide_define_aot_test(image_from_array)
   halide_define_aot_test(mandelbrot)
-  halide_define_aot_test(memory_profiler_mandelbrot)
   halide_define_aot_test(stubuser)
   halide_define_aot_test(variable_num_threads)
   halide_define_aot_test(old_buffer_t)
@@ -234,6 +233,9 @@ if (WITH_TEST_GENERATORS)
   # Tests that require nonstandard targets, namespaces, args, etc.
   halide_define_aot_test(matlab
                          HALIDE_TARGET_FEATURES matlab)
+
+  halide_define_aot_test(memory_profiler_mandelbrot
+                         HALIDE_TARGET_FEATURES profile)
 
   halide_define_aot_test(multitarget
                          HALIDE_TARGET host,host-debug
