@@ -147,7 +147,7 @@ public:
     }
 
     void schedule() {
-        Pipeline p(output); 
+        Pipeline p(output);
 
         if (!auto_schedule) {
             int vec = get_target().natural_vector_size(UInt(16));
@@ -365,9 +365,11 @@ void CameraPipe::generate() {
         processed
             .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
-            .estimate(y, 0, 1968); 
+            .estimate(y, 0, 1968);
 
-        p.auto_schedule(get_target());
+        // Auto schedule the pipeline: this calls auto_schedule() for
+        // all of the Outputs in this Generator
+        auto_schedule_outputs();
 
     } else {
 
@@ -433,7 +435,7 @@ void CameraPipe::generate() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
             .bound(y, 0, (out_height/strip_size)*strip_size);
-    } 
+    }
 };
 
 }  // namespace

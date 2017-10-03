@@ -39,7 +39,7 @@ static inline void print_dimid(int d, int val) {
 
 static inline void print_loc(const std::vector<int32_t> &loc, int dim, const int32_t *min) {
     for (int d = 0; d < dim; d++) {
-        if (d) { 
+        if (d) {
             std::cout << ",";
         }
         std::cout << loc[d] + min[d];

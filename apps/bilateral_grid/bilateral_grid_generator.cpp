@@ -78,9 +78,9 @@ public:
             blurx.estimate(z, 0, 12);
             blury.estimate(z, 0, 12);
             bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
-            // Auto schedule the pipeline
-            Pipeline p(bilateral_grid);
-            p.auto_schedule(get_target());
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 

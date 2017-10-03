@@ -156,7 +156,7 @@ private:
             //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
             //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
             //    Expr c = select(a < b, a, b);            // whoops
-            // 
+            //
             if (true_value.type().bits() != false_value.type().bits() &&
                 true_value.type().lanes() == false_value.type().lanes() &&
                 true_value.type().is_int() && false_value.type().is_int()) {
