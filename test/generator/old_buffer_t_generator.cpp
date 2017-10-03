@@ -23,7 +23,15 @@ public:
         g.define_extern("extern_stage", {in2, f}, Int(32), 2,
                         NameMangling::Default,
                         true /* uses old buffer_t */);
-        return g;
+
+        // Schedule the extern stage per tile to give the buffers a non-trivial min
+        Func h;
+        h(x, y) = g(x, y);
+        Var xi, yi;
+        h.tile(x, y, xi, yi, 8, 8);
+        g.compute_at(h, x);
+
+        return h;
     }
 };
 
