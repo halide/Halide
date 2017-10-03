@@ -351,7 +351,7 @@ Stmt add_image_checks(Stmt s,
             // And that no product of extents overflows 2^31 - 1. This
             // second test is likely only needed if a fuse directive
             // is used in the schedule to combine multiple extents,
-            // but it is here for extra safety. On targets with the
+            // but it is here for extra safety. On 64-bit targets with the
             // LargeBuffers feature, the maximum size is 2^63 - 1.
             Expr max_size = make_const(UInt(64), t.maximum_buffer_size());
             Expr max_extent = make_const(UInt(64), 0x7fffffff);
