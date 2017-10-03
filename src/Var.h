@@ -151,11 +151,11 @@ public:
 
     /** Vars to use for scheduling producer/consumer pairs on the gpu. Deprecated. */
     // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_blocks() is deprecated.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_blocks() is deprecated.")
     static Var gpu_blocks() {
         return Var("__deprecated_block_id_x");
     }
-    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_threads() is deprecated.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("Var::gpu_threads() is deprecated.")
     static Var gpu_threads() {
         return Var("__deprecated_thread_id_x");
     }

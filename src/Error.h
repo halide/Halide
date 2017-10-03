@@ -100,8 +100,8 @@ struct ErrorReport {
 };
 
 // This uses operator precedence as a trick to avoid argument evaluation if
-// an assertion is true: it is intended to be used as part of the 
-// _halide_internal_assertion macro, to coerce the result of the stream 
+// an assertion is true: it is intended to be used as part of the
+// _halide_internal_assertion macro, to coerce the result of the stream
 // expression to void (to match the condition-is-false case).
 class Voidifier {
  public:

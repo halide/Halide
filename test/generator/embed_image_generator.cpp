@@ -26,5 +26,5 @@ public:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(EmbedImage, embed_image) 
+HALIDE_REGISTER_GENERATOR(EmbedImage, embed_image)
 

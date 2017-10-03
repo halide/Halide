@@ -32,12 +32,12 @@ public:
         return type;
     }
 
-    operator Expr() const { 
+    operator Expr() const {
         user_assert(!is_looplevel_param()) << "Only scalar ScheduleParams can be converted to Expr.";
         return scalar_expr;
     }
 
-    operator LoopLevel() const { 
+    operator LoopLevel() const {
         user_assert(is_looplevel_param()) << "Only ScheduleParam<LoopLevel> can be converted to LoopLevel.";
         return loop_level;
     }
@@ -100,7 +100,7 @@ struct Convert {
 /** A ScheduleParam is a "Param" that can contain a scalar Expr or a LoopLevel;
  * unlike Param<>, its value cannot be set at runtime. All ScheduleParam values
  * are finalized just before lowering, and must translate into a constant scalar
- * value (or a well-defined LoopLevel) at that point. The value of 
+ * value (or a well-defined LoopLevel) at that point. The value of
  * should be bound to an actual value of type T using the set method
  * before you realize the function uses this. If you're statically
  * compiling, this param should *not* appear in the argument list.
@@ -111,7 +111,7 @@ class ScheduleParam : public Internal::ScheduleParamBase {
 
     template <typename T2 = T,
               typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
-    static Type get_param_type() { 
+    static Type get_param_type() {
         return type_of<T>();
     }
 
@@ -121,7 +121,7 @@ class ScheduleParam : public Internal::ScheduleParamBase {
         return Handle();
     }
 
-    template <typename T2, typename std::enable_if<std::is_arithmetic<T>::value && 
+    template <typename T2, typename std::enable_if<std::is_arithmetic<T>::value &&
                                                    std::is_convertible<T2, T>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char *type) {
         // Arithmetic types must roundtrip losslessly.
@@ -222,13 +222,13 @@ public:
     // you'd be tempted to examine it, since it won't be finalized until the start of lowering.
     // Here's the code that we'd use to do so, if we find we need to:
 
-    // template <typename T2 = T, 
+    // template <typename T2 = T,
     //           typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
     // operator T() const {
     //     return scalar_parameter.get_scalar<T>();
     // }
 
-    // template <typename T2 = T, 
+    // template <typename T2 = T,
     //           typename std::enable_if<std::is_same<T2, LoopLevel>::value>::type * = nullptr>
     // operator T() const {
     //     return loop_level;

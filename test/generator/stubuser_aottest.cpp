@@ -55,8 +55,8 @@ int main(int argc, char **argv) {
 
   stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output);
   verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
-  verify(input, 1.f, 0, 0.f, float32_buffer_output); 
-  verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output); 
+  verify(input, 1.f, 0, 0.f, float32_buffer_output);
+  verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
 
   printf("Success!\n");
   return 0;

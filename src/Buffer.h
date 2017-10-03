@@ -371,7 +371,7 @@ public:
 
     template<typename Fn, typename ...Args>
     void for_each_value(Fn &&f, Args... other_buffers) {
-        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...); 
+        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
     }
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
@@ -471,7 +471,11 @@ public:
         return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
     }
 
-    /** Wrap a native handle, using the given device API. */
+    /** Wrap a native handle, using the given device API.
+     * It is a bad idea to pass DeviceAPI::Default_GPU to this routine
+     * as the handle argument must match the API that the default
+     * resolves to and it is clearer and more reliable to pass the
+     * resolved DeviceAPI explicitly. */
     int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t), handle);
     }
