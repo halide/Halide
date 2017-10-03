@@ -290,7 +290,7 @@ struct Target {
     }
 
     /** Return true iff 64 bits and has_feature(LargeBuffers). */
-    bool use_large_buffers() const {
+    bool has_large_buffers() const {
         return bits == 64 && has_feature(LargeBuffers);
     }
 
@@ -298,7 +298,7 @@ struct Target {
      * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
      * feature is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        if (use_large_buffers()) {
+        if (has_large_buffers()) {
             return (((uint64_t)1) << 63) - 1;
         } else {
             return (((uint64_t)1) << 31) - 1;
