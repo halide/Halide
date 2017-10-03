@@ -17,9 +17,9 @@ typedef map<FunctionPtr, FunctionPtr> SubstitutionMap;
 namespace {
 
 void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers_map,
-                                FunctionPtr in_func,
-                                FunctionPtr wrapped_func,
-                                FunctionPtr wrapper) {
+                                const FunctionPtr &in_func,
+                                const FunctionPtr &wrapped_func,
+                                const FunctionPtr &wrapper) {
     internal_assert(in_func.defined() &&
                     wrapped_func.defined() &&
                     wrapper.defined());
@@ -50,7 +50,8 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
     wrappers_map[wrapped_func] = wrapper;
 }
 
-void validate_custom_wrapper(Function in_func, Function wrapped, Function wrapper) {
+void validate_custom_wrapper(const Function &in_func, const Function &wrapped,
+                             const Function &wrapper) {
     map<string, Function> callees = find_direct_calls(in_func);
     if (!callees.count(wrapper.name())) {
         std::ostringstream callees_text;
@@ -66,17 +67,44 @@ void validate_custom_wrapper(Function in_func, Function wrapped, Function wrappe
     }
 }
 
+void get_custom_wrapper_in_func_list(vector<Function> &in_func_list,
+                                     const map<string, map<string, Function>> &direct_calls,
+                                     const FunctionPtr &in_func,
+                                     const FunctionPtr &wrapped_func) {
+    vector<Function> funcs = {Function(in_func)};
+    string wrapped_fname = Function(wrapped_func).name();
+
+    while (!funcs.empty()) {
+        Function f = funcs[funcs.size()-1];
+        funcs.pop_back();
+
+        // TODO(psuriana): have to check that the func is not a wrapper. If
+        // it is, we should stop traversing the DAG from that node
+        const map<string, Function> callees = direct_calls.at(f.name());
+        for (const auto &iter : callees) {
+            const Function &callee = iter.second;
+            if (callee.name() == wrapped_fname) {
+                in_func_list.push_back(f);
+            } else if (!callee.schedule().compute_level().is_inline()) {
+
+            }
+        }
+    }
+}
+
 } // anonymous namespace
 
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> wrapped_env;
 
     map<FunctionPtr, SubstitutionMap> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
+    map<string, map<string, Function>> direct_calls; // Func -> all its callees
     set<string> global_wrappers;
 
     for (const auto &iter : env) {
         wrapped_env.emplace(iter.first, iter.second);
         func_wrappers_map[iter.second.get_contents()];
+        direct_calls.emplace(iter.first, find_direct_calls(iter.second));
     }
 
     for (const auto &it : env) {
@@ -143,10 +171,21 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                              << " -> " << Function(wrapper).name() << "] since it's not in the pipeline\n";
                     continue;
                 }
-                insert_func_wrapper_helper(func_wrappers_map,
+
+                vector<Function> in_func_list;
+                get_custom_wrapper_in_func_list(in_func_list,
+                                                direct_calls,
+                                                wrapped_env[in_func].get_contents(),
+                                                wrapped_func);
+                user_assert(!in_func_list.empty());
+
+                for (const Function &f : in_func_list) {
+                    insert_func_wrapper_helper(func_wrappers_map, f.get_contents(),
+                                               wrapped_func, wrapper);
+                }
+                /*insert_func_wrapper_helper(func_wrappers_map,
                                            wrapped_env[in_func].get_contents(),
-                                           wrapped_func,
-                                           wrapper);
+                                           wrapped_func, wrapper);*/
             }
         }
     }
@@ -167,7 +206,9 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
         const auto &substitutions = func_wrappers_map[iter.second.get_contents()];
         for (const auto &pair : substitutions) {
             if (global_wrappers.find(Function(pair.second).name()) == global_wrappers.end()) {
-                validate_custom_wrapper(iter.second, Function(pair.first), Function(pair.second));
+                validate_custom_wrapper(iter.second,
+                                        Function(pair.first),
+                                        Function(pair.second));
             }
         }
     }
