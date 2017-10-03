@@ -18,13 +18,13 @@ int main() {
     const float largeNum = (float)(1<<16);
     h_assert(!std::isnan(largeNum), "largeNum should not be NaN");
     h_assert(!std::isinf(largeNum), "largeNum should not be inf");
-    
+
     // This should fail as it triggers overflow
     float16_t fail(largeNum, RoundingMode::ToNearestTiesToEven);
-    
+
     // Supress -Wunused-but-set-variable
     fail.is_infinity();
-    
+
     printf("Should not be reached!\n");
     return 0;
 }

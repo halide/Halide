@@ -15,6 +15,7 @@ class GEMMGenerator :
     using Base::get_target;
     using Base::natural_vector_size;
     template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
     GeneratorParam<bool> transpose_A_ = {"transpose_A", false};
     GeneratorParam<bool> transpose_B_ = {"transpose_B", false};
@@ -26,7 +27,9 @@ class GEMMGenerator :
     Input<T>         b_ = {"b_", 1};
     Input<Buffer<T>> C_ = {"C_", 2};
 
-    Func build() {
+    Output<Buffer<T>> result_ = {"result", 2};
+
+    void generate() {
         // Matrices are interpreted as column-major by default. The
         // transpose GeneratorParams are used to handle cases where
         // one or both is actually row major.
@@ -50,7 +53,6 @@ class GEMMGenerator :
 
         Var i, j, ii, ji, jii, iii, io, jo, t;
         Var ti[3], tj[3];
-        Func result("result");
 
         // Swizzle A for better memory order in the inner loop.
         Func A("A"), B("B"), Btmp("Btmp"), As("As"), Atmp("Atmp");
@@ -90,33 +92,33 @@ class GEMMGenerator :
         }
 
         // Do the part that makes it a 'general' matrix multiply.
-        result(i, j) = (a_ * ABt(i, j) + b_ * C_(i, j));
+        result_(i, j) = (a_ * ABt(i, j) + b_ * C_(i, j));
 
-        result.tile(i, j, ti[1], tj[1], i, j, 2*s, 2*s, TailStrategy::GuardWithIf);
+        result_.tile(i, j, ti[1], tj[1], i, j, 2*s, 2*s, TailStrategy::GuardWithIf);
         if (transpose_AB) {
-            result
+            result_
                 .tile(i, j, ii, ji, 4, s)
                 .tile(i, j, ti[0], tj[0], i, j, s/4, 1);
 
         } else {
-            result
+            result_
                 .tile(i, j, ii, ji, s, 4)
                 .tile(i, j, ti[0], tj[0], i, j, 1, s/4);
         }
 
         // If we have enough work per task, parallelize over these tiles.
-        result.specialize(num_rows >= 512 && num_cols >= 512)
+        result_.specialize(num_rows >= 512 && num_cols >= 512)
             .fuse(tj[1], ti[1], t).parallel(t);
 
         // Otherwise tile one more time before parallelizing, or don't
         // parallelize at all.
-        result.specialize(num_rows >= 128 && num_cols >= 128)
+        result_.specialize(num_rows >= 128 && num_cols >= 128)
             .tile(ti[1], tj[1], ti[2], tj[2], ti[1], tj[1], 2, 2)
             .fuse(tj[2], ti[2], t).parallel(t);
 
-        result.rename(tj[0], t);
+        result_.rename(tj[0], t);
 
-        result.bound(i, 0, num_rows).bound(j, 0, num_cols);
+        result_.bound(i, 0, num_rows).bound(j, 0, num_cols);
 
         As.compute_root()
             .split(j, jo, ji, s).reorder(i, ji, io, jo)
@@ -127,7 +129,7 @@ class GEMMGenerator :
             .vectorize(i).unroll(j);
 
         if (transpose_B) {
-            B.compute_at(result, t)
+            B.compute_at(result_, t)
                 .tile(i, j, ii, ji, 8, 8)
                 .vectorize(ii).unroll(ji);
             Btmp.reorder_storage(j, i)
@@ -137,13 +139,13 @@ class GEMMGenerator :
         }
 
 
-        AB.compute_at(result, i)
+        AB.compute_at(result_, i)
             .bound_extent(j, 4).unroll(j)
             .bound_extent(i, s).vectorize(i)
             .update()
             .reorder(i, j, rv).unroll(j).unroll(rv, 2).vectorize(i);
         if (transpose_AB) {
-            ABt.compute_at(result, i)
+            ABt.compute_at(result_, i)
                 .bound_extent(i, 4).unroll(i)
                 .bound_extent(j, s).vectorize(j);
         }
@@ -152,9 +154,7 @@ class GEMMGenerator :
         B_.dim(0).set_bounds(0, sum_size).dim(1).set_min(0);
         C_.dim(0).set_bounds(0, num_rows);
         C_.dim(1).set_bounds(0, num_cols);
-        result.output_buffer().dim(0).set_bounds(0, num_rows).dim(1).set_bounds(0, num_cols);
-
-        return result;
+        result_.dim(0).set_bounds(0, num_rows).dim(1).set_bounds(0, num_cols);
     }
 };
 

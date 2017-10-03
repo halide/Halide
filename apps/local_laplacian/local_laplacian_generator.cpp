@@ -102,9 +102,9 @@ public:
             output.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline
-            Pipeline p(output);
-            p.auto_schedule(get_target());
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             // gpu schedule
             remap.compute_root();

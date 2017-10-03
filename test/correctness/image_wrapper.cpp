@@ -10,7 +10,7 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-int calling_wrap_no_op_test() {
+int calling_wrapper_no_op_test() {
     Var x("x"), y("y");
 
     {
@@ -63,7 +63,7 @@ int calling_wrap_no_op_test() {
     return 0;
 }
 
-int func_wrap_test() {
+int func_wrapper_test() {
     Func source("source"), g("g");
     Var x("x"), y("y");
 
@@ -114,82 +114,47 @@ int multiple_funcs_sharing_wrapper_test() {
     g2(x, y) = img(x);
     g3(x, y) = img(x);
 
-    Func im_wrapper = img.in({g1, g2, g3}).compute_root();
+    Func im_wrapper = img.in({g1, g2}).compute_root();
     Func img_f = img;
     img_f.compute_root();
 
-    {
-        // Check the call graphs.
-        // Expect 'g1' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'img_f' to call 'img'
-        Module m = g1.compile_to_module({g1.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
+    // Check the call graphs.
+    // Expect 'g1' and 'g2' to call 'im_wrapper', 'g3' to call 'img_f',
+    // im_wrapper' to call 'img_f', 'img_f' to call 'img'
+    Pipeline p({g1, g2, g3});
+    Module m = p.compile_to_module({p.infer_arguments()}, "");
+    CheckCalls c;
+    m.functions().front().body.accept(&c);
 
-        CallGraphs expected = {
-            {g1.name(), {im_wrapper.name()}},
-            {im_wrapper.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g1.realize(200, 200);
-        auto func = [](int x, int y) { return x; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g1.name(), {im_wrapper.name()}},
+        {g2.name(), {im_wrapper.name()}},
+        {g3.name(), {img_f.name()}},
+        {im_wrapper.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
     }
 
-    {
-        // Check the call graphs.
-        // Expect 'g2' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
-        Module m = g2.compile_to_module({g2.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g2.name(), {im_wrapper.name()}},
-            {im_wrapper.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g2.realize(200, 200);
-        auto func = [](int x, int y) { return x; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    Realization r = p.realize(200, 200);
+    Buffer<int> img1 = r[0];
+    Buffer<int> img2 = r[1];
+    Buffer<int> img3 = r[2];
+    auto func = [](int x, int y) { return x; };
+    if (check_image(img1, func)) {
+        return -1;
     }
-
-    {
-        // Check the call graphs.
-        // Expect 'g3' to call 'im_wrapper', 'im_wrapper' to call 'img_f', 'f' to call 'img'
-        Module m = g3.compile_to_module({g3.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g3.name(), {im_wrapper.name()}},
-            {im_wrapper.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g3.realize(200, 200);
-        auto func = [](int x, int y) { return x; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    if (check_image(img2, func)) {
+        return -1;
+    }
+    if (check_image(img3, func)) {
+        return -1;
     }
     return 0;
 }
 
-int global_wrap_test() {
+int global_wrapper_test() {
     Func source("source"), g("g"), h("h"), i("i");
     Var x("x"), y("y");
 
@@ -234,7 +199,7 @@ int global_wrap_test() {
     return 0;
 }
 
-int update_defined_after_wrap_test() {
+int update_defined_after_wrapper_test() {
     Func source("source"), g("g");
     Var x("x"), y("y");
 
@@ -333,7 +298,8 @@ int rdom_wrapper_test() {
 
     g(x, y) = 10;
     g(x, y) += 2 * img(x, x);
-    g(x, y) += 3 * img(y, y);
+    RDom r(0, 200, 0, 200);
+    g(r.x, r.y) += 3 * img(r.y, r.y);
 
     // Make a global wrapper on 'g', so that we can schedule initialization
     // and the update on the same compute level at the global wrapper
@@ -366,7 +332,7 @@ int rdom_wrapper_test() {
     return 0;
 }
 
-int global_and_custom_wrap_test() {
+int global_and_custom_wrapper_test() {
     Func source("source"), g("g"), result("result");
     Var x("x"), y("y");
 
@@ -626,65 +592,45 @@ int multi_folds_wrapper_test() {
     img_in_g_in_g_in_h_in_h = img_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(_0).unroll(_1);
     h.compute_root().tile(x, y, xi, yi, 8, 8);
 
-    {
-        // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
+    Pipeline p({g, h});
+    Module m = p.compile_to_module({p.infer_arguments()}, "");
+    CheckCalls c;
+    m.functions().front().body.accept(&c);
 
-        CallGraphs expected = {
-            {g.name(), {img_in_g_in_g.name()}},
-            {img_in_g_in_g.name(), {img_in_g.name()}},
-            {img_in_g.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize(1024, 1024);
-        auto func = [](int x, int y) { return 3*x + 2*y; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g.name(), {img_in_g_in_g.name()}},
+        {img_in_g_in_g.name(), {img_in_g.name()}},
+        {img_in_g.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
+        {h.name(), {img_in_g_in_g_in_h_in_h.name()}},
+        {img_in_g_in_g_in_h_in_h.name(), {img_in_g_in_g_in_h.name()}},
+        {img_in_g_in_g_in_h.name(), {img_in_g_in_g.name()}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
     }
 
-    {
-        // Check the call graphs.
-        Module m = h.compile_to_module({h.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {h.name(), {img_in_g_in_g_in_h_in_h.name()}},
-            {img_in_g_in_g_in_h_in_h.name(), {img_in_g_in_g_in_h.name()}},
-            {img_in_g_in_g_in_h.name(), {img_in_g_in_g.name()}},
-            {img_in_g_in_g.name(), {img_in_g.name()}},
-            {img_in_g.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = h.realize(1024, 1024);
-        auto func = [](int x, int y) { return 3*x + 2*y; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    Realization r = p.realize(1024, 1024);
+    Buffer<int> img_g = r[0];
+    Buffer<int> img_h = r[1];
+    auto func = [](int x, int y) { return 3*x + 2*y; };
+    if (check_image(img_g, func)) {
+        return -1;
     }
-
+    if (check_image(img_h, func)) {
+        return -1;
+    }
     return 0;
 }
 
 int main(int argc, char **argv) {
     printf("Running calling wrap no op test\n");
-    if (calling_wrap_no_op_test() != 0) {
+    if (calling_wrapper_no_op_test() != 0) {
         return -1;
     }
 
     printf("Running func wrap test\n");
-    if (func_wrap_test() != 0) {
+    if (func_wrapper_test() != 0) {
         return -1;
     }
 
@@ -694,12 +640,12 @@ int main(int argc, char **argv) {
     }
 
     printf("Running global wrap test\n");
-    if (global_wrap_test() != 0) {
+    if (global_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running update is defined after wrap test\n");
-    if (update_defined_after_wrap_test() != 0) {
+    if (update_defined_after_wrapper_test() != 0) {
         return -1;
     }
 
@@ -709,7 +655,7 @@ int main(int argc, char **argv) {
     }
 
     printf("Running global + custom wrapper test\n");
-    if (global_and_custom_wrap_test() != 0) {
+    if (global_and_custom_wrapper_test() != 0) {
         return -1;
     }
 
