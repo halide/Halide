@@ -107,7 +107,7 @@ public:
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
     }
 
-    /** Call device_sync() for all Buffers in the Realization. 
+    /** Call device_sync() for all Buffers in the Realization.
      * If one of the calls returns an error, subsequent Buffers won't have
      * device_sync called; thus callers should consider a nonzero return
      * code to mean that potentially all of the Buffers are in an indeterminate
@@ -120,7 +120,7 @@ public:
                 return result;
             }
         }
-        return 0; 
+        return 0;
     }
 
 };

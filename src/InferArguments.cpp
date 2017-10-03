@@ -11,7 +11,7 @@ namespace Internal {
 using std::set;
 using std::string;
 using std::vector;
-  
+
 namespace {
 
 class InferArguments : public IRGraphVisitor {
