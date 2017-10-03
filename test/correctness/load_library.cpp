@@ -6,7 +6,7 @@ using namespace Halide;
 // This test exercises the ability to override halide_get_library_symbol (etc)
 // when using JIT code; to do so, it compiles & calls a simple pipeline
 // using an OpenCL schedule, since that is known to use these calls
-// in a (reasonably) well-defined way and is unlikely to change a great deal 
+// in a (reasonably) well-defined way and is unlikely to change a great deal
 // in the near future; additionally, it doesn't require a particular
 // feature in LLVM (unlike, say, Hexagon).
 

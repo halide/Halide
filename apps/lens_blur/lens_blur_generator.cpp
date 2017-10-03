@@ -21,7 +21,9 @@ public:
     // The number of samples of the aperture to use
     Input<int>              aperture_samples{"aperture_samples", 32, 1, 64};
 
-    Func build() {
+    Output<Buffer<float>>   final{"final", 3};
+
+    void generate() {
         /* THE ALGORITHM */
         Expr maximum_blur_radius =
             cast<int>(max(slices - focus_depth, focus_depth) * blur_radius_scale);
@@ -149,7 +151,6 @@ public:
         output(x, y, c) += sample_weight(x, y, s) * input_with_alpha(sample_x, sample_y, c);
 
         // Normalize
-        Func final;
         final(x, y, c) = output(x, y, c) / output(x, y, 3);
 
         /* THE SCHEDULE */
@@ -170,9 +171,9 @@ public:
             final.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline
-            Pipeline p(final);
-            p.auto_schedule(get_target());
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             // Manual GPU schedule
             Var xi("xi"), yi("yi"), zi("zi");
@@ -266,8 +267,6 @@ public:
             sample_weight.compute_at(output, x).unroll(x);
             sample_locations.compute_at(output, x).vectorize(x);
         }
-
-        return final;
     }
 private:
     Var x, y, z, c;

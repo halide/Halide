@@ -174,7 +174,7 @@ float16_t::operator float() const {
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
     // just pick any.
-#if LLVM_VERSION >= 40 
+#if LLVM_VERSION >= 40
     convertedValue.convert(llvm::APFloat::IEEEsingle(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
 #else
     convertedValue.convert(llvm::APFloat::IEEEsingle, llvm::APFloat::rmNearestTiesToEven, &losesInfo);

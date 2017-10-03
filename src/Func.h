@@ -1030,7 +1030,7 @@ public:
     }
     // @}
 
-    /** Creates and returns a new Func that wraps this Func. During
+    /** Creates and returns a new identity Func that wraps this Func. During
      * compilation, Halide replaces all calls to this Func done by 'f'
      * with calls to the wrapper. If this Func is already wrapped for
      * use in 'f', will return the existing wrapper.
@@ -1119,17 +1119,41 @@ public:
      */
     EXPORT Func in(const Func &f);
 
-    /** Create and return a wrapper shared by all the Funcs in
-     * 'fs'. If any of the Funcs in 'fs' already have a custom
-     * wrapper, this will throw an error. */
+    /** Create and return an identity wrapper shared by all the Funcs in
+     * 'fs'. If any of the Funcs in 'fs' already have a custom wrapper,
+     * this will throw an error. */
     EXPORT Func in(const std::vector<Func> &fs);
 
-    /** Create and return a global wrapper, which wraps all calls to
-     * this Func by any other Func. If a global wrapper already
-     * exists, returns it. The global wrapper is only used by callers
-     * for which no custom wrapper has been specified.
+    /** Create and return a global identity wrapper, which wraps all calls to
+     * this Func by any other Func. If a global wrapper already exists,
+     * returns it. The global identity wrapper is only used by callers for
+     * which no custom wrapper has been specified.
      */
     EXPORT Func in();
+
+    /** Similar to \ref Func::in; however, instead of replacing the call to
+     * this Func with an identity Func that refers to it, this replaces the
+     * call with a clone of this Func.
+     *
+     * For example, f.clone_in(g) would rewrite a pipeline like this:
+     \code
+     f(x, y) = x + y;
+     g(x, y) = f(x, y) + 2;
+     h(x, y) = f(x, y) - 3;
+     \endcode
+     * into a pipeline like this:
+     \code
+     f(x, y) = x + y;
+     f_clone(x, y) = x + y;
+     g(x, y) = f_clone(x, y) + 2;
+     h(x, y) = f(x, y) - 3;
+     \endcode
+     *
+     */
+    //@{
+    EXPORT Func clone_in(const Func &f);
+    EXPORT Func clone_in(const std::vector<Func> &fs);
+    //@}
 
     /** Declare that this function should be implemented by a call to
      * halide_buffer_copy with the given target device API. Asserts
@@ -1801,7 +1825,7 @@ public:
     EXPORT Func &compute_at(LoopLevel loop_level);
 
     /** Compute all of this function once ahead of time. Reusing
-     * the example in \ref Func::compute_at :
+     * the example in \ref Func::compute_at:
      *
      \code
      Func f, g;
