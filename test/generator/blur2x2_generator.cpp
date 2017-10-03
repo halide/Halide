@@ -27,14 +27,14 @@ public:
         // input tile (if any).
 
         // (In fact, if we are being used as an extern stage for tiled processing,
-        // clamping accesses to lie within the input tile using input.min() and 
-        // input.extent() would tell the calling kernel we can cope with any size 
+        // clamping accesses to lie within the input tile using input.min() and
+        // input.extent() would tell the calling kernel we can cope with any size
         // input, so it would always pass us 1x1 tiles.)
 
         Func input_clamped = Halide::BoundaryConditions::repeat_edge(
             input, 0, width, 0, height);
 
-        blur(x, y, c) = 
+        blur(x, y, c) =
             (input_clamped(x - 1, y, c) + input_clamped(x + 1, y, c) +
              input_clamped(x, y - 1, c) + input_clamped(x, y + 1, c)) /
             4.0f;

@@ -26,12 +26,12 @@ public:
     //    Output(s)
     //
     // Note that the Inputs will appear in the C function
-    // call in the order they are declared. (GeneratorParams and ScheduleParams 
+    // call in the order they are declared. (GeneratorParams and ScheduleParams
     // are always referenced by name, not position, so their order is irrelevant.)
     //
     // All Input variants declared as Generator members must have explicit
     // names, and all such names must match the regex [A-Za-z_][A-Za-z_0-9]*
-    // (i.e., essentially a C/C++ variable name). By convention, the name should 
+    // (i.e., essentially a C/C++ variable name). By convention, the name should
     // match the member-variable name.
 
     // GeneratorParams can be float or ints: {default} or {default, min, max}
