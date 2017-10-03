@@ -343,7 +343,7 @@ def _gengen_impl(ctx):
       remaps += ["%s=%s" % (ct.replace("-", "_"), t.replace("-", "_"))]
 
   outputs = [
-      ctx.new_file(f)
+      ctx.actions.declare_file(f)
       for f in _gengen_outputs(
           ctx.attr.filename,
           ctx.attr.halide_target,  # *not* halide_target
@@ -384,7 +384,7 @@ def _gengen_impl(ctx):
       "HL_DEBUG_CODEGEN": str(ctx.attr.debug_codegen_level),
       "HL_HEXAGON_CODE_SIGNER": hexagon_code_signer,
   }
-  ctx.action(
+  ctx.actions.run(
       # If you need to force the tools to run locally (e.g. for experimentation),
       # uncomment this line.
       # execution_requirements={"local":"1"},
@@ -443,7 +443,7 @@ def _add_target_features(target, features):
 
 
 def _has_dupes(some_list):
-  clean = list(depset(some_list))
+  clean = depset(some_list).to_list()
   return sorted(some_list) != sorted(clean)
 
 
@@ -502,7 +502,7 @@ _gengen_closure = rule(
 def _discard_useless_features(halide_target_features = []):
   # Discard target features which do not affect the contents of the runtime.
   useless_features = depset(["user_context", "no_asserts", "no_bounds_query", "profile"])
-  return sorted(list(depset([f for f in halide_target_features if f not in useless_features])))
+  return sorted(depset([f for f in halide_target_features if f not in useless_features.to_list()]).to_list())
 
 def _halide_library_runtime_target_name(halide_target_features = []):
   return "_".join(["halide_library_runtime"] + _discard_useless_features(halide_target_features))
@@ -510,9 +510,9 @@ def _halide_library_runtime_target_name(halide_target_features = []):
 def _define_halide_library_runtime(halide_target_features = []):
   target_name = _halide_library_runtime_target_name(halide_target_features)
 
-  if not native.existing_rule("halide_library_runtime_generator"):
+  if not native.existing_rule("halide_library_runtime.generator"):
     halide_generator(
-        name="halide_library_runtime_generator",
+        name="halide_library_runtime.generator",
         srcs=[],
         deps=[],
         visibility=["//visibility:private"])
@@ -530,7 +530,7 @@ def _define_halide_library_runtime(halide_target_features = []):
         name=sub_name,
         filename=sub_name,
         generate_runtime=True,
-        generator_closure="halide_library_runtime_generator_closure",
+        generator_closure="halide_library_runtime.generator_closure",
         halide_target=["-".join([halide_target] + _discard_useless_features(halide_target_features))],
         sanitizer=select({
             "@halide//:halide_config_msan": "msan",
@@ -588,11 +588,11 @@ def halide_generator(name,
                      includes=[],
                      tags=[],
                      visibility=None):
-  if not name.endswith("_generator"):
-    fail("halide_generator rules must end in _generator")
+  if not name.endswith(".generator"):
+    fail("halide_generator rules must end in .generator")
 
   if not generator_name:
-    generator_name = name[:-10]  # strip "_generator" suffix
+    generator_name = name[:-10]  # strip ".generator" suffix
 
   native.cc_library(
       name="%s_library" % name,
@@ -634,7 +634,7 @@ def halide_generator(name,
         halide_target_map={})
     _gengen(
         name="%s_stub_gen" % name,
-        filename=name[:-10],  # strip "_generator" suffix
+        filename=name[:-10],  # strip ".generator" suffix
         generator_closure=":%s_closure" % name,
         halide_target=stub_header_target,
         outputs=["cpp_stub"],
@@ -685,8 +685,8 @@ def halide_library_from_generator(name,
   if _has_dupes(extra_outputs):
     fail("Duplicate values in extra_outputs: %s" % str(extra_outputs))
 
-  full_halide_target_features = sorted(list(depset(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"])))
-  user_halide_target_features = sorted(list(depset(halide_target_features)))
+  full_halide_target_features = sorted(depset(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"]).to_list())
+  user_halide_target_features = sorted(depset(halide_target_features).to_list())
 
   if "cpp" in extra_outputs:
     fail("halide_library('%s') doesn't support 'cpp' in extra_outputs; please depend on '%s_cc' instead." % (name, name))
@@ -767,7 +767,7 @@ def halide_library_from_generator(name,
       tags=["manual"] + tags)
 
   runtime_library = _halide_library_runtime_target_name(user_halide_target_features)
-  if runtime_library in _standard_library_runtime_names():
+  if runtime_library in _standard_library_runtime_names().to_list():
     runtime_library = "@halide//:%s" % runtime_library
   else:
     if not native.existing_rule(runtime_library):
@@ -846,7 +846,7 @@ def halide_library(name,
                    namespace=None,
                    visibility=None):
   halide_generator(
-      name="%s_generator" % name,
+      name="%s.generator" % name,
       srcs=srcs,
       generator_name=generator_name,
       deps=generator_deps,
@@ -856,7 +856,7 @@ def halide_library(name,
 
   return halide_library_from_generator(
       name=name,
-      generator=":%s_generator" % name,
+      generator=":%s.generator" % name,
       deps=filter_deps,
       visibility=visibility,
       namespace=namespace,

@@ -3,7 +3,7 @@
 # they assume that a Halide library has already been built,
 # and that a downstream client wants to use it.
 #
-# These rules have only been tested with Bazel 0.5+, and are unlikely
+# These rules have only been tested with Bazel 0.6+, and are unlikely
 # to work with earlier versions of Bazel.
 
 package(
