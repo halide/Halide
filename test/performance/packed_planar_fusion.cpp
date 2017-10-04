@@ -37,7 +37,7 @@ double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
 
     f.realize(dst);
 
-    return benchmark(5, 10, [&]() { return f.realize(dst); });
+    return benchmark([&]() { return f.realize(dst); });
 }
 
 Buffer<uint8_t> make_packed(uint8_t *host, int W, int H) {
