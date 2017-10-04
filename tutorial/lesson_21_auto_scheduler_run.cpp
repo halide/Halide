@@ -55,15 +55,15 @@ int main(int argc, char **argv) {
     double auto_schedule_off = Halide::Tools::benchmark(2, 5, [&]() {
         auto_schedule_false(input, filter, bias, -200.0f, output1, output2);
     });
-    printf("Auto-scheduler off: %gms\n", auto_schedule_off * 1e3);
+    printf("Manual schedule: %gms\n", auto_schedule_off * 1e3);
 
     double auto_schedule_on = Halide::Tools::benchmark(2, 5, [&]() {
         auto_schedule_true(input, filter, bias, -200.0f, output1, output2);
     });
-    printf("Auto-scheduler on: %gms\n", auto_schedule_on * 1e3);
+    printf("Auto schedule: %gms\n", auto_schedule_on * 1e3);
 
     // auto_schedule_on should be faster since in the auto_schedule_off version,
-    // no schedule is applied.
+    // the schedule is very simple.
     assert(auto_schedule_on < auto_schedule_off);
 
     return 0;
