@@ -52,7 +52,7 @@ private:
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
-        Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
+        Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
@@ -65,7 +65,7 @@ private:
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_feature(Target::LargeBuffers)) {
+                if (target.has_large_buffers()) {
                     idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
                 } else {
                     idx += (args[i] - mins[i]) * strides[i];
@@ -77,9 +77,9 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
+            Expr base = target.has_large_buffers() ? make_zero(Int(64)) : 0;
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_feature(Target::LargeBuffers)) {
+                if (target.has_large_buffers()) {
                     idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
                     base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
                 } else {

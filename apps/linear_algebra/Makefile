@@ -32,7 +32,7 @@ ATLAS_LIBS ?= -lcblas
 # this provides a slight build speed increase (since we don't have to redundantly
 # include the runtime code in each generator) with the extra complication that we
 # must explicitly build and link the halide runtime separately.
-HL_TARGET_NR = $(HL_TARGET)-no_runtime
+HL_TARGET_NR = $(HL_TARGET)-no_runtime-no_asserts-no_bounds_query
 
 KERNELS = \
 	scopy_impl \

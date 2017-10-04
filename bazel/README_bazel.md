@@ -8,7 +8,7 @@ rules are intended to replace the experimental rules implementation provided
 by https://github.com/halide/halide_bazel, which are now considered
 deprecated.
 
-Bazel 0.5 or later is required.
+Bazel 0.6 or later is required.
 
 ## Overview
 
