@@ -1065,11 +1065,6 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
     ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
 }
 
-void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
-    Halide::GeneratorContext::init_from_context(context);
-    target.set(context.get_target());
-}
-
 GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this);
 }
