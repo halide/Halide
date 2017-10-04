@@ -2207,21 +2207,52 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is an abstract base class that is used when constructing a Generator Stub;
+/** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
- * Generators are compiled in a compatible way; at present, this is used to propagate
- * the outer Target to the inner Generator. */
+ * Generators are compiled in a compatible way.
+ *
+ * If you are using this at "top level" (e.g. with the JIT), you can construct a GeneratorContext
+ * with a Target:
+ * \code
+ *   auto my_stub = MyStub(
+ *       GeneratorContext(get_target_from_environment()),
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *   );
+ * \endcode
+ *
+ * Note that all Generators inherit from GeneratorContext, so if you are using a Stub
+ * from within a Generator, you can just pass 'this' for the GeneratorContext:
+ * \code
+ *  struct SomeGen : Generator<SomeGen> {
+ *   void generate() {
+ *     ...
+ *     auto my_stub = MyStub(
+ *       this,  // GeneratorContext
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *     );
+ *     ...
+ *   }
+ *  };
+ * \endcode
+ */
 class GeneratorContext {
 public:
     using ExternsMap = std::map<std::string, ExternalCode>;
 
-    GeneratorContext() : 
-        externs_map(std::make_shared<ExternsMap>())
-        , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+    explicit GeneratorContext(const Target &t) :
+        target("target", t),
+        externs_map(std::make_shared<ExternsMap>()),
+        value_tracker(std::make_shared<Internal::ValueTracker>()) {}
     virtual ~GeneratorContext() {}
 
-    virtual Target get_target() const = 0;
+    inline Target get_target() const { return target; }
 
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
@@ -2255,16 +2286,20 @@ public:
     }
 
 protected:
+    GeneratorParam<Target> target;
     std::shared_ptr<ExternsMap> externs_map;
     std::shared_ptr<Internal::ValueTracker> value_tracker;
 
+    GeneratorContext() : GeneratorContext(Target()) {}
+
     virtual void init_from_context(const Halide::GeneratorContext &context) {
+        target.set(context.get_target());
         value_tracker = context.get_value_tracker();
         externs_map = context.get_externs_map();
     }
 
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
-        return value_tracker;        
+        return value_tracker;
     }
 
     // No copy
@@ -2273,33 +2308,6 @@ protected:
     // No move
     GeneratorContext(GeneratorContext&&) = delete;
     void operator=(GeneratorContext&&) = delete;
-};
-
-/** GeneratorTarget is a trivial implementation of GeneratorContext that
- * is intended for use when using Generators (or Stubs) directly; it simply
- * allows you to wrap a specific Target in a GeneratorContext for use with a stub,
- * often in conjunction with the Halide::get_target_from_environment() call:
- *
- * \code
- *   auto my_stub = MyStub(
- *       GeneratorTarget(get_target_from_environment()),
- *       // inputs
- *       { ... },
- *       // generator params
- *       { ... }
- *   );
- * \endcode
- */
-class GeneratorTarget : public GeneratorContext {
-public:
-    explicit GeneratorTarget(const Target &t) : target(t) {}
-    Target get_target() const override { return target; }
-protected:
-    void init_from_context(const Halide::GeneratorContext &context) override {
-        target = context.get_target();
-    }
-private:
-    Target target;
 };
 
 class NamesInterface {
@@ -2355,8 +2363,6 @@ using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const Gene
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    GeneratorParam<Target> target{ "target", Target() };
-
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
         // This is an optional map used to replace the default extensions generated for
@@ -2372,8 +2378,6 @@ public:
     };
 
     EXPORT virtual ~GeneratorBase();
-
-    Target get_target() const override { return target; }
 
     EXPORT void set_generator_param(const std::string &name, const std::string &value);
     EXPORT void set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params);
