@@ -949,7 +949,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
-            auto gen = GeneratorRegistry::create(generator_name, GeneratorTarget(Target()));
+            auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -962,7 +962,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
-                    auto gen = GeneratorRegistry::create(generator_name, GeneratorTarget(target));
+                    auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                     gen->set_generator_and_schedule_param_values(sub_generator_args);
                     return gen->build_module(name);
                 };
@@ -988,6 +988,8 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
+    // "target" is always readable.
+    if (name == "target") return;
     user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
 }
 
@@ -1784,7 +1786,7 @@ Target StubOutputBufferBase::get_target() const {
 }
 
 void generator_test() {
-    GeneratorTarget context(get_host_target());
+    GeneratorContext context(get_host_target());
 
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations.
