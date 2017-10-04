@@ -59,6 +59,10 @@ class LiftLoopInvariants : public IRMutator {
         if (e.as<Variable>()) return false;
         if (e.as<Broadcast>()) return false;
         if (is_const(e)) return false;
+        // bool vectors are buggy enough in LLVM that lifting them is a bad idea.
+        // (We just skip all vectors on the principle that we don't want them
+        // on the stack anyway.)
+        if (e.type().is_vector()) return false;
         return true;
     }
 
@@ -115,6 +119,10 @@ class LICM : public IRMutator {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
+            IRMutator::visit(op);
+        } else if (op->device_api == DeviceAPI::GLSL ||
+                   op->device_api == DeviceAPI::OpenGLCompute) {
+            // Don't lift anything out of OpenGL loops
             IRMutator::visit(op);
         } else {
 
