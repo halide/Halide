@@ -45,6 +45,9 @@ class AXPYGenerator :
     }
 
     void generate() {
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
+
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
         Expr size_vecs = (size / vec_size) * vec_size;
@@ -92,6 +95,9 @@ class DotGenerator :
     Output<Buffer<T>> result_ = {"result", 1};
 
     void generate() {
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
+
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
         Expr size_vecs = size / vec_size;
@@ -144,6 +150,9 @@ class AbsSumGenerator :
     Output<Buffer<T>> result_ = {"result", 1};
 
     void generate() {
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
+
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
         Expr size_vecs = size / vec_size;
