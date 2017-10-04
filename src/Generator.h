@@ -2292,7 +2292,7 @@ protected:
 
     GeneratorContext() : GeneratorContext(Target()) {}
 
-    virtual void init_from_context(const Halide::GeneratorContext &context) {
+    inline void init_from_context(const Halide::GeneratorContext &context) {
         target.set(context.get_target());
         value_tracker = context.get_value_tracker();
         externs_map = context.get_externs_map();
@@ -2467,7 +2467,6 @@ public:
 
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
-    EXPORT void init_from_context(const Halide::GeneratorContext &context) override;
     EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT virtual Pipeline build_pipeline() = 0;
