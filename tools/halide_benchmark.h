@@ -62,7 +62,7 @@ inline double benchmark(int samples, int iterations, std::function<void()> op) {
 // reported will be that of the best single iteration.
 //
 // Most callers should be able to get good results without needing to specify
-// custom BenchmarkConfig values. 
+// custom BenchmarkConfig values.
 //
 // IMPORTANT NOTE: Using this tool for timing GPU code may be misleading,
 // as it does not account for time needed to synchronize to/from the GPU;
@@ -78,7 +78,10 @@ struct BenchmarkConfig {
   // Attempt to use this much time (in seconds) for the meaningful samples
   // taken; initial iterations will be done to find an iterations-per-sample
   // count that puts the total runtime in this ballpark.
-  double min_time{0.5};
+  double min_time{0.1};
+
+  // Set an absolute upper time limit. Defaults to min_time * 4.
+  double max_time{0.1 * 4};
 
   // Run at least this many iterations per sample.
   uint64_t min_iters{1};
@@ -107,7 +110,7 @@ struct BenchmarkResult {
   // for measurement.)
   uint64_t iterations;
 
-  // Measured accuracy between the best and third-best result. 
+  // Measured accuracy between the best and third-best result.
   // Will be <= config.accuracy unless max_iters is exceeded.
   double accuracy;
 
@@ -118,14 +121,13 @@ inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig
   BenchmarkResult result{0, 0, 0};
 
   const double min_time = std::max(10 * 1e-6, config.min_time);
+  const double max_time = std::max(config.min_time, config.max_time);
+
   const uint64_t min_iters = std::min(std::max((uint64_t)1, config.min_iters),
                                       kBenchmarkMaxIterations);
   const uint64_t max_iters = std::min(
       std::max(config.min_iters, config.max_iters), kBenchmarkMaxIterations);
   const double accuracy = 1.0 + std::min(std::max(0.001, config.accuracy), 0.1);
-
-  // Set an upper time limit based on min_time. This is a bit arbitrary.
-  const double max_time = min_time * 4;
 
   // We will do (at least) kMinSamples samples; we will do additional
   // samples until the best the kMinSamples'th results are within the

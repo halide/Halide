@@ -25,6 +25,7 @@ namespace {
 
 using Halide::Runtime::Buffer;
 using Halide::Tools::FormatInfo;
+using Halide::Tools::BenchmarkConfig;
 
 bool verbose = false;
 bool quiet = false;
@@ -793,7 +794,7 @@ Flags:
         runs "samples" sets of "iterations" each, and chooses the fastest
         sample set.
 
-    --benchmark_min_time=DURATION_SECONDS [default = 0.5]:
+    --benchmark_min_time=DURATION_SECONDS [default = 0.1]:
         Override the default minimum desired benchmarking time; ignored if
         --benchmarks is not also specified.
 
@@ -899,9 +900,9 @@ int main(int argc, char **argv) {
     bool benchmark = false;
     bool track_memory = false;
     bool describe = false;
-    double benchmark_min_time = 0.5;
-    int benchmark_min_iters = 1;
-    int benchmark_max_iters = 1000000000;
+    double benchmark_min_time = BenchmarkConfig().min_time;
+    int benchmark_min_iters = BenchmarkConfig().min_iters;
+    int benchmark_max_iters = BenchmarkConfig().max_iters;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -1124,8 +1125,9 @@ int main(int argc, char **argv) {
 
             info() << "Benchmarking filter...";
 
-            Halide::Tools::BenchmarkConfig config;
+            BenchmarkConfig config;
             config.min_time = benchmark_min_time;
+            config.max_time = benchmark_min_time * 4;
             config.min_iters = benchmark_min_iters;
             config.max_iters = benchmark_max_iters;
             auto result = Halide::Tools::benchmark(benchmark_inner, config);
