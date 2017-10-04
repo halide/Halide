@@ -160,7 +160,7 @@ $(BIN)/RunGen.o: $(HALIDE_DISTRIB)/tools/RunGen.cpp
 
 .PRECIOUS: $(BIN)/%.rungen
 $(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_DISTRIB)/tools/RunGenStubs.cpp
-  $(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER=$* $^ -o $@ $(LIBPNG_LIBS) $(LIBJPEG_LIBS) $(LDFLAGS)
+  $(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(LIBPNG_LIBS) $(LIBJPEG_LIBS) $(LDFLAGS)
 
 RUNARGS ?=
 

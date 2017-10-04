@@ -10,21 +10,24 @@ using namespace Halide::Runtime;
 
 const int kSize = 32;
 
-void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor) {
-    img.for_each_element([=](int x, int y, int c) {
-        int expected = (int32_t)(compiletime_factor * runtime_factor * c * (x > y ? x : y));
-        int actual = img(x, y, c);
-        assert(expected == actual);
-    });
-}
-
 int main(int argc, char **argv) {
+  Buffer<float> input(kSize, kSize, 3);
   Buffer<int32_t> output(kSize, kSize, 3);
 
   const float compiletime_factor = 1.0f;
+  const float runtime_factor = 3.25f;
 
-  buildmethod(3.3245f, output);
-  verify(output, compiletime_factor, 3.3245f);
+  input.for_each_element([&](int x, int y, int c) {
+      input(x, y, c) = std::max(x, y) * c;
+  });
+
+  buildmethod(input, runtime_factor, output);
+
+  output.for_each_element([=](int x, int y, int c) {
+      int expected = (int32_t)(compiletime_factor * runtime_factor * c * std::max(x, y));
+      int actual = output(x, y, c);
+      assert(expected == actual);
+  });
 
   printf("Success!\n");
   return 0;

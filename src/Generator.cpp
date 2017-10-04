@@ -832,7 +832,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     std::string runtime_name = flags_info["-r"];
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
-    if (generator_names.size() == 0 && runtime_name.empty()) {
+    if (generator_names.empty() && runtime_name.empty()) {
         cerr << "No generators have been registered and not compiling a standalone runtime\n";
         cerr << kUsage;
         return 1;
@@ -988,19 +988,17 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
     // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
     if (!generator) return;
-    // Special-case for legacy: allow 'target' to be writable. Yikes.
-    if (name == "target") return;
-    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be written after build() or generate() is called.\n";
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be written after build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
-    user_error << "The GeneratorParam " << name << " cannot be set with a value of type " << type << ".\n";
+    user_error << "The GeneratorParam \"" << name << "\" cannot be set with a value of type " << type << ".\n";
 }
 
 /* static */
@@ -1268,7 +1266,7 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
     advance_phase(InputsSet);
     internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_params.size() == 0)
+    user_assert(pi.filter_params.empty())
         << "The set_inputs_vector() method cannot be used for Generators that use Param<> or ImageParam.";
     user_assert(inputs.size() == pi.filter_inputs.size())
             << "Expected exactly " << pi.filter_inputs.size()
@@ -1330,7 +1328,7 @@ void GeneratorBase::advance_phase(Phase new_phase) {
 void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
+    user_assert(pi.filter_params.empty()) << "May not use generate() method with Param<> or ImageParam.";
     user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
@@ -1363,7 +1361,7 @@ void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_outputs.size() == 0) << "May not use build() method with Output<>.";
+    user_assert(pi.filter_outputs.empty()) << "May not use build() method with Output<>.";
     if (!inputs_set) {
         for (auto input : pi.filter_inputs) {
             input->init_internals();

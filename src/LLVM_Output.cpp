@@ -134,7 +134,7 @@ void write_symbol_table(std::ostream &out,
                         const std::vector<llvm::NewArchiveMember> &members,
                         bool windows_coff_format,
                         std::map<size_t, std::vector<PatchInfo>> *patchers) {
-    internal_assert(members.size() != 0);
+    internal_assert(!members.empty());
 
     EmitU32 emit_u32 = windows_coff_format
         ? emit_little_endian_u32

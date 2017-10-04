@@ -17,8 +17,6 @@ class AXPYGenerator :
     template<typename T2> using Input = typename Base::template Input<T2>;
     template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
-    GeneratorParam<bool> use_fma_ = {"use_fma", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
     GeneratorParam<bool> scale_x_ = {"scale_x", true};
@@ -30,18 +28,6 @@ class AXPYGenerator :
     Input<Buffer<T>> y_ = {"y", 1};
 
     Output<Buffer<T>> result_ = {"result", 1};
-
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-
-        if (use_fma_) {
-            target.set(get_target().with_feature(Target::FMA));
-        }
-    }
 
     void Schedule(Func result, Expr width) {
         Var i("i"), o("o");
@@ -59,7 +45,8 @@ class AXPYGenerator :
     }
 
     void generate() {
-        SetupTarget();
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
@@ -98,8 +85,6 @@ class DotGenerator :
     template<typename T2> using Input = typename Base::template Input<T2>;
     template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
-    GeneratorParam<bool> use_fma_ = {"use_fma", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
@@ -109,20 +94,9 @@ class DotGenerator :
 
     Output<Buffer<T>> result_ = {"result", 1};
 
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-
-        if (use_fma_) {
-            target.set(get_target().with_feature(Target::FMA));
-        }
-    }
-
     void generate() {
-        SetupTarget();
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
@@ -167,8 +141,6 @@ class AbsSumGenerator :
     template<typename T2> using Input = typename Base::template Input<T2>;
     template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
-    GeneratorParam<bool> use_fma_ = {"use_fma", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
@@ -177,20 +149,9 @@ class AbsSumGenerator :
 
     Output<Buffer<T>> result_ = {"result", 1};
 
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-
-        if (use_fma_) {
-            target.set(get_target().with_feature(Target::FMA));
-        }
-    }
-
     void generate() {
-        SetupTarget();
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
