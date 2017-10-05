@@ -15,8 +15,7 @@ int main(int argc, char **argv) {
         Var tx("tx"), ty("ty");
         interleaved.gpu_tile(x, y, tx, ty, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        printf("Temporarily disabled due to https://github.com/halide/Halide/issues/2364\n");
-        //interleaved.hexagon().vectorize(x, 32);
+        interleaved.hexagon().vectorize(x, 32);
     } else {
         Var xo("xo"), yo("yo");
         interleaved.tile(x, y, xo, yo, x, y, 8, 8).vectorize(x);
