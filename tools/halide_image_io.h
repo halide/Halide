@@ -990,9 +990,11 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
     for (auto &f : info) {
         int score = 0;
         // If format has too-few dimensions, that's very bad.
-        score += std::abs(f.dimensions - im_dimensions) * 128;
+        score += std::max(0, im_dimensions - f.dimensions) * 1024;
         // If format has too-few bits, that's pretty bad.
-        score += std::abs(f.type.bits - im_type.bits);
+        score += std::max(0, im_type.bits - f.type.bits) * 8;
+        // If format has too-many bits, that's a little bad.
+        score += std::max(0, f.type.bits - im_type.bits);
         // If format has different code, that's a little bad.
         score += (f.type.code != im_type.code) ? 1 : 0;
         if (score < best_score) {
@@ -1318,6 +1320,9 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
     } else {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_converted = ImageTypeConversion::convert_image(im, best.type);
+        while (im_converted.dimensions() < best.dimensions) {
+            im_converted.add_dimension();
+        }
         (void) save<DynamicImageType, check>(im_converted, filename);
     }
 }
