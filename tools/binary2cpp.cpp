@@ -1,5 +1,7 @@
+
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 #ifdef _WIN32
@@ -10,23 +12,50 @@
 // Embeds a binary blob (from stdin) in a C++ source array of unsigned
 // chars. Similar to the xxd utility.
 
+static int usage() {
+    fprintf(stderr, "Usage: binary2cpp identifier [-header]\n");
+    return -1;
+}
+
 int main(int argc, const char **argv) {
-    assert(argc == 2 && "Requires an identifier as an argument (e.g. initmod_x86_64)");
+    const char *target = argv[1];
+    if (argc == 3) {
+        if (!strcmp(argv[2], "-header")) {
+            printf("#ifndef _H_%s_binary2cpp\n", target);
+            printf("#define _H_%s_binary2cpp\n", target);
+            printf("extern \"C\" {\n");
+            printf("extern unsigned char %s[];\n", target);
+            printf("extern int %s_length;\n", target);
+            printf("}  // extern \"C\"\n");
+            printf("#endif  // _H_%s_binary2cpp\n", target);
+            return 0;
+        } else {
+            return usage();
+        }
+    } else if (argc > 3) {
+        return usage();
+    }
+
 #ifdef _WIN32
     setmode(fileno(stdin), O_BINARY); // On windows bad things will happen unless we read stdin in binary mode
 #endif
-    const char *target = argv[1];
     printf("extern \"C\" {\n");
-    printf("unsigned char halide_internal_%s[] = {\n", target);
+    printf("unsigned char %s[] = {\n", target);
     int count = 0;
+    int line_break = 0;
     while (1) {
         int c = getchar();
         if (c == EOF) break;
-        printf("%d, ", c);
+        printf("0x%02x, ", c);
+        // Not necessary, but makes a bit easier to read
+        if (++line_break > 12) {
+            printf("\n");
+            line_break = 0;
+        }
         count++;
     }
     printf("0};\n");
-    printf("int halide_internal_%s_length = %d;\n", target, count);
-    printf("}\n"); // extern "C"
+    printf("int %s_length = %d;\n", target, count);
+    printf("}  // extern \"C\"\n");
     return 0;
 }

@@ -18,10 +18,12 @@ using std::pair;
 namespace {
 
 // Some expressions are not worth lifting out into lets, even if they
-// occur redundantly many times. This list should mirror the list in
-// the simplifier for lets, otherwise they'll just fight with each
+// occur redundantly many times. They may also be illegal to lift out
+// (e.g. calls with side-effects).
+// This list should at least avoid lifting the same cases as that of the
+// simplifier for lets, otherwise CSE and the simplifier will fight each
 // other pointlessly.
-bool should_extract(Expr e) {
+bool should_extract(const Expr &e) {
     if (is_const(e)) {
         return false;
     }
@@ -59,10 +61,16 @@ bool should_extract(Expr e) {
     }
 
     if (const Call *a = e.as<Call>()) {
-        if (a->is_intrinsic(Call::address_of)) {
+        if (!a->is_pure() && (a->call_type != Call::Halide)) {
+            // Impure calls may have side-effects, thus may not be re-ordered
+            // or reduced in number.
+            // Call to Halide function may give different value depending on
+            // where it is evaluated; however, the value is constant within
+            // an expr. Thus, it is okay to lift out.
             return false;
         }
     }
+
     return true;
 }
 
@@ -82,14 +90,13 @@ public:
     map<Expr, int, ExprCompare> shallow_numbering;
 
     Scope<int> let_substitutions;
-    bool protect_loads_in_scope;
     int number;
 
     IRCompareCache cache;
 
-    GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
+    GVN() : number(0), cache(8) {}
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -98,7 +105,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -129,11 +136,11 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        e = IRMutator::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
-        iter = numbering.find(with_cache(e));
+        iter = numbering.find(with_cache(new_e));
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[old_e] = number;
@@ -142,15 +149,13 @@ public:
         }
 
         // Add it to the numbering.
-        if (!(e.as<Load>() && protect_loads_in_scope)) {
-            Entry entry = {e, 0};
-            number = (int)entries.size();
-            numbering[with_cache(e)] = number;
-            shallow_numbering[e] = number;
-            entries.push_back(entry);
-            internal_assert(e.type() == old_e.type());
-        }
-        return e;
+        Entry entry = {new_e, 0};
+        number = (int)entries.size();
+        numbering[with_cache(new_e)] = number;
+        shallow_numbering[new_e] = number;
+        entries.push_back(entry);
+        internal_assert(new_e.type() == old_e.type());
+        return new_e;
     }
 
 
@@ -172,24 +177,41 @@ public:
         expr = body;
     }
 
-    void visit(const Call *call) {
-        bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of)) {
-            // We shouldn't lift a load out of an address_of node
-            protect_loads_in_scope = true;
+    void visit(const Load *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
         }
-        IRMutator::visit(call);
-        protect_loads_in_scope = old_protect_loads_in_scope;
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        }
     }
 
+    void visit(const Store *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index, op->param, predicate);
+        }
+    }
 };
 
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
-    bool protect_loads_in_scope;
 public:
-    ComputeUseCounts(GVN &g) : gvn(g), protect_loads_in_scope(false) {}
+    ComputeUseCounts(GVN &g) : gvn(g) {}
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
@@ -200,14 +222,6 @@ public:
         // the children.
         debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
         if (!should_extract(e)) {
-            e.accept(this);
-            return;
-        }
-
-        // If we're not supposed to lift out load node (i.e. we're inside an
-        // address_of call node), just use the generic visitor to visit the
-        // load index.
-        if ((e.as<Load>() != nullptr) && protect_loads_in_scope) {
             e.accept(this);
             return;
         }
@@ -225,17 +239,6 @@ public:
             e.accept(this);
         }
     }
-
-
-    void visit(const Call *call) {
-        bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of)) {
-            // We shouldn't lift load out of an address_of node.
-            protect_loads_in_scope = true;
-        }
-        IRGraphVisitor::visit(call);
-        protect_loads_in_scope = old_protect_loads_in_scope;
-    }
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
@@ -246,7 +249,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -267,7 +270,7 @@ class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         return common_subexpression_elimination(e);
     }
 };
@@ -297,7 +300,7 @@ Expr common_subexpression_elimination(Expr e) {
         Expr old = e.expr;
         if (e.use_count > 1) {
             string name = unique_name('t');
-            lets.push_back(make_pair(name, e.expr));
+            lets.push_back({ name, e.expr });
             // Point references to this expr to the variable instead.
             replacements[e.expr] = Variable::make(e.expr.type(), name);
         }
@@ -457,15 +460,13 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter());
-        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
         e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter());
-        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
-        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2);
         correct = ssa_block({x*y,
                              x*x + y*y,
                              t[1] > 0,
@@ -477,48 +478,14 @@ void cse_test() {
 
     {
         Expr pred = x*x + y*y > 0;
-        Expr load = Load::make(Int(32), "buf", select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10),
-                               Buffer<>(), Parameter());
-        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
-        Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(value.type(), "out", x*x + y*y + 2, Buffer<>(), Parameter())},
-                               Call::Intrinsic);
-        e = Call::make(value.type(), Call::predicated_store,
-                       {dest, pred, value},
-                       Call::Intrinsic);
-
-        Expr t1 = Variable::make(Bool(), "t1");
-        Expr cse_load = Load::make(Int(32), "buf",
-                                   select(t1, t[0] + 2, t[0] + 10),
-                                   Buffer<>(), Parameter());
-        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
-        Expr cse_value = Call::make(load.type(), Call::predicated_load, {cse_src, t1}, Call::Intrinsic);
-        Expr cse_dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(value.type(), "out", t[0] + 2, Buffer<>(), Parameter())},
-                               Call::Intrinsic);
-        Expr cse_pred_store = Call::make(value.type(), Call::predicated_store,
-                                         {cse_dest, t1, cse_value},
-                                         Call::Intrinsic);
-        correct = ssa_block({x*x + y*y,
-                             t[0] > 0,
-                             cse_pred_store});
-
-        check(e, correct);
-    }
-
-    {
-        Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter());
-        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
         e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter());
-        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
-        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2);
         correct = ssa_block({x*y,
                              x*x + y*y,
                              t[1] > 0,
@@ -539,6 +506,23 @@ void cse_test() {
                             Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
         check(e, correct);
 
+    }
+
+    {
+        Expr nonpure_call_1 = Call::make(Int(32), "dummy1", {1}, Call::Intrinsic);
+        Expr nonpure_call_2 = Call::make(Int(32), "dummy2", {1}, Call::Extern);
+        e = nonpure_call_1 + nonpure_call_2 + nonpure_call_1 + nonpure_call_2;
+        correct = e; // Impure calls shouldn't get CSE'd
+        check(e, correct);
+    }
+
+    {
+        Expr halide_func = Call::make(Int(32), "dummy", {0}, Call::Halide);
+        e = halide_func * halide_func;
+        Expr t0 = Variable::make(halide_func.type(), "t0");
+        // It's okay to CSE Halide call within an expr
+        correct = Let::make("t0", halide_func, t0 * t0);
+        check(e, correct);
     }
 
     debug(0) << "common_subexpression_elimination test passed\n";

@@ -6,6 +6,19 @@
 
 #include "tiled_blur.h"
 
+// defined away to avoid requiring libpng, libjpeg everywhere;
+// left in because useful for debugging and profiling.
+#define SAVE_IMAGES 0
+
+#if SAVE_IMAGES
+#include "halide_image_io.h"
+#endif
+
+#define RUN_BENCHMARKS 0
+#if RUN_BENCHMARKS
+#include "halide_benchmark.h"
+#endif
+
 using namespace Halide::Runtime;
 
 const int W = 80, H = 80;
@@ -17,8 +30,10 @@ int my_halide_trace(void *user_context, const halide_trace_event_t *ev) {
         int min_y = ev->coordinates[2], height = ev->coordinates[3];
         int max_x = min_x + width - 1;
         int max_y = min_y + height - 1;
+#if !RUN_BENCHMARKS
         printf("Using %d x %d input tile over [%d - %d] x [%d - %d]\n", width, height, min_x, max_x,
                min_y, max_y);
+#endif
         assert(min_x >= 0 && min_y >= 0 && max_x < W && max_y < H);
 
         // The input is large enough that the boundary condition could
@@ -29,25 +44,45 @@ int my_halide_trace(void *user_context, const halide_trace_event_t *ev) {
     return 0;
 }
 
-Buffer<> buffer_factory_planar(halide_type_t t, int w, int h, int c) {
-    return Buffer<>(t, w, h, c);
+Buffer<uint8_t> buffer_factory_planar(int w, int h, int c) {
+    return Buffer<uint8_t>(w, h, c);
 }
 
-Buffer<> buffer_factory_interleaved(halide_type_t t, int w, int h, int c) {
-    return Buffer<>::make_interleaved(t, w, h, c);
+Buffer<uint8_t> buffer_factory_interleaved(int w, int h, int c) {
+    return Buffer<uint8_t>::make_interleaved(w, h, c);
 }
 
-void test(Buffer<> (*factory)(halide_type_t, int w, int h, int c)) {
-    Buffer<int> input = factory(halide_type_of<int>(), W, H, 3);
-    for (int y = 0; y < input.height(); y++) {
-        for (int x = 0; x < input.width(); x++) {
-            input(x, y) = (int)(x * y);
+void test(Buffer<uint8_t> (*factory)(int w, int h, int c)) {
+    Buffer<uint8_t> input = factory(W, H, 3);
+    input.for_each_element([&](int x, int y, int c) {
+        // Just an arbitrary color pattern with enough variation to notice the brighten + blur
+        if (c == 0) {
+            input(x, y, c) = (uint8_t)((x % 7) + (y % 3));
+        } else if (c == 1) {
+            input(x, y, c) = (uint8_t)(x + y);
+        } else {
+            input(x, y, c) = (uint8_t)((x * 5) + (y * 2));
         }
-    }
-    Buffer<float> output = factory(halide_type_of<float>(), W, H, 3);
+    });
+    Buffer<uint8_t> output = factory(W, H, 3);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
     tiled_blur(input, output);
+
+#if RUN_BENCHMARKS
+    double t = Halide::Tools::benchmark(10, 100, [&]() {
+        tiled_blur(input, output);
+    });
+    const float megapixels = (W * H) / (1024.f * 1024.f);
+    printf("Benchmark: %d %d -> %f mpix/s\n", W, H, megapixels / t);
+#endif
+
+#if SAVE_IMAGES
+    static int x = 0;
+    Halide::Tools::save_image(input, "/tmp/tiled_input" + std::to_string(x) + ".png");
+    Halide::Tools::save_image(output, "/tmp/tiled_output" + std::to_string(x) + ".png");
+    ++x;
+#endif
 }
 
 int main(int argc, char **argv) {

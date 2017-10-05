@@ -12,6 +12,7 @@
 #include "Simplify.h"
 #include "IRPrinter.h"
 #include "ExprUsesVar.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -94,6 +95,7 @@ class ExtractBlockSize : public IRVisitor {
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
+                block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
                 block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
             }
         }
@@ -354,13 +356,16 @@ class ExtractSharedAllocations : public IRMutator {
 
     void visit(const Load *op) {
         if (shared.count(op->name)) {
+            Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
-                expr = Load::make(op->type, shared_mem_name + "_" + op->name, index, op->image, op->param);
+                expr = Load::make(op->type, shared_mem_name + "_" + op->name,
+                                  index, op->image, op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                expr = Load::make(op->type, shared_mem_name, base + index, op->image, op->param);
+                expr = Load::make(op->type, shared_mem_name, base + index,
+                                  op->image, op->param, predicate);
             }
 
         } else {
@@ -371,13 +376,15 @@ class ExtractSharedAllocations : public IRMutator {
     void visit(const Store *op) {
         if (shared.count(op->name)) {
             shared[op->name].max = barrier_stage;
+            Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                stmt = Store::make(shared_mem_name + "_" + op->name, value, index, op->param);
+                stmt = Store::make(shared_mem_name + "_" + op->name, value, index,
+                                   op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                stmt = Store::make(shared_mem_name, value, base + index, op->param);
+                stmt = Store::make(shared_mem_name, value, base + index, op->param, predicate);
             }
         } else {
             IRMutator::visit(op);

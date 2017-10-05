@@ -19,7 +19,6 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::map;
 
 namespace {
@@ -66,10 +65,11 @@ class MarkClampedRampsAsLikely : public IRMutator {
         Expr index = mutate(op->index);
         in_index = old_in_index;
         Expr value = mutate(op->value);
-        if (index.same_as(op->index) && value.same_as(op->value)) {
+        Expr predicate = mutate(op->predicate);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
@@ -103,12 +103,6 @@ class HasLikelyTag : public IRVisitor {
 public:
     bool result = false;
 };
-
-bool has_likely_tag(Expr e) {
-    HasLikelyTag h;
-    e.accept(&h);
-    return h.result;
-}
 
 // The goal of loop partitioning is to split loops up into a prologue,
 // a clean steady state, and an epilogue. The next visitor
@@ -398,7 +392,7 @@ public:
     MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
 
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         for (auto const &s : simplifications) {
             if (e.same_as(s.old_expr)) {
                 return mutate(s.likely_value);
@@ -729,13 +723,6 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
-        if (ends_with(op->name, "__thread_id_x")) {
-            in_thread_loop = true;
-            IRMutator::visit(op);
-            in_thread_loop = false;
-            return;
-        }
-
         bool old_in_gpu_loop = in_gpu_loop;
 
         if (in_gpu_loop || CodeGen_GPU_Dev::is_gpu_var(op->name)) {
@@ -743,7 +730,15 @@ class RenormalizeGPULoops : public IRMutator {
             in_gpu_loop = true;
         }
 
-        IRMutator::visit(op);
+
+        if (ends_with(op->name, "__thread_id_x")) {
+            internal_assert(!in_thread_loop);
+            in_thread_loop = true;
+            IRMutator::visit(op);
+            in_thread_loop = false;
+        } else {
+            IRMutator::visit(op);
+        }
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.
@@ -771,7 +766,7 @@ class RenormalizeGPULoops : public IRMutator {
             // we'd better give it a new name.
             string new_name = unique_name('t');
             Expr new_var = Variable::make(op->value.type(), new_name);
-            lifted_lets.push_back(make_pair(new_name, op->value));
+            lifted_lets.push_back({ new_name, op->value });
             stmt = mutate(substitute(op->name, new_var, op->body));
             return;
         }
@@ -979,6 +974,12 @@ class LowerLikelyIfInnermost : public IRMutator {
     }
 };
 
+}
+
+bool has_likely_tag(Expr e) {
+    HasLikelyTag h;
+    e.accept(&h);
+    return h.result;
 }
 
 Stmt partition_loops(Stmt s) {

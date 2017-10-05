@@ -14,12 +14,15 @@ namespace Internal {
  * calls. */
 EXPORT Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
 
+/** Generate vtmpy instruction if possible */
+EXPORT Stmt vtmpy_generator(Stmt s);
+
 /** Hexagon deinterleaves when performing widening operations, and
  * interleaves when performing narrowing operations. This pass
  * rewrites widenings/narrowings to be explicit in the IR, and
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
-EXPORT Stmt optimize_hexagon_instructions(Stmt s);
+EXPORT Stmt optimize_hexagon_instructions(Stmt s, Target t);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */

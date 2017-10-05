@@ -20,8 +20,7 @@ using std::map;
 namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
-    if (op->call_type == Call::Extern ||
-        op->call_type == Call::ExternCPlusPlus) {
+    if (op->is_extern()) {
         if (starts_with(op->name, "halide_memoization")) {
             return false;
         }
@@ -213,26 +212,6 @@ private:
     }
 
     void visit(const Call *op) {
-        // Calls inside of an address_of aren't considered, because no
-        // actuall call to the Func happens.
-        if (op->is_intrinsic(Call::address_of)) {
-            // Visit the args of the inner call
-            const Call *c = op->args[0].as<Call>();
-            if (c) {
-                varies |= varying.contains(c->name);
-                for (size_t i = 0; i < c->args.size(); i++) {
-                    c->args[i].accept(this);
-                }
-            } else {
-                const Load *l = op->args[0].as<Load>();
-
-                internal_assert(l);
-                varies |= varying.contains(l->name);
-                l->index.accept(this);
-            }
-            return;
-        }
-
         varies |= in_pipeline.contains(op->name);
 
         IRVisitor::visit(op);
@@ -249,9 +228,7 @@ private:
         // allocation.
         varying.push(op->name, 0);
         varying.push(op->name + ".buffer", 0);
-        varying.push(op->name + ".host", 0);
         IRVisitor::visit(op);
-        varying.pop(op->name + ".host");
         varying.pop(op->name + ".buffer");
         varying.pop(op->name);
     }
@@ -419,24 +396,6 @@ class MightBeSkippable : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Call *op) {
-        // Calls inside of an address_of aren't considered, because no
-        // actuall call to the Func happens.
-        if (op->is_intrinsic(Call::address_of)) {
-            // Visit the args of the inner call
-            internal_assert(op->args.size() == 1);
-            const Call *c = op->args[0].as<Call>();
-            if (c) {
-                for (size_t i = 0; i < c->args.size(); i++) {
-                    c->args[i].accept(this);
-                }
-            } else {
-                const Load *l = op->args[0].as<Load>();
-
-                internal_assert(l);
-                l->index.accept(this);
-            }
-            return;
-        }
         IRVisitor::visit(op);
         if (op->name == func || extern_call_uses_buffer(op, func)) {
             result &= guarded;

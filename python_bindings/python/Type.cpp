@@ -4,8 +4,7 @@
 #include <boost/format.hpp>
 #include <boost/python.hpp>
 
-#include "../../src/Expr.h"
-#include "../../src/Type.h"
+#include "Halide.h"
 
 #include <string>
 #include <vector>

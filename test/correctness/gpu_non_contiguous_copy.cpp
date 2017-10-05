@@ -16,14 +16,14 @@ int main(int argc, char **argv) {
     // but a different buffer_t.
     Buffer<int> cropped(*full.raw_buffer());
     cropped.raw_buffer()->host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
-    cropped.raw_buffer()->extent[0] = x_size;
-    cropped.raw_buffer()->extent[1] = y_size;
-    cropped.raw_buffer()->extent[2] = z_size;
-    cropped.raw_buffer()->extent[3] = w_size;
-    cropped.raw_buffer()->stride[0] *= 2;
-    cropped.raw_buffer()->stride[1] *= 2;
-    cropped.raw_buffer()->stride[2] *= 2;
-    cropped.raw_buffer()->stride[3] *= 2;
+    cropped.raw_buffer()->dim[0].extent = x_size;
+    cropped.raw_buffer()->dim[1].extent = y_size;
+    cropped.raw_buffer()->dim[2].extent = z_size;
+    cropped.raw_buffer()->dim[3].extent = w_size;
+    cropped.raw_buffer()->dim[0].stride *= 2;
+    cropped.raw_buffer()->dim[1].stride *= 2;
+    cropped.raw_buffer()->dim[2].stride *= 2;
+    cropped.raw_buffer()->dim[3].stride *= 2;
 
     // Make a bitmask representing the region inside the crop.
     Buffer<bool> in_subregion(80, 60, 10, 10);

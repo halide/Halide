@@ -1,7 +1,8 @@
 #include "Halide.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 /* Both 'build' and 'build_wrap' run the same stencil algorithm, albeit with different
  * schedules. 'build(true)' stages the input data (the compute_root() 'host' Func) into
@@ -142,6 +143,10 @@ int main(int argc, char **argv) {
             use_wrap_for_shared.realize(out3);
             out3.device_sync();
         });
+
+    out1.copy_to_host();
+    out2.copy_to_host();
+    out3.copy_to_host();
 
     // Check correctness of the wrapper version
     for (int y = 0; y < out3.height(); y++) {

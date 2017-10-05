@@ -140,24 +140,24 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     if (split.is_split()) {
         Expr inner_extent = split.factor;
         Expr outer_extent = (old_var_max - old_var_min + split.factor)/split.factor;
-        let_stmts.push_back(std::make_pair(prefix + split.inner + ".loop_min", 0));
-        let_stmts.push_back(std::make_pair(prefix + split.inner + ".loop_max", inner_extent-1));
-        let_stmts.push_back(std::make_pair(prefix + split.inner + ".loop_extent", inner_extent));
-        let_stmts.push_back(std::make_pair(prefix + split.outer + ".loop_min", 0));
-        let_stmts.push_back(std::make_pair(prefix + split.outer + ".loop_max", outer_extent-1));
-        let_stmts.push_back(std::make_pair(prefix + split.outer + ".loop_extent", outer_extent));
+        let_stmts.push_back({ prefix + split.inner + ".loop_min", 0 });
+        let_stmts.push_back({ prefix + split.inner + ".loop_max", inner_extent-1 });
+        let_stmts.push_back({ prefix + split.inner + ".loop_extent", inner_extent });
+        let_stmts.push_back({ prefix + split.outer + ".loop_min", 0 });
+        let_stmts.push_back({ prefix + split.outer + ".loop_max", outer_extent-1 });
+        let_stmts.push_back({ prefix + split.outer + ".loop_extent", outer_extent });
     } else if (split.is_fuse()) {
         // Define bounds on the fused var using the bounds on the inner and outer
         Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
         Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".loop_extent");
         Expr fused_extent = inner_extent * outer_extent;
-        let_stmts.push_back(std::make_pair(prefix + split.old_var + ".loop_min", 0));
-        let_stmts.push_back(std::make_pair(prefix + split.old_var + ".loop_max", fused_extent - 1));
-        let_stmts.push_back(std::make_pair(prefix + split.old_var + ".loop_extent", fused_extent));
+        let_stmts.push_back({ prefix + split.old_var + ".loop_min", 0 });
+        let_stmts.push_back({ prefix + split.old_var + ".loop_max", fused_extent - 1 });
+        let_stmts.push_back({ prefix + split.old_var + ".loop_extent", fused_extent });
     } else if (split.is_rename()) {
-        let_stmts.push_back(std::make_pair(prefix + split.outer + ".loop_min", old_var_min));
-        let_stmts.push_back(std::make_pair(prefix + split.outer + ".loop_max", old_var_max));
-        let_stmts.push_back(std::make_pair(prefix + split.outer + ".loop_extent", old_var_extent));
+        let_stmts.push_back({ prefix + split.outer + ".loop_min", old_var_min });
+        let_stmts.push_back({ prefix + split.outer + ".loop_max", old_var_max });
+        let_stmts.push_back({ prefix + split.outer + ".loop_extent", old_var_extent });
     }
     // Do nothing for purify
 

@@ -242,4 +242,60 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
     *buf_ptr = '0';
     return halide_string_to_string(dst, end, buf_ptr);
 }
+
+WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
+    const char *code_name = NULL;
+    switch(t->code) {
+    case halide_type_int:
+        code_name = "int";
+        break;
+    case halide_type_uint:
+        code_name = "uint";
+        break;
+    case halide_type_float:
+        code_name = "float";
+        break;
+    case halide_type_handle:
+        code_name = "handle";
+        break;
+    default:
+        code_name = "bad_type_code";
+        break;
+    }
+    dst = halide_string_to_string(dst, end, code_name);
+    dst = halide_uint64_to_string(dst, end, t->bits, 1);
+    if (t->lanes != 1) {
+        dst = halide_string_to_string(dst, end, "x");
+        dst = halide_uint64_to_string(dst, end, t->lanes, 1);
+    }
+    return dst;
+}
+
+WEAK char *halide_buffer_to_string(char *dst, char *end, const halide_buffer_t *buf) {
+    if (buf == NULL) {
+        return halide_string_to_string(dst, end, "NULL");
+    }
+    dst = halide_string_to_string(dst, end, "buffer(");
+    dst = halide_uint64_to_string(dst, end, buf->device, 1);
+    dst = halide_string_to_string(dst, end, ", ");
+    dst = halide_pointer_to_string(dst, end, buf->device_interface);
+    dst = halide_string_to_string(dst, end, ", ");
+    dst = halide_pointer_to_string(dst, end, buf->host);
+    dst = halide_string_to_string(dst, end, ", ");
+    dst = halide_uint64_to_string(dst, end, buf->flags, 1);
+    dst = halide_string_to_string(dst, end, ", ");
+    dst = halide_type_to_string(dst, end, &(buf->type));
+    for (int i = 0; i < buf->dimensions; i++) {
+        dst = halide_string_to_string(dst, end, ", {");
+        dst = halide_int64_to_string(dst, end, buf->dim[i].min, 1);
+        dst = halide_string_to_string(dst, end, ", ");
+        dst = halide_int64_to_string(dst, end, buf->dim[i].extent, 1);
+        dst = halide_string_to_string(dst, end, ", ");
+        dst = halide_int64_to_string(dst, end, buf->dim[i].stride, 1);
+        dst = halide_string_to_string(dst, end, "}");
+    }
+    dst = halide_string_to_string(dst, end, ")");
+    return dst;
+}
+
 }

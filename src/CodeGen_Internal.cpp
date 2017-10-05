@@ -1,5 +1,6 @@
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
+#include "IRMutator.h"
 #include "CSE.h"
 #include "Debug.h"
 
@@ -17,11 +18,11 @@ namespace {
 
 vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_t, LLVMContext &context) {
     vector<llvm::Type *> res;
-    for (const pair<string, Type> &i : closure.vars) {
-        res.push_back(llvm_type_of(&context, i.second));
+    for (const auto &v : closure.vars) {
+        res.push_back(llvm_type_of(&context, v.second));
     }
-    for (const pair<string, Closure::Buffer> &i : closure.buffers) {
-        res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
+    for (const auto &b : closure.buffers) {
+        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
     return res;
@@ -29,13 +30,15 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
 
 }  // namespace
 
-StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_t, LLVMContext *context) {
+StructType *build_closure_type(const Closure& closure,
+                               llvm::StructType *buffer_t,
+                               LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
     struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
     return struct_t;
 }
 
-void pack_closure(llvm::Type *type,
+void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure& closure,
                   const Scope<Value *> &src,
@@ -43,39 +46,66 @@ void pack_closure(llvm::Type *type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    LLVMContext &context = builder->getContext();
-    vector<string> nm = closure.names();
-    vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
-    for (size_t i = 0; i < nm.size(); i++) {
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
-        Value *val;
-        if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
-            val = src.get(nm[i]);
-            if (val->getType() != ty[i]) {
-                val = builder->CreateBitCast(val, ty[i]);
-            }
-        } else {
-            // Skip over buffers not in the symbol table. They must not be needed.
-            val = ConstantPointerNull::get(buffer_t->getPointerTo());
-        }
+    for (const auto &v : closure.vars) {
+        llvm::Type *t = type->elements()[idx];
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+        Value *val = src.get(v.first);
+        val = builder->CreateBitCast(val, t);
         builder->CreateStore(val, ptr);
-        idx++;
+    }
+    for (const auto &b : closure.buffers) {
+        // For buffers we pass through base address (the symbol with
+        // the same name as the buffer), and the .buffer symbol (GPU
+        // code might implicitly need it).
+        // FIXME: This dependence should be explicitly encoded in the IR.
+        {
+            llvm::Type *t = type->elements()[idx];
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = src.get(b.first);
+            val = builder->CreateBitCast(val, t);
+            builder->CreateStore(val, ptr);
+        }
+        {
+            llvm::PointerType *t = buffer_t->getPointerTo();
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = nullptr;
+            if (src.contains(b.first + ".buffer")) {
+                val = src.get(b.first + ".buffer");
+                val = builder->CreateBitCast(val, t);
+            } else {
+                val = ConstantPointerNull::get(t);
+            }
+            builder->CreateStore(val, ptr);
+        }
     }
 }
 
 void unpack_closure(const Closure& closure,
                     Scope<Value *> &dst,
-                    llvm::Type *type,
+                    llvm::StructType *type,
                     Value *src,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    vector<string> nm = closure.names();
-    for (size_t i = 0; i < nm.size(); i++) {
+    for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
-        dst.push(nm[i], load);
-        load->setName(nm[i]);
+        dst.push(v.first, load);
+        load->setName(v.first);
+    }
+    for (const auto &b : closure.buffers) {
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first, load);
+            load->setName(b.first);
+        }
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first + ".buffer", load);
+            load->setName(b.first + ".buffer");
+        }
     }
 }
 
@@ -108,6 +138,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
 // functions that takes a user_context pointer as its first parameter.
 bool function_takes_user_context(const std::string &name) {
     static const char *user_context_runtime_funcs[] = {
+        "halide_buffer_copy",
         "halide_copy_to_host",
         "halide_copy_to_device",
         "halide_current_time_ns",
@@ -164,6 +195,12 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
+        "halide_upgrade_buffer_t",
+        "halide_downgrade_buffer_t",
+        "halide_downgrade_buffer_t_device_fields",
+        "_halide_buffer_crop",
+        "_halide_buffer_retire_crop_after_extern_stage",
+        "_halide_buffer_retire_crops_after_extern_stage",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -233,6 +270,94 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     }
 }
 
+namespace {
+
+// This mutator rewrites predicated loads and stores as unpredicated
+// loads/stores with explicit conditions, scalarizing if necessary.
+class UnpredicateLoadsStores : public IRMutator {
+    void visit(const Load *op) {
+        if (is_one(op->predicate)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr predicate = mutate(op->predicate);
+        Expr index = mutate(op->index);
+        Expr condition;
+
+        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
+            Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
+                                                const_true(op->type.lanes()));
+            expr = Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
+                              Call::PureIntrinsic);
+        } else {
+            string index_name = "scalarized_load_index";
+            Expr index_var = Variable::make(index.type(), index_name);
+            string predicate_name = "scalarized_load_predicate";
+            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
+
+            vector<Expr> lanes;
+            vector<int> ramp;
+            for (int i = 0; i < op->type.lanes(); i++) {
+                Expr idx_i = Shuffle::make({index_var}, {i});
+                Expr pred_i = Shuffle::make({predicate_var}, {i});
+                Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
+                                                    const_true());
+                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load,
+                                make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
+                ramp.push_back(i);
+            }
+            expr = Shuffle::make(lanes, ramp);
+            expr = Let::make(predicate_name, predicate, expr);
+            expr = Let::make(index_name, index, expr);
+        }
+    }
+
+    void visit(const Store *op) {
+        if (is_one(op->predicate)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+
+        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()));
+            stmt = IfThenElse::make(scalar_pred->value, unpredicated_store);
+        } else {
+            string value_name = "scalarized_store_value";
+            Expr value_var = Variable::make(value.type(), value_name);
+            string index_name = "scalarized_store_index";
+            Expr index_var = Variable::make(index.type(), index_name);
+            string predicate_name = "scalarized_store_predicate";
+            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
+
+            vector<Stmt> lanes;
+            for (int i = 0; i < predicate.type().lanes(); i++) {
+                Expr pred_i = Shuffle::make({predicate_var}, {i});
+                Expr value_i = Shuffle::make({value_var}, {i});
+                Expr index_i = Shuffle::make({index_var}, {i});
+                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
+                lanes.push_back(lane);
+            }
+            stmt = Block::make(lanes);
+            stmt = LetStmt::make(predicate_name, predicate, stmt);
+            stmt = LetStmt::make(value_name, value, stmt);
+            stmt = LetStmt::make(index_name, index, stmt);
+       }
+    }
+
+    using IRMutator::visit;
+};
+
+}  // namespace
+
+Stmt unpredicate_loads_stores(Stmt s) {
+    return UnpredicateLoadsStores().mutate(s);
+}
+
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
@@ -269,7 +394,9 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
 
     options = llvm::TargetOptions();
+    #if LLVM_VERSION < 50
     options.LessPreciseFPMADOption = true;
+    #endif
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
@@ -290,10 +417,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = false;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    #if LLVM_VERSION >= 39
-    // Not supported by older linkers
     options.RelaxELFRelocations = false;
-    #endif
 }
 
 
@@ -324,7 +448,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!target) {
         std::cout << error_string << std::endl;
+#if LLVM_VERSION < 60
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
+#else
+        llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
+#endif
     }
     internal_assert(target) << "Could not create target for " << module.getTargetTriple() << "\n";
 
@@ -337,7 +465,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
+#if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
+#else
+                                                llvm::CodeModel::Small,
+#endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
 

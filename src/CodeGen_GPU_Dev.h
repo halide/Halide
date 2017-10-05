@@ -57,6 +57,11 @@ struct CodeGen_GPU_Dev {
      * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
     static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
+
+    /** Return the total size of an allocation. If the size is not constant,
+     * this returns its upper bound. If the result overflows, this throws an
+     * assertion. If there is no constant upper bound, this returns 0. */
+    static int32_t get_constant_bound_allocation_size(const Allocate *alloc);
 };
 
 }}

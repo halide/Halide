@@ -6,8 +6,6 @@
   useful tricks, e.g., `Buffer<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);`
 - extern functions and extern stages
 - common scheduling patterns
-- parallel reductions
 - scheduling rvars
 - tail strategies
-- RDom::where
 - Wrapping existing memory in a Halide::Buffer

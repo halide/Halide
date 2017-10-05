@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include <memory>
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 enum {
     scalar_trans,

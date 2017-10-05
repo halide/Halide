@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
-#include <stdlib.h>
+
+#include "testing.h"
 
 using namespace Halide;
 
@@ -11,13 +11,9 @@ int main() {
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Buffer<uint8_t> input(255, 10, 3);
-    for (int y=0; y<input.height(); y++) {
-        for (int x=0; x<input.width(); x++) {
-            for (int c=0; c<3; c++) {
-              input(x, y, c) = 10*x + y + c;
-            }
-        }
-    }
+    input.fill([](int x, int y, int c) {
+        return 10 * x + y + c;
+    });
 
     Var x, y, c;
     Func g, h;
@@ -33,18 +29,8 @@ int main() {
     g.realize(out, target);
     out.copy_to_host();
 
-    for (int y=0; y<out.height(); y++) {
-        for (int x=0; x<out.width(); x++) {
-            if (!(out(x, y, 0) == input(x, y, 0) &&
-                  out(x, y, 1) == input(x, y, 1) &&
-                  out(x, y, 2) == input(x, y, 2))) {
-                fprintf(stderr, "Incorrect pixel (%d,%d,%d) != (%d,%d,%d) at x=%d y=%d.\n",
-                        out(x, y, 0), out(x, y, 1), out(x, y, 2),
-                        input(x, y, 0), input(x, y, 1), input(x, y, 2),
-                        x, y);
-                return 1;
-            }
-        }
+    if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) { return input(x, y, c); })) {
+        return 1;
     }
 
     printf("Success!\n");

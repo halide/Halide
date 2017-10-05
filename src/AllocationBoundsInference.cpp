@@ -11,7 +11,6 @@ using std::map;
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::set;
 
 // Figure out the region touched of each buffer, and deposit them as
@@ -130,7 +129,8 @@ public:
         for (map<string, Function>::const_iterator iter = e.begin();
              iter != e.end(); ++iter) {
             Function f = iter->second;
-            if (f.has_extern_definition()) {
+            if (f.has_extern_definition() &&
+                !f.extern_definition_proxy_expr().defined()) {
                 touched_by_extern.insert(f.name());
                 for (size_t i = 0; i < f.extern_arguments().size(); i++) {
                     ExternFuncArgument arg = f.extern_arguments()[i];

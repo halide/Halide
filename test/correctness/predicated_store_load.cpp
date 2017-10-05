@@ -24,11 +24,16 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::predicated_store)) {
-            store_count++;
-        } else if (op->is_intrinsic(Call::predicated_load)) {
+    void visit(const Load *op) {
+        if (!is_one(op->predicate)) {
             load_count++;
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) {
+        if (!is_one(op->predicate)) {
+            store_count++;
         }
         IRVisitor::visit(op);
     }
@@ -123,8 +128,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
 
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        //TODO(psuriana): the hexagon test for this one is broken
-        //f.hexagon().vectorize(x, 16);
+        f.hexagon().vectorize(x, 32);
     } else if (target.arch == Target::X86) {
         f.vectorize(x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
@@ -162,8 +166,7 @@ int multiple_vectorized_predicate_test() {
 
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        //TODO(psuriana): the hexagon test for this one is broken
-        //f.update(0).hexagon().vectorize(r.x, 32);
+        f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
@@ -347,7 +350,51 @@ int vectorized_predicated_predicate_with_pure_call_test() {
     return 0;
 }
 
+int vectorized_predicated_load_const_index_test() {
+    Buffer<int> in(100, 100);
+    for (int y = 0; y < 100; y++) {
+        for (int x = 0; x < 100; x++) {
+            in(x, y) = rand();
+        }
+    }
+
+    Func f("f"), ref("ref");
+    Var x("x"), y("y");
+    ImageParam input(Int(32), 2, "input");
+
+    input.set(in);
+
+    RDom r(0, 100);
+
+    ref(x, y) = x + y;
+    ref(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
+    Buffer<int> im_ref = ref.realize(100, 100);
+
+    f(x, y) = x + y;
+    f(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
+
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update().hexagon().vectorize(r.x, 32);
+    } else if (target.arch == Target::X86) {
+        f.update().vectorize(r.x, 32);
+    }
+
+    Buffer<int> im = f.realize(100, 100);
+    auto func = [im_ref](int x, int y) { return im_ref(x, y); };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
+
+    if (get_jit_target_from_environment().features_any_of({Target::HVX_64, Target::HVX_128})) {
+        printf("Skipping test due to https://github.com/halide/Halide/issues/2364\n");
+        return 0;
+    }
+
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
         return -1;
@@ -385,6 +432,11 @@ int main(int argc, char **argv) {
 
     printf("Running vectorized predicated with pure call test\n");
     if (vectorized_predicated_predicate_with_pure_call_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorized predicated load with constant index test\n");
+    if (vectorized_predicated_load_const_index_test() != 0) {
         return -1;
     }
 

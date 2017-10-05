@@ -109,12 +109,11 @@ public:
      output(x, y) = img(y, x);
      Var tx, ty;
      output.compute_root().gpu_tile(x, y, tx, ty, 8, 8);
-     img.in().compute_at(output, x).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
+     img.in().compute_at(output, x).unroll(_0, 2).unroll(_1, 2).gpu_threads(_0, _1);
      \endcode
      *
-     * Note that we use implicit vars to name the dimensions of the wrapper Func
-     * (See \ref ImageParam::in for more details). See \ref Func::in for more
-     * possible use cases of the 'in()' directive.
+     * Note that we use implicit vars to name the dimensions of the wrapper Func.
+     * See \ref Func::in for more possible use cases of the 'in()' directive.
      */
     // @{
     EXPORT Func in(const Func &f);

@@ -145,6 +145,10 @@ public:
         Buffer(Runtime::Buffer<T>(t, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
 
+    explicit Buffer(const halide_buffer_t &buf,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(buf), name) {}
+
     explicit Buffer(const buffer_t &buf,
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(buf), name) {}
@@ -155,10 +159,14 @@ public:
         Buffer(Runtime::Buffer<T>(Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
 
-    Buffer(Type t,
-           const std::vector<int> &sizes,
-           const std::string &name = "") :
+    explicit Buffer(Type t,
+                    const std::vector<int> &sizes,
+                    const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(t, sizes), name) {}
+
+    explicit Buffer(const std::vector<int> &sizes,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(sizes), name) {}
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
@@ -281,32 +289,31 @@ public:
     /** Get a pointer to the underlying Runtime::Buffer */
     // @{
     Runtime::Buffer<T> *get() {
-        return &contents->buf.as<T>();
+        // It's already type-checked, so no need to use as<T>.
+        return (Runtime::Buffer<T> *)(&contents->buf);
     }
     const Runtime::Buffer<T> *get() const {
-        return &contents->buf.as<T>();
+        return (const Runtime::Buffer<T> *)(&contents->buf);
     }
     // @}
 
-private:
-    // Helpers for decltypes used below
-    static const Runtime::Buffer<T> &dummy_const_runtime_buffer();
-    static Runtime::Buffer<T> &dummy_runtime_buffer();
 public:
 
     // We forward numerous methods from the underlying Buffer
 #define HALIDE_BUFFER_FORWARD_CONST(method)                             \
     template<typename ...Args>                                          \
     auto method(Args&&... args) const ->                                \
-        decltype(dummy_const_runtime_buffer().method(std::forward<Args>(args)...)) { \
-        return get()->method(std::forward<Args>(args)...);              \
+        decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";         \
+        return get()->method(std::forward<Args>(args)...);                                       \
     }
 
 #define HALIDE_BUFFER_FORWARD(method)                                   \
     template<typename ...Args>                                          \
     auto method(Args&&... args) ->                                      \
-        decltype(dummy_runtime_buffer().method(std::forward<Args>(args)...)) { \
-        return get()->method(std::forward<Args>(args)...);              \
+        decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";         \
+        return get()->method(std::forward<Args>(args)...);                                 \
     }
 
     /** Does the same thing as the equivalent Halide::Runtime::Buffer method */
@@ -324,7 +331,7 @@ public:
     HALIDE_BUFFER_FORWARD_CONST(left)
     HALIDE_BUFFER_FORWARD_CONST(right)
     HALIDE_BUFFER_FORWARD_CONST(top)
-    HALIDE_BUFFER_FORWARD_CONST(bottom)    
+    HALIDE_BUFFER_FORWARD_CONST(bottom)
     HALIDE_BUFFER_FORWARD_CONST(number_of_elements)
     HALIDE_BUFFER_FORWARD_CONST(size_in_bytes)
     HALIDE_BUFFER_FORWARD_CONST(begin)
@@ -334,7 +341,9 @@ public:
     HALIDE_BUFFER_FORWARD_CONST(contains)
     HALIDE_BUFFER_FORWARD(crop)
     HALIDE_BUFFER_FORWARD(slice)
+    HALIDE_BUFFER_FORWARD_CONST(sliced)
     HALIDE_BUFFER_FORWARD(embed)
+    HALIDE_BUFFER_FORWARD_CONST(embedded)
     HALIDE_BUFFER_FORWARD(set_min)
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD(transpose)
@@ -348,20 +357,24 @@ public:
     HALIDE_BUFFER_FORWARD(set_device_dirty)
     HALIDE_BUFFER_FORWARD(device_sync)
     HALIDE_BUFFER_FORWARD(device_malloc)
+    HALIDE_BUFFER_FORWARD(device_wrap_native)
+    HALIDE_BUFFER_FORWARD(device_detach_native)
     HALIDE_BUFFER_FORWARD(allocate)
     HALIDE_BUFFER_FORWARD(deallocate)
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
     HALIDE_BUFFER_FORWARD(fill)
     HALIDE_BUFFER_FORWARD_CONST(for_each_element)
-    HALIDE_BUFFER_FORWARD(for_each_value)
 
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
-    static constexpr bool has_static_halide_type() {
-        return Runtime::Buffer<T>::has_static_halide_type();
+    template<typename Fn, typename ...Args>
+    void for_each_value(Fn &&f, Args... other_buffers) {
+        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
     }
+
+    static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
 
     static halide_type_t static_halide_type() {
         return Runtime::Buffer<T>::static_halide_type();
@@ -369,15 +382,16 @@ public:
 
     template<typename T2>
     static bool can_convert_from(const Buffer<T2> &other) {
-        // TODO: This effectively disables dimension checking inside the
-        // runtime version of can_convert_from. Per conversation with
-        // Andrew, we're going with this for now and will revisit for arbitrary
-        // dimensionality buffer_t.
         return Halide::Runtime::Buffer<T>::can_convert_from(*other.get());
     }
 
     Type type() const {
         return contents->buf.type();
+    }
+
+    template<typename T2>
+    Buffer<T2> as() const {
+        return Buffer<T2>(*this);
     }
 
     Buffer<T> copy() const {
@@ -391,33 +405,33 @@ public:
 
     template<typename ...Args>
     auto operator()(int first, Args&&... args) ->
-        decltype(dummy_runtime_buffer()(first, std::forward<Args>(args)...)) {
+        decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     template<typename ...Args>
     auto operator()(int first, Args&&... args) const ->
-        decltype(dummy_const_runtime_buffer()(first, std::forward<Args>(args)...)) {
+        decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     auto operator()(const int *pos) ->
-        decltype(dummy_runtime_buffer()(pos)) {
+        decltype(std::declval<Runtime::Buffer<T>>()(pos)) {
         return (*get())(pos);
     }
 
     auto operator()(const int *pos) const ->
-        decltype(dummy_const_runtime_buffer()(pos)) {
+        decltype(std::declval<const Runtime::Buffer<T>>()(pos)) {
         return (*get())(pos);
     }
 
     auto operator()() ->
-        decltype(dummy_runtime_buffer()()) {
+        decltype(std::declval<Runtime::Buffer<T>>()()) {
         return (*get())();
     }
 
     auto operator()() const ->
-        decltype(dummy_const_runtime_buffer()()) {
+        decltype(std::declval<const Runtime::Buffer<T>>()()) {
         return (*get())();
     }
     // @}
@@ -457,6 +471,14 @@ public:
         return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
     }
 
+    /** Wrap a native handle, using the given device API.
+     * It is a bad idea to pass DeviceAPI::Default_GPU to this routine
+     * as the handle argument must match the API that the default
+     * resolves to and it is clearer and more reliable to pass the
+     * resolved DeviceAPI explicitly. */
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t), handle);
+    }
 
 };
 

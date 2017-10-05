@@ -6,14 +6,10 @@
 namespace Halide {
 namespace Internal {
 
-int tracing_level() {
-    char *trace = getenv("HL_TRACE");
-    return trace ? atoi(trace) : 0;
-}
-
 using std::vector;
 using std::map;
 using std::string;
+using std::pair;
 
 struct TraceEventBuilder {
     string func;
@@ -45,58 +41,31 @@ struct TraceEventBuilder {
 class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
-    int global_level;
+    bool trace_all_loads, trace_all_stores, trace_all_realizations;
 
-    InjectTracing(const map<string, Function> &e)
-        : env(e),
-          global_level(tracing_level()) {}
+    InjectTracing(const map<string, Function> &e, const Target &t)
+        : env(e) {
+        trace_all_loads = t.has_feature(Target::TraceLoads);
+        trace_all_stores = t.has_feature(Target::TraceStores);
+        trace_all_realizations = t.has_feature(Target::TraceRealizations);
+
+        // Check for the deprecated tracing level environment var.
+        string global_level = get_env_variable("HL_TRACE");
+        if (!global_level.empty()) {
+            user_warning << "Using HL_TRACE to set a global tracing level "
+                         << "is deprecated. Use the target flags trace_loads, "
+                         << "trace_stores, and trace_realizations instead\n";
+            int l = std::stoi(global_level);
+            trace_all_loads |= l > 2;
+            trace_all_stores |= l > 1;
+            trace_all_realizations |= l > 0;
+        }
+    }
 
 private:
     using IRMutator::visit;
 
     void visit(const Call *op) {
-
-        // Calls inside of an address_of don't count, but we want to
-        // visit the args of the inner call.
-        if (op->is_intrinsic(Call::address_of)) {
-            internal_assert(op->args.size() == 1);
-            const Call *c = op->args[0].as<Call>();
-            const Load *l = op->args[0].as<Load>();
-
-            internal_assert(c || l);
-
-            std::vector<Expr> args;
-            if (c) {
-                args = c->args;
-            } else {
-                args.push_back(l->index);
-            }
-
-            bool unchanged = true;
-            vector<Expr> new_args(args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                new_args[i] = mutate(args[i]);
-                unchanged = unchanged && (new_args[i].same_as(args[i]));
-            }
-
-            if (unchanged) {
-                expr = op;
-                return;
-            } else {
-                Expr inner;
-                if (c) {
-                    inner = Call::make(c->type, c->name, new_args, c->call_type,
-                                       c->func, c->value_index, c->image, c->param);
-                } else {
-                    Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
-                }
-                expr = Call::make(op->type, Call::address_of, {inner}, Call::Intrinsic);
-                return;
-            }
-        }
-
-
-
         IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
@@ -104,13 +73,15 @@ private:
         bool trace_it = false;
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
-            Function f = env.find(op->name)->second;
+            auto it = env.find(op->name);
+            internal_assert(it != env.end()) << op->name << " not in environment\n";
+            Function f = it->second;
             internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
-            trace_it = f.is_tracing_loads() || (global_level > 2);
+            trace_it = f.is_tracing_loads() || trace_all_loads;
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
-            trace_it = global_level > 2;
+            trace_it = trace_all_loads;
             trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
@@ -132,7 +103,6 @@ private:
                              Call::make(op->type, Call::return_second,
                                         {trace, value_var}, Call::PureIntrinsic));
         }
-
     }
 
     void visit(const Provide *op) {
@@ -145,7 +115,7 @@ private:
         Function f = iter->second;
         internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
-        if (f.is_tracing_stores() || (global_level > 1)) {
+        if (f.is_tracing_stores() || trace_all_stores) {
             // Wrap each expr in a tracing call
 
             const vector<Expr> &values = op->values;
@@ -171,7 +141,23 @@ private:
                                                  {trace, value_var}, Call::PureIntrinsic));
             }
 
-            stmt = Provide::make(op->name, traces, op->args);
+            // Lift the args out into lets so that the order of
+            // evaluation is right for scatters. Otherwise the store
+            // is traced before any loads in the index.
+            vector<Expr> args = op->args;
+            vector<pair<string, Expr>> lets;
+            for (size_t i = 0; i < args.size(); i++) {
+                if (!args[i].as<Variable>() && !is_const(args[i])) {
+                    string name = unique_name('t');
+                    lets.push_back({name, args[i]});
+                    args[i] = Variable::make(args[i].type(), name);
+                }
+            }
+
+            stmt = Provide::make(op->name, traces, args);
+            for (const auto &p : lets) {
+                stmt = LetStmt::make(p.first, p.second, stmt);
+            }
         }
     }
 
@@ -183,7 +169,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        if (f.is_tracing_realizations() || global_level > 0) {
+        if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call before and after the realize body
             TraceEventBuilder builder;
             builder.func = op->name;
@@ -220,7 +206,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        if (f.is_tracing_realizations() || global_level > 0) {
+        if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call around each pipeline event
             TraceEventBuilder builder;
             builder.func = op->name;
@@ -237,19 +223,20 @@ private:
             }
 
             builder.event = (op->is_producer ?
-                             halide_trace_end_produce :
-                             halide_trace_end_consume);
-            Expr call = builder.build();
-            Stmt new_body = Block::make(op->body, Evaluate::make(call));
-
-            stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
-
-            builder.event = (op->is_producer ?
                              halide_trace_produce :
                              halide_trace_consume);
-            call = builder.build();
+            Expr begin_op_call = builder.build();
 
-            stmt = LetStmt::make(f.name() + ".trace_id", call, stmt);
+            builder.event = (op->is_producer ?
+                             halide_trace_end_produce :
+                             halide_trace_end_consume);
+            Expr end_op_call = builder.build();
+
+
+            Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
+
+            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
+                                 ProducerConsumer::make(op->name, op->is_producer, new_body));
         }
     }
 };
@@ -273,9 +260,10 @@ public:
 };
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name,
-                    const map<string, Function> &env, const vector<Function> &outputs) {
+                    const map<string, Function> &env, const vector<Function> &outputs,
+                    const Target &t) {
     Stmt original = s;
-    InjectTracing tracing(env);
+    InjectTracing tracing(env, t);
 
     // Add a dummy realize block for the output buffers
     for (Function output : outputs) {

@@ -44,7 +44,7 @@ protected:
 
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
-        CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_OpenCL_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -53,6 +53,8 @@ protected:
         using CodeGen_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace);
         std::string print_reinterpret(Type type, Expr e);
+        std::string print_extern_call(const Call *op);
+        void add_vector_typedefs(const std::set<Type> &vector_types);
 
         std::string get_memory_space(const std::string &);
 
@@ -73,12 +75,14 @@ protected:
         void visit(const Allocate *op);
         void visit(const Free *op);
         void visit(const AssertStmt *op);
+        void visit(const Shuffle *op);
+        void visit(const Min *op);
+        void visit(const Max *op);
     };
 
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     CodeGen_OpenCL_C clc;
-    Target target;
 };
 
 }}

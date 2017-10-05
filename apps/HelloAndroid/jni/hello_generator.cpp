@@ -26,7 +26,7 @@ public:
         Var yi;
 
         tone_curve.compute_root();
-        Func(result).split(y, y, yi, 60).vectorize(x, 8).parallel(y);
+        result.split(y, y, yi, 60).vectorize(x, 8).parallel(y);
         curved.store_at(result, y).compute_at(result, yi);
 
         // We want to handle inputs that may be rotated 180 due to camera module placement.
@@ -44,6 +44,6 @@ private:
     Func tone_curve, curved;
 };
 
-HALIDE_REGISTER_GENERATOR(Hello, "hello")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Hello, hello)

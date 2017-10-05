@@ -96,7 +96,7 @@ public:
      * const. */
     template<typename T,
              typename ...Args,
-             typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
+             typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
     Realization(Buffer<T> &a, Args&&... args) {
         images = std::vector<Buffer<>>({a, args...});
     }
@@ -105,6 +105,22 @@ public:
      * existing vector of Buffer<> */
     explicit Realization(std::vector<Buffer<>> &e) : images(e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
+    }
+
+    /** Call device_sync() for all Buffers in the Realization.
+     * If one of the calls returns an error, subsequent Buffers won't have
+     * device_sync called; thus callers should consider a nonzero return
+     * code to mean that potentially all of the Buffers are in an indeterminate
+     * state of sync.
+     * Calling this explicitly should rarely be necessary, except for profiling. */
+    int device_sync(void *ctx = nullptr) {
+        for (auto &b : images) {
+            int result = b.device_sync(ctx);
+            if (result != 0) {
+                return result;
+            }
+        }
+        return 0;
     }
 
 };

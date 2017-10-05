@@ -1,8 +1,8 @@
-#ifdef __MINGW32__
+#ifdef _WIN32
 #include <stdio.h>
-// Mingw doesn't support weak linkage
+// MSAN isn't supported for any Windows variant
 int main(int argc, char **argv) {
-    printf("Skipping test on mingw");
+    printf("Skipping test on Windows\n");
     return 0;
 }
 #else
@@ -20,25 +20,25 @@ using namespace std;
 using namespace Halide::Runtime;
 
 // Just copies in -> out.
-extern "C" int msan_extern_stage(buffer_t *in, buffer_t *out) {
-    if (in->host == nullptr) {
-        in->extent[0] = 4;
-        in->extent[1] = 4;
-        in->extent[2] = 3;
-        in->min[0] = 0;
-        in->min[1] = 0;
-        in->min[2] = 0;
+extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
+    if (in->is_bounds_query()) {
+        in->dim[0].extent = 4;
+        in->dim[1].extent = 4;
+        in->dim[2].extent = 3;
+        in->dim[0].min = 0;
+        in->dim[1].min = 0;
+        in->dim[2].min = 0;
         return 0;
     }
     if (!out->host) {
         fprintf(stderr, "msan_extern_stage failure\n");
         return -1;
     }
-    if (in->elem_size != out->elem_size) {
+    if (in->type != out->type) {
         return -1;
     }
     Buffer<int32_t>(*out).copy_from(Buffer<int32_t>(*in));
-    out->host_dirty = true;
+    out->set_host_dirty();
     return 0;
 }
 
@@ -59,7 +59,9 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
 enum {
   expect_bounds_inference_buffer,
   expect_intermediate_buffer,
+  expect_intermediate_shape,
   expect_output_buffer,
+  expect_output_shape,
   expect_intermediate_contents,
   expect_output_contents,
 } annotate_stage = expect_bounds_inference_buffer;
@@ -79,8 +81,8 @@ void reset_state(const void* base) {
 extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
     printf("%d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int) len);
     if (annotate_stage == expect_bounds_inference_buffer) {
-        if (output_previous != nullptr || len != sizeof(buffer_t)) {
-            fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
+        if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
             exit(-1);
         }
         bounds_inference_count += 1;
@@ -95,14 +97,26 @@ extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, c
             }
             return;  // stay in this state
         }
-        if (output_previous != nullptr || len != sizeof(buffer_t)) {
-            fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
+        if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
+        annotate_stage = expect_intermediate_shape;
+    } else if (annotate_stage == expect_intermediate_shape) {
+        if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int) len);
             exit(-1);
         }
         annotate_stage = expect_output_buffer;
     } else if (annotate_stage == expect_output_buffer) {
-        if (output_previous != nullptr || len != sizeof(buffer_t)) {
-            fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
+        if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
+        annotate_stage = expect_output_shape;
+    } else if (annotate_stage == expect_output_shape) {
+        if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int) len);
             exit(-1);
         }
         annotate_stage = expect_intermediate_contents;

@@ -10,11 +10,7 @@
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
-#if LLVM_VERSION >= 39
 namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
-#else
-namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
-#endif
 #endif
 
 namespace Halide {
@@ -69,7 +65,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
+            #if LLVM_VERSION < 50
             function->setDoesNotAlias(i+1);
+            #else
+            function->addParamAttr(i, Attribute::NoAlias);
+            #endif
         }
     }
 
@@ -85,12 +85,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         for (auto &fn_arg : function->args()) {
 
             string arg_sym_name = args[i].name;
-            if (args[i].is_buffer) {
-                // HACK: codegen expects a load from foo to use base
-                // address 'foo.host', so we store the device pointer
-                // as foo.host in this scope.
-                arg_sym_name += ".host";
-            }
             sym_push(arg_sym_name, &fn_arg);
             fn_arg.setName(arg_sym_name);
             arg_sym_names.push_back(arg_sym_name);
@@ -192,19 +186,19 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
-        sym_push(alloc->name + ".host", shared_base);
+        sym_push(alloc->name, shared_base);
     } else {
 
         debug(2) << "Allocate " << alloc->name << " on device\n";
 
-        string allocation_name = alloc->name + ".host";
+        string allocation_name = alloc->name;
         debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
         // Jump back to the entry and generate an alloca. Note that by
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = alloc->constant_allocation_size();
+        int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(alloc);
         user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
@@ -221,7 +215,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
-    sym_pop(f->name + ".host");
+    sym_pop(f->name);
 }
 
 void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
@@ -235,7 +229,9 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability50)) {
+    if (target.has_feature(Target::CUDACapability61)) {
+        return "sm_61";
+    } else if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
     } else if (target.has_feature(Target::CUDACapability35)) {
         return "sm_35";
@@ -249,7 +245,9 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features_any_of({Target::CUDACapability32,
+    if (target.has_feature(Target::CUDACapability61)) {
+        return "+ptx50";
+    } else if (target.features_any_of({Target::CUDACapability32,
                                 Target::CUDACapability50})) {
         // Need ptx isa 4.0.
         return "+ptx40";
@@ -284,7 +282,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(target) << err_str << "\n";
 
     TargetOptions options;
+    #if LLVM_VERSION < 50
     options.LessPreciseFPMADOption = true;
+    #endif
     options.PrintMachineCode = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -299,10 +299,18 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         target_machine(target->createTargetMachine(triple.str(),
                                                    mcpu(), mattrs(), options,
                                                    llvm::Reloc::PIC_,
+#if LLVM_VERSION < 60
                                                    llvm::CodeModel::Default,
+#else
+                                                   llvm::CodeModel::Small,
+#endif
                                                    CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
+
+    #if LLVM_VERSION >= 60
+    module->setDataLayout(target_machine->createDataLayout());
+    #endif
 
     // Set up passes
     llvm::SmallString<8> outstr;
@@ -314,7 +322,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-    
+
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
     // to __nvvm_reflect with a constant via a map lookup. The inliner
@@ -331,16 +339,37 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // passes.
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
-   
+
+    #if LLVM_VERSION <= 40
     StringMap<int> reflect_mapping;
     reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
     module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
-    
+    #else
+    // Insert a module flag for the FTZ handling.
+    module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
+                          kFTZDenorms);
+
+    if (kFTZDenorms) {
+        for (llvm::Function &fn : *module) {
+            fn.addFnAttr("nvptx-f32ftz", "true");
+        }
+    }
+    #endif
+
     PassManagerBuilder b;
     b.OptLevel = 3;
+#if LLVM_VERSION >= 50
+    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
+#else
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
+#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+    #if LLVM_VERSION > 40
+    target_machine->adjustPassManager(b);
+    #endif
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
@@ -363,14 +392,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
-    module_pass_manager.run(*module);    
-    
-    #if LLVM_VERSION < 38
-    ostream.flush();
-    #endif
+    module_pass_manager.run(*module);
 
-    if (debug::debug_level >= 2) {
-        module->dump();
+    if (debug::debug_level() >= 2) {
+        dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
@@ -393,7 +418,11 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
+    #if LLVM_VERSION >= 50
+    module->print(dbgs(), nullptr, false, true);
+    #else
     module->dump();
+    #endif
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {

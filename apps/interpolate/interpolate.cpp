@@ -5,10 +5,11 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 using std::vector;
 
@@ -205,7 +206,7 @@ int main(int argc, char **argv) {
     // JIT compile the pipeline eagerly, so we don't interfere with timing
     normalize.compile_jit(target);
 
-    Buffer<float> in_png = Tools::load_image(argv[1]);
+    Buffer<float> in_png = Tools::load_and_convert_image(argv[1]);
     Buffer<float> out(in_png.width(), in_png.height(), 3);
     assert(in_png.channels() == 4);
     input.set(in_png);
@@ -217,7 +218,7 @@ int main(int argc, char **argv) {
     vector<Argument> args;
     args.push_back(input);
 
-    Tools::save_image(out, argv[2]);
+    Tools::convert_and_save_image(out, argv[2]);
 
     return 0;
 }

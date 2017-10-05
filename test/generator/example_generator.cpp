@@ -12,7 +12,7 @@
 
 namespace {
 
-enum class SomeEnum { Foo, Bar };
+enum SomeEnum { Foo, Bar };
 
 // Note the inheritance using the Curiously Recurring Template Pattern
 class Example : public Halide::Generator<Example> {
@@ -26,12 +26,12 @@ public:
     //    Output(s)
     //
     // Note that the Inputs will appear in the C function
-    // call in the order they are declared. (GeneratorParams and ScheduleParams 
+    // call in the order they are declared. (GeneratorParams and ScheduleParams
     // are always referenced by name, not position, so their order is irrelevant.)
     //
     // All Input variants declared as Generator members must have explicit
     // names, and all such names must match the regex [A-Za-z_][A-Za-z_0-9]*
-    // (i.e., essentially a C/C++ variable name). By convention, the name should 
+    // (i.e., essentially a C/C++ variable name). By convention, the name should
     // match the member-variable name.
 
     // GeneratorParams can be float or ints: {default} or {default, min, max}
@@ -40,11 +40,12 @@ public:
     GeneratorParam<int> channels{ "channels", 3 };
     // ...or enums: {default, name->value map}
     GeneratorParam<SomeEnum> enummy{ "enummy",
-                                     SomeEnum::Foo,
-                                     { { "foo", SomeEnum::Foo },
-                                       { "bar", SomeEnum::Bar } } };
+                                     Foo,
+                                     { { "foo", Foo },
+                                       { "bar", Bar } } };
     // ...or bools: {default}
     ScheduleParam<bool> vectorize{ "vectorize", true };
+    ScheduleParam<bool> parallelize{ "parallelize", true };
 
     // These are bad names that will produce errors at build time:
     // GeneratorParam<bool> badname{ " flag", true };
@@ -77,17 +78,24 @@ public:
     }
 
     void schedule() {
-        Func(output)
+        output
             .bound(c, 0, channels)
             .reorder(c, x, y)
             .unroll(c);
-        if (vectorize) {
-            // Note that we can use the Generator method natural_vector_size()
-            // here; this produces the width of the SIMD vector being targeted
-            // divided by the width of the data type.
-            Func(output)
-                .vectorize(x, natural_vector_size(output.type()));
-        }
+        // Note that we can use the Generator method natural_vector_size()
+        // here; this produces the width of the SIMD vector being targeted
+        // divided by the width of the data type.
+        const int v = natural_vector_size(output.type());
+        output
+            .specialize(parallelize && vectorize)
+            .parallel(y)
+            .vectorize(x, v);
+        output
+            .specialize(parallelize)
+            .parallel(y);
+        output
+            .specialize(vectorize)
+            .vectorize(x, v);
     }
 
 private:
@@ -96,4 +104,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(Example, "example")
+HALIDE_REGISTER_GENERATOR(Example, example)

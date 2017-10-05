@@ -4,7 +4,6 @@ using namespace Halide;
 
 using std::vector;
 using std::pair;
-using std::make_pair;
 
 int main(int argc, char **argv) {
     Func input;
@@ -22,10 +21,9 @@ int main(int argc, char **argv) {
     Func pyr_down[levels];
     Param<int> width, height;
     vector<pair<Expr, Expr> > sizes(levels);
-    sizes[0] = make_pair(width, height);
+    sizes[0] = { width, height };
     for (int i = 1; i < levels; i++) {
-        sizes[i] = make_pair((sizes[i-1].first + 1)/2,
-                             (sizes[i-1].second + 1)/2);
+        sizes[i] = { (sizes[i-1].first + 1)/2, (sizes[i-1].second + 1)/2 };
     }
     pyr_down[0] = input;
     for (int i = 1; i < levels; i++) {

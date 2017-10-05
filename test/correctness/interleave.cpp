@@ -13,8 +13,8 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::interleave_vectors)) {
+    void visit(const Shuffle *op) {
+        if (op->is_interleave()) {
             result++;
         }
         IRVisitor::visit(op);
@@ -26,7 +26,8 @@ int count_interleaves(Func f) {
     t.set_feature(Target::NoBoundsQuery);
     t.set_feature(Target::NoAsserts);
     f.compute_root();
-    Stmt s = Internal::lower({f.function()}, f.name(), t);
+    std::vector<Module> submodules;
+    Stmt s = Internal::lower_main_stmt({f.function()}, f.name(), t);
     CountInterleaves i;
     s.accept(&i);
     return i.result;

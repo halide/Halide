@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     // An internal Func that produces multiple values.
     {
         Func f, g;
-        Var x;
+        Var x, xi;
         f(x) = {x, sin(x)};
 
         f.compute_root();
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         g(x) = t[0] + t[1];
 
         if (use_gpu) {
-            g.gpu_tile(x, 8);
+            g.gpu_tile(x, xi, 8);
         }
 
         g.realize(100);
@@ -59,13 +59,13 @@ int main(int argc, char **argv) {
     // Now multiple output Funcs with different sizes
     {
         Func f, g;
-        Var x;
+        Var x, xi;
         f(x) = 100*x;
         g(x) = x;
 
         if (use_gpu) {
-            f.gpu_tile(x, 8);
-            g.gpu_tile(x, 8);
+            f.gpu_tile(x, xi, 8);
+            g.gpu_tile(x, xi, 8);
         }
 
         Buffer<int> f_im(100);
@@ -87,7 +87,46 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < g_im.width(); x++) {
             if (g_im(x) != x) {
-                printf("g(%d) = %d instead of %d\n", x, f_im(x), x);
+                printf("g(%d) = %d instead of %d\n", x, g_im(x), x);
+                return -1;
+            }
+        }
+    }
+
+    // Now multiple output Funcs via inferred Realization
+    {
+        Func f, g;
+        Var x, xi;
+        f(x) = cast<float>(100*x);
+        g(x) = Tuple(cast<uint8_t>(x), cast<int16_t>(x+1));
+
+        if (use_gpu) {
+            f.gpu_tile(x, xi, 8);
+            g.gpu_tile(x, xi, 8);
+        }
+
+        Realization r = Pipeline({f, g}).realize(100);
+        Buffer<float> f_im = r[0];
+        Buffer<uint8_t> g0_im = r[1];
+        Buffer<int16_t> g1_im = r[2];
+
+        for (int x = 0; x < f_im.width(); x++) {
+            if (f_im(x) != 100*x) {
+                printf("f(%d) = %f instead of %f\n", x, f_im(x), (float) 100*x);
+
+            }
+        }
+
+        for (int x = 0; x < g0_im.width(); x++) {
+            if (g0_im(x) != x) {
+                printf("g0(%d) = %d instead of %d\n", x, (int) g0_im(x), x);
+                return -1;
+            }
+        }
+
+        for (int x = 0; x < g1_im.width(); x++) {
+            if (g1_im(x) != x+1) {
+                printf("g1(%d) = %d instead of %d\n", x, (int) g1_im(x), x+1);
                 return -1;
             }
         }
@@ -96,14 +135,14 @@ int main(int argc, char **argv) {
     // Multiple output Funcs of different dimensionalities that call each other and some of them are Tuples.
     {
         Func f, g, h;
-        Var x, y;
+        Var x, y, xi, yi;
 
         f(x) = x;
         h(x) = {f(x) + 17, f(x) - 17};
         g(x, y) = {f(x + y) * 2, h(x)[0] * y, h(x)[1] - 2};
 
         if (get_jit_target_from_environment().has_gpu_feature()) {
-            g.gpu_tile(x, y, 1, 1);
+            g.gpu_tile(x, y, xi, yi, 1, 1);
         }
 
         Buffer<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);

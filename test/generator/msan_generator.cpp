@@ -11,7 +11,7 @@ public:
         input(x, y, c) = cast<int32_t>(x + y + c);
 
         // This just makes an exact copy
-        msan_extern_stage.define_extern("msan_extern_stage", {input}, Int(32), 3);
+        msan_extern_stage.define_extern("msan_extern_stage", {input}, Int(32), 3, NameMangling::C);
 
         RDom r(0, 4);
         msan_output(x, y, c) = sum(msan_extern_stage(r, y, c));
@@ -24,7 +24,7 @@ public:
     void schedule() {
         input.compute_root();
         msan_extern_stage.compute_root();
-        Func(msan_output).parallel(y).vectorize(x, 4);
+        msan_output.parallel(y).vectorize(x, 4);
         msan_output.dim(0).set_stride(Expr()).set_extent(4)
                    .dim(1).set_extent(4)
                    .dim(2).set_extent(3);
@@ -37,6 +37,6 @@ private:
     Func input, msan_extern_stage;
 };
 
-Halide::RegisterGenerator<MSAN> register_my_gen{"msan"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(MSAN, msan)

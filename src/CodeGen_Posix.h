@@ -77,6 +77,10 @@ private:
      * they aren't being used. */
     std::vector<Allocation> free_stack_allocs;
 
+    /** current size of all alloca instances in use; this is tracked only
+     * for debug output purposes. */
+    size_t cur_stack_alloc_total{0};
+
     /** Generates code for computing the size of an allocation from a
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum

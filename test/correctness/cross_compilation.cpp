@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 
@@ -31,8 +33,8 @@ int main(int argc, char **argv) {
         Target target(t);
         if (!target.supported()) continue;
 
-        std::string object_name = "test_object_" + t;
-        std::string lib_name = "test_lib_" + t;
+        std::string object_name = Internal::get_test_tmp_dir() + "test_object_" + t;
+        std::string lib_name = Internal::get_test_tmp_dir() + "test_lib_" + t;
         if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
             object_name += ".obj";
             lib_name += ".lib";
@@ -44,8 +46,8 @@ int main(int argc, char **argv) {
         Internal::ensure_no_file_exists(object_name);
         Internal::ensure_no_file_exists(lib_name);
 
-        f.compile_to_file("test_object_" + t, std::vector<Argument>(), "", target);
-        f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), "", target);
+        f.compile_to_file(Internal::get_test_tmp_dir() + "test_object_" + t, std::vector<Argument>(), "", target);
+        f.compile_to_static_library(Internal::get_test_tmp_dir() + "test_lib_" + t, std::vector<Argument>(), "", target);
 
         Internal::assert_file_exists(object_name);
         Internal::assert_file_exists(lib_name);

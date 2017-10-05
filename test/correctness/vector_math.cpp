@@ -4,18 +4,10 @@
 #include <string.h>
 #include <cmath>
 #include <algorithm>
+#include <future>
+#include <random>
 
 using namespace Halide;
-
-#ifdef _MSC_VER
-bool is_finite(double x) {
-    return _finite(x);
-}
-#else
-bool is_finite(double x) {
-    return std::isfinite(x);
-}
-#endif
 
 // Make some functions for turning types into strings
 template<typename A>
@@ -120,7 +112,7 @@ struct with_unsigned<int64_t> {
 
 
 template<typename A>
-bool test(int lanes) {
+bool test(int lanes, int seed) {
     const int W = 320;
     const int H = 16;
 
@@ -128,10 +120,14 @@ bool test(int lanes) {
 
     printf("Testing %sx%d\n", string_of_type<A>(), lanes);
 
+    // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
+    std::mt19937 rng(seed);
+    std::uniform_int_distribution<> dis(0, 1023);
+
     Buffer<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
-            input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
+            input(x, y) = (A)(dis(rng)*0.125 + 1.0);
             if ((A)(-1) < 0) {
                 input(x, y) -= 10;
             }
@@ -337,25 +333,25 @@ bool test(int lanes) {
     // Divide by small constants
     if (verbose) printf("Dividing by small constants\n");
     for (int c = 2; c < 16; c++) {
-	Func f10;
-	f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
-	f10.vectorize(x, lanes);
-	Buffer<A> im10 = f10.realize(W, H);
+        Func f10;
+        f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
+        f10.vectorize(x, lanes);
+        Buffer<A> im10 = f10.realize(W, H);
 
-	for (int y = 0; y < H; y++) {
-	    for (int x = 0; x < W; x++) {
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
                 A correct = divide(input(x, y), (A)c);
 
                 if (!close_enough(im10(x, y), correct)) {
-		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
-			   (double)(input(x, y)), c,
-			   (double)(im10(x, y)),
-			   (double)(correct));
-		    printf("Error when dividing by %d\n", c);
-		    return false;
-		}
-	    }
-	}
+                    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
+                           (double)(input(x, y)), c,
+                           (double)(im10(x, y)),
+                           (double)(correct));
+                    printf("Error when dividing by %d\n", c);
+                    return false;
+                }
+            }
+        }
     }
 
     // Interleave
@@ -510,15 +506,15 @@ bool test(int lanes) {
                     worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
                 }
 
-                if (is_finite(correct_log)) {
+                if (std::isfinite(correct_log)) {
                     worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
                 }
 
-                if (is_finite(correct_exp)) {
+                if (std::isfinite(correct_exp)) {
                     worst_fast_exp_mantissa = std::max(worst_fast_exp_mantissa, fast_exp_mantissa_error);
                 }
 
-                if (is_finite(correct_pow) && a > 0) {
+                if (std::isfinite(correct_pow) && a > 0) {
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
                 }
 
@@ -535,15 +531,15 @@ bool test(int lanes) {
                     printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
-                if (is_finite(correct_log) && fast_log_mantissa_error > 64) {
+                if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
                     printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
                 }
-                if (is_finite(correct_exp) && fast_exp_mantissa_error > 64) {
+                if (std::isfinite(correct_exp) && fast_exp_mantissa_error > 64) {
                     printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa);
                 }
-                if (a >= 0 && is_finite(correct_pow) && fast_pow_mantissa_error > 128) {
+                if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
                     printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
                 }
@@ -621,18 +617,26 @@ bool test(int lanes) {
 
 int main(int argc, char **argv) {
 
-    bool ok = true;
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    std::cout << "vector_math test seed: " << seed << std::endl;
 
     // Only native vector widths - llvm doesn't handle others well
-    ok = ok && test<float>(4);
-    ok = ok && test<float>(8);
-    ok = ok && test<double>(2);
-    ok = ok && test<uint8_t>(16);
-    ok = ok && test<int8_t>(16);
-    ok = ok && test<uint16_t>(8);
-    ok = ok && test<int16_t>(8);
-    ok = ok && test<uint32_t>(4);
-    ok = ok && test<int32_t>(4);
+    Halide::Internal::ThreadPool<bool> pool;
+    std::vector<std::future<bool>> futures;
+    futures.push_back(pool.async(test<float>, 4, seed));
+    futures.push_back(pool.async(test<float>, 8, seed));
+    futures.push_back(pool.async(test<double>, 2, seed));
+    futures.push_back(pool.async(test<uint8_t>, 16, seed));
+    futures.push_back(pool.async(test<int8_t>, 16, seed));
+    futures.push_back(pool.async(test<uint16_t>, 8, seed));
+    futures.push_back(pool.async(test<int16_t>, 8, seed));
+    futures.push_back(pool.async(test<uint32_t>, 4, seed));
+    futures.push_back(pool.async(test<int32_t>, 4, seed));
+
+    bool ok = true;
+    for (auto &f : futures) {
+        ok &= f.get();
+    }
 
     if (!ok) return -1;
     printf("Success!\n");
