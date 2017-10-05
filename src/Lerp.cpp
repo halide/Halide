@@ -22,15 +22,18 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     if (zero_val.type().is_int()) {
         computation_type = UInt(zero_val.type().bits(), zero_val.type().lanes());
-        bias_value = result_type.min();
+        // We must take care to do the addition and subtraction of the
+        // bias while in the unsigned computation type, where overflow
+        // is well-defined.
+        bias_value = cast(computation_type, result_type.min());
     }
 
     // For signed integer types, just convert everything to unsigned
     // and then back at the end to ensure proper rounding, etc.
     // There is likely a better way to handle this.
     if (result_type != computation_type) {
-        zero_val = Cast::make(computation_type, zero_val) - Cast::make(computation_type, bias_value);
-        one_val =  Cast::make(computation_type, one_val)  - Cast::make(computation_type, bias_value);
+        zero_val = Cast::make(computation_type, zero_val) - bias_value;
+        one_val =  Cast::make(computation_type, one_val)  - bias_value;
     }
 
     if (result_type.is_bool()) {
@@ -164,7 +167,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
         }
 
         if (!is_zero(bias_value)) {
-            result = Cast::make(result_type, result) + bias_value;
+            result = Cast::make(result_type, result + bias_value);
         }
     }
 

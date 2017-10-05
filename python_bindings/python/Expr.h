@@ -2,7 +2,7 @@
 #define EXPR_H
 
 #include <boost/python.hpp>
-#include "../../src/Expr.h"
+#include "Halide.h"
 #include <vector>
 
 void defineExpr();

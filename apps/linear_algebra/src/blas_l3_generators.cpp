@@ -14,18 +14,22 @@ class GEMMGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
     GeneratorParam<bool> transpose_A_ = {"transpose_A", false};
     GeneratorParam<bool> transpose_B_ = {"transpose_B", false};
 
     // Standard ordering of parameters in GEMM functions.
-    Param<T>   a_ = {"a", 1.0};
-    ImageParam A_ = {type_of<T>(), 2, "A"};
-    ImageParam B_ = {type_of<T>(), 2, "B"};
-    Param<T>   b_ = {"b", 1.0};
-    ImageParam C_ = {type_of<T>(), 2, "C"};
+    Input<T>         a_ = {"a_", 1};
+    Input<Buffer<T>> A_ = {"A_", 2};
+    Input<Buffer<T>> B_ = {"B_", 2};
+    Input<T>         b_ = {"b_", 1};
+    Input<Buffer<T>> C_ = {"C_", 2};
 
-    Func build() {
+    Output<Buffer<T>> result_ = {"result", 2};
+
+    void generate() {
         // Matrices are interpreted as column-major by default. The
         // transpose GeneratorParams are used to handle cases where
         // one or both is actually row major.
@@ -36,30 +40,25 @@ class GEMMGenerator :
         const int vec = natural_vector_size(a_.type());
         const int s = vec * 2;
 
-        ImageParam A_in, B_in;
+        Input<Buffer<T>> *A_in = &A_;
+        Input<Buffer<T>> *B_in = &B_;
 
         // If they're both transposed, then reverse the order and transpose the result instead.
-        bool transpose_AB = false;
-        if ((bool)transpose_A_ && (bool)transpose_B_) {
-            A_in = B_;
-            B_in = A_;
-            transpose_A_.set(false);
-            transpose_B_.set(false);
-            transpose_AB = true;
-        } else {
-            A_in = A_;
-            B_in = B_;
+        const bool transpose_AB = (bool)transpose_A_ && (bool)transpose_B_;
+        const bool transpose_A = !transpose_AB && (bool)transpose_A_;
+        const bool transpose_B = !transpose_AB && (bool)transpose_B_;
+        if (transpose_AB) {
+            std::swap(A_in, B_in);
         }
 
         Var i, j, ii, ji, jii, iii, io, jo, t;
         Var ti[3], tj[3];
-        Func result("result");
 
         // Swizzle A for better memory order in the inner loop.
         Func A("A"), B("B"), Btmp("Btmp"), As("As"), Atmp("Atmp");
-        Atmp(i, j) = BoundaryConditions::constant_exterior(A_in, cast<T>(0))(i, j);
+        Atmp(i, j) = BoundaryConditions::constant_exterior(*A_in, cast<T>(0))(i, j);
 
-        if (transpose_A_) {
+        if (transpose_A) {
             As(i, j, io) = Atmp(j, io*s + i);
         } else {
             As(i, j, io) = Atmp(io*s + i, j);
@@ -67,8 +66,8 @@ class GEMMGenerator :
 
         A(i, j) = As(i % s, j, i / s);
 
-        Btmp(i, j) = B_in(i, j);
-        if (transpose_B_) {
+        Btmp(i, j) = (*B_in)(i, j);
+        if (transpose_B) {
             B(i, j) = Btmp(j, i);
         } else {
             B(i, j) = Btmp(i, j);
@@ -93,33 +92,33 @@ class GEMMGenerator :
         }
 
         // Do the part that makes it a 'general' matrix multiply.
-        result(i, j) = (a_ * ABt(i, j) + b_ * C_(i, j));
+        result_(i, j) = (a_ * ABt(i, j) + b_ * C_(i, j));
 
-        result.tile(i, j, ti[1], tj[1], i, j, 2*s, 2*s, TailStrategy::GuardWithIf);
+        result_.tile(i, j, ti[1], tj[1], i, j, 2*s, 2*s, TailStrategy::GuardWithIf);
         if (transpose_AB) {
-            result
+            result_
                 .tile(i, j, ii, ji, 4, s)
                 .tile(i, j, ti[0], tj[0], i, j, s/4, 1);
 
         } else {
-            result
+            result_
                 .tile(i, j, ii, ji, s, 4)
                 .tile(i, j, ti[0], tj[0], i, j, 1, s/4);
         }
 
         // If we have enough work per task, parallelize over these tiles.
-        result.specialize(num_rows >= 512 && num_cols >= 512)
+        result_.specialize(num_rows >= 512 && num_cols >= 512)
             .fuse(tj[1], ti[1], t).parallel(t);
 
         // Otherwise tile one more time before parallelizing, or don't
         // parallelize at all.
-        result.specialize(num_rows >= 128 && num_cols >= 128)
+        result_.specialize(num_rows >= 128 && num_cols >= 128)
             .tile(ti[1], tj[1], ti[2], tj[2], ti[1], tj[1], 2, 2)
             .fuse(tj[2], ti[2], t).parallel(t);
 
-        result.rename(tj[0], t);
+        result_.rename(tj[0], t);
 
-        result.bound(i, 0, num_rows).bound(j, 0, num_cols);
+        result_.bound(i, 0, num_rows).bound(j, 0, num_cols);
 
         As.compute_root()
             .split(j, jo, ji, s).reorder(i, ji, io, jo)
@@ -129,8 +128,8 @@ class GEMMGenerator :
         Atmp.compute_at(As, io)
             .vectorize(i).unroll(j);
 
-        if (transpose_B_) {
-            B.compute_at(result, t)
+        if (transpose_B) {
+            B.compute_at(result_, t)
                 .tile(i, j, ii, ji, 8, 8)
                 .vectorize(ii).unroll(ji);
             Btmp.reorder_storage(j, i)
@@ -140,27 +139,26 @@ class GEMMGenerator :
         }
 
 
-        AB.compute_at(result, i)
+        AB.compute_at(result_, i)
             .bound_extent(j, 4).unroll(j)
             .bound_extent(i, s).vectorize(i)
             .update()
             .reorder(i, j, rv).unroll(j).unroll(rv, 2).vectorize(i);
         if (transpose_AB) {
-            ABt.compute_at(result, i)
+            ABt.compute_at(result_, i)
                 .bound_extent(i, 4).unroll(i)
                 .bound_extent(j, s).vectorize(j);
         }
 
-        A_.set_min(0, 0).set_min(1, 0);
-        B_.set_bounds(0, 0, sum_size).set_min(1, 0);
-        C_.set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
-        result.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
-
-        return result;
+        A_.dim(0).set_min(0).dim(1).set_min(0);
+        B_.dim(0).set_bounds(0, sum_size).dim(1).set_min(0);
+        C_.dim(0).set_bounds(0, num_rows);
+        C_.dim(1).set_bounds(0, num_cols);
+        result_.dim(0).set_bounds(0, num_rows).dim(1).set_bounds(0, num_cols);
     }
 };
 
-RegisterGenerator<GEMMGenerator<float>>    register_sgemm("sgemm");
-RegisterGenerator<GEMMGenerator<double>>   register_dgemm("dgemm");
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(GEMMGenerator<float>, sgemm)
+HALIDE_REGISTER_GENERATOR(GEMMGenerator<double>, dgemm)

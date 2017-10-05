@@ -4,7 +4,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
-#include "../../src/Func.h"
+#include "Halide.h"
 
 /// Define all gpu related methods
 void defineFuncGpuMethods(boost::python::class_<Halide::Func> &func_class);

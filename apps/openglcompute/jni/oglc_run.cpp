@@ -16,7 +16,7 @@
 
 using Halide::Runtime::Buffer;
 
-typedef int (*filter_t) (buffer_t *, buffer_t *);
+typedef int (*filter_t) (halide_buffer_t *, halide_buffer_t *);
 
 struct timing {
     filter_t filter;

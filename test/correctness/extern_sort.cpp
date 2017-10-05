@@ -11,16 +11,16 @@ using namespace Halide;
 #endif
 
 // Use an extern stage to do a sort
-extern "C" DLLEXPORT int sort_buffer(buffer_t *in, buffer_t *out) {
-    if (!in->host || !out->host) {
-        in->min[0] = out->min[0];
-        in->extent[0] = out->extent[0];
+extern "C" DLLEXPORT int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
+    if (in->is_bounds_query()) {
+        in->dim[0].min = out->dim[0].min;
+        in->dim[0].extent = out->dim[0].extent;
     } else {
-        memcpy(out->host, in->host, out->extent[0] * out->elem_size);
+        memcpy(out->host, in->host, out->dim[0].extent * out->type.bytes());
         float *out_start = (float *)out->host;
-        float *out_end = out_start + out->extent[0];
+        float *out_end = out_start + out->dim[0].extent;
         std::sort(out_start, out_end);
-        out->host_dirty = true;
+        out->set_host_dirty();
     }
     return 0;
 }

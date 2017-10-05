@@ -8,13 +8,13 @@
 #endif
 
 // An extern stage that translates.
-extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) {
+extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
 
-    if (in->host == nullptr) {
-        in->min[0] = out->min[0] + dx;
-        in->min[1] = out->min[1] + dy;
-        in->extent[0] = out->extent[0];
-        in->extent[1] = out->extent[1];
+    if (in->is_bounds_query()) {
+        in->dim[0].min = out->dim[0].min + dx;
+        in->dim[1].min = out->dim[1].min + dy;
+        in->dim[0].extent = out->dim[0].extent;
+        in->dim[1].extent = out->dim[1].extent;
     } else {
         Halide::Runtime::Buffer<uint8_t> out_buf(*out);
         out_buf.translate(dx, dy);

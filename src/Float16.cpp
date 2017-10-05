@@ -111,7 +111,15 @@ uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeN
 #else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
 #endif
+#if LLVM_VERSION >= 50
+    // A comment in LLVM's APFloat.h indicates we should perhaps use
+    // llvm::APInt::WordType directly. However this type matches the
+    // prototype of the method it is passed to below, so it seems more
+    // correct. This code will likely have to change again.
+    llvm::APFloatBase::integerPart asIP = value;
+#else
     llvm::integerPart asIP = value;
+#endif
     llvm::APFloat::opStatus status = convertedValue.convertFromSignExtendedInteger(
         &asIP,
         /*srcCount=*/1, // All bits are contained within a single int64_t
@@ -166,7 +174,7 @@ float16_t::operator float() const {
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
     // just pick any.
-#if LLVM_VERSION >= 40 
+#if LLVM_VERSION >= 40
     convertedValue.convert(llvm::APFloat::IEEEsingle(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
 #else
     convertedValue.convert(llvm::APFloat::IEEEsingle, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
@@ -262,11 +270,7 @@ float16_t float16_t::mod(float16_t denominator, RoundingMode roundingMode) const
     // FIXME: Ignoring possible exceptions
     // LLVM removed the rounding mode as the operation is always exact.
     // TODO: change float16_t::mod to no take a rounding mode.
-    #if LLVM_VERSION < 38
-    result.mod(rhsAPF, getLLVMAPFRoundingMode(roundingMode));
-    #else
     result.mod(rhsAPF);
-    #endif
     return toFP16(result);
 }
 

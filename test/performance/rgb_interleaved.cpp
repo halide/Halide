@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cstdio>
 #include <memory>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 void test_deinterleave() {
     ImageParam src(UInt(8), 3);

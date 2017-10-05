@@ -92,7 +92,7 @@ int single_memoize_test(int index) {
 
     f2.compile_jit();
 
-    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+    for (bool toggle_val : { false, true }) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Buffer<int> out = f2.realize(10);
@@ -121,7 +121,7 @@ int tuple_memoize_test(int index) {
 
     f2.compile_jit();
 
-    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+    for (bool toggle_val : { false, true }) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Realization out = f2.realize(128);
@@ -160,7 +160,7 @@ int non_trivial_allocate_predicate_test(int index) {
 
     f3.compile_jit();
 
-    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+    for (bool toggle_val : { false, true }) {
         set_toggle1 = toggle_val;
         set_toggle2 = toggle_val;
         toggle.set(set_toggle1);

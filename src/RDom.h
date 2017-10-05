@@ -179,13 +179,13 @@ public:
 class RDom {
     Internal::ReductionDomain dom;
 
-    void init_vars(std::string name);
+    void init_vars(const std::string &name);
 
     EXPORT void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
 
     template <typename... Args>
     NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args&&... args) {
-        ranges.push_back(std::make_pair(min, extent));
+        ranges.push_back({ min, extent });
         initialize_from_ranges(ranges, std::forward<Args>(args)...);
     }
 
@@ -215,6 +215,7 @@ public:
     // @{
     EXPORT RDom(const Buffer<> &);
     EXPORT RDom(ImageParam);
+    EXPORT RDom(const Halide::Internal::Constrainable &);  // Allows Input<Buffer<>>
     template<typename T>
     NO_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
     // @}

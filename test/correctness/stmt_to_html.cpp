@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 int main() {
@@ -23,20 +25,20 @@ int main() {
         .unroll(y_pairs);
 
 
-    const char *result_file_1 = "stmt_to_html_dump_1.html";
+    std::string result_file_1 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_1.html";
     Internal::ensure_no_file_exists(result_file_1);
     gradient_fast.compile_to_lowered_stmt(result_file_1, {}, Halide::HTML);
     Internal::assert_file_exists(result_file_1);
 
     // Also check using an image.
-    const char *result_file_2 = "stmt_to_html_dump_2.html";
+    std::string result_file_2 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_2.html";
     Internal::ensure_no_file_exists(result_file_2);
     Buffer<int> im(800, 600);
     gradient_fast.compile_to_lowered_stmt(result_file_2, {im}, Halide::HTML);
     Internal::assert_file_exists(result_file_2);
 
     // Check a multi-output pipeline.
-    const char *result_file_3 = "stmt_to_html_dump_3.html";
+    std::string result_file_3 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_3.html";
     Internal::ensure_no_file_exists(result_file_3);
     Func tuple_func;
     tuple_func(x, y) = Tuple(x, y);

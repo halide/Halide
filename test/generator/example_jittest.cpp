@@ -8,17 +8,11 @@ using Halide::Buffer;
 const int kSize = 32;
 
 void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
-    for (int i = 0; i < kSize; i++) {
-        for (int j = 0; j < kSize; j++) {
-            for (int c = 0; c < channels; c++) {
-                if (img(i, j, c) !=
-                    (int32_t)(compiletime_factor * runtime_factor * c * (i > j ? i : j))) {
-                    printf("img[%d, %d, %d] = %d\n", i, j, c, img(i, j, c));
-                    exit(-1);
-                }
-            }
-        }
-    }
+    img.for_each_element([=](int x, int y, int c) {
+        int expected = (int32_t)(compiletime_factor * runtime_factor * c * (x > y ? x : y));
+        int actual = img(x, y, c);
+        assert(expected == actual);
+    });
 }
 
 int main(int argc, char **argv) {
@@ -53,13 +47,28 @@ int main(int argc, char **argv) {
         // the GeneratorParams entirely to use their default values.
         auto gen = example(context, /* inputs: */ { 1.f });
 
-        // We'll set "vectorize=false" in the ScheduleParams, just to
+        // We'll set "vectorize=false parallelize=false" in the ScheduleParams, just to
         // show that we can:
-        example::ScheduleParams sp;
-        sp.vectorize = false;
-        gen.schedule(sp);
+        gen.vectorize.set(false);
+        gen.parallelize.set(false);
+        gen.schedule();
 
-        Halide::Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
+        Halide::Buffer<int32_t> img(kSize, kSize, 3);
+        gen.realize(img);
+        verify(img, 1, 1, 3);
+    }
+
+    {
+        auto gen = example(context, /* inputs: */ { 1.f });
+
+        // Same as before, but we'll use chained setters for the ScheduleParams;
+        // this is identical in function to the previous block, but a style that
+        // some people prefer. Note that we can also chain the "schedule()"
+        // call on the end.
+        gen.set_vectorize(false).set_parallelize(false).schedule();
+
+        Halide::Buffer<int32_t> img(kSize, kSize, 3);
+        gen.realize(img);
         verify(img, 1, 1, 3);
     }
 

@@ -4,8 +4,7 @@
 #include "add_operators.h"
 #include <boost/python.hpp>
 
-#include "../../src/IROperator.h"
-#include "../../src/Var.h"
+#include "Halide.h"
 
 #include <boost/format.hpp>
 #include <string>

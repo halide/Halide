@@ -35,9 +35,9 @@ int main(int argc, char **argv) {
         assert(b.host_dirty());
 
         Func f;
-        Var x, y;
+        Var x, y, tx, ty;
         f(x, y) = a(x, y) + b(x, y) + 2;
-        f.gpu_tile(x, y, 8, 8, TailStrategy::Auto, d);
+        f.gpu_tile(x, y, tx, ty, 8, 8, TailStrategy::Auto, d);
 
         Buffer<float> out = f.realize(100, 100);
 

@@ -121,6 +121,7 @@ private:
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = op->value;
         if (op->value.type().is_bool()) {
             Type ty = UInt(8, op->value.type().lanes());
@@ -131,10 +132,10 @@ private:
         value = mutate(value);
         Expr index = mutate(op->index);
 
-        if (value.same_as(op->value) && index.same_as(op->index)) {
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
@@ -147,6 +148,24 @@ private:
             // If the condition is a vector, it should be a vector of
             // ints.
             internal_assert(cond_ty.code() == Type::Int);
+
+            // If both true_value and false_value were originally boolean vectors,
+            // they might have been promoted to different-sized integer vectors
+            // depending on how they were calculated, e.g.
+            //
+            //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
+            //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
+            //    Expr c = select(a < b, a, b);            // whoops
+            //
+            if (true_value.type().bits() != false_value.type().bits() &&
+                true_value.type().lanes() == false_value.type().lanes() &&
+                true_value.type().is_int() && false_value.type().is_int()) {
+                if (true_value.type().bits() > false_value.type().bits()) {
+                    false_value = Call::make(true_value.type(), Call::cast_mask, {false_value}, Call::PureIntrinsic);
+                } else {
+                    true_value = Call::make(false_value.type(), Call::cast_mask, {true_value}, Call::PureIntrinsic);
+                }
+            }
 
             // select_mask requires that all 3 operands have the same
             // width.
@@ -174,6 +193,17 @@ private:
             expr = Broadcast::make(value, op->lanes);
         } else {
             expr = op;
+        }
+    }
+
+    void visit(const Shuffle *op) {
+        IRMutator::visit(op);
+        if (op->is_extract_element() && op->type.is_bool()) {
+            op = expr.as<Shuffle>();
+            internal_assert(op);
+            // This is extracting a scalar element of a bool
+            // vector. Generate a call to extract_mask_element.
+            expr = Call::make(Bool(), Call::extract_mask_element, {Shuffle::make_concat(op->vectors), op->indices[0]}, Call::PureIntrinsic);
         }
     }
 

@@ -25,9 +25,9 @@ int main(int argc, char **argv) {
 
     // Run a pipeline that uses it as an input
     Func f;
-    Var x, y;
+    Var x, y, xi, yi;
     f(x, y) = in(x, y);
-    f.gpu_tile(x, y, 8, 8);
+    f.gpu_tile(x, y, xi, yi, 8, 8);
     Buffer<float> out = f.realize(100, 100);
 
     // Check the output has a device allocation, and was copied to

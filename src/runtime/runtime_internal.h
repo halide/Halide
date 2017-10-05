@@ -49,9 +49,6 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
-#define O_RDONLY 0
-#define O_RDWR 2
-
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -74,8 +71,13 @@ const char *strchr(const char* s, int c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);
-int open(const char *filename, int opts, int mode);
-int close(int fd);
+// Use fopen+fileno+fclose instead of open+close - the value of the
+// flags passed to open are different on every platform
+void *fopen(const char *, const char *);
+int fileno(void *);
+int fclose(void *);
+int close(int);
+size_t fwrite(const void *, size_t, size_t, void *);
 ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
@@ -90,11 +92,16 @@ char *strncpy(char *dst, const char *src, size_t n);
 // arg to dst. Does not write to pointer end or beyond. Returns
 // pointer to one beyond the last character written so that calls can
 // be chained.
+
+struct halide_buffer_t;
+struct halide_type_t;
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg);
 WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific);
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
+WEAK char *halide_buffer_to_string(char *dst, char *end, const halide_buffer_t *arg);
+WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *arg);
 
 // Search the current process for a symbol with the given name.
 WEAK void *halide_get_symbol(const char *name);
@@ -129,9 +136,9 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
                                         const uint64_t *func_names);
 WEAK int halide_host_cpu_count();
 
-WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
+WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,
                                        const struct halide_device_interface_t *device_interface);
-WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf);
+WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t *buf);
 
 struct halide_filter_metadata_t;
 

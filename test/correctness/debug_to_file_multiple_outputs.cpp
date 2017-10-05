@@ -1,11 +1,21 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
     const int size_x = 766;
     const int size_y = 311;
+
+    std::string f_tmp = Internal::get_test_tmp_dir() + "f3.tmp";
+    std::string g_tmp = Internal::get_test_tmp_dir() + "g3.tmp";
+    std::string h_tmp = Internal::get_test_tmp_dir() + "h3.tmp";
+
+    Internal::ensure_no_file_exists(f_tmp);
+    Internal::ensure_no_file_exists(g_tmp);
+    Internal::ensure_no_file_exists(h_tmp);
 
     {
         Func f, g, h, j;
@@ -14,9 +24,9 @@ int main(int argc, char **argv) {
         g(x, y) = cast<float>(f(x, y) + f(x + 1, y));
         h(x, y) = f(x, y) + g(x, y);
 
-        f.compute_root().debug_to_file("f3.tmp");
-        g.compute_root().debug_to_file("g3.tmp");
-        h.compute_root().debug_to_file("h3.tmp");
+        f.compute_root().debug_to_file(f_tmp);
+        g.compute_root().debug_to_file(g_tmp);
+        h.compute_root().debug_to_file(h_tmp);
 
         Pipeline p({f, g, h});
 
@@ -26,9 +36,13 @@ int main(int argc, char **argv) {
         p.realize(r);
     }
 
-    FILE *f = fopen("f3.tmp", "rb");
-    FILE *g = fopen("g3.tmp", "rb");
-    FILE *h = fopen("h3.tmp", "rb");
+    Internal::assert_file_exists(f_tmp);
+    Internal::assert_file_exists(g_tmp);
+    Internal::assert_file_exists(h_tmp);
+
+    FILE *f = fopen(f_tmp.c_str(), "rb");
+    FILE *g = fopen(g_tmp.c_str(), "rb");
+    FILE *h = fopen(h_tmp.c_str(), "rb");
     assert(f && g && h);
 
     int header[5];

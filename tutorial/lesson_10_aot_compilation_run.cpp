@@ -21,15 +21,16 @@ int main(int argc, char **argv) {
     // Have a look in the header file above (it won't exist until you've run
     // lesson_10_generate). At the bottom is the signature of the function we generated:
 
-    // int brighter(buffer_t *_input_buffer, uint8_t _offset, buffer_t *_brighter_buffer);
+    // int brighter(halide_buffer_t *_input_buffer, uint8_t _offset, halide_buffer_t *_brighter_buffer);
 
-    // The ImageParam inputs have become pointers to "buffer_t"
+    // The ImageParam inputs have become pointers to "halide_buffer_t"
     // structs. This is struct that Halide uses to represent arrays of
     // data.  Unless you're calling the Halide pipeline from pure C
     // code, you don't want to use it
     // directly. Halide::Runtime::Buffer is a simple wrapper around
-    // buffer_t that will implicitly convert to a buffer_t *. We
-    // will pass Halide::Runtime::Buffer objects in those slots.
+    // halide_buffer_t that will implicitly convert to a
+    // halide_buffer_t *. We will pass Halide::Runtime::Buffer objects
+    // in those slots.
 
     // The Halide::Buffer class we have been using in JIT code is in
     // fact just a shared pointer to the simpler

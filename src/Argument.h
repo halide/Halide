@@ -47,10 +47,10 @@ struct Argument {
 
     /** If this is a scalar parameter, then this is its type.
      *
-     * If this is a buffer parameter, this is used to determine elem_size
-     * of the buffer_t.
+     * If this is a buffer parameter, this this is the type of its
+     * elements.
      *
-     * Note that type.width should always be 1 here. */
+     * Note that type.lanes should always be 1 here. */
     Type type;
 
     /** If this is a scalar parameter, then these are its default, min, max values.
@@ -86,6 +86,16 @@ struct Argument {
 
     bool is_input() const { return kind == InputScalar || kind == InputBuffer; }
     bool is_output() const { return kind == OutputBuffer; }
+
+    bool operator==(const Argument &rhs) const {
+        return name == rhs.name &&
+               kind == rhs.kind &&
+               dimensions == rhs.dimensions &&
+               type == rhs.type &&
+               def.same_as(rhs.def) &&
+               min.same_as(rhs.min) &&
+               max.same_as(rhs.max);
+    }
 };
 
 }

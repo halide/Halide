@@ -19,12 +19,26 @@ class ExprUsesVars : public IRGraphVisitor {
     const Scope<T> &vars;
     Scope<Expr> scope;
 
-    void visit(const Variable *v) {
-        if (vars.contains(v->name)) {
+    void visit_name(const std::string &name) {
+        if (vars.contains(name)) {
             result = true;
-        } else if (scope.contains(v->name)) {
-            include(scope.get(v->name));
+        } else if (scope.contains(name)) {
+            include(scope.get(name));
         }
+    }
+
+    void visit(const Variable *op) {
+        visit_name(op->name);
+    }
+
+    void visit(const Load *op) {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Store *op) {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
     }
 public:
     ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr) : vars(v), result(false) {

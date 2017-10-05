@@ -5,9 +5,7 @@
 
 #include "add_operators.h"
 
-#include "../../src/Expr.h"
-#include "../../src/IROperator.h"
-#include "../../src/Var.h"
+#include "Halide.h"
 
 #include "Type.h"
 

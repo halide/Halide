@@ -2,9 +2,8 @@
 #include <memory.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <malloc.h>
 
-#include "../support/benchmark.h"
+#include "halide_benchmark.h"
 
 #include "pipeline_cpu.h"
 #include "pipeline_hvx64.h"
@@ -26,7 +25,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int (*pipeline)(buffer_t *, buffer_t*);
+    int (*pipeline)(halide_buffer_t *, halide_buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
@@ -61,11 +60,12 @@ int main(int argc, char **argv) {
     });
 
     // To avoid the cost of powering HVX on in each call of the
-    // pipeline, power it on once now.
+    // pipeline, power it on once now. Also, set Hexagon performance to turbo.
+    halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(NULL);
 
     printf("Running pipeline...\n");
-    double time = benchmark(iterations, 10, [&]() {
+    double time = Halide::Tools::benchmark(iterations, 10, [&]() {
         int result = pipeline(in, out);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
@@ -74,8 +74,14 @@ int main(int argc, char **argv) {
 
     printf("Done, time: %g s\n", time);
 
-    // We're done with HVX, power it off.
+    // We're done with HVX, power it off, and reset the performance mode
+    // to default to save power.
     halide_hexagon_power_hvx_off(NULL);
+    halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_default);
+
+    // Copy the output back to the host. If the buffer is zero-copy (as
+    // it should be on a real device), this will be a no-op.
+    out.copy_to_host();
 
     // Validate that the algorithm did what we expect.
     const uint16_t gaussian5[] = { 1, 4, 6, 4, 1 };

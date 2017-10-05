@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -17,7 +19,7 @@ int main(int argc, char **argv) {
     h.compute_root();
 
     {
-        const char *result_file = "compile_to_lowered_stmt.stmt";
+        std::string result_file = Internal::get_test_tmp_dir() + "compile_to_lowered_stmt.stmt";
 
         Internal::ensure_no_file_exists(result_file);
 

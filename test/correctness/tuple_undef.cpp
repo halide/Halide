@@ -38,6 +38,11 @@ public:
 };
 
 int main(int argc, char **argv) {
+    Buffer<int> a(1024, 1024), b(1024, 1024);
+    const int A = (int) 0xdeadbeef;
+    const int B = (int) 0xf00dcafe;
+
+    printf("Test 1...\n");
     {
         Var x("x"), y("y");
         Func f("f");
@@ -48,12 +53,14 @@ int main(int argc, char **argv) {
         // There should be two stores: the undef stores should have been removed.
         f.add_custom_lowering_pass(new CheckStoreCount(2));
 
-        Realization result = f.realize(1024, 1024);
-        Buffer<int> a = result[0], b = result[1];
+        // Pre-fill with unlikely values so we can verify that undef bits are untouched.
+        a.fill(A);
+        b.fill(B);
+        f.realize({a, b});
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x + y;
-                int correct_b = 2;
+                int correct_b = B + 2;
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
@@ -63,19 +70,21 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test 2...\n");
     {
         Var x("x"), y("y");
         Func f("f");
 
         f(x, y) = Tuple(x, y);
-        f(x, y) = Tuple(undef<int>(), select(x < 20, 20*x, undef<int>()));
+        f(x, y) = Tuple(undef<int>(), select(x < 20, 20*f(x, y)[0], undef<int>()));
 
         // There should be three stores: the undef store to the 1st element of
         // the Tuple in the update definition should have been removed.
         f.add_custom_lowering_pass(new CheckStoreCount(3));
 
-        Realization result = f.realize(1024, 1024);
-        Buffer<int> a = result[0], b = result[1];
+        a.fill(A);
+        b.fill(B);
+        f.realize({a, b});
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x;
@@ -89,6 +98,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test 3...\n");
     {
         Var x("x"), y("y");
         Func f("f"), g("g");
@@ -100,8 +110,9 @@ int main(int argc, char **argv) {
         Expr arg_1 = clamp(select(r.x < 2, 23, undef<int>()), 0, 100);
         f(arg_0, arg_1) = {f(arg_0, arg_1)[0] + 10, f(arg_0, arg_1)[1] + 5};
 
-        Realization result = f.realize(1024, 1024);
-        Buffer<int> a = result[0], b = result[1];
+        a.fill(A);
+        b.fill(B);
+        f.realize({a, b});
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = (x == 13) && (y == 23) ? 20 : 0;
@@ -115,6 +126,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test 4...\n");
     {
 
         Var x("x"), y("y");
@@ -125,7 +137,10 @@ int main(int argc, char **argv) {
         // There should be no stores since all Tuple values are undef.
         f.add_custom_lowering_pass(new CheckStoreCount(0));
 
-        Realization result = f.realize(1024, 1024);
+        // Pre-fill with unlikely values so we can verify that undef bits are untouched.
+        a.fill(A);
+        b.fill(B);
+        f.realize({a, b});
     }
 
     printf("Success!\n");

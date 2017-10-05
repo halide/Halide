@@ -17,7 +17,7 @@
 #include "Pipeline.h"
 
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
 #ifdef _WIN32
@@ -285,11 +285,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     TargetMachine *tm = engine_builder.selectTarget();
     internal_assert(tm) << error_string << "\n";
-    #if LLVM_VERSION == 37
-    DataLayout target_data_layout(*(tm->getDataLayout()));
-    #else
     DataLayout target_data_layout(tm->createDataLayout());
-    #endif
     if (initial_module_data_layout != target_data_layout) {
         internal_error << "Warning: data layout mismatch between module ("
                        << initial_module_data_layout.getStringRepresentation()
@@ -422,11 +418,11 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternCFunc
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module->context);
-    llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
-    if (buffer_t == nullptr) {
-        buffer_t = llvm::StructType::create(jit_module->context, "struct.buffer_t");
+    llvm::Type *halide_buffer_t = dummy_module.getTypeByName("struct.halide_buffer_t");
+    if (halide_buffer_t == nullptr) {
+        halide_buffer_t = llvm::StructType::create(jit_module->context, "struct.halide_buffer_t");
     }
-    llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
+    llvm::Type *halide_buffer_t_star = llvm::PointerType::get(halide_buffer_t, 0);
 
     llvm::Type *ret_type;
     auto signature = extern_c_function.signature();
@@ -438,8 +434,8 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternCFunc
 
     std::vector<llvm::Type *> llvm_arg_types;
     for (const Type &t : signature.arg_types()) {
-        if (t == type_of<struct buffer_t *>()) {
-            llvm_arg_types.push_back(buffer_t_star);
+        if (t == type_of<struct halide_buffer_t *>()) {
+            llvm_arg_types.push_back(halide_buffer_t_star);
         } else {
             llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
         }
@@ -581,7 +577,7 @@ void *get_library_symbol_handler(void *lib, const char *name) {
 template <typename function_t>
 function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
     auto iter = exports.find(hook_name);
-    internal_assert(iter != exports.end());
+    internal_assert(iter != exports.end()) << "Failed to find function " << hook_name << "\n";
     function_t (*hook_setter)(function_t) =
         reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
     return (*hook_setter)(hook);

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <set>
 
 #include "RealizationOrder.h"
@@ -13,13 +14,14 @@ using std::vector;
 using std::pair;
 
 void realization_order_dfs(string current,
-                           const map<string, set<string>> &graph,
+                           const vector<pair<string, vector<string>>> &graph,
                            set<string> &visited,
                            set<string> &result_set,
                            vector<string> &order) {
     visited.insert(current);
 
-    map<string, set<string>>::const_iterator iter = graph.find(current);
+    const auto iter = std::find_if(graph.begin(), graph.end(),
+        [&current](const pair<string, vector<string>> &p) { return (p.first == current); });
     internal_assert(iter != graph.end());
 
     for (const string &fn : iter->second) {
@@ -41,13 +43,16 @@ vector<string> realization_order(const vector<Function> &outputs,
 
     // Make a DAG representing the pipeline. Each function maps to the
     // set describing its inputs.
-    map<string, set<string>> graph;
+    vector<pair<string, vector<string>>> graph;
 
     for (const pair<string, Function> &caller : env) {
-        set<string> &s = graph[caller.first];
+        vector<string> s;
         for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
-            s.insert(callee.first);
+            if (std::find(s.begin(), s.end(), callee.first) == s.end()) {
+                s.push_back(callee.first);
+            }
         }
+        graph.push_back({caller.first, s});
     }
 
     vector<string> order;

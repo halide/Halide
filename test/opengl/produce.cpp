@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
-#include <stdlib.h>
+
+#include "testing.h"
 
 using namespace Halide;
 
@@ -18,14 +19,13 @@ int test_lut1d() {
     Var c("c");
 
     Buffer<uint8_t> input(8, 8, 3);
-    for (int y = 0; y < input.height(); y++) {
-        for (int x = 0; x < input.width(); x++) {
+    input.fill([](int x, int y, int c) {
             float v = (1.0f / 16.0f) + (float)x / 8.0f;
-            input(x, y, 0) = (uint8_t)(v * 255.0f);
-            input(x, y, 1) = (uint8_t)((1.0f - v) * 255.0f);
-            input(x, y, 2) = (uint8_t)((v > 0.5 ? 1.0 : 0.0) * 255.0f);
-        }
-    }
+	    switch (c) {
+	    case 0: return (uint8_t)(v * 255.0f);
+	    case 1: return (uint8_t)((1.0f - v) * 255.0f);
+	    default: return (uint8_t)((v > 0.5 ? 1.0 : 0.0) * 255.0f);
+        } });
 
     // 1D Look Up Table case
     Func lut1d("lut1d");
@@ -45,29 +45,14 @@ int test_lut1d() {
 
     out0.copy_to_host();
 
-    for (int c = 0; c != out0.extent(2); ++c) {
-        for (int y = 0; y != out0.extent(1); ++y) {
-            for (int x = 0; x != out0.extent(0); ++x) {
-                float expected = std::numeric_limits<float>::infinity();
-                switch (c) {
-                case 0:
-                    expected = (float)(1 + x);
-                    break;
-                case 1:
-                    expected = (float)(8 - x);
-                    break;
-                case 2:
-                    expected = x > 3 ? 8.0f : 1.0f;
-                    break;
-                }
-                float result = out0(x, y, c);
-
-                if (result != expected) {
-                    fprintf(stderr, "Error at %d,%d,%d %f != %f\n", x, y, c, result, expected);
-                    return 1;
-                }
-            }
-        }
+    if (!Testing::check_result<float>(out0, [](int x, int y, int c) {
+	    switch (c) {
+                case 0: return (float)(1 + x);
+                case 1: return (float)(8 - x);
+                case 2: return (x > 3) ? 8.0f : 1.0f;
+		default: return -1.0f;
+	    } })) {
+        return 1;
     }
 
     return 0;

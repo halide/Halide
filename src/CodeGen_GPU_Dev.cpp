@@ -1,5 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
 #include "IRVisitor.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -92,6 +93,14 @@ bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
     IsBufferConstant v(buffer);
     kernel.accept(&v);
     return v.result;
+}
+
+int32_t CodeGen_GPU_Dev::get_constant_bound_allocation_size(const Allocate *alloc) {
+    std::vector<Expr> extents(alloc->extents.size());
+    for (size_t i = 0; i < alloc->extents.size(); ++i) {
+        extents[i] = find_constant_bound(alloc->extents[i], Direction::Upper);
+    }
+    return Allocate::constant_allocation_size(extents, alloc->name);
 }
 
 }}
