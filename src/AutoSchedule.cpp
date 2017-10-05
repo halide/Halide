@@ -2590,6 +2590,12 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
             }
         }
 
+        if (min_pure_var.empty() && min_impure_var.empty()) {
+            // Since none of the pure and impure strides can be proven as the
+            // minimum, we should break here otherwise it may cause infinite loop.
+            return;
+        }
+
         pair<string, int> curr_min_var;
         if (!min_impure_var.empty() && can_prove(min_impure_stride < min_pure_stride)) {
             curr_min_var.first = min_impure_var;
