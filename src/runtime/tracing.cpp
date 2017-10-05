@@ -13,7 +13,8 @@ namespace Halide { namespace Runtime { namespace Internal {
 // A spinlock that allows for shared and exclusive access. It's
 // equivalent to a reader-writer lock, but in my case the "readers"
 // will actually be writing simultaneously to the trace buffer, so
-// that's a bad name.
+// that's a bad name. We use the __sync primitives used elsewhere in
+// the runtime for atomic work. They are well supported by clang.
 class SharedExclusiveSpinLock {
     uint32_t lock;
     const static uint32_t exclusive_held_mask = 0x80000000;
