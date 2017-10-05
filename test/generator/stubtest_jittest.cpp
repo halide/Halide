@@ -2,18 +2,13 @@
 
 #include "stubtest.stub.h"
 
-using Halide::Argument;
-using Halide::Expr;
-using Halide::Func;
-using Halide::Buffer;
-using Halide::JITGeneratorContext;
-using Halide::LoopLevel;
-using Halide::Var;
+using namespace Halide;
+
 using StubNS1::StubNS2::StubTest;
 
 const int kSize = 32;
 
-Halide::Var x, y, c;
+Var x, y, c;
 
 template<typename Type>
 Buffer<Type> make_image(int extra) {
@@ -66,7 +61,7 @@ int main(int argc, char **argv) {
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
     auto gen = StubTest(
-        JITGeneratorContext(Halide::get_target_from_environment()),
+        GeneratorContext(get_jit_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
             buffer_input,  // typed_buffer_input
@@ -83,31 +78,31 @@ int main(int argc, char **argv) {
     gen.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
     gen.schedule();
 
-    Halide::Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
+    Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
     Buffer<float> s0 = simple_output_realized;
     verify(array_input[0], 1.f, 0, s0);
 
-    Halide::Realization tuple_output_realized = gen.tuple_output.realize(kSize, kSize, 3);
+    Realization tuple_output_realized = gen.tuple_output.realize(kSize, kSize, 3);
     Buffer<float> f0 = tuple_output_realized[0];
     Buffer<float> f1 = tuple_output_realized[1];
     verify(array_input[0], 1.25f, 0, f0);
     verify(array_input[0], 1.25f, 33, f1);
 
     for (int i = 0; i < kArrayCount; ++i) {
-        Halide::Realization array_output_realized = gen.array_output[i].realize(kSize, kSize, gen.get_target());
+        Realization array_output_realized = gen.array_output[i].realize(kSize, kSize, gen.get_target());
         Buffer<int16_t> g0 = array_output_realized;
         verify(array_input[i], 1.0f, int_args[i], g0);
     }
 
-    Halide::Realization typed_buffer_output_realized = gen.typed_buffer_output.realize(kSize, kSize, 3);
+    Realization typed_buffer_output_realized = gen.typed_buffer_output.realize(kSize, kSize, 3);
     Buffer<float> b0 = typed_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b0);
 
-    Halide::Realization untyped_buffer_output_realized = gen.untyped_buffer_output.realize(kSize, kSize, 3);
+    Realization untyped_buffer_output_realized = gen.untyped_buffer_output.realize(kSize, kSize, 3);
     Buffer<float> b1 = untyped_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b1);
 
-    Halide::Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
+    Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
     Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
     verify(buffer_input, 1.f, 42, b2);
 
