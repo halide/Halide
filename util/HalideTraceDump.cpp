@@ -14,8 +14,8 @@
 
 /** \file
  *
- * A tool which can read a binary Halide trace file from stdin, and dump files containing the final pixel values
- * recorded for each traced Func.
+ * A tool which can read a binary Halide trace file, and dump files
+ * containing the final pixel values recorded for each traced Func.
  *
  * Currently dumps into supported Halide image formats.
  */
@@ -32,45 +32,22 @@ struct BufferOutputOpts {
     enum OutputType {
         PNG = 0,
         JPG,
-        PGM
+        PGM,
+        TMP
     };
 
     enum OutputType type;
 };
 
-struct Value {
-    uint8_t payload[8];
-    bool defined;
-    
-    /* To make sure to play nice with Halide Buffers, round the total size
-     * of the Value struct up to 16 by adding padding bytes. */
-    uint8_t padding[8-sizeof(bool)];
-
-    Value() { defined = false; }
-    Value(Packet *p, int lane_idx = 0) {
-        defined = true;
-        int bytes = p->type.bytes();
-        uintptr_t addr = (uintptr_t) p->value();
-        addr += (bytes*lane_idx);
-        memcpy((void*)payload, (void*)addr, bytes);
-    }
-
-    template<typename T>
-    T get_as(halide_type_t type) {
-        return value_as<T>(type, (void*)payload);
-    }
-};
-
 struct FuncInfo {
     int min_coords[16];
     int max_coords[16];
-    int extents[16];
     int dimensions;
     halide_type_t type;
-    Value *values;
+    Buffer<> values;
 
-    FuncInfo() : values(nullptr) {}
-    FuncInfo(Packet *p) : values(NULL) {
+    FuncInfo() {}
+    FuncInfo(Packet *p) {
         int real_dims = p->dimensions/p->type.lanes;
         if (real_dims > 16) {
             fprintf(stderr, "Error: found trace packet with dimensionality > 16. Aborting.\n");
@@ -83,9 +60,6 @@ struct FuncInfo {
         dimensions = real_dims;
         type = p->type;
         type.lanes = 1;
-    }
-    ~FuncInfo() {
-        free(values);
     }
 
     void add_preprocess(Packet *p) {
@@ -117,78 +91,85 @@ struct FuncInfo {
     }
 
     void allocate() {
-        int size = 1;
+        std::vector<int> extents;
         for (int i = 0; i < dimensions; i++) {
-            extents[i] = max_coords[i] - min_coords[i] + 1;
-            size *= extents[i];
+            extents.push_back(max_coords[i] - min_coords[i] + 1);
         }
-        values = (Value *)malloc(size * sizeof(Value));
-        for (int i = 0; i < size; i++) {
-            values[i] = Value();
-        }
-        if (values == nullptr) {
+        values = Buffer<>(type, extents);
+        if (values.data() == nullptr) {
             fprintf(stderr, "Memory allocation failure. Aborting.\n");
             exit(-1);
         }
     }
 
     void add(Packet *p) {
-        int real_dims = p->dimensions/p->type.lanes;
+        halide_type_t scalar_type = p->type;
+        scalar_type.lanes = 1;
+        if (scalar_type == halide_type_of<float>()) {
+            add_typed<float>(p);
+        } else if (scalar_type == halide_type_of<double>()) {
+            add_typed<double>(p);
+        } else if (scalar_type == halide_type_of<uint8_t>()) {
+            add_typed<uint8_t>(p);
+        } else if (scalar_type == halide_type_of<uint16_t>()) {
+            add_typed<uint16_t>(p);
+        } else if (scalar_type == halide_type_of<uint32_t>()) {
+            add_typed<uint32_t>(p);
+        } else if (scalar_type == halide_type_of<uint64_t>()) {
+            add_typed<uint64_t>(p);
+        } else if (scalar_type == halide_type_of<int8_t>()) {
+            add_typed<int8_t>(p);
+        } else if (scalar_type == halide_type_of<int16_t>()) {
+            add_typed<int16_t>(p);
+        } else if (scalar_type == halide_type_of<int32_t>()) {
+            add_typed<int32_t>(p);
+        } else if (scalar_type == halide_type_of<int64_t>()) {
+            add_typed<int64_t>(p);
+        } else if (scalar_type == halide_type_of<bool>()) {
+            add_typed<bool>(p);
+        } else {
+            printf("Packet with unknown type\n");
+            exit(-1);
+        }
+    }
+
+    template<typename T>
+    void add_typed(Packet *p) {
+        Buffer<T> &buf = values.as<T>();
         int lanes = p->type.lanes;
 
-        if (values == nullptr) {
+        if (!allocated()) {
             fprintf(stderr, "Packet storage not allocated. Aborting.\n");
             exit(-1);
         }
-        if (real_dims < 0) {
+
+        if (p->dimensions < 0) {
             fprintf(stderr, "Negative dimensionality found. Aborting.\n");
             exit(-1);
         }
 
         for (int lane = 0; lane < lanes; lane++) {
-            int offset = p->coordinates()[lane];
-            for (int i = 1; i < dimensions; i++) {
-                offset += (p->coordinates()[lanes*i+lane] * extents[i-1]);
+            int coord[16];
+            for (int i = 0; i < dimensions; i++) {
+                coord[i] = p->coordinates()[lanes * i + lane] - min_coords[i];
             }
-            values[offset] = Value(p, lane);
+            buf(coord) = p->get_value_as<T>(lane);
         }
     }
 
-    bool allocated() {
-        return (values != NULL);
-    }
-
-    Buffer<void> get_buffer() {
-        halide_buffer_t buf;
-        buf.device = 0;
-        buf.device_interface = nullptr;
-        buf.flags = 0;
-        buf.padding = nullptr;
-        buf.host = (uint8_t*)values;
-        halide_dimension_t dims[dimensions];
-        dims[0].min = 0;
-        dims[0].extent = extents[0];
-        dims[0].stride = sizeof(Value)/type.bytes();
-        for (int i = 1; i < dimensions; i++) {
-            dims[i].min = 0;
-            dims[i].extent = extents[i];
-            dims[i].stride = (dims[i-1].stride * dims[i-1].extent);
-        }
-        buf.dim = dims;
-        buf.dimensions = dimensions;
-        buf.type = type;
-
-        Buffer<void> buffer(buf);
-        return buffer;
+    bool allocated() const {
+        return (values.data() != NULL);
     }
 };
 
-void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
-    // For now, support only 2D buffers.
-    if (func.dimensions != 2) {
-        printf("[INFO] Skipping func '%s', which is not 2D (has %d dimensions).\n", name.c_str(), func.dimensions);
+bool check_and_continue(bool condition, const char* msg) {
+    if (!condition) {
+        fprintf(stderr, "Failed to dump func: %s\n", msg);
     }
+    return condition;
+}
 
+void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     string filename;
     switch(output_opts.type) {
     case BufferOutputOpts::PNG:
@@ -200,15 +181,17 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     case BufferOutputOpts::PGM:
         filename = name + ".pgm";
         break;
+    case BufferOutputOpts::TMP:
+        filename = name + ".tmp";
+        break;
     default:
         exit(1);
     }
 
     printf("[INFO] Dumping func '%s' to file: %s\n", name.c_str(), filename.c_str());
 
-    //Rely on save_image to do type-checking
-    auto buf = func.get_buffer();
-    Halide::Tools::save_image(buf, filename);
+    // Rely on save_image to do type-checking
+    Halide::Tools::convert_and_save_image<Buffer<>, check_and_continue>(func.values, filename);
 }
 
 void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts) {
@@ -280,7 +263,7 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
 void usage(char * const *argv) {
     const string usage =
             "Usage: " + string(argv[0]) + " -i trace_file -t output_type\n"
-            "  Available output types: png, jpg, pgm\n"
+            "  Available output types: png, jpg, pgm, tmp\n"
             "The tool will record all element loads and stores found in the trace, and "
             "dump them into separate image files per Func.\n"
             "To generate a trace, use the trace_loads() and trace_stores() scheduling "
@@ -325,8 +308,9 @@ int main(int argc, char * const *argv) {
         outputopts.type = BufferOutputOpts::PNG;
     } else if (imagetype == "pgm") {
         outputopts.type = BufferOutputOpts::PGM;
-    }
-    else {
+    } else if (imagetype == "tmp") {
+        outputopts.type = BufferOutputOpts::TMP;
+    } else {
         usage(argv);
     }
 
