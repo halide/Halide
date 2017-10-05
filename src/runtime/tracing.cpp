@@ -109,9 +109,14 @@ public:
 
 WEAK int halide_trace_file = -1; // -1 indicates uninitialized
 WEAK int halide_trace_file_lock = 0;
-WEAK bool halide_trace_file_internally_opened = false;
+WEAK bool halide_trace_file_initialized = false;
+WEAK void *halide_trace_file_internally_opened = NULL;
 
-WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
+}}}
+
+extern "C" {
+
+WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t *e) {
     static int32_t ids = 1;
 
     int32_t my_id = __sync_fetch_and_add(&ids, 1);
@@ -262,7 +267,11 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
     return my_id;
 }
 
-WEAK trace_fn halide_custom_trace = default_trace;
+} // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK trace_fn halide_custom_trace = halide_default_trace;
 
 }}} // namespace Halide::Runtime::Internal
 
@@ -280,9 +289,6 @@ WEAK void halide_set_trace_file(int fd) {
 
 extern int errno;
 
-#define O_APPEND 1024
-#define O_CREAT 64
-#define O_WRONLY 1
 WEAK int halide_get_trace_file(void *user_context) {
     if (halide_trace_file >= 0) {
         return halide_trace_file;
@@ -293,10 +299,10 @@ WEAK int halide_get_trace_file(void *user_context) {
         ScopedSpinLock lock(&halide_trace_file_lock);
         const char *trace_file_name = getenv("HL_TRACE_FILE");
         if (trace_file_name) {
-            int fd = open(trace_file_name, O_APPEND | O_CREAT | O_WRONLY, 0644);
-            halide_assert(user_context, (fd > 0) && "Failed to open trace file\n");
-            halide_set_trace_file(fd);
-            halide_trace_file_internally_opened = true;
+            void *file = fopen(trace_file_name, "ab");
+            halide_assert(user_context, file && "Failed to open trace file\n");
+            halide_set_trace_file(fileno(file));
+            halide_trace_file_internally_opened = file;
         } else {
             halide_set_trace_file(0);
         }
@@ -310,9 +316,10 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event_t *e) {
 
 WEAK int halide_shutdown_trace() {
     if (halide_trace_file_internally_opened) {
-        int ret = close(halide_trace_file);
-        halide_trace_file = -1;
-        halide_trace_file_internally_opened = false;
+        int ret = fclose(halide_trace_file_internally_opened);
+        halide_trace_file = 0;
+        halide_trace_file_initialized = false;
+        halide_trace_file_internally_opened = NULL;
         return ret;
     } else {
         return 0;

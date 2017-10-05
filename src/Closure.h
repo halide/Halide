@@ -9,6 +9,7 @@
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
+#include "Buffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -55,6 +56,10 @@ public:
         Buffer() : dimensions(0), read(false), write(false), size(0) { }
     };
 
+protected:
+    void found_buffer_ref(const std::string &name, Type type,
+                          bool read, bool written, Halide::Buffer<> image);
+
 public:
     Closure() {}
 
@@ -72,9 +77,6 @@ public:
 
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
-
-    /** The Halide names of the external symbols (in the same order as llvm_types). */
-    std::vector<std::string> names() const;
 };
 
 }}

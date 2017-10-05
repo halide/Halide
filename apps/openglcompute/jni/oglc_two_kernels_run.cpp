@@ -11,11 +11,6 @@
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
-extern "C" int halide_copy_to_host(void *, buffer_t *);
-extern "C" int halide_device_sync(void *, buffer_t *);
-extern "C" int halide_device_free(void *, buffer_t* buf);
-extern "C" void halide_device_release(void *, const halide_device_interface_t *interface);
-
 template<typename T>
 void print(Halide::Runtime::Buffer<T> buf) {
     for (int j = 0; j < std::min(buf.height(), 10); j++) {

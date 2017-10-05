@@ -169,6 +169,7 @@ int main(int argc, char **argv) {
     check(&Foo::global_int_in_foo, "int", "Foo::global_int_in_foo", __FILE__, __LINE__);
 
     // Check we can name members of globals
+    check(&global_struct, "SomeStruct", "global_struct", __FILE__, __LINE__);
     check(&global_struct.global_struct_a, "int", "global_struct.global_struct_a", __FILE__, __LINE__);
     check(&global_struct.global_struct_b, "int", "global_struct.global_struct_b", __FILE__, __LINE__);
 

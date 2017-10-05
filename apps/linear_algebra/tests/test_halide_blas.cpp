@@ -6,7 +6,6 @@
 #include <string>
 #include <cblas.h>
 #include <halide_blas.h>
-#include "Halide.h"
 
 #define RUN_TEST(method)                                                \
     std::cout << std::setw(30) << ("Testing " #method ": ") << std::flush; \

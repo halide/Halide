@@ -776,6 +776,40 @@ int gpu_intermediate_computed_if_param_test(int index) {
     return 0;
 }
 
+int vectorize_predicated_rvar_test() {
+    Func f("f");
+    Var x("x"), y("y");
+    f(x, y) = 0;
+
+    Expr w = (f.output_buffer().width()/2)*2;
+    Expr h = (f.output_buffer().height()/2)*2;
+
+    RDom r(1, w - 2, 1, h - 2);
+    r.where((r.x + r.y) % 2 == 0);
+
+    f(r.x, r.y) += 10;
+
+    f.update(0).unroll(r.x, 2)
+        .allow_race_conditions().vectorize(r.x, 8);
+
+    Buffer<int> im = f.realize(200, 200);
+    for (int y = 0; y < im.height(); y++) {
+        for (int x = 0; x < im.width(); x++) {
+            int correct = 0;
+            if ((1 <= x && x < im.width() - 1) && (1 <= y && y < im.height() - 1) &&
+                ((x + y) % 2 == 0)) {
+                correct += 10;
+            }
+            if (im(x, y) != correct) {
+                printf("im(%d, %d) = %d instead of %d\n",
+                       x, y, im(x, y), correct);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 
 int main(int argc, char **argv) {
     printf("Running equality inequality bound test\n");
@@ -840,6 +874,11 @@ int main(int argc, char **argv) {
 
     printf("Running newton's method test\n");
     if (newton_method_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorize predicated rvar test\n");
+    if (vectorize_predicated_rvar_test() != 0) {
         return -1;
     }
 

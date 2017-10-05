@@ -17,12 +17,11 @@ class FindLastUse : public IRVisitor {
 public:
     string func;
     Stmt last_use;
-    bool found_device_malloc;
 
-    FindLastUse(string s) : func(s), found_device_malloc(false), in_loop(false) {}
+    FindLastUse(string s) : func(s) {}
 
 private:
-    bool in_loop;
+    bool in_loop = false;
     Stmt containing_stmt;
 
     using IRVisitor::visit;
@@ -47,9 +46,6 @@ private:
         if (call->name == func) {
             last_use = containing_stmt;
         }
-        if (call->name == "halide_device_malloc" && expr_uses_var(call, func + ".buffer")) {
-            found_device_malloc = true;
-        }
         IRVisitor::visit(call);
     }
 
@@ -61,8 +57,9 @@ private:
     }
 
     void visit(const Variable *var) {
-        if (starts_with(var->name, func + ".") &&
-            (ends_with(var->name, ".buffer") || ends_with(var->name, ".host"))) {
+        if (var->name == func || var->name == func + ".buffer") {
+            // Don't free the allocation while a buffer that may refer
+            // to it is still in use.
             last_use = containing_stmt;
         }
     }
@@ -96,26 +93,14 @@ private:
     }
 };
 
-Stmt make_free(string func, bool device) {
-    Stmt free = Free::make(func);
-    if (device) {
-        Expr buf = Variable::make(Handle(), func + ".buffer");
-        Stmt device_free = call_extern_and_assert("halide_device_free", {buf});
-        free = Block::make({device_free, free});
-    }
-    return free;
-}
-
 class InjectMarker : public IRMutator {
 public:
     string func;
     Stmt last_use;
-    bool inject_device_free;
 
-    InjectMarker() : inject_device_free(false), injected(false) {}
 private:
 
-    bool injected;
+    bool injected = false;
 
     using IRMutator::visit;
 
@@ -123,7 +108,7 @@ private:
         if (injected) return s;
         if (s.same_as(last_use)) {
             injected = true;
-            return Block::make(s, make_free(func, inject_device_free));
+            return Block::make(s, Free::make(func));
         } else {
             return mutate(s);
         }
@@ -157,12 +142,11 @@ class InjectEarlyFrees : public IRMutator {
             InjectMarker inject_marker;
             inject_marker.func = alloc->name;
             inject_marker.last_use = last_use.last_use;
-            inject_marker.inject_device_free = last_use.found_device_malloc;
             stmt = inject_marker.mutate(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-                                  Block::make(alloc->body, make_free(alloc->name, last_use.found_device_malloc)),
-                                  alloc->new_expr);
+                                  Block::make(alloc->body, Free::make(alloc->name)),
+                                  alloc->new_expr, alloc->free_function);
         }
 
     }
@@ -172,8 +156,6 @@ Stmt inject_early_frees(Stmt s) {
     InjectEarlyFrees early_frees;
     return early_frees.mutate(s);
 }
-
-// TODO: test
 
 }
 }

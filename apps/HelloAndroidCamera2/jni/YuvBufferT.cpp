@@ -69,7 +69,7 @@ YuvBufferT::YuvBufferT(uint8_t *lumaPointer,
         }
     }
 
-    interleavedChromaView_ = { 0 };
+    interleavedChromaView_ = Halide::Runtime::Buffer<uint8_t>();
     if (chromaStorage_ == ChromaStorage::kInterleavedUFirst) {
         halide_dimension_t chromaShape[] = {
             {0, chromaUWidth*2, 1},

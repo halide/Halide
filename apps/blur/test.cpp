@@ -3,10 +3,11 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "HalideBuffer.h"
 
 using namespace Halide::Runtime;
+using namespace Halide::Tools;
 
 //#define cimg_display 0
 //#include "CImg.h"
@@ -188,6 +189,8 @@ Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
         // Sync device execution if any.
         out.device_sync();
     });
+
+    out.copy_to_host();
 
     return out;
 }

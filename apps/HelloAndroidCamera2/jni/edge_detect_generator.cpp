@@ -4,9 +4,10 @@ namespace {
 
 class EdgeDetect : public Halide::Generator<EdgeDetect> {
 public:
-    ImageParam input{ UInt(8), 2, "input" };
+    Input<Buffer<uint8_t>>  input{"input" , 2};
+    Output<Buffer<uint8_t>> result{"result", 2};
 
-    Func build() {
+    void generate() {
         Var x, y;
 
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
@@ -26,7 +27,6 @@ public:
         grad_mag(x, y) = (gx(x, y) * gx(x, y) + gy(x, y) * gy(x, y));
 
         // Draw the result
-        Func result;
         result(x, y) = cast<uint8_t>(clamp(grad_mag(x, y), 0, 255));
 
         // CPU schedule:
@@ -41,11 +41,9 @@ public:
         input.dim(0).set_stride(Expr());
         result.specialize(input.dim(0).stride() == 1);
         result.specialize(input.dim(0).stride() == -1);
-
-        return result;
     }
 };
 
-Halide::RegisterGenerator<EdgeDetect> register_edge_detect{ "edge_detect" };
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(EdgeDetect, edge_detect)

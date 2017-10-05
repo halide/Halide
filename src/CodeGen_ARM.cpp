@@ -19,7 +19,6 @@ using std::vector;
 using std::string;
 using std::ostringstream;
 using std::pair;
-using std::make_pair;
 
 using namespace Halide::ConciseCasts;
 using namespace llvm;
@@ -471,20 +470,6 @@ void CodeGen_ARM::visit(const Sub *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_ARM::visit(const Mod *op) {
-     int bits;
-     if (op->type.is_int() &&
-         op->type.is_vector() &&
-         target.bits == 32 &&
-         !is_const_power_of_two_integer(op->b, &bits)) {
-         // 32-bit arm has no vectorized integer modulo, and attempting
-         // to codegen one seems to tickle an llvm bug in some cases.
-         scalarize(op);
-     } else {
-         CodeGen_Posix::visit(op);
-     }
-}
-
 void CodeGen_ARM::visit(const Min *op) {
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
@@ -632,6 +617,12 @@ void CodeGen_ARM::visit(const Max *op) {
 }
 
 void CodeGen_ARM::visit(const Store *op) {
+    // Predicated store
+    if (!is_one(op->predicate)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
@@ -651,15 +642,15 @@ void CodeGen_ARM::visit(const Store *op) {
     vector<pair<string, Expr>> lets;
     while (const Let *let = rhs.as<Let>()) {
         rhs = let->body;
-        lets.push_back(make_pair(let->name, let->value));
+        lets.push_back({ let->name, let->value });
     }
-    const Call *call = rhs.as<Call>();
+    const Shuffle *shuffle = rhs.as<Shuffle>();
 
     // Interleaving store instructions only exist for certain types.
     bool type_ok_for_vst = false;
     Type intrin_type = Handle();
-    if (call && !call->args.empty()) {
-        Type t = call->args[0].type();
+    if (shuffle) {
+        Type t = shuffle->vectors[0].type();
         intrin_type = t;
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
@@ -677,15 +668,14 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     if (is_one(ramp->stride) &&
-        call &&
-        call->is_intrinsic(Call::interleave_vectors) &&
+        shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
-        2 <= call->args.size() && call->args.size() <= 4) {
+        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
 
-        const int num_vecs = call->args.size();
+        const int num_vecs = shuffle->vectors.size();
         vector<Value *> args(num_vecs);
 
-        Type t = call->args[0].type();
+        Type t = shuffle->vectors[0].type();
 
         // Assume element-aligned.
         int alignment = t.bytes();
@@ -697,7 +687,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
         // Codegen all the vector args.
         for (int i = 0; i < num_vecs; ++i) {
-            args[i] = codegen(call->args[i]);
+            args[i] = codegen(shuffle->vectors[i]);
         }
 
         // Declare the function
@@ -706,9 +696,7 @@ void CodeGen_ARM::visit(const Store *op) {
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-#if LLVM_VERSION > 37
-                   << ".p0i8"
-#endif
+                  << ".p0i8"
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
@@ -740,7 +728,7 @@ void CodeGen_ARM::visit(const Store *op) {
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
-            Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
+            Value *ptr = codegen_buffer_pointer(op->name, shuffle->vectors[0].type().element_of(), slice_base);
 
             vector<Value *> slice_args = args;
             // Take a slice of each arg
@@ -806,6 +794,12 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
+    // Predicated load
+    if (!is_one(op->predicate)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;

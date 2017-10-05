@@ -3,6 +3,11 @@
 #include <iostream>
 #include <limits>
 
+// Disable a warning in MSVC that we know will be triggered here.
+#ifdef _MSC_VER
+#pragma warning(disable:4756)  // "overflow in constant arithmetic"
+#endif
+
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
@@ -10,11 +15,23 @@ typedef Expr (*cast_maker_t)(Expr);
 
 template <typename source_t, typename target_t>
 void test_saturating() {
-    source_t source_min = std::numeric_limits<source_t>::lowest();
-    source_t source_max = std::numeric_limits<source_t>::max();
+    source_t source_min, source_max;
+    if (std::numeric_limits<source_t>::has_infinity) {
+        source_max = std::numeric_limits<source_t>::infinity();
+        source_min = -source_max;
+    } else {
+        source_min = std::numeric_limits<source_t>::lowest();
+        source_max = std::numeric_limits<source_t>::max();
+    }
 
-    target_t target_min = std::numeric_limits<target_t>::lowest();
-    target_t target_max = std::numeric_limits<target_t>::max();
+    target_t target_min, target_max;
+    if (std::numeric_limits<target_t>::has_infinity) {
+        target_max = std::numeric_limits<target_t>::infinity();
+        target_min = -target_max;
+    } else {
+        target_min = std::numeric_limits<target_t>::lowest();
+        target_max = std::numeric_limits<target_t>::max();
+    }
 
     Buffer<source_t> in(7);
     in(0) = (source_t)0;
@@ -86,21 +103,21 @@ void test_saturating() {
 
             if (simpler_correct_result != (int64_t)correct_result) {
                 std::cout << "Simpler verification failed for index " << i
-			  << " correct_result is " << correct_result
-			  << " correct_result casted to int64_t is " << (int64_t)correct_result
-			  << " simpler_correct_result is " << simpler_correct_result << "\n";
+                          << " correct_result is " << correct_result
+                          << " correct_result casted to int64_t is " << (int64_t)correct_result
+                          << " simpler_correct_result is " << simpler_correct_result << "\n";
                 std::cout << "in(i) " << in(i)
-			  << " target_min " << target_min
-			  << " target_max " << target_max << "\n";
+                          << " target_min " << target_min
+                          << " target_max " << target_max << "\n";
             }
             assert(simpler_correct_result == (int64_t)correct_result);
         }
 
         if (result(i) != correct_result) {
             std::cout << "Match failure at index " << i
-		      << " got " << result(i)
-		      << " expected " << correct_result
-		      << " for input " << in(i) << std::endl;
+                      << " got " << result(i)
+                      << " expected " << correct_result
+                      << " for input " << in(i) << std::endl;
         }
 
         assert(result(i) == correct_result);

@@ -2,7 +2,9 @@
 #include <string>
 
 #include "Target.h"
+
 #include "Debug.h"
+#include "DeviceInterface.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
@@ -96,12 +98,12 @@ Target calculate_host_target() {
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41  = info[2] & (1 << 19);
-    bool have_sse2   = info[3] & (1 << 26);
-    bool have_avx    = info[2] & (1 << 28);
-    bool have_f16c   = info[2] & (1 << 29);
-    bool have_rdrand = info[2] & (1 << 30);
-    bool have_fma    = info[2] & (1 << 12);
+    bool have_sse41  = (info[2] & (1 << 19)) != 0;
+    bool have_sse2   = (info[3] & (1 << 26)) != 0;
+    bool have_avx    = (info[2] & (1 << 28)) != 0;
+    bool have_f16c   = (info[2] & (1 << 29)) != 0;
+    bool have_rdrand = (info[2] & (1 << 30)) != 0;
+    bool have_fma    = (info[2] & (1 << 12)) != 0;
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -176,25 +178,6 @@ Target get_host_target() {
 }
 
 namespace {
-string get_env(const char *name) {
-#ifdef _MSC_VER
-    char buf[128];
-    size_t read = 0;
-    getenv_s(&read, buf, name);
-    if (read) {
-        return string(buf);
-    } else {
-        return "";
-    }
-#else
-    char *buf = getenv(name);
-    if (buf) {
-        return string(buf);
-    } else {
-        return "";
-    }
-#endif
-}
 
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
@@ -254,6 +237,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_32", Target::CUDACapability32},
     {"cuda_capability_35", Target::CUDACapability35},
     {"cuda_capability_50", Target::CUDACapability50},
+    {"cuda_capability_61", Target::CUDACapability61},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"opengl", Target::OpenGL},
@@ -269,6 +253,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
+    {"hvx_v65", Target::HVX_v65},
+    {"hvx_v66", Target::HVX_v66},
+    {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -276,6 +263,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"trace_loads", Target::TraceLoads},
+    {"trace_stores", Target::TraceStores},
+    {"trace_realizations", Target::TraceRealizations},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -290,7 +280,7 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
 } // End anonymous namespace
 
 Target get_target_from_environment() {
-    string target = get_env("HL_TARGET");
+    string target = Internal::get_env_variable("HL_TARGET");
     if (target.empty()) {
         return get_host_target();
     } else {
@@ -301,7 +291,7 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-    string target = get_env("HL_JIT_TARGET");
+    string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
     } else {
@@ -515,13 +505,36 @@ bool Target::supported() const {
     return !bad;
 }
 
+bool Target::supports_type(const Type &t, DeviceAPI device) const {
+    if (device == DeviceAPI::Default_GPU) {
+        device = get_default_device_api_for_target(*this);
+    }
+
+    if (device == DeviceAPI::Hexagon) {
+        // HVX supports doubles and long long in the scalar unit only.
+        if (t.is_float() || t.bits() == 64) {
+            return t.lanes() == 1;
+        }
+    } else if (device == DeviceAPI::Metal) {
+        // Metal spec says no double or long long.
+        if (t.bits() == 64) {
+            return false;
+        }
+    } else if (device == DeviceAPI::OpenCL) {
+        if (t.is_float() && t.bits() == 64) {
+            return has_feature(Target::CLDoubles);
+        }
+    }
+
+    return true;
+}
+
 bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
-    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128) ||
-                                        has_feature(Target::HVX_v62);
+    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }
@@ -533,6 +546,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::GLSL:          return Target::OpenGL;
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
+    case DeviceAPI::Hexagon:       return Target::HVX_128;
     default:                       return Target::FeatureEnd;
     }
 }

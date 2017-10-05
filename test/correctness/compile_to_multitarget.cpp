@@ -1,10 +1,12 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 void testCompileToOutput(Func j) {
-    std::string fn_object = "compile_to_multitarget";
+    std::string fn_object = Internal::get_test_tmp_dir() + "compile_to_multitarget";
 #ifdef _MSC_VER
     std::string expected_lib = fn_object + ".lib";
 #else

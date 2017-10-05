@@ -19,31 +19,31 @@ namespace Internal {
  * statements with the same name as the first argument, moving a piece
  * of syntax around can change its meaning, because it can cross lets
  * that redefine variable names that it includes references to. */
-EXPORT Expr substitute(std::string name, Expr replacement, Expr expr);
+EXPORT Expr substitute(const std::string &name, const Expr &replacement, const Expr &expr);
 
 /** Substitute variables with the given name with the replacement
  * expression within stmt. */
-EXPORT Stmt substitute(std::string name, Expr replacement, Stmt stmt);
+EXPORT Stmt substitute(const std::string &name, const Expr &replacement, const Stmt &stmt);
 
 /** Substitute variables with names in the map. */
 // @{
-EXPORT Expr substitute(const std::map<std::string, Expr> &replacements, Expr expr);
-EXPORT Stmt substitute(const std::map<std::string, Expr> &replacements, Stmt stmt);
+EXPORT Expr substitute(const std::map<std::string, Expr> &replacements, const Expr &expr);
+EXPORT Stmt substitute(const std::map<std::string, Expr> &replacements, const Stmt &stmt);
 // @}
 
 /** Substitute expressions for other expressions. */
 // @{
-EXPORT Expr substitute(Expr find, Expr replacement, Expr expr);
-EXPORT Stmt substitute(Expr find, Expr replacement, Stmt stmt);
+EXPORT Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr);
+EXPORT Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt);
 // @}
 
 /** Substitutions where the IR may be a general graph (and not just a
  * DAG). */
 // @{
-Expr graph_substitute(std::string name, Expr replacement, Expr expr);
-Stmt graph_substitute(std::string name, Expr replacement, Stmt stmt);
-Expr graph_substitute(Expr find, Expr replacement, Expr expr);
-Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt);
+Expr graph_substitute(const std::string &name, const Expr &replacement, const Expr &expr);
+Stmt graph_substitute(const std::string &name, const Expr &replacement, const Stmt &stmt);
+Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr);
+Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt);
 // @}
 
 /** Substitute in all let Exprs in a piece of IR. Doesn't substitute
@@ -52,8 +52,8 @@ Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt);
  * non-graph-aware visitors or mutators on it until you've CSE'd the
  * result. */
 // @{
-Expr substitute_in_all_lets(Expr expr);
-Stmt substitute_in_all_lets(Stmt stmt);
+Expr substitute_in_all_lets(const Expr &expr);
+Stmt substitute_in_all_lets(const Stmt &stmt);
 // @}
 
 }

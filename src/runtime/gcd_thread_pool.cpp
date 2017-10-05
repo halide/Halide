@@ -24,10 +24,6 @@ extern long dispatch_semaphore_wait(dispatch_semaphore_t dsema, dispatch_time_t 
 extern long dispatch_semaphore_signal(dispatch_semaphore_t dsema);
 extern void dispatch_release(void *object);
 
-
-WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure);
-
 }
 
 namespace Halide { namespace Runtime { namespace Internal {
@@ -77,11 +73,6 @@ WEAK void init_mutex(void *mutex_arg) {
     mutex->semaphore = dispatch_semaphore_create(1);
 }
 
-WEAK int default_do_task(void *user_context, int (*f)(void *, int, uint8_t *),
-                         int idx, uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
 struct halide_gcd_job {
     int (*f)(void *, int, uint8_t *);
     void *user_context;
@@ -98,8 +89,17 @@ WEAK void halide_do_gcd_task(void *job, size_t idx) {
                                     j->closure);
 }
 
-WEAK int default_do_par_for(void *user_context, halide_task_t f,
-                            int min, int size, uint8_t *closure) {
+}}}  // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+WEAK int halide_default_do_task(void *user_context, int (*f)(void *, int, uint8_t *),
+                                int idx, uint8_t *closure) {
+    return f(user_context, idx, closure);
+}
+
+WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
+                                   int min, int size, uint8_t *closure) {
     if (custom_num_threads == 1 || size == 1) {
         // GCD doesn't really allow us to limit the threads,
         // so ensure that there's no parallelism by executing serially.
@@ -123,10 +123,14 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     return job.exit_status;
 }
 
-WEAK halide_do_task_t custom_do_task = default_do_task;
-WEAK halide_do_par_for_t custom_do_par_for = default_do_par_for;
+}  // extern "C"
 
-}}} // namespace Halide::Runtime::Internal
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK halide_do_task_t custom_do_task = halide_default_do_task;
+WEAK halide_do_par_for_t custom_do_par_for = halide_default_do_par_for;
+
+}}}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 

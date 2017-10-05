@@ -8,9 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "../../src/Expr.h"
-#include "../../src/Func.h"
-#include "../../src/Var.h"
+#include "Halide.h"
 
 void defineFunc();
 

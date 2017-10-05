@@ -12,7 +12,6 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::pair;
-using std::make_pair;
 using std::vector;
 
 namespace {
@@ -34,7 +33,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.
@@ -862,7 +861,7 @@ class SolveForInterval : public IRVisitor {
     void visit(const Variable *op) {
         internal_assert(op->type.is_bool());
         if (scope.contains(op->name)) {
-            auto key = make_pair(op->name, target);
+            pair<string, bool> key = { op->name, target };
             auto it = solved_vars.find(key);
             if (it != solved_vars.end()) {
                 result = it->second;
@@ -1538,8 +1537,8 @@ void solve_test() {
     {
         // This case used to break due to signed integer overflow in
         // the simplifier.
-        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter());
-        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter());
+        Expr a16 = Load::make(Int(16), "a", {x}, Buffer<>(), Parameter(), const_true());
+        Expr b16 = Load::make(Int(16), "b", {x}, Buffer<>(), Parameter(), const_true());
         Expr lhs = pow(cast<int32_t>(a16), 2) + pow(cast<int32_t>(b16), 2);
 
         Scope<Interval> s;

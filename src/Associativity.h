@@ -8,6 +8,8 @@
  */
 
 #include "IR.h"
+#include "IREquality.h"
+#include "AssociativeOpsTable.h"
 
 #include <functional>
 
@@ -15,78 +17,88 @@ namespace Halide {
 namespace Internal {
 
 /**
- * Represent the equivalent associative binary/unary operator of an associative Expr.
- * For example, the following associative Expr, min(f(x), g(r.x) + 2), where f(x)
- * is the self-recurrence term, will be represented as:
+ * Represent the equivalent associative op of an update definition.
+ * For example, the following associative Expr, min(f(x), g(r.x) + 2),
+ * where f(x) is the self-recurrence term, is represented as:
  \code
- AssociativeOp assoc = {
-    min(x, y),
-    +inf,
-    {"x", f(x)},
-    {"y", g(r.x) + 2},
- };
+ AssociativeOp assoc(
+    AssociativePattern(min(x, y), +inf, true),
+    {Replacement("x", f(x))},
+    {Replacement("y", g(r.x) + 2)},
+    true
+ );
  \endcode
  *
- * For unary operator, 'x' is not set, i.e. it will be a pair of empty string
- * and undefined Expr: {"", Expr()}. 'op' will only contain the 'y' term in
+ * 'pattern' contains the list of equivalent binary/unary operators (+ identities)
+ * for each Tuple element in the update definition. 'pattern' also contains
+ * a boolean that indicates if the op is also commutative. 'xs' and 'ys'
+ * contain the corresponding definition of each variable in the list of
+ * binary operators.
+ *
+ * For unary operator, 'xs' is not set, i.e. it will be a pair of empty string
+ * and undefined Expr: {"", Expr()}. 'pattern' will only contain the 'y' term in
  * this case. For example, min(g(r.x), 4), will be represented as:
  \code
- AssociativeOp assoc = {
-    y,
-    0,
-    {"", Expr()},
-    {"y", min(g(r.x), 4)},
- };
+ AssociativeOp assoc(
+    AssociativePattern(y, 0, false),
+    {Replacement("", Expr())},
+    {Replacement("y", min(g(r.x), 4))},
+    true
+ );
  \endcode
- * Since it is a unary operator, the identity does not matter. It can be
- * anything.
+ *
+ * Self-assignment, f(x) = f(x), will be represented as:
+ \code
+ AssociativeOp assoc(
+    AssociativePattern(x, 0, true),
+    {Replacement("x", f(x))},
+    {Replacement("", Expr())},
+    true
+ );
+ \endcode
+ * For both unary operator and self-assignment cases, the identity does not
+ * matter. It can be anything.
  */
 struct AssociativeOp {
-    Expr op; // op(x, y)
-    Expr identity;
-    std::pair<std::string, Expr> x;
-    std::pair<std::string, Expr> y;
-};
+    struct Replacement {
+        /** Variable name that is used to replace the expr in 'op'. */
+        std::string var;
+        Expr expr;
 
-/**
- * Represent the result of calling \ref prove_associativity on an update definition.
- * 'is_associative' indicates if the operation was successfuly proven as associative.
- * 'is_commutative' indicates if the operation was successfuly proven as commutative.
- * 'ops' contains the list of AssociativeOps for each Tuple element in the update
- * definition. If it fails to prove associativity, 'ops' is not valid (i.e. it will
- * be empty) as well as 'is_commutative'. See \ref prove_associativity for more details.
- */
-struct ProveAssociativityResult {
+        Replacement() {}
+        Replacement(const std::string &var, Expr expr) : var(var), expr(expr) {}
+
+        bool operator==(const Replacement &other) const {
+            return (var == other.var) && equal(expr, other.expr);
+        }
+        bool operator!=(const Replacement &other) const {
+            return !(*this == other);
+        }
+    };
+
+    /** List of pairs of binary associative op and its identity. */
+    AssociativePattern pattern;
+    std::vector<Replacement> xs;
+    std::vector<Replacement> ys;
     bool is_associative;
-    bool is_commutative;
-    std::vector<AssociativeOp> ops;
 
-    ProveAssociativityResult(bool associative, bool commutative, const std::vector<AssociativeOp> &ops)
-        : is_associative(associative), is_commutative(commutative), ops(ops) {}
+    AssociativeOp() : is_associative(false) {}
+    AssociativeOp(size_t size) : pattern(size), xs(size), ys(size), is_associative(false) {}
+    AssociativeOp(const AssociativePattern &p, const std::vector<Replacement> &xs,
+                  const std::vector<Replacement> &ys, bool is_associative)
+        : pattern(p), xs(xs), ys(ys), is_associative(is_associative) {}
 
-    ProveAssociativityResult() : ProveAssociativityResult(false, false, std::vector<AssociativeOp>()) {}
+    bool associative() const { return is_associative; }
+    bool commutative() const { return pattern.is_commutative; }
+    size_t size() const { return pattern.size(); }
 };
 
 /**
- * Given an update definition of a Func 'f', determine its equivalent associative
- * binary/unary operator if there is any. For an associative tuple update, this
- * will compute a vector containing the list of AssociativeOps for each Tuple
- * element in the update definition. This will also compute the commutativity
- * of the associative update definition. If the update definition is failed to
- * be proven as associative, neither the AssociativeOps vector nor the
- * 'is_commutative' result is valid.
- *
- * For instance, f(x) = min(f(x), g(r.x)) will return true for associativity and
- * commutativity and it will also return {{min(_x_0, _y_0), +inf, {_x_0, f(x)},
- * {_y_0, g(r.x)}}}, where the first Expr is the equivalent binary operator,
- * the second Expr is identity of the binary operator, the third and the last
- * pair contain the corresponding definition of each variable in the binary operator.
- *
- * Note that even though f(x) = f(x) is associative, we'll treat it as non-associative
- * since it doesn't really make any sense to do any associative reduction on that
- * particular update definition.
+ * Given an update definition of a Func 'f', determine its equivalent
+ * associative binary/unary operator if there is any. 'is_associative'
+ * indicates if the operation was successfuly proven as associative.
  */
-ProveAssociativityResult prove_associativity(
+AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
 EXPORT void associativity_test();

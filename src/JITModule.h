@@ -56,9 +56,9 @@ struct JITModule {
 
     /** A pointer to the raw halide function. Its true type depends
      * on the Argument vector passed to CodeGen_LLVM::compile. Image
-     * parameters become (buffer_t *), and scalar parameters become
+     * parameters become (halide_buffer_t *), and scalar parameters become
      * pointers to the appropriate values. The final argument is a
-     * pointer to the buffer_t defining the output. This will be nullptr for
+     * pointer to the halide_buffer_t defining the output. This will be nullptr for
      * a JITModule which has not yet been compiled or one that is not
      * a Halide Func compilation at all. */
     EXPORT void *main_function() const;
@@ -114,9 +114,6 @@ struct JITModule {
                                const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
     /** Encapsulate device (GPU) and buffer interactions. */
-    EXPORT int copy_to_device(struct buffer_t *buf) const;
-    EXPORT int copy_to_host(struct buffer_t *buf) const;
-    EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 
     /** Return true if compile_module has been called on this module. */

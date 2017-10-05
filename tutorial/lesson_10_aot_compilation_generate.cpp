@@ -1,4 +1,3 @@
-
 // Halide tutorial lesson 10: AOT compilation part 1
 
 // This lesson demonstrates how to use Halide as an more traditional
@@ -13,7 +12,7 @@
 // On linux, you can compile and run it like so:
 // g++ lesson_10*generate.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_10_generate
 // LD_LIBRARY_PATH=../bin ./lesson_10_generate
-// g++ lesson_10*run.cpp lesson_10_halide.a -lpthread -ldl -o lesson_10_run
+// g++ lesson_10*run.cpp lesson_10_halide.a -std=c++11 -I ../include -lpthread -ldl -o lesson_10_run
 // ./lesson_10_run
 
 // On os x:

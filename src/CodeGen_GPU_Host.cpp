@@ -197,10 +197,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         }
 
         Value *user_context = get_user_context();
-        debug(2) << "CodeGen_CPU_Host compile_func user_context:";
-        if (debug::debug_level >= 2) {
-            user_context->dump();
-        }
         Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
@@ -272,7 +268,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // Look up the allocation for the vertex buffer and cast it to the
             // right type
-            gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
+            gpu_vertex_buffer = codegen(Variable::make(type_of<float *>(), "glsl.vertex_buffer"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
                                                            CodeGen_LLVM::f32_t->getPointerTo());
         }
@@ -361,8 +357,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *val;
 
             if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
+                // If it's a buffer, get the .buffer symbol
+                val = sym_get(name + ".buffer");
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
                 // expression mesh. Pass a non-nullptr value in the argument array
@@ -374,15 +370,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 val = sym_get(name);
             }
 
-            // allocate stack space to mirror the closure element. It
-            // might be in a register and we need a pointer to it for
-            // the gpu args array.
-            Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
-            // store the closure value into the stack space
-            builder->CreateStore(val, ptr);
+            if (!closure_args[i].is_buffer) {
+                // allocate stack space to mirror the closure element. It
+                // might be in a register and we need a pointer to it for
+                // the gpu args array.
+                Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
+                // store the closure value into the stack space
+                builder->CreateStore(val, ptr);
+                val = ptr;
+            }
 
             // store a void * pointer to the argument into the gpu_args_arr
-            Value *bits = builder->CreateBitCast(ptr, arg_t);
+            Value *bits = builder->CreateBitCast(val, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(
                                     gpu_args_arr_type,
@@ -390,8 +389,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument. Buffer arguments get
-            // the dev field, which is 64-bits.
+            // store the size of the argument.
             int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
                                  builder->CreateConstGEP2_32(

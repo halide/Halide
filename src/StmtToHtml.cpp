@@ -261,6 +261,10 @@ private:
         stream << close_span();
         print(op->index);
         stream << matched("]");
+        if (!is_one(op->predicate)) {
+            stream << " " << keyword("if") << " ";
+            print(op->predicate);
+        }
         stream << close_span();
     }
     void visit(const Ramp *op) {
@@ -383,6 +387,10 @@ private:
         stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
+        if (!is_one(op->predicate)) {
+            stream << " " << keyword("if") << " ";
+            print(op->predicate);
+        }
         stream << close_span();
         stream << close_div();
     }
@@ -475,6 +483,19 @@ private:
         scope.pop(op->name);
     }
 
+    void visit(const Prefetch *op) {
+        stream << open_span("Prefetch");
+        stream << keyword("prefetch") << " ";
+        stream << var(op->name);
+        stream << matched("(");
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
+            if (i < op->bounds.size() - 1) stream << ", ";
+        }
+        stream << matched(")");
+        stream << close_span();
+    }
+
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
     void visit_block_stmt(Stmt stmt) {
         if (const Block *b = stmt.as<Block>()) {
@@ -540,6 +561,32 @@ private:
         stream << open_div("Evaluate");
         print(op->value);
         stream << close_div();
+    }
+
+    void visit(const Shuffle *op) {
+        stream << open_span("Shuffle");
+        if (op->is_concat()) {
+            print_list(symbol("concat_vectors("), op->vectors, ")");
+        } else if (op->is_interleave()) {
+            print_list(symbol("interleave_vectors("), op->vectors, ")");
+        } else if (op->is_extract_element()) {
+            std::vector<Expr> args = op->vectors;
+            args.push_back(op->slice_begin());
+            print_list(symbol("extract_element("), args, ")");
+        } else if (op->is_slice()) {
+            std::vector<Expr> args = op->vectors;
+            args.push_back(op->slice_begin());
+            args.push_back(op->slice_stride());
+            args.push_back(static_cast<int>(op->indices.size()));
+            print_list(symbol("slice_vectors("), args, ")");
+        } else {
+            std::vector<Expr> args = op->vectors;
+            for (int i : op->indices) {
+                args.push_back(i);
+            }
+            print_list(symbol("shuffle("), args, ")");
+        }
+        stream << close_span();
     }
 
 public:
