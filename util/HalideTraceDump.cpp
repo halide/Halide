@@ -262,13 +262,13 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
 
 void usage(char * const *argv) {
     const string usage =
-            "Usage: " + string(argv[0]) + " -i trace_file -t output_type\n"
-            "  Available output types: png, jpg, pgm, tmp\n"
-            "The tool will record all element loads and stores found in the trace, and "
-            "dump them into separate image files per Func.\n"
-            "To generate a trace, use the trace_loads() and trace_stores() scheduling "
-            "commands in your Halide application, and run with HL_TRACE_FILE=<filename>.\n"
-            "Only 2D buffers will be dumped.";
+        "Usage: " + string(argv[0]) + " -i trace_file -t {png,jpg,pgm,tmp}\n"
+        "\n"
+        "This tool reads a binary trace produced by Halide, and dumps all\n"
+        "Funcs into individual image files in the current directory.\n"
+        "To generate a suitable binary trace, use Func::trace_stores(), or the\n"
+        "target features trace_stores and trace_realizations, and run with\n"
+        "HL_TRACE_FILE=<filename>.\n";
     fprintf(stderr, "%s\n", usage.c_str());
     exit(1);
 }
@@ -278,19 +278,14 @@ int main(int argc, char * const *argv) {
     char *buf_filename = nullptr;
     char *buf_imagetype = nullptr;
     BufferOutputOpts outputopts;
-    int c;
-    while ((c = getopt (argc, argv, "i:t:")) != -1) {
-        switch (c)
-        {
-        case 'i':
-            buf_filename = optarg;
-            break;
-        case 't':
-            buf_imagetype = optarg;
-            break;
-        case '?':
-        default:
-            usage(argv);
+    for (int i = 1; i < argc - 1; i++) {
+        string arg = argv[i];
+        if (arg == "-t") {
+            i++;
+            buf_imagetype = argv[i];
+        } else if (arg == "-i") {
+            i++;
+            buf_filename = argv[i];
         }
     }
 
