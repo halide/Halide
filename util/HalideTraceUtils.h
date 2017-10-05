@@ -11,32 +11,35 @@ void bad_type_error(halide_type_t type);
 
 // Simple conversion.
 template<typename T>
-T value_as(halide_type_t type, const void* value) {
+T value_as(halide_type_t type, const halide_scalar_value_t* value) {
+    const halide_scalar_value_t *v = (const halide_scalar_value_t *)value;
     switch (type.code) {
     case halide_type_int:
         switch (type.bits) {
         case 8:
-            return (T)(((const int8_t *)value)[0]);
+            return (T) v->u.i8;
         case 16:
-            return (T)(((const int16_t *)value)[0]);
+            return (T) v->u.i16;
         case 32:
-            return (T)(((const int32_t *)value)[0]);
+            return (T) v->u.i32;
         case 64:
-            return (T)(((const int64_t *)value)[0]);
+            return (T) v->u.i64;
         default:
             bad_type_error(type);
         }
         break;
     case halide_type_uint:
         switch (type.bits) {
+        case 1:
+            return (T) v->u.b;
         case 8:
-            return (T)(((const uint8_t *)value)[0]);
+            return (T) v->u.u8;
         case 16:
-            return (T)(((const uint16_t *)value)[0]);
+            return (T) v->u.u16;
         case 32:
-            return (T)(((const uint32_t *)value)[0]);
+            return (T) v->u.u32;
         case 64:
-            return (T)(((const uint64_t *)value)[0]);
+            return (T) v->u.u64;
         default:
             bad_type_error(type);
         }
@@ -44,9 +47,9 @@ T value_as(halide_type_t type, const void* value) {
     case halide_type_float:
         switch (type.bits) {
         case 32:
-            return (T)(((const float *)value)[0]);
+            return (T) v->u.f32;
         case 64:
-            return (T)(((const double *)value)[0]);
+            return (T) v->u.f64;
         default:
             bad_type_error(type);
         }
@@ -54,7 +57,7 @@ T value_as(halide_type_t type, const void* value) {
     default:
         bad_type_error(type);
     }
-    return (T)0;
+    return (T) 0;
 }
 
 // A struct representing a single Halide tracing packet.
@@ -70,8 +73,8 @@ struct Packet : public halide_trace_packet_t {
 
     template<typename T>
     T get_value_as(int idx) const {
-        const uint8_t * val = &(((const uint8_t*)value())[idx*type.bytes()]);
-        return value_as<T>(type, (const void*) val);
+        const uint8_t *val = (const uint8_t *)(value()) + idx * type.bytes();
+        return value_as<T>(type, (const halide_scalar_value_t *)val);
     }
 
     // Grab a packet from stdin. Returns false when stdin closes.
