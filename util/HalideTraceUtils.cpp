@@ -47,6 +47,7 @@ bool Packet::read(void *d, ssize_t size, FILE *file_desc) {
 
 void bad_type_error(halide_type_t type) {
     fprintf(stderr, "Can't convert packet with type: %d bits: %d\n", type.code, type.bits);
+    exit(-1);
 }
 
 }
