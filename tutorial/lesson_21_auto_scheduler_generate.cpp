@@ -30,25 +30,43 @@ class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
     GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
 
-    Input<Buffer<float>>  input{"input", 4};
-    Input<Buffer<float>>  filter{"filter", 4};
-    Input<Buffer<float>>  bias{"bias", 1};
-    Input<float>          min_value{"min_value"};
+    Input<Buffer<float>>  input{"input", 3};
+    Input<float>          factor{"factor"};
 
-    Output<Buffer<float>> output1{"output1", 4};
-    Output<Buffer<float>> output2{"output2", 4};
+    Output<Buffer<float>> output1{"output1", 2};
+    Output<Buffer<float>> output2{"output2", 2};
+
+    Expr sum3x3(Func f, Var x, Var y) {
+        return f(x-1, y-1) + f(x-1, y) + f(x-1, y+1) +
+               f(x, y-1)   + f(x, y)   + f(x, y+1) +
+               f(x+1, y-1) + f(x+1, y) + f(x+1, y+1);
+    }
 
     void generate() {
-        // For our algorithm, we'll use something resembling a layer from a
-        // convolutional neural network.
-        RDom r(filter.dim(0).min(), filter.dim(0).extent(),
-               filter.dim(1).min(), filter.dim(1).extent(),
-               filter.dim(2).min(), filter.dim(2).extent());
+        // For our algorithm, we'll use Harris corner detection.
+        Func in_b = BoundaryConditions::repeat_edge(input);
 
-        f(x, y, z, n) = bias(z);
-        f(x, y, z, n) += filter(r.x, r.y, r.z, z) * input(x + r.x, y + r.y, r.z, n);
-        output1(x, y, z, n) = max(0, f(x, y, z, n));
-        output2(x, y, z, n) = min(min_value, f(x, y, z, n));
+        gray(x, y) = 0.299f * in_b(x, y, 0) + 0.587f * in_b(x, y, 1) + 0.114f * in_b(x, y, 2);
+
+        Iy(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x-1, y+1)*(1.0f/12) +
+                   gray(x, y-1)*(-2.0f/12) + gray(x, y+1)*(2.0f/12) +
+                   gray(x+1, y-1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+
+        Ix(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x+1, y-1)*(1.0f/12) +
+                   gray(x-1, y)*(-2.0f/12) + gray(x+1, y)*(2.0f/12) +
+                   gray(x-1, y+1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+
+        Ixx(x, y) = Ix(x, y) * Ix(x, y);
+        Iyy(x, y) = Iy(x, y) * Iy(x, y);
+        Ixy(x, y) = Ix(x, y) * Iy(x, y);
+        Sxx(x, y) = sum3x3(Ixx, x, y);
+        Syy(x, y) = sum3x3(Iyy, x, y);
+        Sxy(x, y) = sum3x3(Ixy, x, y);
+        det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
+        trace(x, y) = Sxx(x, y) + Syy(x, y);
+        harris(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
+        output1(x, y) = harris(x + 2, y + 2);
+        output2(x, y) = factor * harris(x + 2, y + 2);
     }
 
     void schedule() {
@@ -61,34 +79,22 @@ public:
             // of the input images ('input', 'filter', and 'bias'), we use the
             // set_bounds_estimate() method. set_bounds_estimate() takes in
             // (min, extent) of the corresponding dimension as arguments.
-            input.dim(0).set_bounds_estimate(0, 131);
-            input.dim(1).set_bounds_estimate(0, 131);
-            input.dim(2).set_bounds_estimate(0, 64);
-            input.dim(3).set_bounds_estimate(0, 4);
-
-            filter.dim(0).set_bounds_estimate(0, 3);
-            filter.dim(1).set_bounds_estimate(0, 3);
-            filter.dim(2).set_bounds_estimate(0, 64);
-            filter.dim(3).set_bounds_estimate(0, 64);
-
-            bias.dim(0).set_bounds_estimate(0, 64);
+            input.dim(0).set_bounds_estimate(0, 1024);
+            input.dim(1).set_bounds_estimate(0, 1024);
+            input.dim(2).set_bounds_estimate(0, 3);
 
             // To provide estimates on the parameter values, we use the
             // set_estimate() method.
-            min_value.set_estimate(2.0f);
+            factor.set_estimate(2.0f);
 
             // To provide estimates (min and extent values) for each dimension
             // of pipeline outputs, we use the estimate() method. estimate()
             // takes in (dim_name, min, extent) as arguments.
-            output1.estimate(x, 0, 128)
-                .estimate(y, 0, 128)
-                .estimate(z, 0, 64)
-                .estimate(n, 0, 4);
+            output1.estimate(x, 0, 1024)
+                   .estimate(y, 0, 1024);
 
-            output2.estimate(x, 0, 128)
-                .estimate(y, 0, 128)
-                .estimate(z, 0, 64)
-                .estimate(n, 0, 4);
+            output2.estimate(x, 0, 1024)
+                   .estimate(y, 0, 1024);
 
             // Technically, the estimate values can be anything, but the closer
             // they are to the actual use-case values, the better the generated
@@ -133,62 +139,87 @@ public:
             // following schedule for the estimates and machine parameters
             // declared above when run on this pipeline:
             //
+            // Var x_i("x_i");
+            // Var x_i_vi("x_i_vi");
+            // Var x_i_vo("x_i_vo");
+            // Var x_o("x_o");
             // Var x_vi("x_vi");
             // Var x_vo("x_vo");
+            // Var y_i("y_i");
+            // Var y_o("y_o");
             //
             // Func f0 = pipeline.get_func(3);
-            // Func output1 = pipeline.get_func(4);
-            // Func output2 = pipeline.get_func(5);
+            // Func f1 = pipeline.get_func(7);
+            // Func f11 = pipeline.get_func(14);
+            // Func f2 = pipeline.get_func(4);
+            // Func output1 = pipeline.get_func(15);
+            // Func output2 = pipeline.get_func(16);
             //
             // {
             //     Var x = f0.args()[0];
-            //     Var z = f0.args()[2];
-            //     Var n = f0.args()[3];
             //     f0
+            //         .compute_at(f11, x_o)
+            //         .split(x, x_vo, x_vi, 8)
+            //         .vectorize(x_vi);
+            // }
+            // {
+            //     Var x = f1.args()[0];
+            //     f1
+            //         .compute_at(f11, x_o)
+            //         .split(x, x_vo, x_vi, 8)
+            //         .vectorize(x_vi);
+            // }
+            // {
+            //     Var x = f11.args()[0];
+            //     Var y = f11.args()[1];
+            //     f11
             //         .compute_root()
+            //         .split(x, x_o, x_i, 256)
+            //         .split(y, y_o, y_i, 128)
+            //         .reorder(x_i, y_i, x_o, y_o)
+            //         .split(x_i, x_i_vo, x_i_vi, 8)
+            //         .vectorize(x_i_vi)
+            //         .parallel(y_o)
+            //         .parallel(x_o);
+            // }
+            // {
+            //     Var x = f2.args()[0];
+            //     f2
+            //         .compute_at(f11, x_o)
             //         .split(x, x_vo, x_vi, 8)
-            //         .vectorize(x_vi)
-            //         .parallel(n)
-            //         .parallel(z);
-            //     f0.update(0)
-            //         .split(x, x_vo, x_vi, 8)
-            //         .vectorize(x_vi)
-            //         .parallel(n)
-            //         .parallel(z);
+            //         .vectorize(x_vi);
             // }
             // {
             //     Var x = output1.args()[0];
-            //     Var z = output1.args()[2];
-            //     Var n = output1.args()[3];
+            //     Var y = output1.args()[1];
             //     output1
             //         .compute_root()
             //         .split(x, x_vo, x_vi, 8)
             //         .vectorize(x_vi)
-            //         .parallel(n)
-            //         .parallel(z);
+            //         .parallel(y);
             // }
             // {
             //     Var x = output2.args()[0];
-            //     Var z = output2.args()[2];
-            //     Var n = output2.args()[3];
+            //     Var y = output2.args()[1];
             //     output2
             //         .compute_root()
             //         .split(x, x_vo, x_vi, 8)
             //         .vectorize(x_vi)
-            //         .parallel(n)
-            //         .parallel(z);
+            //         .parallel(y);
             // }
         } else {
             // This is where you would declare the schedule you have written by
             // hand or paste the schedule generated by the auto-scheduler.
             // We will use a naive schedule here to compare the performance of
             // the autoschedule with a basic schedule.
-            f.compute_root();
+            gray.compute_root();
+            Iy.compute_root();
+            Ix.compute_root();
         }
     }
 private:
-    Var x{"x"}, y{"y"}, z{"z"}, n{"n"};
-    Func f;
+    Var x{"x"}, y{"y"}, c{"c"};
+    Func gray, Iy, Ix, Ixx, Iyy, Ixy, Sxx, Syy, Sxy, det, trace, harris;
 };
 
 // As in lesson 15, we register our generator and then compile this
