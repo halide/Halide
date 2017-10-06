@@ -85,7 +85,7 @@ struct Packet : public halide_trace_packet_t {
 
 private:
     // Do a blocking read of some number of bytes from a unistd file descriptor.
-    bool read(void *d, ssize_t size, FILE *fdesc);
+    bool read(void *d, size_t size, FILE *fdesc);
 };
 
 }
