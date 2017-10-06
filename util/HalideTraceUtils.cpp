@@ -30,10 +30,10 @@ bool Packet::read_from_filedesc(FILE *fdesc){
     return true;
 }
 
-bool Packet::read(void *d, ssize_t size, FILE *file_desc) {
+bool Packet::read(void *d, size_t size, FILE *file_desc) {
     uint8_t *dst = (uint8_t *)d;
     if (!size) return true;
-    ssize_t s = fread(dst, 1, size, file_desc);
+    size_t s = fread(dst, 1, size, file_desc);
     if (s != size) {
         if (ferror(file_desc) || !feof(file_desc)) {
             perror("Failed during read");
