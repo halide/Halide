@@ -102,6 +102,22 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
     return *f == *s;
 }
 
+struct ScopedFile {
+    void *f;
+    ScopedFile(const char *filename, const char *mode) {
+        f = fopen(filename, mode);
+    }
+    ~ScopedFile() {
+        fclose(f);
+    }
+    bool write(const void *ptr, size_t bytes) {
+        return fwrite(ptr, bytes, 1, f);
+    }
+    bool open() const {
+        return f;
+    }
+};
+
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
@@ -114,8 +130,8 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
     halide_copy_to_host(user_context, buf);
 
-    void *f = fopen(filename, "wb");
-    if (!f) return -2;
+    ScopedFile f(filename, "wb");
+    if (!f.open()) return -2;
 
     size_t elts = 1;
     halide_dimension_t shape[4];
@@ -187,8 +203,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         header.height_resolution[0] = 1;
         header.height_resolution[1] = 1;
 
-        if (!fwrite((void *)(&header), sizeof(header), 1, f)) {
-            fclose(f);
+        if (!f.write((void *)(&header), sizeof(header))) {
             return -3;
         }
 
@@ -196,16 +211,14 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
             for (int32_t i = 0; i < channels; i++) {
-                if (!fwrite((void*)(&offset), 4, 1, f)) {
-                    fclose(f);
+                if (!f.write((void*)(&offset), 4)) {
                     return -4;
                 }
                 offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
             }
             int32_t count = shape[0].extent * shape[1].extent * depth;
             for (int32_t i = 0; i < channels; i++) {
-                if (!fwrite((void*)(&count), 4, 1, f)) {
-                    fclose(f);
+                if (!f.write((void*)(&count), 4)) {
                     return -5;
                 }
             }
@@ -232,7 +245,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             "MATLAB 5.0 MAT-file, produced by Halide                         "
             "                                                            \000\001IM";
 
-        fwrite(header, 128, 1, f);
+        f.write(header, 128);
 
         size_t payload_bytes = buf->size_in_bytes();
 
@@ -252,26 +265,22 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             // The shape
             5, buf->dimensions * 4};
 
-        if (!fwrite(&tags, sizeof(tags), 1, f)) {
-            fclose(f);
+        if (!f.write(&tags, sizeof(tags))) {
             return -7;
         }
 
         int extents[] = {shape[0].extent, shape[1].extent, shape[2].extent, shape[3].extent};
-        if (!fwrite(&extents, padded_dimensions * 4, 1, f)) {
-            fclose(f);
+        if (!f.write(&extents, padded_dimensions * 4)) {
             return -8;
         }
 
         // The name
         uint32_t name_header[2] = {1, name_size};
-        if (!fwrite(&name_header, sizeof(name_header), 1, f)) {
-            fclose(f);
+        if (!f.write(&name_header, sizeof(name_header))) {
             return -9;
         }
 
-        if (!fwrite(array_name, padded_name_size, 1, f)) {
-            fclose(f);
+        if (!f.write(array_name, padded_name_size)) {
             return -10;
         }
 
@@ -281,8 +290,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         uint32_t payload_header[2] = {
             pixel_type_to_matlab_type_code[type_code], payload_bytes
         };
-        if (!fwrite(payload_header, sizeof(payload_header), 1, f)) {
-            fclose(f);
+        if (!f.write(payload_header, sizeof(payload_header))) {
             return -11;
         }
     } else {
@@ -291,8 +299,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
                             shape[2].extent,
                             shape[3].extent,
                             type_code};
-        if (!fwrite((void *)(&header[0]), sizeof(header), 1, f)) {
-            fclose(f);
+        if (!f.write((void *)(&header[0]), sizeof(header))) {
             return -12;
         }
     }
@@ -315,8 +322,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
                     if (counter == max_elts) {
                         counter = 0;
-                        if (!fwrite((void *)temp, max_elts * bytes_per_element, 1, f)) {
-                            fclose(f);
+                        if (!f.write((void *)temp, max_elts * bytes_per_element)) {
                             return -13;
                         }
                     }
@@ -325,8 +331,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
     if (counter > 0) {
-        if (!fwrite((void *)temp, counter * bytes_per_element, 1, f)) {
-            fclose(f);
+        if (!f.write((void *)temp, counter * bytes_per_element)) {
             return -14;
         }
     }
@@ -337,13 +342,10 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             halide_error(user_context, "Unexpectedly large final_padding_bytes");
             return -15;
         }
-        if (!fwrite(&zero, final_padding_bytes, 1, f)) {
-            fclose(f);
+        if (!f.write(&zero, final_padding_bytes)) {
             return -16;
         }
     }
-
-    fclose(f);
 
     return 0;
 }
