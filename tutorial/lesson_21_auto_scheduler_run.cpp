@@ -22,43 +22,27 @@
 
 int main(int argc, char **argv) {
     // Let's declare and initialize the input images
-    Halide::Runtime::Buffer<float> input(67, 67, 32, 4);
-    Halide::Runtime::Buffer<float> filter(3, 3, 32, 32);
-    Halide::Runtime::Buffer<float> bias(32);
+    Halide::Runtime::Buffer<float> input(1024, 1024, 3);
 
-    for (int c = 0; c < input.dim(3).extent(); c++) {
-        for (int z = 0; z < input.channels(); z++) {
-            for (int y = 0; y < input.height(); y++) {
-                for (int x = 0; x < input.width(); x++) {
-                    input(x, y) = rand();
-                }
+    for (int c = 0; c < input.channels(); ++c) {
+        for (int y = 0; y < input.height(); ++y) {
+            for (int x = 0; x < input.width(); ++x) {
+                input(x, y, c) = rand();
             }
         }
     }
-    for (int c = 0; c < filter.dim(3).extent(); c++) {
-        for (int z = 0; z < filter.channels(); z++) {
-            for (int y = 0; y < filter.height(); y++) {
-                for (int x = 0; x < filter.width(); x++) {
-                    filter(x, y) = rand();
-                }
-            }
-        }
-    }
-    for (int x = 0; x < bias.width(); x++) {
-        bias(x) = rand();
-    }
 
-    Halide::Runtime::Buffer<float> output1(64, 64, 32, 4);
-    Halide::Runtime::Buffer<float> output2(64, 64, 32, 4);
+    Halide::Runtime::Buffer<float> output1(1024, 1024);
+    Halide::Runtime::Buffer<float> output2(1024, 1024);
     // Run each version of the codes (with no auto-schedule and with
     // auto-schedule) multiple times for benchmarking.
     double auto_schedule_off = Halide::Tools::benchmark(2, 5, [&]() {
-        auto_schedule_false(input, filter, bias, -200.0f, output1, output2);
+        auto_schedule_false(input, 2.0f, output1, output2);
     });
     printf("Manual schedule: %gms\n", auto_schedule_off * 1e3);
 
     double auto_schedule_on = Halide::Tools::benchmark(2, 5, [&]() {
-        auto_schedule_true(input, filter, bias, -200.0f, output1, output2);
+        auto_schedule_true(input, 2.0f, output1, output2);
     });
     printf("Auto schedule: %gms\n", auto_schedule_on * 1e3);
 
