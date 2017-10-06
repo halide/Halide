@@ -1083,7 +1083,7 @@ bool load_mat(const std::string &filename, ImageType *im) {
         return false;
     }
 
-    if (!check(f.read_bytes(im->begin(), im->size_in_bytes()), "Count not read .tmp payload")) {
+    if (!check(f.read_bytes(im->begin(), im->size_in_bytes()), "Could not read .tmp payload")) {
         return false;
     }
 
