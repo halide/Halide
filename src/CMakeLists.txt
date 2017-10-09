@@ -29,6 +29,7 @@ set(RUNTIME_CPP
   gpu_device_selection
   hexagon_cpu_features
   hexagon_host
+  hexagon_dma
   ios_io
   linux_clock
   linux_host_cpu_count
