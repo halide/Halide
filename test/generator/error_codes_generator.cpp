@@ -10,7 +10,7 @@ public:
     Output<Buffer<int32_t>> output{"output", 2};
 
     void generate() {
-        target.set(get_target().without_feature(Target::LargeBuffers));
+        assert(!get_target().has_feature(Target::LargeBuffers));
         Var x, y;
 
         output(x, y) = input(x, y);
