@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         Var x, y, z;
         f(x, y, z) = cast<int32_t>(x + y + z);
         g(x, y) = cast<float>(f(x, y, 0) + f(x+1, y, 1));
-        h(x, y) = cast<double>(f(x, y, -1) + g(x, y));
+        h(x, y) = cast<int32_t>(f(x, y, -1) + g(x, y));
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file(h_mat);
         }
 
-        Buffer<double> im = h.realize(10, 10, target);
+        Buffer<int32_t> im = h.realize(10, 10, target);
     }
 
     {
@@ -81,17 +81,17 @@ int main(int argc, char **argv) {
             }
         }
 
-        Buffer<double> h = Tools::load_image(h_mat);
+        Buffer<int32_t> h = Tools::load_image(h_mat);
         assert(h.dimensions() == 2 &&
                h.dim(0).extent() == 10 &&
                h.dim(1).extent() == 10);
 
         for (int y = 0; y < 10; y++) {
             for (int x = 0; x < 10; x++) {
-                float val = h(x, y);
-                float correct = f(x, y, 0) + g(x, y);
+                int32_t val = h(x, y);
+                int32_t correct = f(x, y, 0) + g(x, y);
                 if (val != correct) {
-                    printf("h(%d, %d) = %f instead of %f\n", x, y, val, correct);
+                    printf("h(%d, %d) = %d instead of %d\n", x, y, val, correct);
                     return -1;
                 }
             }
