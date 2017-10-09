@@ -25,6 +25,7 @@ namespace {
 
 using Halide::Runtime::Buffer;
 using Halide::Tools::FormatInfo;
+using Halide::Tools::BenchmarkConfig;
 
 bool verbose = false;
 bool quiet = false;
@@ -787,23 +788,23 @@ Flags:
     --quiet:
         Don't log calls to halide_print() to stdout.
 
-    --benchmark:
+    --benchmarks=all:
         Run the filter with the given arguments many times to
         produce an estimate of average execution time; this currently
         runs "samples" sets of "iterations" each, and chooses the fastest
         sample set.
 
-    --benchmark_samples=NUM:
-        Override the default number of benchmarking sample sets; ignored if
-        --benchmark is not also specified.
+    --benchmark_min_time=DURATION_SECONDS [default = 0.1]:
+        Override the default minimum desired benchmarking time; ignored if
+        --benchmarks is not also specified.
 
-    --benchmark_iterations=NUM:
-        Override the default number of benchmarking iterations; ignored if
-        --benchmark is not also specified.
+    --benchmark_min_iters=NUM [default = 1]:
+        Override the default minimum number of benchmarking iterations; ignored
+        if --benchmarks is not also specified.
 
-    --benchmark_warmup=NUM:
-        Number of iterations to run before timing, to warm up caches; ignored if
-        --benchmark is not also specified.
+    --benchmark_max_iters=NUM [default = 1000000000]:
+        Override the default maximum number of benchmarking iterations; ignored
+        if --benchmarks is not also specified.
 
     --track_memory:
         Override Halide memory allocator to track high-water mark of memory
@@ -899,9 +900,9 @@ int main(int argc, char **argv) {
     bool benchmark = false;
     bool track_memory = false;
     bool describe = false;
-    int benchmark_samples = 3;
-    int benchmark_iterations = 10;
-    int benchmark_warmup = 1;
+    double benchmark_min_time = BenchmarkConfig().min_time;
+    int benchmark_min_iters = BenchmarkConfig().min_iters;
+    int benchmark_max_iters = BenchmarkConfig().max_iters;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -935,13 +936,6 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &describe)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
-            } else if (flag_name == "benchmark") {
-                if (flag_value.empty()) {
-                    flag_value = "true";
-                }
-                if (!parse_scalar(flag_value, &benchmark)) {
-                    fail() << "Invalid value for flag: " << flag_name;
-                }
             } else if (flag_name == "track_memory") {
                 if (flag_value.empty()) {
                     flag_value = "true";
@@ -949,16 +943,21 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &track_memory)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
-            } else if (flag_name == "benchmark_samples") {
-                if (!parse_scalar(flag_value, &benchmark_samples)) {
+            } else if (flag_name == "benchmarks") {
+                if (flag_value != "all") {
+                    fail() << "The only valid value for --benchmarks is 'all'";
+                }
+                benchmark = true;
+            } else if (flag_name == "benchmark_min_time") {
+                if (!parse_scalar(flag_value, &benchmark_min_time)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
-            } else if (flag_name == "benchmark_iterations") {
-                if (!parse_scalar(flag_value, &benchmark_iterations)) {
+            } else if (flag_name == "benchmark_min_iters") {
+                if (!parse_scalar(flag_value, &benchmark_min_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
-            } else if (flag_name == "benchmark_warmup") {
-                if (!parse_scalar(flag_value, &benchmark_warmup)) {
+            } else if (flag_name == "benchmark_max_iters") {
+                if (!parse_scalar(flag_value, &benchmark_max_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "output_extents") {
@@ -1004,7 +1003,7 @@ int main(int argc, char **argv) {
     bool ok_to_omit_outputs = (benchmark || track_memory);
 
     if (benchmark && track_memory) {
-        warn() << "Using --track_memory with --benchmark will produce inaccurate benchmark results.";
+        warn() << "Using --track_memory with --benchmarks will produce inaccurate benchmark results.";
     }
 
     // Check to be sure that all required arguments are specified.
@@ -1110,14 +1109,7 @@ int main(int argc, char **argv) {
         }
 
         if (benchmark) {
-            info() << "Benchmarking filter...";
-
-            for (int i = 0; i < benchmark_warmup; ++i) {
-                // Ignore result since our halide_error() should catch everything.
-                (void) halide_rungen_redirect_argv(&filter_argv[0]);
-            }
-
-            double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() {
+            const auto benchmark_inner = [&filter_argv, &args]() {
                 // Ignore result since our halide_error() should catch everything.
                 (void) halide_rungen_redirect_argv(&filter_argv[0]);
                 // Ensure that all outputs are finished, otherwise we may just be
@@ -1129,11 +1121,22 @@ int main(int argc, char **argv) {
                         b.device_sync();
                     }
                 }
-              });
+            };
 
-            std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over "
-                << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
-            std::cout << "Best output throughput is " << (megapixels / time_in_seconds) << " mpix/sec.\n";
+            info() << "Benchmarking filter...";
+
+            BenchmarkConfig config;
+            config.min_time = benchmark_min_time;
+            config.max_time = benchmark_min_time * 4;
+            config.min_iters = benchmark_min_iters;
+            config.max_iters = benchmark_max_iters;
+            auto result = Halide::Tools::benchmark(benchmark_inner, config);
+
+            std::cout << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
+                << result.samples << " samples, "
+                << result.iterations << " iterations, "
+                << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%).\n";
+            std::cout << "Best output throughput is " << (megapixels / result.wall_time) << " mpix/sec.\n";
 
         } else {
             info() << "Running filter...";

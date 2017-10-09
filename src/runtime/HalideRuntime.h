@@ -1040,7 +1040,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
     halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
     halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
