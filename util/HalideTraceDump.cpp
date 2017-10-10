@@ -32,7 +32,8 @@ struct BufferOutputOpts {
         PNG = 0,
         JPG,
         PGM,
-        TMP
+        TMP,
+        MAT
     };
 
     enum OutputType type;
@@ -183,6 +184,9 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     case BufferOutputOpts::TMP:
         filename = name + ".tmp";
         break;
+    case BufferOutputOpts::MAT:
+        filename = name + ".mat";
+        break;
     default:
         exit(1);
     }
@@ -261,7 +265,7 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
 
 void usage(char * const *argv) {
     const string usage =
-        "Usage: " + string(argv[0]) + " -i trace_file -t {png,jpg,pgm,tmp}\n"
+        "Usage: " + string(argv[0]) + " -i trace_file -t {png,jpg,pgm,tmp,mat}\n"
         "\n"
         "This tool reads a binary trace produced by Halide, and dumps all\n"
         "Funcs into individual image files in the current directory.\n"
@@ -304,6 +308,8 @@ int main(int argc, char * const *argv) {
         outputopts.type = BufferOutputOpts::PGM;
     } else if (imagetype == "tmp") {
         outputopts.type = BufferOutputOpts::TMP;
+    } else if (imagetype == "mat") {
+        outputopts.type = BufferOutputOpts::MAT;
     } else {
         usage(argv);
     }
