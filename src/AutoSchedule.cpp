@@ -727,9 +727,19 @@ struct AutoSchedule {
     // schedule is placed last in the list).
     map<string, map<int, vector<string>>> func_schedules;
 
+    // Store the list of vars/rvars used in the schedule applied to some
+    // function stages.
+    map<string, map<int, set<string>>> used_vars;
+
     AutoSchedule(const map<string, Function> &env, const vector<string> &order) : env(env) {
         for (size_t i = 0; i < order.size(); ++i) {
             realization_order.emplace(order[i], i);
+        }
+        // Allocate a slot in 'used_vars' for each function stages in the pipeline
+        for (const auto &iter : env) {
+            for (size_t i = 0; i < iter.second.updates().size() + 1; ++i) {
+                used_vars[iter.first][i];
+            }
         }
     }
 
@@ -761,17 +771,22 @@ struct AutoSchedule {
 
             schedule_ss << "{\n";
 
-            // Declare all the Vars and RVars
+            // Declare all the Vars and RVars that are actually used in the schedule
             const Function &func = get_element(sched.env, f.first);
             for (size_t i = 0; i < func.args().size(); ++i) {
-                schedule_ss << "    Var " << func.args()[i] << " = "
-                            << fname << ".args()[" << i << "];\n";
+                if (sched.used_vars.at(func.name()).at(0).find(func.args()[i])
+                        != sched.used_vars.at(func.name()).at(0).end()) {
+                    schedule_ss << "    Var " << func.args()[i] << " = "
+                                << fname << ".args()[" << i << "];\n";
+                }
             }
             set<string> declared_rvars;
             for (size_t i = 0; i < func.updates().size(); ++i) {
                 const vector<ReductionVariable> &rvars = func.updates()[i].schedule().rvars();
+                const set<string> &var_list = sched.used_vars.at(func.name()).at(i);
                 for (size_t j = 0; j < rvars.size(); ++j) {
-                    if (declared_rvars.find(rvars[j].var) != declared_rvars.end()) {
+                    if ((var_list.find(rvars[j].var) == var_list.end()) ||
+                        (declared_rvars.find(rvars[j].var) != declared_rvars.end())) {
                         continue;
                     }
                     declared_rvars.insert(rvars[j].var);
@@ -801,14 +816,16 @@ struct AutoSchedule {
         return stream;
     }
 
-    void push_schedule(const string &stage_name, size_t stage_num, const string &sched) {
+    void push_schedule(const string &stage_name, size_t stage_num,
+                       const string &sched, const set<string> &vars) {
         vector<string> v = split_string(stage_name, ".");
         internal_assert(!v.empty());
 
-        auto &schedules = func_schedules[v[0]][stage_num];
+        used_vars[v[0]][stage_num].insert(vars.begin(), vars.end());
 
         // If the previous schedule applied is the same as this one,
         // there is no need to re-apply the schedule
+        auto &schedules = func_schedules[v[0]][stage_num];
         if (schedules.empty()) {
             schedules.push_back(sched);
         } else {
@@ -2418,7 +2435,8 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
         default:
             internal_assert(false);
     }
-    sched.push_schedule(f_handle.name(), stage_num, oss.str());
+    sched.push_schedule(f_handle.name(), stage_num, oss.str(),
+                        {arg_name, outer_name, inner_name});
 
     const Expr &est = get_element(estimates, arg_name);
     internal_assert(est.defined());
@@ -2470,7 +2488,9 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
                       "_vi", "_vo", estimates, sched);
 
         f_handle.vectorize(split_vars.first);
-        sched.push_schedule(f_handle.name(), stage_num, "vectorize(" + split_vars.first.name() + ")");
+        sched.push_schedule(f_handle.name(), stage_num,
+                            "vectorize(" + split_vars.first.name() + ")",
+                            {split_vars.first.name()});
 
         if (is_rvar) {
             rvars.erase(vec_dim_name);
@@ -2570,6 +2590,12 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
             }
         }
 
+        if (min_pure_var.empty() && min_impure_var.empty()) {
+            // Since none of the pure and impure strides can be proven as the
+            // minimum, we should break here otherwise it may cause infinite loop.
+            return;
+        }
+
         pair<string, int> curr_min_var;
         if (!min_impure_var.empty() && can_prove(min_impure_stride < min_pure_stride)) {
             curr_min_var.first = min_impure_var;
@@ -2591,14 +2617,16 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     internal_assert(!ordering.empty());
+    set<string> var_list;
     string var_order = ordering[0].name();
     for (size_t o = 1; o < ordering.size(); o++) {
         var_order += ", " + ordering[o].name();
+        var_list.insert(ordering[o].name());
     }
 
     if (dims != ordering) {
         f_handle.reorder(ordering);
-        sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")");
+        sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")", var_list);
     }
 }
 
@@ -2650,7 +2678,7 @@ void Partitioner::generate_group_cpu_schedule(
         f_handle = Func(g_out).update(stage_num - 1);
     } else {
         Func(g_out).compute_root();
-        sched.push_schedule(f_handle.name(), g.output.stage_num, "compute_root()");
+        sched.push_schedule(f_handle.name(), g.output.stage_num, "compute_root()", {});
     }
 
     if (g.output.func.has_extern_definition()) {
@@ -2732,14 +2760,17 @@ void Partitioner::generate_group_cpu_schedule(
             ordering.push_back(v);
         }
 
+        set<string> var_list;
         string var_order = ordering[0].name();
         for (size_t o = 1; o < ordering.size(); o++) {
             var_order += ", " + ordering[o].name();
+            var_list.insert(ordering[o].name());
         }
 
         if (dims != ordering) {
             f_handle.reorder(ordering);
-            sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + var_order + ")");
+            sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                "reorder(" + var_order + ")", var_list);
         }
     }
 
@@ -2786,10 +2817,13 @@ void Partitioner::generate_group_cpu_schedule(
                 if (seq_var != "") {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
-                    sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + seq_var + ", " + var + ")");
+                    sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                        "reorder(" + seq_var + ", " + var + ")",
+                                        {seq_var, var});
                 }
                 f_handle.parallel(v);
-                sched.push_schedule(f_handle.name(), g.output.stage_num, "parallel(" + var + ")");
+                sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                    "parallel(" + var + ")", {var});
                 def_par = simplify(def_par * iter->second);
             } else {
                 break;
@@ -2845,13 +2879,15 @@ void Partitioner::generate_group_cpu_schedule(
                 } else {
                     Func(mem.func).compute_at(Func(g_out), tile_inner_var.var);
                 }
+                string sanitized_g_out = get_sanitized_name(g_out.name());
                 sched.push_schedule(mem_handle.name(), mem.stage_num,
-                                    "compute_at(" + get_sanitized_name(g_out.name()) + ", " + tile_inner_var.name() + ")");
+                                    "compute_at(" + sanitized_g_out + ", " + tile_inner_var.name() + ")",
+                                    {sanitized_g_out, tile_inner_var.name()});
             } else {
                 user_warning << "Degenerate tiling. No dimensions are tiled" << '\n';
                 user_warning << "Computing \"" <<  mem.func.name() << "\" at root" << '\n';
                 Func(mem.func).compute_root();
-                sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root()");
+                sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root()", {});
             }
         }
 

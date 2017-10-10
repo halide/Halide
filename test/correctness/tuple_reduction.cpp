@@ -6,11 +6,6 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        printf("Skipping test due to https://github.com/halide/Halide/issues/2364\n");
-        return 0;
-    }
-
     if (1) {
         // Test a tuple reduction on the gpu
         Func f;

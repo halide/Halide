@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     a.set(c);
 
     int expected = 0;
-    double t = benchmark(1, 100, [&]() {
+    double t = benchmark([&]() {
         Func f;
         f(x) = a(x) + b(x);
         f.realize(c);

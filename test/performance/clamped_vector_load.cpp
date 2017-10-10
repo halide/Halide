@@ -32,7 +32,7 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    return benchmark(1, 10, [&]() { f.realize(output); });
+    return benchmark([&]() { f.realize(output); });
 }
 
 int main(int argc, char **argv) {
