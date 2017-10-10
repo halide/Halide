@@ -170,6 +170,13 @@ bool check_and_continue(bool condition, const char* msg) {
 }
 
 void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
+    // Remove special characters
+    for (size_t i = 0; i < name.size(); i++) {
+        if (!std::isalnum(name[i])) {
+            name[i] = '_';
+        }
+    }
+
     string filename;
     switch(output_opts.type) {
     case BufferOutputOpts::PNG:
