@@ -1250,10 +1250,10 @@ bool save_mat(ImageType &im, const std::string &filename) {
     for (int d = 0; d < im.dimensions(); d++) {
         extents[d] = im.dim(d).extent();
     }
-    while (extents.size() < dims) {
+    while ((int)extents.size() < dims) {
         extents.push_back(1);
     }
-    while (extents.size() < padded_dims) {
+    while ((int)extents.size() < padded_dims) {
         extents.push_back(0);
     }
 
