@@ -181,7 +181,7 @@ void do_test() {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2, 0);
 
-    std::vector<std::string> formats = {"ppm","pgm","tmp"};
+    std::vector<std::string> formats = {"ppm","pgm","tmp","mat"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif
@@ -218,4 +218,3 @@ int main(int argc, char **argv) {
     do_test<uint16_t>();
     return 0;
 }
-
