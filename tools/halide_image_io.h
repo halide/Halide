@@ -1183,7 +1183,6 @@ bool save_mat(ImageType &im, const std::string &filename) {
         check(false, "unreachable");
     }
 
-
     FileOpener f(filename, "wb");
     if (!check(f.f != nullptr, "File could not be opened for writing")) {
         return false;
@@ -1195,6 +1194,16 @@ bool save_mat(ImageType &im, const std::string &filename) {
     idx = filename.rfind('/');
     if (idx != std::string::npos) {
         name = name.substr(idx+1);
+    }
+
+    // Matlab variable names conform to similar rules as C
+    if (name.empty() || !std::isalpha(name[0])) {
+        name = "v" + name;
+    }
+    for (size_t i = 0; i < name.size(); i++) {
+        if (!std::isalnum(name[i])) {
+            name[i] = '_';
+        }
     }
 
     uint32_t name_size = (int)name.size();
@@ -1211,15 +1220,21 @@ bool save_mat(ImageType &im, const std::string &filename) {
     header[126] = 'I';
     header[127] = 'M';
 
-    uint64_t payload_bytes = im.number_of_elements();
+    uint64_t payload_bytes = im.size_in_bytes();
 
     if (!check((payload_bytes >> 32) == 0, "Buffer too large to save as .mat")) {
         return false;
     }
 
+    int dims = im.dimensions();
+    if (dims < 2) {
+        dims = 2;
+    }
+    int padded_dims = dims + (dims & 1);
+
     // Matrix header
     uint32_t matrix_header[2] = {
-        miMATRIX, 16 + 24 + 8 + (uint32_t)name.size() + 8 + (uint32_t)payload_bytes
+        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes
     };
 
     // Array flags
@@ -1235,7 +1250,10 @@ bool save_mat(ImageType &im, const std::string &filename) {
     for (int d = 0; d < im.dimensions(); d++) {
         extents[d] = im.dim(d).extent();
     }
-    if (extents.size() & 1) {
+    while (extents.size() < dims) {
+        extents.push_back(1);
+    }
+    while (extents.size() < padded_dims) {
         extents.push_back(0);
     }
 
