@@ -26,11 +26,12 @@ public:
                         NameMangling::Default,
                         true /* uses old buffer_t */);
 
-        // TODO(srj): this compute_root() is necessary only due to
-        // https://github.com/halide/Halide/issues/2386 -- remove when fixed
-        g.compute_root();
-
+        // Schedule the extern stage per tile of the output to give
+        // the buffers a non-trivial min
         output(x, y) = g(x, y);
+        Var xi, yi;
+        output.tile(x, y, xi, yi, 8, 8);
+        g.compute_at(output, x);
     }
 };
 
