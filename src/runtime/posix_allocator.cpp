@@ -8,7 +8,7 @@ extern void free(void *);
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Allocate enough space for aligning the pointer we return.
-    const size_t alignment = halide_get_minimum_alignment();
+    const size_t alignment = halide_malloc_alignment();
     void *orig = malloc(x + alignment);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
