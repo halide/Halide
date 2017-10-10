@@ -217,7 +217,7 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
     return ret;
 }
 
-extern WEAK __attribute__((always_inline)) int halide_get_minimum_alignment();
+extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
 
 }}}
 
