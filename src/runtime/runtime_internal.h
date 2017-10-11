@@ -217,6 +217,8 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
     return ret;
 }
 
+extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
+
 }}}
 
 using namespace Halide::Runtime::Internal;
