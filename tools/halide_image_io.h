@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <cctype>
 
 #ifndef HALIDE_NO_PNG
 #include "png.h"
