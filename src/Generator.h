@@ -1233,9 +1233,6 @@ protected:
     EXPORT void check_value_writable() const override;
 
     EXPORT void estimate_impl(Var var, Expr min, Expr extent);
-
-private:
-    EXPORT void init_parameters();
 };
 
 
