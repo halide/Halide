@@ -12,8 +12,13 @@
 
 namespace Halide {
 
+namespace Internal {
+template<typename T2> class GeneratorInput_Buffer;
+}
+
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
+    template<typename T2> friend class ::Halide::Internal::GeneratorInput_Buffer;
 
     /** Func representation of the ImageParam.
      * All call to ImageParam is equivalent to call to its intrinsic Func
@@ -22,6 +27,8 @@ class ImageParam : public OutputImageParam {
 
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
+
+    ImageParam(const Internal::Parameter &p, Func f) : OutputImageParam(p, Argument::InputBuffer), func(f) {}
 
 public:
 
