@@ -289,11 +289,16 @@ struct Target {
         return natural_vector_size(type_of<data_t>());
     }
 
+    /** Return true iff 64 bits and has_feature(LargeBuffers). */
+    bool has_large_buffers() const {
+        return bits == 64 && has_feature(LargeBuffers);
+    }
+
     /** Return the maximum buffer size in bytes supported on this
-     * Target. This is 2^31 - 1 except when the LargeBuffers feature
-     * is enabled, which expands the maximum to 2^63 - 1. */
+     * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
+     * feature is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        if (bits == 64 && has_feature(LargeBuffers)) {
+        if (has_large_buffers()) {
             return (((uint64_t)1) << 63) - 1;
         } else {
             return (((uint64_t)1) << 31) - 1;

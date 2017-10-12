@@ -288,7 +288,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
     result += prev_decls.check_and_enter_type(mangle_type(return_type, target, prev_decls));
 
-    if (args.size() == 0) {
+    if (args.empty()) {
         result += "X";
     } else {
         for (const auto &arg : args) {
@@ -463,7 +463,7 @@ MangledNamePart mangle_qualified_name(std::string name, const std::vector<std::s
     MangledNamePart result;
 
     // Nested names start with N and then have the enclosing scope names.
-    bool is_directly_in_std = enclosing_types.size() == 0 && (namespaces.size() == 1 && namespaces[0] == "std");
+    bool is_directly_in_std = enclosing_types.empty() && (namespaces.size() == 1 && namespaces[0] == "std");
     bool not_simple = !is_directly_in_std && (!namespaces.empty() || !enclosing_types.empty());
     std::string substitute;
     if (is_directly_in_std) {
@@ -580,7 +580,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
     PrevPrefixes prevs;
     result += mangle_qualified_name(name, namespaces, {}, false, prevs).full_name;
 
-    if (args.size() == 0) {
+    if (args.empty()) {
         result += "v";
     }
 
