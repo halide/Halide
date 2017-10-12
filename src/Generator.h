@@ -1175,10 +1175,6 @@ protected:
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
 
-    virtual bool allow_synthetic_generator_params() const {
-        return true;
-    }
-
     virtual Parameter parameter() const {
         internal_error << "Unimplemented";
         return Parameter();
@@ -1307,14 +1303,10 @@ protected:
     friend class ::Halide::Func;
     friend class ::Halide::Stage;
 
-    bool allow_synthetic_generator_params() const override {
-        return !T::has_static_halide_type;
-    }
-
     std::string get_c_type() const override {
-        if (T::has_static_halide_type) {
+        if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubInputBuffer<" +
-                halide_type_to_c_type(T::static_halide_type()) +
+                halide_type_to_c_type(TBase::static_halide_type()) +
                 ">";
         } else {
             return "Halide::Internal::StubInputBuffer<>";
@@ -1326,20 +1318,22 @@ protected:
         return this->parameters_.at(0);
     }
 
+    static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
+
 public:
     GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!T::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
+        static_assert(!TBase::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
+        : Super(name, IOKind::Buffer, TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{}, d) {
     }
 
 
@@ -1869,18 +1863,20 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
+    static_assert(!std::is_array<T>::value, "Output<Buffer<>[]> is not a legal construct.");
+
 protected:
     GeneratorOutput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : t,
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : t,
                 d) {
-        if (T::has_static_halide_type) {
+        if (TBase::has_static_halide_type) {
             user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
         } else {
             user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
@@ -1888,14 +1884,14 @@ protected:
     }
 
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
-        static_assert(T::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
+        : Super(name, IOKind::Buffer, std::vector<Type>{ TBase::static_halide_type() }, d) {
+        static_assert(TBase::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
     }
 
     NO_INLINE std::string get_c_type() const override {
-        if (T::has_static_halide_type) {
+        if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubOutputBuffer<" +
-                halide_type_to_c_type(T::static_halide_type()) +
+                halide_type_to_c_type(TBase::static_halide_type()) +
                 ">";
         } else {
             return "Halide::Internal::StubOutputBuffer<>";
@@ -1996,7 +1992,11 @@ protected:
     using TBase = typename Super::TBase;
 
 protected:
-    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
+    GeneratorOutput_Func(const std::string &name)
+        : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
+    }
+
+    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Function, t, d) {
     }
 
