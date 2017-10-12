@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <cctype>
 
 #ifndef HALIDE_NO_PNG
 #include "png.h"
@@ -1183,7 +1184,6 @@ bool save_mat(ImageType &im, const std::string &filename) {
         check(false, "unreachable");
     }
 
-
     FileOpener f(filename, "wb");
     if (!check(f.f != nullptr, "File could not be opened for writing")) {
         return false;
@@ -1195,6 +1195,16 @@ bool save_mat(ImageType &im, const std::string &filename) {
     idx = filename.rfind('/');
     if (idx != std::string::npos) {
         name = name.substr(idx+1);
+    }
+
+    // Matlab variable names conform to similar rules as C
+    if (name.empty() || !std::isalpha(name[0])) {
+        name = "v" + name;
+    }
+    for (size_t i = 0; i < name.size(); i++) {
+        if (!std::isalnum(name[i])) {
+            name[i] = '_';
+        }
     }
 
     uint32_t name_size = (int)name.size();
@@ -1211,15 +1221,21 @@ bool save_mat(ImageType &im, const std::string &filename) {
     header[126] = 'I';
     header[127] = 'M';
 
-    uint64_t payload_bytes = im.number_of_elements();
+    uint64_t payload_bytes = im.size_in_bytes();
 
     if (!check((payload_bytes >> 32) == 0, "Buffer too large to save as .mat")) {
         return false;
     }
 
+    int dims = im.dimensions();
+    if (dims < 2) {
+        dims = 2;
+    }
+    int padded_dims = dims + (dims & 1);
+
     // Matrix header
     uint32_t matrix_header[2] = {
-        miMATRIX, 16 + 24 + 8 + (uint32_t)name.size() + 8 + (uint32_t)payload_bytes
+        miMATRIX, 40 + padded_dims * 4 + (uint32_t)name.size() + (uint32_t)payload_bytes
     };
 
     // Array flags
@@ -1235,7 +1251,10 @@ bool save_mat(ImageType &im, const std::string &filename) {
     for (int d = 0; d < im.dimensions(); d++) {
         extents[d] = im.dim(d).extent();
     }
-    if (extents.size() & 1) {
+    while ((int)extents.size() < dims) {
+        extents.push_back(1);
+    }
+    while ((int)extents.size() < padded_dims) {
         extents.push_back(0);
     }
 
@@ -1344,9 +1363,11 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
     for (auto &f : info) {
         int score = 0;
         // If format has too-few dimensions, that's very bad.
-        score += std::abs(f.dimensions - im_dimensions) * 128;
+        score += std::max(0, im_dimensions - f.dimensions) * 1024;
         // If format has too-few bits, that's pretty bad.
-        score += std::abs(f.type.bits - im_type.bits);
+        score += std::max(0, im_type.bits - f.type.bits) * 8;
+        // If format has too-many bits, that's a little bad.
+        score += std::max(0, f.type.bits - im_type.bits);
         // If format has different code, that's a little bad.
         score += (f.type.code != im_type.code) ? 1 : 0;
         if (score < best_score) {
@@ -1672,6 +1693,9 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
     } else {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_converted = ImageTypeConversion::convert_image(im, best.type);
+        while (im_converted.dimensions() < best.dimensions) {
+            im_converted.add_dimension();
+        }
         (void) save<DynamicImageType, check>(im_converted, filename);
     }
 }
