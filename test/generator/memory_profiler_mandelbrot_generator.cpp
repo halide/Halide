@@ -46,7 +46,7 @@ public:
     Output<Buffer<int32_t>> count{"count", 2};
 
     void generate() {
-        target.set(get_target().with_feature(Target::Profile));
+        assert(get_target().has_feature(Target::Profile));
 
         Var x, y, z;
 

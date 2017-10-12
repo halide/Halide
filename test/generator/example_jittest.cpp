@@ -16,7 +16,7 @@ void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_
 }
 
 int main(int argc, char **argv) {
-    GeneratorTarget context(get_target_from_environment());
+    GeneratorContext context(get_jit_target_from_environment());
     const float runtime_factor = 4.5f;
 
     // Demonstrate (and test) various ways to use a Stub to invoke a Generator with the JIT.

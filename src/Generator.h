@@ -1175,10 +1175,6 @@ protected:
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
 
-    virtual bool allow_synthetic_generator_params() const {
-        return true;
-    }
-
     virtual Parameter parameter() const {
         internal_error << "Unimplemented";
         return Parameter();
@@ -1233,9 +1229,6 @@ protected:
     EXPORT void check_value_writable() const override;
 
     EXPORT void estimate_impl(Var var, Expr min, Expr extent);
-
-private:
-    EXPORT void init_parameters();
 };
 
 
@@ -1310,14 +1303,10 @@ protected:
     friend class ::Halide::Func;
     friend class ::Halide::Stage;
 
-    bool allow_synthetic_generator_params() const override {
-        return !T::has_static_halide_type;
-    }
-
     std::string get_c_type() const override {
-        if (T::has_static_halide_type) {
+        if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubInputBuffer<" +
-                halide_type_to_c_type(T::static_halide_type()) +
+                halide_type_to_c_type(TBase::static_halide_type()) +
                 ">";
         } else {
             return "Halide::Internal::StubInputBuffer<>";
@@ -1329,20 +1318,22 @@ protected:
         return this->parameters_.at(0);
     }
 
+    static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
+
 public:
     GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!T::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
+        static_assert(!TBase::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
+        : Super(name, IOKind::Buffer, TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{}, d) {
     }
 
 
@@ -1872,18 +1863,20 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
+    static_assert(!std::is_array<T>::value, "Output<Buffer<>[]> is not a legal construct.");
+
 protected:
     GeneratorOutput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : t,
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : t,
                 d) {
-        if (T::has_static_halide_type) {
+        if (TBase::has_static_halide_type) {
             user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
         } else {
             user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
@@ -1891,14 +1884,14 @@ protected:
     }
 
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
-        static_assert(T::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
+        : Super(name, IOKind::Buffer, std::vector<Type>{ TBase::static_halide_type() }, d) {
+        static_assert(TBase::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
     }
 
     NO_INLINE std::string get_c_type() const override {
-        if (T::has_static_halide_type) {
+        if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubOutputBuffer<" +
-                halide_type_to_c_type(T::static_halide_type()) +
+                halide_type_to_c_type(TBase::static_halide_type()) +
                 ">";
         } else {
             return "Halide::Internal::StubOutputBuffer<>";
@@ -1999,7 +1992,11 @@ protected:
     using TBase = typename Super::TBase;
 
 protected:
-    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
+    GeneratorOutput_Func(const std::string &name)
+        : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
+    }
+
+    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Function, t, d) {
     }
 
@@ -2207,21 +2204,52 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is an abstract base class that is used when constructing a Generator Stub;
+/** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
- * Generators are compiled in a compatible way; at present, this is used to propagate
- * the outer Target to the inner Generator. */
+ * Generators are compiled in a compatible way.
+ *
+ * If you are using this at "top level" (e.g. with the JIT), you can construct a GeneratorContext
+ * with a Target:
+ * \code
+ *   auto my_stub = MyStub(
+ *       GeneratorContext(get_target_from_environment()),
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *   );
+ * \endcode
+ *
+ * Note that all Generators inherit from GeneratorContext, so if you are using a Stub
+ * from within a Generator, you can just pass 'this' for the GeneratorContext:
+ * \code
+ *  struct SomeGen : Generator<SomeGen> {
+ *   void generate() {
+ *     ...
+ *     auto my_stub = MyStub(
+ *       this,  // GeneratorContext
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *     );
+ *     ...
+ *   }
+ *  };
+ * \endcode
+ */
 class GeneratorContext {
 public:
     using ExternsMap = std::map<std::string, ExternalCode>;
 
-    GeneratorContext() : 
-        externs_map(std::make_shared<ExternsMap>())
-        , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+    explicit GeneratorContext(const Target &t) :
+        target("target", t),
+        externs_map(std::make_shared<ExternsMap>()),
+        value_tracker(std::make_shared<Internal::ValueTracker>()) {}
     virtual ~GeneratorContext() {}
 
-    virtual Target get_target() const = 0;
+    inline Target get_target() const { return target; }
 
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
@@ -2255,16 +2283,20 @@ public:
     }
 
 protected:
+    GeneratorParam<Target> target;
     std::shared_ptr<ExternsMap> externs_map;
     std::shared_ptr<Internal::ValueTracker> value_tracker;
 
-    virtual void init_from_context(const Halide::GeneratorContext &context) {
+    GeneratorContext() : GeneratorContext(Target()) {}
+
+    inline void init_from_context(const Halide::GeneratorContext &context) {
+        target.set(context.get_target());
         value_tracker = context.get_value_tracker();
         externs_map = context.get_externs_map();
     }
 
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
-        return value_tracker;        
+        return value_tracker;
     }
 
     // No copy
@@ -2273,33 +2305,6 @@ protected:
     // No move
     GeneratorContext(GeneratorContext&&) = delete;
     void operator=(GeneratorContext&&) = delete;
-};
-
-/** GeneratorTarget is a trivial implementation of GeneratorContext that
- * is intended for use when using Generators (or Stubs) directly; it simply
- * allows you to wrap a specific Target in a GeneratorContext for use with a stub,
- * often in conjunction with the Halide::get_target_from_environment() call:
- *
- * \code
- *   auto my_stub = MyStub(
- *       GeneratorTarget(get_target_from_environment()),
- *       // inputs
- *       { ... },
- *       // generator params
- *       { ... }
- *   );
- * \endcode
- */
-class GeneratorTarget : public GeneratorContext {
-public:
-    explicit GeneratorTarget(const Target &t) : target(t) {}
-    Target get_target() const override { return target; }
-protected:
-    void init_from_context(const Halide::GeneratorContext &context) override {
-        target = context.get_target();
-    }
-private:
-    Target target;
 };
 
 class NamesInterface {
@@ -2355,8 +2360,6 @@ using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const Gene
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    GeneratorParam<Target> target{ "target", Target() };
-
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
         // This is an optional map used to replace the default extensions generated for
@@ -2372,8 +2375,6 @@ public:
     };
 
     EXPORT virtual ~GeneratorBase();
-
-    Target get_target() const override { return target; }
 
     EXPORT void set_generator_param(const std::string &name, const std::string &value);
     EXPORT void set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params);
@@ -2463,7 +2464,6 @@ public:
 
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
-    EXPORT void init_from_context(const Halide::GeneratorContext &context) override;
     EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT virtual Pipeline build_pipeline() = 0;

@@ -39,9 +39,6 @@ int one_d_max() {
         .update()
         .vectorize(v);
 
-    const int trials = 10;
-    const int iterations = 10;
-
     Buffer<float> vec_A(size);
     Buffer<float> ref_output = Buffer<float>::make_scalar();
     Buffer<float> output = Buffer<float>::make_scalar();
@@ -53,10 +50,10 @@ int one_d_max() {
 
     A.set(vec_A);
 
-    double t_ref = benchmark(trials, iterations, [&]() {
+    double t_ref = benchmark([&]() {
         max_ref.realize(ref_output);
     });
-    double t = benchmark(trials, iterations, [&]() {
+    double t = benchmark([&]() {
         maxf.realize(output);
     });
 
@@ -102,17 +99,14 @@ int two_d_histogram() {
         .update().parallel(u);
     hist.update().vectorize(x, 8);
 
-    const int trials = 10;
-    const int iterations = 10;
-
     ref.realize(256);
     hist.realize(256);
 
     Buffer<int> result(256);
-    double t_ref = benchmark(trials, iterations, [&]() {
+    double t_ref = benchmark([&]() {
         ref.realize(result);
     });
-    double t = benchmark(trials, iterations, [&]() {
+    double t = benchmark([&]() {
         hist.realize(result);
     });
 
@@ -160,9 +154,6 @@ int four_d_argmin() {
     intm2.compute_at(intm1, u);
     intm2.update(0).vectorize(v);
 
-    const int iterations = 10;
-    const int trials = 10;
-
     Buffer<uint8_t> vec(size, size, size, size);
 
     // init randomly
@@ -181,10 +172,10 @@ int four_d_argmin() {
     ref.realize();
     amin.realize();
 
-    double t_ref = benchmark(trials, iterations, [&]() {
+    double t_ref = benchmark([&]() {
         ref.realize();
     });
-    double t = benchmark(trials, iterations, [&]() {
+    double t = benchmark([&]() {
         amin.realize();
     });
 
@@ -233,9 +224,6 @@ int complex_multiply() {
         .update()
         .vectorize(v);
 
-    const int trials = 10;
-    const int iterations = 10;
-
     Buffer<int32_t> vec0(size), vec1(size);
 
     // init randomly
@@ -250,10 +238,10 @@ int complex_multiply() {
     ref.realize();
     mult.realize();
 
-    double t_ref = benchmark(trials, iterations, [&]() {
+    double t_ref = benchmark([&]() {
         ref.realize();
     });
-    double t = benchmark(trials, iterations, [&]() {
+    double t = benchmark([&]() {
         mult.realize();
     });
 
@@ -300,9 +288,6 @@ int dot_product() {
         .update()
         .vectorize(v);
 
-    const int trials = 10;
-    const int iterations = 10;
-
     Buffer<float> vec_A(size), vec_B(size);
     Buffer<float> ref_output = Buffer<float>::make_scalar();
     Buffer<float> output = Buffer<float>::make_scalar();
@@ -316,10 +301,10 @@ int dot_product() {
     A.set(vec_A);
     B.set(vec_B);
 
-    double t_ref = benchmark(trials, iterations, [&]() {
+    double t_ref = benchmark([&]() {
         dot_ref.realize(ref_output);
     });
-    double t = benchmark(trials, iterations, [&]() {
+    double t = benchmark([&]() {
         dot.realize(output);
     });
 
@@ -381,9 +366,6 @@ int kitchen_sink() {
         .update()
         .vectorize(v);
 
-    const int trials = 10;
-    const int iterations = 10;
-
     Buffer<int32_t> vec_A(size);
 
     // init randomly
@@ -393,10 +375,10 @@ int kitchen_sink() {
 
     A.set(vec_A);
 
-    double t_ref = benchmark(trials, iterations, [&]() {
+    double t_ref = benchmark([&]() {
         sink_ref.realize();
     });
-    double t = benchmark(trials, iterations, [&]() {
+    double t = benchmark([&]() {
         sink.realize();
     });
 
