@@ -147,7 +147,9 @@ int main() {
         {0.1, 0x2e66},
         {0.3, 0x34cd},
         {4091, 0x6bfe},
-        {-4091, 0xebfe}
+        {-4091, 0xebfe},
+        {1000000, 0x7c00},  // Out of range maps to +infinity
+        {-1000000, 0xfc00}, // Out of range maps to -infinity
     };
 
     for (auto test : tests) {

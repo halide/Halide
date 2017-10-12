@@ -4,7 +4,6 @@
 
 using namespace Halide;
 
-// FIXME: Why aren't we using a unit test framework for this?
 void h_assert(bool condition, const char* msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
@@ -13,8 +12,8 @@ void h_assert(bool condition, const char* msg) {
 }
 
 int main() {
-    const float16_t one(1.0, RoundingMode::ToNearestTiesToEven);
-    const float16_t onePointTwoFive(1.25, RoundingMode::ToNearestTiesToEven);
+    const float16_t one(1.0);
+    const float16_t onePointTwoFive(1.25);
 
     // Check the bits are how we expect before using
     // comparision operators
