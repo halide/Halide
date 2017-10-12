@@ -1084,17 +1084,18 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
     }
 
     const auto add_synthetic_params = [this](GIOBase *gio) {
-        if (!gio->allow_synthetic_generator_params()) {
-            return;
-        }
         const std::string &n = gio->name();
         if (gio->kind() != IOKind::Scalar) {
-            owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<Type>(n + ".type", *gio, GeneratorParam_Synthetic<Type>::Type));
-            generator_params.push_back(owned_synthetic_params.back().get());
-            owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<int>(n + ".dim", *gio, GeneratorParam_Synthetic<int>::Dim));
-            generator_params.push_back(owned_synthetic_params.back().get());
+            if (!gio->types_defined()) {
+                owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<Type>(n + ".type", *gio, GeneratorParam_Synthetic<Type>::Type));
+                generator_params.push_back(owned_synthetic_params.back().get());
+            }
+            if (!gio->dims_defined()) {
+                owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<int>(n + ".dim", *gio, GeneratorParam_Synthetic<int>::Dim));
+                generator_params.push_back(owned_synthetic_params.back().get());
+            }
         }
-        if (gio->is_array()) {
+        if (gio->is_array() && !gio->array_size_defined()) {
             owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<size_t>(n + ".size", *gio, GeneratorParam_Synthetic<size_t>::ArraySize));
             generator_params.push_back(owned_synthetic_params.back().get());
         }
