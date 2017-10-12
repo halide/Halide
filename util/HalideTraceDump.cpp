@@ -205,7 +205,6 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
 }
 
 void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts) {
-
     printf("\nTrace stats:\n");
     printf("  Funcs:\n");
     for (auto &pair : func_info) {
@@ -221,8 +220,7 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
             printf("uint%d\n", info.type.bits);
         } else if (info.type.code == halide_type_code_t::halide_type_float) {
             printf("float%d\n", info.type.bits);
-        }
-        else {
+        } else {
             fprintf(stderr, "Unsupported Func type. Aborting.\n");
             exit(-1);
         }
@@ -284,7 +282,6 @@ void usage(char * const *argv) {
 }
 
 int main(int argc, char * const *argv) {
-
     char *buf_filename = nullptr;
     char *buf_imagetype = nullptr;
     BufferOutputOpts outputopts;
@@ -360,7 +357,7 @@ int main(int argc, char * const *argv) {
 
     packet_count = 0;
     fseek(file_desc, 0, SEEK_SET);
-    if(ferror(file_desc)){
+    if (ferror(file_desc)){
         fprintf(stderr, "Error: couldn't seek back to beginning of trace file. Aborting.\n");
         exit(-1);
     }
