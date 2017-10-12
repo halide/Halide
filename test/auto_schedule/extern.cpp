@@ -35,7 +35,6 @@ using namespace Halide;
 
 // Test a pipe with several extern-defined Funcs.
 void test_case_1() {
-
     ImageParam input(UInt(8), 2);
     Var x("x"), y("y");
     Func f0("f0");
@@ -71,22 +70,20 @@ void test_case_1() {
 
     // Inspect the schedule
     g.print_loop_nest();
-
 }
 
 // Test with an extern Func which consumes a trivial Func; autoscheduler
 // should not attempt to inline into the extern consumer.
 void test_case_2() {
-
     ImageParam input(UInt(8), 2);
     Var x("x"), y("y");
     Func f0("f0"), f1("f1"), f2("f2"), g("g");
 
     f0(x, y) = input(x, y) * 2;
 
-    // make f1, which is not a wrapper, but is trivial to inline
+    // Create f1, which is not a wrapper, but is trivial to inline
     // into the next extern Func (because print() has no cost)
-    f1(x, y) = print( f0(x, y) );
+    f1(x, y) = print(f0(x, y));
 
     f2.define_extern("translate", {f1, Expr(0), Expr(0)}, UInt(8), 2);
 
@@ -104,11 +101,9 @@ void test_case_2() {
 
     // Inspect the schedule
     g.print_loop_nest();
-
 }
 
 int main(int argc, char **argv) {
-
     test_case_1();
     test_case_2();
 

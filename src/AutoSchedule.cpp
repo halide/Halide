@@ -3139,7 +3139,7 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
                 internal_assert(order[i] != order[j]);
                 Function f2 = env.at(order[j]);
 
-                if( f2.has_extern_definition() &&  !f1.is_wrapper() ) {
+                if (f2.has_extern_definition() &&  !f1.is_wrapper()) {
                     debug(5) << "Skip inlining of function \"" << f1.name()
                              << "\" inside \"" << f2.name() << "\", because "
                              << "non-wrapper functions cannot be inlined inside "
