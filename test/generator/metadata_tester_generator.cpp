@@ -59,7 +59,7 @@ public:
         assert(output.types().size() == 2);
         Type output_type = output.types().at(0);
 
-        Func f1, f2;
+        Func f1("f1"), f2("f2");
         f1(x, y, c) = cast(output_type, input(x, y, c) + zero1 + zero2);
         f2(x, y, c) = cast<float>(f1(x, y, c) + 1);
 
@@ -67,7 +67,8 @@ public:
         typed_output_buffer(x, y, c) = f1(x, y, c);
         type_only_output_buffer(x, y, c) = f1(x, y, c);
         dim_only_output_buffer(x, y, c) = f1(x, y, c);
-        untyped_output_buffer(x, y, c) = f2(x, y, c);
+        // verify that we can assign a Func to an Output<Buffer<>>
+        untyped_output_buffer = f2;
         output_scalar() = 1234.25f;
         for (size_t i = 0; i < array_outputs.size(); ++i) {
             array_outputs[i](x, y, c) = (i + 1) * 1.5f;
