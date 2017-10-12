@@ -131,7 +131,8 @@ void verify(const Buffer<InputType> &input,
             const Buffer<OutputType> &output1,
             const Buffer<OutputType> &output_scalar,
             const Buffer<OutputType> &output_array0,
-            const Buffer<OutputType> &output_array1) {
+            const Buffer<OutputType> &output_array1,
+            const Buffer<OutputType> &untyped_output_buffer) {
     if (output_scalar.dimensions() != 0) {
         fprintf(stderr, "output_scalar should be zero-dimensional\n");
         exit(-1);
@@ -161,6 +162,10 @@ void verify(const Buffer<InputType> &input,
                 }
                 if (output_array1(x, y, c) != 3.0f) {
                     fprintf(stderr, "output_array1[%d, %d, %d] = %f, expected %f\n", x, y, c, output_array1(x, y, c), 3.0f);
+                    exit(-1);
+                }
+                if (untyped_output_buffer(x, y, c) != expected1) {
+                    fprintf(stderr, "untyped_output_buffer[%d, %d, %d] = %f, expected %f\n", x, y, c, untyped_output_buffer(x, y, c), expected1);
                     exit(-1);
                 }
             }
@@ -664,7 +669,11 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "untyped_output_buffer",
+          // Since we assign a Func to this output, it is generated with the Func's name.
+          // This is not really what we want, but is hard to correct, since Funcs cannot
+          // be arbitrarily renamed, adding wrappers can cause pathologies in some situations,
+          // and piping name-remaps into the metadata generation code is complex.
+          "f2$0", // "untyped_output_buffer",
           halide_argument_kind_output_buffer,
           3,
           halide_type_t(halide_type_float, 32),
@@ -856,7 +865,7 @@ int main(int argc, char **argv) {
     );
     EXPECT_EQ(0, result);
 
-    verify(input, output0, output1, output_scalar, output_array[0], output_array[1]);
+    verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer);
 
     check_metadata(*metadata_tester_metadata(), false);
     if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {
