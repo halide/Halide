@@ -628,7 +628,7 @@ void StubEmitter::emit() {
     stream << indent() << "};\n";
     stream << "\n";
 
-    stream << indent() << "NO_INLINE static Outputs apply(\n";
+    stream << indent() << "NO_INLINE static Outputs generate(\n";
     indent_level++;
     stream << indent() << "const GeneratorContext& context,\n";
     stream << indent() << "const Inputs& inputs,\n";
@@ -655,7 +655,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << indent() << "// overload to allow GeneratorContext-pointer\n";
-    stream << indent() << "inline static Outputs apply(\n";
+    stream << indent() << "inline static Outputs generate(\n";
     indent_level++;
     stream << indent() << "const GeneratorContext* context,\n";
     stream << indent() << "const Inputs& inputs,\n";
@@ -664,13 +664,13 @@ void StubEmitter::emit() {
     stream << indent() << ")\n";
     stream << indent() << "{\n";
     indent_level++;
-    stream << indent() << "return apply(*context, inputs, generator_params);\n";
+    stream << indent() << "return generate(*context, inputs, generator_params);\n";
     indent_level--;
     stream << indent() << "}\n";
     stream << "\n";
 
     stream << indent() << "// overload to allow Target instead of GeneratorContext.\n";
-    stream << indent() << "inline static Outputs apply(\n";
+    stream << indent() << "inline static Outputs generate(\n";
     indent_level++;
     stream << indent() << "const Target& target,\n";
     stream << indent() << "const Inputs& inputs,\n";
@@ -679,7 +679,7 @@ void StubEmitter::emit() {
     stream << indent() << ")\n";
     stream << indent() << "{\n";
     indent_level++;
-    stream << indent() << "return apply(Halide::GeneratorContext(target), inputs, generator_params);\n";
+    stream << indent() << "return generate(Halide::GeneratorContext(target), inputs, generator_params);\n";
     indent_level--;
     stream << indent() << "}\n";
     stream << "\n";
