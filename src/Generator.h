@@ -2817,7 +2817,7 @@ public:
     template <typename... Args>
     void apply(const Args &...args) {
         set_inputs(args...);
-        (void) get_pipeline();
+        build_pipeline();
     }
 
 private:
