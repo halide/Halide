@@ -19,9 +19,9 @@ struct float16_t {
     /// \name Constructors
     /// @{
 
-    /** Construct from a float, double, or int using a particular rounding mode.
-     *  A warning will be emitted if the result cannot be represented exactly
-     *  and error will be raised if the conversion results in overflow.
+    /** Construct from a float, double, or int using
+     * round-to-nearest-ties-to-even. Out-of-range values become +/-
+     * infinity.
      */
     // @{
     EXPORT explicit float16_t(float value);
