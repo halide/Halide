@@ -1,4 +1,5 @@
 #include "LICM.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -168,11 +169,12 @@ class GroupLoopInvariants : public IRMutator {
             }
         }
     public:
-        int result = -1;
+        int result = 0;
         ExprDepth(const Scope<int> &var_depth) : depth(var_depth) {}
     };
 
     int expr_depth(const Expr &e) {
+        if (is_const(e)) return 0x7fffffff;
         ExprDepth depth(var_depth);
         e.accept(&depth);
         return depth.result;
@@ -224,20 +226,27 @@ class GroupLoopInvariants : public IRMutator {
         vector<Term> terms = extract_summation(e);
 
         Expr result;
+        bool positive = true;
         while (!terms.empty()) {
             Term next = terms.back();
             terms.pop_back();
             if (result.defined()) {
-                if (next.positive) {
+                if (next.positive == positive) {
                     result += next.expr;
+                } else if (next.positive) {
+                    result = next.expr - result;
+                    positive = true;
                 } else {
                     result -= next.expr;
                 }
-            } else if (next.positive) {
-                result = next.expr;
             } else {
-                result = make_zero(next.expr.type()) - next.expr;
+                result = next.expr;
+                positive = next.positive;
             }
+        }
+
+        if (!positive) {
+            result = make_zero(result.type()) - result;
         }
 
         return result;
@@ -277,6 +286,7 @@ class GroupLoopInvariants : public IRMutator {
 // Turn for loops of size one into let statements
 Stmt loop_invariant_code_motion(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
+    s = common_subexpression_elimination(s);
     s = LICM().mutate(s);
     return s;
 }
