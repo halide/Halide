@@ -893,7 +893,7 @@ public:
         decref();
     }
 
-    /** Get a pointer to the raw buffer_t this wraps. */
+    /** Get a pointer to the raw halide_buffer_t this wraps. */
     // @{
     halide_buffer_t *raw_buffer() {
         return &buf;
