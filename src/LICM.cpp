@@ -10,6 +10,8 @@ namespace Internal {
 
 using std::string;
 using std::map;
+using std::vector;
+using std::pair;
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
@@ -149,9 +151,134 @@ class LICM : public IRMutator {
     }
 };
 
+
+// Reassociate summations to group together the loop invariants. Useful to run before LICM.
+class GroupLoopInvariants : public IRMutator {
+    using IRMutator::visit;
+
+    Scope<int> var_depth;
+
+    class ExprDepth : public IRVisitor {
+        using IRVisitor::visit;
+        const Scope<int> &depth;
+
+        void visit(const Variable *op) {
+            if (depth.contains(op->name)) {
+                result = std::max(result, depth.get(op->name));
+            }
+        }
+    public:
+        int result = -1;
+        ExprDepth(const Scope<int> &var_depth) : depth(var_depth) {}
+    };
+
+    int expr_depth(const Expr &e) {
+        ExprDepth depth(var_depth);
+        e.accept(&depth);
+        return depth.result;
+    }
+
+    struct Term {
+        Expr expr;
+        bool positive;
+        int depth;
+    };
+
+    vector<Term> extract_summation(Expr e) {
+        vector<Term> pending, terms;
+        pending.push_back({e, true, 0});
+        while (!pending.empty()) {
+            Term next = pending.back();
+            pending.pop_back();
+            const Add *add = next.expr.as<Add>();
+            const Sub *sub = next.expr.as<Sub>();
+            if (add) {
+                pending.push_back({add->a, next.positive, 0});
+                pending.push_back({add->b, next.positive, 0});
+            } else if (sub) {
+                pending.push_back({sub->a, next.positive, 0});
+                pending.push_back({sub->b, !next.positive, 0});
+            } else {
+                next.expr = mutate(next.expr);
+                if (next.expr.as<Add>() || next.expr.as<Sub>()) {
+                    // After mutation it became an add or sub, throw it back on the pending queue.
+                    pending.push_back(next);
+                } else {
+                    next.depth = expr_depth(next.expr);
+                    terms.push_back(next);
+                }
+            }
+        }
+
+        // Sort the terms by loop depth
+        std::sort(terms.begin(), terms.end(),
+                  [](const Term &a, const Term &b) {
+                      return a.depth > b.depth;
+                  });
+
+        return terms;
+    }
+
+    Expr reassociate_summation(Expr e) {
+
+        vector<Term> terms = extract_summation(e);
+
+        Expr result;
+        while (!terms.empty()) {
+            Term next = terms.back();
+            terms.pop_back();
+            if (result.defined()) {
+                if (next.positive) {
+                    result += next.expr;
+                } else {
+                    result -= next.expr;
+                }
+            } else if (next.positive) {
+                result = next.expr;
+            } else {
+                result = make_zero(next.expr.type()) - next.expr;
+            }
+        }
+
+        return result;
+    }
+
+    void visit(const Sub *op) {
+        expr = reassociate_summation(op);
+    }
+
+    void visit(const Add *op) {
+        expr = reassociate_summation(op);
+    }
+
+    int depth = 0;
+
+    void visit(const For *op) {
+        depth++;
+        var_depth.push(op->name, depth);
+        IRMutator::visit(op);
+        var_depth.pop(op->name);
+        depth--;
+    }
+
+    void visit(const Let *op) {
+        var_depth.push(op->name, expr_depth(op->value));
+        IRMutator::visit(op);
+        var_depth.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {
+        var_depth.push(op->name, expr_depth(op->value));
+        IRMutator::visit(op);
+        var_depth.pop(op->name);
+    }
+};
+
 // Turn for loops of size one into let statements
 Stmt loop_invariant_code_motion(Stmt s) {
-    return LICM().mutate(s);
+    s = GroupLoopInvariants().mutate(s);
+    s = LICM().mutate(s);
+    return s;
 }
 
 }
