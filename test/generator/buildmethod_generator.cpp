@@ -9,6 +9,7 @@ namespace {
 class BuildMethod : public Halide::Generator<BuildMethod> {
 public:
     GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
+    ScheduleParam<int> vectorize{ "vectorize", 1 };
 
     ImageParam input{Halide::Float(32), 3, "input"};
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
@@ -18,6 +19,7 @@ public:
 
         Func g;
         g(x, y, c) = cast<int32_t>(input(x, y, c) * compiletime_factor * runtime_factor);
+        g.vectorize(x, natural_vector_size<int32_t>() * vectorize);
         return g;
     }
 };

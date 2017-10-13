@@ -1275,7 +1275,16 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
     inputs_set = true;
 }
 
+void GeneratorBase::generate() {
+    user_error << "You must provide an override for the generate() method in your Generator.";
+}
+
+void GeneratorBase::schedule() {
+    // No user error: it's OK for a Generator to omit the override of schedule()
+}
+
 void GeneratorBase::track_parameter_values(bool include_outputs) {
+    internal_assert(inputs_set);
     ParamInfo &pi = param_info();
     for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
@@ -1285,6 +1294,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
         }
     }
     if (include_outputs) {
+        internal_assert(outputs_set);
         for (auto output : pi.filter_outputs) {
             if (output->kind() == IOKind::Buffer) {
                 Parameter p = output->parameter();
@@ -1322,54 +1332,73 @@ void GeneratorBase::advance_phase(Phase new_phase) {
     phase = new_phase;
 }
 
+Func GeneratorBase::build() {
+    return Func();
+}
 
-void GeneratorBase::pre_generate() {
+void GeneratorBase::init_input_output_internals() {
+    ParamInfo &pi = param_info();
+    if (!inputs_set) {
+        for (auto input : pi.filter_inputs) {
+            input->init_internals();
+        }
+        inputs_set = true;
+    }
+    if (!outputs_set) {
+        for (auto output : pi.filter_outputs) {
+            output->init_internals();
+        }
+        outputs_set = true;
+    }
+}
+
+Pipeline GeneratorBase::build_pipeline() {
+    init_input_output_internals();
+
+    // Call the build() method: if it returns an undefined Func(), assume that
+    // it's the default (legacy) version and we should call generate()/schedule()
+    // instead. Note that we must advance the phase to 'GenerateCalled' to allow
+    // real build() methods to access GeneratorParams; we must then explicitly
+    // reset the phase back to InputsSet if the build() method is fake and we need
+    // to call generate()/schedule().
+    Phase prev_phase = phase;
     advance_phase(GenerateCalled);
+    Func f = build();
+    if (f.defined()) {
+        ParamInfo &pi = param_info();
+        user_assert(pi.filter_outputs.empty()) << "May not use build() method with Output<>.";
+        return Pipeline(f);
+    } else {
+        // Resetting the phase explicitly is distasteful but expedient.
+        phase = prev_phase;
+        call_generate();
+        call_schedule();
+        return get_pipeline();
+    }
+}
+
+void GeneratorBase::call_generate() {
+    advance_phase(GenerateCalled);
+
     ParamInfo &pi = param_info();
     user_assert(pi.filter_params.empty()) << "May not use generate() method with Param<> or ImageParam.";
     user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
-    if (!inputs_set) {
-        for (auto input : pi.filter_inputs) {
-            input->init_internals();
-        }
-        inputs_set = true;
-    }
-    for (auto output : pi.filter_outputs) {
-        output->init_internals();
-    }
+    init_input_output_internals();
     track_parameter_values(false);
-}
 
-void GeneratorBase::post_generate() {
+    generate();
+
     track_parameter_values(true);
 }
 
-void GeneratorBase::pre_schedule() {
+void GeneratorBase::call_schedule() {
     advance_phase(ScheduleCalled);
     track_parameter_values(true);
-}
 
-void GeneratorBase::post_schedule() {
-    track_parameter_values(true);
-}
+    schedule();
 
-void GeneratorBase::pre_build() {
-    advance_phase(GenerateCalled);
-    advance_phase(ScheduleCalled);
-    ParamInfo &pi = param_info();
-    user_assert(pi.filter_outputs.empty()) << "May not use build() method with Output<>.";
-    if (!inputs_set) {
-        for (auto input : pi.filter_inputs) {
-            input->init_internals();
-        }
-        inputs_set = true;
-    }
-    track_parameter_values(false);
-}
-
-void GeneratorBase::post_build() {
     track_parameter_values(true);
 }
 
