@@ -22,11 +22,11 @@ int main(int argc, char **argv) {
     // Demonstrate (and test) various ways to use a Stub to invoke a Generator with the JIT.
 
     {
-        // The simplest way is to just use the Stub's static "apply" method.
+        // The simplest way is to just use the Stub's static "generate" method.
         //
         // The Generator's Input<>s are specified via a struct that is initialized
         // via an {initializer-list}, in the order the Input<>s are declared in the Generator.
-        Func f = example::apply(context, {runtime_factor});
+        Func f = example::generate(context, {runtime_factor});
         Buffer<int32_t> img = f.realize(kSize, kSize, 3);
         verify(img, 1.f, runtime_factor, 3);
     }
@@ -36,14 +36,14 @@ int main(int argc, char **argv) {
         example::Inputs inputs;
         inputs.runtime_factor = runtime_factor;
 
-        Func f = example::apply(context, inputs);
+        Func f = example::generate(context, inputs);
         Buffer<int32_t> img = f.realize(kSize, kSize, 3);
         verify(img, 1.f, runtime_factor, 3);
     }
 
     {
         // We can also just call realize() directly, without assigning to a Func.
-        Buffer<int32_t> img = example::apply(context, {runtime_factor}).realize(kSize, kSize, 3);
+        Buffer<int32_t> img = example::generate(context, {runtime_factor}).realize(kSize, kSize, 3);
         verify(img, 1.f, runtime_factor, 3);
     }
 
@@ -55,18 +55,18 @@ int main(int argc, char **argv) {
         example::GeneratorParams gp;
         gp.compiletime_factor = 2.5f;
 
-        Func f = example::apply(context, {runtime_factor}, gp);
+        Func f = example::generate(context, {runtime_factor}, gp);
         Buffer<int32_t> img = f.realize(kSize, kSize, 3);
         verify(img, gp.compiletime_factor, runtime_factor, 3);
     }
 
     {
-        // apply() actually returns an Outputs struct, which contains all of the Generator's
+        // generate() actually returns an Outputs struct, which contains all of the Generator's
         // Output<> and ScheduleParam<> fields. If there is just a single Output<>,
         // you can assign a Func to it directly (as we did in previous examples).
         //
         // In this case, we'll save it to a temporary so we can set some of its ScheduleParams.
-        example::Outputs result = example::apply(context, {runtime_factor});
+        example::Outputs result = example::generate(context, {runtime_factor});
 
         // For purposes of this example, don't vectorize or parallelize. (Note that
         // we can set ScheduleParams any time before we realize.)
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 
     {
         // You can also explicitly create a Stub instance and use it in a "stateful" manner;
-        // this is usually a bit less convenient that simply using the static apply()
+        // this is usually a bit less convenient that simply using the static generate()
         // method, in that you must explicitly manage the instance and call the
         // schedule() method yourself:
 

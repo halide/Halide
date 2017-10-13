@@ -51,7 +51,7 @@ public:
         // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
-        StubTest::Outputs out = StubTest::apply(this, inputs, gp);
+        StubTest::Outputs out = StubTest::generate(this, inputs, gp);
 
         float32_buffer_output = out.typed_buffer_output;
         int32_buffer_output = out.untyped_buffer_output;
