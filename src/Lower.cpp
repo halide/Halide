@@ -293,7 +293,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
-    s = loop_invariant_code_motion(s);
 
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Detecting varying attributes...\n";
@@ -308,6 +307,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
+    s = loop_invariant_code_motion(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     debug(1) << "Splitting off Hexagon offload...\n";
