@@ -11,8 +11,8 @@ namespace Halide {
 namespace Internal {
 
 struct SolverResult {
-        Expr result;
-        bool fully_solved;
+    Expr result;
+    bool fully_solved;
 };
 
 /** Attempts to collect all instances of a variable in an expression
