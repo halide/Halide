@@ -21,6 +21,10 @@ typedef int64_t ssize_t;
 
 #include "inconsolata.h"
 #include "HalideRuntime.h"
+#include "HalideTraceUtils.h"
+
+using namespace Halide;
+using namespace Internal;
 
 namespace {
 
@@ -30,110 +34,6 @@ using std::string;
 using std::queue;
 using std::array;
 using std::pair;
-
-// A struct representing a single Halide tracing packet.
-struct Packet : public halide_trace_packet_t {
-    // Not all of this will be used, but this
-    // is the max possible packet size we
-    // consider here.
-    uint8_t payload[4096];
-
-    int get_coord(int idx) const {
-        return coordinates()[idx];
-    }
-
-    template<typename T>
-    T get_value_as(int idx) const {
-        switch (type.code) {
-        case halide_type_int:
-            switch (type.bits) {
-            case 8:
-                return (T)(((const int8_t *)value())[idx]);
-            case 16:
-                return (T)(((const int16_t *)value())[idx]);
-            case 32:
-                return (T)(((const int32_t *)value())[idx]);
-            case 64:
-                return (T)(((const int64_t *)value())[idx]);
-            default:
-                bad_type_error();
-            }
-            break;
-        case halide_type_uint:
-            switch (type.bits) {
-            case 8:
-                return (T)(((const uint8_t *)value())[idx]);
-            case 16:
-                return (T)(((const uint16_t *)value())[idx]);
-            case 32:
-                return (T)(((const uint32_t *)value())[idx]);
-            case 64:
-                return (T)(((const uint64_t *)value())[idx]);
-            default:
-                bad_type_error();
-            }
-            break;
-        case halide_type_float:
-            switch (type.bits) {
-            case 32:
-                return (T)(((const float *)value())[idx]);
-            case 64:
-                return (T)(((const double *)value())[idx]);
-            default:
-                bad_type_error();
-            }
-            break;
-        default:
-            bad_type_error();
-        }
-        return (T)0;
-    }
-
-    // Grab a packet from stdin. Returns false when stdin closes.
-    bool read_from_stdin() {
-        uint32_t header_size = (uint32_t)sizeof(halide_trace_packet_t);
-        if (!read_stdin(this, header_size)) {
-            return false;
-        }
-        uint32_t payload_size = size - header_size;
-        if (payload_size > (uint32_t)sizeof(payload)) {
-            fprintf(stderr, "Payload larger than %d bytes in trace stream (%d)\n", (int)sizeof(payload), (int)payload_size);
-            abort();
-            return false;
-        }
-        if (!read_stdin(payload, payload_size)) {
-            fprintf(stderr, "Unexpected EOF mid-packet");
-            return false;
-        }
-        return true;
-    }
-
-private:
-    // Do a blocking read of some number of bytes from stdin.
-    bool read_stdin(void *d, ssize_t size) {
-        uint8_t *dst = (uint8_t *)d;
-        if (!size) return true;
-        for (;;) {
-            ssize_t s = read(0, dst, size);
-            if (s == 0) {
-                // EOF
-                return false;
-            } else if (s < 0) {
-                perror("Failed during read");
-                exit(-1);
-                return 0;
-            } else if (s == size) {
-                return true;
-            }
-            size -= s;
-            dst += s;
-        }
-    }
-
-    void bad_type_error() const {
-        fprintf(stderr, "Can't visualize packet with type: %d bits: %d\n", type.code, type.bits);
-    }
-};
 
 // A struct specifying a text label that will appear on the screen at some point.
 struct Label {
