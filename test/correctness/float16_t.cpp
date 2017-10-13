@@ -10,10 +10,10 @@ int main() {
         Param<float16_t> p;
         p.set(float16_t(0.75));
 
-        float16_t val = evaluate<float16_t>(2*(p + 1));
+        float16_t val = evaluate<float16_t>(p);
 
-        if ((float)val != 3.5f) {
-            printf("Expected 3.5, got %f\n", (float)val);
+        if ((float)val != 0.75f) {
+            printf("Expected 0.75, got %f\n", (float)val);
         }
     }
 
