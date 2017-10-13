@@ -1357,12 +1357,12 @@ Pipeline GeneratorBase::build_pipeline() {
 
     // Call the build() method: if it returns an undefined Func(), assume that
     // it's the default (legacy) version and we should call generate()/schedule()
-    // instead. Note that we must advance the phase to 'GenerateCalled' to allow
-    // real build() methods to access GeneratorParams; we must then explicitly
-    // reset the phase back to InputsSet if the build() method is fake and we need
-    // to call generate()/schedule().
+    // instead. Note that we must advance the phase to allow real build() methods
+    // to access GeneratorParams; we must then explicitly reset the phase back to
+    // what it was if the build() method is fake and we need to call generate()/schedule().
     Phase prev_phase = phase;
     advance_phase(GenerateCalled);
+    advance_phase(ScheduleCalled);
     Func f = build();
     if (f.defined()) {
         ParamInfo &pi = param_info();
