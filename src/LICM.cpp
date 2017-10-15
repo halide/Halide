@@ -5,6 +5,8 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -140,9 +142,38 @@ class LICM : public IRMutator {
             new_stmt = For::make(loop->name, loop->min, loop->extent,
                                  loop->for_type, loop->device_api, mutate(loop->body));
 
-            // Wrap lets for the lifted invariants
+
+
+            // As an optimization to reduce register pressure, take
+            // the set of expressions to lift and check if any can
+            // cheaply be computed from others. If so it's better to
+            // do that than to load multiple related values off the
+            // stack. We currently only consider expressions that are
+            // the sum of two variables already used in the kernel, or
+            // a variable plus a constant.
+
+            vector<Expr> exprs;
+            vector<string> names;
             for (const auto &p : lifter.lifted) {
-                new_stmt = LetStmt::make(p.second, p.first, new_stmt);
+                exprs.push_back(p.first);
+                names.push_back(p.second);
+            }
+
+            for (size_t i = 0; i < exprs.size(); i++) {
+                const Add *add = exprs[i].as<Add>();
+                const Variable *var_a = add ? add->a.as<Variable>() : nullptr;
+                const Variable *var_b = add ? add->b.as<Variable>() : nullptr;
+                if (add && ((is_const(add->a) || (var_a && stmt_uses_var(new_stmt, var_a->name))) &&
+                            (is_const(add->b) || (var_b && stmt_uses_var(new_stmt, var_b->name))))) {
+                    new_stmt = substitute(names[i], exprs[i], new_stmt);
+                    exprs[i] = Expr();
+                }
+            }
+
+            // Wrap lets for the lifted invariants
+            for (size_t i = 0; i < exprs.size(); i++) {
+                if (!exprs[i].defined()) continue;
+                new_stmt = LetStmt::make(names[i], exprs[i], new_stmt);
             }
 
             stmt = new_stmt;
@@ -174,7 +205,6 @@ class GroupLoopInvariants : public IRMutator {
     };
 
     int expr_depth(const Expr &e) {
-        if (is_const(e)) return 0x7fffffff;
         ExprDepth depth(var_depth);
         e.accept(&depth);
         return depth.result;
@@ -281,6 +311,7 @@ class GroupLoopInvariants : public IRMutator {
         IRMutator::visit(op);
         var_depth.pop(op->name);
     }
+
 };
 
 // Turn for loops of size one into let statements
@@ -288,6 +319,7 @@ Stmt loop_invariant_code_motion(Stmt s) {
     s = GroupLoopInvariants().mutate(s);
     s = common_subexpression_elimination(s);
     s = LICM().mutate(s);
+    s = simplify_exprs(s);
     return s;
 }
 
