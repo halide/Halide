@@ -103,11 +103,16 @@ public:
             // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c);
 
             // Schedule the remaining blurs and the sampling at the end similarly.
-            blurx.compute_root().reorder(c, x, y, z).unroll(c)
+            blurx.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
                 .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-            blury.compute_root().reorder(c, x, y, z).unroll(c)
+            blury.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
                 .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
             bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
+            interpolated.compute_at(bilateral_grid, xi).vectorize(c);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
