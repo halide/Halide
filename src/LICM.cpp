@@ -135,20 +135,6 @@ class LICM : public IRMutator {
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter.mutate(op);
 
-            vector<Expr> exprs;
-            vector<string> names;
-            for (const auto &p : lifter.lifted) {
-                exprs.push_back(p.first);
-                names.push_back(p.second);
-            }
-
-            // Recurse
-            const For *loop = new_stmt.as<For>();
-            internal_assert(loop);
-
-            new_stmt = For::make(loop->name, loop->min, loop->extent,
-                                 loop->for_type, loop->device_api, mutate(loop->body));
-
             // As an optimization to reduce register pressure, take
             // the set of expressions to lift and check if any can
             // cheaply be computed from others. If so it's better to
@@ -157,6 +143,20 @@ class LICM : public IRMutator {
             // the sum, difference, or product of two variables
             // already used in the kernel, or a variable plus a
             // constant.
+
+            // Convert all lifted expressions into canonical form.
+            map<Expr, string, IRDeepCompare> lifted;
+            for (auto it : lifter.lifted) {
+                lifted[simplify(it.first)] = it.second;
+            }
+
+            // Linearize all the exprs and names
+            vector<Expr> exprs;
+            vector<string> names;
+            for (const auto &p : lifted) {
+                exprs.push_back(p.first);
+                names.push_back(p.second);
+            }
 
             for (size_t i = 0; i < exprs.size(); i++) {
                 vector<Expr> args;
@@ -178,8 +178,8 @@ class LICM : public IRMutator {
                 bool should_substitute = !args.empty();
                 for (Expr &e : args) {
                     const Variable *var = e.as<Variable>();
-                    auto it = lifter.lifted.find(e);
-                    if (it != lifter.lifted.end()) {
+                    auto it = lifted.find(e);
+                    if (it != lifted.end()) {
                         // This expression is one of the other lifted
                         // things, so it's used in the inner loop.
                         e = Variable::make(e.type(), it->second);
@@ -197,14 +197,23 @@ class LICM : public IRMutator {
                 if (should_substitute) {
                     // Build the substitution
                     Expr subs = build_substitution(args[0], args[1]);
+                    // Inject it
                     new_stmt = substitute(names[i], subs, new_stmt);
                     exprs[i] = Expr();
                 }
             }
 
+            // Recurse
+            const For *loop = new_stmt.as<For>();
+            internal_assert(loop);
+
+            new_stmt = For::make(loop->name, loop->min, loop->extent,
+                                 loop->for_type, loop->device_api, mutate(loop->body));
+
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
                 if (!exprs[i].defined()) continue;
+                if (!stmt_uses_var(new_stmt, names[i])) continue;
                 new_stmt = LetStmt::make(names[i], exprs[i], new_stmt);
             }
 
