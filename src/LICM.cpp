@@ -181,7 +181,8 @@ class LICM : public IRMutator {
                     auto it = lifted.find(e);
                     if (it != lifted.end()) {
                         // This expression is one of the other lifted
-                        // things, so it's used in the inner loop.
+                        // things, so it's used in the inner
+                        // loop.
                         e = Variable::make(e.type(), it->second);
                     } else if (var && stmt_uses_var(new_stmt, var->name)) {
                         // This expression is a Variable already used
@@ -199,6 +200,7 @@ class LICM : public IRMutator {
                     Expr subs = build_substitution(args[0], args[1]);
                     // Inject it
                     new_stmt = substitute(names[i], subs, new_stmt);
+                    lifted.erase(exprs[i]);
                     exprs[i] = Expr();
                 }
             }
