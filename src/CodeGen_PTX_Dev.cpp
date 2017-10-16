@@ -73,6 +73,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         }
     }
 
+    // Get the alignment of the integer arguments
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].alignment.modulus) {
+            alignment_info.push(args[i].name, args[i].alignment);
+        }
+    }
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
