@@ -5316,7 +5316,7 @@ Stmt simplify(Stmt s, bool simplify_lets,
 class SimplifyExprs : public IRMutator {
 public:
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         return simplify(e);
     }
 };
