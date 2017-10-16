@@ -135,23 +135,6 @@ class LICM : public IRMutator {
             LiftLoopInvariants lifter;
             Stmt new_stmt = lifter.mutate(op);
 
-            // Recurse
-            const For *loop = new_stmt.as<For>();
-            internal_assert(loop);
-
-            new_stmt = For::make(loop->name, loop->min, loop->extent,
-                                 loop->for_type, loop->device_api, mutate(loop->body));
-
-
-
-            // As an optimization to reduce register pressure, take
-            // the set of expressions to lift and check if any can
-            // cheaply be computed from others. If so it's better to
-            // do that than to load multiple related values off the
-            // stack. We currently only consider expressions that are
-            // the sum of two variables already used in the kernel, or
-            // a variable plus a constant.
-
             vector<Expr> exprs;
             vector<string> names;
             for (const auto &p : lifter.lifted) {
@@ -159,13 +142,61 @@ class LICM : public IRMutator {
                 names.push_back(p.second);
             }
 
+            // Recurse
+            const For *loop = new_stmt.as<For>();
+            internal_assert(loop);
+
+            new_stmt = For::make(loop->name, loop->min, loop->extent,
+                                 loop->for_type, loop->device_api, mutate(loop->body));
+
+            // As an optimization to reduce register pressure, take
+            // the set of expressions to lift and check if any can
+            // cheaply be computed from others. If so it's better to
+            // do that than to load multiple related values off the
+            // stack. We currently only consider expressions that are
+            // the sum or difference of two variables already used in
+            // the kernel, or a variable plus a constant.
+
             for (size_t i = 0; i < exprs.size(); i++) {
-                const Add *add = exprs[i].as<Add>();
-                const Variable *var_a = add ? add->a.as<Variable>() : nullptr;
-                const Variable *var_b = add ? add->b.as<Variable>() : nullptr;
-                if (add && ((is_const(add->a) || (var_a && stmt_uses_var(new_stmt, var_a->name))) &&
-                            (is_const(add->b) || (var_b && stmt_uses_var(new_stmt, var_b->name))))) {
-                    new_stmt = substitute(names[i], exprs[i], new_stmt);
+                vector<Expr> args;
+                decltype(&Add::make) build_substitution = nullptr;
+                // Build a substitution...
+                if (const Add *add = exprs[i].as<Add>()) {
+                    args.push_back(add->a);
+                    args.push_back(add->b);
+                    build_substitution = &Add::make;
+                } else if (const Sub *sub = exprs[i].as<Sub>()) {
+                    args.push_back(sub->a);
+                    args.push_back(sub->b);
+                    build_substitution = &Sub::make;
+                } else if (const Mul *mul = exprs[i].as<Mul>()) {
+                    args.push_back(mul->a);
+                    args.push_back(mul->b);
+                    build_substitution = &Mul::make;
+                }
+                bool should_substitute = !args.empty();
+                for (Expr &e : args) {
+                    const Variable *var = e.as<Variable>();
+                    auto it = lifter.lifted.find(e);
+                    if (it != lifter.lifted.end()) {
+                        // This expression is one of the other lifted
+                        // things, so it's used in the inner loop.
+                        e = Variable::make(e.type(), it->second);
+                    } else if (var && stmt_uses_var(new_stmt, var->name)) {
+                        // This expression is a Variable already used
+                        // in the inner loop, so it's free.
+                    } else if (is_const(e)) {
+                        // A const is always free.
+                    } else {
+                        // This expression would have to be computed.
+                        should_substitute = false;
+                    }
+                }
+
+                if (should_substitute) {
+                    // Build the substitution
+                    Expr subs = build_substitution(args[0], args[1]);
+                    new_stmt = substitute(names[i], subs, new_stmt);
                     exprs[i] = Expr();
                 }
             }
