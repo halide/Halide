@@ -154,8 +154,9 @@ class LICM : public IRMutator {
             // cheaply be computed from others. If so it's better to
             // do that than to load multiple related values off the
             // stack. We currently only consider expressions that are
-            // the sum or difference of two variables already used in
-            // the kernel, or a variable plus a constant.
+            // the sum, difference, or product of two variables
+            // already used in the kernel, or a variable plus a
+            // constant.
 
             for (size_t i = 0; i < exprs.size(); i++) {
                 vector<Expr> args;
