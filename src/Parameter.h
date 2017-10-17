@@ -10,11 +10,12 @@
 
 namespace Halide {
 
-class OutputImageParam;
+class DimensionedParam;
+struct ExternFuncArgument;
 
 namespace Internal {
 
-class Constrainable;
+class DimensionedParameter;
 struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
@@ -234,8 +235,7 @@ public:
     // @}
 
 private:
-    friend class ::Halide::OutputImageParam;
-    friend class Constrainable;
+    friend class DimensionedParameter;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
@@ -250,6 +250,72 @@ private:
     int d;
 };
 
+/** A DimensionedParameter is an abstract class that provides a way make static
+ * promises about the size and stride of Parameter that are input or output buffers.
+ * It exists as a way to reduce duplicate code between ImageParam, Input<Buffer<>>,
+ * and Output<Buffer<>>. End-user code should never use it directly. */
+class DimensionedParameter {
+protected:
+    virtual ~DimensionedParameter() {}
+
+public:
+    /** Get at the internal parameter object representing this ImageParam. */
+    EXPORT virtual Internal::Parameter parameter() const = 0;
+
+    /** Get a handle on one of the dimensions for the purposes of
+     * inspecting or constraining its min, extent, or stride. */
+    EXPORT Internal::Dimension dim(int i);
+
+    /** Get a handle on one of the dimensions for the purposes of
+     * inspecting its min, extent, or stride. */
+    EXPORT const Internal::Dimension dim(int i) const;
+
+    /** Get the alignment of the host pointer in bytes. Defaults to
+     * the size of type. */
+    EXPORT int host_alignment() const;
+
+    /** Set the expected alignment of the host pointer in bytes. */
+    EXPORT DimensionedParameter &set_host_alignment(int);
+
+    /** Get the dimensionality of this image parameter */
+    EXPORT int dimensions() const;
+
+    /** Get an expression giving the minimum coordinate in dimension 0, which
+     * by convention is the coordinate of the left edge of the image */
+    EXPORT Expr left() const;
+
+    /** Get an expression giving the maximum coordinate in dimension 0, which
+     * by convention is the coordinate of the right edge of the image */
+    EXPORT Expr right() const;
+
+    /** Get an expression giving the minimum coordinate in dimension 1, which
+     * by convention is the top of the image */
+    EXPORT Expr top() const;
+
+    /** Get an expression giving the maximum coordinate in dimension 1, which
+     * by convention is the bottom of the image */
+    EXPORT Expr bottom() const;
+
+    /** Get an expression giving the extent in dimension 0, which by
+     * convention is the width of the image */
+    EXPORT Expr width() const;
+
+    /** Get an expression giving the extent in dimension 1, which by
+     * convention is the height of the image */
+    EXPORT Expr height() const;
+
+    /** Get an expression giving the extent in dimension 2, which by
+     * convention is the channel-count of the image */
+    EXPORT Expr channels() const;
+
+    /** Using a DimensionedParameter as the argument to an external stage treats it
+     * as an Expr */
+    EXPORT operator ExternFuncArgument() const;
+
+    /** Using a DimensionedParameter as the argument to an RDom treats it
+     * as a DimensionedParam */
+    EXPORT operator DimensionedParam() const;
+};
 
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);

@@ -4,13 +4,6 @@ using namespace Halide;
 
 namespace {
 
-template<typename T>
-void set_alignment_and_bounds(T *t, int size) {
-    (*t).set_host_alignment(16)
-        .dim(0).set_bounds(0, size)
-        .dim(1).set_stride(size);
-}
-
 class MatMul : public Halide::Generator<MatMul> {
 public:
 
@@ -49,9 +42,12 @@ public:
             .compute_at(prod, y)
             .vectorize(B.in().args()[0]);
 
-        set_alignment_and_bounds(&A, size);
-        set_alignment_and_bounds(&B, size);
-        set_alignment_and_bounds(&out, size);
+        const DimensionedParam bufs[] = {A, B, out};
+        for (auto c : bufs) {
+            c.set_host_alignment(16)
+             .dim(0).set_bounds(0, size)
+             .dim(1).set_stride(size);
+        }
     }
 };
 
