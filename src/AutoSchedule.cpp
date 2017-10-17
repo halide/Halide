@@ -3174,9 +3174,17 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
             for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
                 internal_assert(order[i] != order[j]);
                 Function f2 = env.at(order[j]);
-                debug(5) << "Inline trivial function \"" << f1.name()
-                         << "\" inside \"" << f2.name() << "\"\n";
-                inline_function(f2, f1);
+
+                if (f2.has_extern_definition() &&  !f1.is_wrapper()) {
+                    debug(5) << "Skip inlining of function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\", because "
+                             << "non-wrapper functions cannot be inlined inside "
+                             << "extern functions.\n";
+                } else {
+                    debug(5) << "Inline trivial function \"" << f1.name()
+                             << "\" inside \"" << f2.name() << "\"\n";
+                    inline_function(f2, f1);
+                }
             }
         }
     }
