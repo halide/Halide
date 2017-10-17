@@ -264,7 +264,7 @@ public:
         : stream(dest),
           generator_registered_name(generator_registered_name),
           generator_stub_name(generator_stub_name),
-          generator_params(filter_params(generator_params)),
+          generator_params(select_generator_params(generator_params)),
           schedule_params(schedule_params),
           inputs(inputs),
           outputs(outputs) {
@@ -293,7 +293,7 @@ private:
     const std::vector<Internal::GeneratorOutputBase *> outputs;
     int indent_level{0};
 
-    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in) {
+    std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
             if (p->name == "target") continue;
