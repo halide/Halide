@@ -17,6 +17,8 @@ public:
         Var x, y;
         output(x, y) = cast<uint8_t>(0);
         output(r.x, r.y) += input(r.x, r.y) ^ cast<uint8_t>(0xff);
+
+        RDom r2(output);  // unused, just here to ensure it compiles
     }
 };
 
