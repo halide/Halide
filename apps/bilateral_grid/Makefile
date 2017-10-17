@@ -12,7 +12,7 @@ $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 
 $(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true -e static_library,h,schedule
 
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)

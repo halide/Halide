@@ -157,15 +157,6 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     return generate_schedules(contents->outputs, target, arch_params);
 }
 
-string Pipeline::auto_schedule(const Target &target) {
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "Automatic scheduling is currently supported only on these architectures.";
-    // Default machine parameters for generic CPU architecture.
-    MachineParams arch_params(16, 16 * 1024 * 1024, 40);
-    return generate_schedules(contents->outputs, target, arch_params);
-}
-
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
