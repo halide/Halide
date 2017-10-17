@@ -380,6 +380,16 @@ def _gengen_impl(ctx):
     input_manifests = None
     hexagon_code_signer = ""
 
+  progress_message = "Executing generator %s with target (%s) args (%s)." % (
+      ctx.attr.generator_closure.generator_name,
+       ",".join(halide_target),
+       ctx.attr.halide_generator_args)
+  for o in outputs:
+    s = o.path
+    if s.endswith(".h") or s.endswith(".a") or s.endswith(".lib"):
+      continue
+    progress_message += "\nEmitting extra Halide output: %s" % s
+
   env = {
       "HL_DEBUG_CODEGEN": str(ctx.attr.debug_codegen_level),
       "HL_HEXAGON_CODE_SIGNER": hexagon_code_signer,
