@@ -93,6 +93,9 @@ Outputs compute_outputs(const Target &target,
             output_files.static_library_name = base_path + get_extension(".a", options);
         }
     }
+    if (options.emit_schedule) {
+        output_files.schedule_name = base_path + get_extension(".schedule", options);
+    }
     return output_files;
 }
 
@@ -296,7 +299,10 @@ private:
     std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
-            if (p->name == "target") continue;
+            // These are always propagated specially.
+            if (p->name == "target" ||
+                p->name == "auto_schedule" ||
+                p->name == "machine_params") continue;
             if (p->is_synthetic_param()) continue;
             out.push_back(p);
         }
@@ -791,7 +797,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub]. If omitted, default value is [static_library, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule]. If omitted, default value is [static_library, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -906,6 +912,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_static_library = true;
             } else if (opt == "cpp_stub") {
                 emit_options.emit_cpp_stub = true;
+            } else if (opt == "schedule") {
+                emit_options.emit_schedule = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
                      << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
@@ -988,8 +996,10 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    // "target" is always readable.
+    // These are always readable.
     if (name == "target") return;
+    if (name == "auto_schedule") return;
+    if (name == "machine_params") return;
     user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
 }
 
@@ -1407,17 +1417,13 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
-std::string GeneratorBase::auto_schedule_outputs(const MachineParams &arch_params) {
-    return get_pipeline().auto_schedule(get_target(), arch_params);
-}
-
-std::string GeneratorBase::auto_schedule_outputs() {
-    return get_pipeline().auto_schedule(get_target());
-}
-
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
+    std::string schedule;
     Pipeline pipeline = build_pipeline();
+    if (get_auto_schedule()) {
+        schedule = pipeline.auto_schedule(get_target(), get_machine_params());
+    }
 
     // Special-case here: for certain legacy Generators, building the pipeline
     // can mutate the Params/ImageParams (mainly, to customize the type/dim
@@ -1444,6 +1450,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
     for (const auto &map_entry : *externs_map) {
         result.append(map_entry.second);
     }
+    result.set_auto_schedule(schedule);
     return result;
 }
 
