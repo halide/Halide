@@ -167,15 +167,9 @@ RDom::RDom(const Buffer<> &b) {
     init_vars(name);
 }
 
-RDom::RDom(ImageParam p) {
+RDom::RDom(const OutputImageParam &p) {
     std::string name = p.name();
     dom = make_dom_from_dimensions(p, name);
-    init_vars(name);
-}
-
-RDom::RDom(const Halide::Internal::Constrainable &c) {
-    std::string name = unique_name('r');
-    dom = make_dom_from_dimensions(c, name);
     init_vars(name);
 }
 
