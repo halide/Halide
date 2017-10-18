@@ -15,6 +15,7 @@ using std::string;
 using std::map;
 using std::vector;
 using std::pair;
+using std::set;
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
@@ -95,10 +96,12 @@ public:
 
     Expr mutate(const Expr &e) {
         if (should_lift(e)) {
-            auto it = lifted.find(e);
+            // Lift it in canonical form
+            Expr lifted_expr = simplify(e);
+            auto it = lifted.find(lifted_expr);
             if (it == lifted.end()) {
                 string name = unique_name('t');
-                lifted[e] = name;
+                lifted[lifted_expr] = name;
                 return Variable::make(e.type(), name);
             } else {
                 return Variable::make(e.type(), it->second);
@@ -115,6 +118,30 @@ class LICM : public IRMutator {
     using IRVisitor::visit;
 
     bool in_gpu_loop {false};
+
+    // Compute the cost of computing an expression inside the inner
+    // loop, compared to just loading it as a parameter.
+    int cost(Expr e, const set<string> &vars) {
+        if (is_const(e)) {
+            return 0;
+        } else if (const Variable *var = e.as<Variable>()) {
+            if (vars.count(var->name)) {
+                // We're loading this already
+                return 0;
+            } else {
+                // Would have to load this
+                return 1;
+            }
+        } else if (const Add *add = e.as<Add>()) {
+            return cost(add->a, vars) + cost(add->b, vars) + 1;
+        } else if (const Sub *sub = e.as<Sub>()) {
+            return cost(sub->a, vars) + cost(sub->b, vars) + 1;
+        } else if (const Mul *mul = e.as<Mul>()) {
+            return cost(mul->a, vars) + cost(mul->b, vars) + 1;
+        } else {
+            return 0x7fffffff;
+        }
+    }
 
     void visit(const For *op) {
         bool old_in_gpu_loop = in_gpu_loop;
@@ -144,66 +171,58 @@ class LICM : public IRMutator {
             // already used in the kernel, or a variable plus a
             // constant.
 
-            // Convert all lifted expressions into canonical form.
-            map<Expr, string, IRDeepCompare> lifted;
-            for (auto it : lifter.lifted) {
-                lifted[simplify(it.first)] = it.second;
-            }
-
             // Linearize all the exprs and names
             vector<Expr> exprs;
             vector<string> names;
-            for (const auto &p : lifted) {
+            for (const auto &p : lifter.lifted) {
                 exprs.push_back(p.first);
                 names.push_back(p.second);
             }
 
-            for (size_t i = 0; i < exprs.size(); i++) {
-                vector<Expr> args;
-                decltype(&Add::make) build_substitution = nullptr;
-                // Build a substitution...
-                if (const Add *add = exprs[i].as<Add>()) {
-                    args.push_back(add->a);
-                    args.push_back(add->b);
-                    build_substitution = &Add::make;
-                } else if (const Sub *sub = exprs[i].as<Sub>()) {
-                    args.push_back(sub->a);
-                    args.push_back(sub->b);
-                    build_substitution = &Sub::make;
-                } else if (const Mul *mul = exprs[i].as<Mul>()) {
-                    args.push_back(mul->a);
-                    args.push_back(mul->b);
-                    build_substitution = &Mul::make;
+            // Jointly CSE the lifted exprs put putting them together into a dummy Expr
+            Expr dummy_call = Call::make(Int(32), "dummy", exprs, Call::Extern);
+            dummy_call = common_subexpression_elimination(dummy_call, true);
+
+            // Peel off containing lets. These will be lifted.
+            vector<pair<string, Expr>> lets;
+            while (const Let *let = dummy_call.as<Let>()) {
+                lets.push_back({let->name, let->value});
+                dummy_call = let->body;
+            }
+
+            // Track the set of variables used by the inner loop
+            class CollectVars : public IRVisitor {
+                using IRVisitor::visit;
+                void visit(const Variable *op) {
+                    vars.insert(op->name);
                 }
-                bool should_substitute = !args.empty();
-                for (Expr &e : args) {
-                    const Variable *var = e.as<Variable>();
-                    auto it = lifted.find(e);
-                    if (it != lifted.end()) {
-                        // This expression is one of the other lifted
-                        // things, so it's used in the inner
-                        // loop.
-                        e = Variable::make(e.type(), it->second);
-                    } else if (var && stmt_uses_var(new_stmt, var->name)) {
-                        // This expression is a Variable already used
-                        // in the inner loop, so it's free.
-                    } else if (is_const(e)) {
-                        // A const is always free.
+            public:
+                set<string> vars;
+            } vars;
+            new_stmt.accept(&vars);
+
+            // Now consider substituting back in each use
+            const Call *call = dummy_call.as<Call>();
+            internal_assert(call);
+            bool converged;
+            do {
+                converged = true;
+                for (size_t i = 0; i < exprs.size(); i++) {
+                    if (!exprs[i].defined()) continue;
+                    Expr e = call->args[i];
+                    if (cost(e, vars.vars) <= 1) {
+                        // Just subs it back in - computing it is as cheap
+                        // as loading it.
+                        e.accept(&vars);
+                        new_stmt = substitute(names[i], e, new_stmt);
+                        names[i].clear();
+                        exprs[i] = Expr();
+                        converged = false;
                     } else {
-                        // This expression would have to be computed.
-                        should_substitute = false;
+                        exprs[i] = e;
                     }
                 }
-
-                if (should_substitute) {
-                    // Build the substitution
-                    Expr subs = build_substitution(args[0], args[1]);
-                    // Inject it
-                    new_stmt = substitute(names[i], subs, new_stmt);
-                    lifted.erase(exprs[i]);
-                    exprs[i] = Expr();
-                }
-            }
+            } while (!converged);
 
             // Recurse
             const For *loop = new_stmt.as<For>();
@@ -214,9 +233,15 @@ class LICM : public IRMutator {
 
             // Wrap lets for the lifted invariants
             for (size_t i = 0; i < exprs.size(); i++) {
-                if (!exprs[i].defined()) continue;
-                if (!stmt_uses_var(new_stmt, names[i])) continue;
-                new_stmt = LetStmt::make(names[i], exprs[i], new_stmt);
+                if (exprs[i].defined()) {
+                    new_stmt = LetStmt::make(names[i], exprs[i], new_stmt);
+                }
+            }
+
+            // Wrap the lets pulled out by CSE
+            while (!lets.empty()) {
+                new_stmt = LetStmt::make(lets.back().first, lets.back().second, new_stmt);
+                lets.pop_back();
             }
 
             stmt = new_stmt;
@@ -285,8 +310,9 @@ class GroupLoopInvariants : public IRMutator {
             }
         }
 
-        // Sort the terms by loop depth
-        std::sort(terms.begin(), terms.end(),
+        // Sort the terms by loop depth. Terms of equal depth are
+        // likely already in a good order, so don't mess with them.
+        std::stable_sort(terms.begin(), terms.end(),
                   [](const Term &a, const Term &b) {
                       return a.depth > b.depth;
                   });
