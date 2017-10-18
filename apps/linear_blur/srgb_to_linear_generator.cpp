@@ -21,12 +21,12 @@ public:
             // Might be x,y but might be _0,_1. Use the args() to work around.
             srgb.estimate(srgb.args()[0], 0, W)
                 .estimate(srgb.args()[1], 0, H);
-            for (int i = 2; i < srgb.args().size(); ++i) {
+            for (size_t i = 2; i < srgb.args().size(); ++i) {
                 srgb.estimate(srgb.args()[i], 0, C);
             }
             linear.estimate(x, 0, W)
                   .estimate(y, 0, H);
-            for (int i = 2; i < linear.args().size(); ++i) {
+            for (size_t i = 2; i < linear.args().size(); ++i) {
                 linear.estimate(linear.args()[i], 0, C);
             }
         } else {
