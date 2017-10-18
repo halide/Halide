@@ -740,6 +740,18 @@ const std::vector<std::string> Function::args() const {
     return arg_names;
 }
 
+bool Function::is_pure_arg(const std::string &name) const {
+    const auto &pure_def_args = contents->init_def.args();
+    for (size_t i = 0; i < pure_def_args.size(); i++) {
+        const Variable *var = pure_def_args[i].as<Variable>();
+        internal_assert(var);
+        if (var->name == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int Function::dimensions() const {
     return contents->init_def.args().size();
 }
