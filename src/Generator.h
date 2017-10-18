@@ -3065,11 +3065,6 @@ protected:
         return generator != nullptr;
     }
 
-    template<typename Ratio>
-    static double ratio_to_double() {
-        return (double)Ratio::num / (double)Ratio::den;
-    }
-
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
         return { StubInput(e) };
     }
