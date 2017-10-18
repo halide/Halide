@@ -214,8 +214,7 @@ public:
      * the argument. */
     // @{
     EXPORT RDom(const Buffer<> &);
-    EXPORT RDom(ImageParam);
-    EXPORT RDom(const Halide::Internal::Constrainable &);  // Allows Input<Buffer<>>
+    EXPORT RDom(const OutputImageParam &);
     template<typename T>
     NO_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
     // @}
