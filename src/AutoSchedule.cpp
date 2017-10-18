@@ -99,6 +99,39 @@ struct FStage {
     }
 };
 
+// Check the output_buffers() and propagate any estimates set there into the schedule's
+// estimates. If there are multiple output buffers, any estimates found on them must match
+// or assert-fail will occur. Note that after this function, we can end up in duplicates
+// if both estimate() and set_bounds_estimate() are called for the same arg; that will be
+// caught as an error later on.
+void propagate_output_buffer_estimates(const vector<Function> &outputs) {
+    for (Function out : outputs) {
+        auto args = out.args();
+        for (size_t i = 0; i < args.size(); ++i) {
+            // Extract min & extent. For multiple output-buffers, require
+            // that all match.
+            Expr min, extent;
+            for (const auto &out_buf : out.output_buffers()) {
+                internal_assert(out_buf.is_buffer());
+                Expr out_min = out_buf.min_constraint_estimate(i);
+                user_assert(!min.defined() || equal(min, out_min))
+                    << "Mismatched values for minimum bounds estimate for output var " << args[i];
+                min = out_min;
+                Expr out_extent = out_buf.extent_constraint_estimate(i);
+                user_assert(!extent.defined() || equal(extent, out_extent))
+                    << "Mismatched values for extent bounds estimate for output var " << args[i];
+                extent = out_extent;
+            }
+            if (!min.defined() && !extent.defined()) {
+                continue;
+            }
+            user_assert(min.defined() && extent.defined());
+            Bound b = {args[i], min, extent, Expr(), Expr()};
+            out.schedule().estimates().push_back(b);
+        }
+    }
+}
+
 // Check if all the pipeline outputs have estimates specified
 // on each of their dimensions; otherwise, throw an assertion.
 void check_estimates_on_outputs(const vector<Function> &outputs) {
@@ -3329,6 +3362,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     for (const auto &iter : env) {
         validate_no_partial_schedules(iter.second);
     }
+
+    // For output functions, we only care about estimates in the Schedule;
+    // check to see if estimates were set on the output_buffer() instead,
+    // and if so, propagate them into the estimates we'll use.
+    debug(2) << "Propagating output_buffer() estimates...\n";
+    propagate_output_buffer_estimates(outputs);
 
     // The auto scheduling algorithm requires estimates on the outputs of the
     // pipeline to get quantitative estimates of costs for computing functions
