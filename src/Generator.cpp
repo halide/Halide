@@ -1798,6 +1798,11 @@ void GeneratorInputBase::set_def_min_max() {
     // nothing
 }
 
+Parameter GeneratorInputBase::parameter() const {
+    internal_assert(parameters_.size() == 1);
+    return parameters_.at(0);
+}
+
 void GeneratorInputBase::verify_internals() const {
     GIOBase::verify_internals();
 
@@ -1902,6 +1907,11 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 
 void GeneratorOutputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
+}
+
+Parameter GeneratorOutputBase::parameter() const {
+    internal_assert(funcs().size() == 1);
+    return funcs().at(0).output_buffer().parameter();
 }
 
 void GeneratorOutputBase::init_internals() {

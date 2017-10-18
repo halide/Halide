@@ -14,7 +14,6 @@ class OutputImageParam;
 
 namespace Internal {
 
-class Constrainable;
 struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
@@ -235,7 +234,8 @@ public:
 
 private:
     friend class ::Halide::OutputImageParam;
-    friend class Constrainable;
+    template<typename T2> friend class GeneratorInput_Buffer;
+    template<typename T2> friend class GeneratorOutput_Buffer;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
