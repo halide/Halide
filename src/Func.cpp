@@ -1994,12 +1994,7 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     extent = cast<int32_t>(extent);
 
     invalidate_cache();
-    bool found = false;
-    for (size_t i = 0; i < func.args().size(); i++) {
-        if (var.name() == func.args()[i]) {
-            found = true;
-        }
-    }
+    bool found = func.is_pure_arg(var.name());
     user_assert(found)
         << "Can't bound variable " << var.name()
         << " of function " << name()
@@ -2013,12 +2008,7 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 
 Func &Func::estimate(Var var, Expr min, Expr extent) {
     invalidate_cache();
-    bool found = false;
-    for (size_t i = 0; i < func.args().size(); i++) {
-        if (var.name() == func.args()[i]) {
-            found = true;
-        }
-    }
+    bool found = func.is_pure_arg(var.name());
     user_assert(found)
         << "Can't provide an estimate on variable " << var.name()
         << " of function " << name()
@@ -2048,12 +2038,7 @@ Func &Func::align_bounds(Var var, Expr modulus, Expr remainder) {
 
     invalidate_cache();
 
-    bool found = false;
-    for (size_t i = 0; i < func.args().size(); i++) {
-        if (var.name() == func.args()[i]) {
-            found = true;
-        }
-    }
+    bool found = func.is_pure_arg(var.name());
     user_assert(found)
         << "Can't align bounds of variable " << var.name()
         << " of function " << name()
