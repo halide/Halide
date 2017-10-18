@@ -119,14 +119,17 @@ public:
             // been applied to the pipeline; otherwise, the auto-scheduler will
             // throw an error. The current auto-scheduler cannot handle a
             // partially-schedule pipeline.
-            //
-            // Calling auto_schedule_outputs() will apply the generated schedule
-            // automatically to members of the pipeline in addition to returning
-            // a string representation of the schedule.
-            std::string schedule = auto_schedule_outputs(machine_params);
-            std::cout << "\nSchedule:\n\n" << schedule << "\n";
 
-            // The generated schedule that is dumped to std::cout is an actual
+            // Calling auto_schedule_outputs() will apply the generated schedule
+            // automatically to members of the pipeline.
+            //
+            // If HL_DEBUG_CODEGEN is set to 3 or greater, the schedule will be dumped
+            // to stdout (along with much other information); a more useful way is
+            // to add "schedule" to the -e flag to the Generator. (In CMake and Bazel,
+            // this is done using the "extra_outputs" flag.)
+            auto_schedule_outputs(machine_params);
+
+            // The generated schedule that is dumped to file is an actual
             // Halide C++ source, which is readily copy-pasteable back into
             // this very same source file with few modifications. Programmers
             // can use this as a starting schedule and iteratively improve the
