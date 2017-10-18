@@ -108,55 +108,6 @@ Argument to_argument(const Internal::Parameter &param) {
         param.type(), param.dimensions(), def, min, max);
 }
 
-std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_depth) {
-    const int64_t int_part = static_cast<int64_t>(std::floor(d));
-    const double float_part = d - int_part;
-    if (max_depth == 0 || float_part == 0.0) {
-        return {int_part, 1};
-    }
-
-    const auto r = rational_approximation_helper(1.0/float_part, max_depth - 1);
-    const int64_t num = r.second;
-    const int64_t den = r.first;
-    if (mul_would_overflow(64, int_part, den) ||
-        add_would_overflow(64, num, int_part * den)) {
-        return {0, 0};
-    }
-
-    return {num + int_part * den, den};
-}
-
-std::pair<int64_t, int64_t> rational_approximation(double d) {
-    // Special-case non-finite numbers.
-    if (std::isnan(d)) return {0, 0};
-
-    const int64_t sign = (d < 0) ? -1 : 1;
-    if (!std::isfinite(d)) return {sign, 0};
-
-    d = std::abs(d);
-
-    // The most accurate rationals to approximate a real come from
-    // truncating its continued fraction representation.  We want the
-    // largest continued fraction possible, but at some point they'll
-    // overflow our rational type, and because they're evaluated
-    // backwards it's not easy to stop at the point which will not
-    // trigger overflow. Use binary search to find the right depth.
-    std::pair<int64_t, int64_t> best {0, 0};
-    int lo = 0, hi = 64;
-    while (lo + 1 < hi) {
-        int mid = (lo + hi)/2;
-        auto next = rational_approximation_helper(d, mid);
-        if (next.first == 0 && next.second == 0) {
-            hi = mid;
-        } else {
-            lo = mid;
-            best = next;
-        }
-    }
-
-    return {best.first * sign, best.second};
-}
-
 Func make_param_func(const Parameter &p, const std::string &name) {
     internal_assert(p.is_buffer());
     Func f(name + "_im");
@@ -264,7 +215,7 @@ public:
         : stream(dest),
           generator_registered_name(generator_registered_name),
           generator_stub_name(generator_stub_name),
-          generator_params(filter_params(generator_params)),
+          generator_params(select_generator_params(generator_params)),
           schedule_params(schedule_params),
           inputs(inputs),
           outputs(outputs) {
@@ -293,7 +244,7 @@ private:
     const std::vector<Internal::GeneratorOutputBase *> outputs;
     int indent_level{0};
 
-    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in) {
+    std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
             if (p->name == "target") continue;
@@ -581,52 +532,6 @@ void StubEmitter::emit() {
     stream << indent() << ": " << class_name << "(*context, inputs, params) {}\n";
     stream << "\n";
     indent_level--;
-
-    if (!generator_params.empty()) {
-        stream << indent() << "// templated construction method with inputs\n";
-        stream << indent() << "template<\n";
-        std::string comma = "";
-        indent_level++;
-        for (auto p : generator_params) {
-            std::string type = p->get_template_type();
-            std::string value = p->get_template_value();
-            if (type == "float" || type == "double") {
-                // floats and doubles can't be used as template value arguments;
-                // it turns out to be pretty uncommon use floating point types
-                // in GeneratorParams, but to avoid breaking these cases entirely,
-                // use std::ratio as an approximation for the default value.
-                auto ratio = rational_approximation(std::atof(value.c_str()));
-                stream << indent() << comma << "typename" << " " << p->name << " = std::ratio<" << ratio.first << ", " << ratio.second << ">\n";
-            } else {
-                stream << indent() << comma << type << " " << p->name << " = " << value << "\n";
-            }
-            comma = ", ";
-        }
-        indent_level--;
-        stream << indent() << ">\n";
-        stream << indent() << "static " << class_name << " make(const GeneratorContext& context, const Inputs& inputs) {\n";
-        indent_level++;
-        stream << indent() << "GeneratorParams gp(\n";
-        indent_level++;
-        comma = "";
-        for (auto p : generator_params) {
-            std::string type = p->get_template_type();
-            if (type == "typename") {
-                stream << indent() << comma << "Halide::type_of<" << p->name << ">()\n";
-            } else if (type == "float" || type == "double") {
-                stream << indent() << comma << "ratio_to_double<" << p->name << ">()\n";
-            } else {
-                stream << indent() << comma << p->name << "\n";
-            }
-            comma = ", ";
-        }
-        indent_level--;
-        stream << indent() << ");\n";
-        stream << indent() << "return " << class_name << "(context, inputs, gp);\n";
-        indent_level--;
-        stream << indent() << "}\n";
-        stream << "\n";
-    }
 
     stream << indent() << "// schedule method\n";
     stream << indent() << class_name << " &schedule() {\n";
@@ -1641,6 +1546,11 @@ void GeneratorInputBase::set_def_min_max() {
     // nothing
 }
 
+Parameter GeneratorInputBase::parameter() const {
+    internal_assert(parameters_.size() == 1);
+    return parameters_.at(0);
+}
+
 void GeneratorInputBase::verify_internals() const {
     GIOBase::verify_internals();
 
@@ -1745,6 +1655,11 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 
 void GeneratorOutputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
+}
+
+Parameter GeneratorOutputBase::parameter() const {
+    internal_assert(funcs().size() == 1);
+    return funcs().at(0).output_buffer().parameter();
 }
 
 void GeneratorOutputBase::init_internals() {
@@ -2044,39 +1959,6 @@ void generator_test() {
 
     // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
     Tuple t(gp, gp, gp);
-
-    // Test rational_approximation
-    auto check_ratio = [](double d, std::pair<int64_t, int64_t> expected) {
-        auto actual = rational_approximation(d);
-        internal_assert(actual == expected)
-            << "rational_approximation(" << d << ") failed:"
-            << " expected " << expected.first << "/" << expected.second
-            << " actual " << actual.first << "/" << actual.second << "\n";
-    };
-
-    // deliberately use fractional values that are exactly representable so that
-    // we minimize testing variation across compilers
-    const double kFrac1 = 1234.125;
-    const double kFrac2 = 123412341234.125;
-    const double kFrac3 = 1.0/65536.0;
-
-    check_ratio(0.0,        {0, 1});
-    check_ratio(1.0,        {1, 1});
-    check_ratio(2.0,        {2, 1});
-    check_ratio(kFrac1,     {9873, 8});
-    check_ratio(kFrac2,     {987298729873, 8});
-    check_ratio(kFrac3,     {1, 65536});
-
-    check_ratio(-0.0,       {0, 1});
-    check_ratio(-1.0,       {-1, 1});
-    check_ratio(-2.0,       {-2, 1});
-    check_ratio(-kFrac1,    {-9873, 8});
-    check_ratio(-kFrac2,    {-987298729873, 8});
-    check_ratio(-kFrac3,    {-1, 65536});
-
-    check_ratio(NAN, {0, 0});
-    check_ratio(INFINITY, {1, 0});
-    check_ratio(-INFINITY, {-1, 0});
 
     std::cout << "Generator test passed" << std::endl;
 }
