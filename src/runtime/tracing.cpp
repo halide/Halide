@@ -16,9 +16,22 @@ namespace Halide { namespace Runtime { namespace Internal {
 // that's a bad name. We use the __sync primitives used elsewhere in
 // the runtime for atomic work. They are well supported by clang.
 class SharedExclusiveSpinLock {
-    uint32_t lock;
+    volatile uint32_t lock;
+
+    // Covers a single bit indicating one owner has exclusive
+    // access. The waiting bit can be set while the exclusive bit is
+    // set, but the bits masked by shared_mask must be zero while this
+    // bit is set.
     const static uint32_t exclusive_held_mask = 0x80000000;
+
+    // Set to indicate a thread needs to acquire exclusive
+    // access. Other fields of the lock may be set, but no shared
+    // access request will proceed while this bit is set.
     const static uint32_t exclusive_waiting_mask = 0x40000000;
+
+    // Count of threads currently holding shared access. Must be zero
+    // if the exclusive bit is set. Cannot increase if the waiting bit
+    // is set.
     const static uint32_t shared_mask = 0x3fffffff;
 
 public:
@@ -37,6 +50,10 @@ public:
 
     void acquire_exclusive() {
         while (1) {
+            // If multiple threads are trying to acquire exclusive
+            // ownership, we may need to rerequest exclusive waiting
+            // while we spin, as it gets unset whenever a thread
+            // acquires exclusive ownership.
             __sync_fetch_and_or(&lock, exclusive_waiting_mask);
             if (__sync_bool_compare_and_swap(&lock, exclusive_waiting_mask, exclusive_held_mask)) {
                 return;
@@ -45,23 +62,24 @@ public:
     }
 
     void release_exclusive() {
-        __sync_fetch_and_xor(&lock, exclusive_held_mask);
+        __sync_fetch_and_and(&lock, ~exclusive_held_mask);
     }
 
     SharedExclusiveSpinLock() : lock(0) {}
 };
 
+const static int buffer_size = 1024 * 1024;
+
 class TraceBuffer {
     SharedExclusiveSpinLock lock;
     uint32_t cursor;
-    uint8_t buf[1024*1024];
-
-public:
+    uint8_t buf[buffer_size];
 
     // Attempt to atomically acquire space in the buffer to write a
     // packet. Returns NULL if the buffer was full.
-    halide_trace_packet_t *try_acquire_packet(uint32_t size) {
+    halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
         lock.acquire_shared();
+        halide_assert(user_context, size <= buffer_size);
         uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
         if (my_cursor + size > sizeof(buf)) {
             __sync_fetch_and_sub(&cursor, size);
@@ -71,6 +89,8 @@ public:
             return (halide_trace_packet_t *)(buf + my_cursor);
         }
     }
+
+public:
 
     // Wait for all writers to finish with their packets, stall any
     // new writers, and flush the buffer to the fd.
@@ -87,10 +107,12 @@ public:
 
     // Acquire and return a packet's worth of space in the trace
     // buffer, flushing the trace buffer to the given fd to make space
-    // if necessary.
+    // if necessary. The region acquired is protected from other
+    // threads writing or reading to it, so it must be released before
+    // a flush can occur.
     halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
         halide_trace_packet_t *packet = NULL;
-        while (!(packet = try_acquire_packet(size))) {
+        while (!(packet = try_acquire_packet(user_context, size))) {
             // Couldn't acquire space to write a packet. Flush and try again.
             flush(user_context, fd);
         }
@@ -291,13 +313,10 @@ WEAK void halide_set_trace_file(int fd) {
 extern int errno;
 
 WEAK int halide_get_trace_file(void *user_context) {
+    ScopedSpinLock lock(&halide_trace_file_lock);
     if (halide_trace_file >= 0) {
         return halide_trace_file;
-    }
-    {
-        // Prevent multiple threads both trying to initialize the trace
-        // file at the same time.
-        ScopedSpinLock lock(&halide_trace_file_lock);
+    } else {
         const char *trace_file_name = getenv("HL_TRACE_FILE");
         if (trace_file_name) {
             void *file = fopen(trace_file_name, "ab");
