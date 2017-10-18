@@ -2,7 +2,8 @@ load("@halide//:halide.bzl", "halide_library")
 
 halide_library(
   name="bazeldemo",
-  srcs=["bazeldemo_generator.cpp"]
+  srcs=["bazeldemo_generator.cpp"],
+  extra_outputs=["stmt"],
 )
 
 cc_binary(

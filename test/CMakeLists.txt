@@ -326,7 +326,8 @@ if (WITH_TEST_GENERATORS)
   halide_library_from_generator(metadata_tester_ucon
                                 GENERATOR metadata_tester.generator
                                 HALIDE_TARGET_FEATURES user_context
-                                GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
+                                GENERATOR_ARGS "${MDTEST_GEN_ARGS}"
+                                EXTRA_OUTPUTS stmt assembly)
   target_link_libraries(generator_aot_metadata_tester PUBLIC metadata_tester_ucon)
 
   halide_define_aot_test(tiled_blur)
