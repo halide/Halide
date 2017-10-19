@@ -669,11 +669,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          // Since we assign a Func to this output, it is generated with the Func's name.
-          // This is not really what we want, but is hard to correct, since Funcs cannot
-          // be arbitrarily renamed, adding wrappers can cause pathologies in some situations,
-          // and piping name-remaps into the metadata generation code is complex.
-          "f2$0", // "untyped_output_buffer",
+          "untyped_output_buffer",
           halide_argument_kind_output_buffer,
           3,
           halide_type_t(halide_type_float, 32),
@@ -709,7 +705,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "array_outputs2_0",
+          "array_outputs2_0.0",
           halide_argument_kind_output_buffer,
           3,
           halide_type_t(halide_type_float, 32),
@@ -718,7 +714,25 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "array_outputs2_1",
+          "array_outputs2_0.1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs2_1.0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs2_1.1",
           halide_argument_kind_output_buffer,
           3,
           halide_type_t(halide_type_float, 32),
@@ -751,7 +765,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
 
     const halide_filter_argument_t* expected = &kExpectedArguments[expect_ucon_at_0 ? 0 : 1];
     for (int i = 0; i < md.num_arguments; ++i) {
-        fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
+        // fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
         match_argument(expected[i], md.arguments[i]);
     }
 
@@ -777,7 +791,7 @@ int main(int argc, char **argv) {
     Buffer<float> untyped_output_buffer(kSize, kSize, 3);
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array3[2] = {Buffer<float>{1}, Buffer<float>{1}};
 
     result = metadata_tester(
@@ -817,7 +831,7 @@ int main(int argc, char **argv) {
         untyped_output_buffer,  // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],   // Output<Func[]>
-        output_array2[0], output_array2[1], // Output<Func[2]>
+        output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
         output_array3[0], output_array3[1]  // Output<float[2]>
     );
     EXPECT_EQ(0, result);
@@ -860,7 +874,7 @@ int main(int argc, char **argv) {
         untyped_output_buffer,  // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],    // Output<Func[]>
-        output_array2[0], output_array2[1], // Output<Func[2]>
+        output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
         output_array3[0], output_array3[1]  // Output<float[2]>
     );
     EXPECT_EQ(0, result);

@@ -1349,6 +1349,19 @@ Module GeneratorBase::build_module(const std::string &function_name,
     for (const auto &map_entry : *externs_map) {
         result.append(map_entry.second);
     }
+
+    auto outputs = pipeline.outputs();
+    for (auto *output : pi.filter_outputs) {
+        for (size_t i = 0; i < output->funcs().size(); ++i) {
+            auto from = output->funcs()[i].name();
+            auto to = output->array_name(i);
+            size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+            for (size_t t = 0; t < tuple_size; ++t) {
+                std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
+                result.remap_metadata_name(from + suffix, to + suffix);
+            }
+        }
+    }
     return result;
 }
 
