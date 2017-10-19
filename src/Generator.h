@@ -1454,6 +1454,34 @@ public:
     Func in(const std::vector<Func> &others) {
         return Func(*this).in(others);
     }
+
+#define HALIDE_INPUT_FORWARD_CONST(method)                                   \
+    template<typename ...Args>                                               \
+    inline auto method(Args&&... args) const ->                              \
+        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) { \
+        user_assert(this->funcs().size() == 1) << "Use operator[] to access the Func you want"; \
+        return Func(*this).method(std::forward<Args>(args)...);              \
+    }
+
+    /** Forward const methods to the underlying Func. (Non-const methods
+     * aren't available for Input<Func>.) */
+    // @{
+    HALIDE_INPUT_FORWARD_CONST(args)
+    HALIDE_INPUT_FORWARD_CONST(defined)
+    HALIDE_INPUT_FORWARD_CONST(has_update_definition)
+    HALIDE_INPUT_FORWARD_CONST(num_update_definitions)
+    HALIDE_INPUT_FORWARD_CONST(output_types)
+    HALIDE_INPUT_FORWARD_CONST(outputs)
+    HALIDE_INPUT_FORWARD_CONST(rvars)
+    HALIDE_INPUT_FORWARD_CONST(update_args)
+    HALIDE_INPUT_FORWARD_CONST(update_value)
+    HALIDE_INPUT_FORWARD_CONST(update_values)
+    HALIDE_INPUT_FORWARD_CONST(value)
+    HALIDE_INPUT_FORWARD_CONST(values)
+    // }@
+
+#undef HALIDE_INPUT_FORWARD
+#undef HALIDE_INPUT_FORWARD_CONST
 };
 
 
