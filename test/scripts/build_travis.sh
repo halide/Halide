@@ -2,9 +2,6 @@
 set -e
 set -o pipefail
 
-# The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
-# so running lengthy make steps with -j2 is almost certainly a win.
-
 # Note this script assumes that the current working directory
 # is the root of the repository
 if [ ! -f ./.travis.yml ]; then
@@ -32,39 +29,25 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         ../
 
   # Build and run internal tests
-  make -j2 VERBOSE=1
-  # Build docs
-  make doc
+  make ${MAKEFLAGS} VERBOSE=1
+  
+  # Build the docs and run the tests
+  make doc 
+  make ${MAKEFLAGS} test_correctness 
+  make ${MAKEFLAGS} test_generators
 
-  # Run correctness tests
-  TESTCASES=$(find bin/ -iname 'correctness_*' | \
-      grep -v _vector_math | \
-      grep -v _vector_cast | \
-      grep -v _lerp | \
-      grep -v _simd_op_check | \
-      grep -v _specialize_branched_loops | \
-      grep -v _print | \
-      grep -v _math | \
-      grep -v _div_mod | \
-      grep -v _fuzz_simplify | \
-      grep -v _round | \
-      sort)
-  for TESTCASE in ${TESTCASES}; do
-      echo "Running ${TESTCASE}"
-      ${TESTCASE}
-  done
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   export LLVM_CONFIG=/usr/local/llvm/bin/llvm-config
   export CLANG=/usr/local/llvm/bin/clang
   ${LLVM_CONFIG} --cxxflags --libdir --bindir
 
   # Build and run internal tests
-  make -j2
+  make ${MAKEFLAGS}
 
   # Build the docs and run the tests
   make doc 
-  make -j2 test_correctness 
-  make -j2 test_generators
+  make ${MAKEFLAGS} test_correctness 
+  make ${MAKEFLAGS} test_generators
 
   # Build the distrib folder (needed for the Bazel build test)
   make distrib
