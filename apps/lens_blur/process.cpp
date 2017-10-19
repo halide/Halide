@@ -36,7 +36,8 @@ int main(int argc, char **argv) {
     double min_t_manual = benchmark(timing_iterations, 10, [&]() {
         lens_blur(left_im, right_im, slices, focus_depth, blur_radius_scale,
                   aperture_samples, output);
-    });
+        output.device_sync();
+        });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version

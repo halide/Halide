@@ -1551,6 +1551,27 @@ extern double halide_float16_bits_to_double(uint16_t);
 
 //@}
 
+// Tell Halide how much unused memory it is permitted to hold onto to
+// service future allocations. If zero, Halide returns all memory to
+// the OS as soon as it is no longer needed. If large, Halide will not
+// eagerly free allocations when the memory is no longer needed, but
+// instead keep them in a pool to service future requests.
+extern void halide_allocation_cache_set_size(uint64_t size);
+
+// Halide calls this to determine the maximum amount of unused memory
+// it can hold onto in order to satisfy future allocations. By default
+// it just returns the value set by the function above.
+extern uint64_t halide_allocation_cache_get_size(void *user_context);
+
+// Halide calls this to notify the cache that it is adding some unused
+// memory into an allocation cache. Returns the total amount of unused
+// memory in the cache.
+extern uint64_t halide_allocation_cache_increase_used(void *user_context, uint64_t amount);
+
+// Halide calls this when it decides to release an unused allocation
+// back to the OS.
+extern uint64_t halide_allocation_cache_decrease_used(void *user_context, uint64_t amount);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

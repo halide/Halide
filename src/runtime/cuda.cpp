@@ -78,6 +78,14 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
 CUcontext WEAK context = 0;
 volatile int WEAK thread_lock = 0;
 
+// A free list, used when allocations are being cached.
+static struct FreeListItem {
+    CUdeviceptr ptr;
+    CUcontext ctx;
+    size_t size;
+    FreeListItem *next;
+} *free_list = 0;
+
 }}}} // namespace Halide::Runtime::Internal::Cuda
 
 using namespace Halide::Runtime::Internal;
@@ -164,6 +172,8 @@ public:
     }
 
     INLINE ~Context() {
+
+
         CUcontext old;
         cuCtxPopCurrent(&old);
 
@@ -466,10 +476,44 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
 
     halide_assert(user_context, validate_device_pointer(user_context, buf));
 
-    debug(user_context) <<  "    cuMemFree " << (void *)(dev_ptr) << "\n";
-    CUresult err = cuMemFree(dev_ptr);
-    // If cuMemFree fails, it isn't likely to succeed later, so just drop
-    // the reference.
+    CUresult err = CUDA_SUCCESS;
+    uint64_t size = buf->size_in_bytes();
+    uint64_t max_size = halide_allocation_cache_get_size(user_context);
+    if (size < max_size) {
+        debug(user_context) <<  "    caching allocation for later use: " << (void *)(dev_ptr) << "\n";
+        FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
+        item->next = free_list;
+        item->ctx = ctx.context;
+        item->size = buf->size_in_bytes();
+        item->ptr = dev_ptr;
+        free_list = item;
+        uint64_t new_size = halide_allocation_cache_increase_used(user_context, size);
+        if (new_size > max_size) {
+            // Free the tail of the list to get us back under the size limit.
+            uint64_t cumulative_size = size;
+            FreeListItem *to_free = free_list->next;
+            FreeListItem **prev_ptr = &(free_list->next);
+            while (to_free) {
+                cumulative_size += to_free->size;
+                if (cumulative_size > max_size) {
+                    *prev_ptr = NULL;
+                    halide_allocation_cache_decrease_used(user_context, to_free->size);
+                    debug(user_context) <<  "    cuMemFree " << (void *)(to_free->ptr) << "\n";
+                    cuMemFree(to_free->ptr);
+                    to_free = to_free->next;
+                    free(to_free);
+                } else {
+                    prev_ptr = &(to_free->next);
+                    to_free = to_free->next;
+                }
+            }
+        }
+    } else {
+        debug(user_context) <<  "    cuMemFree " << (void *)(dev_ptr) << "\n";
+        err = cuMemFree(dev_ptr);
+        // If cuMemFree fails, it isn't likely to succeed later, so just drop
+        // the reference.
+    }
     buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     buf->device = 0;
@@ -495,6 +539,15 @@ WEAK int halide_cuda_device_release(void *user_context) {
     err = halide_cuda_acquire_context(user_context, &ctx, false);
     if (err != CUDA_SUCCESS) {
         return err;
+    }
+
+    // Dump the contents of the free list, ignoring errors.
+    while (free_list) {
+        FreeListItem *next = free_list;
+        halide_allocation_cache_decrease_used(user_context, next->size);
+        cuMemFree(next->ptr);
+        free(next);
+        free_list = free_list->next;
     }
 
     if (ctx) {
@@ -570,16 +623,33 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    CUdeviceptr p;
-    debug(user_context) << "    cuMemAlloc " << (uint64_t)size << " -> ";
-    CUresult err = cuMemAlloc(&p, size);
-    if (err != CUDA_SUCCESS) {
-        debug(user_context) << get_error_name(err) << "\n";
-        error(user_context) << "CUDA: cuMemAlloc failed: "
-                            << get_error_name(err);
-        return err;
-    } else {
-        debug(user_context) << (void *)p << "\n";
+    CUdeviceptr p = 0;
+    {
+        // Check the free list for an allocation of the right size
+        FreeListItem **prev_ptr = &free_list;
+        FreeListItem *item = free_list;
+        while (item && !p) {
+            if (size == item->size && ctx.context == item->ctx) {
+                *prev_ptr = item->next;
+                p = item->ptr;
+                halide_allocation_cache_decrease_used(user_context, item->size);
+                free(item);
+            }
+            prev_ptr = &item->next;
+            item = item->next;
+        }
+    }
+    if (!p) {
+        debug(user_context) << "    cuMemAlloc " << (uint64_t)size << " -> ";
+        CUresult err = cuMemAlloc(&p, size);
+        if (err != CUDA_SUCCESS) {
+            debug(user_context) << get_error_name(err) << "\n";
+            error(user_context) << "CUDA: cuMemAlloc failed: "
+                                << get_error_name(err);
+            return err;
+        } else {
+            debug(user_context) << (void *)p << "\n";
+        }
     }
     halide_assert(user_context, p);
     buf->device = p;
