@@ -1906,10 +1906,6 @@ private:
                 << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
         }
 
-        if (f.name() != this->name()) {
-            user_warning << "Renaming output \"" << this->name() << "\" to \"" << f.name() << "\"; the metadata might be inaccurate.\n";
-        }
-
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
         user_assert(!this->funcs_.at(0).defined());
         this->funcs_[0] = f;
