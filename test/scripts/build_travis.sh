@@ -2,6 +2,9 @@
 set -e
 set -o pipefail
 
+# The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
+# so running lengthy make steps with -j2 is almost certainly a win.
+
 # Note this script assumes that the current working directory
 # is the root of the repository
 if [ ! -f ./.travis.yml ]; then
@@ -29,7 +32,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         ../
 
   # Build and run internal tests
-  make VERBOSE=1
+  make -j2 VERBOSE=1
   # Build docs
   make doc
 
@@ -56,10 +59,12 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   ${LLVM_CONFIG} --cxxflags --libdir --bindir
 
   # Build and run internal tests
-  make
+  make -j2
 
   # Build the docs and run the tests
-  make doc test_correctness test_generators
+  make doc 
+  make -j2 test_correctness 
+  make -j2 test_generators
 
   # Build the distrib folder (needed for the Bazel build test)
   make distrib
