@@ -1333,13 +1333,14 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
 
     // Add the inlined unbounded functions into the consumer groups.
     for (const auto &f : unbounded) {
+        debug(0) << "\n***TRY TO INLINE UNBOUNDED FUNC " << f << "\n";
         for (const auto &o : outputs) {
             internal_assert(o.name() != f) << "Output \"" << f << "\" should have been bounded\n";
         }
         const Function &func = get_element(dep_analysis.env, f);
         int num_stages = func.updates().size() + 1;
         for (auto &iter : groups) {
-            bool use_f = true;
+            bool use_f = false;
             for (int s = 0; s < num_stages; s++) {
                 FStage prod_stage(func, s);
                 for (const auto &m : iter.second.members) {
@@ -1350,11 +1351,14 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
                     }
                 }
             }
+            debug(0) << "\nGroup:\n" << iter.second << "\n";
+            debug(0) << "\tuse f? " << use_f << "\n";
             if (use_f) {
                 for (int s = 0; s < num_stages; s++) {
                     iter.second.members.push_back(FStage(func, s));
                 }
                 iter.second.inlined.insert(f);
+                debug(0) << "\tINLINED " << f << "\n";
             }
         }
     }
@@ -1449,11 +1453,11 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         bool no_redundant_work = false;
         Expr overall_benefit = estimate_benefit(grouping, no_redundant_work, true);
 
-        debug(3) << "Candidate grouping:\n";
+        debug(0) << "Candidate grouping:\n";
         for (const auto &g : grouping) {
-            debug(3) << "  " << g.first;
+            debug(0) << "  " << g.first;
         }
-        debug(3) << "Candidate benefit: " << overall_benefit << '\n';
+        debug(0) << "Candidate benefit: " << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
         if (overall_benefit.defined() && can_prove(best_benefit < overall_benefit)) {
@@ -1462,12 +1466,12 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         }
     }
 
-    debug(3) << "\nBest grouping:\n";
+    debug(0) << "\nBest grouping:\n";
     for (const auto &g : best_grouping) {
-        debug(3) << "  " << g.first;
+        debug(0) << "  " << g.first;
     }
     if (best_grouping.size() > 0) {
-        debug(3) << "Best benefit: " << best_benefit << '\n';
+        debug(0) << "Best benefit: " << best_benefit << '\n';
     }
 
     return best_grouping;
@@ -1684,11 +1688,11 @@ void Partitioner::group(Partitioner::Level level) {
             }
         }
 
-        debug(3) << "\n============================" << '\n';
-        debug(3) << "Current grouping candidates:" << '\n';
-        debug(3) << "============================" << '\n';
+        debug(0) << "\n============================" << '\n';
+        debug(0) << "Current grouping candidates:" << '\n';
+        debug(0) << "============================" << '\n';
         for (size_t i = 0; i < cand.size(); ++i) {
-            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}" << '\n';
+            debug(0) << "{" << cand[i].first << ", " << cand[i].second << "}" << '\n';
         }
 
         vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);
@@ -1786,7 +1790,7 @@ DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
             // Check if the bounds allow for tiling with the given tile size,
             // i.e. ensure at least 2 tiles
             Expr extent = get_extent(bound);
-            internal_assert(extent.defined());
+            internal_assert(extent.defined()) << s << "\n" << "dim: " << var << ", min: " << bound.min << ", max: " << bound.max << "\n";
             if (can_prove(extent >= 2 * size)) {
                 // TODO: Maybe shift this to the center of the pipeline bound
                 bounds[var] = Interval(0, simplify(size - 1));
@@ -1855,8 +1859,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         }
     }
 
+    debug(0) << "GET HERE 0\n";
     // Get the regions of the pipeline required to compute a tile of the group
     DimBounds tile_bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
+    debug(0) << "GET HERE 1\n";
 
     map<string, Box> alloc_regions = dep_analysis.regions_required(
         g.output.func, g.output.stage_num, tile_bounds, group_members, false, &costs.input_estimates);
@@ -2098,19 +2104,28 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
                                                       Partitioner::Level level) {
     // Create a group that reflects the grouping choice and evaluate the cost
     // of the group.
+    debug(0) << "ENTER EVALUATE CHOICE 1\n";
     const Function &prod_f = get_element(dep_analysis.env, choice.prod);
+    debug(0) << "EXIT\n";
     int num_prod_stages = prod_f.updates().size() + 1;
     vector<Group> prod_groups;
 
     for (int s = 0; s < num_prod_stages; s++) {
         FStage prod_s(prod_f, s);
+        debug(0) << "HERE 1\n";
         prod_groups.push_back(get_element(groups, prod_s));
+        debug(0) << "HERE 2\n";
     }
 
+    debug(0) << "HERE 3\n";
+    debug(0) << "choice cons:\n" << choice.cons << "\n";
     Group cons = get_element(groups, choice.cons);
+    debug(0) << "HERE 4\n";
     Group group = cons;
     for (const auto &prod_g : prod_groups) {
+        debug(0) << "HERE 5\n";
         group = merge_groups(prod_g, group);
+        debug(0) << "HERE 6\n";
     }
 
     GroupAnalysis group_analysis;
@@ -2121,13 +2136,14 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
         map<string, Expr> tile_sizes;
 
         const Function &cons_f = cons.output.func;
+        debug(0) << "HERE 7\n";
         Definition def = get_stage_definition(cons_f, cons.output.stage_num);
 
         const vector<Dim> &dims = def.schedule().dims();
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             tile_sizes[dims[d].var] = 1;
         }
-
+        debug(0) << "HERE 8\n";
         group.tile_sizes = tile_sizes;
 
         for (const auto &prod_g : prod_groups) {
@@ -2139,12 +2155,15 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
         for (const string &f : cons.inlined) {
             group.inlined.insert(f);
         }
-
+        debug(0) << "HMMM 1\n";
         group_analysis = analyze_group(group, false);
+        debug(0) << "HMMM 2\n";
         best_tile_config = tile_sizes;
 
     } else {
+        debug(0) << "HMMM 3\n";
         pair<map<string, Expr>, GroupAnalysis> config = find_best_tile_config(group);
+        debug(0) << "HMMM 4\n";
         best_tile_config = config.first;
         group_analysis = config.second;
     }
@@ -2241,7 +2260,9 @@ map<FStage, map<string, Box>> Partitioner::group_storage_bounds() {
     map<FStage, map<string, Box>> group_storage_bounds;
     for (const pair<const FStage, Group> &gpair : groups) {
         const Group &g = gpair.second;
+        debug(0) << "GET HERE 3\n";
         DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
+        debug(0) << "GET HERE 4\n";
 
         set<string> prods;
         for (const FStage &s : g.members) {
@@ -2271,7 +2292,9 @@ map<FStage, map<FStage, DimBounds>> Partitioner::group_loop_bounds() {
         Group g = gpair.second;
         map<FStage, DimBounds> mem_bounds;
 
+        debug(0) << "GET HERE 5\n";
         DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
+        debug(0) << "GET HERE 6\n";
 
         set<string> prods;
         for (const FStage &s : g.members) {
@@ -2282,6 +2305,7 @@ map<FStage, map<FStage, DimBounds>> Partitioner::group_loop_bounds() {
             dep_analysis.regions_required(g.output.func, g.output.stage_num,
                                           bounds, prods, true, &costs.input_estimates);
 
+        debug(0) << "\nCURRENT GROUP:\n" << g << "\n";
         for (const FStage &s : g.members) {
             const auto &iter = reg_computed.find(s.func.name());
             if (iter != reg_computed.end()) {
@@ -2290,7 +2314,9 @@ map<FStage, map<FStage, DimBounds>> Partitioner::group_loop_bounds() {
                 for (size_t arg = 0; arg < args.size(); arg++) {
                     tile_sizes[args[arg]] = get_extent(iter->second[arg]);
                 }
+                debug(0) << "GET HERE 7\n";
                 mem_bounds[s] = get_bounds_from_tile_sizes(s, tile_sizes);
+                debug(0) << "GET HERE 8\n";
             }
         }
 
@@ -2658,10 +2684,10 @@ void Partitioner::generate_group_cpu_schedule(
     string out_f_name = g.output.func.name();
     Function g_out = g.output.func;
 
-    debug(3) << "\n================\n";
-    debug(3) << "Scheduling group:\n";
-    debug(3) << "================\n";
-    debug(3) << g;
+    debug(0) << "\n================\n";
+    debug(0) << "Scheduling group:\n";
+    debug(0) << "================\n";
+    debug(0) << g;
 
     // Get the definition corresponding to the stage
     Definition def = get_stage_definition(g_out, g.output.stage_num);
@@ -3287,13 +3313,15 @@ bool used_by_extern_func(const map<string, Function> &env, const Function &f) {
 }
 
 // If the bounds of a Func are undefined, then we should just inline the Func
-// as long as it is not an extern Func or used by some extern Func.
+// as long as it is pure and not an extern Func or used by some extern Func.
 set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
                                     const map<string, Function> &env) {
     set<string> unbounded;
     for (const auto &iter : env) {
         const Function &f = iter.second;
-        if (f.has_extern_definition() || used_by_extern_func(env, f)) {
+        if (!f.is_pure() || f.has_extern_definition() || used_by_extern_func(env, f)) {
+            debug(0) << "***SKIP " << f.name() << ", has extern def? " << f.has_extern_definition()
+                     << ", used by extern func? " << used_by_extern_func(env, f) << "\n";
             continue;
         }
         const Box &bound = get_element(pipeline_bounds, iter.first);
@@ -3414,6 +3442,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     debug(2) << "Determining all unbounded functions...\n";
     set<string> unbounded = get_unbounded_functions(pipeline_bounds, env);
 
+    debug(0) << "\n****UNBOUNDED: ";
+    for (const auto &s : unbounded) {
+        debug(0) << s << ", ";
+    }
+    debug(0) << "\n";
+
     debug(2) << "Initializing partitioner...\n";
     Partitioner part(pipeline_bounds, arch_params, dep_analysis, costs, outputs, unbounded);
 
@@ -3441,17 +3475,17 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_pipeline_bounds();
     }
 
-    debug(2) << "Partitioner initializing groups...\n";
+    debug(0) << "Partitioner initializing groups...\n";
     part.initialize_groups();
-    if (debug::debug_level() >= 3) {
+    //if (debug::debug_level() >= 3) {
         part.disp_pipeline_costs();
-    }
+    //}
 
-    debug(2) << "Partitioner computing inline group...\n";
+    debug(0) << "Partitioner computing inline group...\n";
     part.group(Partitioner::Level::Inline);
-    if (debug::debug_level() >= 3) {
+    //if (debug::debug_level() >= 3) {
         part.disp_grouping();
-    }
+    //}
 
     debug(2) << "Partitioner computing fast-mem group...\n";
     part.grouping_cache.clear();
@@ -3471,7 +3505,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     oss << sched;
     string sched_string = oss.str();
 
-    debug(3) << "\n\n*******************************\nSchedule:\n"
+    debug(0) << "\n\n*******************************\nSchedule:\n"
              << "*******************************\n" << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem
