@@ -46,7 +46,7 @@ public:
     Output<Buffer<>> untyped_output_buffer{ "untyped_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
     Output<float> output_scalar{ "output_scalar" };
     Output<Func[]> array_outputs{ "array_outputs", Float(32), 3 };  // must be overridden to size=2
-    Output<Func[2]> array_outputs2{ "array_outputs2", Float(32), 3 };
+    Output<Func[2]> array_outputs2{ "array_outputs2", { Float(32), Float(32) }, 3 };
     Output<float[2]> array_outputs3{ "array_outputs3" };
 
     void generate() {
@@ -63,7 +63,10 @@ public:
         f1(x, y, c) = cast(output_type, input(x, y, c) + zero1 + zero2);
         f2(x, y, c) = cast<float>(f1(x, y, c) + 1);
 
-        output(x, y, c) = Tuple(f1(x, y, c), f2(x, y, c));
+        Func t1("t1");
+        t1(x, y, c) = Tuple(f1(x, y, c), f2(x, y, c));
+
+        output = t1;
         typed_output_buffer(x, y, c) = f1(x, y, c);
         type_only_output_buffer(x, y, c) = f1(x, y, c);
         dim_only_output_buffer(x, y, c) = f1(x, y, c);
@@ -72,7 +75,9 @@ public:
         output_scalar() = 1234.25f;
         for (size_t i = 0; i < array_outputs.size(); ++i) {
             array_outputs[i](x, y, c) = (i + 1) * 1.5f;
-            array_outputs2[i](x, y, c) = (i + 1) * 1.5f;
+            Func z1("z1");
+            z1(x, y, c) = Tuple((i + 1) * 1.5f, 42.f);
+            array_outputs2[i] = z1;
             array_outputs3[i]() = 42.f;
         }
     }
