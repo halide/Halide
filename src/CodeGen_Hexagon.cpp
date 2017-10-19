@@ -1495,9 +1495,17 @@ string CodeGen_Hexagon::mcpu() const {
 string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
     if (target.has_feature(Halide::Target::HVX_128)) {
+#if LLVM_VERSION < 60
         attrs << "+hvx-double";
+#else
+        attrs << "+hvx-length128b";
+#endif
     } else {
+#if LLVM_VERSION < 60
         attrs << "+hvx";
+#else
+        attrs << "+hvx-length64b";
+#endif
     }
     attrs << ",+long-calls";
     return attrs.str();
