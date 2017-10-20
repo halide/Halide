@@ -5,8 +5,7 @@
 
 namespace {
 
-class LinearBlur : public Halide::Generator<LinearBlur> {
-public:
+struct LinearBlur : public Halide::Generator<LinearBlur> {
     Input<Buffer<float>>  input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
 
@@ -36,7 +35,8 @@ public:
             //       .dim(1).set_bounds_estimate(0, 2560)
             //       .dim(2).set_bounds_estimate(0, 4);
         } else {
-            // user_error << "non-auto_schedule not supported.";
+            assert(false && "non-auto_schedule not supported.");
+            abort();
         }
     }
 };
