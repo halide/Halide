@@ -54,10 +54,9 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
 
   # Build our one-and-only Bazel test.
   # --verbose_failures so failures are easier to figure out.
-  # Disabled for now: see https://github.com/halide/Halide/issues/2195
-  # echo "Testing apps/bazeldemo..."
-  # cd apps/bazeldemo
-  # bazel build --verbose_failures :all
+  echo "Testing apps/bazeldemo..."
+  cd apps/bazeldemo
+  bazel build --verbose_failures :all
 
 else
   echo "Unexpected BUILD_SYSTEM: \"${BUILD_SYSTEM}\""
