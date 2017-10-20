@@ -398,7 +398,11 @@ void Module::compile(const Outputs &output_files) const {
     if (!output_files.schedule_name.empty()) {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
         std::ofstream file(output_files.schedule_name);
-        file << contents->auto_schedule;
+        if (contents->auto_schedule.empty()) {
+           file << "// auto_schedule_outputs() was not called for this Generator.\n";
+        } else {
+           file << contents->auto_schedule;
+        }
     }
 }
 

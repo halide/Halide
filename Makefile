@@ -1355,8 +1355,8 @@ LESSON_21_MACHINE_PARAMS = 32,16777216,40
 $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -f auto_schedule_false -e static_library,h,schedule target=host            auto_schedule=false
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -f auto_schedule_true  -e static_library,h,schedule target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS)
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,h,schedule -f auto_schedule_false target=host            auto_schedule=false
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,h,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS)
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
