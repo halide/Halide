@@ -108,8 +108,8 @@ void propagate_output_buffer_estimates(const vector<Function> &outputs) {
     for (Function out : outputs) {
         auto args = out.args();
         for (size_t i = 0; i < args.size(); ++i) {
-            // Extract min & extent. For multiple output-buffers, require
-            // that all match.
+            // Extract min & extent. For multiple output-buffers (i.e., a Func-of-Tuple),
+            // require that all match.
             Expr min, extent;
             for (const auto &out_buf : out.output_buffers()) {
                 internal_assert(out_buf.is_buffer());
