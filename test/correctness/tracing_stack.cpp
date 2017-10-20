@@ -13,6 +13,9 @@
 #include <string>
 
 using namespace Halide;
+
+namespace {
+
 using std::stack;
 using std::string;
 
@@ -59,6 +62,7 @@ void signal_handler(int signum) {
     exit(0);
 }
 
+}  // namespace
 
 int main(int argc, char **argv) {
 
