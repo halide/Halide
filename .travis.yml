@@ -7,6 +7,9 @@ env:
   global:
     - BAZEL_VERSION="0.5.2"
     - JDK=openjdk8
+    # The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
+    # so running lengthy make steps with -j2 is almost certainly a win.
+    - MAKEFLAGS=-j2
   matrix:
     # Configurations
     #
