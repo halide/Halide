@@ -2427,7 +2427,16 @@ using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const Gene
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
+        bool emit_o{false};
+        bool emit_h{true};
+        bool emit_cpp{false};
+        bool emit_assembly{false};
+        bool emit_bitcode{false};
+        bool emit_stmt{false};
+        bool emit_stmt_html{false};
+        bool emit_static_library{true};
+        bool emit_cpp_stub{false};
+        bool emit_schedule{false};
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2435,9 +2444,6 @@ public:
         // extensions are problematic, and avoids the need to rename output files
         // after the fact.
         std::map<std::string, std::string> substitutions;
-        EmitOptions()
-            : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
@@ -2524,8 +2530,8 @@ public:
 
     /** Generate a schedule for the Generator's pipeline. */
     //@{
-    EXPORT std::string auto_schedule_outputs(const MachineParams &arch_params);
-    EXPORT std::string auto_schedule_outputs();
+    EXPORT void auto_schedule_outputs(const MachineParams &arch_params);
+    EXPORT void auto_schedule_outputs();
     //@}
 
 protected:
@@ -2631,6 +2637,7 @@ private:
     bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
+    std::string auto_schedule_result;
 
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
