@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <map>
 
+namespace {
+
 using std::map;
 using std::string;
 
@@ -339,6 +341,8 @@ int clone_on_clone_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     printf("Running calling clone no op test\n");
