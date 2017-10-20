@@ -9,6 +9,8 @@ struct sRGBToLinear : public Halide::Generator<sRGBToLinear> {
     Input<Func>  srgb{"srgb"};
     Output<Func> linear{"linear"};
 
+    Var x{"x"}, y{"y"};
+
     void generate() {
         using Halide::_;
 
@@ -40,8 +42,6 @@ struct sRGBToLinear : public Halide::Generator<sRGBToLinear> {
             linear.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
         }
     }
-
-    Var x{"x"}, y{"y"};
 };
 
 }  // namespace

@@ -9,6 +9,8 @@ struct LinearTosRGB : public Halide::Generator<LinearTosRGB> {
     Input<Func>  linear{"linear"};
     Output<Func> srgb{"srgb"};
 
+    Var x{"x"}, y{"y"};
+
     void generate() {
         using Halide::_;
 
@@ -40,8 +42,6 @@ struct LinearTosRGB : public Halide::Generator<LinearTosRGB> {
             srgb.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
         }
     }
-
-    Var x{"x"}, y{"y"};
 };
 
 }  // namespace
