@@ -1349,7 +1349,12 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< $(BUILD_DIR)/GenGen.o \
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-# Parallelism, CacheSize, Balance
+# The values in MachineParams are:
+# - the maximum level of parallelism available, 
+# - the size of the last-level cache (in KB), 
+# - the ratio between the cost of a miss at the last level cache and the cost
+#   of arithmetic on the target architecture
+# ...in that order.
 LESSON_21_MACHINE_PARAMS = 32,16777216,40
 
 $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate
