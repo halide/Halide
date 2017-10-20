@@ -11,6 +11,9 @@ struct SimpleBlur : public Halide::Generator<SimpleBlur> {
     Input<int32_t> height{"height"};
     Output<Func>   output{"output"};
 
+    Var x{"x"}, y{"y"};
+    Func blur_x{"blur_x"};
+
     void generate() {
         using Halide::_;
 
@@ -47,9 +50,6 @@ struct SimpleBlur : public Halide::Generator<SimpleBlur> {
             blur_x.store_at(output, y).compute_at(output, yi).vectorize(x, 8);
         }
     }
-
-    Var x{"x"}, y{"y"};
-    Func blur_x{"blur_x"};
 };
 
 }  // namespace
