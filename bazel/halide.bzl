@@ -299,6 +299,7 @@ _output_extensions = {
     "assembly": ("s.txt", True),
     "bitcode": ("bc", True),
     "stmt": ("stmt", True),
+    "schedule": ("schedule", True),
     "html": ("html", True),
     "cpp": ("generated.cpp", True),
 }
