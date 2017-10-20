@@ -40,20 +40,6 @@ public:
     std::vector<std::pair<std::string, std::vector<Expr>>> call_args;
 };
 
-/** Return a map of estimates on some variables. */
-class GetVarEstimates : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) {
-        if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.get_estimate().defined()) {
-            var_estimates[var->param.name()] = var->param.get_estimate();
-        }
-    }
-public:
-    std::map<std::string, Expr> var_estimates;
-};
-
 
 /** Substitute every variable with its estimate if specified. */
 class SubstituteVarEstimates: public IRMutator {
