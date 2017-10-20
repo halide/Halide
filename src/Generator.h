@@ -1489,12 +1489,12 @@ public:
         return Func(*this).in(others);
     }
 
-#define HALIDE_INPUT_FORWARD_CONST(method)                                 \
-    template<typename ...Args>                                              \
-    inline auto method(Args&&... args) const ->                             \
-        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) {\
+#define HALIDE_INPUT_FORWARD_CONST(method)                                   \
+    template<typename ...Args>                                               \
+    inline auto method(Args&&... args) const ->                              \
+        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) { \
         user_assert(this->funcs().size() == 1) << "Use operator[] to access the Func you want"; \
-        return Func(*this).method(std::forward<Args>(args)...);          \
+        return Func(*this).method(std::forward<Args>(args)...);              \
     }
 
     /** Forward const methods to the underlying Func. (Non-const methods
@@ -3132,11 +3132,6 @@ protected:
 
     bool has_generator() const {
         return generator != nullptr;
-    }
-
-    template<typename Ratio>
-    static double ratio_to_double() {
-        return (double)Ratio::num / (double)Ratio::den;
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
