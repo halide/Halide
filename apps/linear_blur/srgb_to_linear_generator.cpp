@@ -2,19 +2,21 @@
 
 namespace {
 
-class sRGBToLinear : public Halide::Generator<sRGBToLinear> {
-public:
+struct sRGBToLinear : public Halide::Generator<sRGBToLinear> {
     Input<Func>  srgb{"srgb"};
     Output<Func> linear{"linear"};
 
+    Var x{"x"}, y{"y"};
+
     void generate() {
         using Halide::_;
-        Var x("x"), y("y"), yi("yi");
 
         linear(x, y, _) = select(srgb(x, y, _) <= 0.04045f,
                                  srgb(x, y, _) / 12.92f,
                                  pow(((srgb(x, y, _) + .055f) / (1.0f + .055f)), 2.4f));
+    }
 
+    void schedule() {
         if (auto_schedule) {
             const int W = 1536, H = 2560, C = 4;
             // Wart: Input<Func> are defined with Vars we don't know.
@@ -30,6 +32,7 @@ public:
                 linear.estimate(linear.args()[i], 0, C);
             }
         } else {
+            Var yi("yi");
             linear.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
         }
     }
