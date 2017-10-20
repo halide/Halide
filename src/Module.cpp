@@ -90,6 +90,7 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.c_source_name.empty()) out.c_source_name = add_suffix(in.c_source_name, suffix);
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
+    if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
     return out;
 }
 
@@ -108,7 +109,7 @@ uint64_t target_feature_mask(const Target &target) {
 
 struct ModuleContents {
     mutable RefCount ref_count;
-    std::string name;
+    std::string name, auto_schedule;
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
@@ -154,12 +155,21 @@ Module::Module(const std::string &name, const Target &target) :
     contents->target = target;
 }
 
+void Module::set_auto_schedule(const std::string &auto_schedule) {
+    internal_assert(contents->auto_schedule.empty());
+    contents->auto_schedule = auto_schedule;
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
 
 const std::string &Module::name() const {
     return contents->name;
+}
+
+const std::string &Module::auto_schedule() const {
+    return contents->auto_schedule;
 }
 
 const std::vector<Buffer<>> &Module::buffers() const {
@@ -384,6 +394,15 @@ void Module::compile(const Outputs &output_files) const {
     if (!output_files.stmt_html_name.empty()) {
         debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
         Internal::print_to_html(output_files.stmt_html_name, *this);
+    }
+    if (!output_files.schedule_name.empty()) {
+        debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
+        std::ofstream file(output_files.schedule_name);
+        if (contents->auto_schedule.empty()) {
+           file << "// auto_schedule_outputs() was not called for this Generator.\n";
+        } else {
+           file << contents->auto_schedule;
+        }
     }
 }
 

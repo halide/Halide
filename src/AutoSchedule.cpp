@@ -28,6 +28,14 @@ using std::make_pair;
 
 namespace {
 
+int string_to_int(const std::string &s) {
+    std::istringstream iss(s);
+    int i;
+    iss >> i;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
+    return i;
+}
+
 // Return true if any of the box dimension is unbounded.
 bool is_box_unbounded(const Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
@@ -3507,6 +3515,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     part.generate_cpu_schedule(target, sched);
 
     std::ostringstream oss;
+    oss << "// Target: " << target.to_string() << "\n";
+    oss << "// MachineParams: " << arch_params.to_string() << "\n";
+    oss << "\n";
     oss << sched;
     string sched_string = oss.str();
 
@@ -3521,4 +3532,22 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 }
+
+std::string MachineParams::to_string() const {
+    internal_assert(parallelism.type().is_int() &&
+                    last_level_cache_size.type().is_int() &&
+                    balance.type().is_int());
+    std::ostringstream o;
+    o << parallelism << "," << last_level_cache_size << "," << balance;
+    return o.str();
+}
+
+MachineParams::MachineParams(const std::string &s) {
+    std::vector<std::string> v = Internal::split_string(s, ",");
+    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
+    parallelism = Internal::string_to_int(v[0]);
+    last_level_cache_size = Internal::string_to_int(v[1]);
+    balance = Internal::string_to_int(v[2]);
+}
+
 }
