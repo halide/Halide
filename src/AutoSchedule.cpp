@@ -128,7 +128,7 @@ void check_estimates_on_outputs(const vector<Function> &outputs) {
                     break;
                 }
             }
-            user_assert(found && est.min.as<IntImm>() && est.extent.as<IntImm>())
+            user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
                 << "Please provide a valid estimate for dimension "
                 << est.var << " of output \"" << out.name() << "\"\n";
         }
