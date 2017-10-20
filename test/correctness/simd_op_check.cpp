@@ -11,6 +11,8 @@
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
+namespace {
+
 // This tests that we can correctly generate all the simd ops
 using std::vector;
 using std::string;
@@ -2091,6 +2093,8 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
         return success;
     }
 };
+
+}  // namespace
 
 int main(int argc, char **argv) {
     Test test;
