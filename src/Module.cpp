@@ -115,6 +115,7 @@ struct ModuleContents {
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
     std::vector<ExternalCode> external_code;
+    std::map<std::string, std::string> metadata_name_map;
 };
 
 template<>
@@ -311,6 +312,16 @@ Module Module::resolve_submodules() const {
     }
 
     return lowered_module;
+}
+
+void Module::remap_metadata_name(const std::string &from, const std::string &to) const {
+    internal_assert(contents->metadata_name_map.find(from) == contents->metadata_name_map.end());
+    internal_assert(contents->metadata_name_map.find(to) == contents->metadata_name_map.end());
+    contents->metadata_name_map[from] = to;
+}
+
+std::map<std::string, std::string> Module::get_metadata_name_map() const {
+    return contents->metadata_name_map;
 }
 
 void Module::compile(const Outputs &output_files) const {
