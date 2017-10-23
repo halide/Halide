@@ -476,7 +476,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                             // correct dimension and update the region map.
                             Buffer<> buf;
                             if (arg.is_image_param()) {
-                                buf = arg.image_param.get_buffer();
+                                buf = arg.image_param.buffer();
                             } else {
                                 buf = arg.buffer;
                             }

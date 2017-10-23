@@ -102,9 +102,9 @@ Outputs compute_outputs(const Target &target,
 Argument to_argument(const Internal::Parameter &param) {
     Expr def, min, max;
     if (!param.is_buffer()) {
-        def = param.get_scalar_expr();
-        min = param.get_min_value();
-        max = param.get_max_value();
+        def = param.scalar_expr();
+        min = param.min_value();
+        max = param.max_value();
     }
     return Argument(param.name(),
         param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
@@ -114,7 +114,7 @@ Argument to_argument(const Internal::Parameter &param) {
 Func make_param_func(const Parameter &p, const std::string &name) {
     internal_assert(p.is_buffer());
     Func f(name + "_im");
-    auto b =  p.get_buffer();
+    auto b =  p.buffer();
     if (b.defined()) {
         // If the Parameter has an explicit BufferPtr set, bind directly to it
         f(_) = b(_);
@@ -200,8 +200,8 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
             values.push_back(p.stride_constraint(i));
         }
     } else {
-        values.push_back(p.get_min_value());
-        values.push_back(p.get_max_value());
+        values.push_back(p.min_value());
+        values.push_back(p.max_value());
     }
     return values;
 }
