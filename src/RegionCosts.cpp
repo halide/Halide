@@ -28,8 +28,8 @@ class FindImageInputs : public IRVisitor {
             // Call to an ImageParam
             if (call->param.defined() && (seen_image_param.count(call->name) == 0)) {
                 for (int i = 0; i < call->param.dimensions(); ++i) {
-                    const Expr &min = call->param.min_constraint_estimate(i);
-                    const Expr &extent = call->param.extent_constraint_estimate(i);
+                    const Expr &min = call->param.get_min_constraint_estimate(i);
+                    const Expr &extent = call->param.get_extent_constraint_estimate(i);
 
                     user_assert(min.defined())
                         << "AutoSchedule: Estimate of the min value of ImageParam \""

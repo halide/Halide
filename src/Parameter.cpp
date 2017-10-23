@@ -254,37 +254,37 @@ void Parameter::set_host_alignment(int bytes) {
     contents->host_alignment = bytes;
 }
 
-Expr Parameter::min_constraint(int dim) const {
+Expr Parameter::get_min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
     return contents->min_constraint[dim];
 }
 
-Expr Parameter::extent_constraint(int dim) const {
+Expr Parameter::get_extent_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
     return contents->extent_constraint[dim];
 }
 
-Expr Parameter::stride_constraint(int dim) const {
+Expr Parameter::get_stride_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
     return contents->stride_constraint[dim];
 }
 
-Expr Parameter::min_constraint_estimate(int dim) const {
+Expr Parameter::get_min_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
     return contents->min_constraint_estimate[dim];
 }
 
-Expr Parameter::extent_constraint_estimate(int dim) const {
+Expr Parameter::get_extent_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
     return contents->extent_constraint_estimate[dim];
 }
 
-int Parameter::host_alignment() const {
+int Parameter::get_host_alignment() const {
     check_is_buffer();
     return contents->host_alignment;
 }

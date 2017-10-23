@@ -85,7 +85,7 @@ private:
         int aligned_offset = 0;
         bool known_alignment = false;
         int base_alignment =
-            op->param.defined() ? op->param.host_alignment() : required_alignment;
+            op->param.defined() ? op->param.get_host_alignment() : required_alignment;
         if (base_alignment % required_alignment == 0) {
             // We know the base is aligned. Try to find out the offset
             // of the ramp base from an aligned offset.

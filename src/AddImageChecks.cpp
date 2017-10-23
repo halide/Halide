@@ -433,13 +433,13 @@ Stmt add_image_checks(Stmt s,
                 // constrained to match the first output.
 
                 if (param.defined()) {
-                    user_assert(!param.extent_constraint(i).defined() &&
-                                !param.min_constraint(i).defined())
+                    user_assert(!param.get_extent_constraint(i).defined() &&
+                                !param.get_min_constraint(i).defined())
                         << "Can't constrain the min or extent of an output buffer beyond the "
                         << "first. They are implicitly constrained to have the same min and extent "
                         << "as the first output buffer.\n";
 
-                    stride_constrained = param.stride_constraint(i);
+                    stride_constrained = param.get_stride_constraint(i);
                 } else if (image.defined() && (int)i < image.dimensions()) {
                     stride_constrained = image.dim(i).stride();
                 }
@@ -462,9 +462,9 @@ Stmt add_image_checks(Stmt s,
                 extent_constrained = image.dim(i).extent();
                 min_constrained = image.dim(i).min();
             } else if (param.defined()) {
-                stride_constrained = param.stride_constraint(i);
-                extent_constrained = param.extent_constraint(i);
-                min_constrained = param.min_constraint(i);
+                stride_constrained = param.get_stride_constraint(i);
+                extent_constrained = param.get_extent_constraint(i);
+                min_constrained = param.get_min_constraint(i);
             }
 
             if (stride_constrained.defined()) {
@@ -548,8 +548,8 @@ Stmt add_image_checks(Stmt s,
         }
 
         // and check alignment of the host field
-        if (param.defined() && param.host_alignment() != param.type().bytes()) {
-            int alignment_required = param.host_alignment();
+        if (param.defined() && param.get_host_alignment() != param.type().bytes()) {
+            int alignment_required = param.get_host_alignment();
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",

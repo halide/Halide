@@ -30,7 +30,7 @@ const Dimension OutputImageParam::dim(int i) const {
 }
 
 int OutputImageParam::host_alignment() const {
-    return param.host_alignment();
+    return param.get_host_alignment();
 }
 
 OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
