@@ -93,6 +93,10 @@ public:
      * for output operations. */
     EXPORT const std::string &name() const;
 
+    /** If this Module had an auto-generated schedule, this is the C++ source
+     * for that schedule. */
+    EXPORT const std::string &auto_schedule() const;
+
     /** The declarations contained in this module. */
     // @{
     EXPORT const std::vector<Buffer<>> &buffers() const;
@@ -126,6 +130,17 @@ public:
     /** Return a new module with all submodules compiled to buffers on
      * on the result Module. */
     EXPORT Module resolve_submodules() const;
+
+    /** When generating metadata from this module, remap any occurrences
+     * of 'from' into 'to'. */
+    EXPORT void remap_metadata_name(const std::string &from, const std::string &to) const;
+
+    /** Retrieve the metadata name map. */
+    EXPORT std::map<std::string, std::string> get_metadata_name_map() const;
+
+    /** Set the auto_schedule text for the Module. It is an error to call this
+     * multiple times for a given Module. */
+    EXPORT void set_auto_schedule(const std::string &auto_schedule);
 };
 
 /** Link a set of modules together into one module. */

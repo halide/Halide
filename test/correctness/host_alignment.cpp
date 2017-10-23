@@ -3,6 +3,8 @@
 #include <map>
 #include <string>
 
+namespace {
+
 using std::vector;
 using std::map;
 using std::string;
@@ -84,6 +86,8 @@ int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     s.accept(&c);
     return c.count;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     Var x, y, c;
