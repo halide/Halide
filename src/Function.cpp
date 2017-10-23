@@ -108,14 +108,14 @@ struct FunctionContents {
 
         for (Parameter i : output_buffers) {
             for (size_t j = 0; j < init_def.args().size(); j++) {
-                if (i.min_constraint(j).defined()) {
-                    i.min_constraint(j).accept(visitor);
+                if (i.get_min_constraint(j).defined()) {
+                    i.get_min_constraint(j).accept(visitor);
                 }
-                if (i.stride_constraint(j).defined()) {
-                    i.stride_constraint(j).accept(visitor);
+                if (i.get_stride_constraint(j).defined()) {
+                    i.get_stride_constraint(j).accept(visitor);
                 }
-                if (i.extent_constraint(j).defined()) {
-                    i.extent_constraint(j).accept(visitor);
+                if (i.get_extent_constraint(j).defined()) {
+                    i.get_extent_constraint(j).accept(visitor);
                 }
             }
         }

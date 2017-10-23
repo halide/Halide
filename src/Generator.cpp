@@ -192,12 +192,12 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
 std::vector<Expr> parameter_constraints(const Parameter &p) {
     internal_assert(p.defined());
     std::vector<Expr> values;
-    values.push_back(Expr(p.host_alignment()));
+    values.push_back(Expr(p.get_host_alignment()));
     if (p.is_buffer()) {
         for (int i = 0; i < p.dimensions(); ++i) {
-            values.push_back(p.min_constraint(i));
-            values.push_back(p.extent_constraint(i));
-            values.push_back(p.stride_constraint(i));
+            values.push_back(p.get_min_constraint(i));
+            values.push_back(p.get_extent_constraint(i));
+            values.push_back(p.get_stride_constraint(i));
         }
     } else {
         values.push_back(p.get_min_value());

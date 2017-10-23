@@ -822,8 +822,8 @@ public:
                 Expr extent = Variable::make(Int(32), buffer_name + ".extent." + std::to_string(d), buf);
 
                 // Respect any output min and extent constraints
-                Expr min_constraint = buf.min_constraint(d);
-                Expr extent_constraint = buf.extent_constraint(d);
+                Expr min_constraint = buf.get_min_constraint(d);
+                Expr extent_constraint = buf.get_extent_constraint(d);
 
                 if (min_constraint.defined()) {
                     min = min_constraint;

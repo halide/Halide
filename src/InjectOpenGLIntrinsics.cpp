@@ -58,8 +58,8 @@ private:
             // value of c dimension for ImageParams accessed by GLSL-based filters.
             if (call->param.defined()) {
                 bool const_min_constraint =
-                    call->param.min_constraint(2).defined() &&
-                    is_const(call->param.min_constraint(2));
+                    call->param.get_min_constraint(2).defined() &&
+                    is_const(call->param.get_min_constraint(2));
                 user_assert(const_min_constraint)
                     << "GLSL: Requires minimum for c-dimension set to constant "
                     << "for ImageParam '" << args[0] << "'. "

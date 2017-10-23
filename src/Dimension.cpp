@@ -32,11 +32,11 @@ Expr Dimension::max() const {
 }
 
 Expr Dimension::min_estimate() const {
-    return param.min_constraint_estimate(d);
+    return param.get_min_constraint_estimate(d);
 }
 
 Expr Dimension::extent_estimate() const {
-    return param.extent_constraint_estimate(d);
+    return param.get_extent_constraint_estimate(d);
 }
 
 Expr Dimension::stride() const {

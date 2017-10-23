@@ -1922,7 +1922,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
         // is aligned to at least the native vector width. However, we may be able to do
         // better than just assuming that it is unaligned.
         if (is_external && op->param.defined()) {
-            int host_alignment = op->param.host_alignment();
+            int host_alignment = op->param.get_host_alignment();
             alignment = gcd(alignment, host_alignment);
         }
 
@@ -2009,7 +2009,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
     if (is_external && load->param.defined()) {
-        int host_alignment = load->param.host_alignment();
+        int host_alignment = load->param.get_host_alignment();
         alignment = gcd(alignment, host_alignment);
     }
 
@@ -3150,7 +3150,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             // is aligned to at least the native vector width. However, we may be able to do
             // better than just assuming that it is unaligned.
             if (is_external && op->param.defined()) {
-                int host_alignment = op->param.host_alignment();
+                int host_alignment = op->param.get_host_alignment();
                 alignment = gcd(alignment, host_alignment);
             }
 

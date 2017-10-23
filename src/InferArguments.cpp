@@ -110,9 +110,9 @@ private:
             visit_expr(max);
         } else {
             for (int i = 0; i < p.dimensions(); i++) {
-                visit_expr(p.min_constraint(i));
-                visit_expr(p.extent_constraint(i));
-                visit_expr(p.stride_constraint(i));
+                visit_expr(p.get_min_constraint(i));
+                visit_expr(p.get_extent_constraint(i));
+                visit_expr(p.get_stride_constraint(i));
             }
         }
     }
