@@ -217,8 +217,6 @@ private:
                 (op->param.get_min_value().defined() ||
                  op->param.get_max_value().defined())) {
 
-                debug(0) << "Encountered bounded param: " << op->name << "\n";
-
                 if (op->param.get_max_value().defined() && is_const(op->param.get_max_value())) {
                     interval.max = Interval::make_min(interval.max, op->param.get_max_value());
                 }
