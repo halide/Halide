@@ -322,7 +322,7 @@ WEAK int halide_get_trace_file(void *user_context) {
             halide_set_trace_file(fileno(file));
             halide_trace_file_internally_opened = file;
             if (!halide_trace_buffer) {
-                halide_trace_buffer = new TraceBuffer;
+                halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
             }
         } else {
             halide_set_trace_file(0);
@@ -342,7 +342,7 @@ WEAK int halide_shutdown_trace() {
         halide_trace_file_initialized = false;
         halide_trace_file_internally_opened = NULL;
         if (halide_trace_buffer) {
-            delete halide_trace_buffer;
+            free(halide_trace_buffer);
         }
         return ret;
     } else {
