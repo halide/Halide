@@ -306,6 +306,7 @@ SOURCE_FILES = \
   Deinterleave.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
+  Dimension.cpp \
   EarlyFree.cpp \
   Elf.cpp \
   EliminateBoolVectors.cpp \
@@ -438,6 +439,7 @@ HEADER_FILES = \
   Deinterleave.h \
   DeviceArgument.h \
   DeviceInterface.h \
+  Dimension.h \
   EarlyFree.h \
   Elf.h \
   EliminateBoolVectors.h \

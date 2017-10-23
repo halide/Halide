@@ -9,6 +9,7 @@
 #include "Argument.h"
 #include "runtime/HalideRuntime.h"
 #include "Var.h"
+#include "Dimension.h"
 
 namespace Halide {
 
