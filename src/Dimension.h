@@ -40,7 +40,7 @@ public:
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
-    EXPORT Dimension set_min(Expr e);
+    EXPORT Dimension set_min(Expr min);
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
@@ -63,24 +63,24 @@ public:
      im.dim(0).set_extent((im.dim(0).extent()/32)*32);
      \endcode
      * tells the compiler that the extent is a multiple of 32. */
-    EXPORT Dimension set_extent(Expr e);
+    EXPORT Dimension set_extent(Expr extent);
 
     /** Set the stride in a given dimension to equal the given
      * value. This is particularly helpful to set when
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
-    EXPORT Dimension set_stride(Expr e);
+    EXPORT Dimension set_stride(Expr stride);
 
     /** Set the min and extent in one call. */
     EXPORT Dimension set_bounds(Expr min, Expr extent);
 
     /** Set the estimate of the min in a given dimension to equal the given
      * expression. This value is only used by the auto-scheduler. */
-    EXPORT Dimension set_min_estimate(Expr e);
+    EXPORT Dimension set_min_estimate(Expr min);
 
     /** Set the estimate of the extent in a given dimension to equal the given
      * expression. This value is only used by the auto-scheduler. */
-    EXPORT Dimension set_extent_estimate(Expr e);
+    EXPORT Dimension set_extent_estimate(Expr extent);
 
     /** Set the min and extent estimates in one call. These values are only
      * used by the auto-scheduler. */
