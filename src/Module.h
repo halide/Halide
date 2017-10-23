@@ -131,6 +131,13 @@ public:
      * on the result Module. */
     EXPORT Module resolve_submodules() const;
 
+    /** When generating metadata from this module, remap any occurrences
+     * of 'from' into 'to'. */
+    EXPORT void remap_metadata_name(const std::string &from, const std::string &to) const;
+
+    /** Retrieve the metadata name map. */
+    EXPORT std::map<std::string, std::string> get_metadata_name_map() const;
+
     /** Set the auto_schedule text for the Module. It is an error to call this
      * multiple times for a given Module. */
     EXPORT void set_auto_schedule(const std::string &auto_schedule);
