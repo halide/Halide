@@ -249,7 +249,21 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
     return stream;
 }
 
-}
-}
+/** Helper class for pushing/popping Scope<> values, to allow
+ * for early-exit in Visitor/Mutators that preserves correctness */
+template<typename T>
+struct PushScope {
+    Scope<T> &scope;
+    std::string name;
+    PushScope(Scope<T> &scope, const std::string &name, const T &value) : scope(scope), name(name) {
+        scope.push(name, value);
+    }
+    ~PushScope() {
+        scope.pop(name);
+    }
+};
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
