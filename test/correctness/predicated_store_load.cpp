@@ -7,6 +7,8 @@
 
 #include "test/common/check_call_graphs.h"
 
+namespace {
+
 using std::map;
 using std::vector;
 using std::string;
@@ -387,6 +389,8 @@ int vectorized_predicated_load_const_index_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
 

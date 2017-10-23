@@ -1454,6 +1454,34 @@ public:
     Func in(const std::vector<Func> &others) {
         return Func(*this).in(others);
     }
+
+#define HALIDE_INPUT_FORWARD_CONST(method)                                   \
+    template<typename ...Args>                                               \
+    inline auto method(Args&&... args) const ->                              \
+        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) { \
+        user_assert(this->funcs().size() == 1) << "Use operator[] to access the Func you want"; \
+        return Func(*this).method(std::forward<Args>(args)...);              \
+    }
+
+    /** Forward const methods to the underlying Func. (Non-const methods
+     * aren't available for Input<Func>.) */
+    // @{
+    HALIDE_INPUT_FORWARD_CONST(args)
+    HALIDE_INPUT_FORWARD_CONST(defined)
+    HALIDE_INPUT_FORWARD_CONST(has_update_definition)
+    HALIDE_INPUT_FORWARD_CONST(num_update_definitions)
+    HALIDE_INPUT_FORWARD_CONST(output_types)
+    HALIDE_INPUT_FORWARD_CONST(outputs)
+    HALIDE_INPUT_FORWARD_CONST(rvars)
+    HALIDE_INPUT_FORWARD_CONST(update_args)
+    HALIDE_INPUT_FORWARD_CONST(update_value)
+    HALIDE_INPUT_FORWARD_CONST(update_values)
+    HALIDE_INPUT_FORWARD_CONST(value)
+    HALIDE_INPUT_FORWARD_CONST(values)
+    // }@
+
+#undef HALIDE_INPUT_FORWARD
+#undef HALIDE_INPUT_FORWARD_CONST
 };
 
 
@@ -1855,6 +1883,34 @@ class GeneratorOutput_Buffer : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
 
+    NO_INLINE void assign_from_func(const Func &f) {
+        this->check_value_writable();
+
+        internal_assert(f.defined());
+
+        const auto &output_types = f.output_types();
+        user_assert(output_types.size() == 1)
+            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
+
+        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
+        user_assert(T::can_convert_from(other))
+            << "Cannot assign to the Output \"" << this->name()
+            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+
+        if (this->types_defined()) {
+            user_assert(output_types.at(0) == this->type())
+                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+        }
+        if (this->dims_defined()) {
+            user_assert(f.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+        }
+
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        user_assert(!this->funcs_.at(0).defined());
+        this->funcs_[0] = f;
+    }
+
 protected:
     using TBase = typename Super::TBase;
 
@@ -1929,34 +1985,16 @@ public:
     // this allows us to pipeline the results of a Stub to the results
     // of the enclosing Generator.
     template<typename T2>
-    NO_INLINE GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
-        this->check_value_writable();
+    GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
+        assign_from_func(stub_output_buffer.f);
+        return *this;
+    }
 
-        const auto &f = stub_output_buffer.f;
-        internal_assert(f.defined());
-
-        const auto &output_types = f.output_types();
-        user_assert(output_types.size() == 1)
-            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
-
-        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-        user_assert(T::can_convert_from(other))
-            << "Cannot assign to the Output \"" << this->name()
-            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
-
-        if (this->types_defined()) {
-            user_assert(output_types.at(0) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
-        }
-        if (this->dims_defined()) {
-            user_assert(f.dimensions() == this->dims())
-                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
-        }
-
-        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
-        user_assert(!this->funcs_.at(0).defined());
-        this->funcs_[0] = f;
-
+    // Allow assignment from a Func to an Output<Buffer>;
+    // this allows us to use helper functions that return a plain Func
+    // to simply set the output(s) without needing a wrapper Func.
+    GeneratorOutput_Buffer<T> &operator=(const Func &f) {
+        assign_from_func(f);
         return *this;
     }
 
@@ -2389,7 +2427,16 @@ using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const Gene
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
+        bool emit_o{false};
+        bool emit_h{true};
+        bool emit_cpp{false};
+        bool emit_assembly{false};
+        bool emit_bitcode{false};
+        bool emit_stmt{false};
+        bool emit_stmt_html{false};
+        bool emit_static_library{true};
+        bool emit_cpp_stub{false};
+        bool emit_schedule{false};
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2397,9 +2444,6 @@ public:
         // extensions are problematic, and avoids the need to rename output files
         // after the fact.
         std::map<std::string, std::string> substitutions;
-        EmitOptions()
-            : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
@@ -2486,8 +2530,8 @@ public:
 
     /** Generate a schedule for the Generator's pipeline. */
     //@{
-    EXPORT std::string auto_schedule_outputs(const MachineParams &arch_params);
-    EXPORT std::string auto_schedule_outputs();
+    EXPORT void auto_schedule_outputs(const MachineParams &arch_params);
+    EXPORT void auto_schedule_outputs();
     //@}
 
 protected:
@@ -2593,6 +2637,7 @@ private:
     bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
+    std::string auto_schedule_result;
 
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
