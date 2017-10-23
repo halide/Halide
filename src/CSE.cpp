@@ -234,10 +234,7 @@ public:
         }
 
         // Visit the children if we haven't been here before.
-        if (!visited.count(e.get())) {
-            visited.insert(e.get());
-            e.accept(this);
-        }
+        IRGraphVisitor::include(e);
     }
 };
 
