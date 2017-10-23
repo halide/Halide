@@ -1254,8 +1254,7 @@ class EliminateInterleaves : public IRMutator {
     }
 
     void visit_bool_to_mask(const Call *op) {
-        bool old_in_bool_to_mask = in_bool_to_mask;
-        in_bool_to_mask = true;
+        RestoreAtExit<bool> old_in_bool_to_mask(in_bool_to_mask, true);
 
         Expr arg = mutate(op->args[0]);
         if (!arg.same_as(op->args[0]) || interleave_mask) {
@@ -1267,8 +1266,6 @@ class EliminateInterleaves : public IRMutator {
         } else {
             expr = op;
         }
-
-        in_bool_to_mask = old_in_bool_to_mask;
     }
 
     void visit(const Call *op) {
