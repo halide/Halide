@@ -206,14 +206,14 @@ private:
 
             if (op->param.defined() &&
                 !op->param.is_buffer() &&
-                (op->param.get_min_value().defined() ||
-                 op->param.get_max_value().defined())) {
+                (op->param.min_value().defined() ||
+                 op->param.max_value().defined())) {
 
-                if (op->param.get_max_value().defined() && is_const(op->param.get_max_value())) {
-                    interval.max = Interval::make_min(interval.max, op->param.get_max_value());
+                if (op->param.max_value().defined() && is_const(op->param.max_value())) {
+                    interval.max = Interval::make_min(interval.max, op->param.max_value());
                 }
-                if (op->param.get_min_value().defined() && is_const(op->param.get_min_value())) {
-                    interval.min = Interval::make_max(interval.min, op->param.get_min_value());
+                if (op->param.min_value().defined() && is_const(op->param.min_value())) {
+                    interval.min = Interval::make_max(interval.min, op->param.min_value());
                 }
             }
         } else {

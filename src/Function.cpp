@@ -985,7 +985,7 @@ class SubstituteScheduleParamExprs : public IRMutator {
     void visit(const Variable *v) override {
         IRMutator::visit(v);
         if (v->param.defined() && v->param.is_bound_before_lowering()) {
-            expr = mutate(v->param.get_scalar_expr());
+            expr = mutate(v->param.scalar_expr());
         }
     }
 

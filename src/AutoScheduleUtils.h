@@ -47,8 +47,8 @@ class SubstituteVarEstimates: public IRMutator {
 
     void visit(const Variable *var) {
         if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.get_estimate().defined()) {
-            expr = var->param.get_estimate();
+            var->param.estimate().defined()) {
+            expr = var->param.estimate();
         } else {
             expr = var;
         }
