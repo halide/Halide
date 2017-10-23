@@ -69,8 +69,8 @@ Dimension Dimension::set_min_estimate(Expr min) {
     return *this;
 }
 
-Dimension Dimension::set_extent_estimate(Expr stride) {
-    param.set_extent_constraint_estimate(d, stride);
+Dimension Dimension::set_extent_estimate(Expr extent) {
+    param.set_extent_constraint_estimate(d, extent);
     return *this;
 }
 
