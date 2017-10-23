@@ -1,5 +1,5 @@
-#ifndef HALIDE_SYNCTHREADS_H
-#define HALIDE_SYNCTHREADS_H
+#ifndef HALIDE_FUSE_GPU_THREAD_LOOPS_H
+#define HALIDE_FUSE_GPU_THREAD_LOOPS_H
 
 /** \file
  * Defines the lowering pass that fuses and normalizes loops over gpu
