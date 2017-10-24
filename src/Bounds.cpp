@@ -634,7 +634,7 @@ private:
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type(), var_name);
         Expr lane = op->base + var * op->stride;
-        PushScope<Interval> p(scope, var_name, Interval(make_const(var.type(), 0),
+        ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0),
                                                         make_const(var.type(), op->lanes-1)));
         lane.accept(this);
     }
@@ -784,7 +784,7 @@ private:
         }
 
         {
-            PushScope<Interval> p(scope, op->name, var);
+            ScopedBinding<Interval> p(scope, op->name, var);
             op->body.accept(this);
         }
 
@@ -1272,13 +1272,13 @@ private:
 
         if (is_small_enough_to_substitute(value_bounds.min) &&
             (fixed || is_small_enough_to_substitute(value_bounds.max))) {
-            PushScope<Interval> p(scope, op->name, value_bounds);
+            ScopedBinding<Interval> p(scope, op->name, value_bounds);
             op->body.accept(this);
         } else {
             string max_name = unique_name('t');
             string min_name = unique_name('t');
             {
-                PushScope<Interval> p(scope, op->name, Interval(Variable::make(op->value.type(), min_name),
+                ScopedBinding<Interval> p(scope, op->name, Interval(Variable::make(op->value.type(), min_name),
                                                                 Variable::make(op->value.type(), max_name)));
                 op->body.accept(this);
             }
@@ -1342,7 +1342,7 @@ private:
         }
 
         {
-            PushScope<Expr> p(let_stmts, op->name, op->value);
+            ScopedBinding<Expr> p(let_stmts, op->name, op->value);
             visit_let(op);
         }
 
@@ -1616,7 +1616,7 @@ private:
 
         push_var(op->name);
         {
-            PushScope<Interval> p(scope, op->name, Interval(min_val, max_val));
+            ScopedBinding<Interval> p(scope, op->name, Interval(min_val, max_val));
             op->body.accept(this);
         }
         pop_var(op->name);

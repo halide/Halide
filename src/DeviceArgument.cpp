@@ -63,8 +63,8 @@ void HostClosure::visit(const Call *op) {
 
         // The Func's name and the associated .buffer are mentioned in the
         // argument lists, but don't treat them as free variables.
-        PushScope<int> p1(ignore, bufname, 0);
-        PushScope<int> p2(ignore, bufname + ".buffer", 0);
+        ScopedBinding<int> p1(ignore, bufname, 0);
+        ScopedBinding<int> p2(ignore, bufname + ".buffer", 0);
         Internal::Closure::visit(op);
     } else {
         Internal::Closure::visit(op);
@@ -74,7 +74,7 @@ void HostClosure::visit(const Call *op) {
 void HostClosure::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         // The size of the threads and blocks is not part of the closure
-        PushScope<int> p(ignore, loop->name, 0);
+        ScopedBinding<int> p(ignore, loop->name, 0);
         loop->body.accept(this);
     } else {
         Internal::Closure::visit(loop);

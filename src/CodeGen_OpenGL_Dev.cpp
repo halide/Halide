@@ -774,12 +774,12 @@ void CodeGen_GLSL::visit(const Allocate *op) {
     if (size == 1) {
         // We can use a variable
         stream << print_type(op->type) << " " << print_name(op->name) << ";\n";
-        PushScope<int> p(scalar_vars, op->name, 0);
+        ScopedBinding<int> p(scalar_vars, op->name, 0);
         op->body.accept(this);
     } else if (size <= 4 && all_access_constant.result) {
         // We can just use a vector variable
         stream << print_type(op->type.with_lanes(size)) << " " << print_name(op->name) << ";\n";
-        PushScope<int> p(vector_vars, op->name, 0);
+        ScopedBinding<int> p(vector_vars, op->name, 0);
         op->body.accept(this);
     } else {
         stream << print_type(op->type) << " " << print_name(op->name) << "[" << size << "];\n";
