@@ -43,8 +43,8 @@ public:
 
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
-class LiftLoopInvariants : public IRMutator {
-    using IRMutator::visit;
+class LiftLoopInvariants : public IRMutator2 {
+    using IRMutator2::mvisit;
 
     Scope<int> varying;
 
@@ -66,29 +66,32 @@ class LiftLoopInvariants : public IRMutator {
         return true;
     }
 
-    void visit(const Let *op) {
+    Expr mvisit(const Let *op) override {
         varying.push(op->name, 0);
-        IRMutator::visit(op);
+        Expr expr = IRMutator2::mvisit(op);
         varying.pop(op->name);
+        return expr;
     }
 
-    void visit(const LetStmt *op) {
+    Stmt mvisit(const LetStmt *op) override {
         varying.push(op->name, 0);
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::mvisit(op);
         varying.pop(op->name);
+        return stmt;
     }
 
-    void visit(const For *op) {
+    Stmt mvisit(const For *op) override {
         varying.push(op->name, 0);
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::mvisit(op);
         varying.pop(op->name);
+        return stmt;
     }
 
 public:
 
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (should_lift(e)) {
             auto it = lifted.find(e);
             if (it == lifted.end()) {
@@ -99,19 +102,21 @@ public:
                 return Variable::make(e.type(), it->second);
             }
         } else {
-            return IRMutator::mutate(e);
+            return IRMutator2::mutate(e);
         }
     }
 
     map<Expr, string, IRDeepCompare> lifted;
 };
 
-class LICM : public IRMutator {
-    using IRVisitor::visit;
+class LICM : public IRMutator2 {
+    using IRMutator2::mvisit;
 
     bool in_gpu_loop {false};
 
-    void visit(const For *op) {
+    Stmt mvisit(const For *op) override {
+        Stmt stmt;
+
         bool old_in_gpu_loop = in_gpu_loop;
         in_gpu_loop =
             (op->for_type == ForType::GPUBlock ||
@@ -119,11 +124,11 @@ class LICM : public IRMutator {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
-            IRMutator::visit(op);
+            stmt = IRMutator2::mvisit(op);
         } else if (op->device_api == DeviceAPI::GLSL ||
                    op->device_api == DeviceAPI::OpenGLCompute) {
             // Don't lift anything out of OpenGL loops
-            IRMutator::visit(op);
+            stmt = IRMutator2::mvisit(op);
         } else {
 
             // Lift invariants
@@ -146,6 +151,7 @@ class LICM : public IRMutator {
         }
 
         in_gpu_loop = old_in_gpu_loop;
+        return stmt;
     }
 };
 
