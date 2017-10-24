@@ -283,7 +283,7 @@ private:
             Expr new_var = Variable::make(new_type, new_name);
             Expr body;
             {
-                PushScope<Expr> p(internal, op->name, new_var);
+                ScopedBinding<Expr> p(internal, op->name, new_var);
                 body = mutate(op->body);
             }
 

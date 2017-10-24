@@ -74,7 +74,7 @@ private:
         if (op->name == var) {
             result = in;
         } else {
-            PushScope<Interval> p(scope, op->name, in);
+            ScopedBinding<Interval> p(scope, op->name, in);
             op->body.accept(this);
         }
     }
@@ -88,7 +88,7 @@ private:
         if (op->name == var) {
             result = in;
         } else {
-            PushScope<Interval> p(scope, op->name, in);
+            ScopedBinding<Interval> p(scope, op->name, in);
             op->body.accept(this);
         }
     }
