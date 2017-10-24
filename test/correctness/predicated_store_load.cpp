@@ -7,6 +7,8 @@
 
 #include "test/common/check_call_graphs.h"
 
+namespace {
+
 using std::map;
 using std::vector;
 using std::string;
@@ -388,12 +390,9 @@ int vectorized_predicated_load_const_index_test() {
     return 0;
 }
 
-int main(int argc, char **argv) {
+}  // namespace
 
-    if (get_jit_target_from_environment().features_any_of({Target::HVX_64, Target::HVX_128})) {
-        printf("Skipping test due to https://github.com/halide/Halide/issues/2364\n");
-        return 0;
-    }
+int main(int argc, char **argv) {
 
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {

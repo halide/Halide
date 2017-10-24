@@ -24,11 +24,11 @@ int main(int argc, char **argv) {
 
     src.set(input);
 
-    double t1 = benchmark(10, 10, [&]() {
+    double t1 = benchmark([&]() {
         dst.realize(output);
     });
 
-    double t2 = benchmark(10, 10, [&]() {
+    double t2 = benchmark([&]() {
         memcpy(output.data(), input.data(), input.width());
     });
 

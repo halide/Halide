@@ -10,6 +10,8 @@ endif()
 
 set(RUNTIME_CPP
   aarch64_cpu_features
+  alignment_128
+  alignment_32
   android_clock
   android_host_cpu_count
   android_io
@@ -278,6 +280,7 @@ set(HEADER_FILES
   Deinterleave.h
   DeviceArgument.h
   DeviceInterface.h
+  Dimension.h
   EarlyFree.h
   Elf.h
   EliminateBoolVectors.h
@@ -434,6 +437,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Deinterleave.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
+  Dimension.cpp
   EarlyFree.cpp
   Elf.cpp
   EliminateBoolVectors.cpp

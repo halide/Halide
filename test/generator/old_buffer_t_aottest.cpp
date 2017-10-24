@@ -34,8 +34,8 @@ extern "C" int extern_stage(buffer_t *in2, buffer_t *f, buffer_t *out) {
         return 0;
     }
     halide_copy_to_host_legacy(nullptr, f);
-    for (int y = 0; y < out->extent[1]; y++) {
-        for (int x = 0; x < out->extent[0]; x++) {
+    for (int y = out->min[1]; y < out->min[1] + out->extent[1]; y++) {
+        for (int x = out->min[0]; x < out->min[0] + out->extent[0]; x++) {
             get_pixel(out, x, y) = get_pixel(in2, x, y + 7) + get_pixel(f, x, y);
         }
     }
