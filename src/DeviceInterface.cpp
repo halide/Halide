@@ -30,13 +30,18 @@ bool lookup_runtime_routine(const std::string &name,
 
 }
 
-const halide_device_interface_t *get_default_device_interface_for_target(const Target &t) {
-    return get_device_interface_for_device_api(DeviceAPI::Default_GPU, t);
-}
-
-const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d, const Target &t) {
-    if (d == DeviceAPI::Default_GPU) {
-        return get_device_interface_for_device_api(get_default_device_api_for_target(t), t);
+const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d, const Target &t,
+                                                                     const char *error_site) {
+  
+  if (d == DeviceAPI::Default_GPU) {
+        d = get_default_device_api_for_target(t);
+        if (d == DeviceAPI::Host) {
+            if (error_site) {
+                user_error << "get_device_interface_for_device_api called from " << error_site <<
+                  " requested a default GPU but no GPU feature is specified in target (" << t.to_string() << ").\n";
+            }
+            return nullptr;
+        }
     }
 
     const struct halide_device_interface_t *(*fn)();
@@ -52,12 +57,28 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
     } else {
+        if (error_site) {
+            user_error << "get_device_interface_for_device_api called from " << error_site <<
+                " requested unknown DeviceAPI (" << (int)d << ").\n";
+        }
+        return nullptr;
+    }
+
+    if (!t.supports_device_api(d)) {
+        if (error_site) {
+            user_error << "get_device_interface_for_device_api called from " << error_site <<
+                " DeviceAPI (" << name << ") is not supported by target (" << t.to_string() << ").\n";
+        }
         return nullptr;
     }
 
     if (lookup_runtime_routine("halide_" + name + "_device_interface", t, fn)) {
         return (*fn)();
     } else {
+        if (error_site) {
+              user_error << "get_device_interface_for_device_api called from " << error_site <<
+                  " cannot find runtime or device interface symbol for " << name << ".\n";
+        }
         return nullptr;
     }
 }
