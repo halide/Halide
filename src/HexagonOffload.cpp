@@ -327,6 +327,9 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         } else if ((inst >> 21) == 540) {
             // 0100 0011 100s ssss PP0t tiii iiid dddd
             mask = 0x000007e0;
+        } else if ((inst >> 28) == 11) {
+            // 1011 iiii iiis ssss PPii iiii iiid dddd
+            mask = 0x0fe03fe0;
         } else {
             internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
         }

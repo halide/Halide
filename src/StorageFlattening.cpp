@@ -118,6 +118,11 @@ private:
             shader_scope_realizations.pop(op->name);
         }
 
+        // The allocation extents of the function taken into account of
+        // the align_storage directives. It is only used to determine the
+        // host allocation size and the strides in buffer_t objects (which
+        // also affects the device allocation in some backends).
+        vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
         {
             auto iter = env.find(op->name);
@@ -131,7 +136,9 @@ private:
                         storage_permutation.push_back((int)j);
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
-                            extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                            allocation_extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                        } else {
+                            allocation_extents[j] = extents[j];
                         }
                     }
                 }
@@ -173,13 +180,13 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         // Make the allocation node
-        stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
+        stmt = Allocate::make(op->name, op->types[0], allocation_extents, condition, stmt);
 
         // Compute the strides
         for (int i = (int)op->bounds.size()-1; i > 0; i--) {
             int prev_j = storage_permutation[i-1];
             int j = storage_permutation[i];
-            Expr stride = stride_var[prev_j] * extent_var[prev_j];
+            Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
         }
 
