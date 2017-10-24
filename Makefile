@@ -1631,6 +1631,11 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
 
+# This is a specialized 'install' for users who need Hexagon support libraries as well.
+install_qc: install
+	cp $(ROOT_DIR)/src/runtime/hexagon_remote/bin/host/* $(PREFIX)/lib/host
+	cp $(ROOT_DIR)/src/runtime/hexagon_remote/bin/v60/* $(PREFIX)/lib/v60
+
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
 # have to guess what's necessary on their system; call
