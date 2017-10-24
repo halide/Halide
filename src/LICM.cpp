@@ -44,7 +44,7 @@ public:
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
 class LiftLoopInvariants : public IRMutator2 {
-    using IRMutator2::mvisit;
+    using IRMutator2::visit;
 
     Scope<int> varying;
 
@@ -66,23 +66,23 @@ class LiftLoopInvariants : public IRMutator2 {
         return true;
     }
 
-    Expr mvisit(const Let *op) override {
+    Expr visit(const Let *op) override {
         varying.push(op->name, 0);
-        Expr expr = IRMutator2::mvisit(op);
+        Expr expr = IRMutator2::visit(op);
         varying.pop(op->name);
         return expr;
     }
 
-    Stmt mvisit(const LetStmt *op) override {
+    Stmt visit(const LetStmt *op) override {
         varying.push(op->name, 0);
-        Stmt stmt = IRMutator2::mvisit(op);
+        Stmt stmt = IRMutator2::visit(op);
         varying.pop(op->name);
         return stmt;
     }
 
-    Stmt mvisit(const For *op) override {
+    Stmt visit(const For *op) override {
         varying.push(op->name, 0);
-        Stmt stmt = IRMutator2::mvisit(op);
+        Stmt stmt = IRMutator2::visit(op);
         varying.pop(op->name);
         return stmt;
     }
@@ -110,11 +110,11 @@ public:
 };
 
 class LICM : public IRMutator2 {
-    using IRMutator2::mvisit;
+    using IRMutator2::visit;
 
     bool in_gpu_loop {false};
 
-    Stmt mvisit(const For *op) override {
+    Stmt visit(const For *op) override {
         Stmt stmt;
 
         bool old_in_gpu_loop = in_gpu_loop;
@@ -124,11 +124,11 @@ class LICM : public IRMutator2 {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
-            stmt = IRMutator2::mvisit(op);
+            stmt = IRMutator2::visit(op);
         } else if (op->device_api == DeviceAPI::GLSL ||
                    op->device_api == DeviceAPI::OpenGLCompute) {
             // Don't lift anything out of OpenGL loops
-            stmt = IRMutator2::mvisit(op);
+            stmt = IRMutator2::visit(op);
         } else {
 
             // Lift invariants

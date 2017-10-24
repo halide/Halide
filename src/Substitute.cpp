@@ -142,9 +142,9 @@ class GraphSubstitute : public IRGraphMutator2 {
     string var;
     Expr value;
 
-    using IRGraphMutator2::mvisit;
+    using IRGraphMutator2::visit;
 
-    Expr mvisit(const Variable *op) override {
+    Expr visit(const Variable *op) override {
         if (op->name == var) {
             return value;
         } else {
@@ -194,9 +194,9 @@ Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stm
 
 class SubstituteInAllLets : public IRGraphMutator2 {
 
-    using IRGraphMutator2::mvisit;
+    using IRGraphMutator2::visit;
 
-    Expr mvisit(const Let *op) override {
+    Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
         return graph_substitute(op->name, value, body);
