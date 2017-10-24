@@ -279,6 +279,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();
 
+        // Sort the args by the size of the underlying type. This is
+        // helpful for avoiding struct-packing ambiguities in metal,
+        // which passes the scalar args as a struct.
+        std::sort(closure_args.begin(), closure_args.end(),
+                  [](const DeviceArgument &a, const DeviceArgument &b) {
+                      if (a.is_buffer == b.is_buffer) {
+                          return a.type.bits() > b.type.bits();
+                      } else {
+                          return a.is_buffer < b.is_buffer;
+                      }
+                  });
+
         // Propagate anything known about alignment into the kernel via the closure
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (alignment_info.contains(closure_args[i].name)) {
