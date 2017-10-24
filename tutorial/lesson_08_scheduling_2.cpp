@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
     // producer.compute_root():
     // - Temporary memory allocated: 25 floats
     // - Loads: 64
-    // - Stores: 39
+    // - Stores: 41
     // - Calls to sin: 25
 
     // There's a trade-off here. Full inlining used minimal temporary
