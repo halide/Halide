@@ -18,18 +18,18 @@ Closure::Closure(Stmt s, const string &loop_variable) {
 
 void Closure::visit(const Let *op) {
     op->value.accept(this);
-    PushScope<int> p(ignore, op->name, 0);
+    ScopedBinding<int> p(ignore, op->name, 0);
     op->body.accept(this);
 }
 
 void Closure::visit(const LetStmt *op) {
     op->value.accept(this);
-    PushScope<int> p(ignore, op->name, 0);
+    ScopedBinding<int> p(ignore, op->name, 0);
     op->body.accept(this);
 }
 
 void Closure::visit(const For *op) {
-    PushScope<int> p(ignore, op->name, 0);
+    ScopedBinding<int> p(ignore, op->name, 0);
     op->min.accept(this);
     op->extent.accept(this);
     op->body.accept(this);
@@ -71,7 +71,7 @@ void Closure::visit(const Allocate *op) {
     if (op->new_expr.defined()) {
         op->new_expr.accept(this);
     }
-    PushScope<int> p(ignore, op->name, 0);
+    ScopedBinding<int> p(ignore, op->name, 0);
     for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
     }
