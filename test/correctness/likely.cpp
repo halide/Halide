@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+namespace {
+
 using namespace Halide;
 using namespace Halide::Internal;
 using std::string;
@@ -78,6 +80,8 @@ void count_sin_calls(Func g, int correct) {
     g.add_custom_lowering_pass(new CheckSinCount(correct));
     g.compile_to_module(g.infer_arguments());
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     Func f;
