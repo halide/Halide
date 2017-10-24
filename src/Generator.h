@@ -1062,43 +1062,6 @@ private:
     }
 };
 
-class Constrainable {
-public:
-    virtual ~Constrainable() {}
-
-    virtual Parameter parameter() const = 0;
-
-    int dimensions() const {
-        return parameter().dimensions();
-    }
-
-    Dimension dim(int i) {
-        return Dimension(parameter(), i);
-    }
-
-    const Dimension dim(int i) const {
-        return Dimension(parameter(), i);
-    }
-
-    int host_alignment() const {
-        return parameter().host_alignment();
-    }
-
-    Constrainable &set_host_alignment(int alignment) {
-        parameter().set_host_alignment(alignment);
-        return *this;
-    }
-
-    const Expr left() const { return dim(0).min(); }
-    const Expr right() const { return dim(0).max(); }
-    const Expr top() const { return dim(1).min(); }
-    const Expr bottom() const { return dim(1).max(); }
-
-    const Expr width() const { return dim(0).extent(); }
-    const Expr height() const { return dim(1).extent(); }
-    const Expr channels() const { return dim(2).extent(); }
-};
-
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
  * instantiations; it is not part of the public API and should never be
  * used directly by user code.
@@ -1175,11 +1138,6 @@ protected:
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
 
-    virtual Parameter parameter() const {
-        internal_error << "Unimplemented";
-        return Parameter();
-    }
-
     virtual void check_value_writable() const = 0;
 
 private:
@@ -1214,6 +1172,8 @@ protected:
     friend class GeneratorBase;
 
     std::vector<Parameter> parameters_;
+
+    EXPORT Parameter parameter() const;
 
     EXPORT void init_internals();
     EXPORT void set_inputs(const std::vector<StubInput> &inputs);
@@ -1293,7 +1253,7 @@ public:
 };
 
 template<typename T>
-class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func>, public Constrainable {
+class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func> {
 private:
     using Super = GeneratorInputImpl<T, Func>;
 
@@ -1311,11 +1271,6 @@ protected:
         } else {
             return "Halide::Internal::StubInputBuffer<>";
         }
-    }
-
-    Parameter parameter() const override {
-        internal_assert(this->parameters_.size() == 1);
-        return this->parameters_.at(0);
     }
 
     static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
@@ -1339,16 +1294,16 @@ public:
 
     template <typename... Args>
     Expr operator()(Args&&... args) const {
-        return this->funcs().at(0)(std::forward<Args>(args)...);
+        return Func(*this)(std::forward<Args>(args)...);
     }
 
     Expr operator()(std::vector<Expr> args) const {
-        return this->funcs().at(0)(args);
+        return Func(*this)(args);
     }
 
     template<typename T2>
     operator StubInputBuffer<T2>() const {
-        return StubInputBuffer<T2>(parameter());
+        return StubInputBuffer<T2>(this->parameter());
     }
 
     operator Func() const {
@@ -1375,6 +1330,43 @@ public:
     Func in(const std::vector<Func> &others) {
         return Func(*this).in(others);
     }
+
+    operator ImageParam() const {
+        return ImageParam(this->parameter(), Func(*this));
+    }
+
+#define HALIDE_INPUT_FORWARD(method)                                       \
+    template<typename ...Args>                                              \
+    inline auto method(Args&&... args) ->                                   \
+        decltype(std::declval<ImageParam>().method(std::forward<Args>(args)...)) {\
+        return ((ImageParam) *this).method(std::forward<Args>(args)...);          \
+    }
+
+#define HALIDE_INPUT_FORWARD_CONST(method)                                 \
+    template<typename ...Args>                                              \
+    inline auto method(Args&&... args) const ->                             \
+        decltype(std::declval<ImageParam>().method(std::forward<Args>(args)...)) {\
+        return ((ImageParam) *this).method(std::forward<Args>(args)...);          \
+    }
+
+    /** Forward methods to the ImageParam. */
+    // @{
+    HALIDE_INPUT_FORWARD(dim)
+    HALIDE_INPUT_FORWARD_CONST(dim)
+    HALIDE_INPUT_FORWARD_CONST(host_alignment)
+    HALIDE_INPUT_FORWARD(set_host_alignment)
+    HALIDE_INPUT_FORWARD_CONST(dimensions)
+    HALIDE_INPUT_FORWARD_CONST(left)
+    HALIDE_INPUT_FORWARD_CONST(right)
+    HALIDE_INPUT_FORWARD_CONST(top)
+    HALIDE_INPUT_FORWARD_CONST(bottom)
+    HALIDE_INPUT_FORWARD_CONST(width)
+    HALIDE_INPUT_FORWARD_CONST(height)
+    HALIDE_INPUT_FORWARD_CONST(channels)
+    // }@
+
+#undef HALIDE_INPUT_FORWARD
+#undef HALIDE_INPUT_FORWARD_CONST
 };
 
 
@@ -1462,6 +1454,34 @@ public:
     Func in(const std::vector<Func> &others) {
         return Func(*this).in(others);
     }
+
+#define HALIDE_INPUT_FORWARD_CONST(method)                                   \
+    template<typename ...Args>                                               \
+    inline auto method(Args&&... args) const ->                              \
+        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) { \
+        user_assert(this->funcs().size() == 1) << "Use operator[] to access the Func you want"; \
+        return Func(*this).method(std::forward<Args>(args)...);              \
+    }
+
+    /** Forward const methods to the underlying Func. (Non-const methods
+     * aren't available for Input<Func>.) */
+    // @{
+    HALIDE_INPUT_FORWARD_CONST(args)
+    HALIDE_INPUT_FORWARD_CONST(defined)
+    HALIDE_INPUT_FORWARD_CONST(has_update_definition)
+    HALIDE_INPUT_FORWARD_CONST(num_update_definitions)
+    HALIDE_INPUT_FORWARD_CONST(output_types)
+    HALIDE_INPUT_FORWARD_CONST(outputs)
+    HALIDE_INPUT_FORWARD_CONST(rvars)
+    HALIDE_INPUT_FORWARD_CONST(update_args)
+    HALIDE_INPUT_FORWARD_CONST(update_value)
+    HALIDE_INPUT_FORWARD_CONST(update_values)
+    HALIDE_INPUT_FORWARD_CONST(value)
+    HALIDE_INPUT_FORWARD_CONST(values)
+    // }@
+
+#undef HALIDE_INPUT_FORWARD
+#undef HALIDE_INPUT_FORWARD_CONST
 };
 
 
@@ -1731,6 +1751,7 @@ public:
     // }@
 
 #undef HALIDE_OUTPUT_FORWARD
+#undef HALIDE_OUTPUT_FORWARD_CONST
 
 protected:
     EXPORT GeneratorOutputBase(size_t array_size,
@@ -1748,6 +1769,8 @@ protected:
 
     friend class GeneratorBase;
     friend class StubEmitter;
+
+    EXPORT Parameter parameter() const;
 
     EXPORT void init_internals();
     EXPORT void resize(size_t size);
@@ -1856,9 +1879,37 @@ public:
 };
 
 template<typename T>
-class GeneratorOutput_Buffer : public GeneratorOutputImpl<T>, public Constrainable {
+class GeneratorOutput_Buffer : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
+
+    NO_INLINE void assign_from_func(const Func &f) {
+        this->check_value_writable();
+
+        internal_assert(f.defined());
+
+        const auto &output_types = f.output_types();
+        user_assert(output_types.size() == 1)
+            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
+
+        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
+        user_assert(T::can_convert_from(other))
+            << "Cannot assign to the Output \"" << this->name()
+            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+
+        if (this->types_defined()) {
+            user_assert(output_types.at(0) == this->type())
+                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+        }
+        if (this->dims_defined()) {
+            user_assert(f.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+        }
+
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        user_assert(!this->funcs_.at(0).defined());
+        this->funcs_[0] = f;
+    }
 
 protected:
     using TBase = typename Super::TBase;
@@ -1898,11 +1949,6 @@ protected:
         }
     }
 
-    Parameter parameter() const override {
-        internal_assert(this->funcs().size() == 1);
-        return this->funcs().at(0).output_buffer().parameter();
-    }
-
 public:
 
     // Allow assignment from a Buffer<> to an Output<Buffer<>>;
@@ -1939,34 +1985,16 @@ public:
     // this allows us to pipeline the results of a Stub to the results
     // of the enclosing Generator.
     template<typename T2>
-    NO_INLINE GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
-        this->check_value_writable();
+    GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
+        assign_from_func(stub_output_buffer.f);
+        return *this;
+    }
 
-        const auto &f = stub_output_buffer.f;
-        internal_assert(f.defined());
-
-        const auto &output_types = f.output_types();
-        user_assert(output_types.size() == 1)
-            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
-
-        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-        user_assert(T::can_convert_from(other))
-            << "Cannot assign to the Output \"" << this->name()
-            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
-
-        if (this->types_defined()) {
-            user_assert(output_types.at(0) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
-        }
-        if (this->dims_defined()) {
-            user_assert(f.dimensions() == this->dims())
-                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
-        }
-
-        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
-        user_assert(!this->funcs_.at(0).defined());
-        this->funcs_[0] = f;
-
+    // Allow assignment from a Func to an Output<Buffer>;
+    // this allows us to use helper functions that return a plain Func
+    // to simply set the output(s) without needing a wrapper Func.
+    GeneratorOutput_Buffer<T> &operator=(const Func &f) {
+        assign_from_func(f);
         return *this;
     }
 
@@ -1975,6 +2003,44 @@ public:
         this->funcs_.at(0).estimate(var, min, extent);
         return *this;
     }
+
+    operator OutputImageParam() const {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        return this->funcs_.at(0).output_buffer();
+    }
+
+#define HALIDE_OUTPUT_FORWARD(method)                                       \
+    template<typename ...Args>                                              \
+    inline auto method(Args&&... args) ->                                   \
+        decltype(std::declval<OutputImageParam>().method(std::forward<Args>(args)...)) {\
+        return ((OutputImageParam) *this).method(std::forward<Args>(args)...);          \
+    }
+
+#define HALIDE_OUTPUT_FORWARD_CONST(method)                                 \
+    template<typename ...Args>                                              \
+    inline auto method(Args&&... args) const ->                             \
+        decltype(std::declval<OutputImageParam>().method(std::forward<Args>(args)...)) {\
+        return ((OutputImageParam) *this).method(std::forward<Args>(args)...);          \
+    }
+
+    /** Forward methods to the OutputImageParam. */
+    // @{
+    HALIDE_OUTPUT_FORWARD(dim)
+    HALIDE_OUTPUT_FORWARD_CONST(dim)
+    HALIDE_OUTPUT_FORWARD_CONST(host_alignment)
+    HALIDE_OUTPUT_FORWARD(set_host_alignment)
+    HALIDE_OUTPUT_FORWARD_CONST(dimensions)
+    HALIDE_OUTPUT_FORWARD_CONST(left)
+    HALIDE_OUTPUT_FORWARD_CONST(right)
+    HALIDE_OUTPUT_FORWARD_CONST(top)
+    HALIDE_OUTPUT_FORWARD_CONST(bottom)
+    HALIDE_OUTPUT_FORWARD_CONST(width)
+    HALIDE_OUTPUT_FORWARD_CONST(height)
+    HALIDE_OUTPUT_FORWARD_CONST(channels)
+    // }@
+
+#undef HALIDE_OUTPUT_FORWARD
+#undef HALIDE_OUTPUT_FORWARD_CONST
 };
 
 
@@ -2361,7 +2427,16 @@ using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const Gene
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
+        bool emit_o{false};
+        bool emit_h{true};
+        bool emit_cpp{false};
+        bool emit_assembly{false};
+        bool emit_bitcode{false};
+        bool emit_stmt{false};
+        bool emit_stmt_html{false};
+        bool emit_static_library{true};
+        bool emit_cpp_stub{false};
+        bool emit_schedule{false};
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2369,9 +2444,6 @@ public:
         // extensions are problematic, and avoids the need to rename output files
         // after the fact.
         std::map<std::string, std::string> substitutions;
-        EmitOptions()
-            : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
@@ -2458,8 +2530,8 @@ public:
 
     /** Generate a schedule for the Generator's pipeline. */
     //@{
-    EXPORT std::string auto_schedule_outputs(const MachineParams &arch_params);
-    EXPORT std::string auto_schedule_outputs();
+    EXPORT void auto_schedule_outputs(const MachineParams &arch_params);
+    EXPORT void auto_schedule_outputs();
     //@}
 
 protected:
@@ -2565,6 +2637,7 @@ private:
     bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
+    std::string auto_schedule_result;
 
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
@@ -3035,11 +3108,6 @@ protected:
 
     bool has_generator() const {
         return generator != nullptr;
-    }
-
-    template<typename Ratio>
-    static double ratio_to_double() {
-        return (double)Ratio::num / (double)Ratio::den;
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
