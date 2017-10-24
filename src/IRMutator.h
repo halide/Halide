@@ -10,7 +10,12 @@
 namespace Halide {
 namespace Internal {
 
-/** A base class for passes over the IR which modify it
+/**
+ * Deprecated for new use: please use IRMutator2 instead.
+ * Existing usage of IRMutator will be migrated to IRMutator2 and
+ * this class will be removed.
+ *
+ * A base class for passes over the IR which modify it
  * (e.g. replacing a variable with a value (Substitute.h), or
  * constant-folding).
  *
@@ -87,7 +92,12 @@ protected:
 };
 
 
-/** A mutator that caches and reapplies previously-done mutations, so
+/**
+ * Deprecated for new use: please use IRGraphMutator2 instead.
+ * Existing usage of IRGraphMutator will be migrated to IRGraphMutator2 and
+ * this class will be removed.
+ *
+ * A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
 class IRGraphMutator : public IRMutator {
@@ -100,6 +110,88 @@ public:
     EXPORT Expr mutate(const Expr &e);
 };
 
+/** A base class for passes over the IR which modify it
+ * (e.g. replacing a variable with a value (Substitute.h), or
+ * constant-folding).
+ *
+ * Your mutator should override the mvisit() methods you care about and return
+ * the new expression or stmt. The default implementations recursively
+ * mutate their children. To mutate sub-expressions and sub-statements you
+ * should override the mutate() method, which will dispatch to
+ * the appropriate mvisit() method and then return the value of expr or
+ * stmt after the call to visit.
+ */
+class IRMutator2 {
+public:
+    EXPORT virtual ~IRMutator2();
+
+    /** This is the main interface for using a mutator. Also call
+     * these in your subclass to mutate sub-expressions and
+     * sub-statements.
+     */
+    EXPORT virtual Expr mutate(const Expr &expr);
+    EXPORT virtual Stmt mutate(const Stmt &stmt);
+
+public:
+
+    EXPORT virtual Expr mvisit(const IntImm *);
+    EXPORT virtual Expr mvisit(const UIntImm *);
+    EXPORT virtual Expr mvisit(const FloatImm *);
+    EXPORT virtual Expr mvisit(const StringImm *);
+    EXPORT virtual Expr mvisit(const Cast *);
+    EXPORT virtual Expr mvisit(const Variable *);
+    EXPORT virtual Expr mvisit(const Add *);
+    EXPORT virtual Expr mvisit(const Sub *);
+    EXPORT virtual Expr mvisit(const Mul *);
+    EXPORT virtual Expr mvisit(const Div *);
+    EXPORT virtual Expr mvisit(const Mod *);
+    EXPORT virtual Expr mvisit(const Min *);
+    EXPORT virtual Expr mvisit(const Max *);
+    EXPORT virtual Expr mvisit(const EQ *);
+    EXPORT virtual Expr mvisit(const NE *);
+    EXPORT virtual Expr mvisit(const LT *);
+    EXPORT virtual Expr mvisit(const LE *);
+    EXPORT virtual Expr mvisit(const GT *);
+    EXPORT virtual Expr mvisit(const GE *);
+    EXPORT virtual Expr mvisit(const And *);
+    EXPORT virtual Expr mvisit(const Or *);
+    EXPORT virtual Expr mvisit(const Not *);
+    EXPORT virtual Expr mvisit(const Select *);
+    EXPORT virtual Expr mvisit(const Load *);
+    EXPORT virtual Expr mvisit(const Ramp *);
+    EXPORT virtual Expr mvisit(const Broadcast *);
+    EXPORT virtual Expr mvisit(const Call *);
+    EXPORT virtual Expr mvisit(const Let *);
+    EXPORT virtual Expr mvisit(const Shuffle *);
+
+    EXPORT virtual Stmt mvisit(const LetStmt *);
+    EXPORT virtual Stmt mvisit(const AssertStmt *);
+    EXPORT virtual Stmt mvisit(const ProducerConsumer *);
+    EXPORT virtual Stmt mvisit(const For *);
+    EXPORT virtual Stmt mvisit(const Store *);
+    EXPORT virtual Stmt mvisit(const Provide *);
+    EXPORT virtual Stmt mvisit(const Allocate *);
+    EXPORT virtual Stmt mvisit(const Free *);
+    EXPORT virtual Stmt mvisit(const Realize *);
+    EXPORT virtual Stmt mvisit(const Block *);
+    EXPORT virtual Stmt mvisit(const IfThenElse *);
+    EXPORT virtual Stmt mvisit(const Evaluate *);
+    EXPORT virtual Stmt mvisit(const Prefetch *);
+};
+
+/** A mutator that caches and reapplies previously-done mutations, so
+ * that it can handle graphs of IR that have not had CSE done to
+ * them. */
+class IRGraphMutator2 : public IRMutator2 {
+protected:
+    // TODO: would std::unordered_map be a performance win here?
+    std::map<Expr, Expr, ExprCompare> expr_replacements;
+    std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
+
+public:
+    EXPORT Stmt mutate(const Stmt &s) override;
+    EXPORT Expr mutate(const Expr &e) override;
+};
 
 }
 }
