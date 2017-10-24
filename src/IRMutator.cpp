@@ -401,11 +401,11 @@ IRMutator2::~IRMutator2() {
 }
 
 Expr IRMutator2::mutate(const Expr &e) {
-    return e.defined() ? ((BaseExprNode *)e.get())->mutate_expr(this) : Expr();
+    return e.defined() ? ((const BaseExprNode *)e.get())->mutate_expr(this) : Expr();
 }
 
 Stmt IRMutator2::mutate(const Stmt &s) {
-    return s.defined() ? ((BaseStmtNode *)s.get())->mutate_stmt(this) : Stmt();
+    return s.defined() ? ((const BaseStmtNode *)s.get())->mutate_stmt(this) : Stmt();
 }
 
 Expr IRMutator2::visit(const IntImm *op)   {return op;}
