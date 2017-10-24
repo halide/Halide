@@ -28,6 +28,14 @@ using std::make_pair;
 
 namespace {
 
+int string_to_int(const std::string &s) {
+    std::istringstream iss(s);
+    int i;
+    iss >> i;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
+    return i;
+}
+
 // Return true if any of the box dimension is unbounded.
 bool is_box_unbounded(const Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
@@ -104,18 +112,25 @@ struct FStage {
 void check_estimates_on_outputs(const vector<Function> &outputs) {
     for (const auto &out : outputs) {
         const vector<Bound> &estimates = out.schedule().estimates();
-        if (estimates.size() != out.args().size()) {
-            user_error << "Please provide estimate for each dimension of \""
-                       << out.name() << "\"\n";
-        }
-        const vector<string> &vars = out.args();
-        // Check if the estimate for each dimension is available and it is an integer.
-        for (uint32_t i = 0; i < estimates.size(); i++) {
-            if ((std::find(vars.begin(), vars.end(), estimates[i].var) == vars.end()) ||
-                !(estimates[i].min.as<IntImm>() && estimates[i].extent.as<IntImm>())) {
-                user_error << "Please provide estimate for dimension " << estimates[i].var
-                           << " of \"" << out.name() << "\"\n";
+        // Check if the estimate for each dimension of the output is available
+        // and is an integer. If there are duplicates for the estimate of a
+        // dimension, we only check the last defined estimate (which min and
+        // extent values are defined) since it is the one that would be
+        // eventually used.
+        Bound est;
+        for (const auto &arg : out.args()) {
+            bool found = false;
+            for (int i = (int)estimates.size() - 1; i >= 0; --i) {
+                if ((estimates[i].var == arg) && estimates[i].min.defined() &&
+                    estimates[i].extent.defined()) {
+                    found = true;
+                    est = estimates[i];
+                    break;
+                }
             }
+            user_assert(found && est.min.type().is_int() && est.extent.type().is_int())
+                << "Please provide a valid estimate for dimension "
+                << est.var << " of output \"" << out.name() << "\"\n";
         }
     }
 }
@@ -671,14 +686,14 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
             int i;
             for (i = estimates.size() - 1; i >= 0; --i) {
                 const auto &est = estimates[i];
-                if (est.var == arg) {
+                if ((est.var == arg) && est.min.defined() && est.extent.defined()) {
                     Interval I = Interval(est.min, simplify(est.min + est.extent - 1));
                     pure_bounds.emplace(arg, I);
                     out_box.push_back(I);
                     break;
                 }
             }
-            internal_assert(i >= 0);
+            internal_assert(i >= 0) << "Could not find estimate for " << arg << "\n";
         }
 
         set<string> prods;
@@ -1339,7 +1354,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
         const Function &func = get_element(dep_analysis.env, f);
         int num_stages = func.updates().size() + 1;
         for (auto &iter : groups) {
-            bool use_f = true;
+            bool use_f = false;
             for (int s = 0; s < num_stages; s++) {
                 FStage prod_stage(func, s);
                 for (const auto &m : iter.second.members) {
@@ -3468,6 +3483,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     part.generate_cpu_schedule(target, sched);
 
     std::ostringstream oss;
+    oss << "// Target: " << target.to_string() << "\n";
+    oss << "// MachineParams: " << arch_params.to_string() << "\n";
+    oss << "\n";
     oss << sched;
     string sched_string = oss.str();
 
@@ -3482,4 +3500,22 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 }
+
+std::string MachineParams::to_string() const {
+    internal_assert(parallelism.type().is_int() &&
+                    last_level_cache_size.type().is_int() &&
+                    balance.type().is_int());
+    std::ostringstream o;
+    o << parallelism << "," << last_level_cache_size << "," << balance;
+    return o.str();
+}
+
+MachineParams::MachineParams(const std::string &s) {
+    std::vector<std::string> v = Internal::split_string(s, ",");
+    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
+    parallelism = Internal::string_to_int(v[0]);
+    last_level_cache_size = Internal::string_to_int(v[1]);
+    balance = Internal::string_to_int(v[2]);
+}
+
 }

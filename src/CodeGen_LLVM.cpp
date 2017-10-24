@@ -535,7 +535,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
+            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
+                names.simple_name, f.args, input.get_metadata_name_map());
 
             if (target.has_feature(Target::Matlab)) {
                 define_matlab_wrapper(module.get(), wrapper, metadata_getter);
@@ -546,7 +547,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     debug(2) << module.get() << "\n";
 
     // Verify the module is ok
-    verifyModule(*module);
+    internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize
@@ -657,8 +658,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         }
     }
 
-    llvm::raw_os_ostream os(std::cerr);
-    internal_assert(!verifyFunction(*function, &os));
+    internal_assert(!verifyFunction(*function, &llvm::errs()));
 
     current_function_args.clear();
 }
@@ -903,16 +903,21 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
     // This call should never inline
     result->setIsNoInline();
     builder->CreateRet(result);
-    llvm::raw_os_ostream os(std::cerr);
-    llvm::verifyFunction(*wrapper, &os);
+    internal_assert(!verifyFunction(*wrapper, &llvm::errs()));
     return wrapper;
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args) {
+        const std::string &function_name, const std::vector<LoweredArgument> &args,
+        const std::map<std::string, std::string> &metadata_name_map) {
     Constant *zero = ConstantInt::get(i32_t, 0);
 
     const int num_args = (int) args.size();
+
+    auto map_string = [&metadata_name_map](const std::string &from) -> std::string {
+        auto it = metadata_name_map.find(from);
+        return it == metadata_name_map.end() ? from : it->second;
+    };
 
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
@@ -936,7 +941,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
             def = min = max = Expr();
         }
         Constant *argument_fields[] = {
-            create_string_constant(args[arg].name),
+            create_string_constant(map_string(args[arg].name)),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
@@ -959,8 +964,8 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
-        /* target */ create_string_constant(target.to_string()),
-        /* name */ create_string_constant(function_name)
+        /* target */ create_string_constant(map_string(target.to_string())),
+        /* name */ create_string_constant(map_string(function_name))
     };
 
     GlobalVariable *metadata_storage = new GlobalVariable(
@@ -976,7 +981,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     builder->CreateRet(metadata_storage);
-    llvm::verifyFunction(*metadata_getter);
+    internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
 
     return metadata_getter;
 }

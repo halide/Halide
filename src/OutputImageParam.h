@@ -7,8 +7,11 @@
  */
 
 #include "Argument.h"
+#include "Dimension.h"
 #include "runtime/HalideRuntime.h"
 #include "Var.h"
+#include "Dimension.h"
+#include "Func.h"
 
 namespace Halide {
 
@@ -16,23 +19,31 @@ namespace Halide {
  * promises about the output size and stride. */
 class OutputImageParam {
 protected:
+    friend class Func;
+
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 
     /** Is this an input or an output? OutputImageParam is the base class for both. */
     Argument::Kind kind;
 
+    /** If Input: Func representation of the ImageParam.
+     * If Output: Func that creates this OutputImageParam.
+     */
+    Func func;
+
     void add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                           Expr last_arg,
                                           int total_args,
                                           bool *placeholder_seen) const;
+
+    /** Construct an OutputImageParam that wraps an Internal Parameter object. */
+    EXPORT OutputImageParam(const Internal::Parameter &p, Argument::Kind k, Func f);
+
 public:
 
     /** Construct a null image parameter handle. */
     OutputImageParam() {}
-
-    /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    EXPORT OutputImageParam(const Internal::Parameter &p, Argument::Kind k);
 
     /** Get the name of this Param */
     EXPORT const std::string &name() const;

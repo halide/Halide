@@ -126,6 +126,8 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
     std::vector<ReductionVariable> vars;
     for (size_t i = 0; i < ranges.size(); i++) {
         CheckRDomBounds checker;
+        user_assert(ranges[i].first.defined() && ranges[i].second.defined())
+            << "The RDom " << name << " may not be constructed with undefined Exprs.\n";
         ranges[i].first.accept(&checker);
         ranges[i].second.accept(&checker);
         user_assert(checker.offending_func.empty())
