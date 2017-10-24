@@ -126,6 +126,8 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
     std::vector<ReductionVariable> vars;
     for (size_t i = 0; i < ranges.size(); i++) {
         CheckRDomBounds checker;
+        user_assert(ranges[i].first.defined() && ranges[i].second.defined())
+            << "The RDom " << name << " may not be constructed with undefined Exprs.\n";
         ranges[i].first.accept(&checker);
         ranges[i].second.accept(&checker);
         user_assert(checker.offending_func.empty())
@@ -167,15 +169,9 @@ RDom::RDom(const Buffer<> &b) {
     init_vars(name);
 }
 
-RDom::RDom(ImageParam p) {
+RDom::RDom(const OutputImageParam &p) {
     std::string name = p.name();
     dom = make_dom_from_dimensions(p, name);
-    init_vars(name);
-}
-
-RDom::RDom(const Halide::Internal::Constrainable &c) {
-    std::string name = unique_name('r');
-    dom = make_dom_from_dimensions(c, name);
     init_vars(name);
 }
 

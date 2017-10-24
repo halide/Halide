@@ -129,17 +129,17 @@ int main(int argc, char **argv) {
     Buffer<int> out2(1000, 1000);
     Buffer<int> out3(1000, 1000);
 
-    double shared_time = benchmark(5, 5, [&]() {
+    double shared_time = benchmark([&]() {
             use_shared.realize(out1);
             out1.device_sync();
         });
 
-    double l1_time = benchmark(5, 5, [&]() {
+    double l1_time = benchmark([&]() {
             use_l1.realize(out2);
             out2.device_sync();
         });
 
-    double wrap_time = benchmark(5, 5, [&]() {
+    double wrap_time = benchmark([&]() {
             use_wrap_for_shared.realize(out3);
             out3.device_sync();
         });

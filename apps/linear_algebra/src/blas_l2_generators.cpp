@@ -17,7 +17,6 @@ class GEMVGenerator :
     template<typename T2> using Input = typename Base::template Input<T2>;
     template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1 << 8};
@@ -32,16 +31,9 @@ class GEMVGenerator :
 
     Output<Buffer<T>> output_ = {"output", 1};
 
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-    }
-
     void generate() {
-        SetupTarget();
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         const int unroll_size = 4;
@@ -186,7 +178,6 @@ class GERGenerator :
     template<typename T2> using Input = typename Base::template Input<T2>;
     template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1 << 5};
@@ -199,16 +190,9 @@ class GERGenerator :
 
     Output<Buffer<T>> result_ = {"result", 2};
 
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-    }
-
     void generate() {
-        SetupTarget();
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         const int unroll_size = 4;
