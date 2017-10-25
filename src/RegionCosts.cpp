@@ -410,7 +410,7 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function so they should be skipped.
         if (inlines.find(f.first) != inlines.end()) {
-            internal_assert(get_element(env, f.first).is_pure());
+            internal_assert(get_element(env, f.first).is_pure()) << f.first << " is not PURE\n";
             continue;
         }
 

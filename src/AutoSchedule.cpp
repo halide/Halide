@@ -1366,6 +1366,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
                 }
             }
             if (use_f) {
+                debug(0) << "******INLINE UNBOUNDED: " << f << " in group: " << iter.second << "\n";
                 for (int s = 0; s < num_stages; s++) {
                     iter.second.members.push_back(FStage(func, s));
                 }
@@ -1801,7 +1802,7 @@ DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
             // Check if the bounds allow for tiling with the given tile size,
             // i.e. ensure at least 2 tiles
             Expr extent = get_extent(bound);
-            internal_assert(extent.defined());
+            internal_assert(extent.defined()) << "Could not get extent of " << s.func.name() << ", stage: " << s.stage_num << "\n";
             if (can_prove(extent >= 2 * size)) {
                 // TODO: Maybe shift this to the center of the pipeline bound
                 bounds[var] = Interval(0, simplify(size - 1));
@@ -2122,11 +2123,15 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
         prod_groups.push_back(get_element(groups, prod_s));
     }
 
+    debug(0) << "GET HERE 4\n";
+    debug(0) << "\tchoice cons: " << choice.cons << "\n";
     Group cons = get_element(groups, choice.cons);
+    debug(0) << "GET HERE 5\n";
     Group group = cons;
     for (const auto &prod_g : prod_groups) {
         group = merge_groups(prod_g, group);
     }
+    debug(0) << "GET HERE 6\n";
 
     GroupAnalysis group_analysis;
     map<string, Expr> best_tile_config;
@@ -2733,6 +2738,7 @@ void Partitioner::generate_group_cpu_schedule(
         dim_vars[d] = get_base_name(dims[d].var);
     }
 
+    debug(0) << "**APPLY TILING TO OUTPUT\n";
     // Apply tiling to output of the group
     for (const auto &var : dim_vars) {
         bool is_rvar = (rvars.find(var) != rvars.end());
@@ -2764,6 +2770,7 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
+    debug(0) << "**REORDER TILE DIMENSION\n";
     // Reorder the tile dimensions
     if (!outer_dims.empty()) {
 
@@ -2789,6 +2796,7 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
+    debug(0) << "**VECTORIZE STAGE\n";
     vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
                     rvars, stg_estimates, sched);
 
@@ -2922,11 +2930,6 @@ void Partitioner::generate_group_cpu_schedule(
 }
 
 void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
-    // Grab the group bounds early as they rely on the dimensions of the group
-    // outputs which will be altered by modifying schedules.
-    map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
-    map<FStage, map<string, Box>> storage_bounds = group_storage_bounds();
-
     set<string> inlines;
     // Mark all functions that are inlined.
     for (const pair<FStage, Group> &g : groups) {
@@ -2934,6 +2937,18 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
             inlines.insert(inline_func);
         }
     }
+    debug(0) << "\nINLINED FUNCS: ";
+    for (const auto &s : inlines) {
+        debug(0) << s << ", ";
+    }
+    debug(0) << "\n";
+
+    // Grab the group bounds early as they rely on the dimensions of the group
+    // outputs which will be altered by modifying schedules.
+    debug(0) << "\n**GET STORAGE BOUND\n\n";
+    map<FStage, map<string, Box>> storage_bounds = group_storage_bounds();
+    debug(0) << "\n**GET LOOP BOUND\n\n";
+    map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
 
     // TODO: Inlining functions with update definitions has different
     // behavior than pure functions. They may need to be computed above
@@ -3308,7 +3323,8 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
     set<string> unbounded;
     for (const auto &iter : env) {
         const Function &f = iter.second;
-        if (f.has_extern_definition() || used_by_extern_func(env, f)) {
+        if (f.has_extern_definition() || used_by_extern_func(env, f) || !f.can_be_inlined()) {
+            debug(0) << "...SKIP " << f.name() << "\n";
             continue;
         }
         const Box &bound = get_element(pipeline_bounds, iter.first);
@@ -3336,11 +3352,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // we remove any functions from 'env'). We need the full realization
     // order to pass to get_func() when generating the string representation
     // of the schedule.
-    debug(2) << "Computing full realization order...\n";
+    debug(0) << "Computing full realization order...\n";
     vector<string> full_order = realization_order(outputs, env);
 
     // Validate that none of the functions in the pipeline have partial schedules.
-    debug(2) << "Validating no partial schedules...\n";
+    debug(0) << "Validating no partial schedules...\n";
     for (const auto &iter : env) {
         validate_no_partial_schedules(iter.second);
     }
@@ -3348,13 +3364,13 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // The auto scheduling algorithm requires estimates on the outputs of the
     // pipeline to get quantitative estimates of costs for computing functions
     // in the pipeline.
-    debug(2) << "Checking estimates on outputs...\n";
+    debug(0) << "Checking estimates on outputs...\n";
     check_estimates_on_outputs(outputs);
 
     // Run a pre-pass that inline all trivial Funcs (i.e. if the cost of
     // computing a Func is about the same as calling that Func, we should
     // just inline it).
-    debug(2) << "Inlining all trivial functions...\n";
+    debug(0) << "Inlining all trivial functions...\n";
     if (inline_all_trivial_functions(outputs, full_order, env)) {
         // If any of the Funcs is inlined, we need to recompute 'env', since some
         // of the Funcs are no longer used and need to be removed from 'env'.
@@ -3391,7 +3407,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // In the first iteration, we cannot inline 'f1' since it is used by two
     // functions: 'f2' and 'f3'. If 'f2' and 'f4' get inlined and 'f3' is only
     // used by 'f4', then 'f1' can now also be inlined.
-    debug(2) << "Inlining all element-wise functions...\n";
+    debug(0) << "Inlining all element-wise functions...\n";
     while (inline_all_element_wise_functions(outputs, order, env)) {
         // We need to recompute 'env' for the same reason as with
         // inline_all_trivial_functions
@@ -3404,32 +3420,38 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     // Compute the bounds of function values which are used for dependence analysis.
-    debug(2) << "Computing function value bounds...\n";
+    debug(0) << "Computing function value bounds...\n";
     FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
 
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.
-    debug(2) << "Initializing region costs...\n";
+    debug(0) << "Initializing region costs...\n";
     RegionCosts costs(env);
     if (debug::debug_level() >= 3) {
         costs.disp_func_costs();
     }
 
-    debug(2) << "Initializing dependence analysis...\n";
+    debug(0) << "Initializing dependence analysis...\n";
     DependenceAnalysis dep_analysis(env, order, func_val_bounds);
 
     // Compute bounds of all functions in the pipeline given estimates on
     // outputs. Also report functions which bounds could not be inferred.
-    debug(2) << "Computing pipeline bounds...\n";
+    debug(0) << "Computing pipeline bounds...\n";
     map<string, Box> pipeline_bounds =
         get_pipeline_bounds(dep_analysis, outputs, &costs.input_estimates);
 
     // Determine all unbounded functions that are not extern Func or
     // used by some extern Funcs.
-    debug(2) << "Determining all unbounded functions...\n";
+    debug(0) << "Determining all unbounded functions...\n";
     set<string> unbounded = get_unbounded_functions(pipeline_bounds, env);
 
-    debug(2) << "Initializing partitioner...\n";
+    debug(0) << "\n\nUNBOUNDED:\n\t";
+    for (const auto &s : unbounded) {
+        debug(0) << s << ", ";
+    }
+    debug(0) << "\n";
+
+    debug(0) << "Initializing partitioner...\n";
     Partitioner part(pipeline_bounds, arch_params, dep_analysis, costs, outputs, unbounded);
 
     // Compute and display reuse
@@ -3456,19 +3478,19 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_pipeline_bounds();
     }
 
-    debug(2) << "Partitioner initializing groups...\n";
+    debug(0) << "Partitioner initializing groups...\n";
     part.initialize_groups();
     if (debug::debug_level() >= 3) {
         part.disp_pipeline_costs();
     }
 
-    debug(2) << "Partitioner computing inline group...\n";
+    debug(0) << "Partitioner computing inline group...\n";
     part.group(Partitioner::Level::Inline);
     if (debug::debug_level() >= 3) {
         part.disp_grouping();
     }
 
-    debug(2) << "Partitioner computing fast-mem group...\n";
+    debug(0) << "Partitioner computing fast-mem group...\n";
     part.grouping_cache.clear();
     part.group(Partitioner::Level::FastMem);
     if (debug::debug_level() >= 3) {
@@ -3477,9 +3499,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_pipeline_graph();
     }
 
-    debug(2) << "Initializing AutoSchedule...\n";
+    debug(0) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, full_order);
-    debug(2) << "Generating CPU schedule...\n";
+    debug(0) << "Generating CPU schedule...\n";
+    debug(0) << "GET HERE\n";
     part.generate_cpu_schedule(target, sched);
 
     std::ostringstream oss;
@@ -3489,7 +3512,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     oss << sched;
     string sched_string = oss.str();
 
-    debug(3) << "\n\n*******************************\nSchedule:\n"
+    debug(0) << "\n\n*******************************\nSchedule:\n"
              << "*******************************\n" << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem

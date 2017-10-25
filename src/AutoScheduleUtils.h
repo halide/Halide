@@ -101,7 +101,7 @@ V get_element(const std::map<K, V> &m, const K &key) {
 template<typename K, typename V>
 V &get_element(std::map<K, V> &m, const K &key) {
     const auto &iter = m.find(key);
-    internal_assert(iter != m.end());
+    internal_assert(iter != m.end()) << "Could not find " << key << "\n";
     return iter->second;
 }
 // @}
