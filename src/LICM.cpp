@@ -67,21 +67,18 @@ class LiftLoopInvariants : public IRMutator {
     }
 
     void visit(const Let *op) {
-        varying.push(op->name, 0);
+        ScopedBinding<int> p(varying, op->name, 0);
         IRMutator::visit(op);
-        varying.pop(op->name);
     }
 
     void visit(const LetStmt *op) {
-        varying.push(op->name, 0);
+        ScopedBinding<int> p(varying, op->name, 0);
         IRMutator::visit(op);
-        varying.pop(op->name);
     }
 
     void visit(const For *op) {
-        varying.push(op->name, 0);
+        ScopedBinding<int> p(varying, op->name, 0);
         IRMutator::visit(op);
-        varying.pop(op->name);
     }
 
 public:
