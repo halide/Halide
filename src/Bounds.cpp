@@ -634,10 +634,9 @@ private:
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type(), var_name);
         Expr lane = op->base + var * op->stride;
-        scope.push(var_name, Interval(make_const(var.type(), 0),
-                                      make_const(var.type(), op->lanes-1)));
+        ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0),
+                                                        make_const(var.type(), op->lanes-1)));
         lane.accept(this);
-        scope.pop(var_name);
     }
 
     void visit(const Broadcast *op) {
@@ -784,9 +783,10 @@ private:
             }
         }
 
-        scope.push(op->name, var);
-        op->body.accept(this);
-        scope.pop(op->name);
+        {
+            ScopedBinding<Interval> p(scope, op->name, var);
+            op->body.accept(this);
+        }
 
         if (interval.has_lower_bound()) {
             if (val.min.defined() && expr_uses_var(interval.min, min_name)) {
@@ -1272,17 +1272,16 @@ private:
 
         if (is_small_enough_to_substitute(value_bounds.min) &&
             (fixed || is_small_enough_to_substitute(value_bounds.max))) {
-            scope.push(op->name, value_bounds);
+            ScopedBinding<Interval> p(scope, op->name, value_bounds);
             op->body.accept(this);
-            scope.pop(op->name);
         } else {
             string max_name = unique_name('t');
             string min_name = unique_name('t');
-
-            scope.push(op->name, Interval(Variable::make(op->value.type(), min_name),
-                                          Variable::make(op->value.type(), max_name)));
-            op->body.accept(this);
-            scope.pop(op->name);
+            {
+                ScopedBinding<Interval> p(scope, op->name, Interval(Variable::make(op->value.type(), min_name),
+                                                                Variable::make(op->value.type(), max_name)));
+                op->body.accept(this);
+            }
 
             for (pair<const string, Box> &i : boxes) {
                 Box &box = i.second;
@@ -1342,9 +1341,10 @@ private:
             }
         }
 
-        let_stmts.push(op->name, op->value);
-        visit_let(op);
-        let_stmts.pop(op->name);
+        {
+            ScopedBinding<Expr> p(let_stmts, op->name, op->value);
+            visit_let(op);
+        }
 
         // Re-insert the children from the previous let stmt into the map.
         if (!old_let_vars.empty()) {
@@ -1615,9 +1615,10 @@ private:
         }
 
         push_var(op->name);
-        scope.push(op->name, Interval(min_val, max_val));
-        op->body.accept(this);
-        scope.pop(op->name);
+        {
+            ScopedBinding<Interval> p(scope, op->name, Interval(min_val, max_val));
+            op->body.accept(this);
+        }
         pop_var(op->name);
     }
 

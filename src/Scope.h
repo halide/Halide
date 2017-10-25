@@ -249,7 +249,27 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
     return stream;
 }
 
-}
-}
+/** Helper class for pushing/popping Scope<> values, to allow
+ * for early-exit in Visitor/Mutators that preserves correctness.
+ * Note that this name can be a bit confusing, since there are two "scopes"
+ * involved here:
+ * - the Scope object itself
+ * - the lifetime of this helper object
+ * The "Scoped" in this class name refers to the latter, as it temporarily binds
+ * a name within the scope of this helper's lifetime. */
+template<typename T>
+struct ScopedBinding {
+    Scope<T> &scope;
+    std::string name;
+    ScopedBinding(Scope<T> &scope, const std::string &name, const T &value) : scope(scope), name(name) {
+        scope.push(name, value);
+    }
+    ~ScopedBinding() {
+        scope.pop(name);
+    }
+};
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
