@@ -264,6 +264,14 @@ DOC_DIR     = doc
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
+HEXAGON_RUNTIME_LIBS_DIR = src/runtime/hexagon_remote/bin
+HEXAGON_RUNTIME_LIBS = \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/libhalide_hexagon_host.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/libhalide_hexagon_host.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/host/libhalide_hexagon_host.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/hexagon_sim_remote \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/libhalide_hexagon_remote_skel.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so
 
 SOURCE_FILES = \
   AddImageChecks.cpp \
@@ -1632,9 +1640,15 @@ ifeq ($(UNAME), Darwin)
 endif
 
 # This is a specialized 'install' for users who need Hexagon support libraries as well.
-install_qc: install
-	cp $(ROOT_DIR)/src/runtime/hexagon_remote/bin/host/* $(PREFIX)/lib/host
-	cp $(ROOT_DIR)/src/runtime/hexagon_remote/bin/v60/* $(PREFIX)/lib/v60
+install_qc: install $(HEXAGON_RUNTIME_LIBS)
+	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v60 $(PREFIX)/tools
+	cp $(ROOT_DIR)/tools/sim_qurt/libsim_qurt.a $(PREFIX)/lib
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
+	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v60/* $(PREFIX)/lib/v60
+	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
+	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
