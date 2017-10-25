@@ -20,15 +20,11 @@ template<typename T2> class GeneratorInput_Buffer;
 class ImageParam : public OutputImageParam {
     template<typename T2> friend class ::Halide::Internal::GeneratorInput_Buffer;
 
-    /** Func representation of the ImageParam.
-     * All call to ImageParam is equivalent to call to its intrinsic Func
-     * representation. */
-    Func func;
+    // Only for use of Generator
+    ImageParam(const Internal::Parameter &p, Func f) : OutputImageParam(p, Argument::InputBuffer, f) {}
 
     /** Helper function to initialize the Func representation of this ImageParam. */
-    EXPORT void init_func();
-
-    ImageParam(const Internal::Parameter &p, Func f) : OutputImageParam(p, Argument::InputBuffer), func(f) {}
+    EXPORT Func create_func() const;
 
 public:
 
