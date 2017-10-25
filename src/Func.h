@@ -10,7 +10,6 @@
 #include "Var.h"
 #include "Function.h"
 #include "Param.h"
-#include "OutputImageParam.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITModule.h"
@@ -22,6 +21,8 @@
 #include <map>
 
 namespace Halide {
+
+class OutputImageParam;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
