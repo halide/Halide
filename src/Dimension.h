@@ -5,6 +5,7 @@
  * Defines the Dimension utility class for Halide pipelines
  */
 
+#include "Func.h"
 #include "Parameter.h"
 
 namespace Halide {
@@ -74,14 +75,6 @@ public:
     /** Set the min and extent in one call. */
     EXPORT Dimension set_bounds(Expr min, Expr extent);
 
-    /** Set the estimate of the min in a given dimension to equal the given
-     * expression. This value is only used by the auto-scheduler. */
-    EXPORT Dimension set_min_estimate(Expr min);
-
-    /** Set the estimate of the extent in a given dimension to equal the given
-     * expression. This value is only used by the auto-scheduler. */
-    EXPORT Dimension set_extent_estimate(Expr extent);
-
     /** Set the min and extent estimates in one call. These values are only
      * used by the auto-scheduler. */
     EXPORT Dimension set_bounds_estimate(Expr min, Expr extent);
@@ -100,7 +93,7 @@ private:
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
      * these. */
-    EXPORT Dimension(const Internal::Parameter &p, int d);
+    EXPORT Dimension(const Internal::Parameter &p, int d, Func f);
 
     /** Only friends may copy these, too. This prevents
      * users removing constness by making a non-const copy. */
@@ -108,6 +101,7 @@ private:
 
     Parameter param;
     int d;
+    Func f;
 };
 
 }  // namespace Internal
