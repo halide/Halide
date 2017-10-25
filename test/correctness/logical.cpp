@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
                     ((input(x, y) > 40) && (!(input(x, y) > 50)));
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
                     ((input(x, y) > 40) && (!common_cond));
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
                 bool cond = x < 10 || x > 20 || y < 10 || y > 20;
                 uint8_t correct = cond ? 0 : input(x,y);
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
                 bool cond = input(x, y) > 10;
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -146,6 +146,7 @@ int main(int argc, char **argv) {
 
     // Test a select where the condition has a different width than
     // the true/false values.
+    int result = 0;
     for (int w = 8; w <= 32; w *= 2) {
         for (int n = 8; n < w; n *= 2) {
             Type narrow = UInt(n), wide = UInt(w);
@@ -190,13 +191,16 @@ int main(int argc, char **argv) {
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
-                        printf("gpu_output(%d, %d) = %d instead of %d\n",
-                               x, y, gpu_output(x, y), cpu_output(x, y));
-                        return -1;
+                        fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
+                               x, y, gpu_output(x, y), cpu_output(x, y), n, w);
+                        result = -1;
                     }
                 }
             }
         }
+    }
+    if (result != 0) {
+        return result;
     }
 
 
