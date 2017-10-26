@@ -184,7 +184,6 @@ public:
  * them. */
 class IRGraphMutator2 : public IRMutator2 {
 protected:
-    // TODO: would std::unordered_map be a performance win here?
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
