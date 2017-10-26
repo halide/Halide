@@ -251,7 +251,9 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
             // These are always propagated specially.
-            if (p->name == "target") continue;
+            if (p->name == "target" ||
+                p->name == "auto_schedule" ||
+                p->name == "machine_params") continue;
             if (p->is_synthetic_param()) continue;
             out.push_back(p);
         }
@@ -901,6 +903,8 @@ GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_i
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
     if (name == "target") return;
+    if (name == "auto_schedule") return;
+    if (name == "machine_params") return;
     user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
 }
 
@@ -1318,19 +1322,13 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
-void GeneratorBase::auto_schedule_outputs(const MachineParams &arch_params) {
-    user_assert(auto_schedule_result.empty()) << "auto_schedule_outputs was called multiple times for " << generator_registered_name;
-    auto_schedule_result = get_pipeline().auto_schedule(get_target(), arch_params);
-}
-
-void GeneratorBase::auto_schedule_outputs() {
-    user_assert(auto_schedule_result.empty()) << "auto_schedule_outputs was called multiple times for " << generator_registered_name;
-    auto_schedule_result = get_pipeline().auto_schedule(get_target());
-}
-
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
+    std::string auto_schedule_result;
     Pipeline pipeline = build_pipeline();
+    if (get_auto_schedule()) {
+        auto_schedule_result = pipeline.auto_schedule(get_target(), get_machine_params());
+    }
 
     // Special-case here: for certain legacy Generators, building the pipeline
     // can mutate the Params/ImageParams (mainly, to customize the type/dim

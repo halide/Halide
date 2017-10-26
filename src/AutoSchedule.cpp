@@ -3501,6 +3501,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 
 }
 
+MachineParams MachineParams::generic() {
+  return MachineParams(16, 16 * 1024 * 1024, 40);
+}
+
 std::string MachineParams::to_string() const {
     internal_assert(parallelism.type().is_int() &&
                     last_level_cache_size.type().is_int() &&
