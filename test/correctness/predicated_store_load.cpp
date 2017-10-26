@@ -7,6 +7,8 @@
 
 #include "test/common/check_call_graphs.h"
 
+namespace {
+
 using std::map;
 using std::vector;
 using std::string;
@@ -388,7 +390,10 @@ int vectorized_predicated_load_const_index_test() {
     return 0;
 }
 
+}  // namespace
+
 int main(int argc, char **argv) {
+
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
         return -1;

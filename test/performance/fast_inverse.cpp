@@ -27,8 +27,8 @@ int main(int argc, char **argv) {
 
     Buffer<float> out_fast(8), out_slow(8);
 
-    double slow_time = benchmark(1, 1, [&]() { slow.realize(out_slow); });
-    double fast_time = benchmark(1, 1, [&]() { fast.realize(out_fast); });
+    double slow_time = benchmark([&]() { slow.realize(out_slow); });
+    double fast_time = benchmark([&]() { fast.realize(out_fast); });
 
     slow_time *= 1e9 / (out_fast.width() * N);
     fast_time *= 1e9 / (out_fast.width() * N);

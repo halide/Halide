@@ -8,20 +8,22 @@ using namespace Halide;
 
 class LensBlur : public Halide::Generator<LensBlur> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
+    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
 
-    ImageParam            left_im{UInt(8), 3, "left_im"};
-    ImageParam            right_im{UInt(8), 3, "right_im"};
+    Input<Buffer<uint8_t>>  left_im{"left_im", 3};
+    Input<Buffer<uint8_t>>  right_im{"right_im", 3};
     // The number of displacements to consider
-    Param<int>       slices{"slices", 32, 1, 64};
+    Input<int>              slices{"slices", 32, 1, 64};
     // The depth to focus on
-    Param<int>       focus_depth{"focus_depth", 13, 1, 32};
+    Input<int>              focus_depth{"focus_depth", 13, 1, 32};
     // The increase in blur radius with misfocus depth
-    Param<float>     blur_radius_scale{"blur_radius_scale", 0.5f, 0.0f, 1.0f};
+    Input<float>            blur_radius_scale{"blur_radius_scale", 0.5f, 0.0f, 1.0f};
     // The number of samples of the aperture to use
-    Param<int>       aperture_samples{"aperture_samples", 32, 1, 64};
+    Input<int>              aperture_samples{"aperture_samples", 32, 1, 64};
 
-    Func build() {
+    Output<Buffer<float>>   final{"final", 3};
+
+    void generate() {
         /* THE ALGORITHM */
         Expr maximum_blur_radius =
             cast<int>(max(slices - focus_depth, focus_depth) * blur_radius_scale);
@@ -55,7 +57,7 @@ public:
         cost_pyramid_push[0](x, y, z, c) =
             select(c == 0, cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y));
 
-        Expr w = left_im.width(), h = left_im.height();
+        Expr w = left_im.dim(0).extent(), h = left_im.dim(1).extent();
         for (int i = 1; i < 8; i++) {
             cost_pyramid_push[i](x, y, z, c) = downsample(cost_pyramid_push[i-1])(x, y, z, c);
             w /= 2;
@@ -149,7 +151,6 @@ public:
         output(x, y, c) += sample_weight(x, y, s) * input_with_alpha(sample_x, sample_y, c);
 
         // Normalize
-        Func final;
         final(x, y, c) = output(x, y, c) / output(x, y, 3);
 
         /* THE SCHEDULE */
@@ -170,9 +171,9 @@ public:
             final.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline
-            Pipeline p(final);
-            p.auto_schedule(get_target());
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             // Manual GPU schedule
             Var xi("xi"), yi("yi"), zi("zi");
@@ -266,8 +267,6 @@ public:
             sample_weight.compute_at(output, x).unroll(x);
             sample_locations.compute_at(output, x).vectorize(x);
         }
-
-        return final;
     }
 private:
     Var x, y, z, c;

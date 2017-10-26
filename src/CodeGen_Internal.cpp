@@ -417,10 +417,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = false;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    #if LLVM_VERSION >= 39
-    // Not supported by older linkers
     options.RelaxELFRelocations = false;
-    #endif
 }
 
 
@@ -451,7 +448,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!target) {
         std::cout << error_string << std::endl;
-#if LLVM_VERSION < 50
+#if LLVM_VERSION < 60
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
 #else
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());

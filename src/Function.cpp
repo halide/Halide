@@ -349,6 +349,11 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     }
 }
 
+void Function::deep_copy(string name, FunctionPtr copy, DeepCopyMap &copied_map) const {
+    deep_copy(copy, copied_map);
+    copy->name = name;
+}
+
 void Function::define(const vector<string> &args, vector<Expr> values) {
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new pure definition, "
@@ -733,6 +738,18 @@ const std::vector<std::string> Function::args() const {
         arg_names[i] = var->name;
     }
     return arg_names;
+}
+
+bool Function::is_pure_arg(const std::string &name) const {
+    const auto &pure_def_args = contents->init_def.args();
+    for (size_t i = 0; i < pure_def_args.size(); i++) {
+        const Variable *var = pure_def_args[i].as<Variable>();
+        internal_assert(var);
+        if (var->name == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int Function::dimensions() const {

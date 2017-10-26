@@ -124,13 +124,13 @@ check_file_exists my_first_generator.stmt
 # The second generator has generator params, which can be specified on
 # the command-line after the target. Let's compile a few different variants:
 ./lesson_15_generate -g my_second_generator -f my_second_generator_1 -o . \
-target=host parallel=false scale=3.0 rotation=ccw output_type=uint16
+target=host parallel=false scale=3.0 rotation=ccw output.type=uint16
 
 ./lesson_15_generate -g my_second_generator -f my_second_generator_2 -o . \
-target=host scale=9.0 rotation=ccw output_type=float32
+target=host scale=9.0 rotation=ccw output.type=float32
 
 ./lesson_15_generate -g my_second_generator -f my_second_generator_3 -o . \
-target=host parallel=false output_type=float64
+target=host parallel=false output.type=float64
 
 check_file_exists my_second_generator_1.a
 check_file_exists my_second_generator_1.h

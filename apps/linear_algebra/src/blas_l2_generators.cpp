@@ -14,30 +14,26 @@ class GEMVGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1 << 8};
     GeneratorParam<bool> transpose_ = {"transpose", false};
 
     // Standard ordering of parameters in GEMV functions.
-    Param<T>   a_ = {"a", 1.0};
-    ImageParam A_ = {type_of<T>(), 2, "A"};
-    ImageParam x_ = {type_of<T>(), 1, "x"};
-    Param<T>   b_ = {"b", 1.0};
-    ImageParam y_ = {type_of<T>(), 1, "y"};
+    Input<T>         a_ = {"a", 1};
+    Input<Buffer<T>> A_ = {"A", 2};
+    Input<Buffer<T>> x_ = {"x", 1};
+    Input<T>         b_ = {"b", 1};
+    Input<Buffer<T>> y_ = {"y", 1};
 
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-    }
+    Output<Buffer<T>> output_ = {"output", 1};
 
-    Func build() {
-        SetupTarget();
+    void generate() {
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         const int unroll_size = 4;
@@ -111,7 +107,6 @@ class GEMVGenerator :
             A_.dim(0).set_min(0).dim(1).set_min(0);
             x_.dim(0).set_bounds(0, A_.width());
             y_.dim(0).set_bounds(0, A_.height());
-            result.output_buffer().dim(0).set_bounds(0, A_.height());
         } else {
             const Expr size = A_.width();
             const Expr sum_size = A_.height();
@@ -154,21 +149,19 @@ class GEMVGenerator :
             A_.dim(0).set_min(0).dim(1).set_min(0);
             x_.dim(0).set_bounds(0, A_.height());
             y_.dim(0).set_bounds(0, A_.width());
-            result.output_buffer().dim(0).set_bounds(0, A_.width());
         }
 
-        Func output("output");
-        output(i) = result(i);
+        // TODO: delete this pointless memcpy, as we probably have the tools to deal with this now.
+        // see https://github.com/halide/Halide/commit/cf999bf71939261bdcbb92d87fc4d07db5770732
+        output_(i) = result(i);
         result.compute_root();
 
         const Expr size = x_.width();
         Var ii("ii");
-        output.specialize(size >= vec_size).vectorize(i, vec_size)
+        output_.specialize(size >= vec_size).vectorize(i, vec_size)
                 .specialize(size >= unroll_size * vec_size).unroll(i, unroll_size)
                 .specialize(size >= block_size_)
                 .split(i, i, ii, block_size_ / (unroll_size * vec_size)).parallel(i);
-
-        return output;
     }
 };
 
@@ -182,28 +175,24 @@ class GERGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
+    template<typename T2> using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1 << 5};
 
     // Standard ordering of parameters in GEMV functions.
-    Param<T>   a_ = {"a", 1.0};
-    ImageParam x_ = {type_of<T>(), 1, "x"};
-    ImageParam y_ = {type_of<T>(), 1, "y"};
-    ImageParam A_ = {type_of<T>(), 2, "A"};
+    Input<T>         a_ = {"a", 1};
+    Input<Buffer<T>> x_ = {"x", 1};
+    Input<Buffer<T>> y_ = {"y", 1};
+    Input<Buffer<T>> A_ = {"A", 2};
 
-    void SetupTarget() {
-        if (!assertions_enabled_) {
-            target.set(get_target()
-                       .with_feature(Target::NoAsserts)
-                       .with_feature(Target::NoBoundsQuery));
-        }
-    }
+    Output<Buffer<T>> result_ = {"result", 2};
 
-    Func build() {
-        SetupTarget();
+    void generate() {
+        assert(get_target().has_feature(Target::NoAsserts));
+        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         const int unroll_size = 4;
@@ -212,12 +201,11 @@ class GERGenerator :
         Expr num_cols = A_.height();
 
         Var i("i"), j("j");
-        Func result("result");
-        result(i, j) = A_(i, j) + a_ * x_(i) * y_(j);
+        result_(i, j) = A_(i, j) + a_ * x_(i) * y_(j);
 
         Var ii("ii"), ji("ji");
         Var ti("ti"), tj("tj"), t("t");
-        result.specialize(num_rows >= vec_size).vectorize(i, vec_size)
+        result_.specialize(num_rows >= vec_size).vectorize(i, vec_size)
                 .specialize(num_cols >= unroll_size).unroll(j, unroll_size)
                 .specialize(num_rows >= block_size_ && num_cols >= block_size_)
                 .tile(i, j, ii, ji, block_size_ / vec_size, block_size_ / unroll_size)
@@ -228,9 +216,7 @@ class GERGenerator :
         x_.dim(0).set_bounds(0, A_.width());
         y_.dim(0).set_bounds(0, A_.height());
 
-        result.output_buffer().dim(0).set_bounds(0, A_.width()).dim(1).set_bounds(0, A_.height());
-
-        return result;
+        result_.dim(0).set_bounds(0, A_.width()).dim(1).set_bounds(0, A_.height());
     }
 };
 

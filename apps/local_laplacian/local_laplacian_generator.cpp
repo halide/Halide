@@ -6,15 +6,17 @@ constexpr int maxJ = 20;
 
 class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-    GeneratorParam<int>   pyramid_levels{"pyramid_levels", 8, 1, maxJ};
+    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
+    GeneratorParam<int>     pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
-    ImageParam            input{UInt(16), 3, "input"};
-    Param<int>            levels{"levels"};
-    Param<float>          alpha{"alpha"};
-    Param<float>          beta{"beta"};
+    Input<Buffer<uint16_t>> input{"input", 3};
+    Input<int>              levels{"levels"};
+    Input<float>            alpha{"alpha"};
+    Input<float>            beta{"beta"};
 
-    Func build() {
+    Output<Buffer<uint16_t>> output{"output", 3};
+
+    void generate() {
         /* THE ALGORITHM */
         const int J = pyramid_levels;
 
@@ -82,7 +84,6 @@ public:
         float eps = 0.01f;
         color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
-        Func output("local_laplacian");
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
@@ -101,9 +102,9 @@ public:
             output.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline
-            Pipeline p(output);
-            p.auto_schedule(get_target());
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             // gpu schedule
             remap.compute_root();
@@ -144,7 +145,6 @@ public:
                 outGPyramid[j].compute_root();
             }
         }
-        return output;
     }
 private:
     Var x, y, c, k;

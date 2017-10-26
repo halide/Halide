@@ -10,6 +10,8 @@ endif()
 
 set(RUNTIME_CPP
   aarch64_cpu_features
+  alignment_128
+  alignment_32
   android_clock
   android_host_cpu_count
   android_io
@@ -66,6 +68,8 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
+  qurt_init_fini
+  qurt_thread_pool
   runtime_api
   ssp
   thread_pool
@@ -276,6 +280,7 @@ set(HEADER_FILES
   Deinterleave.h
   DeviceArgument.h
   DeviceInterface.h
+  Dimension.h
   EarlyFree.h
   Elf.h
   EliminateBoolVectors.h
@@ -316,6 +321,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   Lambda.h
   Lerp.h
+  LICM.h
   LoopCarry.h
   Lower.h
   MainPage.h
@@ -431,6 +437,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Deinterleave.cpp
   DeviceArgument.cpp
   DeviceInterface.cpp
+  Dimension.cpp
   EarlyFree.cpp
   Elf.cpp
   EliminateBoolVectors.cpp
@@ -465,6 +472,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Output.cpp
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
+  LICM.cpp
   LoopCarry.cpp
   Lower.cpp
   MatlabWrapper.cpp
@@ -533,10 +541,6 @@ add_dependencies(Halide
   binary2cpp
   build_halide_h
 )
-
-if (WIN32 AND NOT MSVC)
-  set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
-endif()
 
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support

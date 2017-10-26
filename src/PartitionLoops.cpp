@@ -723,13 +723,6 @@ class RenormalizeGPULoops : public IRMutator {
             return;
         }
 
-        if (ends_with(op->name, "__thread_id_x")) {
-            in_thread_loop = true;
-            IRMutator::visit(op);
-            in_thread_loop = false;
-            return;
-        }
-
         bool old_in_gpu_loop = in_gpu_loop;
 
         if (in_gpu_loop || CodeGen_GPU_Dev::is_gpu_var(op->name)) {
@@ -737,7 +730,15 @@ class RenormalizeGPULoops : public IRMutator {
             in_gpu_loop = true;
         }
 
-        IRMutator::visit(op);
+
+        if (ends_with(op->name, "__thread_id_x")) {
+            internal_assert(!in_thread_loop);
+            in_thread_loop = true;
+            IRMutator::visit(op);
+            in_thread_loop = false;
+        } else {
+            IRMutator::visit(op);
+        }
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.

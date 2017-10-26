@@ -102,9 +102,13 @@ public:
      * This method also takes a map of <old Function, deep-copied version> as input
      * and would use the deep-copied Function from the map if exists instead of
      * creating a new deep-copy to avoid creating deep-copies of the same Function
-     * multiple times.
+     * multiple times. If 'name' is specified, copy's name will be set to that.
      */
+    // @{
     EXPORT void deep_copy(FunctionPtr copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+    EXPORT void deep_copy(std::string name, FunctionPtr copy,
+                          std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+    // @}
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -315,6 +319,9 @@ public:
     /** Find all Vars that are placeholders for ScheduleParams and substitute in
      * the corresponding constant value. */
     EXPORT Function &substitute_schedule_param_exprs();
+
+    /** Return true iff the name matches one of the Function's pure args. */
+    EXPORT bool is_pure_arg(const std::string &name) const;
 };
 
 /** Deep copy an entire Function DAG. */

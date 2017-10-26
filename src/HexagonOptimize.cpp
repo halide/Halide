@@ -1649,7 +1649,7 @@ private:
     // Return the load expression of first vector if all vector in exprs are
     // contiguous vectors pointing to the same buffer.
     Expr are_contiguous_vectors(const vector<Expr> exprs) {
-        if (exprs.size() == 0) {
+        if (exprs.empty()) {
             return Expr();
         }
         // If the shuffle simplifies then the vectors are contiguous.

@@ -11,17 +11,9 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
-#if LLVM_VERSION >= 39
 class IRBuilderDefaultInserter;
-#else
-template<bool> class IRBuilderDefaultInserter;
-#endif
 class ConstantFolder;
-#if LLVM_VERSION >= 39
 template<typename, typename> class IRBuilder;
-#else
-template<bool, typename, typename> class IRBuilder;
-#endif
 class LLVMContext;
 class Type;
 class StructType;
@@ -132,11 +124,7 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-#if LLVM_VERSION >= 39
     llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
-#else
-    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
-#endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     std::vector<LoweredArgument> current_function_args;
@@ -475,7 +463,8 @@ private:
      * pointer-to-constant-data.
      */
     llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args);
+        const std::string &function_name, const std::vector<LoweredArgument> &args,
+        const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);

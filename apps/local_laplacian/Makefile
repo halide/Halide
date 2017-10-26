@@ -31,7 +31,7 @@ $(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian_exec
 
 $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/viz -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -I$(BIN)/viz -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz

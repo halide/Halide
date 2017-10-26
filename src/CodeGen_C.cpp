@@ -1897,11 +1897,7 @@ void CodeGen_C::visit(const FloatImm *op) {
 
 void CodeGen_C::visit(const Call *op) {
 
-    internal_assert(op->call_type == Call::Extern ||
-                    op->call_type == Call::ExternCPlusPlus ||
-                    op->call_type == Call::PureExtern ||
-                    op->call_type == Call::Intrinsic ||
-                    op->call_type == Call::PureIntrinsic)
+    internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
     ostringstream rhs;
@@ -2141,8 +2137,7 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
-    } else if (op->call_type == Call::Intrinsic ||
-               op->call_type == Call::PureIntrinsic) {
+    } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
     } else {

@@ -80,6 +80,7 @@ protected:
     EXPORT virtual void include(const Stmt &);
     // @}
 
+private:
     /** The nodes visited so far */
     std::set<const IRNode *> visited;
 

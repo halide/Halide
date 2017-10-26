@@ -52,7 +52,7 @@ private:
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
-        Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
+        Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
@@ -65,7 +65,7 @@ private:
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_feature(Target::LargeBuffers)) {
+                if (target.has_large_buffers()) {
                     idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
                 } else {
                     idx += (args[i] - mins[i]) * strides[i];
@@ -77,9 +77,9 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
+            Expr base = target.has_large_buffers() ? make_zero(Int(64)) : 0;
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_feature(Target::LargeBuffers)) {
+                if (target.has_large_buffers()) {
                     idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
                     base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
                 } else {
@@ -118,6 +118,11 @@ private:
             shader_scope_realizations.pop(op->name);
         }
 
+        // The allocation extents of the function taken into account of
+        // the align_storage directives. It is only used to determine the
+        // host allocation size and the strides in buffer_t objects (which
+        // also affects the device allocation in some backends).
+        vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
         {
             auto iter = env.find(op->name);
@@ -131,7 +136,9 @@ private:
                         storage_permutation.push_back((int)j);
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
-                            extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                            allocation_extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                        } else {
+                            allocation_extents[j] = extents[j];
                         }
                     }
                 }
@@ -173,13 +180,13 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         // Make the allocation node
-        stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
+        stmt = Allocate::make(op->name, op->types[0], allocation_extents, condition, stmt);
 
         // Compute the strides
         for (int i = (int)op->bounds.size()-1; i > 0; i--) {
             int prev_j = storage_permutation[i-1];
             int j = storage_permutation[i];
-            Expr stride = stride_var[prev_j] * extent_var[prev_j];
+            Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
         }
 
