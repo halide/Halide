@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
                     ((input(x, y) > 40) && (!(input(x, y) > 50)));
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
                     ((input(x, y) > 40) && (!common_cond));
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
                 bool cond = x < 10 || x > 20 || y < 10 || y > 20;
                 uint8_t correct = cond ? 0 : input(x,y);
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
                 bool cond = input(x, y) > 10;
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
-                    printf("output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
+                    fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
                     return -1;
                 }
             }
@@ -174,6 +174,11 @@ int main(int argc, char **argv) {
             gpu.compute_root();
 
             Target target = get_jit_target_from_environment();
+            if (target.has_feature(Target::OpenCL) && n == 16 && w == 32) {
+                // Workaround for https://github.com/halide/Halide/issues/2477
+                printf("Skipping uint%d -> uint%d for OpenCL\n", n, w);
+                continue;
+            }
             if (target.has_gpu_feature()) {
                 gpu.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
             } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
@@ -190,8 +195,8 @@ int main(int argc, char **argv) {
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
-                        printf("gpu_output(%d, %d) = %d instead of %d\n",
-                               x, y, gpu_output(x, y), cpu_output(x, y));
+                        fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
+                               x, y, gpu_output(x, y), cpu_output(x, y), n, w);
                         return -1;
                     }
                 }
