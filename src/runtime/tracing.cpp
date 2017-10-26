@@ -10,7 +10,127 @@ typedef int32_t (*trace_fn)(void *, const halide_trace_event_t *);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK int halide_trace_file = 0;
+// A spinlock that allows for shared and exclusive access. It's
+// equivalent to a reader-writer lock, but in my case the "readers"
+// will actually be writing simultaneously to the trace buffer, so
+// that's a bad name. We use the __sync primitives used elsewhere in
+// the runtime for atomic work. They are well supported by clang.
+class SharedExclusiveSpinLock {
+    volatile uint32_t lock;
+
+    // Covers a single bit indicating one owner has exclusive
+    // access. The waiting bit can be set while the exclusive bit is
+    // set, but the bits masked by shared_mask must be zero while this
+    // bit is set.
+    const static uint32_t exclusive_held_mask = 0x80000000;
+
+    // Set to indicate a thread needs to acquire exclusive
+    // access. Other fields of the lock may be set, but no shared
+    // access request will proceed while this bit is set.
+    const static uint32_t exclusive_waiting_mask = 0x40000000;
+
+    // Count of threads currently holding shared access. Must be zero
+    // if the exclusive bit is set. Cannot increase if the waiting bit
+    // is set.
+    const static uint32_t shared_mask = 0x3fffffff;
+
+public:
+    __attribute__((always_inline)) void acquire_shared() {
+        while (1) {
+            uint32_t x = lock & shared_mask;
+            if (__sync_bool_compare_and_swap(&lock, x, x + 1)) {
+                return;
+            }
+        }
+    }
+
+     __attribute__((always_inline)) void release_shared() {
+        __sync_fetch_and_sub(&lock, 1);
+    }
+
+    __attribute__((always_inline)) void acquire_exclusive() {
+        while (1) {
+            // If multiple threads are trying to acquire exclusive
+            // ownership, we may need to rerequest exclusive waiting
+            // while we spin, as it gets unset whenever a thread
+            // acquires exclusive ownership.
+            __sync_fetch_and_or(&lock, exclusive_waiting_mask);
+            if (__sync_bool_compare_and_swap(&lock, exclusive_waiting_mask, exclusive_held_mask)) {
+                return;
+            }
+        }
+    }
+
+    __attribute__((always_inline)) void release_exclusive() {
+        __sync_fetch_and_and(&lock, ~exclusive_held_mask);
+    }
+
+    SharedExclusiveSpinLock() : lock(0) {}
+};
+
+const static int buffer_size = 1024 * 1024;
+
+class TraceBuffer {
+    SharedExclusiveSpinLock lock;
+    uint32_t cursor;
+    uint8_t buf[buffer_size];
+
+    // Attempt to atomically acquire space in the buffer to write a
+    // packet. Returns NULL if the buffer was full.
+    __attribute__((always_inline)) halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
+        lock.acquire_shared();
+        halide_assert(user_context, size <= buffer_size);
+        uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
+        if (my_cursor + size > sizeof(buf)) {
+            __sync_fetch_and_sub(&cursor, size);
+            lock.release_shared();
+            return NULL;
+        } else {
+            return (halide_trace_packet_t *)(buf + my_cursor);
+        }
+    }
+
+public:
+
+    // Wait for all writers to finish with their packets, stall any
+    // new writers, and flush the buffer to the fd.
+    __attribute__((always_inline)) void flush(void *user_context, int fd) {
+        lock.acquire_exclusive();
+        bool success = true;
+        if (cursor) {
+            success = (cursor == (uint32_t)write(fd, buf, cursor));
+            cursor = 0;
+        }
+        lock.release_exclusive();
+        halide_assert(user_context, success && "Could not write to trace file");
+    }
+
+    // Acquire and return a packet's worth of space in the trace
+    // buffer, flushing the trace buffer to the given fd to make space
+    // if necessary. The region acquired is protected from other
+    // threads writing or reading to it, so it must be released before
+    // a flush can occur.
+    __attribute__((always_inline)) halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
+        halide_trace_packet_t *packet = NULL;
+        while (!(packet = try_acquire_packet(user_context, size))) {
+            // Couldn't acquire space to write a packet. Flush and try again.
+            flush(user_context, fd);
+        }
+        return packet;
+    }
+
+    // Release a packet, allowing it to be written out with flush
+    __attribute__((always_inline)) void release_packet(halide_trace_packet_t *) {
+        // Need a memory barrier to guarantee all the writes are done.
+        __sync_synchronize();
+        lock.release_shared();
+    }
+
+    TraceBuffer() : cursor(0) {}
+};
+
+WEAK TraceBuffer *halide_trace_buffer = NULL;
+WEAK int halide_trace_file = -1; // -1 indicates uninitialized
 WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK void *halide_trace_file_internally_opened = NULL;
@@ -34,33 +154,38 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         uint32_t name_bytes = strlen(e->func) + 1;
         uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes;
         uint32_t total_size = (total_size_without_padding + 3) & ~3;
-        uint32_t padding_bytes = total_size - total_size_without_padding;
 
-        // The packet header
-        halide_trace_packet_t header;
-        header.size = total_size;
-        header.id = my_id;
-        header.type = e->type;
-        header.event = e->event;
-        header.parent_id = e->parent_id;
-        header.value_index = e->value_index;
-        header.dimensions = e->dimensions;
+        // Claim some space to write to in the trace buffer
+        halide_trace_packet_t *packet = halide_trace_buffer->acquire_packet(user_context, fd, total_size);
 
-        size_t written = 0;
-        {
-            ScopedSpinLock lock(&halide_trace_file_lock);
-            written += write(fd, &header, sizeof(header));
-            if (e->coordinates) {
-                written += write(fd, e->coordinates, coords_bytes);
-            }
-            if (e->value) {
-                written += write(fd, e->value, value_bytes);
-            }
-            written += write(fd, e->func, name_bytes);
-            uint32_t zero = 0;
-            written += write(fd, &zero, padding_bytes);
+        if (total_size > 4096) {
+            print(NULL) << total_size << "\n";
         }
-        halide_assert(user_context, written == total_size && "Can't write to trace file");
+
+        // Write a packet into it
+        packet->size = total_size;
+        packet->id = my_id;
+        packet->type = e->type;
+        packet->event = e->event;
+        packet->parent_id = e->parent_id;
+        packet->value_index = e->value_index;
+        packet->dimensions = e->dimensions;
+        if (e->coordinates) {
+            memcpy((void *)packet->coordinates(), e->coordinates, coords_bytes);
+        }
+        if (e->value) {
+            memcpy((void *)packet->value(), e->value, value_bytes);
+        }
+        memcpy((void *)packet->func(), e->func, name_bytes);
+
+        // Release it
+        halide_trace_buffer->release_packet(packet);
+
+        // We should also flush the trace buffer if we hit an event
+        // that might be the end of the trace.
+        if (e->event == halide_trace_end_pipeline) {
+            halide_trace_buffer->flush(user_context, fd);
+        }
 
     } else {
         uint8_t buffer[4096];
@@ -183,22 +308,22 @@ WEAK trace_fn halide_set_custom_trace(trace_fn t) {
 
 WEAK void halide_set_trace_file(int fd) {
     halide_trace_file = fd;
-    halide_trace_file_initialized = true;
 }
 
 extern int errno;
 
 WEAK int halide_get_trace_file(void *user_context) {
-    // Prevent multiple threads both trying to initialize the trace
-    // file at the same time.
     ScopedSpinLock lock(&halide_trace_file_lock);
-    if (!halide_trace_file_initialized) {
+    if (halide_trace_file < 0) {
         const char *trace_file_name = getenv("HL_TRACE_FILE");
         if (trace_file_name) {
             void *file = fopen(trace_file_name, "ab");
             halide_assert(user_context, file && "Failed to open trace file\n");
             halide_set_trace_file(fileno(file));
             halide_trace_file_internally_opened = file;
+            if (!halide_trace_buffer) {
+                halide_trace_buffer = (TraceBuffer *)malloc(sizeof(TraceBuffer));
+            }
         } else {
             halide_set_trace_file(0);
         }
@@ -216,6 +341,9 @@ WEAK int halide_shutdown_trace() {
         halide_trace_file = 0;
         halide_trace_file_initialized = false;
         halide_trace_file_internally_opened = NULL;
+        if (halide_trace_buffer) {
+            free(halide_trace_buffer);
+        }
         return ret;
     } else {
         return 0;
