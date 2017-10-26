@@ -547,7 +547,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     debug(2) << module.get() << "\n";
 
     // Verify the module is ok
-    verifyModule(*module);
+    internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize
@@ -658,8 +658,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         }
     }
 
-    llvm::raw_os_ostream os(std::cerr);
-    internal_assert(!verifyFunction(*function, &os));
+    internal_assert(!verifyFunction(*function, &llvm::errs()));
 
     current_function_args.clear();
 }
@@ -904,8 +903,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
     // This call should never inline
     result->setIsNoInline();
     builder->CreateRet(result);
-    llvm::raw_os_ostream os(std::cerr);
-    llvm::verifyFunction(*wrapper, &os);
+    internal_assert(!verifyFunction(*wrapper, &llvm::errs()));
     return wrapper;
 }
 
@@ -983,7 +981,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     builder->CreateRet(metadata_storage);
-    llvm::verifyFunction(*metadata_getter);
+    internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
 
     return metadata_getter;
 }
