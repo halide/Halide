@@ -318,7 +318,8 @@ enum class DeviceAPI {
     GLSL,
     OpenGLCompute,
     Metal,
-    Hexagon
+    Hexagon,
+    Vulkan
 };
 
 /** An array containing all the device apis. Useful for iterating
@@ -331,7 +332,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
-                                     DeviceAPI::Hexagon};
+                                     DeviceAPI::Hexagon,
+                                     DeviceAPI::Vulkan};
 
 namespace Internal {
 

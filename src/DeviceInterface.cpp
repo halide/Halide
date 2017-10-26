@@ -51,6 +51,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
         name = "openglcompute";
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
+    } else if (d == DeviceAPI::Vulkan) {
+        name = "vulkan";
     } else {
         return nullptr;
     }
@@ -69,6 +71,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenCL;
     } else if (target.has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
+    } else if (target.has_feature(Target::Vulkan)) {
+        return DeviceAPI::Vulkan;
     } else if (target.has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.has_feature(Target::OpenGL)) {
@@ -102,6 +106,9 @@ Expr make_device_interface_call(DeviceAPI device_api) {
         interface_name = "halide_openglcompute_device_interface";
         break;
     case DeviceAPI::Hexagon:
+        interface_name = "halide_hexagon_device_interface";
+        break;
+    case DeviceAPI::Vulkan:
         interface_name = "halide_hexagon_device_interface";
         break;
     case DeviceAPI::Default_GPU:

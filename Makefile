@@ -184,12 +184,21 @@ TEST_METAL = 1
 endif
 endif
 
+ifneq ($(WITH_VULKAN), )
+ifneq (,$(findstring vulkan,$(HL_TARGET)))
+TEST_VULKAN = 1
+endif
+endif
+
 ifeq ($(UNAME), Linux)
 ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
+endif
+ifneq ($(TEST_VULKAN), )
+VULKAN_LD_FLAGS ?= # TODO: figure this out
 endif
 OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
@@ -206,6 +215,9 @@ endif
 ifneq ($(TEST_METAL), )
 METAL_LD_FLAGS ?= -framework Metal -framework Foundation
 endif
+ifneq ($(TEST_VULKAN), )
+VULKAN_LD_FLAGS ?= # TODO: figure this out
+endif
 OPENGL_LD_FLAGS ?= -framework OpenGL
 HOST_OS=os_x
 endif
@@ -220,6 +232,10 @@ endif
 
 ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
+endif
+
+ifneq ($(TEST_VULKAN), )
+TEST_CXX_FLAGS += -DTEST_VULKAN
 endif
 
 # Compiling the tutorials requires libpng
@@ -610,6 +626,7 @@ RUNTIME_CPP_COMPONENTS = \
   thread_pool \
   to_string \
   tracing \
+  vulkan \
   windows_clock \
   windows_cuda \
   windows_get_symbol \
@@ -643,6 +660,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
+                            $(INCLUDE_DIR)/HalideRuntimeVulkan.h \
                             $(INCLUDE_DIR)/HalideBuffer.h
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \

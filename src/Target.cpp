@@ -266,6 +266,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"vulkan", Target::Vulkan},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -502,6 +503,9 @@ bool Target::supported() const {
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
+#if !defined(WITH_VULKAN)
+    bad |= has_feature(Target::Vulkan);
+#endif
     return !bad;
 }
 
@@ -523,6 +527,11 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
     } else if (device == DeviceAPI::OpenCL) {
         if (t.is_float() && t.bits() == 64) {
             return has_feature(Target::CLDoubles);
+        }
+    } else if (device == DeviceAPI::Vulkan) {
+        // TODO: Is this correct?
+        if (t.bits() == 64) {
+	  return false;
         }
     }
 
@@ -547,6 +556,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
     case DeviceAPI::Hexagon:       return Target::HVX_128;
+    case DeviceAPI::Vulkan:        return Target::Vulkan;
     default:                       return Target::FeatureEnd;
     }
 }
