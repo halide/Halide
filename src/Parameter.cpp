@@ -159,9 +159,9 @@ Expr Parameter::scalar_expr() const {
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
-        case 16: return Expr(get_scalar<float16_t>());
-        case 32: return Expr(get_scalar<float>());
-        case 64: return Expr(get_scalar<double>());
+        case 16: return Expr(scalar<float16_t>());
+        case 32: return Expr(scalar<float>());
+        case 64: return Expr(scalar<double>());
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
