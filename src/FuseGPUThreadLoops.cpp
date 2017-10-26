@@ -36,7 +36,7 @@ class InjectThreadBarriers : public IRMutator {
     Stmt barrier;
 
     void visit(const For *op) {
-        RestoreAtExit<bool> old_in_threads(in_threads);
+        ScopedValue<bool> old_in_threads(in_threads);
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             in_threads = true;
         }
@@ -683,7 +683,7 @@ class ZeroGPULoopMins : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        RestoreAtExit<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
+        ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
@@ -710,10 +710,10 @@ class ValidateGPULoopNesting : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const For *op) {
-        RestoreAtExit<string> old_innermost_block_var(innermost_block_var);
-        RestoreAtExit<string> old_innermost_thread_var(innermost_thread_var);
-        RestoreAtExit<int> old_gpu_block_depth(gpu_block_depth);
-        RestoreAtExit<int> old_gpu_thread_depth(gpu_thread_depth);
+        ScopedValue<string> old_innermost_block_var(innermost_block_var);
+        ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
+        ScopedValue<int> old_gpu_block_depth(gpu_block_depth);
+        ScopedValue<int> old_gpu_thread_depth(gpu_thread_depth);
 
         for (int i = 1; i <= 4; i++) {
             if (ends_with(op->name, block_names[4-i])) {
