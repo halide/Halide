@@ -109,7 +109,7 @@ class LICM : public IRMutator {
     bool in_gpu_loop{false};
 
     void visit(const For *op) {
-        RestoreAtExit<bool> old_in_gpu_loop(in_gpu_loop);
+        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop);
         in_gpu_loop =
             (op->for_type == ForType::GPUBlock ||
              op->for_type == ForType::GPUThread);

@@ -1254,7 +1254,7 @@ class EliminateInterleaves : public IRMutator {
     }
 
     void visit_bool_to_mask(const Call *op) {
-        RestoreAtExit<bool> old_in_bool_to_mask(in_bool_to_mask, true);
+        ScopedValue<bool> old_in_bool_to_mask(in_bool_to_mask, true);
 
         Expr arg = mutate(op->args[0]);
         if (!arg.same_as(op->args[0]) || interleave_mask) {

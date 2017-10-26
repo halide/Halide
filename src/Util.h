@@ -256,14 +256,14 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b);
 /** Helper class for saving/restoring variable values on the stack, to allow
  * for early-exit that preserves correctness */
 template<typename T>
-struct RestoreAtExit {
+struct ScopedValue {
     T &var;
     const T old_value;
     /** Preserve the old value, restored at dtor time */
-    RestoreAtExit(T &var) : var(var), old_value(var) {}
+    ScopedValue(T &var) : var(var), old_value(var) {}
     /** Preserve the old value, then set the var to a new value. */
-    RestoreAtExit(T &var, T new_value) : var(var), old_value(var) { var = new_value; }
-    ~RestoreAtExit() { var = old_value; }
+    ScopedValue(T &var, T new_value) : var(var), old_value(var) { var = new_value; }
+    ~ScopedValue() { var = old_value; }
     operator T() const { return old_value; }
 };
 
