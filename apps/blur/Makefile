@@ -2,11 +2,11 @@ include ../support/Makefile.inc
 
 all: $(BIN)/test
 
-$(BIN)/halide_blur_exec: halide_blur_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/halide_blur.generator: halide_blur_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
-$(BIN)/halide_blur.a: $(BIN)/halide_blur_exec
+$(BIN)/halide_blur.a: $(BIN)/halide_blur.generator
 	@mkdir -p $(@D)
 	$^ -g halide_blur -o $(BIN) target=$(HL_TARGET)
 
