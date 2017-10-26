@@ -172,6 +172,29 @@
  * some extra restrictions on underscore use). By convention, the name should match
  * the member-variable name.
  *
+ *
+ *  All Generators have three GeneratorParams that are implicitly provided
+ *  by the base class:
+ *
+ *      GeneratorParam<Target> target{"target", Target()};
+ *      GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+ *      GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+ *
+ *  - 'target' is the Halide::Target for which the Generator is producing code.
+ *    It is read-only during the Generator's lifetime, and must not be modified;
+ *    its value should always be filled in by the calling code: either the Halide
+ *    build system (for ahead-of-time compilation), or ordinary C++ code
+ *    (for JIT compilation).
+ *  - 'auto_schedule' indicates whether the auto-scheduler should be run for this
+ *    Generator:
+ *      - if 'false', the Generator should schedule its Funcs as it sees fit.
+ *      - if 'true', the Generator should only provide estimate()s for its Funcs,
+ *        and not call any other scheduling methods.
+ *  - 'machine_params' is only used if auto_schedule is true; it is ignored
+ *    if auto_schedule is false. It provides details about the machine architecture
+ *    being targeted which may be used to enhance the automatically-generated
+ *    schedule.
+ *
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
