@@ -281,9 +281,11 @@ private:
             std::string new_name = unique_name('t');
             Type new_type = new_value.type();
             Expr new_var = Variable::make(new_type, new_name);
-            internal.push(op->name, new_var);
-            Expr body = mutate(op->body);
-            internal.pop(op->name);
+            Expr body;
+            {
+                ScopedBinding<Expr> p(internal, op->name, new_var);
+                body = mutate(op->body);
+            }
 
             // Define the new name.
             expr = Let::make(new_name, new_value, body);
