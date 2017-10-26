@@ -74,9 +74,8 @@ private:
         if (op->name == var) {
             result = in;
         } else {
-            scope.push(op->name, in);
+            ScopedBinding<Interval> p(scope, op->name, in);
             op->body.accept(this);
-            scope.pop(op->name);
         }
     }
 
@@ -89,9 +88,8 @@ private:
         if (op->name == var) {
             result = in;
         } else {
-            scope.push(op->name, in);
+            ScopedBinding<Interval> p(scope, op->name, in);
             op->body.accept(this);
-            scope.pop(op->name);
         }
     }
 };
