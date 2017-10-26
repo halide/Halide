@@ -19,7 +19,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   mkdir -p build/ && cd build/
   cmake -DLLVM_DIR="/usr/local/llvm/share/llvm/cmake/" \
         -DHALIDE_SHARED_LIBRARY="${HALIDE_SHARED_LIBRARY}" \
-        -DWITH_APPS=ON \
+        -DWITH_APPS=OFF \
         -DWITH_TESTS=ON \
         -DWITH_TEST_OPENGL=OFF \
         -DWITH_TUTORIALS=OFF \
@@ -29,7 +29,8 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
         ../
 
   # Build and run internal tests
-  make ${MAKEFLAGS} VERBOSE=1
+  make ${MAKEFLAGS} Halide
+  make ${MAKEFLAGS} test_internal
   
   # Build the docs and run the tests
   make doc 

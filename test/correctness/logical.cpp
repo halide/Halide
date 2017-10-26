@@ -146,7 +146,6 @@ int main(int argc, char **argv) {
 
     // Test a select where the condition has a different width than
     // the true/false values.
-    int result = 0;
     for (int w = 8; w <= 32; w *= 2) {
         for (int n = 8; n < w; n *= 2) {
             Type narrow = UInt(n), wide = UInt(w);
@@ -175,6 +174,11 @@ int main(int argc, char **argv) {
             gpu.compute_root();
 
             Target target = get_jit_target_from_environment();
+            if (target.has_feature(Target::OpenCL) && n == 16 && w == 32) {
+                // Workaround for https://github.com/halide/Halide/issues/2477
+                printf("Skipping uint%d -> uint%d for OpenCL\n", n, w);
+                continue;
+            }
             if (target.has_gpu_feature()) {
                 gpu.gpu_tile(x, y, xi, yi, 16, 16).vectorize(xi, 4);
             } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
@@ -193,14 +197,11 @@ int main(int argc, char **argv) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
                         fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
                                x, y, gpu_output(x, y), cpu_output(x, y), n, w);
-                        result = -1;
+                        return -1;
                     }
                 }
             }
         }
-    }
-    if (result != 0) {
-        return result;
     }
 
 
