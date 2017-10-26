@@ -172,6 +172,29 @@
  * some extra restrictions on underscore use). By convention, the name should match
  * the member-variable name.
  *
+ *
+ *  All Generators have three GeneratorParams that are implicitly provided
+ *  by the base class:
+ *
+ *      GeneratorParam<Target> target{"target", Target()};
+ *      GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+ *      GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+ *
+ *  - 'target' is the Halide::Target for which the Generator is producing code.
+ *    It is read-only during the Generator's lifetime, and must not be modified;
+ *    its value should always be filled in by the calling code: either the Halide
+ *    build system (for ahead-of-time compilation), or ordinary C++ code
+ *    (for JIT compilation).
+ *  - 'auto_schedule' indicates whether the auto-scheduler should be run for this
+ *    Generator:
+ *      - if 'false', the Generator should schedule its Funcs as it sees fit.
+ *      - if 'true', the Generator should only provide estimate()s for its Funcs,
+ *        and not call any other scheduling methods.
+ *  - 'machine_params' is only used if auto_schedule is true; it is ignored
+ *    if auto_schedule is false. It provides details about the machine architecture
+ *    being targeted which may be used to enhance the automatically-generated
+ *    schedule.
+ *
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
@@ -362,6 +385,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
@@ -446,6 +470,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
@@ -456,7 +481,8 @@ protected:
 private:
     T value_;
 
-    template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value &&
+                                                  !std::is_same<T2, MachineParams>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
         check_value_writable();
         // Arithmetic types must roundtrip losslessly.
@@ -475,6 +501,12 @@ private:
     template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
         fail_wrong_type(msg);
+    }
+
+    template <typename T2, typename std::enable_if<std::is_same<T2, MachineParams>::value &&
+                                                   std::is_same<T, MachineParams>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char *msg) {
+        value_ = value;
     }
 };
 
@@ -504,6 +536,30 @@ public:
 
     std::string get_c_type() const override {
         return "Target";
+    }
+};
+
+template<typename T>
+class GeneratorParam_MachineParams : public GeneratorParamImpl<T> {
+public:
+    GeneratorParam_MachineParams(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
+
+    void set_from_string(const std::string &new_value_string) override {
+        this->set(MachineParams(new_value_string));
+    }
+
+    std::string to_string() const override {
+        return this->value().to_string();
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        std::ostringstream oss;
+        oss << v << ".to_string()";
+        return oss.str();
+    }
+
+    std::string get_c_type() const override {
+        return "MachineParams";
     }
 };
 
@@ -700,11 +756,12 @@ public:
 template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
-        cond<std::is_same<T, Target>::value,    GeneratorParam_Target<T>>,
-        cond<std::is_same<T, Type>::value,      GeneratorParam_Type<T>>,
-        cond<std::is_same<T, bool>::value,      GeneratorParam_Bool<T>>,
-        cond<std::is_arithmetic<T>::value,      GeneratorParam_Arithmetic<T>>,
-        cond<std::is_enum<T>::value,            GeneratorParam_Enum<T>>
+        cond<std::is_same<T, Target>::value,        GeneratorParam_Target<T>>,
+        cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
+        cond<std::is_same<T, Type>::value,          GeneratorParam_Type<T>>,
+        cond<std::is_same<T, bool>::value,          GeneratorParam_Bool<T>>,
+        cond<std::is_arithmetic<T>::value,          GeneratorParam_Arithmetic<T>>,
+        cond<std::is_enum<T>::value,                GeneratorParam_Enum<T>>
     >::type;
 
 }  // namespace Internal
@@ -1709,6 +1766,7 @@ public:
     HALIDE_OUTPUT_FORWARD(compute_root)
     HALIDE_OUTPUT_FORWARD(define_extern)
     HALIDE_OUTPUT_FORWARD_CONST(defined)
+    HALIDE_OUTPUT_FORWARD(estimate)
     HALIDE_OUTPUT_FORWARD(fold_storage)
     HALIDE_OUTPUT_FORWARD(fuse)
     HALIDE_OUTPUT_FORWARD(glsl)
@@ -1783,13 +1841,15 @@ protected:
 
     NO_INLINE Func &get_func_ref() {
         internal_assert(kind() != IOKind::Scalar);
-        internal_assert(funcs_.size() == array_size() && exprs_.empty());
+        internal_assert(exprs_.empty());
+        user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
         return funcs_[0];
     }
 
     NO_INLINE const Func &get_func_ref() const {
         internal_assert(kind() != IOKind::Scalar);
-        internal_assert(funcs_.size() == array_size() && exprs_.empty());
+        internal_assert(exprs_.empty());
+        user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
         return funcs_[0];
     }
 };
@@ -1995,12 +2055,6 @@ public:
     // to simply set the output(s) without needing a wrapper Func.
     GeneratorOutput_Buffer<T> &operator=(const Func &f) {
         assign_from_func(f);
-        return *this;
-    }
-
-    GeneratorOutput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
-        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
-        this->funcs_.at(0).estimate(var, min, extent);
         return *this;
     }
 
@@ -2309,13 +2363,19 @@ class GeneratorContext {
 public:
     using ExternsMap = std::map<std::string, ExternalCode>;
 
-    explicit GeneratorContext(const Target &t) :
+    explicit GeneratorContext(const Target &t,
+                              bool auto_schedule = false,
+                              const MachineParams &machine_params = MachineParams::generic()) :
         target("target", t),
+        auto_schedule("auto_schedule", auto_schedule),
+        machine_params("machine_params", machine_params),
         externs_map(std::make_shared<ExternsMap>()),
         value_tracker(std::make_shared<Internal::ValueTracker>()) {}
     virtual ~GeneratorContext() {}
 
     inline Target get_target() const { return target; }
+    inline bool get_auto_schedule() const { return auto_schedule; }
+    inline MachineParams get_machine_params() const { return machine_params; }
 
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
@@ -2350,6 +2410,8 @@ public:
 
 protected:
     GeneratorParam<Target> target;
+    GeneratorParam<bool> auto_schedule;
+    GeneratorParam<MachineParams> machine_params;
     std::shared_ptr<ExternsMap> externs_map;
     std::shared_ptr<Internal::ValueTracker> value_tracker;
 
@@ -2357,6 +2419,8 @@ protected:
 
     inline void init_from_context(const Halide::GeneratorContext &context) {
         target.set(context.get_target());
+        auto_schedule.set(context.get_auto_schedule());
+        machine_params.set(context.get_machine_params());
         value_tracker = context.get_value_tracker();
         externs_map = context.get_externs_map();
     }
@@ -2528,12 +2592,6 @@ public:
     // calling from generate() as long as all Outputs have been defined.)
     EXPORT Pipeline get_pipeline();
 
-    /** Generate a schedule for the Generator's pipeline. */
-    //@{
-    EXPORT void auto_schedule_outputs(const MachineParams &arch_params);
-    EXPORT void auto_schedule_outputs();
-    //@}
-
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
     EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
@@ -2637,7 +2695,6 @@ private:
     bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
-    std::string auto_schedule_result;
 
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
