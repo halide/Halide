@@ -441,6 +441,10 @@ struct halide_trace_packet_t {
         return (const int *)(this + 1);
     }
 
+    HALIDE_ALWAYS_INLINE int *coordinates() {
+        return (int *)(this + 1);
+    }
+
     /** Get the value, assuming this packet is laid out in memory as
      * it was written. The packet comes immediately after the coordinates
      * array. */
@@ -448,10 +452,18 @@ struct halide_trace_packet_t {
         return (const void *)(coordinates() + dimensions);
     }
 
+    HALIDE_ALWAYS_INLINE void *value() {
+        return (void *)(coordinates() + dimensions);
+    }
+
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
         return (const char *)value() + type.lanes * type.bytes();
+    }
+
+    HALIDE_ALWAYS_INLINE char *func() {
+        return (char *)value() + type.lanes * type.bytes();
     }
     #endif
 };
