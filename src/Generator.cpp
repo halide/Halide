@@ -93,6 +93,9 @@ Outputs compute_outputs(const Target &target,
             output_files.static_library_name = base_path + get_extension(".a", options);
         }
     }
+    if (options.emit_schedule) {
+        output_files.schedule_name = base_path + get_extension(".schedule", options);
+    }
     return output_files;
 }
 
@@ -106,55 +109,6 @@ Argument to_argument(const Internal::Parameter &param) {
     return Argument(param.name(),
         param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
         param.type(), param.dimensions(), def, min, max);
-}
-
-std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_depth) {
-    const int64_t int_part = static_cast<int64_t>(std::floor(d));
-    const double float_part = d - int_part;
-    if (max_depth == 0 || float_part == 0.0) {
-        return {int_part, 1};
-    }
-
-    const auto r = rational_approximation_helper(1.0/float_part, max_depth - 1);
-    const int64_t num = r.second;
-    const int64_t den = r.first;
-    if (mul_would_overflow(64, int_part, den) ||
-        add_would_overflow(64, num, int_part * den)) {
-        return {0, 0};
-    }
-
-    return {num + int_part * den, den};
-}
-
-std::pair<int64_t, int64_t> rational_approximation(double d) {
-    // Special-case non-finite numbers.
-    if (std::isnan(d)) return {0, 0};
-
-    const int64_t sign = (d < 0) ? -1 : 1;
-    if (!std::isfinite(d)) return {sign, 0};
-
-    d = std::abs(d);
-
-    // The most accurate rationals to approximate a real come from
-    // truncating its continued fraction representation.  We want the
-    // largest continued fraction possible, but at some point they'll
-    // overflow our rational type, and because they're evaluated
-    // backwards it's not easy to stop at the point which will not
-    // trigger overflow. Use binary search to find the right depth.
-    std::pair<int64_t, int64_t> best {0, 0};
-    int lo = 0, hi = 64;
-    while (lo + 1 < hi) {
-        int mid = (lo + hi)/2;
-        auto next = rational_approximation_helper(d, mid);
-        if (next.first == 0 && next.second == 0) {
-            hi = mid;
-        } else {
-            lo = mid;
-            best = next;
-        }
-    }
-
-    return {best.first * sign, best.second};
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
@@ -264,7 +218,7 @@ public:
         : stream(dest),
           generator_registered_name(generator_registered_name),
           generator_stub_name(generator_stub_name),
-          generator_params(filter_params(generator_params)),
+          generator_params(select_generator_params(generator_params)),
           schedule_params(schedule_params),
           inputs(inputs),
           outputs(outputs) {
@@ -293,9 +247,10 @@ private:
     const std::vector<Internal::GeneratorOutputBase *> outputs;
     int indent_level{0};
 
-    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in) {
+    std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
+            // These are always propagated specially.
             if (p->name == "target") continue;
             if (p->is_synthetic_param()) continue;
             out.push_back(p);
@@ -582,52 +537,6 @@ void StubEmitter::emit() {
     stream << "\n";
     indent_level--;
 
-    if (!generator_params.empty()) {
-        stream << indent() << "// templated construction method with inputs\n";
-        stream << indent() << "template<\n";
-        std::string comma = "";
-        indent_level++;
-        for (auto p : generator_params) {
-            std::string type = p->get_template_type();
-            std::string value = p->get_template_value();
-            if (type == "float" || type == "double") {
-                // floats and doubles can't be used as template value arguments;
-                // it turns out to be pretty uncommon use floating point types
-                // in GeneratorParams, but to avoid breaking these cases entirely,
-                // use std::ratio as an approximation for the default value.
-                auto ratio = rational_approximation(std::atof(value.c_str()));
-                stream << indent() << comma << "typename" << " " << p->name << " = std::ratio<" << ratio.first << ", " << ratio.second << ">\n";
-            } else {
-                stream << indent() << comma << type << " " << p->name << " = " << value << "\n";
-            }
-            comma = ", ";
-        }
-        indent_level--;
-        stream << indent() << ">\n";
-        stream << indent() << "static " << class_name << " make(const GeneratorContext& context, const Inputs& inputs) {\n";
-        indent_level++;
-        stream << indent() << "GeneratorParams gp(\n";
-        indent_level++;
-        comma = "";
-        for (auto p : generator_params) {
-            std::string type = p->get_template_type();
-            if (type == "typename") {
-                stream << indent() << comma << "Halide::type_of<" << p->name << ">()\n";
-            } else if (type == "float" || type == "double") {
-                stream << indent() << comma << "ratio_to_double<" << p->name << ">()\n";
-            } else {
-                stream << indent() << comma << p->name << "\n";
-            }
-            comma = ", ";
-        }
-        indent_level--;
-        stream << indent() << ");\n";
-        stream << indent() << "return " << class_name << "(context, inputs, gp);\n";
-        indent_level--;
-        stream << indent() << "}\n";
-        stream << "\n";
-    }
-
     stream << indent() << "// schedule method\n";
     stream << indent() << class_name << " &schedule() {\n";
     indent_level++;
@@ -791,7 +700,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub]. If omitted, default value is [static_library, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule]. If omitted, default value is [static_library, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -832,7 +741,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     std::string runtime_name = flags_info["-r"];
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
-    if (generator_names.size() == 0 && runtime_name.empty()) {
+    if (generator_names.empty() && runtime_name.empty()) {
         cerr << "No generators have been registered and not compiling a standalone runtime\n";
         cerr << kUsage;
         return 1;
@@ -906,6 +815,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_static_library = true;
             } else if (opt == "cpp_stub") {
                 emit_options.emit_cpp_stub = true;
+            } else if (opt == "schedule") {
+                emit_options.emit_schedule = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
                      << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
@@ -949,8 +860,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
-            // (Note that "JITGeneratorContext" is misleading, since we're actually doing AOT here, but it does exactly what we need)
-            auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(Target()));
+            auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -963,8 +873,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
-                    // (Note that "JITGeneratorContext" is misleading, since we're actually doing AOT here, but it does exactly what we need)
-                    auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(target));
+                    auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                     gen->set_generator_and_schedule_param_values(sub_generator_args);
                     return gen->build_module(name);
                 };
@@ -990,19 +899,19 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+    // These are always readable.
+    if (name == "target") return;
+    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be read before build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
     // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
     if (!generator) return;
-    // Special-case for legacy: allow 'target' to be writable. Yikes.
-    if (name == "target") return;
-    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be written after build() or generate() is called.\n";
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam \"" << name << "\" cannot be written after build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
-    user_error << "The GeneratorParam " << name << " cannot be set with a value of type " << type << ".\n";
+    user_error << "The GeneratorParam \"" << name << "\" cannot be set with a value of type " << type << ".\n";
 }
 
 /* static */
@@ -1067,20 +976,8 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
     ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
 }
 
-void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
-    target.set(context.get_target());
-    value_tracker = context.get_value_tracker();
-    externs_map = context.get_externs_map();
-}
-
 GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this);
-}
-
-std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::get_externs_map() const {
-    // externs_map should always come from a GeneratorContext.
-    internal_assert(externs_map != nullptr);
-    return externs_map;
 }
 
 GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size) {
@@ -1098,17 +995,18 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
     }
 
     const auto add_synthetic_params = [this](GIOBase *gio) {
-        if (!gio->allow_synthetic_generator_params()) {
-            return;
-        }
         const std::string &n = gio->name();
         if (gio->kind() != IOKind::Scalar) {
-            owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<Type>(n + ".type", *gio, GeneratorParam_Synthetic<Type>::Type));
-            generator_params.push_back(owned_synthetic_params.back().get());
-            owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<int>(n + ".dim", *gio, GeneratorParam_Synthetic<int>::Dim));
-            generator_params.push_back(owned_synthetic_params.back().get());
+            if (!gio->types_defined()) {
+                owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<Type>(n + ".type", *gio, GeneratorParam_Synthetic<Type>::Type));
+                generator_params.push_back(owned_synthetic_params.back().get());
+            }
+            if (!gio->dims_defined()) {
+                owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<int>(n + ".dim", *gio, GeneratorParam_Synthetic<int>::Dim));
+                generator_params.push_back(owned_synthetic_params.back().get());
+            }
         }
-        if (gio->is_array()) {
+        if (gio->is_array() && !gio->array_size_defined()) {
             owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<size_t>(n + ".size", *gio, GeneratorParam_Synthetic<size_t>::ArraySize));
             generator_params.push_back(owned_synthetic_params.back().get());
         }
@@ -1277,7 +1175,7 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
     advance_phase(InputsSet);
     internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_params.size() == 0)
+    user_assert(pi.filter_params.empty())
         << "The set_inputs_vector() method cannot be used for Generators that use Param<> or ImageParam.";
     user_assert(inputs.size() == pi.filter_inputs.size())
             << "Expected exactly " << pi.filter_inputs.size()
@@ -1289,14 +1187,12 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 }
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
-    // value_tracker should always come from a GeneratorContext.
-    internal_assert(value_tracker != nullptr);
     ParamInfo &pi = param_info();
     for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
             Parameter p = input->parameter();
             // This must use p.name(), *not* input->name()
-            value_tracker->track_values(p.name(), parameter_constraints(p));
+            get_value_tracker()->track_values(p.name(), parameter_constraints(p));
         }
     }
     if (include_outputs) {
@@ -1304,7 +1200,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
             if (output->kind() == IOKind::Buffer) {
                 Parameter p = output->parameter();
                 // This must use p.name(), *not* output->name()
-                value_tracker->track_values(p.name(), parameter_constraints(p));
+                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
             }
         }
     }
@@ -1341,7 +1237,7 @@ void GeneratorBase::advance_phase(Phase new_phase) {
 void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
+    user_assert(pi.filter_params.empty()) << "May not use generate() method with Param<> or ImageParam.";
     user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
@@ -1374,7 +1270,7 @@ void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_outputs.size() == 0) << "May not use build() method with Output<>.";
+    user_assert(pi.filter_outputs.empty()) << "May not use build() method with Output<>.";
     if (!inputs_set) {
         for (auto input : pi.filter_inputs) {
             input->init_internals();
@@ -1422,6 +1318,16 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
+void GeneratorBase::auto_schedule_outputs(const MachineParams &arch_params) {
+    user_assert(auto_schedule_result.empty()) << "auto_schedule_outputs was called multiple times for " << generator_registered_name;
+    auto_schedule_result = get_pipeline().auto_schedule(get_target(), arch_params);
+}
+
+void GeneratorBase::auto_schedule_outputs() {
+    user_assert(auto_schedule_result.empty()) << "auto_schedule_outputs was called multiple times for " << generator_registered_name;
+    auto_schedule_result = get_pipeline().auto_schedule(get_target());
+}
+
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
     Pipeline pipeline = build_pipeline();
@@ -1451,6 +1357,22 @@ Module GeneratorBase::build_module(const std::string &function_name,
     for (const auto &map_entry : *externs_map) {
         result.append(map_entry.second);
     }
+
+    auto outputs = pipeline.outputs();
+    for (auto *output : pi.filter_outputs) {
+        for (size_t i = 0; i < output->funcs().size(); ++i) {
+            auto from = output->funcs()[i].name();
+            auto to = output->array_name(i);
+            size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+            for (size_t t = 0; t < tuple_size; ++t) {
+                std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
+                result.remap_metadata_name(from + suffix, to + suffix);
+            }
+        }
+    }
+
+    result.set_auto_schedule(auto_schedule_result);
+
     return result;
 }
 
@@ -1648,12 +1570,9 @@ void GeneratorInputBase::set_def_min_max() {
     // nothing
 }
 
-void GeneratorInputBase::init_parameters() {
-    parameters_.clear();
-    for (size_t i = 0; i < array_size(); ++i) {
-        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), array_name(i), true, false);
-    }
-    set_def_min_max();
+Parameter GeneratorInputBase::parameter() const {
+    internal_assert(parameters_.size() == 1);
+    return parameters_.at(0);
 }
 
 void GeneratorInputBase::verify_internals() const {
@@ -1669,12 +1588,12 @@ void GeneratorInputBase::init_internals() {
     user_assert(types_defined()) << "Type is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
     user_assert(dims_defined()) << "Dimensions is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
 
-    init_parameters();
-
+    parameters_.clear();
     exprs_.clear();
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
+        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name, true, false);
         auto &p = parameters_[i];
         if (kind() != IOKind::Scalar) {
             internal_assert(dims() == p.dimensions());
@@ -1685,6 +1604,7 @@ void GeneratorInputBase::init_internals() {
         }
     }
 
+    set_def_min_max();
     verify_internals();
 }
 
@@ -1716,7 +1636,6 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     }
 
     set_def_min_max();
-
     verify_internals();
 }
 
@@ -1762,6 +1681,11 @@ void GeneratorOutputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
 }
 
+Parameter GeneratorOutputBase::parameter() const {
+    internal_assert(funcs().size() == 1);
+    return funcs().at(0).output_buffer().parameter();
+}
+
 void GeneratorOutputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
@@ -1789,7 +1713,7 @@ Target StubOutputBufferBase::get_target() const {
 }
 
 void generator_test() {
-    JITGeneratorContext context(get_host_target());
+    GeneratorContext context(get_host_target());
 
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations.
@@ -2059,39 +1983,6 @@ void generator_test() {
 
     // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
     Tuple t(gp, gp, gp);
-
-    // Test rational_approximation
-    auto check_ratio = [](double d, std::pair<int64_t, int64_t> expected) {
-        auto actual = rational_approximation(d);
-        internal_assert(actual == expected)
-            << "rational_approximation(" << d << ") failed:"
-            << " expected " << expected.first << "/" << expected.second
-            << " actual " << actual.first << "/" << actual.second << "\n";
-    };
-
-    // deliberately use fractional values that are exactly representable so that
-    // we minimize testing variation across compilers
-    const double kFrac1 = 1234.125;
-    const double kFrac2 = 123412341234.125;
-    const double kFrac3 = 1.0/65536.0;
-
-    check_ratio(0.0,        {0, 1});
-    check_ratio(1.0,        {1, 1});
-    check_ratio(2.0,        {2, 1});
-    check_ratio(kFrac1,     {9873, 8});
-    check_ratio(kFrac2,     {987298729873, 8});
-    check_ratio(kFrac3,     {1, 65536});
-
-    check_ratio(-0.0,       {0, 1});
-    check_ratio(-1.0,       {-1, 1});
-    check_ratio(-2.0,       {-2, 1});
-    check_ratio(-kFrac1,    {-9873, 8});
-    check_ratio(-kFrac2,    {-987298729873, 8});
-    check_ratio(-kFrac3,    {-1, 65536});
-
-    check_ratio(NAN, {0, 0});
-    check_ratio(INFINITY, {1, 0});
-    check_ratio(-INFINITY, {-1, 0});
 
     std::cout << "Generator test passed" << std::endl;
 }

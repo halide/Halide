@@ -43,8 +43,10 @@ public:
     Input<int>   w{"w"};
     Input<int>   h{"h"};
 
-    Func build() {
-        target.set(get_target().with_feature(Target::Profile));
+    Output<Buffer<int32_t>> count{"count", 2};
+
+    void generate() {
+        assert(get_target().has_feature(Target::Profile));
 
         Var x, y, z;
 
@@ -59,7 +61,6 @@ public:
         mandelbrot(x, y, t) = current * current + c;
 
         // How many iterations until something escapes a circle of radius 2?
-        Func count;
         Tuple escape = argmin(magnitude(mandelbrot(x, y, t)) < 4);
 
         // If it never escapes, use the value 0
@@ -69,8 +70,6 @@ public:
         mandelbrot.compute_at(count, xo);
 
         count.tile(x, y, xo, yo, xi, yi, 8, 8).parallel(yo).vectorize(xi, 4).unroll(xi).unroll(yi, 2);
-
-        return count;
     }
 };
 

@@ -371,7 +371,7 @@ public:
 
     template<typename Fn, typename ...Args>
     void for_each_value(Fn &&f, Args... other_buffers) {
-        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...); 
+        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
     }
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
@@ -453,27 +453,31 @@ public:
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.copy_to_device(get_default_device_interface_for_target(t));
+        return copy_to_device(DeviceAPI::Default_GPU, t);
     }
 
     /** Copy to the GPU, using the given device API */
     int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t));
+        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t, "Buffer::copy_to_device"));
     }
 
     /** Allocate on the GPU, using the device API that is the default for the given Target. */
     int device_malloc(const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_malloc(get_default_device_interface_for_target(t));
+        return device_malloc(DeviceAPI::Default_GPU, t);
     }
 
     /** Allocate storage on the GPU, using the given device API */
     int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
+        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t, "Buffer::device_malloc"));
     }
 
-    /** Wrap a native handle, using the given device API. */
-    int device_wrap_native(const DeviceAPI &d, uint64_t handle) {
-        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d), handle);
+    /** Wrap a native handle, using the given device API.
+     * It is a bad idea to pass DeviceAPI::Default_GPU to this routine
+     * as the handle argument must match the API that the default
+     * resolves to and it is clearer and more reliable to pass the
+     * resolved DeviceAPI explicitly. */
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle);
     }
 
 };

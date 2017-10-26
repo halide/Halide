@@ -69,6 +69,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     DECLARE_INITMOD(mod ## _ll)
 
 // Universal CPP Initmods. Please keep sorted alphabetically.
+DECLARE_CPP_INITMOD(alignment_128)
+DECLARE_CPP_INITMOD(alignment_32)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
@@ -611,7 +613,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
 
-    internal_assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.bits == 32 || t.bits == 64)
+        << "Bad target: " << t.to_string();
     bool bits_64 = (t.bits == 64);
     bool debug = t.has_feature(Target::Debug);
 
@@ -730,6 +733,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_cache(c, bits_64, debug));
             }
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
+
+            if (t.arch == Target::Hexagon ||
+                t.has_feature(Target::HVX_64) ||
+                t.has_feature(Target::HVX_128)) {
+                modules.push_back(get_initmod_alignment_128(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+            }
 
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));

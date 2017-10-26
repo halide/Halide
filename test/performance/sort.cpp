@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
     printf("Running...\n");
     Buffer<int> bitonic_sorted(N);
     f.realize(bitonic_sorted);
-    double t_bitonic = benchmark(1, 10, [&]() {
+    double t_bitonic = benchmark([&]() {
         f.realize(bitonic_sorted);
     });
 
@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
     printf("Running...\n");
     Buffer<int> merge_sorted(N);
     f.realize(merge_sorted);
-    double t_merge = benchmark(1, 10, [&]() {
+    double t_merge = benchmark([&]() {
         f.realize(merge_sorted);
     });
 
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
         correct(i) = data(i);
     }
     printf("std::sort...\n");
-    double t_std = benchmark(1, 1, [&]() {
+    double t_std = benchmark([&]() {
         std::sort(&correct(0), &correct(N));
     });
 

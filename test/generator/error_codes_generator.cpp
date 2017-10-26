@@ -4,19 +4,17 @@ namespace {
 
 class ErrorCodes : public Halide::Generator<ErrorCodes> {
 public:
-    Input<Buffer<int32_t>> input{ "input", 2};
-    Input<int>             f_explicit_bound{"f_explicit_bound", 1, 0, 64};
+    Input<Buffer<int32_t>>  input{ "input", 2};
+    Input<int>              f_explicit_bound{"f_explicit_bound", 1, 0, 64};
 
+    Output<Buffer<int32_t>> output{"output", 2};
 
-    Func build() {
-        target.set(get_target().without_feature(Target::LargeBuffers));
-        Func f;
+    void generate() {
+        assert(!get_target().has_feature(Target::LargeBuffers));
         Var x, y;
 
-        f(x, y) = input(x, y);
-        f.bound(x, 0, f_explicit_bound);
-
-        return f;
+        output(x, y) = input(x, y);
+        output.bound(x, 0, f_explicit_bound);
     }
 };
 
