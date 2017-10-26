@@ -24,24 +24,24 @@ BIN ?= bin
 
 all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
-$(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
+$(BIN)/matmul.generator: matmul_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
-$(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
+$(BIN)/%/matmul_cpu.o: $(BIN)/matmul.generator
 	@mkdir -p $(@D)
-	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
+	$^ -g matmul -o $(BIN)/$* -e o,h -f matmul_cpu target=$*
 
-$(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
+$(BIN)/%/matmul_hvx64.o: $(BIN)/matmul.generator
 	@mkdir -p $(@D)
-	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
+	$^ -g matmul -o $(BIN)/$* -e o,h -f matmul_hvx64 target=$*-hvx_64
 
-$(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
+$(BIN)/%/matmul_hvx128.o: $(BIN)/matmul.generator
 	@mkdir -p $(@D)
-	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
+	$^ -g matmul -o $(BIN)/$* -e o,h -f matmul_hvx128 target=$*-hvx_128
 
-$(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
+$(BIN)/process-%: process.cpp $(BIN)/%/matmul_cpu.o $(BIN)/%/matmul_hvx64.o $(BIN)/%/matmul_hvx128.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/matmul_cpu.o $(BIN)/$*/matmul_hvx64.o $(BIN)/$*/matmul_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 DEVICE_PATH ?= /data/local/tmp/hexagon_matmul
 DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""
