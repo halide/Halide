@@ -2205,6 +2205,8 @@ private:
 
         if (is_zero(b) && !op->type.is_float()) {
             expr = indeterminate_expression_error(op->type);
+        } else if (is_one(b) && !op->type.is_float()) {
+            expr = make_zero(op->type);
         } else if (is_zero(a)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
