@@ -27,8 +27,8 @@ Stmt make_checked_call(Expr call) {
     return s;
 }
 
-class WrapExternStages : public IRMutator {
-    using IRMutator::visit;
+class WrapExternStages : public IRMutator2 {
+    using IRMutator2::visit;
 
     string make_wrapper(const Call *op) {
         string wrapper_name = replace_all(prefix + op->name, ":", "_");
@@ -118,7 +118,7 @@ class WrapExternStages : public IRMutator {
         return wrapper_name;
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_extern() && op->func.defined()) {
             Function f(op->func);
             internal_assert(f.has_extern_definition());
@@ -127,12 +127,12 @@ class WrapExternStages : public IRMutator {
                 for (Expr e : op->args) {
                     new_args.push_back(mutate(e));
                 }
-                expr = Call::make(op->type, make_wrapper(op), new_args, Call::Extern, op->func);
+                return Call::make(op->type, make_wrapper(op), new_args, Call::Extern, op->func);
             } else {
-                IRMutator::visit(op);
+                return IRMutator2::visit(op);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
