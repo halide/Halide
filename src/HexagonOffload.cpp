@@ -635,28 +635,28 @@ const std::string pipeline_module_name = "halide_hexagon_code";
 
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
-class ReplaceParams : public IRMutator {
+class ReplaceParams : public IRMutator2 {
     const std::map<std::string, Parameter> &replacements;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
-            expr = Load::make(op->type, op->name, mutate(op->index), op->image,
+            return Load::make(op->type, op->name, mutate(op->index), op->image,
                               i->second, mutate(op->predicate));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
-            stmt = Store::make(op->name, mutate(op->value), mutate(op->index),
+            return Store::make(op->name, mutate(op->value), mutate(op->index),
                                i->second, mutate(op->predicate));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -669,7 +669,7 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
-class InjectHexagonRpc : public IRMutator {
+class InjectHexagonRpc : public IRMutator2 {
     std::map<std::string, Expr> state_bufs;
 
     Module &device_code;
@@ -711,12 +711,11 @@ class InjectHexagonRpc : public IRMutator {
         return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *loop) {
+    Stmt visit(const For *loop) override {
         if (loop->device_api != DeviceAPI::Hexagon) {
-            IRMutator::visit(loop);
-            return;
+            return IRMutator2::visit(loop);
         }
 
         // Unrolling or loop partitioning might generate multiple
@@ -842,31 +841,33 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        stmt = call_extern_and_assert("halide_hexagon_run", params);
+        return call_extern_and_assert("halide_hexagon_run", params);
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
-        IRMutator::visit(op);
+        Expr expr = IRMutator2::visit(op);
 
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
         }
+        return expr;
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (op->value.type() == Int(32)) {
             alignment_info.pop(op->name);
         }
+        return stmt;
     }
 
 public:
