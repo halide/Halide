@@ -5613,6 +5613,7 @@ void check_algebra() {
     check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
+    check((x*y) % 1, 0);
 
     // Check an optimization important for fusing dimensions
     check((x/3)*3 + x%3, x);
