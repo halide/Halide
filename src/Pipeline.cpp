@@ -731,7 +731,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer<> buf = arg.param.get_buffer();
+            Buffer<> buf = arg.param.buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -740,7 +740,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             }
             debug(1) << "JIT input ImageParam argument ";
         } else if (arg.param.defined()) {
-            arg_values.push_back(arg.param.get_scalar_address());
+            arg_values.push_back(arg.param.scalar_address());
             debug(1) << "JIT input scalar argument ";
         } else {
             debug(1) << "JIT input Image argument ";
@@ -907,7 +907,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
         JITModule::Symbol reset_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_reset");
         if (report_sym.address && reset_sym.address) {
-            void *uc = jit_context.user_context_param.get_scalar<void *>();
+            void *uc = jit_context.user_context_param.scalar<void *>();
             void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
             report_fn_ptr(uc);
 
@@ -998,7 +998,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
-        internal_assert(!ia.param.get_buffer().defined());
+        internal_assert(!ia.param.buffer().defined());
 
         // Allocate enough memory with the right type and dimensionality.
         tracked_buffers[i].query.allocate();
