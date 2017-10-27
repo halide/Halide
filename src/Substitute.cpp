@@ -138,17 +138,17 @@ Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
 }
 
 /** Substitute an expr for a var in a graph. */
-class GraphSubstitute : public IRGraphMutator {
+class GraphSubstitute : public IRGraphMutator2 {
     string var;
     Expr value;
 
-    using IRGraphMutator::visit;
+    using IRGraphMutator2::visit;
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (op->name == var) {
-            expr = value;
+            return value;
         } else {
-            expr = op;
+            return op;
         }
     }
 
@@ -159,17 +159,17 @@ public:
 
 /** Substitute an Expr for another Expr in a graph. Unlike substitute,
  * this only checks for shallow equality. */
-class GraphSubstituteExpr : public IRGraphMutator {
+class GraphSubstituteExpr : public IRGraphMutator2 {
     Expr find, replace;
 public:
 
-    using IRGraphMutator::mutate;
+    using IRGraphMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (e.same_as(find)) {
             return replace;
         } else {
-            return IRGraphMutator::mutate(e);
+            return IRGraphMutator2::mutate(e);
         }
     }
 
@@ -192,14 +192,14 @@ Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stm
     return GraphSubstituteExpr(find, replacement).mutate(stmt);
 }
 
-class SubstituteInAllLets : public IRGraphMutator {
+class SubstituteInAllLets : public IRGraphMutator2 {
 
-    using IRGraphMutator::visit;
+    using IRGraphMutator2::visit;
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
-        expr = graph_substitute(op->name, value, body);
+        return graph_substitute(op->name, value, body);
     }
 };
 
