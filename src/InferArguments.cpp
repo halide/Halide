@@ -90,9 +90,9 @@ private:
 
         Expr def, min, max;
         if (!p.is_buffer()) {
-            def = p.get_scalar_expr();
-            min = p.get_min_value();
-            max = p.get_max_value();
+            def = p.scalar_expr();
+            min = p.min_value();
+            max = p.max_value();
         }
 
         InferredArgument a = {
