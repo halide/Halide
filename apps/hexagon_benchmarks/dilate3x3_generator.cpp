@@ -44,11 +44,11 @@ public:
                 .tile(x, y, xi, yi, vector_size, 4)
                 .vectorize(xi)
                 .unroll(yi);
-            if (use_parallel_sched) {
-                output.parallel(y);
-            }
             if (use_prefetch_sched) {
                 output.prefetch(input, y, 2);
+            }
+            if (use_parallel_sched) {
+                output.parallel(y);
             }
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
