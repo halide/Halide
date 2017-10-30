@@ -38,8 +38,8 @@ LINK_OBJS += $(patsubst %,$(BIN)/$$*/%_cpu.o, $(FILTERS))
 UPPERCASE_FILTERS = $(shell echo $(FILTERS) | tr '[:lower:]' '[:upper:]')
 DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
-PARALLEL_SCHED ?= false
-PREFETCH_SCHED ?= false
+PARALLEL_SCHED ?= true
+PREFETCH_SCHED ?= true
 SCHEDULING_OPTS = use_parallel_sched=${PARALLEL_SCHED} use_prefetch_sched=${PREFETCH_SCHED}
 
 $(BIN)/%.generator : %_generator.cpp $(GENERATOR_DEPS)
