@@ -9,67 +9,65 @@ namespace Internal {
 using std::map;
 using std::string;
 
-class UnifyDuplicateLets : public IRMutator {
-    using IRMutator::visit;
+class UnifyDuplicateLets : public IRMutator2 {
+    using IRMutator2::visit;
 
     map<Expr, string, IRDeepCompare> scope;
     map<string, string> rewrites;
     string producing;
 
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
-
+    Expr mutate(const Expr &e) override {
         if (e.defined()) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(e);
             if (iter != scope.end()) {
-                expr = Variable::make(e.type(), iter->second);
+                return Variable::make(e.type(), iter->second);
             } else {
-                e.accept(this);
+                return IRMutator2::mutate(e);
             }
         } else {
-            expr = Expr();
+            return Expr();
         }
-        stmt = Stmt();
-        return std::move(expr);
     }
 
 protected:
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         map<string, string>::iterator iter = rewrites.find(op->name);
         if (iter != rewrites.end()) {
-            expr = Variable::make(op->type, iter->second);
+            return Variable::make(op->type, iter->second);
         } else {
-            expr = op;
+            return op;
         }
     }
 
     // Can't unify lets where the RHS might be not be pure
     bool is_impure;
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         is_impure |= !op->is_pure();
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         is_impure |= ((op->name == producing) ||
                       starts_with(op->name + ".", producing));
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_producing = producing;
             producing = op->name;
-            IRMutator::visit(op);
+            Stmt stmt = IRMutator2::visit(op);
             producing = old_producing;
+            return stmt;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         is_impure = false;
         Expr value = mutate(op->value);
         Stmt body = op->body;
@@ -99,9 +97,9 @@ protected:
         }
 
         if (value.same_as(op->value) && body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            return LetStmt::make(op->name, value, body);
         }
     }
 };
