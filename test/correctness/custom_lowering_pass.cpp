@@ -10,16 +10,15 @@ using namespace Halide::Internal;
 
 // Verify that all floating point divisions by constants have been
 // converted to float multiplication.
-class CheckForFloatDivision : public IRMutator {
-    using IRMutator::visit;
+class CheckForFloatDivision : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Div *op) {
+    Expr visit(const Div *op) override {
         if (op->type.is_float() && is_const(op->b)) {
             std::cerr << "Found floating-point division by constant: " << Expr(op) << "\n";
             exit(-1);
-        } else {
-            expr = op;
         }
+        return op;
     }
 };
 
@@ -38,14 +37,15 @@ extern "C" DLLEXPORT float record_float_mul(float arg) {
 }
 HalideExtern_1(float, record_float_mul, float);
 
-class CountMultiplies : public IRMutator {
-    using IRMutator::visit;
+class CountMultiplies : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Mul *op) {
-        IRMutator::visit(op);
+    Expr visit(const Mul *op) override {
+        Expr expr = IRMutator2::visit(op);
         if (op->type.is_float()) {
             expr = record_float_mul(expr);
         }
+        return expr;
     }
 };
 

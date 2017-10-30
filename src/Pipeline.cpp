@@ -378,7 +378,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         // We can avoid relowering and just reuse the existing module.
         debug(2) << "Reusing old module\n";
     } else {
-        vector<IRMutator *> custom_passes;
+        vector<IRMutator2 *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
@@ -505,7 +505,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     return contents->jit_externs;
 }
 
-void Pipeline::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
+void Pipeline::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
