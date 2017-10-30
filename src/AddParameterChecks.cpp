@@ -49,8 +49,8 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         Parameter param = i.second;
 
         if (!param.is_buffer() &&
-            (param.get_min_value().defined() ||
-             param.get_max_value().defined())) {
+            (param.min_value().defined() ||
+             param.max_value().defined())) {
 
             string constrained_name = i.first + ".constrained";
 
@@ -58,24 +58,24 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
             Expr constrained_value = Variable::make(param.type(), i.first, param);
             replace_with_constrained[i.first] = constrained_var;
 
-            if (param.get_min_value().defined()) {
+            if (param.min_value().defined()) {
                 ParamAssert p = {
-                    constrained_value >= param.get_min_value(),
-                    constrained_value, param.get_min_value(),
+                    constrained_value >= param.min_value(),
+                    constrained_value, param.min_value(),
                     param.name()
                 };
                 asserts.push_back(p);
-                constrained_value = max(constrained_value, param.get_min_value());
+                constrained_value = max(constrained_value, param.min_value());
             }
 
-            if (param.get_max_value().defined()) {
+            if (param.max_value().defined()) {
                 ParamAssert p = {
-                    constrained_value <= param.get_max_value(),
-                    constrained_value, param.get_max_value(),
+                    constrained_value <= param.max_value(),
+                    constrained_value, param.max_value(),
                     param.name()
                 };
                 asserts.push_back(p);
-                constrained_value = min(constrained_value, param.get_max_value());
+                constrained_value = min(constrained_value, param.max_value());
             }
 
             lets.push_back({ constrained_name, constrained_value });

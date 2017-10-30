@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator {
-    using IRMutator::visit;
+class ConvertSelfRef : public IRMutator2 {
+    using IRMutator2::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -47,11 +47,11 @@ class ConvertSelfRef : public IRMutator {
     const int value_index;
     const vector<string> &op_x_names;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (!is_solvable) {
-            return;
+            return op;
         }
-        IRMutator::visit(op);
+        Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -63,7 +63,7 @@ class ConvertSelfRef : public IRMutator {
                     debug(5) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
                     is_solvable = false;
-                    return;
+                    return expr;
                 }
             }
             // Substitute the call
@@ -78,6 +78,7 @@ class ConvertSelfRef : public IRMutator {
                 x_dependencies.insert(op->value_index);
             }
         }
+        return expr;
     }
 
 public:

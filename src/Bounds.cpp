@@ -206,14 +206,14 @@ private:
 
             if (op->param.defined() &&
                 !op->param.is_buffer() &&
-                (op->param.get_min_value().defined() ||
-                 op->param.get_max_value().defined())) {
+                (op->param.min_value().defined() ||
+                 op->param.max_value().defined())) {
 
-                if (op->param.get_max_value().defined() && is_const(op->param.get_max_value())) {
-                    interval.max = Interval::make_min(interval.max, op->param.get_max_value());
+                if (op->param.max_value().defined() && is_const(op->param.max_value())) {
+                    interval.max = Interval::make_min(interval.max, op->param.max_value());
                 }
-                if (op->param.get_min_value().defined() && is_const(op->param.get_min_value())) {
-                    interval.min = Interval::make_max(interval.min, op->param.get_min_value());
+                if (op->param.min_value().defined() && is_const(op->param.min_value())) {
+                    interval.min = Interval::make_max(interval.min, op->param.min_value());
                 }
             }
         } else {
@@ -1072,13 +1072,13 @@ private:
 };
 
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
-class SolveIfThenElse : public IRMutator {
+class SolveIfThenElse : public IRMutator2 {
     // Scope of variable names and their depths. Higher depth indicates
     // variable defined more innermost.
     Scope<int> vars_depth;
     int depth = -1;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     void push_var(const string &var) {
         depth += 1;
@@ -1090,20 +1090,22 @@ class SolveIfThenElse : public IRMutator {
         vars_depth.pop(var);
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         push_var(op->name);
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
         pop_var(op->name);
+        return stmt;
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         push_var(op->name);
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
         pop_var(op->name);
+        return stmt;
     }
 
-    void visit(const IfThenElse *op) {
-        IRMutator::visit(op);
+    Stmt visit(const IfThenElse *op) override {
+        Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<IfThenElse>();
         internal_assert(op);
 
@@ -1115,6 +1117,7 @@ class SolveIfThenElse : public IRMutator {
                 stmt = IfThenElse::make(condition, op->then_case, op->else_case);
             }
         }
+        return stmt;
     }
 };
 

@@ -4,7 +4,6 @@ namespace {
 
 class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<int>   s_sigma{"s_sigma", 8};
 
     Input<Buffer<float>>  input{"input", 2};
@@ -78,9 +77,6 @@ public:
             blurx.estimate(z, 0, 12);
             blury.estimate(z, 0, 12);
             bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
-            // Auto schedule the pipeline: this calls auto_schedule() for
-            // all of the Outputs in this Generator
-            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 

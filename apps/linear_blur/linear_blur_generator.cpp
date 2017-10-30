@@ -6,21 +6,19 @@
 namespace {
 
 struct LinearBlur : public Halide::Generator<LinearBlur> {
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-
     Input<Buffer<float>>  input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
 
     void generate() {
         Var x("x"), y("y"), c("c");
 
-        auto linear = srgb_to_linear(this, {input}, {/*auto_schedule*/false, /*estimate_only*/true});
+        auto linear = srgb_to_linear(this, {input});
         linear.schedule();
 
-        auto blurred = simple_blur(this, {linear.linear, input.width(), input.height()}, {/*auto_schedule*/false, /*estimate_only*/true});
+        auto blurred = simple_blur(this, {linear.linear, input.width(), input.height()});
         blurred.schedule();
 
-        auto srgb = linear_to_srgb(this, {blurred.output}, {/*auto_schedule*/false, /*estimate_only*/true});
+        auto srgb = linear_to_srgb(this, {blurred.output});
         srgb.schedule();
 
         output(x, y, c) = srgb.srgb(x, y, c);
@@ -36,10 +34,9 @@ struct LinearBlur : public Halide::Generator<LinearBlur> {
             // output.dim(0).set_bounds_estimate(0, 1536)
             //       .dim(1).set_bounds_estimate(0, 2560)
             //       .dim(2).set_bounds_estimate(0, 4);
-            auto_schedule_outputs();
         } else {
-            abort();
             assert(false && "non-auto_schedule not supported.");
+            abort();
         }
     }
 };
