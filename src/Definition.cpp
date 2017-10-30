@@ -45,7 +45,7 @@ struct DefinitionContents {
         }
     }
 
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator2 *mutator) {
         if (predicate.defined()) {
             predicate = mutator->mutate(predicate);
         }
@@ -128,7 +128,7 @@ void Definition::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Definition::mutate(IRMutator *mutator) {
+void Definition::mutate(IRMutator2 *mutator) {
     contents->mutate(mutator);
 }
 
