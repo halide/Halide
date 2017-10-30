@@ -17,14 +17,14 @@ using std::set;
 // let statements outside of each realize node, or at the top level if
 // they're not internal allocations.
 
-class AllocationInference : public IRMutator {
-    using IRMutator::visit;
+class AllocationInference : public IRMutator2 {
+    using IRMutator2::visit;
 
     const map<string, Function> &env;
     const FuncValueBounds &func_bounds;
     set<string> touched_by_extern;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
         internal_assert(iter != env.end());
         Function f = iter->second;
@@ -48,7 +48,7 @@ class AllocationInference : public IRMutator {
 
         Stmt new_body = mutate(op->body);
 
-        stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+        Stmt stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
 
         internal_assert(b.size() == op->bounds.size());
 
@@ -119,7 +119,7 @@ class AllocationInference : public IRMutator {
             stmt = LetStmt::make(min_name, min, stmt);
             stmt = LetStmt::make(max_name, max, stmt);
         }
-
+        return stmt;
     }
 
 public:

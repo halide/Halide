@@ -274,11 +274,10 @@ namespace {
 
 // This mutator rewrites predicated loads and stores as unpredicated
 // loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator {
-    void visit(const Load *op) {
+class UnpredicateLoadsStores : public IRMutator2 {
+    Expr visit(const Load *op) override {
         if (is_one(op->predicate)) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -288,7 +287,7 @@ class UnpredicateLoadsStores : public IRMutator {
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
                                                 const_true(op->type.lanes()));
-            expr = Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
+            return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
                               Call::PureIntrinsic);
         } else {
             string index_name = "scalarized_load_index";
@@ -307,16 +306,15 @@ class UnpredicateLoadsStores : public IRMutator {
                                 make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
                 ramp.push_back(i);
             }
-            expr = Shuffle::make(lanes, ramp);
+            Expr expr = Shuffle::make(lanes, ramp);
             expr = Let::make(predicate_name, predicate, expr);
-            expr = Let::make(index_name, index, expr);
+            return Let::make(index_name, index, expr);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         if (is_one(op->predicate)) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -325,7 +323,7 @@ class UnpredicateLoadsStores : public IRMutator {
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()));
-            stmt = IfThenElse::make(scalar_pred->value, unpredicated_store);
+            return IfThenElse::make(scalar_pred->value, unpredicated_store);
         } else {
             string value_name = "scalarized_store_value";
             Expr value_var = Variable::make(value.type(), value_name);
@@ -342,14 +340,14 @@ class UnpredicateLoadsStores : public IRMutator {
                 Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
                 lanes.push_back(lane);
             }
-            stmt = Block::make(lanes);
+            Stmt stmt = Block::make(lanes);
             stmt = LetStmt::make(predicate_name, predicate, stmt);
             stmt = LetStmt::make(value_name, value, stmt);
-            stmt = LetStmt::make(index_name, index, stmt);
+            return LetStmt::make(index_name, index, stmt);
        }
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 };
 
 }  // namespace

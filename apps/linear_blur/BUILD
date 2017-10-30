@@ -28,10 +28,11 @@ halide_library(
 halide_library(
     name = "linear_blur",
     srcs = ["linear_blur_generator.cpp"],
-    # Emit the .stmt files so we can
+    # Emit the .stmt and .schedule files so we can
     # examine how the auto-scheduled results look
     extra_outputs = [
         "stmt",
+        "schedule",
     ],
     generator_args = " ".join(["auto_schedule=true"]),
     generator_deps = [
