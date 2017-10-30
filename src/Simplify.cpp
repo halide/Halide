@@ -2205,6 +2205,8 @@ private:
 
         if (is_zero(b) && !op->type.is_float()) {
             expr = indeterminate_expression_error(op->type);
+        } else if (is_one(b) && !op->type.is_float()) {
+            expr = make_zero(op->type);
         } else if (is_zero(a)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
@@ -5611,6 +5613,7 @@ void check_algebra() {
     check((y + 8) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
+    check((x*y) % 1, 0);
 
     // Check an optimization important for fusing dimensions
     check((x/3)*3 + x%3, x);
