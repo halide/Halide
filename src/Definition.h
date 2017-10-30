@@ -22,7 +22,7 @@ struct FunctionContents;
 namespace Internal {
 
 class IRVisitor;
-class IRMutator;
+class IRMutator2;
 struct Specialization;
 
 /** A Function definition which can either represent a init or an update
@@ -65,9 +65,9 @@ public:
      * definition. */
     EXPORT void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * definition. */
-    EXPORT void mutate(IRMutator *);
+    EXPORT void mutate(IRMutator2 *);
 
     /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
     // @{
