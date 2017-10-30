@@ -9,8 +9,8 @@ public:
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
 
-    GeneratorParam<bool> use_parallel_sched{"use_parallel_sched", false};
-    GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", false};
+    GeneratorParam<bool> use_parallel_sched{"use_parallel_sched", true};
+    GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", true};
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
