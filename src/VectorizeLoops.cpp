@@ -734,9 +734,8 @@ class VectorSubs : public IRMutator2 {
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
-                    Stmt stmt = scalarize(op);
-                    debug(4) << "...Scalarizing vector predicate: \n" << op << "\n";
-                    return stmt;
+                    debug(4) << "...Scalarizing vector predicate: \n" << Stmt(op) << "\n";
+                    return scalarize(op);
                 } else {
                     Stmt stmt = predicated_stmt;
                     debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
