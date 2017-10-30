@@ -352,15 +352,15 @@ std::string Stage::dump_argument_list() const {
 
 namespace {
 
-class SubstituteSelfReference : public IRMutator {
-    using IRMutator::visit;
+class SubstituteSelfReference : public IRMutator2 {
+    using IRMutator2::visit;
 
     const string func;
     const Function substitute;
     const vector<Var> new_args;
 
-    void visit(const Call *c) {
-        IRMutator::visit(c);
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -372,6 +372,7 @@ class SubstituteSelfReference : public IRMutator {
             args.insert(args.end(), new_args.begin(), new_args.end());
             expr = Call::make(substitute, args, c->value_index);
         }
+        return expr;
     }
 public:
     SubstituteSelfReference(const string &func, const Function &substitute,
@@ -2978,7 +2979,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
+void Func::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 
