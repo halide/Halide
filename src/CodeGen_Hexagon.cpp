@@ -151,12 +151,11 @@ bool is_dense_ramp(Expr x) {
 // In Hexagon, we assume that we can read one vector past the end of
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
-class SloppyUnpredicateLoads : public IRMutator {
-    void visit(const Load *op) {
+class SloppyUnpredicateLoads : public IRMutator2 {
+    Expr visit(const Load *op) override {
         // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
         if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         Expr predicate = mutate(op->predicate);
@@ -169,10 +168,10 @@ class SloppyUnpredicateLoads : public IRMutator {
         }
         predicate = Broadcast::make(condition, predicate.type().lanes());
 
-        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 };
 
 Stmt sloppy_unpredicate_loads(Stmt s) {
