@@ -456,6 +456,7 @@ class PartitionLoops : public IRMutator {
 
         if (finder.simplifications.empty()) {
             IRMutator::visit(op);
+            in_gpu_loop = old_in_gpu_loop;
             return;
         }
 
@@ -676,6 +677,7 @@ class PartitionLoops : public IRMutator {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
             IRMutator::visit(op);
+            in_gpu_loop = old_in_gpu_loop;
             return;
         }
 
