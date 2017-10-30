@@ -131,8 +131,8 @@ struct FuncScheduleContents {
         store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
         memoized(false) {};
 
-    // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the FuncScheduleContents
+    void mutate(IRMutator2 *mutator) {
         for (Bound &b : bounds) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
@@ -189,8 +189,8 @@ struct StageScheduleContents {
 
     StageScheduleContents() : touched(false), allow_race_conditions(false) {};
 
-    // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the StageScheduleContents
+    void mutate(IRMutator2 *mutator) {
         for (ReductionVariable &r : rvars) {
             if (r.min.defined()) {
                 r.min = mutator->mutate(r.min);
@@ -347,7 +347,7 @@ void FuncSchedule::accept(IRVisitor *visitor) const {
     }
 }
 
-void FuncSchedule::mutate(IRMutator *mutator) {
+void FuncSchedule::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }
@@ -437,7 +437,7 @@ void StageSchedule::accept(IRVisitor *visitor) const {
     }
 }
 
-void StageSchedule::mutate(IRMutator *mutator) {
+void StageSchedule::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }
