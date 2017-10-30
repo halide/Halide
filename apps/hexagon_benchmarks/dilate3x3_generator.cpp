@@ -48,7 +48,8 @@ public:
                 output.prefetch(input, y, 2);
             }
             if (use_parallel_sched) {
-                output.parallel(y);
+                Var yo;
+                output.split(y, yo, y, 128).parallel(yo);
             }
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
