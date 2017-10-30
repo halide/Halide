@@ -38,81 +38,85 @@ LINK_OBJS += $(patsubst %,$(BIN)/$$*/%_cpu.o, $(FILTERS))
 UPPERCASE_FILTERS = $(shell echo $(FILTERS) | tr '[:lower:]' '[:upper:]')
 DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
+PARALLEL_SCHED ?= true
+PREFETCH_SCHED ?= true
+SCHEDULING_OPTS = use_parallel_sched=${PARALLEL_SCHED} use_prefetch_sched=${PREFETCH_SCHED}
+
 $(BIN)/%.generator : %_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$* accumulator_type=int16
+	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$* accumulator_type=int16 ${SCHEDULING_OPTS}
 
 $(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64 accumulator_type=int16
+	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64 accumulator_type=int16 ${SCHEDULING_OPTS}
 
 $(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128 accumulator_type=int16
+	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128 accumulator_type=int16 ${SCHEDULING_OPTS}
 
 $(BIN)/%/dilate3x3_cpu.o: $(BIN)/dilate3x3.generator
 	@mkdir -p $(@D)
-	$^ -g dilate3x3 -o $(BIN)/$* -e o,h -f dilate3x3_cpu target=$*
+	$^ -g dilate3x3 -o $(BIN)/$* -e o,h -f dilate3x3_cpu target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/dilate3x3_hvx64.o: $(BIN)/dilate3x3.generator
 	@mkdir -p $(@D)
-	$^ -g dilate3x3 -o $(BIN)/$* -e o,h -f dilate3x3_hvx64 target=$*-hvx_64
+	$^ -g dilate3x3 -o $(BIN)/$* -e o,h -f dilate3x3_hvx64 target=$*-hvx_64 ${SCHEDULING_OPTS}
 
 $(BIN)/%/dilate3x3_hvx128.o: $(BIN)/dilate3x3.generator
 	@mkdir -p $(@D)
-	$^ -g dilate3x3 -o $(BIN)/$* -e o,h -f dilate3x3_hvx128 target=$*-hvx_128
+	$^ -g dilate3x3 -o $(BIN)/$* -e o,h -f dilate3x3_hvx128 target=$*-hvx_128 ${SCHEDULING_OPTS}
 
 $(BIN)/%/median3x3_cpu.o: $(BIN)/median3x3.generator
 	@mkdir -p $(@D)
-	$^ -g median3x3 -o $(BIN)/$* -e o,h -f median3x3_cpu target=$*
+	$^ -g median3x3 -o $(BIN)/$* -e o,h -f median3x3_cpu target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/median3x3_hvx64.o: $(BIN)/median3x3.generator
 	@mkdir -p $(@D)
-	$^ -g median3x3 -o $(BIN)/$* -e o,h -f median3x3_hvx64 target=$*-hvx_64
+	$^ -g median3x3 -o $(BIN)/$* -e o,h -f median3x3_hvx64 target=$*-hvx_64 ${SCHEDULING_OPTS}
 
 $(BIN)/%/median3x3_hvx128.o: $(BIN)/median3x3.generator
 	@mkdir -p $(@D)
-	$^ -g median3x3 -o $(BIN)/$* -e o,h -f median3x3_hvx128 target=$*-hvx_128
+	$^ -g median3x3 -o $(BIN)/$* -e o,h -f median3x3_hvx128 target=$*-hvx_128 ${SCHEDULING_OPTS}
 
 $(BIN)/%/gaussian5x5_cpu.o: $(BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)
-	$^ -g gaussian5x5 -o $(BIN)/$* -e o,h -f gaussian5x5_cpu target=$*
+	$^ -g gaussian5x5 -o $(BIN)/$* -e o,h -f gaussian5x5_cpu target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/gaussian5x5_hvx64.o: $(BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)
-	$^ -g gaussian5x5 -o $(BIN)/$* -e o,h -f gaussian5x5_hvx64 target=$*-hvx_64
+	$^ -g gaussian5x5 -o $(BIN)/$* -e o,h -f gaussian5x5_hvx64 target=$*-hvx_64 ${SCHEDULING_OPTS}
 
 $(BIN)/%/gaussian5x5_hvx128.o: $(BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)
-	$^ -g gaussian5x5 -o $(BIN)/$* -e o,h -f gaussian5x5_hvx128 target=$*-hvx_128
+	$^ -g gaussian5x5 -o $(BIN)/$* -e o,h -f gaussian5x5_hvx128 target=$*-hvx_128 ${SCHEDULING_OPTS}
 
 $(BIN)/%/sobel_cpu.o: $(BIN)/sobel.generator
 	@mkdir -p $(@D)
-	$^ -g sobel -o $(BIN)/$* -e o,h -f sobel_cpu target=$*
+	$^ -g sobel -o $(BIN)/$* -e o,h -f sobel_cpu target=$* ${SCHEDULING_OPTS}
 
 $(BIN)/%/sobel_hvx64.o: $(BIN)/sobel.generator
 	@mkdir -p $(@D)
-	$^ -g sobel -o $(BIN)/$* -e o,h -f sobel_hvx64 target=$*-hvx_64
+	$^ -g sobel -o $(BIN)/$* -e o,h -f sobel_hvx64 target=$*-hvx_64 ${SCHEDULING_OPTS}
 
 $(BIN)/%/sobel_hvx128.o: $(BIN)/sobel.generator
 	@mkdir -p $(@D)
-	$^ -g sobel -o $(BIN)/$* -e o,h -f sobel_hvx128 target=$*-hvx_128
+	$^ -g sobel -o $(BIN)/$* -e o,h -f sobel_hvx128 target=$*-hvx_128 ${SCHEDULING_OPTS}
 
 $(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$* accumulator_type=int32
+	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$* accumulator_type=int32 ${SCHEDULING_OPTS}
 
 $(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64 accumulator_type=int32
+	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64 accumulator_type=int32 ${SCHEDULING_OPTS}
 
 $(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3.generator
 	@mkdir -p $(@D)
-	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128 accumulator_type=int32
+	$^ -g conv3x3 -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128 accumulator_type=int32 ${SCHEDULING_OPTS}
 
 $(BIN)/%/filters.a : $(OBJS)
 	ar q $(BIN)/$*/filters.a $^
