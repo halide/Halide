@@ -131,7 +131,7 @@ struct FuncScheduleContents {
         store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
         memoized(false) {};
 
-    // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
+    // Pass an IRMutator2 through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator2 *mutator) {
         for (Bound &b : bounds) {
             if (b.min.defined()) {
