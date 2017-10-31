@@ -369,14 +369,10 @@ private:
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
-        if (!body.defined()) {
-            return op;
-        }
+        if (!body.defined()) return Stmt();
 
         Expr condition = mutate(op->condition);
-        if (!condition.defined()) {
-            return op;
-        }
+        if (!condition.defined()) return Stmt();
 
         Expr new_expr;
         if (op->new_expr.defined()) {
