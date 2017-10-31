@@ -464,13 +464,10 @@ private:
         std::map<std::string, Function>::const_iterator iter = env.find(realization_name);
 
         if (iter != env.end() && iter->second.schedule().memoized()) {
-            std::string old_innermost_realization_name = innermost_realization_name;
-            innermost_realization_name = realization_name;
+            ScopedValue<std::string> old_innermost_realization_name(innermost_realization_name, realization_name);
 
             pending_memoized_allocations[innermost_realization_name].push_back(allocation);
             stmt = mutate(allocation->body);
-
-            innermost_realization_name = old_innermost_realization_name;
         } else {
             IRMutator::visit(allocation);
         }
