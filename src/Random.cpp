@@ -93,24 +93,25 @@ Expr random_float(const vector<Expr> &e) {
     return clamp(reinterpret(Float(32), result) - 1.0f, 0.0f, 1.0f);
 }
 
-class LowerRandom : public IRMutator {
-    using IRMutator::visit;
+class LowerRandom : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
             vector<Expr> args = op->args;
             args.insert(args.end(), extra_args.begin(), extra_args.end());
             if (op->type == Float(32)) {
-                expr = random_float(args);
+                return random_float(args);
             } else if (op->type == Int(32)) {
-                expr = cast<int32_t>(random_int(args));
+                return cast<int32_t>(random_int(args));
             } else if (op->type == UInt(32)) {
-                expr = random_int(args);
+                return random_int(args);
             } else {
                 internal_error << "The intrinsic random() returns an Int(32), UInt(32) or a Float(32).\n";
+                return Expr();
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
