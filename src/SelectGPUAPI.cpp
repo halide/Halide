@@ -5,22 +5,22 @@
 namespace Halide {
 namespace Internal {
 
-class SelectGPUAPI : public IRMutator {
-    using IRMutator::visit;
+class SelectGPUAPI : public IRMutator2 {
+    using IRMutator2::visit;
 
     Target target;
 
     DeviceAPI default_api, parent_api;
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->name == "halide_default_device_interface") {
-            expr = make_device_interface_call(default_api);
+            return make_device_interface_call(default_api);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         DeviceAPI selected_api = op->device_api;
         if (op->device_api == DeviceAPI::Default_GPU) {
             selected_api = default_api;
@@ -28,15 +28,16 @@ class SelectGPUAPI : public IRMutator {
 
         DeviceAPI old_parent_api = parent_api;
         parent_api = selected_api;
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
         parent_api = old_parent_api;
 
         op = stmt.as<For>();
         internal_assert(op);
 
         if (op->device_api != selected_api) {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, selected_api, op->body);
+            return For::make(op->name, op->min, op->extent, op->for_type, selected_api, op->body);
         }
+        return stmt;
     }
 public:
     SelectGPUAPI(Target t) : target(t) {

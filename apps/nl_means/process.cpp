@@ -33,13 +33,13 @@ int main(int argc, char **argv) {
             input.width(), input.height(), patch_size, search_area, sigma);
 
     // Manually-tuned version
-    double min_t_manual = benchmark(timing_iterations, 10, [&]() {
+    double min_t_manual = benchmark(timing_iterations, 1, [&]() {
         nl_means(input, patch_size, search_area, sigma, output);
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     // Auto-scheduled version
-    double min_t_auto = benchmark(timing_iterations, 10, [&]() {
+    double min_t_auto = benchmark(timing_iterations, 1, [&]() {
         nl_means_auto_schedule(input, patch_size, search_area, sigma, output);
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
