@@ -32,11 +32,11 @@ struct FunctionContents;
 namespace {
 // Weaken all the references to a particular Function to break
 // reference cycles. Also count the number of references found.
-class WeakenFunctionPtrs : public IRMutator {
-    using IRMutator::visit;
+class WeakenFunctionPtrs : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Call *c) {
-        IRMutator::visit(c);
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
         if (c->func.defined() &&
@@ -48,6 +48,7 @@ class WeakenFunctionPtrs : public IRMutator {
                               c->image, c->param);
             count++;
         }
+        return expr;
     }
     FunctionContents *func;
 public:
@@ -121,8 +122,8 @@ struct FunctionContents {
         }
     }
 
-    // Pass an IRMutator through to all Exprs referenced in the FunctionContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the FunctionContents
+    void mutate(IRMutator2 *mutator) {
         func_schedule.mutate(mutator);
 
         init_def.mutate(mutator);
@@ -713,7 +714,7 @@ void Function::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Function::mutate(IRMutator *mutator) {
+void Function::mutate(IRMutator2 *mutator) {
     contents->mutate(mutator);
 }
 
@@ -952,13 +953,13 @@ const Call *Function::is_wrapper() const {
 namespace {
 
 // Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator {
-    using IRMutator::visit;
+class SubstituteCalls : public IRMutator2 {
+    using IRMutator2::visit;
 
     map<FunctionPtr, FunctionPtr> substitutions;
 
-    void visit(const Call *c) {
-        IRMutator::visit(c);
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -973,20 +974,22 @@ class SubstituteCalls : public IRMutator {
                               subs, c->value_index,
                               c->image, c->param);
         }
+        return expr;
     }
 public:
     SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
         : substitutions(substitutions) {}
 };
 
-class SubstituteScheduleParamExprs : public IRMutator {
-    using IRMutator::visit;
+class SubstituteScheduleParamExprs : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Variable *v) override {
-        IRMutator::visit(v);
+    Expr visit(const Variable *v) override {
+        Expr expr = IRMutator2::visit(v);
         if (v->param.defined() && v->param.is_bound_before_lowering()) {
             expr = mutate(v->param.scalar_expr());
         }
+        return expr;
     }
 
 public:
