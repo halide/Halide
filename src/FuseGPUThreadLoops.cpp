@@ -36,16 +36,12 @@ class InjectThreadBarriers : public IRMutator2 {
     Stmt barrier;
 
     Stmt visit(const For *op) override {
-        bool old_in_threads = in_threads;
+        ScopedValue<bool> old_in_threads(in_threads);
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             in_threads = true;
         }
 
-        Stmt stmt = IRMutator2::visit(op);
-
-        in_threads = old_in_threads;
-
-        return stmt;
+        return IRMutator2::visit(op);
     }
 
     Stmt visit(const Block *op) override {
@@ -686,7 +682,7 @@ class ZeroGPULoopMins : public IRMutator2 {
     using IRMutator2::visit;
 
     Stmt visit(const For *op) override {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
+        ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
@@ -700,8 +696,6 @@ class ZeroGPULoopMins : public IRMutator2 {
             Stmt body = substitute(op->name, adjusted, op->body);
             stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
-
-        in_non_glsl_gpu = old_in_non_glsl_gpu;
         return stmt;
     }
 
@@ -716,10 +710,10 @@ class ValidateGPULoopNesting : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const For *op) {
-        string old_innermost_block_var  = innermost_block_var;
-        string old_innermost_thread_var = innermost_thread_var;
-        int old_gpu_block_depth  = gpu_block_depth;
-        int old_gpu_thread_depth = gpu_thread_depth;
+        ScopedValue<string> old_innermost_block_var(innermost_block_var);
+        ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
+        ScopedValue<int> old_gpu_block_depth(gpu_block_depth);
+        ScopedValue<int> old_gpu_thread_depth(gpu_thread_depth);
 
         for (int i = 1; i <= 4; i++) {
             if (ends_with(op->name, block_names[4-i])) {
@@ -744,11 +738,6 @@ class ValidateGPULoopNesting : public IRVisitor {
             }
         }
         IRVisitor::visit(op);
-
-        innermost_block_var  = old_innermost_block_var;
-        innermost_thread_var = old_innermost_thread_var;
-        gpu_block_depth  = old_gpu_block_depth;
-        gpu_thread_depth = old_gpu_thread_depth;
     }
 };
 
