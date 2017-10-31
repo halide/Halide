@@ -29,9 +29,9 @@ private:
     template<typename T>
     Expr mutate_binary_operator(const T *op) {
         Expr a = mutate(op->a);
-        if (!a.defined()) return op;
+        if (!a.defined()) return Expr();
         Expr b = mutate(op->b);
-        if (!b.defined()) return op;
+        if (!b.defined()) return Expr();
         if (a.same_as(op->a) &&
             b.same_as(op->b)) {
             return op;
@@ -42,7 +42,7 @@ private:
 
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
-        if (!value.defined()) return op;
+        if (!value.defined()) return Expr();
         if (value.same_as(op->value)) {
             return op;
         } else {
@@ -68,7 +68,7 @@ private:
 
     Expr visit(const Not *op) override {
         Expr a = mutate(op->a);
-        if (!a.defined()) return op;
+        if (!a.defined()) return Expr();
         if (a.same_as(op->a)) {
             return op;
         } else {
@@ -116,9 +116,9 @@ private:
 
     Expr visit(const Load *op) override {
         Expr pred = mutate(op->predicate);
-        if (!pred.defined()) return op;
+        if (!pred.defined()) return Expr();
         Expr index = mutate(op->index);
-        if (!index.defined()) return op;
+        if (!index.defined()) return Expr();
         if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             return op;
         } else {
@@ -128,9 +128,9 @@ private:
 
     Expr visit(const Ramp *op) override {
         Expr base = mutate(op->base);
-        if (!base.defined()) return op;
+        if (!base.defined()) return Expr();
         Expr stride = mutate(op->stride);
-        if (!stride.defined()) return op;
+        if (!stride.defined()) return Expr();
         if (base.same_as(op->base) &&
             stride.same_as(op->stride)) {
             return op;
@@ -141,7 +141,7 @@ private:
 
     Expr visit(const Broadcast *op) override {
         Expr value = mutate(op->value);
-        if (!value.defined()) return op;
+        if (!value.defined()) return Expr();
         if (value.same_as(op->value)) {
             return op;
         } else {
@@ -161,7 +161,7 @@ private:
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.defined()) return op;
+            if (!new_arg.defined()) return Expr();
             if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
@@ -183,7 +183,7 @@ private:
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!body.defined()) return op;
+        if (!body.defined()) return Expr();
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
             return op;
@@ -205,7 +205,7 @@ private:
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!body.defined()) return op;
+        if (!body.defined()) return Stmt();
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
             return op;
@@ -236,7 +236,7 @@ private:
 
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
-        if (!body.defined()) return op;
+        if (!body.defined()) return Stmt();
         if (body.same_as(op->body)) {
             return op;
         } else {
@@ -254,7 +254,7 @@ private:
             return Stmt();
         }
         Stmt body = mutate(op->body);
-        if (!body.defined()) return op;
+        if (!body.defined()) return Stmt();
         if (min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body)) {
@@ -419,14 +419,10 @@ private:
         }
 
         Stmt body = mutate(op->body);
-        if (!body.defined()) {
-            return op;
-        }
+        if (!body.defined()) return Stmt();
 
         Expr condition = mutate(op->condition);
-        if (!condition.defined()) {
-            return op;
-        }
+        if (!condition.defined()) return Stmt();
 
         if (!bounds_changed &&
             body.same_as(op->body) &&
