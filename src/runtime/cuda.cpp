@@ -185,13 +185,14 @@ public:
 };
 
 // Halide allocates a device API controlled pointer slot as part of
-// each compiled module. The slots is used to prevent having to
-// reload/recompile kernel code on each call into a Halide filter.
-// the cuda runtime uses this pointer to maintain a linked list
-// of contexts into which the module has been loaded.
+// each compiled module. The slot is used to store information to
+// avoid having to reload/recompile kernel code on each call into a
+// Halide filter. The cuda runtime uses this pointer to maintain a
+// linked list of contexts into which the module has been loaded.
 //
-// A global list of all registered filters is also kept so they can
-// be reset when a halide_device_release is called on a specific context.
+// A global list of all registered filters is also kept so all modules
+// loaded on a given context can be unloaded and removed from the list
+// when halide_device_release is called on a specific context.
 //
 // The registered_filters struct is not freed as it is pointed to by the
 // Halide generated code. The module_state structs are freed.
@@ -408,7 +409,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
 
     CUcontext ctx;
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, dev_ptr);
-    if (result) {
+    if (result != CUDA_SUCCESS) {
         error(user_context) << "Bad device pointer " << (void *)dev_ptr
                             << ": cuPointerGetAttribute returned "
                             << get_error_name(result);
@@ -473,7 +474,6 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 
         if (err != CUDA_SUCCESS) {
             free(loaded_module);
-            debug(user_context) << get_error_name(err) << "\n";
             error(user_context) << "CUDA: cuModuleLoadData failed: "
                                 << get_error_name(err);
             return err;
@@ -1007,6 +1007,11 @@ WEAK const char *get_error_name(CUresult err) {
     case CUDA_ERROR_INVALID_VALUE: return "CUDA_ERROR_INVALID_VALUE";
     case CUDA_ERROR_OUT_OF_MEMORY: return "CUDA_ERROR_OUT_OF_MEMORY";
     case CUDA_ERROR_NOT_INITIALIZED: return "CUDA_ERROR_NOT_INITIALIZED";
+    case CUDA_ERROR_DEINITIALIZED: return "CUDA_ERROR_DEINITIALIZED";
+    case CUDA_ERROR_PROFILER_DISABLED: return "CUDA_ERROR_PROFILER_DISABLED";
+    case CUDA_ERROR_PROFILER_NOT_INITIALIZED: return "CUDA_ERROR_PROFILER_NOT_INITIALIZED";
+    case CUDA_ERROR_PROFILER_ALREADY_STARTED: return "CUDA_ERROR_PROFILER_ALREADY_STARTED";
+    case CUDA_ERROR_PROFILER_ALREADY_STOPPED: return "CUDA_ERROR_PROFILER_ALREADY_STOPPED";
     case CUDA_ERROR_NO_DEVICE: return "CUDA_ERROR_NO_DEVICE";
     case CUDA_ERROR_INVALID_DEVICE: return "CUDA_ERROR_INVALID_DEVICE";
     case CUDA_ERROR_INVALID_IMAGE: return "CUDA_ERROR_INVALID_IMAGE";
@@ -1019,12 +1024,25 @@ WEAK const char *get_error_name(CUresult err) {
     case CUDA_ERROR_NO_BINARY_FOR_GPU: return "CUDA_ERROR_NO_BINARY_FOR_GPU";
     case CUDA_ERROR_ALREADY_ACQUIRED: return "CUDA_ERROR_ALREADY_ACQUIRED";
     case CUDA_ERROR_NOT_MAPPED: return "CUDA_ERROR_NOT_MAPPED";
+    case CUDA_ERROR_NOT_MAPPED_AS_ARRAY: return "CUDA_ERROR_NOT_MAPPED_AS_ARRAY";
+    case CUDA_ERROR_NOT_MAPPED_AS_POINTER: return "CUDA_ERROR_NOT_MAPPED_AS_POINTER";
+    case CUDA_ERROR_ECC_UNCORRECTABLE: return "CUDA_ERROR_ECC_UNCORRECTABLE";
+    case CUDA_ERROR_UNSUPPORTED_LIMIT: return "CUDA_ERROR_UNSUPPORTED_LIMIT";
+    case CUDA_ERROR_CONTEXT_ALREADY_IN_USE: return "CUDA_ERROR_CONTEXT_ALREADY_IN_USE";
+    case CUDA_ERROR_PEER_ACCESS_UNSUPPORTED: return "CUDA_ERROR_PEER_ACCESS_UNSUPPORTED";
+    case CUDA_ERROR_INVALID_PTX: return "CUDA_ERROR_INVALID_PTX";
+    case CUDA_ERROR_INVALID_GRAPHICS_CONTEXT: return "CUDA_ERROR_INVALID_GRAPHICS_CONTEXT";
+    case CUDA_ERROR_NVLINK_UNCORRECTABLE: return "CUDA_ERROR_NVLINK_UNCORRECTABLE";
+    case CUDA_ERROR_JIT_COMPILER_NOT_FOUND: return "CUDA_ERROR_JIT_COMPILER_NOT_FOUND";
     case CUDA_ERROR_INVALID_SOURCE: return "CUDA_ERROR_INVALID_SOURCE";
     case CUDA_ERROR_FILE_NOT_FOUND: return "CUDA_ERROR_FILE_NOT_FOUND";
+    case CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND: return "CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND";
+    case CUDA_ERROR_SHARED_OBJECT_INIT_FAILED: return "CUDA_ERROR_SHARED_OBJECT_INIT_FAILED";
+    case CUDA_ERROR_OPERATING_SYSTEM: return "CUDA_ERROR_OPERATING_SYSTEM";
     case CUDA_ERROR_INVALID_HANDLE: return "CUDA_ERROR_INVALID_HANDLE";
     case CUDA_ERROR_NOT_FOUND: return "CUDA_ERROR_NOT_FOUND";
     case CUDA_ERROR_NOT_READY: return "CUDA_ERROR_NOT_READY";
-    case CUDA_ERROR_LAUNCH_FAILED: return "CUDA_ERROR_LAUNCH_FAILED";
+    case CUDA_ERROR_ILLEGAL_ADDRESS: return "CUDA_ERROR_ILLEGAL_ADDRESS";
     case CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES: return "CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES";
     case CUDA_ERROR_LAUNCH_TIMEOUT: return "CUDA_ERROR_LAUNCH_TIMEOUT";
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING: return "CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING";
@@ -1032,10 +1050,16 @@ WEAK const char *get_error_name(CUresult err) {
     case CUDA_ERROR_PEER_ACCESS_NOT_ENABLED: return "CUDA_ERROR_PEER_ACCESS_NOT_ENABLED";
     case CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE: return "CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE";
     case CUDA_ERROR_CONTEXT_IS_DESTROYED: return "CUDA_ERROR_CONTEXT_IS_DESTROYED";
-    case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
     // A trap instruction produces the below error, which is how we codegen asserts on GPU
     case CUDA_ERROR_ILLEGAL_INSTRUCTION:
         return "Illegal instruction or Halide assertion failure inside kernel";
+    case CUDA_ERROR_MISALIGNED_ADDRESS: return "CUDA_ERROR_MISALIGNED_ADDRESS";
+    case CUDA_ERROR_INVALID_ADDRESS_SPACE: return "CUDA_ERROR_INVALID_ADDRESS_SPACE";
+    case CUDA_ERROR_INVALID_PC: return "CUDA_ERROR_INVALID_PC";
+    case CUDA_ERROR_LAUNCH_FAILED: return "CUDA_ERROR_LAUNCH_FAILED";
+    case CUDA_ERROR_NOT_PERMITTED: return "CUDA_ERROR_NOT_PERMITTED";
+    case CUDA_ERROR_NOT_SUPPORTED: return "CUDA_ERROR_NOT_SUPPORTED";
+    case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
     default:
         // This is unfortunate as usually get_cuda_error is called in the middle of
         // an error print, but dropping the number on the floor is worse.
