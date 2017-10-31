@@ -137,7 +137,7 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        Expr expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (sub_a && !a_failed) {
@@ -218,7 +218,7 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        Expr expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (sub_a && !a_failed) {
@@ -315,7 +315,7 @@ private:
             std::swap(a_failed, b_failed);
         }
 
-        Expr expr = Expr();
+        Expr expr;
         if (a_uses_var && !b_uses_var) {
             if (add_a && !a_failed) {
                 // (f(x) + a) * b -> f(x) * b + a * b
@@ -391,7 +391,7 @@ private:
         const T *t_a = a.as<T>();
         const T *t_b = b.as<T>();
 
-        Expr expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (t_a && !a_failed) {
@@ -499,7 +499,7 @@ private:
         const T *t_a = a.as<T>();
         const T *t_b = b.as<T>();
 
-        Expr expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             if (t_a && !a_failed) {
@@ -578,7 +578,7 @@ private:
         bool is_ge = Expr(op).as<GE>() != nullptr;
         bool is_gt = Expr(op).as<GT>() != nullptr;
 
-        Expr expr = Expr();
+        Expr expr;
 
         if (a_uses_var && !b_uses_var) {
             // We have f(x) < y. Try to unwrap f(x)
