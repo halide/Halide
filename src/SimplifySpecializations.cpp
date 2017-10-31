@@ -29,11 +29,11 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
-class SimplifyUsingFact : public IRMutator {
+class SimplifyUsingFact : public IRMutator2 {
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (e.type().is_bool()) {
             if (equal(fact, e) ||
                 can_prove(!fact || e)) {
@@ -47,7 +47,7 @@ public:
                 return const_false();
             }
         }
-        return IRMutator::mutate(e);
+        return IRMutator2::mutate(e);
     }
 
     Expr fact;
