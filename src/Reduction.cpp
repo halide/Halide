@@ -155,18 +155,18 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 }
 
 namespace {
-class DropSelfReferences : public IRMutator {
-    using IRMutator::visit;
+class DropSelfReferences : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (op->reduction_domain.defined()) {
             user_assert(op->reduction_domain.same_as(domain))
                 << "An RDom's predicate may only refer to its own RVars, "
                 << " not the RVars of some other RDom. "
                 << "Cannot set the predicate to : " << predicate << "\n";
-            expr = Variable::make(op->type, op->name);
+            return Variable::make(op->type, op->name);
         } else {
-            expr = op;
+            return op;
         }
     }
 public:

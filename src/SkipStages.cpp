@@ -234,7 +234,7 @@ private:
     }
 };
 
-class ProductionGuarder : public IRMutator {
+class ProductionGuarder : public IRMutator2 {
 public:
     ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
         buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
@@ -243,7 +243,7 @@ private:
     Expr compute_predicate;
     Expr alloc_predicate;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     bool memoize_call_uses_buffer(const Call *op) {
         internal_assert(op->call_type == Call::Extern);
@@ -259,7 +259,7 @@ private:
         return false;
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
 
         if ((op->name == "halide_memoization_cache_lookup") &&
              memoize_call_uses_buffer(op)) {
@@ -271,24 +271,24 @@ private:
             // hence, we need to allocate some scratch memory for the consumer
             // to load from. For memoized func, the memory might already be in
             // the cache, so we perform the lookup instead of allocating a new one.
-            expr = Call::make(op->type, Call::if_then_else,
+            return Call::make(op->type, Call::if_then_else,
                               {alloc_predicate, op, 0}, Call::PureIntrinsic);
         } else if ((op->name == "halide_memoization_cache_store") &&
                     memoize_call_uses_buffer(op)) {
             // We need to wrap the halide_memoization_cache_store with the
             // compute_predicate, since the data to be written is only valid if
             // the producer of the buffer is executed.
-            expr = Call::make(op->type, Call::if_then_else,
+            return Call::make(op->type, Call::if_then_else,
                               {compute_predicate, op, 0}, Call::PureIntrinsic);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (op->is_producer) {
             op = stmt.as<ProducerConsumer>();
@@ -298,20 +298,21 @@ private:
                 stmt = ProducerConsumer::make(op->name, op->is_producer, body);
             }
         }
+        return stmt;
     }
 };
 
-class StageSkipper : public IRMutator {
+class StageSkipper : public IRMutator2 {
 public:
     StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
 private:
     string func;
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     Scope<int> vector_vars;
     bool in_vector_loop;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         bool old_in_vector_loop = in_vector_loop;
 
         // We want to be sure that the predicate doesn't vectorize.
@@ -320,16 +321,18 @@ private:
             in_vector_loop = true;
         }
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (op->for_type == ForType::Vectorized) {
             vector_vars.pop(op->name);
         }
 
         in_vector_loop = old_in_vector_loop;
+
+        return stmt;
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         bool should_pop = false;
         if (in_vector_loop &&
             expr_uses_vars(op->value, vector_vars)) {
@@ -337,14 +340,16 @@ private:
             vector_vars.push(op->name, 0);
         }
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (should_pop) {
             vector_vars.pop(op->name);
         }
+
+        return stmt;
     }
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         if (op->name == func) {
             debug(3) << "Finding compute predicate for " << op->name << "\n";
             PredicateFinder find_compute(op->name, true);
@@ -378,13 +383,13 @@ private:
 
                 debug(3) << "Done guarding computation for " << op->name << "\n";
 
-                stmt = Realize::make(op->name, op->types, op->bounds,
+                return Realize::make(op->name, op->types, op->bounds,
                                      alloc_predicate, body);
             } else {
-                IRMutator::visit(op);
+                return IRMutator2::visit(op);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
