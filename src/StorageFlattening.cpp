@@ -21,7 +21,7 @@ using std::set;
 
 namespace {
 
-class FlattenDimensions : public IRMutator {
+class FlattenDimensions : public IRMutator2 {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e,
                       const vector<Function> &o,
@@ -93,9 +93,9 @@ private:
         return idx;
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         realizations.push(op->name, 0);
 
         if (in_shader) {
@@ -148,7 +148,7 @@ private:
 
         internal_assert(storage_permutation.size() == op->bounds.size());
 
-        stmt = body;
+        Stmt stmt = body;
         internal_assert(op->types.size() == 1);
 
         // Make the names for the mins, extents, and strides
@@ -201,9 +201,10 @@ private:
             stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
             stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
         }
+        return stmt;
     }
 
-    void visit(const Provide *op) {
+    Stmt visit(const Provide *op) override {
         internal_assert(op->values.size() == 1);
 
         Parameter output_buf;
@@ -234,14 +235,14 @@ private:
                 value};
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
-            stmt = Evaluate::make(store);
+            return Evaluate::make(store);
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            stmt = Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
+            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
         }
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
 
@@ -271,7 +272,7 @@ private:
                     args.push_back(1);
                 }
 
-                expr = Call::make(op->type,
+                return Call::make(op->type,
                                   Call::image_load,
                                   args,
                                   Call::PureIntrinsic,
@@ -281,16 +282,16 @@ private:
                                   op->param);
             } else {
                 Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
-                expr = Load::make(op->type, op->name, idx, op->image, op->param,
+                return Load::make(op->type, op->name, idx, op->image, op->param,
                                   const_true(op->type.lanes()));
             }
 
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Prefetch *op) {
+    Stmt visit(const Prefetch *op) override {
         internal_assert(op->types.size() == 1)
             << "Prefetch from multi-dimensional halide tuple should have been split\n";
 
@@ -339,77 +340,80 @@ private:
             }
         }
 
-        stmt = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        return Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
     }
 
-    void visit(const LetStmt *let) {
+    Stmt visit(const LetStmt *op) override {
         // Discover constrained versions of things.
-        bool constrained_version_exists = ends_with(let->name, ".constrained");
+        bool constrained_version_exists = ends_with(op->name, ".constrained");
         if (constrained_version_exists) {
-            scope.push(let->name, 0);
+            scope.push(op->name, 0);
         }
 
-        IRMutator::visit(let);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (constrained_version_exists) {
-            scope.pop(let->name);
+            scope.pop(op->name);
         }
+
+        return stmt;
     }
 
-    void visit(const For *loop) {
+    Stmt visit(const For *op) override {
         bool old_in_shader = in_shader;
-        if ((loop->for_type == ForType::GPUBlock ||
-             loop->for_type == ForType::GPUThread) &&
-            loop->device_api == DeviceAPI::GLSL) {
+        if ((op->for_type == ForType::GPUBlock ||
+             op->for_type == ForType::GPUThread) &&
+            op->device_api == DeviceAPI::GLSL) {
             in_shader = true;
         }
-        IRMutator::visit(loop);
+        Stmt stmt = IRMutator2::visit(op);
         in_shader = old_in_shader;
+        return stmt;
     }
 
 };
 
 // Realizations, stores, and loads must all be on types that are
 // multiples of 8-bits. This really only affects bools
-class PromoteToMemoryType : public IRMutator {
-    using IRMutator::visit;
+class PromoteToMemoryType : public IRMutator2 {
+    using IRMutator2::visit;
 
     Type upgrade(Type t) {
         return t.with_bits(((t.bits() + 7)/8)*8);
     }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            expr = Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
+            return Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
                                                    op->image, op->param, mutate(op->predicate)));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
-            stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
+            return Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
                                                     op->param, mutate(op->predicate));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
             vector<Expr> extents;
             for (Expr e : op->extents) {
                 extents.push_back(mutate(e));
             }
-            stmt = Allocate::make(op->name, t, extents,
+            return Allocate::make(op->name, t, extents,
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
