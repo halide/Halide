@@ -673,8 +673,8 @@ public:
 // TODO: could this be made to use the IRMutator2 pattern instead?
 class IRFilter : public IRVisitor {
 public:
-    virtual Stmt mutate(const Expr &expr);
-    virtual Stmt mutate(const Stmt &stmt);
+    virtual Stmt mutate(const Expr &e);
+    virtual Stmt mutate(const Stmt &s);
 
 protected:
     using IRVisitor::visit;
@@ -725,8 +725,7 @@ protected:
 Stmt IRFilter::mutate(const Expr &e) {
     if (e.defined()) {
         e.accept(this);
-    }
-    else {
+    } else {
         stmt = Stmt();
     }
     return stmt;
