@@ -92,8 +92,14 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
         Func(f).compute_root().store_root();
+        // Outputs aren't in env, so finalize the LoopLevels while we're here
+        // f.lock_loop_levels();
     }
 
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
     // Ensure that all ScheduleParams become well-defined constant Exprs.
     for (auto &f : env) {
         f.second.substitute_schedule_param_exprs();

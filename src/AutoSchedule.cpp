@@ -3339,6 +3339,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     debug(2) << "Computing full realization order...\n";
     vector<string> full_order = realization_order(outputs, env);
 
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
+
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
     for (const auto &iter : env) {
