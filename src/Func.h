@@ -1826,7 +1826,7 @@ public:
     EXPORT Func &compute_at(LoopLevel loop_level);
 
     /** Compute all of this function once ahead of time. Reusing
-     * the example in \ref Func::compute_at:
+     * the example in \ref Func::compute_at :
      *
      \code
      Func f, g;
