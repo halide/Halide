@@ -1615,7 +1615,6 @@ endif
 .PHONY: doc
 $(DOC_DIR): doc
 doc: $(SRC_DIR) Doxyfile
-	mkdir -p $(DOC_DIR)
 	doxygen
 
 Doxyfile: Doxyfile.in
