@@ -1,9 +1,8 @@
-include ../support/Makefile.inc
+# halide.make requires that HALIDE_DISTRIB_DIR be set to point to the Halide distribution folder we use.
+# This assumes it's built at the toplevel via 'make distrib'.
+HALIDE_DISTRIB_DIR ?= ../../distrib
 
-BIN ?= bin
-
-# If HL_TARGET isn't set, use host
-HL_TARGET ?= host
+include $(HALIDE_DISTRIB_DIR)/halide.make
 
 all: test
 
@@ -11,10 +10,10 @@ clean:
 	@rm -rf $(BIN)
 
 # By default, %.generator is produced by building %_generator.cpp
-$(BIN)/%.generator: %_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/%.generator: %_generator.cpp $(HALIDE_GENERATOR_DEPS)
 	@echo Building Generator $(filter %_generator.cpp,$^)
 	@mkdir -p $(@D)
-	@$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS) -o $@
+	@$(CXX) $(filter-out %.h,$^) $(HALIDE_GENERATOR_CXXFLAGS) $(HALIDE_GENERATOR_LDFLAGS) -o $@
 
 # By default, %.a/.h are produced by executing %.generator
 $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
@@ -27,18 +26,18 @@ $(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x.generator
 	@mkdir -p $(@D)
 	@$< -r runtime_$(HL_TARGET) -o $(BIN) target=$(HL_TARGET)
 
-HL_MODULES = \
+WAVELET_MODULES = \
 	$(BIN)/daubechies_x.a \
 	$(BIN)/haar_x.a \
 	$(BIN)/inverse_daubechies_x.a \
 	$(BIN)/inverse_haar_x.a \
 	$(BIN)/runtime_$(HL_TARGET).a
 
-$(BIN)/wavelet.a: wavelet.cpp $(HL_MODULES)
-	@$(CXX) $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -c $< -o $@
+$(BIN)/wavelet.a: wavelet.cpp $(WAVELET_MODULES)
+	@$(CXX) $(CXXFLAGS) $(HALIDE_IMAGE_IO_CXXFLAGS) -I$(BIN) -c $< -o $@
 
 $(BIN)/wavelet: $(BIN)/wavelet.a
-	@$(CXX) $(CXXFLAGS) $^ $(HL_MODULES) $(IMAGE_IO_LIBS) $(LDFLAGS) -o $@
+	@$(CXX) $(CXXFLAGS) $^ $(WAVELET_MODULES) $(LDFLAGS) $(HALIDE_IMAGE_IO_LDFLAGS) -o $@
 
 test: $(BIN)/wavelet
 	@echo Testing wavelet...
