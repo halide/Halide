@@ -1321,14 +1321,14 @@ public:
     template<typename ...Args>                                              \
     inline auto Method(Args&&... args) ->                                   \
         typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
-        return ((Class) *this).Method(std::forward<Args>(args)...);          \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);          \
     }
 
 #define HALIDE_FORWARD_METHOD_CONST(Class, Method)                          \
     template<typename ...Args>                                              \
     inline auto Method(Args&&... args) const ->                             \
         typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
-        return ((Class) *this).Method(std::forward<Args>(args)...);          \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);          \
     }
 
 template<typename T>
@@ -1353,6 +1353,11 @@ protected:
     }
 
     static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
+
+    template<typename T2>
+    inline T2 as() const {
+        return (T2) *this;
+    }
 
 public:
     GeneratorInput_Buffer(const std::string &name)
@@ -1442,6 +1447,11 @@ protected:
 
     std::string get_c_type() const override {
         return "Func";
+    }
+
+    template<typename T2>
+    inline T2 as() const {
+        return (T2) *this;
     }
 
 public:
@@ -1733,7 +1743,10 @@ namespace Internal {
 
 
 class GeneratorOutputBase : public GIOBase {
-    NO_INLINE operator Func() const {
+protected:
+    template<typename T2, typename std::enable_if<std::is_same<T2, Func>::value>::type * = nullptr>
+    NO_INLINE T2 as() const {
+        static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
         internal_assert(kind() != IOKind::Scalar);
         internal_assert(exprs_.empty());
         user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
@@ -1980,6 +1993,11 @@ protected:
         } else {
             return "Halide::Internal::StubOutputBuffer<>";
         }
+    }
+
+    template<typename T2, typename std::enable_if<!std::is_same<T2, Func>::value>::type * = nullptr>
+    NO_INLINE T2 as() const {
+        return (T2) *this;
     }
 
 public:
