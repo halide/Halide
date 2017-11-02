@@ -19,6 +19,15 @@ struct dma_device_handle {
     int frame_stride;
     void *desc_addr;
 };
+typedef struct desc_data {
+    void* descriptor;
+    bool used;
+    unsigned int size;
+    struct desc_data* next;
+} desc_pool_t;
+
+typedef desc_pool_t* pdesc_pool;
+static pdesc_pool dma_desc_pool = NULL;
 
 dma_device_handle *malloc_device_handle() {
     dma_device_handle *dev = (dma_device_handle *)malloc(sizeof(dma_device_handle));
@@ -32,6 +41,73 @@ dma_device_handle *malloc_device_handle() {
     dev->desc_addr = 0;
     return dev;
 }
+
+
+static void* desc_pool_get (unsigned int size) {
+
+   /* if pool empty
+    * get locked cache    --> multiple of 128B (cache line size) and each "desc" is 64B
+    * add new "desc" into pool
+    * get "desc" from pool
+    * mark "desc" used
+    * return "desc" */
+
+    pdesc_pool temp = dma_desc_pool;
+    pdesc_pool prev = NULL;
+    if (temp != NULL) {
+        if (!temp->used) {
+            temp->used = true;
+            return (void*) temp->descriptor;
+        }
+        prev = temp;
+        temp=temp->next;
+    }
+
+    temp = (pdesc_pool) malloc(sizeof(desc_pool_t));
+    //allocate descriptor
+	// Will use the HAP API to allocate L
+    char* desc = (char*)malloc(size);
+    *desc = 'a';
+    temp->descriptor = (void *)desc;
+    temp->size = size;
+    temp->used = true;
+    if (prev != NULL) {
+        prev->next = temp;
+    } else if (dma_desc_pool == NULL) {
+        dma_desc_pool = temp;
+    }
+
+    return (void*) temp->descriptor;
+}
+
+static int desc_pool_put (void *desc) {
+    /*find "desc"
+    put "desc" into pool
+    mark "desc" free*/
+
+    pdesc_pool temp = dma_desc_pool;
+
+    while (temp != NULL) {
+        if (temp->descriptor == desc) {
+            temp->used = false;
+            return 0;
+        }
+        temp=temp->next;
+    }
+    return -1;
+}
+
+static void desc_pool_free () {
+    pdesc_pool temp = dma_desc_pool;
+    while (temp != NULL) {
+        pdesc_pool temp2 = temp;
+        temp=temp->next;
+        free(temp2->descriptor);
+        free(temp2);
+    }
+}
+
+
 
 }}}}  // namespace Halide::Runtime::Internal::HexagonDma
 

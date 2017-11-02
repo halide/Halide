@@ -137,30 +137,6 @@ typedef unsigned int qurt_mem_pool_t;
   } t_StDmaWrapper_DmaTransferSetup;
 
   /*!
-   * @brief      Allocated a DMA Descriptor
-   * @description Maintain a pool of descriptors
-   *
-   * @return      Descriptor
-   */
-  void* desc_pool_get (unsigned int size);
-
-  /*!
-   * @brief       Put back DMA escriptor
-   * @description Frees a descriptor and return it to the pool of descriptors
-   *
-   * @return      Success
-   */
-  int desc_pool_put (void *desc);
-
-  /*!
-   * @brief     Frees the pool of descriptor
-   * @description Traverses through the list once release is called
-   *
-   * @return      None
-   */
-  void desc_pool_free ();
-
-  /*!
    * Handle for wrapper DMA engine
    */
   typedef void* t_DmaWrapper_DmaEngineHandle;
