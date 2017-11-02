@@ -903,7 +903,7 @@ void Function::lock_loop_levels() {
     // If store_level is inlined, use the compute_level instead.
     // (Note that we deliberately do *not* do the same if store_level
     // is undefined.)
-    if (schedule.store_level().is_inline()) {
+    if (schedule.store_level().is_inlined()) {
         schedule.store_level() = schedule.compute_level();
     }
 }
