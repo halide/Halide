@@ -113,8 +113,8 @@ struct ReductionDomainContents {
         }
     }
 
-    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator2 *mutator) {
         for (ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
                 rvar.min = mutator->mutate(rvar.min);
@@ -211,7 +211,7 @@ void ReductionDomain::accept(IRVisitor *visitor) const {
     }
 }
 
-void ReductionDomain::mutate(IRMutator *mutator) {
+void ReductionDomain::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }
