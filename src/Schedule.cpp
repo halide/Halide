@@ -111,7 +111,7 @@ std::string LoopLevel::func() const {
 
 VarOrRVar LoopLevel::var() const {
     check_defined_and_locked();
-    internal_assert(!is_inline() && !is_root());
+    internal_assert(!is_inlined() && !is_root());
     return VarOrRVar(contents->var_name, contents->is_rvar);
 }
 
@@ -120,7 +120,7 @@ LoopLevel LoopLevel::inlined() {
     return LoopLevel("", inline_looplevel_name, false);
 }
 
-bool LoopLevel::is_inline() const {
+bool LoopLevel::is_inlined() const {
     // It's OK to be undefined (just return false).
     check_locked();
     return contents->var_name == inline_looplevel_name;
