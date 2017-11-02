@@ -6,7 +6,6 @@ constexpr int maxJ = 20;
 
 class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
-    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
     GeneratorParam<int>     pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
     Input<Buffer<uint16_t>> input{"input", 3};
@@ -102,9 +101,6 @@ public:
             output.estimate(x, 0, 1536)
                 .estimate(y, 0, 2560)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline: this calls auto_schedule() for
-            // all of the Outputs in this Generator
-            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             // gpu schedule
             remap.compute_root();

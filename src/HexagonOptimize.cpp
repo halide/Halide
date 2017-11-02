@@ -66,34 +66,34 @@ Expr bc(Expr x) { return Broadcast::make(x, 0); }
 
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
-class WithLanes : public IRMutator {
-    using IRMutator::visit;
+class WithLanes : public IRMutator2 {
+    using IRMutator2::visit;
 
     int lanes;
 
     Type with_lanes(Type t) { return t.with_lanes(lanes); }
 
-    void visit(const Cast *op) {
+    Expr visit(const Cast *op) override {
         if (op->type.lanes() != lanes) {
-            expr = Cast::make(with_lanes(op->type), mutate(op->value));
+            return Cast::make(with_lanes(op->type), mutate(op->value));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (op->type.lanes() != lanes) {
-            expr = Variable::make(with_lanes(op->type), op->name);
+            return Variable::make(with_lanes(op->type), op->name);
         } else {
-            expr = op;
+            return op;
         }
     }
 
-    void visit(const Broadcast *op) {
+    Expr visit(const Broadcast *op) override {
         if (op->type.lanes() != lanes) {
-            expr = Broadcast::make(op->value, lanes);
+            return Broadcast::make(op->value, lanes);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -175,7 +175,7 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
-Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator *op_mutator) {
+Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator2 *op_mutator) {
     debug(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -281,7 +281,7 @@ Expr lossless_negate(Expr x) {
 }
 
 template <typename T>
-Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
+Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator2 *mutator) {
     Expr ret = apply_patterns(op, patterns, target, mutator);
     if (!ret.same_as(op)) return ret;
 
@@ -387,13 +387,13 @@ int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
 
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
-class OptimizePatterns : public IRMutator {
+class OptimizePatterns : public IRMutator2 {
 private:
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     Target target;
 
-    void visit(const Mul *op) {
+    Expr visit(const Mul *op) override {
         static const vector<Pattern> scalar_muls = {
             // Vector by scalar widening multiplies.
             { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -444,17 +444,15 @@ private:
         if (op->type.is_vector()) {
             Expr new_expr = apply_commutative_patterns(op, scalar_muls, target, this);
             if (!new_expr.same_as(op)) {
-                expr = new_expr;
-                return;
+                return new_expr;
             }
 
             new_expr = apply_commutative_patterns(op, muls, target, this);
             if (!new_expr.same_as(op)) {
-                expr = new_expr;
-                return;
+                return new_expr;
             }
         }
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
     // Helpers to generate horizontally reducing multiply operations.
@@ -471,7 +469,7 @@ private:
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
 
-    void visit(const Add *op) {
+    Expr visit(const Add *op) override {
         // vmpa, vdmpy, and vrmpy instructions are hard to match with
         // patterns, do it manually here.
         // Try to find vrmpy opportunities first, which consume 4 operands.
@@ -517,8 +515,7 @@ private:
                     if (rest.defined()) {
                         new_expr = Add::make(new_expr, rest);
                     }
-                    expr = mutate(new_expr);
-                    return;
+                    return mutate(new_expr);
                 }
             }
 
@@ -556,8 +553,7 @@ private:
                     if (rest.defined()) {
                         new_expr = Add::make(new_expr, rest);
                     }
-                    expr = mutate(new_expr);
-                    return;
+                    return mutate(new_expr);
                 }
             }
         }
@@ -601,8 +597,7 @@ private:
                 if (rest.defined()) {
                     new_expr = Add::make(new_expr, rest);
                 }
-                expr = mutate(new_expr);
-                return;
+                return mutate(new_expr);
             }
         }
 
@@ -675,20 +670,18 @@ private:
         if (op->type.is_vector()) {
             Expr new_expr = apply_commutative_patterns(op, adds, target, this);
             if (!new_expr.same_as(op)) {
-                expr = new_expr;
-                return;
+                return new_expr;
             }
         }
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const Sub *op) {
+    Expr visit(const Sub *op) override {
         if (op->type.is_vector()) {
             // Try negating op->b, using an add pattern if successful.
             Expr neg_b = lossless_negate(op->b);
             if (neg_b.defined()) {
-                expr = mutate(op->a + neg_b);
-                return;
+                return mutate(op->a + neg_b);
             } else {
                 static const vector<Pattern> subs = {
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
@@ -702,16 +695,15 @@ private:
 
                 Expr new_expr = apply_patterns(op, subs, target, this);
                 if (!new_expr.same_as(op)) {
-                    expr = new_expr;
-                    return;
+                    return new_expr;
                 }
             }
         }
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const Max *op) {
-        IRMutator::visit(op);
+    Expr visit(const Max *op) override {
+        Expr expr = IRMutator2::visit(op);
 
         if (op->type.is_vector()) {
             // This pattern is weird (two operands must match, result
@@ -724,14 +716,14 @@ private:
             vector<Expr> matches;
             for (const auto &i : cl) {
                 if (expr_match(i.second, expr, matches) && equal(matches[0], matches[1])) {
-                    expr = Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
-                    return;
+                    return Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
                 }
             }
         }
+        return expr;
     }
 
-    void visit(const Cast *op) {
+    Expr visit(const Cast *op) override {
 
         static const vector<Pattern> casts = {
             // Averaging
@@ -870,8 +862,7 @@ private:
 
             Expr new_expr = apply_patterns(cast, casts, target, this);
             if (!new_expr.same_as(cast)) {
-                expr = new_expr;
-                return;
+                return new_expr;
             }
 
             // If we didn't find a pattern, try using one of the
@@ -881,28 +872,27 @@ private:
                 if (expr_match(i.first, cast, matches)) {
                     debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
                     Expr replacement = with_lanes(i.second, op->type.lanes());
-                    expr = substitute("*", matches[0], replacement);
-                    expr = mutate(expr);
-                    return;
+                    Expr expr = substitute("*", matches[0], replacement);
+                    return mutate(expr);
                 }
             }
         }
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::lerp)) {
             // We need to lower lerps now to optimize the arithmetic
             // that they generate.
             internal_assert(op->args.size() == 3);
-            expr = mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_assert(op->args.size() == 1);
             Type src_type = op->args[0].type();
             Type dst_type = op->type;
             if (dst_type.bits() < src_type.bits()) {
                 // For narrowing, we can truncate
-                expr = mutate(Cast::make(dst_type, op->args[0]));
+                return mutate(Cast::make(dst_type, op->args[0]));
             } else {
                 // Hexagon masks only use the bottom bit in each byte,
                 // so duplicate each lane until we're wide enough.
@@ -912,10 +902,10 @@ private:
                     src_type = src_type.with_bits(src_type.bits()*2);
                     e = reinterpret(src_type, e);
                 }
-                expr = mutate(e);
+                return mutate(e);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -930,7 +920,7 @@ public:
 // program, using the fact that interleaves can pass through pointwise
 // IR operations. When an interleave collides with a deinterleave,
 // they cancel out.
-class EliminateInterleaves : public IRMutator {
+class EliminateInterleaves : public IRMutator2 {
     Scope<bool> vars;
 
     // We need to know when loads are a multiple of 2 native vectors.
@@ -1033,7 +1023,8 @@ class EliminateInterleaves : public IRMutator {
     }
 
     template <typename T>
-    void visit_binary(const T* op) {
+    Expr visit_binary(const T* op) {
+        Expr expr;
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (yields_removable_interleave({a, b})) {
@@ -1051,38 +1042,39 @@ class EliminateInterleaves : public IRMutator {
         } else {
             expr = op;
         }
+        return expr;
     }
 
-    void visit(const Add *op) { visit_binary(op); }
-    void visit(const Sub *op) { visit_binary(op); }
-    void visit(const Mul *op) { visit_binary(op); }
-    void visit(const Div *op) { visit_binary(op); }
-    void visit(const Mod *op) { visit_binary(op); }
-    void visit(const Min *op) { visit_binary(op); }
-    void visit(const Max *op) { visit_binary(op); }
-    void visit(const EQ *op) { visit_binary(op); }
-    void visit(const NE *op) { visit_binary(op); }
-    void visit(const LT *op) { visit_binary(op); }
-    void visit(const LE *op) { visit_binary(op); }
-    void visit(const GT *op) { visit_binary(op); }
-    void visit(const GE *op) { visit_binary(op); }
+    Expr visit(const Add *op) override { return visit_binary(op); }
+    Expr visit(const Sub *op) override { return visit_binary(op); }
+    Expr visit(const Mul *op) override { return visit_binary(op); }
+    Expr visit(const Div *op) override { return visit_binary(op); }
+    Expr visit(const Mod *op) override { return visit_binary(op); }
+    Expr visit(const Min *op) override { return visit_binary(op); }
+    Expr visit(const Max *op) override { return visit_binary(op); }
+    Expr visit(const EQ *op) override { return visit_binary(op); }
+    Expr visit(const NE *op) override { return visit_binary(op); }
+    Expr visit(const LT *op) override { return visit_binary(op); }
+    Expr visit(const LE *op) override { return visit_binary(op); }
+    Expr visit(const GT *op) override { return visit_binary(op); }
+    Expr visit(const GE *op) override { return visit_binary(op); }
 
     // These next 3 nodes should not exist if we're vectorized, they
     // should have been replaced with bitwise operations.
-    void visit(const And *op) {
+    Expr visit(const And *op) override {
         internal_assert(op->type.is_scalar());
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
-    void visit(const Or *op) {
+    Expr visit(const Or *op) override {
         internal_assert(op->type.is_scalar());
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
-    void visit(const Not *op) {
+    Expr visit(const Not *op) override {
         internal_assert(op->type.is_scalar());
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const Select *op) {
+    Expr visit(const Select *op) override {
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
 
@@ -1095,13 +1087,13 @@ class EliminateInterleaves : public IRMutator {
         if (yields_removable_interleave({true_value, false_value})) {
             true_value = remove_interleave(true_value);
             false_value = remove_interleave(false_value);
-            expr = native_interleave(Select::make(cond, true_value, false_value));
+            return native_interleave(Select::make(cond, true_value, false_value));
         } else if (!cond.same_as(op->condition) ||
                    !true_value.same_as(op->true_value) ||
                    !false_value.same_as(op->false_value)) {
-            expr = Select::make(cond, true_value, false_value);
+            return Select::make(cond, true_value, false_value);
         } else {
-            expr = op;
+            return op;
         }
     }
 
@@ -1114,7 +1106,7 @@ class EliminateInterleaves : public IRMutator {
     }
 
     template <typename NodeType, typename LetType>
-    void visit_let(NodeType &result, const LetType *op) {
+    NodeType visit_let(const LetType *op) {
         Expr value = mutate(op->value);
         string deinterleaved_name;
         NodeType body;
@@ -1141,13 +1133,13 @@ class EliminateInterleaves : public IRMutator {
             body = mutate(op->body);
         }
         if (value.same_as(op->value) && body.same_as(op->body)) {
-            result = op;
+            return op;
         } else if (body.same_as(op->body)) {
             // If the body didn't change, we must not have used the deinterleaved value.
-            result = LetType::make(op->name, value, body);
+            return LetType::make(op->name, value, body);
         } else {
             // We need to rewrap the body with new lets.
-            result = body;
+            NodeType result = body;
             bool deinterleaved_used = uses_var(result, deinterleaved_name);
             bool interleaved_used = uses_var(result, op->name);
             if (deinterleaved_used && interleaved_used) {
@@ -1166,47 +1158,49 @@ class EliminateInterleaves : public IRMutator {
                 }
 
                 result = LetType::make(op->name, interleaved, result);
-                result = LetType::make(deinterleaved_name, deinterleaved, result);
+                return LetType::make(deinterleaved_name, deinterleaved, result);
             } else if (deinterleaved_used) {
                 // Only the deinterleaved value is used, we can eliminate the interleave.
-                result = LetType::make(deinterleaved_name, remove_interleave(value), result);
+                return LetType::make(deinterleaved_name, remove_interleave(value), result);
             } else if (interleaved_used) {
                 // Only the original value is used, regenerate the let.
-                result = LetType::make(op->name, value, result);
+                return LetType::make(op->name, value, result);
             } else {
                 // The let must have been dead.
                 internal_assert(!uses_var(op->body, op->name)) << "EliminateInterleaves eliminated a non-dead let.\n";
+                return NodeType();
             }
         }
     }
 
-    void visit(const Let *op) {
-        visit_let(expr, op);
+    Expr visit(const Let *op) override {
+        Expr expr = visit_let<Expr>(op);
 
         // Lift interleaves out of Let expression bodies.
         const Let *let = expr.as<Let>();
         if (let && yields_removable_interleave(let->body)) {
             expr = native_interleave(Let::make(let->name, let->value, remove_interleave(let->body)));
         }
+        return expr;
     }
 
-    void visit(const LetStmt *op) { visit_let(stmt, op); }
+    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
 
-    void visit(const Cast *op) {
+    Expr visit(const Cast *op) override {
         if (op->type.bits() == op->value.type().bits()) {
             // We can only move interleaves through casts of the same size.
             Expr value = mutate(op->value);
 
             if (yields_removable_interleave(value)) {
                 value = remove_interleave(value);
-                expr = native_interleave(Cast::make(op->type, value));
+                return native_interleave(Cast::make(op->type, value));
             } else if (!value.same_as(op->value)) {
-                expr = Cast::make(op->type, value);
+                return Cast::make(op->type, value);
             } else {
-                expr = op;
+                return op;
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
@@ -1253,9 +1247,9 @@ class EliminateInterleaves : public IRMutator {
         return true;
     }
 
-    void visit_bool_to_mask(const Call *op) {
-        bool old_in_bool_to_mask = in_bool_to_mask;
-        in_bool_to_mask = true;
+    Expr visit_bool_to_mask(const Call *op) {
+        Expr expr;
+        ScopedValue<bool> old_in_bool_to_mask(in_bool_to_mask, true);
 
         Expr arg = mutate(op->args[0]);
         if (!arg.same_as(op->args[0]) || interleave_mask) {
@@ -1267,14 +1261,12 @@ class EliminateInterleaves : public IRMutator {
         } else {
             expr = op;
         }
-
-        in_bool_to_mask = old_in_bool_to_mask;
+        return expr;
     }
 
-    void visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::bool_to_mask)) {
-            visit_bool_to_mask(op);
-            return;
+            return visit_bool_to_mask(op);
         }
 
         vector<Expr> args(op->args);
@@ -1316,7 +1308,7 @@ class EliminateInterleaves : public IRMutator {
 
         if (is_native_deinterleave(op) && yields_interleave(args[0])) {
             // This is a deinterleave of an interleave! Remove them both.
-            expr = remove_interleave(args[0]);
+            return remove_interleave(args[0]);
         } else if (is_interleavable(op) && yields_removable_interleave(args)) {
             // All the arguments yield interleaves (and one of
             // them is an interleave), create a new call with the
@@ -1324,10 +1316,10 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            expr = Call::make(op->type, op->name, args, op->call_type,
+            Expr expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
-            expr = native_interleave(expr);
+            return native_interleave(expr);
         } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
@@ -1336,20 +1328,20 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            expr = Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
+            return Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
         } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
             // op so we can remove the deinterleave.
             Expr arg = args[0].as<Call>()->args[0];
-            expr = Call::make(op->type, interleaving_alts[op->name], { arg }, op->call_type,
+            return Call::make(op->type, interleaving_alts[op->name], { arg }, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
-            expr = Call::make(op->type, op->name, args, op->call_type,
+            return Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else {
-            expr = op;
+            return op;
         }
     }
 
@@ -1364,7 +1356,7 @@ class EliminateInterleaves : public IRMutator {
     // Buffers we should deinterleave the storage of.
     Scope<bool> deinterleave_buffers;
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         Expr condition = mutate(op->condition);
 
         // First, we need to mutate the op, to pull native interleaves
@@ -1383,14 +1375,14 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (!body.same_as(op->body) || !condition.same_as(op->condition)) {
-            stmt = Allocate::make(op->name, op->type, op->extents, condition, body,
+            return Allocate::make(op->name, op->type, op->extents, condition, body,
                                   op->new_expr, op->free_function);
         } else {
-            stmt = op;
+            return op;
         }
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
@@ -1427,13 +1419,13 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param, predicate);
+            return Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (buffers.contains(op->name)) {
             if ((op->type.lanes()*op->type.bits()) % (native_vector_bits*2) == 0) {
                 // This is a double vector load, we might be able to
@@ -1452,13 +1444,14 @@ class EliminateInterleaves : public IRMutator {
                 state = BufferState::NotInterleaved;
             }
         }
-        IRMutator::visit(op);
+        Expr expr = IRMutator2::visit(op);
         if (deinterleave_buffers.contains(op->name)) {
             expr = native_interleave(expr);
         }
+        return expr;
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
 public:
     EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits) {}
@@ -1470,8 +1463,8 @@ public:
 // this after all other efforts to eliminate the interleaves,
 // otherwise this might eat some interleaves that could have cancelled
 // with other operations.
-class FuseInterleaves : public IRMutator {
-    void visit(const Call *op) {
+class FuseInterleaves : public IRMutator2 {
+    Expr visit(const Call *op) override {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
         static const std::vector<std::pair<string, string>> non_deinterleaving_alts = {
@@ -1489,17 +1482,16 @@ class FuseInterleaves : public IRMutator {
                         for (Expr &j : args) {
                             j = mutate(j);
                         }
-                        expr = Call::make(op->type, i.second, args, Call::PureExtern);
-                        return;
+                        return Call::make(op->type, i.second, args, Call::PureExtern);
                     }
                 }
             }
         }
 
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 };
 
 // Find an upper bound of bounds.max - bounds.min.
@@ -1530,42 +1522,42 @@ Expr span_of_bounds(Interval bounds) {
 
 // Replace indirect loads with dynamic_shuffle intrinsics where
 // possible.
-class OptimizeShuffles : public IRMutator {
+class OptimizeShuffles : public IRMutator2 {
     int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    template <typename T>
-    void visit_let(const T *op) {
+    template <typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
         // We only care about vector lets.
         if (op->value.type().is_vector()) {
             bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         }
-        IRMutator::visit(op);
+        NodeType node = IRMutator2::visit(op);
         if (op->value.type().is_vector()) {
             bounds.pop(op->name);
         }
+        return node;
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         lets.push_back({op->name, op->value});
-        visit_let(op);
+        Expr expr = visit_let<Expr>(op);
         lets.pop_back();
+        return expr;
     }
-    void visit(const LetStmt *op) { visit_let(op); }
+    Stmt visit(const LetStmt *op) override { return visit_let<Stmt>(op); }
 
-    void visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (!is_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
         if (!op->type.is_vector() || op->index.as<Ramp>()) {
             // Don't handle scalar or simple vector loads.
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         Expr index = mutate(op->index);
@@ -1604,15 +1596,14 @@ class OptimizeShuffles : public IRMutator {
                     // dynamic_shuffle requires.
                     index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
 
-                    expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
-                    return;
+                    return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
                 }
             }
         }
         if (!index.same_as(op->index)) {
-            expr = Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
+            return Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
         } else {
-            expr = op;
+            return op;
         }
     }
 
@@ -1621,10 +1612,10 @@ public:
 };
 
 // Attempt to generate vtmpy instructions. This requires that all lets
-// be substituted prior to running, and so must be an IRGraphMutator.
-class VtmpyGenerator : public IRGraphMutator {
+// be substituted prior to running, and so must be an IRGraphMutator2.
+class VtmpyGenerator : public IRGraphMutator2 {
 private:
-    using IRMutator::visit;
+    using IRMutator2::visit;
     typedef pair<Expr, size_t> LoadIndex;
 
     // Check if vectors a and b point to the same buffer with the base of a
@@ -1714,7 +1705,7 @@ private:
     //      v0, v1 and v2 start indices differ by vector stride
     // Current supported value of stride is 1.
     // TODO: Add support for any stride.
-    void visit(const Add *op) {
+    Expr visit(const Add *op) override {
         // Find opportunities vtmpy
         if (op && op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
             int lanes = op->type.lanes();
@@ -1808,12 +1799,11 @@ private:
                     if (rest.defined()) {
                         new_expr = new_expr + rest;
                     }
-                    expr = mutate(new_expr);
-                    return;
+                    return mutate(new_expr);
                 }
             }
         }
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 };
 }  // namespace

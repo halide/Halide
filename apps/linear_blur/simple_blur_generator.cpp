@@ -3,9 +3,6 @@
 namespace {
 
 struct SimpleBlur : public Halide::Generator<SimpleBlur> {
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-    GeneratorParam<bool>  estimate_only{"estimate_only", false};
-
     Input<Func>    input{"input"};
     Input<int32_t> width{"width"};
     Input<int32_t> height{"height"};
@@ -25,7 +22,7 @@ struct SimpleBlur : public Halide::Generator<SimpleBlur> {
     }
 
     void schedule() {
-        if ((bool) auto_schedule || (bool) estimate_only) {
+        if (auto_schedule) {
             const int W = 1536, H = 2560, C = 4;
             // Wart: Input<Func> are defined with Vars we don't know.
             // Might be x,y but might be _0,_1. Use the args() to work around.
@@ -40,9 +37,6 @@ struct SimpleBlur : public Halide::Generator<SimpleBlur> {
                   .estimate(y, 0, H);
             for (size_t i = 2; i < output.args().size(); ++i) {
                 output.estimate(output.args()[i], 0, C);
-            }
-            if (auto_schedule) {
-                auto_schedule_outputs();
             }
         } else {
             Var xi("xi"), yi("yi");

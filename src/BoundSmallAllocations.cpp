@@ -58,7 +58,7 @@ class BoundSmallAllocations : public IRMutator {
             << "Only fixed-size allocations are supported on the gpu. "
             << "Try storing into shared memory instead.";
         // 128 bytes is a typical minimum allocation size in
-        // halide_malloc. For now we be very conservative, and only
+        // halide_malloc. For now we are very conservative, and only
         // round sizes up to a constant if they're smaller than that.
         Expr malloc_overhead = 128 / op->type.bytes();
         if (bound.defined() &&

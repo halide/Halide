@@ -25,6 +25,9 @@ struct MachineParams {
     explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance)
         : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
 
+    /** Default machine parameters for generic CPU architecture. */
+    EXPORT static MachineParams generic();
+
     /** Convert the MachineParams into canonical string form. */
     EXPORT std::string to_string() const;
 
