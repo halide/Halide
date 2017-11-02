@@ -476,7 +476,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                             // correct dimension and update the region map.
                             Buffer<> buf;
                             if (arg.is_image_param()) {
-                                buf = arg.image_param.get_buffer();
+                                buf = arg.image_param.buffer();
                             } else {
                                 buf = arg.buffer;
                             }
@@ -3499,6 +3499,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     return sched_string;
 }
 
+}
+
+MachineParams MachineParams::generic() {
+  return MachineParams(16, 16 * 1024 * 1024, 40);
 }
 
 std::string MachineParams::to_string() const {

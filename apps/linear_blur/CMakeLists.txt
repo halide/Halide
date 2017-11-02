@@ -19,9 +19,9 @@ halide_library(linear_blur
                GENERATOR_DEPS srgb_to_linear.generator
                               linear_to_srgb.generator
                               simple_blur.generator
-               # Emit the .stmt files so we can 
+               # Emit the .stmt and .schedule files so we can 
                # examine how the auto-scheduled results look
-               EXTRA_OUTPUTS stmt)
+               EXTRA_OUTPUTS stmt schedule)
 
 add_executable(run_linear_blur run_linear_blur.cpp)
 halide_use_image_io(run_linear_blur)

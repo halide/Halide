@@ -264,39 +264,39 @@ Expr get_func_value_size(const Function &f) {
 //
 // TODO: Comment this out for now until we modify the compute expr cost and
 // detailed byte loads functions to account for likely exprs.
-/*class LikelyExpression : public IRMutator {
-    using IRMutator::visit;
+/*class LikelyExpression : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Min *op) {
+    Expr visit(const Min *op) override {
         IRVisitor::visit(op);
         bool likely_a = has_likely_tag(op->a);
         bool likely_b = has_likely_tag(op->b);
         if (likely_a && !likely_b) {
-            expr = op->a;
+            return op->a;
         } else if (likely_b && !likely_a) {
-            expr = op->a;
+            return op->a;
         }
     }
 
-    void visit(const Max *op) {
+    Expr visit(const Max *op) override {
         IRVisitor::visit(op);
         bool likely_a = has_likely_tag(op->a);
         bool likely_b = has_likely_tag(op->b);
         if (likely_a && !likely_b) {
-            expr = op->a;
+            return op->a;
         } else if (likely_b && !likely_a) {
-            expr = op->b;
+            return op->b;
         }
     }
 
-    void visit(const Select *op) {
+    Expr visit(const Select *op) override {
         IRVisitor::visit(op);
         bool likely_t = has_likely_tag(op->true_value);
         bool likely_f = has_likely_tag(op->false_value);
         if (likely_t && !likely_f) {
-            expr = op->true_value;
+            return op->true_value;
         } else if (likely_f && !likely_t) {
-            expr = op->false_value;
+            return op->false_value;
         }
     }
 };*/

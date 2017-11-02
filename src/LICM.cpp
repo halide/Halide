@@ -49,8 +49,8 @@ public:
 
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
-class LiftLoopInvariants : public IRMutator {
-    using IRMutator::visit;
+class LiftLoopInvariants : public IRMutator2 {
+    using IRMutator2::visit;
 
     Scope<int> varying;
 
@@ -72,26 +72,26 @@ class LiftLoopInvariants : public IRMutator {
         return true;
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         ScopedBinding<int> p(varying, op->name, 0);
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         ScopedBinding<int> p(varying, op->name, 0);
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         ScopedBinding<int> p(varying, op->name, 0);
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
 public:
 
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (should_lift(e)) {
             // Lift it in canonical form
             Expr lifted_expr = simplify(e);
@@ -104,17 +104,17 @@ public:
                 return Variable::make(e.type(), it->second);
             }
         } else {
-            return IRMutator::mutate(e);
+            return IRMutator2::mutate(e);
         }
     }
 
     map<Expr, string, IRDeepCompare> lifted;
 };
 
-class LICM : public IRMutator {
-    using IRVisitor::visit;
+class LICM : public IRMutator2 {
+    using IRMutator2::visit;
 
-    bool in_gpu_loop {false};
+    bool in_gpu_loop{false};
 
     // Compute the cost of computing an expression inside the inner
     // loop, compared to just loading it as a parameter.
@@ -140,19 +140,19 @@ class LICM : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
-        bool old_in_gpu_loop = in_gpu_loop;
+    Stmt visit(const For *op) override {
+        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop);
         in_gpu_loop =
             (op->for_type == ForType::GPUBlock ||
              op->for_type == ForType::GPUThread);
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         } else if (op->device_api == DeviceAPI::GLSL ||
                    op->device_api == DeviceAPI::OpenGLCompute) {
             // Don't lift anything out of OpenGL loops
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         } else {
 
             // Lift invariants
@@ -241,17 +241,15 @@ class LICM : public IRMutator {
                 lets.pop_back();
             }
 
-            stmt = new_stmt;
+            return new_stmt;
         }
-
-        in_gpu_loop = old_in_gpu_loop;
     }
 };
 
 
 // Reassociate summations to group together the loop invariants. Useful to run before LICM.
-class GroupLoopInvariants : public IRMutator {
-    using IRMutator::visit;
+class GroupLoopInvariants : public IRMutator2 {
+    using IRMutator2::visit;
 
     Scope<int> var_depth;
 
@@ -318,7 +316,6 @@ class GroupLoopInvariants : public IRMutator {
     }
 
     Expr reassociate_summation(Expr e) {
-
         vector<Term> terms = extract_summation(e);
 
         Expr result;
@@ -348,34 +345,32 @@ class GroupLoopInvariants : public IRMutator {
         return result;
     }
 
-    void visit(const Sub *op) {
-        expr = reassociate_summation(op);
+    Expr visit(const Sub *op) override {
+        return reassociate_summation(op);
     }
 
-    void visit(const Add *op) {
-        expr = reassociate_summation(op);
+    Expr visit(const Add *op) override {
+        return reassociate_summation(op);
     }
 
     int depth = 0;
-
-    void visit(const For *op) {
-        depth++;
-        var_depth.push(op->name, depth);
-        IRMutator::visit(op);
-        var_depth.pop(op->name);
+    
+    Stmt visit(const For *op) override {
+        depth++;	
+	ScopedBinding<int> bind(var_depth, op->name, depth);
+        Stmt stmt = IRMutator2::visit(op);
         depth--;
+	return stmt;
     }
 
-    void visit(const Let *op) {
-        var_depth.push(op->name, expr_depth(op->value));
-        IRMutator::visit(op);
-        var_depth.pop(op->name);
+    Expr visit(const Let *op) override {
+	ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
+	return IRMutator2::visit(op);
     }
 
-    void visit(const LetStmt *op) {
-        var_depth.push(op->name, expr_depth(op->value));
-        IRMutator::visit(op);
-        var_depth.pop(op->name);
+    Stmt visit(const LetStmt *op) override {
+	ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
+	return IRMutator2::visit(op);
     }
 
 };

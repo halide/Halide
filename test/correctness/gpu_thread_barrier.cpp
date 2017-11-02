@@ -21,13 +21,13 @@ protected:
     }
 };
 
-class CheckBarrierCount : public IRMutator {
+class CheckBarrierCount : public IRMutator2 {
     int correct;
 public:
     CheckBarrierCount(int correct) : correct(correct) {}
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         CountBarriers c;
         s.accept(&c);
 

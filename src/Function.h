@@ -132,7 +132,7 @@ public:
 
     /** Accept a mutator to mutator all of the definitions and
      * arguments of this function. */
-    EXPORT void mutate(IRMutator *mutator);
+    EXPORT void mutate(IRMutator2 *mutator);
 
     /** Get the name of the function. */
     EXPORT const std::string &name() const;
