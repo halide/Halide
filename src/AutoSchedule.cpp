@@ -3068,7 +3068,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 // The current auto scheduler cannots handle such cases.
 void validate_no_partial_schedules(const Function &f) {
     // Verify no compute_root or bounds are specified
-    user_assert(f.schedule().compute_level().is_inline())
+    user_assert(f.schedule().compute_level().is_inlined())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it is scheduled to be computed at root\n";
     user_assert(f.schedule().bounds().empty())

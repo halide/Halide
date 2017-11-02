@@ -99,7 +99,7 @@ enum class PrefetchBoundStrategy {
  * A LoopLevel can be in one of two states:
 
      - Unlocked (the default state): An unlocked LoopLevel can be mutated freely (via the set() method),
-       but cannot be inspected (calls to func(), var(), is_inline(), is_root(), etc.
+       but cannot be inspected (calls to func(), var(), is_inlined(), is_root(), etc.
        will assert-fail). This is the only sort of LoopLevel that most user code will ever encounter.
      - Locked: Once a LoopLevel is locked, it can be freely inspected, but no longer mutated.
        Halide locks all LoopLevels during the lowering process to ensure that no user
@@ -177,10 +177,10 @@ public:
     /** Lock this LoopLevel. */
     EXPORT LoopLevel &lock();
 
-    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline() or !defined(). */
+    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inlined() or !defined(). */
     EXPORT std::string func() const;
 
-    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline() or !defined(). */
+    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inlined() or !defined(). */
     EXPORT VarOrRVar var() const;
 
     /** inlined is a special LoopLevel value that implies
@@ -188,7 +188,7 @@ public:
     EXPORT static LoopLevel inlined();
 
     /** Test if a loop level corresponds to inlining the function. */
-    EXPORT bool is_inline() const;
+    EXPORT bool is_inlined() const;
 
     /** root is a special LoopLevel value which represents the
      * location outside of all for loops */

@@ -807,7 +807,7 @@ private:
 
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
-            func.schedule().compute_level().is_inline() &&
+            func.schedule().compute_level().is_inlined() &&
             for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
@@ -861,7 +861,7 @@ private:
     Stmt visit(const Provide *op) override {
         if (op->name != func.name() &&
             !func.is_pure() &&
-            func.schedule().compute_level().is_inline() &&
+            func.schedule().compute_level().is_inlined() &&
             function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
@@ -965,7 +965,7 @@ string schedule_to_source(Function f,
                           LoopLevel compute_at) {
     std::ostringstream ss;
     ss << f.name();
-    if (compute_at.is_inline()) {
+    if (compute_at.is_inlined()) {
         ss << ".compute_inline()";
     } else {
         if (!store_at.match(compute_at)) {
@@ -1086,7 +1086,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             if (arg.is_func()) {
                 Function g(arg.func);
                 if (!g.is_wrapper() &&
-                    g.schedule().compute_level().is_inline()) {
+                    g.schedule().compute_level().is_inlined()) {
                     user_error
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
@@ -1169,7 +1169,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // pure function. An inlined Halide Func with multiple stages technically
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
-    if (store_at.is_inline() && compute_at.is_inline()) {
+    if (store_at.is_inlined() && compute_at.is_inlined()) {
         if (f.is_pure()) {
             validate_schedule_inlined_function(f);
         }
@@ -1278,7 +1278,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (f.can_be_inlined() &&
-            f.schedule().compute_level().is_inline()) {
+            f.schedule().compute_level().is_inlined()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {
