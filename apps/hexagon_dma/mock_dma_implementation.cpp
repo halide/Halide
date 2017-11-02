@@ -5,148 +5,98 @@
  * This file is need only if there is no hexagon SDK support or NO hexagon DMA support, in either csae we replace
  * the DMA operations with normal memory operations */
 
+#include "pipeline.h"
 #include "HalideRuntime.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
 
 #include <stdlib.h>
 #include <memory.h>
 
-typedef struct dma_dummy_lib {
-    int width;
-    void* host_address;
-} t_dma_dummy_lib;
+t_StDmaWrapper_DmaTransferSetup* dmaTransferParm;
 
-int dma_is_dma_driver_ready() {
-    return QURT_EOK;
+
+
+t_DmaWrapper_DmaEngineHandle hDmaWrapper_AllocDma(void) {
+
+    char* a = (char *)malloc(sizeof(char));
+    return (void *)a;
 }
 
-int dma_get_format_alignment(t_eDmaFmt eFmt, bool is_ubwc, t_dma_pix_align_info& pix_align) {
-    int nRet = 0;
-    pix_align.u16H = 16;
-    pix_align.u16W = 128;
-    return nRet;
+int32 nDmaWrapper_FreeDma(t_DmaWrapper_DmaEngineHandle hDmaHandle) {
+
+    char *a = (char *)hDmaHandle;
+    free(a);
+    return 0;
 }
 
-uintptr_t dma_lookup_physical_address(uintptr_t addr) {
-    return addr;
-}
+int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle hDmaHandle) {
 
-int dma_get_min_roi_size(t_eDmaFmt eFmt, bool isUbwc, t_dma_pix_align_info& pix_align) {
-    int nRet = 0;
-    pix_align.u16H = 16;
-    pix_align.u16W = 128;
-    return nRet;
-}
+    if (hDmaHandle != 0) {
+        unsigned char* host_addr = (unsigned char*) dmaTransferParm->pFrameBuf;
+        unsigned char* dest_addr = (unsigned char*) dmaTransferParm->pTcmDataBuf;
 
-void* dma_allocate_dma_engine() {
-    t_dma_dummy_lib* dma_handle = NULL;
-    dma_handle = (t_dma_dummy_lib *)malloc(sizeof(t_dma_dummy_lib));
-    return (void*)dma_handle;
-}
+        int x = dmaTransferParm->u16RoiX;
+        int y = dmaTransferParm->u16RoiY;
+        int w = dmaTransferParm->u16RoiW;
+        int h = dmaTransferParm->u16RoiH;
 
-qurt_size_t dma_get_descriptor_size(t_eDmaFmt* fmt_type, int ncomponents, int nfolds) {
-    qurt_size_t region_tcm_desc_size = 0;
-    if (fmt_type != NULL) {
-        region_tcm_desc_size = align(64, 0x1000);
-    }
-    return region_tcm_desc_size;
-}
-
-int dma_get_stride(t_eDmaFmt fmt_type, bool is_ubwc, t_dma_pix_align_info roi_dims) {
-    int stride = roi_dims.u16W;
-    return stride;
-}
-
-int dma_get_mem_pool_id(qurt_mem_pool_t *mem_pool) {
-    int nRet = 0;
-    *mem_pool = 1;
-    return nRet;
-}
-
-int dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t tcm_size,
-                            uintptr_t* region_tcm, uintptr_t* tcm_vaddr) {
-    unsigned char* buf_vaddr;
-    buf_vaddr = (unsigned char*) malloc(tcm_size*sizeof(unsigned char*));
-    if (region_tcm != 0) {
-        *region_tcm = (uintptr_t) buf_vaddr;
-    }
-    memset(buf_vaddr, 0, tcm_size*sizeof(unsigned char*));
-    uintptr_t buf_addr = (uintptr_t) buf_vaddr;
-    *tcm_vaddr = buf_addr;
-    return QURT_EOK;
-}
-
-int dma_unlock_cache(uintptr_t tcm_buf_vaddr, qurt_size_t region_tcm_size) {
-    int nRet  = QURT_EOK;
-    //do nothing
-    return nRet;
-}
-
-int dma_prepare_for_transfer(t_dma_prepare_params param) {
-    int nRet  = QURT_EOK;
-    t_dma_dummy_lib* dma_handle = (t_dma_dummy_lib*) param.handle;
-    if (dma_handle != 0) {
-        dma_handle->host_address = (void*) param.host_address;
-        dma_handle->width = param.frame_width;
-    }
-    //do Nothing
-    return nRet;
-}
-
-int dma_wait(void* handle) {
-    int nRet = QURT_EOK;
-    //do nothing
-    return nRet;
-}
-
-int dma_move_data(t_dma_move_params param) {
-    int nRet = QURT_EOK;
-    t_dma_dummy_lib* dma_handle = (t_dma_dummy_lib*) param.handle;
-
-    if (dma_handle != 0) {
-        unsigned char* host_addr = (unsigned char*) dma_handle->host_address;
-        unsigned char* dest_addr = (unsigned char*) param.ping_buffer;
-        int x = param.xoffset;
-        int y = param.yoffset;
-        int w = param.roi_width;
-        int h = param.roi_height;
-        unsigned int offset_buf = param.offset;
         for (int xii=0;xii<h;xii++) {
             for (int yii=0;yii<w;yii++) {
                 int xin = xii*w;
                 int yin = yii;
-                int RoiOffset = x+y*dma_handle->width;
-                int xout = xii*dma_handle->width;
+                int RoiOffset = x+y*dmaTransferParm->u16FrameW;
+                int xout = xii*dmaTransferParm->u16FrameW;
                 int yout = yii;
-                dest_addr[offset_buf+yin+xin] =  host_addr[RoiOffset + yout + xout ] ;
+                dest_addr[yin+xin] = host_addr[RoiOffset + yout + xout];
             }
         }
     }
-    return nRet;
+    dmaTransferParm = 0;
+    return 0;
 }
 
-int dma_free_dma_engine(void* handle) {
-    int nRet  = QURT_EOK;
-    t_dma_dummy_lib* dma_handle = (t_dma_dummy_lib*)handle;
-    if (dma_handle != 0) {
-        free(dma_handle);
+int32 nDmaWrapper_Wait(t_DmaWrapper_DmaEngineHandle hDmaHandle) {
+    return 0;
+}
+
+int32 nDmaWrapper_FinishFrame(t_DmaWrapper_DmaEngineHandle hDmaHandle) {
+    return 0;
+}
+
+int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt eFmtId, bool bIsUbwc,
+                                         t_StDmaWrapper_RoiAlignInfo* pStWalkSize) {
+    // for raw, mimic with NV12 linear, alignment is (W=256, H=1)
+    pStWalkSize->u16H = align(pStWalkSize->u16H, 1);
+    pStWalkSize->u16W = align(pStWalkSize->u16W, 1);
+    return 0;
+}
+
+int32 nDmaWrapper_GetRecommendedIntermBufStride(t_eDmaFmt eFmtId,
+                                                t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
+                                                 bool bIsUbwc) {
+    return align(pStRoiSize->u16W, 256);
+
+}
+
+int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle hDmaHandle, t_StDmaWrapper_DmaTransferSetup* stpDmaTransferParm) {
+
+    dmaTransferParm = stpDmaTransferParm;
+    return 0;
+}
+
+int32 nDmaWrapper_GetDescbuffsize(t_eDmaFmt *aeFmtId, uint16 nsize) {
+
+    int32 i, yuvformat=0,desc_size;
+    for (i=0;i<nsize;i++) {
+        if ((aeFmtId[i]==eDmaFmt_NV12)||(aeFmtId[i]==eDmaFmt_TP10)||
+            (aeFmtId[i]==eDmaFmt_NV124R)||(aeFmtId[i]==eDmaFmt_P010)) {
+            yuvformat += 1;
+        }
     }
-    return nRet;
+    desc_size = (nsize+yuvformat)*64;
+    return desc_size;
 }
 
-int dma_finish_frame(void* handle) {
-    int nRet  = QURT_EOK;
-    //do nothing
-    return nRet;
-}
 
-unsigned int dma_get_thread_id() {
-    static int i=0;
-    i++;
-    return i;
-}
 
-void dma_delete_mem_region(uintptr_t cache_mem) {
-    unsigned char* temp =(unsigned char*)(cache_mem);
-    free(temp);
-}
+

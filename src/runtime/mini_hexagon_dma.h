@@ -11,6 +11,11 @@
 extern "C" {
 #endif
 
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef int32_t int32;
+typedef unsigned long addr_t;
+
 typedef unsigned int qurt_size_t;
 typedef unsigned int qurt_mem_pool_t;
 
@@ -41,160 +46,247 @@ typedef unsigned int qurt_mem_pool_t;
     eDmaFmt_MAX,
   } t_eDmaFmt;
 
-  /**
-   * Params needed for Prepare for transfer
+  /*!
+   * DMA status
+   * Currently not use, for future development
    */
-  typedef struct {
-    void* handle;
-    uintptr_t host_address;
-    int frame_width;
-    int frame_height;
-    int frame_stride;
-    int roi_width;
-    int roi_height;
-    int luma_stride;
-    int chroma_stride;
-    bool read;
-    t_eDmaFmt chroma_type;
-    t_eDmaFmt luma_type;
-    int ncomponents;
-    bool padding;
-    bool is_ubwc;
-    int num_folds;
-    uintptr_t desc_address;
-    int desc_size;
-  } t_dma_prepare_params;
+  typedef void* t_stDmaWrapperDmaStats;
 
-  /**
-   * Params needed to move data
+  /*!
+   * Transfer type
    */
-  typedef struct {
-    void* handle;
-    int xoffset;
-    int yoffset;
-    int roi_width;
-    int roi_height;
-    int offset;
-    int l2_chroma_offset;
-    int ncomponents;
-    uintptr_t ping_buffer;
-  } t_dma_move_params;
+  typedef enum eDmaWrapper_TransationType {
+      //! DDR to L2 transfer
+      eDmaWrapper_DdrToL2,
+      //! L2 to DDR transfer
+      eDmaWrapper_L2ToDdr,
+  } t_eDmaWrapper_TransationType;
 
-  /**
-   * Params for alignment of roi and frame
+  /*!
+   * Roi Properties
    */
-  typedef struct {
-    int u16W;
-    int u16H;
-  } t_dma_pix_align_info;
+  typedef struct stDmaWrapper_Roi {
+      //! ROI x position in pixels
+      uint16 u16X;
+      //! ROI y position in pixels
+      uint16 u16Y;
+      //! ROI width in pixels
+      uint16 u16W;
+      //! ROI height in pixels
+      uint16 u16H;
+  } t_StDmaWrapper_Roi;
 
-  /**
-   * Check for DMA Driver Availability
-   * out: ERR if not available
+  /*!
+   * Frame Properties
    */
-  int dma_is_dma_driver_ready();
+  typedef struct stDmaWrapper_FrameProp {
+      //! Starting physical address to buffer
+      addr_t aAddr;
+      //! Frame height in pixels
+      uint16 u16H;
+      //! Frame width in pixels
+      uint16 u16W;
+      //! Frame stride in pixels
+      uint16 u16Stride;
+  } t_StDmaWrapper_FrameProp;
 
-  /**
-   * Get Format Alignment
-   * desc: check if the frame is aligned */
-  int dma_get_format_alignment(t_eDmaFmt fmt, bool is_ubwc, t_dma_pix_align_info &pix_align);
-
-
-  /**
-   * dma_lookup_physical_address
-   * desc: look up the physical address
+  /*!
+   * Roi alignment
    */
-  uintptr_t dma_lookup_physical_address(uintptr_t vaddr);
+  typedef struct stDmaWrapper_RoiAlignInfo {
+      //! ROI width in pixels
+      uint16 u16W;
+      //! ROI height in pixels
+      uint16 u16H;
+  } t_StDmaWrapper_RoiAlignInfo;
 
-  /**
-   *  Get Minimum ROI Size
-   * desc: check if roi size is aligned
+  /*!
+   * DmaTransferSetup Properties
    */
-  int dma_get_min_roi_size(t_eDmaFmt fmt, bool is_ubwc, t_dma_pix_align_info &pix_align);
 
-  /**
-   *  Allocate DMA Engine
-   * allocate dma engtines
-   */
-  void* dma_allocate_dma_engine();
+  typedef struct stDmaWrapper_DmaTransferSetup {
+      //! Format
+      t_eDmaFmt eFmt;
+       bool bIsFmtUbwc;
+      //! Frame Width in pixels
+      uint16 u16FrameW;
+      //! Frame height in pixels
+      uint16 u16FrameH;
+       //! Frame stride in pixels
+       uint16 u16FrameStride;
+      //! ROI x position in pixels
+      uint16 u16RoiX;
+      //! ROI y position in pixels
+      uint16 u16RoiY;
+      //! ROI width in pixels
+      uint16 u16RoiW;
+      //! ROI height in pixels
+      uint16 u16RoiH;
+       //! ROI stride in pixels
+       uint16 u16RoiStride;
+      //! Should the intermediate buffer be padded. This only apply for 8bit format sucha NV12, NV12-4R
+      bool bUse16BitPaddingInL2;
+      //! Virtual address of the HW descriptor buffer (must be locked in the L2$).
+       void* pDescBuf;
+      //! Virtual address of the TCM pixeldata buffer (must be locked in the L2$).
+       void*  pTcmDataBuf;
+      //! Virtual address of the DDR Frame buffer .
+       void*  pFrameBuf;
+      //! TransferType: eDmaWrapper_DdrToL2 (Read from DDR), eDmaWrapper_L2ToDDR (Write to DDR);
+       t_eDmaWrapper_TransationType eTransferType;
+  } t_StDmaWrapper_DmaTransferSetup;
 
-  /**
-   * Get Descriptor Size
-   * get the descriptor size
+  /*!
+   * Handle for wrapper DMA engine
    */
-  qurt_size_t dma_get_descriptor_size(t_eDmaFmt* fmtType, int ncomponents, int nfolds);
+  typedef void* t_DmaWrapper_DmaEngineHandle;
 
-  /**
-   * Get Stride
-   * get luma and chroma stride from dma 
+  /*!
+   * @brief       Allocates a DMA Engine to be used
+   *
+   * @description Allocates a DMA Engine to be used by using the default
+   *              wait type (polling).
+   *
+   * @return      Success: Engine's DMA Handle
+   * @n           Failure: NULL
    */
-  int dma_get_stride(t_eDmaFmt, bool is_ubwc, t_dma_pix_align_info roi_dims);
+  extern t_DmaWrapper_DmaEngineHandle hDmaWrapper_AllocDma(void);
 
-  /**
-   * Get Memory Pool ID
-   * qurt call for alloxation of l2 cache
+  /*!
+   * @brief       Frees a DMA Engine
+   *
+   * @description Frees a DMA Engine that was previously allocated by AllocDma().
+   *
+   * @input       hDmaHandle - Engine's DMA Handle
+   *
+   * @return      Success: OK
+   * @n           Failure: ERR
    */
-  int dma_get_mem_pool_id(qurt_mem_pool_t* pool_tcm);
+  extern int32 nDmaWrapper_FreeDma(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
-  /**
-   * Allocate and lock Cache for DMA
-   * allocate and lock cache for tcm and descriptors
+  /*!
+   * @brief       Starts a transfer request on the DMA engine
+   *
+   * @description Starts a transfer on the provided DMA engine. The transfer is based
+   *              on descriptors constructed in earlier nDmaWrapper_Prepare() and
+   *              nDmaWrapper_Update() calls.
+   *
+   * @input       hDmaHandle - Engine's DMA Handle
+   *
+   * @return      Success: OK
+   * @n           Failure: ERR
    */
-  int dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t tcm_size, uintptr_t* region_tcm, \
-                         uintptr_t* tcm_vaddr);
+  extern int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
-  /**
-   * dma_prepare_for_transfer
-   * prepare dma for tramsfer
+  /*!
+   * @brief       Waits for all outstanding transfers on the DMA to complete
+   *
+   * @description Blocks until all outstanding transfers on the DMA are complete.
+   *              The wait type is based on the type specified when allocating the
+   *              engine.
+   *
+   * @input       hDmaHandle - Engine's DMA Handle
+   *
+   * @return      Success: OK
+   * @n           Failure: ERR
    */
-  // TODO: Really not a pointer?
-  int dma_prepare_for_transfer(t_dma_prepare_params params);
+  extern int32 nDmaWrapper_Wait(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
-  /**
-   * dma_wait
-   * Blocks new ops till other DMA operations are finished
-   * in:dma_handle
-   * need to sync with the dma 
+  /*!
+   * @brief       Cleans up all transfers and flushes DMA buffers
+   *
+   * @description This call flushes the DMA buffers.
+   *              Blocks until the flush of the DMA is complete.
+   *
+   * @input       hDmaHandle - Engine's DMA Handle
+   *
+   * @return      Success: OK
+   * @n           Failure: ERR
    */
-  int dma_wait(void* handle);
+  extern int32 nDmaWrapper_FinishFrame(t_DmaWrapper_DmaEngineHandle hDmaHandle);
 
-  /**
-   * DMA Move Data
-   * actual DMA data transfer
+  /*!
+   * @brief       Get the recommended walk ROI width and height
+   *
+   * @description Get the recommended walk ROI width and height that should
+   *              be used if walking the entire frame. The ROI returned is always
+   *              in terms of frame dimensions. This function is different from
+   *              nDmaWrapper_GetRecommendedRoi() as coordinates are not used.
+   *
+   * @input       eFmtId - Format ID
+   * @input       bIsUbwc - Is the format UBWC (TRUE/FALSE)
+   * @inout       pStWalkSize - Initial walk size, will be overwritten with
+   *                            the recommended walk size to align with DMA
+   *                            requirements
+   *
+   * @return      Success: OK
+   * @n           Failure: ERR
    */
-  // TODO: Really not a pointer?
-  int dma_move_data(t_dma_move_params params);
+  extern int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt eFmtId, bool bIsUbwc,
+                                                  t_StDmaWrapper_RoiAlignInfo* pStWalkSize);
 
-  /**
-   * Unlock Cache for DMA
-   * unlock cache 
+  /*!
+   * @brief       Get the HW descriptor buffer size per DMA engine
+   *
+   * @description Calculates the HW descriptor buffer size based
+   *              on the formats that will be used with the engine.
+   *
+   * @input       aeFmtId - Array of format IDs, such as eDmaFmt_NV12, eDmaFmt_NV12_Y,
+   *                        eDmaFmt_NV12_UV etc..
+   * @input       nsize - Number of format IDs provided
+   *
+   * @return      Descriptor buffer size in bytes
    */
-  int dma_unlock_cache(uintptr_t cache_addr, qurt_size_t cache_size);
+  extern int32 nDmaWrapper_GetDescbuffsize(t_eDmaFmt *aeFmtId, uint16 nsize);
 
-  /**
-   *  dma_free_dma_engine
-   * Free DMA
+  /*!
+   * @brief       Get the recommended intermediate buffer stride.
+   *
+   * @description Get the recommended (minimum) intermediate buffer stride for the
+   *              L2 Cache that is used transfer data from/to DDR. The stride is
+   *              greater than or equal to the width and must be a multiple of 256.
+   *
+   * @input       eFmtId - Format ID
+   * @input         pStRoiSize - The ROI that will be used (should be aligned with
+   *                           the DMA requirements for the format)
+   * @input         bIsUbwc - Is the format UBWC (TRUE/FALSE)
+   *
+   * @return      Success: The intermediate buffer stride in pixels
+   * @n           Failure: ERR
    */
-  int dma_free_dma_engine(void* handle);
+  extern int32 nDmaWrapper_GetRecommendedIntermBufStride(t_eDmaFmt eFmtId,
+                                                         t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
+                                                         bool bIsUbwc);
 
-  /**
-   *  dma_finish_frame
-   * signal the end of frame
+  /*!
+   * @brief       Dma transfer parameters per HW descriptor
+   *
+   * @description Setup Dma transfer parameters required to be ready to make DMA transfer.
+   *              call this API multiple to create a descriptor link list
+   *
+   * @input       hDmaHandle - Wrapper's DMA Handle. Represents
+   *                  t_StDmaWrapper_DmaEngine.
+   * @input       stpDmaTransferParm - Dma Transfer parameters. Each element describes
+   *                  complete Frame/ROI details for this Dma transfer
+   *
+   * @return      Success: OK
+   *              Failure: ERR
    */
-  int dma_finish_frame(void* handle);
+  extern int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle hDmaHandle, t_StDmaWrapper_DmaTransferSetup* stpDmaTransferParm);
 
-  /**
-   *  dma_delete_mem_region
-   * in: qurt_mem_region_t
-   * do the deletion
+  /** @example dma_memcpy.c
+   *  Copies one region of memory to another.
+   *  @example dma_memcpy.h
+   *  @example dma_memcpy_test.c
    */
-  void dma_delete_mem_region(uintptr_t tcm_reg);
 
-  /**
-   * dma_get_thread_id
-   * out: unsigned int
+  /** @example dma_blend.c
+   *  DMA Blend App. Will read 2 frames from DDR, blend them and output
+   *  the result to DDR.
+   *  @example dma_blend.h
+   *  @example dma_blend_test.c
    */
-  unsigned int dma_get_thread_id();
+
 
 #ifdef __cplusplus
 }
