@@ -169,6 +169,11 @@ string print_loop_nest(const vector<Function> &output_funcs) {
         Func(f).compute_root().store_root();
     }
 
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
+
     // Ensure that all ScheduleParams become well-defined constant Exprs.
     for (auto &f : env) {
         f.second.substitute_schedule_param_exprs();
