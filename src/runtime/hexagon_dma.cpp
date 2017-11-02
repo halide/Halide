@@ -13,8 +13,11 @@ struct dma_device_handle {
     uint8_t *buffer;
     int offset_x;
     int offset_y;
-
     void *dma_engine;
+    int frame_width;
+    int frame_height;
+    int frame_stride;
+    void *desc_addr;
 };
 
 dma_device_handle *malloc_device_handle() {
@@ -23,6 +26,10 @@ dma_device_handle *malloc_device_handle() {
     dev->offset_x = 0;
     dev->offset_y = 0;
     dev->dma_engine = 0;
+    dev->frame_width = 0;
+    dev->frame_height = 0;
+    dev->frame_stride = 0;
+    dev->desc_addr = 0;
     return dev;
 }
 
@@ -38,8 +45,7 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
         << ", buf: " << buf << ")\n";
 
     if (buf->device) {
-        // This buffer already has a device allocation
-        return 0;
+        return halide_error_code_success;
     }
 
     size_t size = buf->size_in_bytes();
@@ -55,10 +61,10 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
                                                     reinterpret_cast<uint64_t>(mem));
     if (err != 0) {
         halide_free(user_context, mem);
-        return err;
+        return halide_error_code_device_malloc_failed;
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t* buf) {
@@ -74,7 +80,7 @@ WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t* buf
 
     // This is to match what the default implementation of halide_device_free does.
     buf->set_device_dirty(false);
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engine) {
@@ -84,14 +90,14 @@ WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engin
     halide_assert(user_context, dma_engine);
 
     debug(user_context) << "    dma_allocate_dma_engine -> ";
-    *dma_engine = dma_allocate_dma_engine();
+    *dma_engine = (void *)hDmaWrapper_AllocDma();
     debug(user_context) << "        " << dma_engine << "\n";
     if (!*dma_engine) {
         error(user_context) << "dma_allocate_dma_engine failed.\n";
-        return -1;
+        return halide_error_code_generic_error;
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine) {
@@ -101,8 +107,8 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
 
 
     debug(user_context) << "    dma_free_dma_engine\n";
-    dma_free_dma_engine(dma_engine);
-    return 0;
+    nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
@@ -110,51 +116,7 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct 
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_allocate_engine (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
-
-    halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
-    halide_assert(user_context, buf->device);
-    halide_assert(user_context, dma_engine);
-
-    dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
-    dev->dma_engine = dma_engine;
-
-    t_dma_prepare_params prep;
-    prep.handle = dma_engine;
-    prep.host_address = reinterpret_cast<uintptr_t>(dev->buffer);
-    prep.frame_width = buf->dim[0].extent;
-    prep.frame_height = buf->dim[1].extent;
-    prep.frame_stride = buf->dim[1].stride;
-    if (buf->dimensions == 3) {
-        prep.ncomponents = buf->dim[2].extent;
-    } else {
-        halide_assert(user_context, buf->dimensions == 2);
-        prep.ncomponents = 1;
-    }
-    halide_assert(user_context, buf->dim[0].stride == 1);
-    // TODO: Do we really need to specify these here?
-    prep.roi_width = 0;
-    prep.roi_height = 0;
-    // TODO: Support YUV formats.
-    prep.luma_stride = 0;
-    prep.chroma_stride = 0;
-    prep.read = true;
-    prep.chroma_type = eDmaFmt_RawData;
-    prep.luma_type = eDmaFmt_RawData;
-    prep.padding = false;
-    prep.is_ubwc = false;
-    prep.num_folds = 1;
-    prep.desc_address = 0;
-    prep.desc_size = 0;
-
-    debug(user_context) << "    dma_prepare_for_transfer -> ";
-    int err = dma_prepare_for_transfer(prep);
-    debug(user_context) << "        " << err << "\n";
-    if (err != 0) {
-        error(user_context) << "dma_prepare_for_transfer failed.\n";
-        return -1;
-    }
-
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {
@@ -168,14 +130,15 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
 
     debug(user_context) << "   dma_finish_frame -> ";
-    int err = dma_finish_frame(dev->dma_engine);
+    int err = nDmaWrapper_FinishFrame(dev->dma_engine);
+    desc_pool_free();
     debug(user_context) << "        " << err << "\n";
     if (err != 0) {
         error(user_context) << "dma_finish_frame failed.\n";
-        return -1;
+        return halide_error_code_generic_error;
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t* buf) {
@@ -186,7 +149,7 @@ WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t* 
 
     // TODO: Implement this with dma_move_data.
     error(user_context) << "haldie_hexagon_dma_copy_to_device not implemented.\n";
-    return -1;
+    return halide_error_code_copy_to_device_failed;
 }
 
 WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
@@ -195,33 +158,48 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
         << ", buf: " << buf << ")\n";
 
     halide_assert(user_context, buf->host && buf->device);
-
     dma_device_handle *dev = (dma_device_handle *)buf->device;
 
-    t_dma_move_params move;
-    move.handle = dev->dma_engine;
-    move.xoffset = dev->offset_x;
-    move.yoffset = dev->offset_y;
-    move.roi_width = buf->dim[0].extent;
-    move.roi_height = buf->dim[1].extent;
-    if (buf->dimensions == 3) {
-        move.ncomponents = buf->dim[2].extent;
-    } else {
-        halide_assert(user_context, buf->dimensions == 2);
-        move.ncomponents = 1;
-    }
-    move.offset = 0;
-    move.ping_buffer = reinterpret_cast<uintptr_t>(buf->host);
+    t_StDmaWrapper_RoiAlignInfo stWalkSize = {buf->dim[0].extent, buf->dim[1].extent};
+    int nRet = nDmaWrapper_GetRecommendedWalkSize(eDmaFmt_RawData, false, &stWalkSize);
+    int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(eDmaFmt_RawData, &stWalkSize, false);
+    int roi_width = stWalkSize.u16W;
+    int roi_height = stWalkSize.u16H;
+    t_eDmaFmt aeFmtId[1] = {eDmaFmt_RawData};
+    int32 desc_size = nDmaWrapper_GetDescbuffsize(aeFmtId, 1);
 
-    debug(user_context) << "    dma_move_data -> ";
-    int err = dma_move_data(move);
-    debug(user_context) << "        " << err << "\n";
-    if (err != 0) {
-        error(user_context) << "dma_move_data failed.\n";
-        return -1;
+    dev->desc_addr = desc_pool_get(desc_size);
+
+    t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
+    stDmaTransferParm.eFmt = eDmaFmt_RawData;
+    stDmaTransferParm.u16FrameW = dev->frame_width;
+    stDmaTransferParm.u16FrameH = dev->frame_height;
+    stDmaTransferParm.u16FrameStride = dev->frame_stride;
+    stDmaTransferParm.u16RoiW = roi_width;
+    stDmaTransferParm.u16RoiH = roi_height;
+    stDmaTransferParm.u16RoiStride = roi_stride;
+    stDmaTransferParm.bUse16BitPaddingInL2 = false;
+    stDmaTransferParm.pDescBuf = dev->desc_addr;
+
+    stDmaTransferParm.pTcmDataBuf = reinterpret_cast<void *>(buf->host);
+    stDmaTransferParm.pFrameBuf = dev->buffer;
+    stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
+
+    stDmaTransferParm.u16RoiX = dev->offset_x;
+    stDmaTransferParm.u16RoiY = dev->offset_y;
+    nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
+    if (nRet != QURT_EOK) {
+        debug(user_context) << "Hexagon: DMA Tranfer Error" << "\n"; 
+        return halide_error_code_copy_to_host_failed; 
     }
 
-    return 0;
+    nRet = nDmaWrapper_Move(dev->dma_engine);
+    if (nRet != QURT_EOK) {
+        debug(user_context) << "Hexagon: DMA Tranfer Error" << "\n";
+        return halide_error_code_copy_to_host_failed;
+    }
+    
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_crop(void *user_context,
@@ -241,7 +219,7 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
     dst_dev->offset_y = src_dev->offset_y + dst->dim[1].min - src->dim[1].min;
     dst_dev->dma_engine = src_dev->dma_engine;
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_release_crop(void *user_context,
@@ -252,7 +230,7 @@ WEAK int halide_hexagon_dma_device_release_crop(void *user_context,
     free((dma_device_handle *)buf->device);
     buf->device = 0;
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer_t *buf) {
@@ -261,19 +239,21 @@ WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer
 
     dma_device_handle *dev = (dma_device_handle *)buf->device;
     halide_assert(user_context, dev->dma_engine);
-    int err = dma_wait(dev->dma_engine);
+    int err = nDmaWrapper_Wait(dev->dma_engine);
+    desc_pool_put(dev->desc_addr);
     if (err != 0) {
-      error(user_context) << "dma_wait failed (" << err << ")\n";
+        error(user_context) << "dma_wait failed (" << err << ")\n";
+        return halide_error_code_device_sync_failed;
     }
 
-    return err;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide_buffer_t *buf,
                                                uint64_t handle) {
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
-        return -2;
+        return halide_error_code_device_wrap_native_failed;
     }
 
     buf->device_interface = &hexagon_dma_device_interface;
@@ -283,8 +263,11 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
     halide_assert(user_context, dev);
     dev->buffer = reinterpret_cast<uint8_t*>(handle);
     dev->dma_engine = 0;
+    dev->frame_width = buf->dim[0].extent;
+    dev->frame_height = buf->dim[1].extent;
+    dev->frame_stride = buf->dim[1].stride;
     buf->device = reinterpret_cast<uint64_t>(dev);
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
@@ -299,7 +282,7 @@ WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct hali
     buf->device_interface->impl->release_module();
     buf->device = 0;
     buf->device_interface = NULL;
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
