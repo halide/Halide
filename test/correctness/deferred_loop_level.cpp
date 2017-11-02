@@ -22,14 +22,13 @@ private:
         inside_for_loop = old_for_loop;
     }
 
-    void visit(const Min *op) override {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
-        _halide_user_assert(inside_for_loop == inner_loop_level);
-    }
-
-    void visit(const Max *op) override {
-        IRVisitor::visit(op);
-        _halide_user_assert(inside_for_loop == outer_loop_level);
+        if (op->name == "sin_f32") {
+            _halide_user_assert(inside_for_loop == inner_loop_level);
+        } else if (op->name == "cos_f32") {
+            _halide_user_assert(inside_for_loop == outer_loop_level);
+        }
     }
 
     void visit(const Store *op) override {
@@ -51,18 +50,23 @@ struct Test {
     LoopLevel inner_compute_at, inner_store_at;
 
     explicit Test(int i) {
+        // We use specific calls as proxies for verifying that compute_at
+        // happens where we expect: sin() for the inner function, cos()
+        // for the outer one; these are chosen mainly because they won't
+        // ever get generated incidentally by the lowering code as part of
+        // general code structure.
         inner = Func("inner" + std::to_string(i));
-        inner(x, y, c) = Halide::min(x, y) + c;
+        inner(x, y, c) = sin(cast<float>(x + y + c));
 
         inner.compute_at(inner_compute_at).store_at(inner_store_at);
 
         outer = Func("outer" + std::to_string(i));
-        outer(x, y, c) = Halide::max(inner(x, y, c), 2);
+        outer(x, y, c) = cos(cast<float>(inner(x, y, c)));
     }
 
     void check(const std::string &inner_loop_level,
                const std::string &outer_loop_level) {
-        Buffer<int> result = outer.realize(1, 1, 1);
+        Buffer<float> result = outer.realize(1, 1, 1);
 
         Module m = outer.compile_to_module({outer.infer_arguments()});
         CheckScheduleParams c(inner_loop_level, outer_loop_level);
