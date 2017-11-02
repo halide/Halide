@@ -76,7 +76,8 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
 
 // A cuda context defined in this module with weak linkage
 CUcontext WEAK context = 0;
-volatile int WEAK thread_lock = 0;
+// This spinlock protexts the above context variable.
+volatile int WEAK context_lock = 0;
 
 }}}} // namespace Halide::Runtime::Internal::Cuda
 
@@ -99,25 +100,37 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
 
-    halide_assert(user_context, &thread_lock != NULL);
-    while (__sync_lock_test_and_set(&thread_lock, 1)) { }
-
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
-    if (context == NULL && create) {
-        CUresult error = create_cuda_context(user_context, &context);
-        if (error != CUDA_SUCCESS) {
-            __sync_lock_release(&thread_lock);
-            return error;
+
+    CUcontext local_val;
+    __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+    if (local_val == NULL) {
+        if (!create) {
+            *ctx = NULL;
+            return 0;
         }
+
+        while (__sync_lock_test_and_set(&context_lock, 1)) { }
+
+        __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+        if (local_val == NULL) {
+            CUresult error = create_cuda_context(user_context, &local_val);
+            if (error != CUDA_SUCCESS) {
+                __sync_lock_release(&context_lock);
+                return error;
+            }
+        }
+        __atomic_store(&context, &local_val, __ATOMIC_RELEASE);
+
+        __sync_lock_release(&context_lock);
     }
 
-    *ctx = context;
+    *ctx = local_val;
     return 0;
 }
 
 WEAK int halide_cuda_release_context(void *user_context) {
-    __sync_lock_release(&thread_lock);
     return 0;
 }
 
@@ -171,15 +184,43 @@ public:
     }
 };
 
-// Structure to hold the state of a module attached to the context.
-// Also used as a linked-list to keep track of all the different
-// modules that are attached to a context in order to release them all
-// when then context is released.
+// Halide allocates a device API controlled pointer slot as part of
+// each compiled module. The slot is used to store information to
+// avoid having to reload/recompile kernel code on each call into a
+// Halide filter. The cuda runtime uses this pointer to maintain a
+// linked list of contexts into which the module has been loaded.
+//
+// A global list of all registered filters is also kept so all modules
+// loaded on a given context can be unloaded and removed from the list
+// when halide_device_release is called on a specific context.
+//
+// The registered_filters struct is not freed as it is pointed to by the
+// Halide generated code. The module_state structs are freed.
+
 struct module_state {
+    CUcontext context;
     CUmodule module;
     module_state *next;
 };
-WEAK module_state *state_list = NULL;
+
+struct registered_filters {
+    module_state *modules;
+    registered_filters *next;
+};
+WEAK registered_filters *filters_list = NULL;
+// This spinlock protects the above filters_list.
+volatile int WEAK filters_list_lock = 0;
+
+WEAK module_state *find_module_for_context(const registered_filters *filters, CUcontext ctx) {
+    module_state *modules = filters->modules;
+    while (modules != NULL) {
+        if (modules->context == ctx) {
+            return modules;
+        }
+        modules = modules->next;
+    }
+    return NULL;
+}
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
@@ -333,7 +374,8 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     }
     // Creation automatically pushes the context, but we'll pop to allow the caller
     // to decide when to push.
-    err = cuCtxPopCurrent(&context);
+    CUcontext dummy;
+    err = cuCtxPopCurrent(&dummy);
     if (err != CUDA_SUCCESS) {
       error(user_context) << "CUDA: cuCtxPopCurrent failed: "
                           << get_error_name(err);
@@ -367,7 +409,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
 
     CUcontext ctx;
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, dev_ptr);
-    if (result) {
+    if (result != CUDA_SUCCESS) {
         error(user_context) << "Bad device pointer " << (void *)dev_ptr
                             << ": cuPointerGetAttribute returned "
                             << get_error_name(result);
@@ -395,20 +437,26 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+
+    halide_assert(user_context, &filters_list_lock != NULL);
+    while (__sync_lock_test_and_set(&filters_list_lock, 1)) { }
+
     // Create the state object if necessary. This only happens once, regardless
     // of how many times halide_initialize_kernels/halide_release is called.
     // halide_release traverses this list and releases the module objects, but
     // it does not modify the list nodes created/inserted here.
-    module_state **state = (module_state**)state_ptr;
-    if (!(*state)) {
-        *state = (module_state*)malloc(sizeof(module_state));
-        (*state)->module = NULL;
-        (*state)->next = state_list;
-        state_list = *state;
+    registered_filters **filters = (registered_filters**)state_ptr;
+    if (!(*filters)) {
+        *filters = (registered_filters*)malloc(sizeof(registered_filters));
+        (*filters)->modules = NULL;
+        (*filters)->next = filters_list;
+        filters_list = *filters;
     }
 
     // Create the module itself if necessary.
-    if (!(*state)->module) {
+    module_state *loaded_module = find_module_for_context(*filters, ctx.context);
+    if (loaded_module == NULL) {
+        loaded_module = (module_state *)malloc(sizeof(module_state));
         debug(user_context) <<  "    cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
 
         CUjit_option options[] = { CU_JIT_MAX_REGISTERS };
@@ -422,17 +470,22 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
             max_regs_per_thread = atoi(regs);
         }
         void *optionValues[] = { (void*)(uintptr_t) max_regs_per_thread };
-        CUresult err = cuModuleLoadDataEx(&(*state)->module, ptx_src, 1, options, optionValues);
+        CUresult err = cuModuleLoadDataEx(&loaded_module->module, ptx_src, 1, options, optionValues);
 
         if (err != CUDA_SUCCESS) {
-            debug(user_context) << get_error_name(err) << "\n";
+            free(loaded_module);
             error(user_context) << "CUDA: cuModuleLoadData failed: "
                                 << get_error_name(err);
             return err;
         } else {
-            debug(user_context) << (void *)((*state)->module) << "\n";
+            debug(user_context) << (void *)(loaded_module->module) << "\n";
         }
+        loaded_module->context = ctx.context;
+        loaded_module->next = (*filters)->modules;
+        (*filters)->modules = loaded_module;
     }
+
+    __sync_lock_release(&filters_list_lock);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -507,26 +560,41 @@ WEAK int halide_cuda_device_release(void *user_context) {
         }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
+        while (__sync_lock_test_and_set(&filters_list_lock, 1)) { }
+
         // Unload the modules attached to this context. Note that the list
         // nodes themselves are not freed, only the module objects are
         // released. Subsequent calls to halide_init_kernels might re-create
         // the program object using the same list node to store the module
         // object.
-        module_state *state = state_list;
-        while (state) {
-            if (state->module) {
-                debug(user_context) << "    cuModuleUnload " << state->module << "\n";
-                err = cuModuleUnload(state->module);
-                halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-                state->module = 0;
+        registered_filters *filters = filters_list;
+        while (filters) {
+            module_state **prev_ptr = &filters->modules;
+            module_state *loaded_module = filters->modules;
+            while (loaded_module != NULL) {
+                if (loaded_module->context == ctx) {
+                    debug(user_context) << "    cuModuleUnload " << loaded_module->module << "\n";
+                    err = cuModuleUnload(loaded_module->module);
+                    halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+                    *prev_ptr = loaded_module->next;
+                    free(loaded_module);
+                    loaded_module = *prev_ptr;
+                } else {
+                    loaded_module = loaded_module->next;
+                    prev_ptr = &loaded_module->next;
+                }
             }
-            state = state->next;
+            filters = filters->next;
         }
+
+        __sync_lock_release(&filters_list_lock);
 
         CUcontext old_ctx;
         cuCtxPopCurrent(&old_ctx);
 
         // Only destroy the context if we own it
+
+        while (__sync_lock_test_and_set(&context_lock, 1)) { }
         if (ctx == context) {
             debug(user_context) << "    cuCtxDestroy " << context << "\n";
             err = cuProfilerStop();
@@ -534,6 +602,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
             halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
             context = NULL;
         }
+        __sync_lock_release(&context_lock);
     }
 
     halide_cuda_release_context(user_context);
@@ -794,7 +863,9 @@ WEAK int halide_cuda_run(void *user_context,
     #endif
 
     halide_assert(user_context, state_ptr);
-    CUmodule mod = ((module_state*)state_ptr)->module;
+    module_state *loaded_module = find_module_for_context((registered_filters *)state_ptr, ctx.context);
+    halide_assert(user_context, loaded_module != NULL);
+    CUmodule mod = loaded_module->module;
     debug(user_context) << "Got module " << mod << "\n";
     halide_assert(user_context, mod);
     CUfunction f;
@@ -930,12 +1001,17 @@ WEAK void halide_cuda_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
 
-WEAK const char *get_error_name(CUresult error) {
-    switch(error) {
+WEAK const char *get_error_name(CUresult err) {
+    switch(err) {
     case CUDA_SUCCESS: return "CUDA_SUCCESS";
     case CUDA_ERROR_INVALID_VALUE: return "CUDA_ERROR_INVALID_VALUE";
     case CUDA_ERROR_OUT_OF_MEMORY: return "CUDA_ERROR_OUT_OF_MEMORY";
     case CUDA_ERROR_NOT_INITIALIZED: return "CUDA_ERROR_NOT_INITIALIZED";
+    case CUDA_ERROR_DEINITIALIZED: return "CUDA_ERROR_DEINITIALIZED";
+    case CUDA_ERROR_PROFILER_DISABLED: return "CUDA_ERROR_PROFILER_DISABLED";
+    case CUDA_ERROR_PROFILER_NOT_INITIALIZED: return "CUDA_ERROR_PROFILER_NOT_INITIALIZED";
+    case CUDA_ERROR_PROFILER_ALREADY_STARTED: return "CUDA_ERROR_PROFILER_ALREADY_STARTED";
+    case CUDA_ERROR_PROFILER_ALREADY_STOPPED: return "CUDA_ERROR_PROFILER_ALREADY_STOPPED";
     case CUDA_ERROR_NO_DEVICE: return "CUDA_ERROR_NO_DEVICE";
     case CUDA_ERROR_INVALID_DEVICE: return "CUDA_ERROR_INVALID_DEVICE";
     case CUDA_ERROR_INVALID_IMAGE: return "CUDA_ERROR_INVALID_IMAGE";
@@ -948,20 +1024,47 @@ WEAK const char *get_error_name(CUresult error) {
     case CUDA_ERROR_NO_BINARY_FOR_GPU: return "CUDA_ERROR_NO_BINARY_FOR_GPU";
     case CUDA_ERROR_ALREADY_ACQUIRED: return "CUDA_ERROR_ALREADY_ACQUIRED";
     case CUDA_ERROR_NOT_MAPPED: return "CUDA_ERROR_NOT_MAPPED";
+    case CUDA_ERROR_NOT_MAPPED_AS_ARRAY: return "CUDA_ERROR_NOT_MAPPED_AS_ARRAY";
+    case CUDA_ERROR_NOT_MAPPED_AS_POINTER: return "CUDA_ERROR_NOT_MAPPED_AS_POINTER";
+    case CUDA_ERROR_ECC_UNCORRECTABLE: return "CUDA_ERROR_ECC_UNCORRECTABLE";
+    case CUDA_ERROR_UNSUPPORTED_LIMIT: return "CUDA_ERROR_UNSUPPORTED_LIMIT";
+    case CUDA_ERROR_CONTEXT_ALREADY_IN_USE: return "CUDA_ERROR_CONTEXT_ALREADY_IN_USE";
+    case CUDA_ERROR_PEER_ACCESS_UNSUPPORTED: return "CUDA_ERROR_PEER_ACCESS_UNSUPPORTED";
+    case CUDA_ERROR_INVALID_PTX: return "CUDA_ERROR_INVALID_PTX";
+    case CUDA_ERROR_INVALID_GRAPHICS_CONTEXT: return "CUDA_ERROR_INVALID_GRAPHICS_CONTEXT";
+    case CUDA_ERROR_NVLINK_UNCORRECTABLE: return "CUDA_ERROR_NVLINK_UNCORRECTABLE";
+    case CUDA_ERROR_JIT_COMPILER_NOT_FOUND: return "CUDA_ERROR_JIT_COMPILER_NOT_FOUND";
     case CUDA_ERROR_INVALID_SOURCE: return "CUDA_ERROR_INVALID_SOURCE";
     case CUDA_ERROR_FILE_NOT_FOUND: return "CUDA_ERROR_FILE_NOT_FOUND";
+    case CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND: return "CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND";
+    case CUDA_ERROR_SHARED_OBJECT_INIT_FAILED: return "CUDA_ERROR_SHARED_OBJECT_INIT_FAILED";
+    case CUDA_ERROR_OPERATING_SYSTEM: return "CUDA_ERROR_OPERATING_SYSTEM";
     case CUDA_ERROR_INVALID_HANDLE: return "CUDA_ERROR_INVALID_HANDLE";
     case CUDA_ERROR_NOT_FOUND: return "CUDA_ERROR_NOT_FOUND";
     case CUDA_ERROR_NOT_READY: return "CUDA_ERROR_NOT_READY";
-    case CUDA_ERROR_LAUNCH_FAILED: return "CUDA_ERROR_LAUNCH_FAILED";
+    case CUDA_ERROR_ILLEGAL_ADDRESS: return "CUDA_ERROR_ILLEGAL_ADDRESS";
     case CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES: return "CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES";
     case CUDA_ERROR_LAUNCH_TIMEOUT: return "CUDA_ERROR_LAUNCH_TIMEOUT";
     case CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING: return "CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING";
-    case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
+    case CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED: return "CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED";
+    case CUDA_ERROR_PEER_ACCESS_NOT_ENABLED: return "CUDA_ERROR_PEER_ACCESS_NOT_ENABLED";
+    case CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE: return "CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE";
+    case CUDA_ERROR_CONTEXT_IS_DESTROYED: return "CUDA_ERROR_CONTEXT_IS_DESTROYED";
     // A trap instruction produces the below error, which is how we codegen asserts on GPU
     case CUDA_ERROR_ILLEGAL_INSTRUCTION:
         return "Illegal instruction or Halide assertion failure inside kernel";
-    default: return "<Unknown error>";
+    case CUDA_ERROR_MISALIGNED_ADDRESS: return "CUDA_ERROR_MISALIGNED_ADDRESS";
+    case CUDA_ERROR_INVALID_ADDRESS_SPACE: return "CUDA_ERROR_INVALID_ADDRESS_SPACE";
+    case CUDA_ERROR_INVALID_PC: return "CUDA_ERROR_INVALID_PC";
+    case CUDA_ERROR_LAUNCH_FAILED: return "CUDA_ERROR_LAUNCH_FAILED";
+    case CUDA_ERROR_NOT_PERMITTED: return "CUDA_ERROR_NOT_PERMITTED";
+    case CUDA_ERROR_NOT_SUPPORTED: return "CUDA_ERROR_NOT_SUPPORTED";
+    case CUDA_ERROR_UNKNOWN: return "CUDA_ERROR_UNKNOWN";
+    default:
+        // This is unfortunate as usually get_cuda_error is called in the middle of
+        // an error print, but dropping the number on the floor is worse.
+        error(NULL) << "Unknown cuda error " << err << "\n";
+        return "<Unknown error>";
     }
 }
 
