@@ -64,6 +64,13 @@ void LoopLevel::check_defined() const {
 }
 
 void LoopLevel::check_locked() const {
+    // A LoopLevel can be in one of two states:
+    //   - Unlocked (the default state): An unlocked LoopLevel can be mutated freely (via the set() method),
+    //     but cannot be inspected (calls to func(), var(), is_inlined(), is_root(), etc.
+    //     will assert-fail). This is the only sort of LoopLevel that most user code will ever encounter.
+    //   - Locked: Once a LoopLevel is locked, it can be freely inspected, but no longer mutated.
+    //     Halide locks all LoopLevels during the lowering process to ensure that no user
+    //     code (e.g. custom passes) can interfere with invariants.
     user_assert(contents->locked)
         << "Cannot inspect an unlocked LoopLevel: "
         << contents->func_name << "." << contents->var_name
@@ -94,7 +101,7 @@ LoopLevel &LoopLevel::lock() {
     // so let's give a more useful error message.
     user_assert(defined())
         << "There should be no undefined LoopLevels at the start of lowering. "
-        << "(Did you mean to use LoopLevel::inlined() instead?)";
+        << "(Did you mean to use LoopLevel::inlined() instead of LoopLevel() ?)";
 
     return *this;
 }
