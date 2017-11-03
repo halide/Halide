@@ -96,15 +96,6 @@ enum class PrefetchBoundStrategy {
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site.
  *
- * A LoopLevel can be in one of two states:
-
-     - Unlocked (the default state): An unlocked LoopLevel can be mutated freely (via the set() method),
-       but cannot be inspected (calls to func(), var(), is_inlined(), is_root(), etc.
-       will assert-fail). This is the only sort of LoopLevel that most user code will ever encounter.
-     - Locked: Once a LoopLevel is locked, it can be freely inspected, but no longer mutated.
-       Halide locks all LoopLevels during the lowering process to ensure that no user
-       code (e.g. custom passes) can interfere with invariants.
-
  * Note that a LoopLevel is essentially a pointer to an underlying value;
  * all copies of a LoopLevel refer to the same site, so mutating one copy
  * (via the set() method) will effectively mutate all copies:
@@ -166,50 +157,54 @@ public:
      * LoopLevel (other than set()) will assert. */
     EXPORT LoopLevel();
 
-    /** Return true iff the LoopLevel is defined. (Only LoopLevels created
-     * with the default ctor are undefined.) */
-    EXPORT bool defined() const;
-
-    /** Mutate our contents to match the contents of 'other'. This can only be
-     * done to an unlocked LoopLevel. */
-    EXPORT void set(const LoopLevel &other);
-
-    /** Lock this LoopLevel. */
-    EXPORT LoopLevel &lock();
-
-    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inlined() or !defined(). */
-    EXPORT std::string func() const;
-
-    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inlined() or !defined(). */
-    EXPORT VarOrRVar var() const;
-
-    /** inlined is a special LoopLevel value that implies
-     * that a function should be inlined away. Asserts if !defined(). */
+    /** Construct a special LoopLevel value that implies
+     * that a function should be inlined away. */
     EXPORT static LoopLevel inlined();
 
-    /** Test if a loop level corresponds to inlining the function. */
-    EXPORT bool is_inlined() const;
-
-    /** root is a special LoopLevel value which represents the
-     * location outside of all for loops */
+    /** Construct a special LoopLevel value which represents the
+     * location outside of all for loops. */
     EXPORT static LoopLevel root();
 
-    /** Test if a loop level is 'root', which describes the site
-     * outside of all for loops. */
+    /** Mutate our contents to match the contents of 'other'. */
+    EXPORT void set(const LoopLevel &other);
+
+    // All the public methods below this point are meant only for internal
+    // use by Halide, rather than user code; hence, they are deliberately
+    // documented with plain comments (rather than Doxygen) to avoid being
+    // present in user documentation.
+
+    // Lock this LoopLevel.
+    EXPORT LoopLevel &lock();
+
+    // Return the Func name. Asserts if the LoopLevel is_root() or is_inlined() or !defined().
+    EXPORT std::string func() const;
+
+    // Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inlined() or !defined().
+    EXPORT VarOrRVar var() const;
+
+    // Return true iff the LoopLevel is defined. (Only LoopLevels created
+    // with the default ctor are undefined.)
+    EXPORT bool defined() const;
+
+    // Test if a loop level corresponds to inlining the function.
+    EXPORT bool is_inlined() const;
+
+    // Test if a loop level is 'root', which describes the site
+    // outside of all for loops.
     EXPORT bool is_root() const;
 
-    /** Return a string of the form func.var -- note that this is safe
-     * to call for root or inline LoopLevels, but asserts if !defined(). */
+    // Return a string of the form func.var -- note that this is safe
+    // to call for root or inline LoopLevels, but asserts if !defined().
     EXPORT std::string to_string() const;
 
-    /** Compare this loop level against the variable name of a for
-     * loop, to see if this loop level refers to the site
-     * immediately inside this loop. Asserts if !defined(). */
+    // Compare this loop level against the variable name of a for
+    // loop, to see if this loop level refers to the site
+    // immediately inside this loop. Asserts if !defined().
     EXPORT bool match(const std::string &loop) const;
 
     EXPORT bool match(const LoopLevel &other) const;
 
-    /** Check if two loop levels are exactly the same. Asserts if !defined(). */
+    // Check if two loop levels are exactly the same.
     EXPORT bool operator==(const LoopLevel &other) const;
 
     bool operator!=(const LoopLevel &other) const { return !(*this == other); }
