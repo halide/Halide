@@ -252,6 +252,7 @@ set(HEADER_FILES
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
+  BoundSmallAllocations.h
   Buffer.h
   CSE.h
   CanonicalizeGPUVars.h
@@ -409,6 +410,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
+  BoundSmallAllocations.cpp
   Buffer.cpp
   Closure.cpp
   CodeGen_ARM.cpp

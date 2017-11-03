@@ -10,6 +10,7 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
+#include "BoundSmallAllocations.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "Debug.h"
@@ -291,9 +292,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
+    debug(1) << "Bounding small allocations...\n";
+    s = bound_small_allocations(s);
+    debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
+
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
-    s = loop_invariant_code_motion(s);
 
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Detecting varying attributes...\n";
@@ -308,6 +312,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
+    s = loop_invariant_code_motion(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     debug(1) << "Splitting off Hexagon offload...\n";
