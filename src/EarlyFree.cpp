@@ -29,10 +29,8 @@ private:
     void visit(const For *loop) {
         loop->min.accept(this);
         loop->extent.accept(this);
-        bool old_in_loop = in_loop;
-        in_loop = true;
+        ScopedValue<bool> old_in_loop(in_loop, true);
         loop->body.accept(this);
-        in_loop = old_in_loop;
     }
 
     void visit(const Load *load) {
@@ -68,13 +66,11 @@ private:
         // It's a bad idea to inject it in either side of an
         // ifthenelse, so we treat this as being in a loop.
         op->condition.accept(this);
-        bool old_in_loop = in_loop;
-        in_loop = true;
+        ScopedValue<bool> old_in_loop(in_loop, true);
         op->then_case.accept(this);
         if (op->else_case.defined()) {
             op->else_case.accept(this);
         }
-        in_loop = old_in_loop;
     }
 
     void visit(const Block *block) {
@@ -93,7 +89,7 @@ private:
     }
 };
 
-class InjectMarker : public IRMutator {
+class InjectMarker : public IRMutator2 {
 public:
     string func;
     Stmt last_use;
@@ -102,7 +98,7 @@ private:
 
     bool injected = false;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     Stmt inject_marker(Stmt s) {
         if (injected) return s;
@@ -114,24 +110,24 @@ private:
         }
     }
 
-    void visit(const Block *block) {
+    Stmt visit(const Block *block) override {
         Stmt new_rest = inject_marker(block->rest);
         Stmt new_first = inject_marker(block->first);
 
         if (new_first.same_as(block->first) &&
             new_rest.same_as(block->rest)) {
-            stmt = block;
+            return block;
         } else {
-            stmt = Block::make(new_first, new_rest);
+            return Block::make(new_first, new_rest);
         }
     }
 };
 
-class InjectEarlyFrees : public IRMutator {
-    using IRMutator::visit;
+class InjectEarlyFrees : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Allocate *alloc) {
-        IRMutator::visit(alloc);
+    Stmt visit(const Allocate *alloc) override {
+        Stmt stmt = IRMutator2::visit(alloc);
         alloc = stmt.as<Allocate>();
         internal_assert(alloc);
 
@@ -148,6 +144,7 @@ class InjectEarlyFrees : public IRMutator {
                                   Block::make(alloc->body, Free::make(alloc->name)),
                                   alloc->new_expr, alloc->free_function);
         }
+        return stmt;
 
     }
 };

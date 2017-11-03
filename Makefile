@@ -264,6 +264,14 @@ DOC_DIR     = doc
 BUILD_DIR   = $(BIN_DIR)/build
 FILTERS_DIR = $(BIN_DIR)/$(TARGET)/build
 TMP_DIR     = $(BUILD_DIR)/tmp
+HEXAGON_RUNTIME_LIBS_DIR = src/runtime/hexagon_remote/bin
+HEXAGON_RUNTIME_LIBS = \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/libhalide_hexagon_host.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/libhalide_hexagon_host.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/host/libhalide_hexagon_host.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/hexagon_sim_remote \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/libhalide_hexagon_remote_skel.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v60/signed_by_debug/libhalide_hexagon_remote_skel.so
 
 SOURCE_FILES = \
   AddImageChecks.cpp \
@@ -278,6 +286,7 @@ SOURCE_FILES = \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
+  BoundSmallAllocations.cpp \
   Buffer.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
@@ -412,6 +421,7 @@ HEADER_FILES = \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
+  BoundSmallAllocations.h \
   Buffer.h \
   Closure.h \
   CodeGen_ARM.h \
@@ -1000,7 +1010,7 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
-$(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
+$(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeOpenGL.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) $(OPENGL_LD_FLAGS) -o $@ -MMD -MF $(BUILD_DIR)/test_opengl_$*.d
 
 # Auto schedule tests that link against libHalide
@@ -1357,11 +1367,19 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< $(BUILD_DIR)/GenGen.o \
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
+# The values in MachineParams are:
+# - the maximum level of parallelism available, 
+# - the size of the last-level cache (in KB), 
+# - the ratio between the cost of a miss at the last level cache and the cost
+#   of arithmetic on the target architecture
+# ...in that order.
+LESSON_21_MACHINE_PARAMS = 32,16777216,40
+
 $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
 	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,h,schedule -f auto_schedule_false target=host            auto_schedule=false
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,h,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,h,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS)
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
@@ -1637,6 +1655,17 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
 
+# This is a specialized 'install' for users who need Hexagon support libraries as well.
+install_qc: install $(HEXAGON_RUNTIME_LIBS)
+	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v60 $(PREFIX)/tools
+	cp $(ROOT_DIR)/tools/sim_qurt/libsim_qurt.a $(PREFIX)/lib
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
+	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v60/* $(PREFIX)/lib/v60
+	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
+	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
+
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
 # have to guess what's necessary on their system; call
@@ -1714,7 +1743,6 @@ distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
-	
+
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
-

@@ -18,6 +18,7 @@
 namespace Halide {
 namespace Internal {
 
+class IRMutator2;
 class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
@@ -113,12 +114,14 @@ EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
    methods beyond base IR nodes for now. */
 struct BaseStmtNode : public IRNode {
     BaseStmtNode(IRNodeType t) : IRNode(t) {}
+    virtual Stmt mutate_stmt(IRMutator2 *v) const = 0;
 };
 
 /** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
     BaseExprNode(IRNodeType t) : IRNode(t) {}
+    virtual Expr mutate_expr(IRMutator2 *v) const = 0;
     Type type;
 };
 
@@ -131,6 +134,7 @@ struct BaseExprNode : public IRNode {
 template<typename T>
 struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
+    EXPORT Expr mutate_expr(IRMutator2 *v) const;
     ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
@@ -138,6 +142,7 @@ struct ExprNode : public BaseExprNode {
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
+    EXPORT Stmt mutate_stmt(IRMutator2 *v) const;
     StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };

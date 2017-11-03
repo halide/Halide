@@ -163,7 +163,7 @@ public:
 
 namespace Internal {
 
-class IRMutator;
+class IRMutator2;
 struct ReductionVariable;
 
 struct Split {
@@ -295,7 +295,7 @@ public:
      * wrapper or clone during the lowering stage. If the string 'f' is empty,
      * it means replace all calls to the function by all other functions
      * (excluding itself) in the pipeline with the global identity wrapper.
-     * See \ref Func::in and \ref Func::clone for more details. */
+     * See \ref Func::in and \ref Func::clone_in for more details. */
     // @{
     const std::map<std::string, Internal::FunctionPtr> &wrappers() const;
     std::map<std::string, Internal::FunctionPtr> &wrappers();
@@ -319,9 +319,9 @@ public:
      * Schedule. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
-    void mutate(IRMutator *);
+    void mutate(IRMutator2 *);
 };
 
 
@@ -392,9 +392,9 @@ public:
      * Schedule. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
-    void mutate(IRMutator *);
+    void mutate(IRMutator2 *);
 };
 
 }
