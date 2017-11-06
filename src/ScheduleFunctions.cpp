@@ -807,7 +807,7 @@ private:
 
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
-            func.schedule().compute_level().is_inline() &&
+            func.schedule().compute_level().is_inlined() &&
             for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
@@ -861,7 +861,7 @@ private:
     Stmt visit(const Provide *op) override {
         if (op->name != func.name() &&
             !func.is_pure() &&
-            func.schedule().compute_level().is_inline() &&
+            func.schedule().compute_level().is_inlined() &&
             function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
@@ -911,6 +911,9 @@ private:
             internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
+        // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
+        // thus any new ones we synthesize we must explicitly lock.
+        loop_level.lock();
         Site s = {f->is_parallel() ||
                   f->for_type == ForType::Vectorized,
                   loop_level};
@@ -962,7 +965,7 @@ string schedule_to_source(Function f,
                           LoopLevel compute_at) {
     std::ostringstream ss;
     ss << f.name();
-    if (compute_at.is_inline()) {
+    if (compute_at.is_inlined()) {
         ss << ".compute_inline()";
     } else {
         if (!store_at.match(compute_at)) {
@@ -1020,7 +1023,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const For *op) {
         if (ends_with(op->name, Var::outermost().name()) ||
-            ends_with(op->name, LoopLevel::root().to_string())) {
+            ends_with(op->name, LoopLevel::root().lock().to_string())) {
             IRVisitor::visit(op);
         } else {
 
@@ -1083,7 +1086,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             if (arg.is_func()) {
                 Function g(arg.func);
                 if (!g.is_wrapper() &&
-                    g.schedule().compute_level().is_inline()) {
+                    g.schedule().compute_level().is_inlined()) {
                     user_error
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
@@ -1166,7 +1169,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // pure function. An inlined Halide Func with multiple stages technically
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
-    if (store_at.is_inline() && compute_at.is_inline()) {
+    if (store_at.is_inlined() && compute_at.is_inlined()) {
         if (f.is_pure()) {
             validate_schedule_inlined_function(f);
         }
@@ -1249,7 +1252,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
 
-    string root_var = LoopLevel::root().to_string();
+    string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
@@ -1275,7 +1278,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (f.can_be_inlined() &&
-            f.schedule().compute_level().is_inline()) {
+            f.schedule().compute_level().is_inlined()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {
