@@ -95,6 +95,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         Func(f).compute_root().store_root();
     }
 
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
     // Ensure that all ScheduleParams become well-defined constant Exprs.
     for (auto &f : env) {
         f.second.substitute_schedule_param_exprs();
