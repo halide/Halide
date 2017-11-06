@@ -391,9 +391,8 @@ private:
         }
     }
 
-    void crop_device_side(Buffer<T, D> &result_host_cropped) {
-        if (buf.device_interface != nullptr &&
-            buf.host != result_host_cropped.buf.host) {
+    void complete_device_crop(Buffer<T, D> &result_host_cropped) const {
+        if (buf.device_interface != nullptr) {
             // TODO: If we get it so this can be an assert that there is no device,
             // then the code will do fewer ref count operations, but will need an
             // else clause to copy the device allocation back in if no actual crop.
@@ -401,10 +400,10 @@ private:
             // TODO: plumb through user context
             if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
                 const Buffer<T, D> *parent = this;
-		// TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
-		// is it possible to get to this point without incref having run at least once since
-		// the device field was set? (I.e. in the internal logic of crop. incref might have been
-		// called.)
+                // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
+                // is it possible to get to this point without incref having run at least once since
+                // the device field was set? (I.e. in the internal logic of crop. incref might have been
+                // called.)
                 if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
                     parent = &((DevRefCountCropped *)dev_ref_count)->parent;
                 }
@@ -1109,15 +1108,14 @@ public:
 
     /** Make an image that refers to a sub-range of this image along
      * the given dimension. Does not assert the crop region is within
-     * the existing bounds. The cropped image drops any device
-     * handle. */
+     * the existing bounds. */
     Buffer<T, D> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
         im.crop_host_side(d, min, extent);
         if (buf.device_interface != nullptr) {
-            im.crop_device_side(im);
+            complete_device_crop(im);
         }
         return im;
     }
@@ -1144,7 +1142,7 @@ public:
         Buffer<T, D> im = *this;
         im.crop_host_side(rect);
         if (buf.device_interface != nullptr) {
-            im.crop_device_side(im);
+            complete_device_crop(im);
         }
         return im;
     }
