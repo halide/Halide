@@ -19,16 +19,16 @@ typedef unsigned long addr_t;
 typedef unsigned int qurt_size_t;
 typedef unsigned int qurt_mem_pool_t;
 
-  __inline static int align(int x,int a) {
+__inline static int align(int x,int a) {
     return ( (x+a-1) & (~(a-1)) );    
-  } 
+} 
 
-  enum { QURT_EOK = 0 };
+enum { QURT_EOK = 0 };
 
-  /*!
-   * Format IDs
-   */
-  typedef enum {
+/*!
+ * Format IDs
+ */
+typedef enum {
     eDmaFmt_RawData,
     eDmaFmt_NV12,
     eDmaFmt_NV12_Y,
@@ -44,7 +44,7 @@ typedef unsigned int qurt_mem_pool_t;
     eDmaFmt_NV124R_UV,
     eDmaFmt_Invalid,
     eDmaFmt_MAX,
-  } t_eDmaFmt;
+} t_eDmaFmt;
 
   /*!
    * DMA status
@@ -56,48 +56,48 @@ typedef unsigned int qurt_mem_pool_t;
    * Transfer type
    */
   typedef enum eDmaWrapper_TransationType {
-      //! DDR to L2 transfer
-      eDmaWrapper_DdrToL2,
-      //! L2 to DDR transfer
-      eDmaWrapper_L2ToDdr,
+    //! DDR to L2 transfer
+    eDmaWrapper_DdrToL2,
+    //! L2 to DDR transfer
+    eDmaWrapper_L2ToDdr,
   } t_eDmaWrapper_TransationType;
 
   /*!
    * Roi Properties
    */
   typedef struct stDmaWrapper_Roi {
-      //! ROI x position in pixels
-      uint16 u16X;
-      //! ROI y position in pixels
-      uint16 u16Y;
-      //! ROI width in pixels
-      uint16 u16W;
-      //! ROI height in pixels
-      uint16 u16H;
+    //! ROI x position in pixels
+    uint16 u16X;
+    //! ROI y position in pixels
+    uint16 u16Y;
+    //! ROI width in pixels
+    uint16 u16W;
+    //! ROI height in pixels
+    uint16 u16H;
   } t_StDmaWrapper_Roi;
 
   /*!
    * Frame Properties
    */
   typedef struct stDmaWrapper_FrameProp {
-      //! Starting physical address to buffer
-      addr_t aAddr;
-      //! Frame height in pixels
-      uint16 u16H;
-      //! Frame width in pixels
-      uint16 u16W;
-      //! Frame stride in pixels
-      uint16 u16Stride;
+    //! Starting physical address to buffer
+    addr_t aAddr;
+    //! Frame height in pixels
+    uint16 u16H;
+    //! Frame width in pixels
+    uint16 u16W;
+    //! Frame stride in pixels
+    uint16 u16Stride;
   } t_StDmaWrapper_FrameProp;
 
   /*!
    * Roi alignment
    */
   typedef struct stDmaWrapper_RoiAlignInfo {
-      //! ROI width in pixels
-      uint16 u16W;
-      //! ROI height in pixels
-      uint16 u16H;
+    //! ROI width in pixels
+    uint16 u16W;
+    //! ROI height in pixels
+    uint16 u16H;
   } t_StDmaWrapper_RoiAlignInfo;
 
   /*!
@@ -105,36 +105,53 @@ typedef unsigned int qurt_mem_pool_t;
    */
 
   typedef struct stDmaWrapper_DmaTransferSetup {
-      //! Format
-      t_eDmaFmt eFmt;
-       bool bIsFmtUbwc;
-      //! Frame Width in pixels
-      uint16 u16FrameW;
-      //! Frame height in pixels
-      uint16 u16FrameH;
-       //! Frame stride in pixels
-       uint16 u16FrameStride;
-      //! ROI x position in pixels
-      uint16 u16RoiX;
-      //! ROI y position in pixels
-      uint16 u16RoiY;
-      //! ROI width in pixels
-      uint16 u16RoiW;
-      //! ROI height in pixels
-      uint16 u16RoiH;
-       //! ROI stride in pixels
-       uint16 u16RoiStride;
-      //! Should the intermediate buffer be padded. This only apply for 8bit format sucha NV12, NV12-4R
-      bool bUse16BitPaddingInL2;
-      //! Virtual address of the HW descriptor buffer (must be locked in the L2$).
-       void* pDescBuf;
-      //! Virtual address of the TCM pixeldata buffer (must be locked in the L2$).
-       void*  pTcmDataBuf;
-      //! Virtual address of the DDR Frame buffer .
-       void*  pFrameBuf;
-      //! TransferType: eDmaWrapper_DdrToL2 (Read from DDR), eDmaWrapper_L2ToDDR (Write to DDR);
-       t_eDmaWrapper_TransationType eTransferType;
+    //! Format
+    t_eDmaFmt eFmt;
+    bool bIsFmtUbwc;
+    //! Frame Width in pixels
+    uint16 u16FrameW;
+    //! Frame height in pixels
+    uint16 u16FrameH;
+    //! Frame stride in pixels
+    uint16 u16FrameStride;
+    //! ROI x position in pixels
+    uint16 u16RoiX;
+    //! ROI y position in pixels
+    uint16 u16RoiY;
+    //! ROI width in pixels
+    uint16 u16RoiW;
+    //! ROI height in pixels
+    uint16 u16RoiH;
+    //! ROI stride in pixels
+    uint16 u16RoiStride;
+    //! Should the intermediate buffer be padded. This only apply for 8bit format sucha NV12, NV12-4R
+    bool bUse16BitPaddingInL2;
+    //! Virtual address of the HW descriptor buffer (must be locked in the L2$).
+    void* pDescBuf;
+    //! Virtual address of the TCM pixeldata buffer (must be locked in the L2$).
+    void*  pTcmDataBuf;
+    //! Virtual address of the DDR Frame buffer .
+    void*  pFrameBuf;
+    //! TransferType: eDmaWrapper_DdrToL2 (Read from DDR), eDmaWrapper_L2ToDDR (Write to DDR);
+    t_eDmaWrapper_TransationType eTransferType;
   } t_StDmaWrapper_DmaTransferSetup;
+
+  /*!
+   * @brief  API for Cache Allocation
+   * @description Abstraction for allocation of memory in cache and lock
+   *
+   * @return NULL or Memory
+   */
+  void* HAP_cache_lock(unsigned int size, void** paddr_ptr);
+
+
+  /*!
+   * @brief  API for Free
+   * @description Abstraction for deallocation of memory and unlock cache
+   *
+   * @return void
+   */
+  int HAP_cache_unlock(void* vaddr_ptr);
 
   /*!
    * Handle for wrapper DMA engine

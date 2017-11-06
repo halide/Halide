@@ -19,15 +19,6 @@ struct dma_device_handle {
     int frame_stride;
     void *desc_addr;
 };
-typedef struct desc_data {
-    void* descriptor;
-    bool used;
-    unsigned int size;
-    struct desc_data* next;
-} desc_pool_t;
-
-typedef desc_pool_t* pdesc_pool;
-static pdesc_pool dma_desc_pool = NULL;
 
 dma_device_handle *malloc_device_handle() {
     dma_device_handle *dev = (dma_device_handle *)malloc(sizeof(dma_device_handle));
@@ -42,18 +33,22 @@ dma_device_handle *malloc_device_handle() {
     return dev;
 }
 
+typedef struct desc_pool {
+    void* descriptor;
+    bool used;
+    struct desc_pool* next;
+} desc_pool_t;
 
-static void* desc_pool_get (unsigned int size) {
+typedef desc_pool_t* pdesc_pool;
+static pdesc_pool dma_desc_pool = NULL;
+#define descriptor_size 64
 
-   /* if pool empty
-    * get locked cache    --> multiple of 128B (cache line size) and each "desc" is 64B
-    * add new "desc" into pool
-    * get "desc" from pool
-    * mark "desc" used
-    * return "desc" */
+static void* desc_pool_get (void) {
 
     pdesc_pool temp = dma_desc_pool;
     pdesc_pool prev = NULL;
+
+    //Walk the list
     if (temp != NULL) {
         if (!temp->used) {
             temp->used = true;
@@ -63,51 +58,56 @@ static void* desc_pool_get (unsigned int size) {
         temp=temp->next;
     }
 
+    // If we are still here that means temp was null.
+    // We have to allocate two descriptors here
     temp = (pdesc_pool) malloc(sizeof(desc_pool_t));
-    //allocate descriptor
-	// Will use the HAP API to allocate L
-    char* desc = (char*)malloc(size);
-    *desc = 'a';
+    uint8_t* desc = (uint8_t *)HAP_cache_lock(sizeof(char)*descriptor_size*2, NULL);
     temp->descriptor = (void *)desc;
-    temp->size = size;
     temp->used = true;
+    temp->next = (pdesc_pool) malloc(sizeof(desc_pool_t));
+    //hard coding bytes here
+    (temp->next)->descriptor = (void *)(desc+descriptor_size);
+    (temp->next)->used = false;
+    (temp->next)->next = NULL;
+
     if (prev != NULL) {
         prev->next = temp;
     } else if (dma_desc_pool == NULL) {
         dma_desc_pool = temp;
     }
-
     return (void*) temp->descriptor;
 }
 
+/*find "desc"
+ put "desc" into pool
+ mark "desc" free*/
 static int desc_pool_put (void *desc) {
-    /*find "desc"
-    put "desc" into pool
-    mark "desc" free*/
-
     pdesc_pool temp = dma_desc_pool;
-
     while (temp != NULL) {
         if (temp->descriptor == desc) {
             temp->used = false;
-            return 0;
         }
         temp=temp->next;
     }
     return -1;
 }
-
+//2 descriptor at a time
 static void desc_pool_free () {
     pdesc_pool temp = dma_desc_pool;
     while (temp != NULL) {
         pdesc_pool temp2 = temp;
         temp=temp->next;
-        free(temp2->descriptor);
+        if (temp2->descriptor != NULL) {
+            HAP_cache_unlock(temp2->descriptor);
+        }
         free(temp2);
+        temp2 = temp;
+        if (temp != NULL) {
+            temp=temp->next;
+            free(temp2);
+        }
     }
 }
-
-
 
 }}}}  // namespace Halide::Runtime::Internal::HexagonDma
 
@@ -192,6 +192,9 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct 
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_allocate_engine (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
+
+    dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
+    dev->dma_engine = dma_engine;
     return halide_error_code_success;
 }
 
@@ -241,10 +244,8 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(eDmaFmt_RawData, &stWalkSize, false);
     int roi_width = stWalkSize.u16W;
     int roi_height = stWalkSize.u16H;
-    t_eDmaFmt aeFmtId[1] = {eDmaFmt_RawData};
-    int32 desc_size = nDmaWrapper_GetDescbuffsize(aeFmtId, 1);
 
-    dev->desc_addr = desc_pool_get(desc_size);
+    dev->desc_addr = desc_pool_get();
 
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
     stDmaTransferParm.eFmt = eDmaFmt_RawData;
@@ -263,6 +264,8 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
 
     stDmaTransferParm.u16RoiX = dev->offset_x;
     stDmaTransferParm.u16RoiY = dev->offset_y;
+
+    debug(user_context) << "Hexagon:" << dev->dma_engine << "transfer" << stDmaTransferParm.pDescBuf << "\n" ;
     nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: DMA Tranfer Error" << "\n"; 
