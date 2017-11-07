@@ -149,8 +149,8 @@ class LoopLevel {
 public:
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    EXPORT LoopLevel(Internal::Function f, VarOrRVar v);
-    EXPORT LoopLevel(Func f, VarOrRVar v);
+    EXPORT LoopLevel(const Internal::Function &f, VarOrRVar v);
+    EXPORT LoopLevel(const Func &f, VarOrRVar v);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined

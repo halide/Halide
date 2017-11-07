@@ -37,12 +37,12 @@ Interval bounds_of_expr_in_scope(Expr expr,
  * A lower bound (always less than or equal to the expression)
  * If it fails, returns an undefined Expr. */
 enum class Direction {Upper, Lower};
-Expr find_constant_bound(Expr e, Direction d,
+Expr find_constant_bound(const Expr &e, Direction d,
                          const Scope<Interval> &scope = Scope<Interval>());
 
 /** Find bounds for a varying expression that are either constants or
  * +/-inf. */
-Interval find_constant_bounds(Expr e, const Scope<Interval> &scope);
+Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
 
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */

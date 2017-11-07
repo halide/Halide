@@ -50,9 +50,9 @@ EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
 LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar, bool locked)
     : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, locked)) {}
 
-LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar, false) {}
+LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar, false) {}
 
-LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar, false) {}
+LoopLevel::LoopLevel(const Func &f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar, false) {}
 
 // Note that even 'undefined' LoopLevels get a LoopLevelContents; this is deliberate,
 // as we want to be able to create an undefined LoopLevel, pass it to another function

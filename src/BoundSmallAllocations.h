@@ -17,7 +17,7 @@ namespace Internal {
  * allocations. Inside GPU kernels this is necessary in order to
  * compile. On the CPU this is also useful, because it prevents malloc
  * calls for (provably) tiny allocations. */
-Stmt bound_small_allocations(Stmt s);
+Stmt bound_small_allocations(const Stmt &s);
 
 }
 }

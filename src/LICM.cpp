@@ -118,7 +118,7 @@ class LICM : public IRMutator2 {
 
     // Compute the cost of computing an expression inside the inner
     // loop, compared to just loading it as a parameter.
-    int cost(Expr e, const set<string> &vars) {
+    int cost(const Expr &e, const set<string> &vars) {
         if (is_const(e)) {
             return 0;
         } else if (const Variable *var = e.as<Variable>()) {
@@ -279,7 +279,7 @@ class GroupLoopInvariants : public IRMutator2 {
         int depth;
     };
 
-    vector<Term> extract_summation(Expr e) {
+    vector<Term> extract_summation(const Expr &e) {
         vector<Term> pending, terms;
         pending.push_back({e, true, 0});
         while (!pending.empty()) {
@@ -315,7 +315,7 @@ class GroupLoopInvariants : public IRMutator2 {
         return terms;
     }
 
-    Expr reassociate_summation(Expr e) {
+    Expr reassociate_summation(const Expr &e) {
         vector<Term> terms = extract_summation(e);
 
         Expr result;
@@ -354,9 +354,9 @@ class GroupLoopInvariants : public IRMutator2 {
     }
 
     int depth = 0;
-    
+
     Stmt visit(const For *op) override {
-        depth++;        
+        depth++;
         ScopedBinding<int> bind(var_depth, op->name, depth);
         Stmt stmt = IRMutator2::visit(op);
         depth--;

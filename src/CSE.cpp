@@ -282,7 +282,9 @@ public:
 
 } // namespace
 
-Expr common_subexpression_elimination(Expr e, bool lift_all) {
+Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
+    Expr e = e_in;
+
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
@@ -333,7 +335,7 @@ Expr common_subexpression_elimination(Expr e, bool lift_all) {
     return e;
 }
 
-Stmt common_subexpression_elimination(Stmt s, bool lift_all) {
+Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
     return CSEEveryExprInStmt(lift_all).mutate(s);
 }
 
