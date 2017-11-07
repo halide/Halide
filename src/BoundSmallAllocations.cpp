@@ -49,7 +49,7 @@ class BoundSmallAllocations : public IRMutator {
 
     void visit(const Allocate *op) {
         Expr total_extent = make_const(Int(64), 1);
-        for (Expr e : op->extents) {
+        for (const Expr &e : op->extents) {
             total_extent *= e;
         }
         Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
@@ -76,7 +76,7 @@ class BoundSmallAllocations : public IRMutator {
     }
 };
 
-Stmt bound_small_allocations(Stmt s) {
+Stmt bound_small_allocations(const Stmt &s) {
     return BoundSmallAllocations().mutate(s);
 }
 
