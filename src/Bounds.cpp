@@ -44,7 +44,7 @@ int static_sign(Expr x) {
 }
 } // anonymous namespace
 
-Expr find_constant_bound(Expr e, Direction d, const Scope<Interval> &scope) {
+Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
     Interval interval = find_constant_bounds(e, scope);
     Expr bound;
     if (interval.has_lower_bound() && (d == Direction::Lower)) {
@@ -55,7 +55,7 @@ Expr find_constant_bound(Expr e, Direction d, const Scope<Interval> &scope) {
     return bound;
 }
 
-Interval find_constant_bounds(Expr e, const Scope<Interval> &scope) {
+Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
