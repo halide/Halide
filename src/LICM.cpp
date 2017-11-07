@@ -356,21 +356,21 @@ class GroupLoopInvariants : public IRMutator2 {
     int depth = 0;
     
     Stmt visit(const For *op) override {
-        depth++;	
-	ScopedBinding<int> bind(var_depth, op->name, depth);
+        depth++;        
+        ScopedBinding<int> bind(var_depth, op->name, depth);
         Stmt stmt = IRMutator2::visit(op);
         depth--;
-	return stmt;
+        return stmt;
     }
 
     Expr visit(const Let *op) override {
-	ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-	return IRMutator2::visit(op);
+        ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
+        return IRMutator2::visit(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-	ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
-	return IRMutator2::visit(op);
+        ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
+        return IRMutator2::visit(op);
     }
 
 };
