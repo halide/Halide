@@ -272,6 +272,8 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
         return halide_error_code_copy_to_host_failed; 
     }
 
+    debug(user_context) << "Hexagon:" << dev->dma_engine << "move\n" ;
+
     nRet = nDmaWrapper_Move(dev->dma_engine);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: DMA Tranfer Error" << "\n";

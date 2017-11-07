@@ -38,13 +38,13 @@ typedef struct stDescriptor {
     struct {
       uint32 RoiH             : 16;
       uint32 RoiW             : 16;
-      uintptr_t SrcFrmBaseAddr: 32;
+      uintptr_t SrcFrmBaseAddr;
       uint32 SrcRoiStartAddr  : 32;
       uint32 SrcRoiStride     : 16;
       uint32 _unused0         : 16;
     } stWord1;
     struct {
-      uintptr_t DstFrmBaseAddr: 32;
+      uintptr_t DstFrmBaseAddr;
       uint32 DstRoiStartAddr  : 32;
       uint32 DstRoiStride     : 16;
       uint32 Flush            :  1;
@@ -113,7 +113,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
                     int xin = xii*desc->stWord2.DstRoiStride;
                     int yin = yii;
                     int RoiOffset = x+y*desc->stWord1.SrcRoiStride;
-                    int xout = xii*desc->stWord0.FrmHeight;
+                    int xout = xii*desc->stWord0.FrmWidth;
                     int yout = yii;
                     dest_addr[yin+xin] = host_addr[RoiOffset + yout + xout];
                 }
