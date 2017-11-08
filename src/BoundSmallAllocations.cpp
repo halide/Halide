@@ -7,47 +7,42 @@ namespace Halide {
 namespace Internal {
 
 // Find a constant upper bound on the size of each thread-local allocation
-class BoundSmallAllocations : public IRMutator {
-    using IRMutator::visit;
+class BoundSmallAllocations : public IRMutator2 {
+    using IRMutator2::visit;
 
     // Track constant bounds
     Scope<Interval> scope;
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         Interval b = find_constant_bounds(op->value, scope);
-        scope.push(op->name, b);
-        IRMutator::visit(op);
-        scope.pop(op->name);
+        ScopedBinding<Interval> bind(scope, op->name, b);
+        return IRMutator2::visit(op);
     }
 
-    void visit(const Let *op) {
+    Expr visit(const Let *op) override {
         Interval b = find_constant_bounds(op->value, scope);
-        scope.push(op->name, b);
-        IRMutator::visit(op);
-        scope.pop(op->name);
+        ScopedBinding<Interval> bind(scope, op->name, b);
+        return IRMutator2::visit(op);
     }
 
     bool in_thread_loop = false;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         Interval min_bounds = find_constant_bounds(op->min, scope);
         Interval max_bounds = find_constant_bounds(op->min + op->extent - 1, scope);
         Interval b = Interval::make_union(min_bounds, max_bounds);
         b.min = simplify(b.min);
         b.max = simplify(b.max);
-        scope.push(op->name, b);
+        ScopedBinding<Interval> bind(scope, op->name, b);
         if (op->for_type == ForType::GPUThread) {
-            bool old_in_thread_loop = in_thread_loop;
-            in_thread_loop = true;
-            IRMutator::visit(op);
-            in_thread_loop = old_in_thread_loop;
+            ScopedValue<bool> old_in_thread_loop(in_thread_loop, true);
+            return IRMutator2::visit(op);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
-        scope.pop(op->name);
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         Expr total_extent = make_const(Int(64), 1);
         for (const Expr &e : op->extents) {
             total_extent *= e;
@@ -67,11 +62,10 @@ class BoundSmallAllocations : public IRMutator {
             user_assert(can_prove(bound <= Int(32).max()))
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
             bound = simplify(cast<int32_t>(bound));
-            stmt = Allocate::make(op->name, op->type, {bound}, op->condition,
+            return Allocate::make(op->name, op->type, {bound}, op->condition,
                                   mutate(op->body), op->new_expr, op->free_function);
-            return;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
