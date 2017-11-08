@@ -49,7 +49,7 @@ static void* desc_pool_get (void) {
     pdesc_pool prev = NULL;
 
     //Walk the list
-    if (temp != NULL) {
+    while (temp != NULL) {
         if (!temp->used) {
             temp->used = true;
             return (void*) temp->descriptor;
@@ -244,6 +244,8 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(eDmaFmt_RawData, &stWalkSize, false);
     int roi_width = stWalkSize.u16W;
     int roi_height = stWalkSize.u16H;
+    // DMA driver Expect the Stride to be 256 Byte Aligned
+    halide_assert(user_context,(buf->dim[1].stride== roi_stride));
 
     dev->desc_addr = desc_pool_get();
 

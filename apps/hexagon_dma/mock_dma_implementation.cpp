@@ -17,7 +17,7 @@
 //Mock Global Descriptor
 typedef struct stDescriptor {
   struct {
-      uintptr_t DesPointer    : 32;   // for chain to next "desc" or NULL to terminate the chain
+      uintptr_t DesPointer    ;   // for chain to next "desc" or NULL to terminate the chain
       uint32 DstPixFmt        :  3;
       uint32 DstIsUbwc        :  1;
       uint32 SrcPixFmt        :  3;
@@ -38,26 +38,14 @@ typedef struct stDescriptor {
     struct {
       uint32 RoiH             : 16;
       uint32 RoiW             : 16;
-      uintptr_t SrcFrmBaseAddr;
-      uint32 SrcRoiStartAddr  : 32;
       uint32 SrcRoiStride     : 16;
-      uint32 _unused0         : 16;
-    } stWord1;
-    struct {
-      uintptr_t DstFrmBaseAddr;
-      uint32 DstRoiStartAddr  : 32;
       uint32 DstRoiStride     : 16;
-      uint32 Flush            :  1;
-      uint32 _unused0         : 15;
-      uint32 _unused1         : 32;
-    } stWord2;
-    struct {
-      uint32 reserved0        : 32;
-      uint32 reserved1        : 32;
-      uint32 reserved2        : 32;
-//    uint32 reserved3        : 32;
+      uintptr_t SrcFrmBaseAddr;
+      uintptr_t DstFrmBaseAddr;
+      uint32 SrcRoiStartAddr  : 32;
+      uint32 DstRoiStartAddr  : 32;
       uint32 ubwc_stat_pointer  : 32;// use reserved3 for gralloc ubwc_stat_pointer
-    } stWord3;
+    } stWord1;
 } t_StHwDescriptor;
 
 typedef struct {
@@ -103,14 +91,14 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
 
         while (desc != NULL) {
             unsigned char* host_addr = reinterpret_cast<unsigned char *>(desc->stWord1.SrcFrmBaseAddr);
-            unsigned char* dest_addr = reinterpret_cast<unsigned char *>(desc->stWord2.DstFrmBaseAddr);
+            unsigned char* dest_addr = reinterpret_cast<unsigned char *>(desc->stWord1.DstFrmBaseAddr);
             int x = desc->stWord0.RoiX;
             int y = desc->stWord0.RoiY;
             int w = desc->stWord1.RoiW;
             int h = desc->stWord1.RoiH;
             for (int xii=0;xii<h;xii++) {
                 for (int yii=0;yii<w;yii++) {
-                    int xin = xii*desc->stWord2.DstRoiStride;
+                    int xin = xii*desc->stWord1.DstRoiStride;
                     int yin = yii;
                     int RoiOffset = x+y*desc->stWord1.SrcRoiStride;
                     int xout = xii*desc->stWord0.FrmWidth;
@@ -180,8 +168,8 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
     desc->stWord1.RoiH = dma_transfer_parm->u16RoiH;
     desc->stWord1.RoiW = dma_transfer_parm->u16RoiW;
     desc->stWord1.SrcRoiStride = dma_transfer_parm->u16FrameStride;
-    desc->stWord2.DstRoiStride = dma_transfer_parm->u16RoiStride;
-    desc->stWord2.DstFrmBaseAddr = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
+    desc->stWord1.DstRoiStride = dma_transfer_parm->u16RoiStride;
+    desc->stWord1.DstFrmBaseAddr = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
     desc->stWord1.SrcFrmBaseAddr  = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);
     return 0;
 
