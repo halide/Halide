@@ -3068,7 +3068,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 // The current auto scheduler cannots handle such cases.
 void validate_no_partial_schedules(const Function &f) {
     // Verify no compute_root or bounds are specified
-    user_assert(f.schedule().compute_level().is_inline())
+    user_assert(f.schedule().compute_level().is_inlined())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it is scheduled to be computed at root\n";
     user_assert(f.schedule().bounds().empty())
@@ -3338,6 +3338,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // of the schedule.
     debug(2) << "Computing full realization order...\n";
     vector<string> full_order = realization_order(outputs, env);
+
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";

@@ -439,14 +439,14 @@ protected:
     /** Get the result of modulus-remainder analysis for a given expr. */
     ModulusRemainder get_alignment_info(Expr e);
 
+    /** Alignment info for Int(32) variables in scope. */
+    Scope<ModulusRemainder> alignment_info;
+
 private:
 
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
 
     /** String constants already emitted to the module. Tracked to
      * prevent emitting the same string many times. */

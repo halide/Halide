@@ -286,6 +286,7 @@ SOURCE_FILES = \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
+  BoundSmallAllocations.cpp \
   Buffer.cpp \
   Closure.cpp \
   CodeGen_ARM.cpp \
@@ -420,6 +421,7 @@ HEADER_FILES = \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
+  BoundSmallAllocations.h \
   Buffer.h \
   Closure.h \
   CodeGen_ARM.h \
@@ -977,21 +979,10 @@ $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalid
 $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_includes.c $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE) $< -I$(ROOT_DIR)/src/runtime -o $@
 
-ifeq ($(UNAME), Darwin)
-WEAK_BUFFER_LINKAGE_FLAGS=-Wl,-U,_halide_weak_device_free
-else
-ifneq (,$(findstring MINGW,$(UNAME)))
-WEAK_BUFFER_LINKAGE_FLAGS=-Wl,--defsym=_halide_weak_device_free=0,--defsym=halide_device_free=0
-else
-WEAK_BUFFER_LINKAGE_FLAGS=
-endif
-endif
-
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
-# this test should be usable without either. (Note that this requires an extra
-# linker directive on Darwin to ensure halide_weak_device_free() is in fact weak.)
+# this test should be usable without either. 
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(WEAK_BUFFER_LINKAGE_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -o $@
 
 # The image_io test additionally needs to link to libpng and
 # libjpeg.
@@ -1735,7 +1726,6 @@ distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
-	
+
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
-

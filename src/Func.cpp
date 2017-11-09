@@ -2355,9 +2355,11 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
 Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
     func.schedule().compute_level() = loop_level;
-    if (func.schedule().store_level().is_inline()) {
-        func.schedule().store_level() = loop_level;
-    }
+    // We want to set store_level = compute_level iff store_level is inlined,
+    // but we can't do that here, since the value in store_level could
+    // be mutated at any time prior to lowering. Instead, we check at
+    // the start of lowering (via Function::lock_loop_levels() method) and
+    // do the compute_level -> store_level propagation then.
     return *this;
 }
 

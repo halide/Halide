@@ -44,16 +44,24 @@ int static_sign(Expr x) {
 }
 } // anonymous namespace
 
-Expr find_constant_bound(Expr e, Direction d, const Scope<Interval> &scope) {
-    Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
+Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
+    Interval interval = find_constant_bounds(e, scope);
     Expr bound;
     if (interval.has_lower_bound() && (d == Direction::Lower)) {
-        bound = simplify(interval.min);
+        bound = interval.min;
     } else if (interval.has_upper_bound() && (d == Direction::Upper)) {
-        bound = simplify(interval.max);
+        bound = interval.max;
     }
-    internal_assert(!bound.defined() || is_const(bound));
     return bound;
+}
+
+Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
+    Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
+    interval.min = simplify(interval.min);
+    interval.max = simplify(interval.max);
+    internal_assert(!interval.has_lower_bound() || is_const(interval.min)) << interval.min << "\n";
+    internal_assert(!interval.has_upper_bound() || is_const(interval.max)) << interval.max << "\n";
+    return interval;
 }
 
 
@@ -668,6 +676,7 @@ private:
         }
 
         if (const_args &&
+            !const_bound &&
             (op->call_type == Call::PureExtern ||
              op->call_type == Call::Image)) {
             Expr call = Call::make(t, op->name, new_args, op->call_type,
@@ -729,8 +738,9 @@ private:
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
 
-        } else if (op->name == Call::buffer_get_min ||
-                   op->name == Call::buffer_get_max) {
+        } else if (!const_bound &&
+                   (op->name == Call::buffer_get_min ||
+                    op->name == Call::buffer_get_max)) {
             // Bounds query results should have perfect nesting. Their
             // max over a loop is just the same bounds query call at
             // an outer loop level. This requires that the query is
