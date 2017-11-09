@@ -59,8 +59,12 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
-    internal_assert(!interval.has_lower_bound() || is_const(interval.min)) << interval.min << "\n";
-    internal_assert(!interval.has_upper_bound() || is_const(interval.max)) << interval.max << "\n";
+
+    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
+    // for our purposes here, treat anything non-const as no-bound.
+    if (!is_const(interval.min)) interval.min = Interval::neg_inf;
+    if (!is_const(interval.max)) interval.max = Interval::pos_inf;
+
     return interval;
 }
 
