@@ -107,7 +107,7 @@ public:
     const vector<Function> &funcs;
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions;
-    Scope<int> in_stages;
+    Scope<> in_stages;
     const Target target;
 
     struct CondValue {
@@ -266,7 +266,7 @@ public:
         Stmt define_bounds(Stmt s,
                            string producing_stage,
                            string loop_level,
-                           const Scope<int> &in_stages,
+                           const Scope<> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions,
                            const Target &target) {
@@ -877,7 +877,7 @@ public:
             }
         }
 
-        in_stages.push(stage_name, 0);
+        in_stages.push(stage_name);
 
         // Figure out how much of it we're producing
         Box box;
