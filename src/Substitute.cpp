@@ -11,7 +11,7 @@ using std::string;
 
 class Substitute : public IRMutator2 {
     const map<string, Expr> &replace;
-    Scope<int> hidden;
+    Scope<> hidden;
 
     Expr find_replacement(const string &s) {
         map<string, Expr>::const_iterator iter = replace.find(s);
@@ -38,7 +38,7 @@ public:
 
     Expr visit(const Let *op) override {
         Expr new_value = mutate(op->value);
-        hidden.push(op->name, 0);
+        hidden.push(op->name);
         Expr new_body = mutate(op->body);
         hidden.pop(op->name);
 
@@ -52,7 +52,7 @@ public:
 
     Stmt visit(const LetStmt *op) override {
         Expr new_value = mutate(op->value);
-        hidden.push(op->name, 0);
+        hidden.push(op->name);
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 
@@ -67,7 +67,7 @@ public:
     Stmt visit(const For *op) override {
         Expr new_min = mutate(op->min);
         Expr new_extent = mutate(op->extent);
-        hidden.push(op->name, 0);
+        hidden.push(op->name);
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 

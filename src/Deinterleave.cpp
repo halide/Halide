@@ -157,9 +157,9 @@ public:
     int lane_stride;
 
     // lets for which we have even and odd lane specializations
-    const Scope<int> &external_lets;
+    const Scope<> &external_lets;
 
-    Deinterleaver(const Scope<int> &lets) : external_lets(lets) {}
+    Deinterleaver(const Scope<> &lets) : external_lets(lets) {}
 
 private:
     Scope<Expr> internal;
@@ -328,7 +328,7 @@ private:
     }
 };
 
-Expr extract_odd_lanes(Expr e, const Scope<int> &lets) {
+Expr extract_odd_lanes(Expr e, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 2 == 0);
     Deinterleaver d(lets);
     d.starting_lane = 1;
@@ -338,7 +338,7 @@ Expr extract_odd_lanes(Expr e, const Scope<int> &lets) {
     return simplify(e);
 }
 
-Expr extract_even_lanes(Expr e, const Scope<int> &lets) {
+Expr extract_even_lanes(Expr e, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 2 == 0);
     Deinterleaver d(lets);
     d.starting_lane = 0;
@@ -350,17 +350,17 @@ Expr extract_even_lanes(Expr e, const Scope<int> &lets) {
 
 Expr extract_even_lanes(Expr e) {
     internal_assert(e.type().lanes() % 2 == 0);
-    Scope<int> lets;
+    Scope<> lets;
     return extract_even_lanes(e, lets);
 }
 
 Expr extract_odd_lanes(Expr e) {
     internal_assert(e.type().lanes() % 2 == 0);
-    Scope<int> lets;
+    Scope<> lets;
     return extract_odd_lanes(e, lets);
 }
 
-Expr extract_mod3_lanes(Expr e, int lane, const Scope<int> &lets) {
+Expr extract_mod3_lanes(Expr e, int lane, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 3 == 0);
     Deinterleaver d(lets);
     d.starting_lane = lane;
@@ -371,7 +371,7 @@ Expr extract_mod3_lanes(Expr e, int lane, const Scope<int> &lets) {
 }
 
 Expr extract_lane(Expr e, int lane) {
-    Scope<int> lets;
+    Scope<> lets;
     Deinterleaver d(lets);
     d.starting_lane = lane;
     d.lane_stride = e.type().lanes();
@@ -383,7 +383,7 @@ Expr extract_lane(Expr e, int lane) {
 class Interleaver : public IRMutator2 {
     Scope<ModulusRemainder> alignment_info;
 
-    Scope<int> vector_lets;
+    Scope<> vector_lets;
 
     using IRMutator2::visit;
 
@@ -425,7 +425,7 @@ class Interleaver : public IRMutator2 {
         }
 
         if (value.type().is_vector()) {
-            vector_lets.push(op->name, 0);
+            vector_lets.push(op->name);
         }
         Body body = mutate(op->body);
         if (value.type().is_vector()) {

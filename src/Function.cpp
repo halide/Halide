@@ -168,7 +168,7 @@ EXPORT void destroy<FunctionGroup>(const FunctionGroup *f) {
 struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
-    Scope<int> defined_internally;
+    Scope<> defined_internally;
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
@@ -179,9 +179,8 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Let *let) {
         let->value.accept(this);
-        defined_internally.push(let->name, 0);
+        ScopedBinding<> bind(defined_internally, let->name);
         let->body.accept(this);
-        defined_internally.pop(let->name);
     }
 
     void visit(const Call *op) {
