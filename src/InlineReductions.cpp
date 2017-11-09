@@ -28,13 +28,13 @@ private:
     bool explicit_rdom;
     const string &name;
 
-    Scope<int> internal;
+    Scope<> internal;
 
     using IRMutator2::visit;
 
     Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
-        internal.push(op->name, 0);
+        internal.push(op->name);
         Expr body = mutate(op->body);
         internal.pop(op->name);
         if (value.same_as(op->value) &&
