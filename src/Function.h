@@ -277,6 +277,10 @@ public:
     EXPORT bool is_tracing_realizations() const;
     // @}
 
+    /** Replace this Function's LoopLevels with locked copies that
+     * cannot be mutated further. */
+    EXPORT void lock_loop_levels();
+
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
     EXPORT void freeze();
