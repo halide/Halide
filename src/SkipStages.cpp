@@ -16,6 +16,7 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::map;
+using std::set;
 
 namespace {
 
@@ -394,83 +395,98 @@ private:
     }
 };
 
-// Check if all calls to a given function are behind an if of some
-// sort (but don't worry about what it is).
+// Find Funcs where at least one of the consume nodes only uses the
+// Func conditionally. We may want to guard the production of these
+// Funcs.
 class MightBeSkippable : public IRVisitor {
 
     using IRVisitor::visit;
 
     void visit(const Call *op) {
         IRVisitor::visit(op);
-        if (op->name == func || extern_call_uses_buffer(op, func)) {
-            result &= guarded;
+        if (op->call_type == Call::Halide) {
+            unconditionally_used.insert(op->name);
         }
     }
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
 
-        bool old = guarded;
-        guarded = true;
+        std::set<string> old;
+        unconditionally_used.swap(old);
 
         op->then_case.accept(this);
+
+        std::set<string> used_in_true;
+        used_in_true.swap(unconditionally_used);
         if (op->else_case.defined()) {
             op->else_case.accept(this);
         }
 
-        guarded = old;
+        // Take the set intersection of the true and false paths, and add them to the set.
+        std::set_intersection(used_in_true.begin(), used_in_true.end(),
+                              unconditionally_used.begin(), unconditionally_used.end(),
+                              std::inserter(old, old.begin()));
+
+        unconditionally_used.swap(old);
     }
 
     void visit(const Select *op) {
         op->condition.accept(this);
 
-        bool old = guarded;
-        guarded = true;
+        std::set<string> old;
+        unconditionally_used.swap(old);
 
         op->true_value.accept(this);
+        std::set<string> used_in_true;
+        used_in_true.swap(unconditionally_used);
+
         op->false_value.accept(this);
 
-        guarded = old;
-    }
+        // Again, take the set intersection
+        std::set_intersection(used_in_true.begin(), used_in_true.end(),
+                              unconditionally_used.begin(), unconditionally_used.end(),
+                              std::inserter(old, old.begin()));
 
-    void visit(const Realize *op) {
-        if (op->name == func) {
-            guarded = false;
-        }
-        IRVisitor::visit(op);
+        unconditionally_used.swap(old);
     }
 
     void visit(const ProducerConsumer *op) {
-        if (!op->is_producer && (op->name == func)) {
-            bool old_result = result;
-            result = true;
+        if (!op->is_producer) {
             op->body.accept(this);
-            result = result || old_result;
+            if (!unconditionally_used.count(op->name)) {
+                // This Func has a least one consume clause in which
+                // it is only used conditionally.
+                candidates.insert(op->name);
+            }
         } else {
             IRVisitor::visit(op);
+            // Calls inside the produce don't count - that's the block of code we intend to guard.
+            unconditionally_used.erase(op->name);
         }
     }
 
-    string func;
-    bool guarded;
-
+    set<string> unconditionally_used;
 public:
-    bool result;
-
-    MightBeSkippable(string f) : func(f), guarded(false), result(false) {}
+    set<string> candidates;
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // Don't consider the last stage, because it's the output, so it's
     // never skippable.
+    MightBeSkippable check;
+    stmt.accept(&check);
     for (size_t i = order.size()-1; i > 0; i--) {
         debug(2) << "skip_stages checking " << order[i-1] << "\n";
-        MightBeSkippable check(order[i-1]);
-        stmt.accept(&check);
-        if (check.result) {
+        if (check.candidates.count(order[i-1])) {
             debug(2) << "skip_stages can skip " << order[i-1] << "\n";
             StageSkipper skipper(order[i-1]);
-            stmt = skipper.mutate(stmt);
+            Stmt new_stmt = skipper.mutate(stmt);
+            if (!new_stmt.same_as(stmt)) {
+                // Might have made earlier stages skippable too
+                new_stmt.accept(&check);
+            }
+            stmt = new_stmt;
         }
     }
     return stmt;

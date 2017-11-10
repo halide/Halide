@@ -9,3 +9,5 @@
 #undef internal_assert
 #undef halide_runtime_error
 #undef EXPORT
+#undef TICK
+#undef TOCK
