@@ -435,13 +435,13 @@ struct TickStackEntry {
 
 vector<TickStackEntry> tick_stack;
 
-void tick_impl(const char *file, int line) {
+void halide_tic_impl(const char *file, int line) {
     string f = file;
     f = split_string(f, "/").back();
     tick_stack.push_back({std::chrono::high_resolution_clock::now(), f, line});
 }
 
-void tock_impl(const char *file, int line) {
+void halide_toc_impl(const char *file, int line) {
     auto t1 = tick_stack.back();
     auto t2 = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> diff = t2 - t1.time;
