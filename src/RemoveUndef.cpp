@@ -16,7 +16,7 @@ public:
 private:
     using IRMutator2::visit;
 
-    Scope<int> dead_vars;
+    Scope<> dead_vars;
 
     Expr visit(const Variable *op) override {
         if (dead_vars.contains(op->name)) {
@@ -177,7 +177,7 @@ private:
     Expr visit(const Let *op) override {
         Expr value = mutate(op->value);
         if (!value.defined()) {
-            dead_vars.push(op->name, 0);
+            dead_vars.push(op->name);
         }
         Expr body = mutate(op->body);
         if (!value.defined()) {
@@ -199,7 +199,7 @@ private:
     Stmt visit(const LetStmt *op) override {
         Expr value = mutate(op->value);
         if (!value.defined()) {
-            dead_vars.push(op->name, 0);
+            dead_vars.push(op->name);
         }
         Stmt body = mutate(op->body);
         if (!value.defined()) {
