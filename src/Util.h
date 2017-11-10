@@ -321,18 +321,22 @@ using make_index_sequence = make_integer_sequence<size_t, N>;
 
 #endif
 
-// Helpers for timing blocks of code. Put 'TICK;' at the start and
-// 'TOCK;' at the end. Timing is reported at the tock via
+// Helpers for timing blocks of code. Put 'TIC;' at the start and
+// 'TOC;' at the end. Timing is reported at the toc via
 // debug(0). The calls can be nested and will pretty-print
 // appropriately. Took this idea from matlab via Jon Barron.
 //
 // Note that this uses global state internally, and is not thread-safe
 // at all. Only use it for single-threaded debugging sessions.
 
-void tick_impl(const char *file, int line);
-void tock_impl(const char *file, int line);
-#define TICK tick_impl(__FILE__, __LINE__)
-#define TOCK tock_impl(__FILE__, __LINE__)
+void halide_tic_impl(const char *file, int line);
+void halide_toc_impl(const char *file, int line);
+#define HALIDE_TIC Halide::Internal::halide_tic_impl(__FILE__, __LINE__)
+#define HALIDE_TOC Halide::Internal::halide_toc_impl(__FILE__, __LINE__)
+#ifdef COMPILING_HALIDE
+#define TIC HALIDE_TIC
+#define TOC HALIDE_TOC
+#endif
 
 }  // namespace Internal
 }  // namespace Halide
