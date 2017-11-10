@@ -215,7 +215,7 @@ struct Simplification {
 class ExprUsesInvalidBuffers : public IRVisitor {
     using IRVisitor::visit;
 
-    const Scope<int> &invalid_buffers;
+    const Scope<> &invalid_buffers;
 
     void visit(const Load *op) {
         if (invalid_buffers.contains(op->name)) {
@@ -225,12 +225,12 @@ class ExprUsesInvalidBuffers : public IRVisitor {
         }
     }
 public:
-    ExprUsesInvalidBuffers(const Scope<int> &buffers) : invalid_buffers(buffers), invalid(false) {}
+    ExprUsesInvalidBuffers(const Scope<> &buffers) : invalid_buffers(buffers), invalid(false) {}
     bool invalid;
 };
 
 /** Check if any references to buffers in an expression is invalid. */
-bool expr_uses_invalid_buffers(Expr e, const Scope<int> &invalid_buffers) {
+bool expr_uses_invalid_buffers(Expr e, const Scope<> &invalid_buffers) {
     ExprUsesInvalidBuffers uses(invalid_buffers);
     e.accept(&uses);
     return uses.invalid;
@@ -240,11 +240,11 @@ bool expr_uses_invalid_buffers(Expr e, const Scope<int> &invalid_buffers) {
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
-    Scope<int> depends_on_loop_var;
-    Scope<int> buffers;
+    Scope<> depends_on_loop_var;
+    Scope<> buffers;
 
     void visit(const Allocate *op) {
-        buffers.push(op->name, 0);
+        buffers.push(op->name);
         IRVisitor::visit(op);
     }
 
@@ -351,7 +351,7 @@ class FindSimplifications : public IRVisitor {
     void visit_let(const LetOrLetStmt *op) {
         bool varying = expr_uses_vars(op->value, depends_on_loop_var);
         if (varying) {
-            depends_on_loop_var.push(op->name, 0);
+            depends_on_loop_var.push(op->name);
         }
         vector<Simplification> old;
         old.swap(simplifications);
@@ -378,7 +378,7 @@ public:
     vector<Simplification> simplifications;
 
     FindSimplifications(const std::string &v) {
-        depends_on_loop_var.push(v, 0);
+        depends_on_loop_var.push(v);
     }
 };
 
@@ -718,7 +718,7 @@ class RenormalizeGPULoops : public IRMutator2 {
     using IRMutator2::visit;
 
     // Track all vars that depend on GPU loop indices or loops inside GPU kernels.
-    Scope<int> gpu_vars;
+    Scope<> gpu_vars;
 
     vector<pair<string, Expr> > lifted_lets;
 
@@ -732,7 +732,7 @@ class RenormalizeGPULoops : public IRMutator2 {
         Stmt stmt;
 
         if (in_gpu_loop || CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            gpu_vars.push(op->name, 0);
+            gpu_vars.push(op->name);
             in_gpu_loop = true;
         }
 
@@ -776,7 +776,7 @@ class RenormalizeGPULoops : public IRMutator2 {
             return mutate(substitute(op->name, new_var, op->body));
         }
 
-        gpu_vars.push(op->name, 0);
+        gpu_vars.push(op->name);
 
         if (in_thread_loop) {
             return IRMutator2::visit(op);

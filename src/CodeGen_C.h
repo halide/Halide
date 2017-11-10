@@ -138,7 +138,7 @@ protected:
     Scope<Allocation> allocations;
 
     /** Track which allocations actually went on the heap. */
-    Scope<int> heap_allocations;
+    Scope<> heap_allocations;
 
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
