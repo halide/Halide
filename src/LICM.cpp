@@ -136,7 +136,7 @@ class LICM : public IRMutator2 {
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
         } else {
-            return 0x7fffffff;
+            return 100;
         }
     }
 
