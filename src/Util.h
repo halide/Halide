@@ -321,6 +321,19 @@ using make_index_sequence = make_integer_sequence<size_t, N>;
 
 #endif
 
+// Helpers for timing blocks of code. Put 'TICK;' at the start and
+// 'TOCK;' at the end. Timing is reported at the tock via
+// debug(0). The calls can be nested and will pretty-print
+// appropriately. Took this idea from matlab via Jon Barron.
+//
+// Note that this uses global state internally, and is not thread-safe
+// at all. Only use it for single-threaded debugging sessions.
+
+void tick_impl(const char *file, int line);
+void tock_impl(const char *file, int line);
+#define TICK tick_impl(__FILE__, __LINE__)
+#define TOCK tock_impl(__FILE__, __LINE__)
+
 }  // namespace Internal
 }  // namespace Halide
 
