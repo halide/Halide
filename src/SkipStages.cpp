@@ -10,6 +10,8 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
+#include <iterator>
+
 namespace Halide {
 namespace Internal {
 
