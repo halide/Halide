@@ -95,7 +95,7 @@ bool associative_op_pattern_match(Expr e,
                                   const Expr &op,
                                   const vector<string> &x_names,
                                   const vector<string> &y_names,
-                                  const Scope<int> &x_scope,
+                                  const Scope<> &x_scope,
                                   map<string, Expr> &match) {
 
     internal_assert(e.type() == op.type())
@@ -164,9 +164,9 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
     internal_assert(op_x_names.size() == exprs.size());
     internal_assert(op_x_names.size() == assoc_op.size());
 
-    Scope<int> x_scope;
+    Scope<> x_scope;
     for (const auto &x : op_x_names) {
-        x_scope.push(x, 0);
+        x_scope.push(x);
     }
 
     for (const AssociativePattern &pattern : table) {

@@ -31,12 +31,12 @@ public:
             outputs.insert(f.name());
         }
     }
-    Scope<int> scope;
+    Scope<> scope;
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
     const Target &target;
-    Scope<int> realizations, shader_scope_realizations;
+    Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
 
     Expr make_shape_var(string name, string field, size_t dim,
@@ -107,10 +107,10 @@ private:
     using IRMutator2::visit;
 
     Stmt visit(const Realize *op) override {
-        realizations.push(op->name, 0);
+        realizations.push(op->name);
 
         if (in_shader) {
-            shader_scope_realizations.push(op->name, 0);
+            shader_scope_realizations.push(op->name);
         }
 
         Stmt body = mutate(op->body);
@@ -358,7 +358,7 @@ private:
         // Discover constrained versions of things.
         bool constrained_version_exists = ends_with(op->name, ".constrained");
         if (constrained_version_exists) {
-            scope.push(op->name, 0);
+            scope.push(op->name);
         }
 
         Stmt stmt = IRMutator2::visit(op);
