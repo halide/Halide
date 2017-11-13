@@ -30,7 +30,7 @@ $(BIN)/process: process.cpp $(BIN)/camera_pipe.a $(BIN)/camera_pipe_auto_schedul
 	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/viz/process: process.cpp $(BIN)/viz/camera_pipe.a $(BIN)/Demosaic.o $(BIN)/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN)/viz $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -Wall -O3 -I$(BIN)/viz $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/out.png: $(BIN)/process
 	$(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 $(TIMING_ITERATIONS) $@ $(BIN)/h_auto.png $(BIN)/fcam_c.png $(BIN)/fcam_arm.png
