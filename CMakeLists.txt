@@ -358,8 +358,9 @@ else()
 endif()
 
 # ------------------------------------------------
+# 'make distrib' support
 
-add_custom_target(distrib)
+add_custom_target(build_distrib_dir)
 set(DISTRIB_DIR "${CMAKE_BINARY_DIR}/distrib")
 
 function(_make_distrib_subdir TARGET DIR)
@@ -396,7 +397,7 @@ function(add_to_distrib TARGET DIR)
                        DEPENDS "${TARGET}")
     _make_distrib_subdir("${NAME}" "${DIR}")
   endif()
-  add_dependencies(distrib "${NAME}")
+  add_dependencies(build_distrib_dir "${NAME}")
 endfunction()
 
 # ---- libHalide
@@ -407,6 +408,7 @@ else()
 endif()
 
 # ---- Header files
+add_dependencies(build_distrib_dir HalideIncludes)
 add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include)
 add_to_distrib("${CMAKE_BINARY_DIR}/include/HalideBuffer.h" include)
 file(GLOB FILES "${CMAKE_SOURCE_DIR}/include/HalideRuntime*.h")
@@ -461,6 +463,12 @@ foreach(F ${FILES})
   add_to_distrib(${F} "")
 endforeach()
 
+# ---- CMake 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.cmake")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
 # ---- halide_config 
 file(GLOB FILES "${CMAKE_SOURCE_DIR}/tools/halide_config.*.tpl")
 foreach(F ${FILES})
@@ -474,12 +482,16 @@ foreach(F ${FILES})
 endforeach()
 
 # ---- distrib.tgz and distrib.zip
-add_custom_target(halide.tgz
-    DEPENDS distrib
-    COMMAND cmake -E tar -czf "${CMAKE_BINARY_DIR}/halide.tgz" "${DISTRIB_DIR}")
+if (MSVC)
+  # 'cmake -E tar' can create zipfiles as of v3.2+
+  add_custom_target(halide_archive
+      DEPENDS build_distrib_dir
+      COMMAND cmake -E tar -cf "${DISTRIB_DIR}/halide.zip" --format=zip "${DISTRIB_DIR}")
+else()
+  add_custom_target(halide_archive
+      DEPENDS build_distrib_dir
+      COMMAND cmake -E tar -czf "${DISTRIB_DIR}/halide.tgz" "${DISTRIB_DIR}")
+endif()
 
-# 'cmake -E tar' can create zipfiles as of v3.2+
-add_custom_target(halide.zip
-    DEPENDS distrib
-    COMMAND cmake -E tar -cf "${CMAKE_BINARY_DIR}/halide.zip" --format=zip "${DISTRIB_DIR}")
-
+add_custom_target(distrib)
+add_dependencies(distrib build_distrib_dir halide_archive)
