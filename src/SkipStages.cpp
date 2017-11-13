@@ -53,8 +53,8 @@ private:
     string buffer;
     bool varies;
     bool treat_selects_as_guards;
-    Scope<int> varying;
-    Scope<int> in_pipeline;
+    Scope<> varying;
+    Scope<> in_pipeline;
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -69,7 +69,7 @@ private:
         bool should_pop = false;
         if (!is_one(op->extent) || min_varies) {
             should_pop = true;
-            varying.push(op->name, 0);
+            varying.push(op->name);
         }
         op->body.accept(this);
         if (should_pop) {
@@ -88,7 +88,7 @@ private:
         bool value_varies = varies;
         varies |= old_varies;
         if (value_varies) {
-            varying.push(name, 0);
+            varying.push(name);
         }
         body.accept(this);
         if (value_varies) {
@@ -108,7 +108,7 @@ private:
     }
 
     void visit(const ProducerConsumer *op) {
-        in_pipeline.push(op->name, 0);
+        ScopedBinding<> bind(in_pipeline, op->name);
         if (op->is_producer) {
             if (op->name != buffer) {
                 op->body.accept(this);
@@ -116,7 +116,6 @@ private:
         } else {
             IRVisitor::visit(op);
         }
-        in_pipeline.pop(op->name);
     }
 
     // Logical operators with eager constant folding
@@ -226,11 +225,10 @@ private:
         // allocation don't get moved outside the allocation and are
         // marked as varying if predicate depends on the value of the
         // allocation.
-        varying.push(op->name, 0);
-        varying.push(op->name + ".buffer", 0);
+        ScopedBinding<>
+            bind_host_ptr(varying, op->name),
+            bind_buffer(varying, op->name + ".buffer");
         IRVisitor::visit(op);
-        varying.pop(op->name + ".buffer");
-        varying.pop(op->name);
     }
 };
 
@@ -309,7 +307,7 @@ private:
     string func;
     using IRMutator2::visit;
 
-    Scope<int> vector_vars;
+    Scope<> vector_vars;
     bool in_vector_loop;
 
     Stmt visit(const For *op) override {
@@ -317,7 +315,7 @@ private:
 
         // We want to be sure that the predicate doesn't vectorize.
         if (op->for_type == ForType::Vectorized) {
-            vector_vars.push(op->name, 0);
+            vector_vars.push(op->name);
             in_vector_loop = true;
         }
 
@@ -337,7 +335,7 @@ private:
         if (in_vector_loop &&
             expr_uses_vars(op->value, vector_vars)) {
             should_pop = true;
-            vector_vars.push(op->name, 0);
+            vector_vars.push(op->name);
         }
 
         Stmt stmt = IRMutator2::visit(op);

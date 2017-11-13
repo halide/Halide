@@ -76,7 +76,7 @@ private:
             auto it = env.find(op->name);
             internal_assert(it != env.end()) << op->name << " not in environment\n";
             Function f = it->second;
-            internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
+            internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
 
             trace_it = f.is_tracing_loads() || trace_all_loads;
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
@@ -114,7 +114,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return stmt;
         Function f = iter->second;
-        internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
+        internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
 
         if (f.is_tracing_stores() || trace_all_stores) {
             // Wrap each expr in a tracing call
