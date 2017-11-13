@@ -373,6 +373,10 @@ endfunction()
 
 # Copy the file produced by TARGET into the distrib folder, in the subdir DIR
 function(add_to_distrib TARGET DIR)
+  set(options )
+  set(oneValueArgs )
+  set(multiValueArgs DEPS)
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   if(TARGET "${TARGET}")
     set(NAME "_distrib_${TARGET}")
     get_target_property(TARGET_TYPE "${TARGET}" TYPE)
@@ -397,6 +401,9 @@ function(add_to_distrib TARGET DIR)
                        DEPENDS "${TARGET}")
     _make_distrib_subdir("${NAME}" "${DIR}")
   endif()
+  if("${args_DEPS}")
+    add_dependencies("${NAME}" "${args_DEPS}")
+  endif()
   add_dependencies(build_distrib_dir "${NAME}")
 endfunction()
 
@@ -408,8 +415,8 @@ else()
 endif()
 
 # ---- Header files
-add_dependencies(build_distrib_dir HalideIncludes)
-add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include)
+add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include
+               DEPS HalideIncludes)
 add_to_distrib("${CMAKE_BINARY_DIR}/include/HalideBuffer.h" include)
 file(GLOB FILES "${CMAKE_SOURCE_DIR}/include/HalideRuntime*.h")
 foreach(F ${FILES})
