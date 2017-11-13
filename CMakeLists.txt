@@ -482,15 +482,17 @@ foreach(F ${FILES})
 endforeach()
 
 # ---- distrib.tgz and distrib.zip
+file(TO_NATIVE_PATH "${DISTRIB_DIR}" NATIVE_DISTRIB_DIR)
+file(TO_NATIVE_PATH "${DISTRIB_DIR}/../" NATIVE_ARCHIVE_DIR)
 if (MSVC)
   # 'cmake -E tar' can create zipfiles as of v3.2+
   add_custom_target(halide_archive
       DEPENDS build_distrib_dir
-      COMMAND cmake -E tar -cf "${DISTRIB_DIR}/halide.zip" --format=zip "${DISTRIB_DIR}")
+      COMMAND cmake -E tar -cf "${NATIVE_ARCHIVE_DIR}/halide.zip" --format=zip "${NATIVE_DISTRIB_DIR}")
 else()
   add_custom_target(halide_archive
       DEPENDS build_distrib_dir
-      COMMAND cmake -E tar -czf "${DISTRIB_DIR}/halide.tgz" "${DISTRIB_DIR}")
+      COMMAND cmake -E tar -czf "${NATIVE_ARCHIVE_DIR}/halide.tgz" "${NATIVE_DISTRIB_DIR}")
 endif()
 
 add_custom_target(distrib)
