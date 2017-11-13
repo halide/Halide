@@ -19,7 +19,7 @@ $(BIN)/%.generator: %_generator.cpp $(HALIDE_GENERATOR_DEPS)
 $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	@echo Running Generator $<
 	@mkdir -p $(@D)
-	@$< -g $(notdir $*) -o $(BIN) target=$(HL_TARGET)-no_runtime
+	@$< -g $(*F) -f $(*F) -o $(BIN) target=$(HL_TARGET)-no_runtime
 
 MODULES = \
 	$(BIN)/daubechies_x.a \

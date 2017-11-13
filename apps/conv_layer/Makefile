@@ -1,28 +1,40 @@
-include ../support/Makefile.inc
+# This assumes it's built at the toplevel via 'make distrib'.
+HALIDE_DISTRIB_DIR ?= ../../distrib
 
-BIN ?= bin
+include $(HALIDE_DISTRIB_DIR)/halide.make
 
-all: $(BIN)/process
-
-$(BIN)/conv_layer.generator: conv_layer_generator.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
-$(BIN)/conv_layer.a: $(BIN)/conv_layer.generator
-	@-mkdir -p $(BIN)
-	$^ -g conv_layer -o $(BIN) -f conv_layer target=$(HL_TARGET) auto_schedule=false
-
-$(BIN)/conv_layer_auto_schedule.a: $(BIN)/conv_layer.generator
-	@-mkdir -p $(BIN)
-	$^ -g conv_layer -o $(BIN) -f conv_layer_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
-
-$(BIN)/process: process.cpp $(BIN)/conv_layer.a $(BIN)/conv_layer_auto_schedule.a
-	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS)
-
-run: $(BIN)/process
-	@-mkdir -p $(BIN)
-	$(BIN)/process
+all: test
 
 clean:
-	rm -rf $(BIN)
+	@rm -rf $(BIN)
+
+# By default, %.generator is produced by building %_generator.cpp
+$(BIN)/%.generator: %_generator.cpp $(HALIDE_GENERATOR_DEPS)
+	@echo Building Generator $(filter %_generator.cpp,$^)
+	@mkdir -p $(@D)
+	@$(CXX) $(filter-out %.h,$^) $(HALIDE_GENERATOR_CXXFLAGS) $(HALIDE_GENERATOR_LDFLAGS) -o $@
+
+# By default, %.a/.h are produced by executing %.generator
+$(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
+	@echo Running Generator $<
+	@mkdir -p $(@D)
+	@$< -g $(*F) -f $(*F) -o $(BIN) target=$(HL_TARGET)-no_runtime
+
+# By default, %_auto_schedule.a/.h are produced by executing %.generator with auto_schedule=true
+$(BIN)/%_auto_schedule.a $(BIN)/%_auto_schedule.h: $(BIN)/%.generator
+	@echo Running Generator $< with auto_schedule=true
+	@mkdir -p $(@D)
+	@$< -g $(*F) -f $(*F)_auto_schedule -o $(BIN) target=$(HL_TARGET)-no_runtime auto_schedule=true
+
+MODULES = \
+	$(BIN)/conv_layer.a \
+	$(BIN)/conv_layer_auto_schedule.a \
+	$(BIN)/runtime.a
+
+$(BIN)/process: process.cpp $(MODULES)
+	$(CXX) $(CXXFLAGS) $(HALIDE_IMAGE_IO_CXXFLAGS) -I$(BIN) $^ $(MODULES) $(LDFLAGS) $(HALIDE_IMAGE_IO_LDFLAGS) -o $@
+
+test: $(BIN)/process
+	@echo Testing $<...
+	@$< 
+

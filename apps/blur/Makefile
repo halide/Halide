@@ -19,7 +19,7 @@ $(BIN)/%.generator: %_generator.cpp $(HALIDE_GENERATOR_DEPS)
 $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	@echo Running Generator $<
 	@mkdir -p $(@D)
-	@$< -g $(notdir $*) -o $(BIN) target=$(HL_TARGET)-no_runtime
+	@$< -g $(*F) -f $(*F) -o $(BIN) target=$(HL_TARGET)-no_runtime
 
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
@@ -29,16 +29,18 @@ else
 OPENMP_FLAGS=
 endif
 
+# -O2 is faster than -O3 for this app (O3 unrolls too much)
+EXTRA_CXX_FLAGS = $(OPENMP_FLAGS) -msse2 -Wall -O2  
+
 MODULES = \
 	$(BIN)/halide_blur.a \
 	$(BIN)/runtime.a
 
-# -O2 is faster than -O3 for this app (O3 unrolls too much)
 $(BIN)/halide_blur_test: halide_blur_test.cpp $(MODULES)
-	$(CXX) $(CXXFLAGS) $(HALIDE_IMAGE_IO_CXXFLAGS) $(OPENMP_FLAGS) -msse2 -Wall -O2  -I$(BIN) $^ $(MODULES) $(LDFLAGS) $(HALIDE_IMAGE_IO_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(HALIDE_IMAGE_IO_CXXFLAGS) $(EXTRA_CXX_FLAGS) -I$(BIN) $^ $(MODULES) $(LDFLAGS) $(HALIDE_IMAGE_IO_LDFLAGS) -o $@
 
 test: $(BIN)/halide_blur_test
-	@echo Testing halide_blur_test...
+	@echo Testing $<...
 	@$< 
 
 # Don't auto-delete the generators.
