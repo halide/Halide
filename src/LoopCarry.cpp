@@ -189,7 +189,7 @@ class LoopCarryOverLoop : public IRMutator2 {
 
     // Productions we're in a consume node for. They're fixed and safe
     // to lift out.
-    const Scope<int> &in_consume;
+    const Scope<> &in_consume;
 
     int max_carried_values;
 
@@ -200,7 +200,7 @@ class LoopCarryOverLoop : public IRMutator2 {
         // loop variable.
         Expr value = mutate(op->value);
         Expr step = is_linear(value, linear);
-        linear.push(op->name, step);
+        ScopedBinding<Expr> bind(linear, op->name, step);
 
         containing_lets.push_back({ op->name, value });
 
@@ -214,7 +214,6 @@ class LoopCarryOverLoop : public IRMutator2 {
         }
 
         containing_lets.pop_back();
-        linear.pop(op->name);
         return stmt;
     }
 
@@ -482,7 +481,7 @@ class LoopCarryOverLoop : public IRMutator2 {
     }
 
 public:
-    LoopCarryOverLoop(const string &var, const Scope<int> &s, int max_carried_values)
+    LoopCarryOverLoop(const string &var, const Scope<> &s, int max_carried_values)
         : in_consume(s), max_carried_values(max_carried_values) {
         linear.push(var, 1);
     }
@@ -501,15 +500,14 @@ class LoopCarry : public IRMutator2 {
     using IRMutator2::visit;
 
     int max_carried_values;
-    Scope<int> in_consume;
+    Scope<> in_consume;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             return IRMutator2::visit(op);
         } else {
-            in_consume.push(op->name, 0);
+            ScopedBinding<> bind(in_consume, op->name);
             Stmt body = mutate(op->body);
-            in_consume.pop(op->name);
             return ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }

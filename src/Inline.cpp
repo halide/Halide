@@ -19,7 +19,7 @@ void validate_schedule_inlined_function(Function f) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
-    if (!func_s.store_level().is_inline()) {
+    if (!func_s.store_level().is_inlined()) {
         user_error << "Function " << f.name() << " is scheduled to be computed inline, "
                    << "but is not scheduled to be stored inline. A storage schedule "
                    << "is meaningless for functions computed inline.\n";

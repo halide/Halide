@@ -159,7 +159,7 @@ public:
     }
 
 #if LOG_EXPR_MUTATIONS
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -175,7 +175,7 @@ public:
 #endif
 
 #if LOG_STMT_MUTATIONS
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(const Stmt &s) override {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;

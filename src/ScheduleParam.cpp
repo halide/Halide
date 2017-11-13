@@ -10,12 +10,7 @@ ScheduleParamBase::ScheduleParamBase(const Type &t, const std::string &name, boo
       scalar_parameter(t, /*is_buffer*/ false, 0, is_explicit_name ? name + ".schedule_param_param" : "",
           is_explicit_name, /*register_instance*/ false, /*is_bound_before_lowering*/ true),
       scalar_expr(Variable::make(t, scalar_parameter.name() + ".schedule_param_var", scalar_parameter)),
-      // We must use a not-undefined LoopLevel, so that if we later mutate it,
-      // references that use it will see the same content pointer.
-      // We choose to use an "invalid" possibility here so that if we neglect
-      // to set it, a scheduling error results; alternately, we could default
-      // to LoopLevel::root() or LoopLevel::inlined().
-      loop_level("__invalid_func_name", "__invalid_var_name", false) {
+      loop_level() {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::ScheduleParam, this, nullptr);
 }
 
