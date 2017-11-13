@@ -23,7 +23,7 @@ namespace {
 // This list should at least avoid lifting the same cases as that of the
 // simplifier for lets, otherwise CSE and the simplifier will fight each
 // other pointlessly.
-bool should_extract(const Expr &e) {
+bool should_extract(const Expr &e, bool lift_all) {
     if (is_const(e)) {
         return false;
     }
@@ -32,12 +32,27 @@ bool should_extract(const Expr &e) {
         return false;
     }
 
+    if (const Call *a = e.as<Call>()) {
+        if (!a->is_pure() && (a->call_type != Call::Halide)) {
+            // Impure calls may have side-effects, thus may not be re-ordered
+            // or reduced in number.
+            // Call to Halide function may give different value depending on
+            // where it is evaluated; however, the value is constant within
+            // an expr. Thus, it is okay to lift out.
+            return false;
+        }
+    }
+
+    if (lift_all) {
+        return true;
+    }
+
     if (const Broadcast *a = e.as<Broadcast>()) {
-        return should_extract(a->value);
+        return should_extract(a->value, false);
     }
 
     if (const Cast *a = e.as<Cast>()) {
-        return should_extract(a->value);
+        return should_extract(a->value, false);
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -58,17 +73,6 @@ bool should_extract(const Expr &e) {
 
     if (const Ramp *a = e.as<Ramp>()) {
         return !is_const(a->stride);
-    }
-
-    if (const Call *a = e.as<Call>()) {
-        if (!a->is_pure() && (a->call_type != Call::Halide)) {
-            // Impure calls may have side-effects, thus may not be re-ordered
-            // or reduced in number.
-            // Call to Halide function may give different value depending on
-            // where it is evaluated; however, the value is constant within
-            // an expr. Thus, it is okay to lift out.
-            return false;
-        }
     }
 
     return true;
@@ -209,8 +213,9 @@ public:
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
+    bool lift_all;
 public:
-    ComputeUseCounts(GVN &g) : gvn(g) {}
+    ComputeUseCounts(GVN &g, bool l) : gvn(g), lift_all(l) {}
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
@@ -219,8 +224,8 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
-        if (!should_extract(e)) {
+        debug(4) << "Include: " << e << "; should extract: " << should_extract(e, lift_all) << "\n";
+        if (!should_extract(e, lift_all)) {
             e.accept(this);
             return;
         }
@@ -263,17 +268,23 @@ public:
 };
 
 class CSEEveryExprInStmt : public IRMutator2 {
+    bool lift_all;
+
 public:
     using IRMutator2::mutate;
 
-    Expr mutate(const Expr &e) {
-        return common_subexpression_elimination(e);
+    Expr mutate(const Expr &e) override {
+        return common_subexpression_elimination(e, lift_all);
     }
+
+    CSEEveryExprInStmt(bool l) : lift_all(l) {}
 };
 
 } // namespace
 
-Expr common_subexpression_elimination(Expr e) {
+Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
+    Expr e = e_in;
+
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
@@ -282,7 +293,7 @@ Expr common_subexpression_elimination(Expr e) {
     GVN gvn;
     e = gvn.mutate(e);
 
-    ComputeUseCounts count_uses(gvn);
+    ComputeUseCounts count_uses(gvn, lift_all);
     count_uses.include(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
@@ -324,8 +335,8 @@ Expr common_subexpression_elimination(Expr e) {
     return e;
 }
 
-Stmt common_subexpression_elimination(Stmt s) {
-    return CSEEveryExprInStmt().mutate(s);
+Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
+    return CSEEveryExprInStmt(lift_all).mutate(s);
 }
 
 

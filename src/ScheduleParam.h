@@ -140,7 +140,7 @@ class ScheduleParam : public Internal::ScheduleParamBase {
     template <typename T2, typename std::enable_if<std::is_same<T2, LoopLevel>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const LoopLevel &value, const char *msg) {
         user_assert(is_looplevel_param()) << "Only ScheduleParam<LoopLevel> can be set withLoopLevel.";
-        loop_level.copy_from(value);
+        loop_level.set(value);
     }
 
     template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>

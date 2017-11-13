@@ -45,7 +45,7 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # It's theoretically possible that this could be legitimately empty,
   # but in practice that doesn't really happen, so we'll assume it means we
   # aren't configured correctly.
-  message(FATAL_ERROR "'llvm-config --system-libs' is empty; this is probably wrong.")
+  message(WARNING "'llvm-config --system-libs' is empty; this is possibly wrong.")
 endif()
 
 # Check LLVM
@@ -130,7 +130,6 @@ function(halide_project name folder)
   else()
     target_compile_options("${name}" PUBLIC "-fno-rtti")
   endif()
-  target_compile_definitions("${name}" PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
