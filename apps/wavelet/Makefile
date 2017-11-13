@@ -31,9 +31,11 @@ MODULES = \
 $(BIN)/wavelet: wavelet.cpp $(MODULES)
 	$(CXX) $(CXXFLAGS) $(HALIDE_IMAGE_IO_CXXFLAGS) -I$(BIN) $^ $(MODULES) $(LDFLAGS) $(HALIDE_IMAGE_IO_LDFLAGS) -o $@
 
+IMAGES ?= ../images
+
 test: $(BIN)/wavelet
-	@echo Testing wavelet...
-	@$< ../images/gray.png $(BIN)
+	@echo Testing $<...
+	@$< $(IMAGES)/gray.png $(BIN)
 
 # Don't auto-delete the generators.
 .SECONDARY:
