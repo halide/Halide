@@ -7,6 +7,7 @@
 
 #include "IR.h"
 #include "Closure.h"
+#include "ModulusRemainder.h"
 
 namespace Halide {
 namespace Internal {
@@ -58,6 +59,9 @@ struct DeviceArgument {
      * buffer is read-write and set both flags. */
     bool read;
     bool write;
+
+    /** Alignment information for integer parameters. */
+    ModulusRemainder alignment;
 
     DeviceArgument() :
         is_buffer(false),

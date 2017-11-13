@@ -31,12 +31,12 @@ public:
             outputs.insert(f.name());
         }
     }
-    Scope<int> scope;
+    Scope<> scope;
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
     const Target &target;
-    Scope<int> realizations, shader_scope_realizations;
+    Scope<> realizations, shader_scope_realizations;
     bool in_shader = false;
 
     Expr make_shape_var(string name, string field, size_t dim,
@@ -49,7 +49,7 @@ private:
         return Variable::make(Int(32), name, buf, param, rdom);
     }
 
-    Expr flatten_args(const string &name, const vector<Expr> &args,
+    Expr flatten_args(const string &name, vector<Expr> args,
                       const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
         Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
@@ -58,18 +58,30 @@ private:
         for (size_t i = 0; i < args.size(); i++) {
             strides[i] = make_shape_var(name, "stride", i, buf, param);
             mins[i] = make_shape_var(name, "min", i, buf, param);
+            if (target.has_large_buffers()) {
+                strides[i] = cast<int64_t>(strides[i]);
+            }
+        }
+
+        Expr zero = target.has_large_buffers() ? make_zero(Int(64)) : 0;
+
+        // We peel off constant offsets so that multiple stencil
+        // taps can share the same base address.
+        Expr constant_term = zero;
+        for (size_t i = 0; i < args.size(); i++) {
+            const Add *add = args[i].as<Add>();
+            if (add && is_const(add->b)) {
+                constant_term += strides[i] * add->b;
+                args[i] = add->a;
+            }
         }
 
         if (internal) {
             // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
             // strategy makes sense when we expect x to cancel with
-            // something in xmin.  We use this for internal allocations
+            // something in xmin.  We use this for internal allocations.
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_large_buffers()) {
-                    idx += cast<int64_t>(args[i] - mins[i]) * cast<int64_t>(strides[i]);
-                } else {
-                    idx += (args[i] - mins[i]) * strides[i];
-                }
+                idx += (args[i] - mins[i]) * strides[i];
             }
         } else {
             // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
@@ -77,17 +89,16 @@ private:
             // will be pulled outside the inner loop. We use this for
             // external buffers, where the mins and strides are likely
             // to be symbolic
-            Expr base = target.has_large_buffers() ? make_zero(Int(64)) : 0;
+            Expr base = zero;
             for (size_t i = 0; i < args.size(); i++) {
-                if (target.has_large_buffers()) {
-                    idx += cast<int64_t>(args[i]) * cast<int64_t>(strides[i]);
-                    base += cast<int64_t>(mins[i]) * cast<int64_t>(strides[i]);
-                } else {
-                    idx += args[i] * strides[i];
-                    base += mins[i] * strides[i];
-                }
+                idx += args[i] * strides[i];
+                base += mins[i] * strides[i];
             }
             idx -= base;
+        }
+
+        if (!is_zero(constant_term)) {
+            idx += constant_term;
         }
 
         return idx;
@@ -96,10 +107,10 @@ private:
     using IRMutator2::visit;
 
     Stmt visit(const Realize *op) override {
-        realizations.push(op->name, 0);
+        realizations.push(op->name);
 
         if (in_shader) {
-            shader_scope_realizations.push(op->name, 0);
+            shader_scope_realizations.push(op->name);
         }
 
         Stmt body = mutate(op->body);
@@ -347,7 +358,7 @@ private:
         // Discover constrained versions of things.
         bool constrained_version_exists = ends_with(op->name, ".constrained");
         if (constrained_version_exists) {
-            scope.push(op->name, 0);
+            scope.push(op->name);
         }
 
         Stmt stmt = IRMutator2::visit(op);

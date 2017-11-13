@@ -73,6 +73,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         }
     }
 
+    // Get the alignment of the integer arguments
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].alignment.modulus) {
+            alignment_info.push(args[i].name, args[i].alignment);
+        }
+    }
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
@@ -198,7 +204,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(alloc);
+        int32_t size = alloc->constant_allocation_size();
         user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "

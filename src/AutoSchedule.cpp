@@ -1135,7 +1135,7 @@ struct Partitioner {
     // loop variable specified in 'vars'. Access expressions along each dimension
     // of the allocation are specified by 'acc_exprs'. The dimension bounds of the
     // allocation are specified by 'buffer_bounds'.
-    Expr find_max_access_stride(const Scope<int> &vars, const string &func_acc,
+    Expr find_max_access_stride(const Scope<> &vars, const string &func_acc,
                                 const vector<Expr> &acc_exprs, const Box &buffer_bounds);
 
     // Return the sum of access strides along each of the loop variables in
@@ -2651,16 +2651,16 @@ class FindVarsUsingVar : public IRVisitor {
 
     void visit(const Let *let) {
         if (expr_uses_vars(let->value, vars)) {
-            vars.push(let->name, 0);
+            vars.push(let->name);
         }
         let->value.accept(this);
         let->body.accept(this);
     }
 public :
-    Scope<int> vars;
+    Scope<> vars;
 
     FindVarsUsingVar(string var) {
-        vars.push(var, 0);
+        vars.push(var);
     }
 };
 
@@ -2950,7 +2950,7 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
     }
 }
 
-Expr Partitioner::find_max_access_stride(const Scope<int> &vars,
+Expr Partitioner::find_max_access_stride(const Scope<> &vars,
                                          const string &func_acc,
                                          const vector<Expr> &acc_exprs,
                                          const Box &buffer_bounds) {
@@ -3068,7 +3068,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 // The current auto scheduler cannots handle such cases.
 void validate_no_partial_schedules(const Function &f) {
     // Verify no compute_root or bounds are specified
-    user_assert(f.schedule().compute_level().is_inline())
+    user_assert(f.schedule().compute_level().is_inlined())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
         << "\" since it is scheduled to be computed at root\n";
     user_assert(f.schedule().bounds().empty())
@@ -3338,6 +3338,11 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // of the schedule.
     debug(2) << "Computing full realization order...\n";
     vector<string> full_order = realization_order(outputs, env);
+
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
