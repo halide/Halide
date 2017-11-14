@@ -1509,7 +1509,7 @@ string CodeGen_Hexagon::mattrs() const {
 #if LLVM_VERSION >= 50
     attrs << ",+long-calls";
 #else
-    user_error << "LLVM version blah is required for the Hexagon backend";
+    user_error << "LLVM version 5.0 or greater is required for the Hexagon backend";
 #endif
     return attrs.str();
 }
