@@ -193,10 +193,12 @@ std::string Definition::source_location() const {
 const Specialization &Definition::add_specialization(Expr condition) {
     Specialization s;
     s.condition = condition;
+    s.definition.contents = new DefinitionContents;
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
     s.definition.contents->args   = contents->args;
+    s.definition.contents->source_location = contents->source_location;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
     s.definition.contents->stage_schedule = contents->stage_schedule.get_copy();
