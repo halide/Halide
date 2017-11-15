@@ -1732,6 +1732,14 @@ Stage &Stage::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr off
     return *this;
 }
 
+/** Attempt to get the source file and line where this stage was
+ * defined by parsing the process's own debug symbols. Returns an
+ * empty string if no debug symbols were found or the debug
+ * symbols were not understood. Works on OS X and Linux only. */
+std::string Stage::source_location() const {
+    return definition.source_location();
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -2860,6 +2868,11 @@ Pipeline Func::pipeline() {
 
 vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
+}
+
+std::string Func::source_location() const {
+    user_assert(defined()) << "A Func with no definition has no source_location\n";
+    return func.definition().source_location();
 }
 
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {

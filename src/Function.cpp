@@ -87,7 +87,9 @@ struct FunctionContents {
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
 
-        init_def.accept(visitor);
+        if (init_def.defined()) {
+            init_def.accept(visitor);
+        }
         for (const Definition &def : updates) {
             def.accept(visitor);
         }
@@ -126,7 +128,9 @@ struct FunctionContents {
     void mutate(IRMutator2 *mutator) {
         func_schedule.mutate(mutator);
 
-        init_def.mutate(mutator);
+        if (init_def.defined()) {
+            init_def.mutate(mutator);
+        }
         for (Definition &def : updates) {
             def.mutate(mutator);
         }
@@ -331,10 +335,12 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
 
     // Copy the pure definition
-    copy->init_def = contents->init_def.get_copy();
-    internal_assert(copy->init_def.is_init());
-    internal_assert(copy->init_def.schedule().rvars().empty())
-        << "Init definition shouldn't have reduction domain\n";
+    if (contents->init_def.defined()) {
+        copy->init_def = contents->init_def.get_copy();
+        internal_assert(copy->init_def.is_init());
+        internal_assert(copy->init_def.schedule().rvars().empty())
+            << "Init definition shouldn't have reduction domain\n";
+    }
 
     for (const Definition &def : contents->updates) {
         internal_assert(!def.is_init());
@@ -417,18 +423,18 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents->name = unique_name('f');
     }
 
-    internal_assert(contents->init_def.is_init());
-
-    user_assert(contents->init_def.values().empty())
+    user_assert(!contents->init_def.defined())
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func is already defined.\n";
 
-    contents->init_def.values() = values;
-    auto &pure_def_args = contents->init_def.args();
-    pure_def_args.resize(args.size());
+    std::vector<Expr> init_def_args;
+    init_def_args.resize(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        pure_def_args[i] = Var(args[i]);
+        init_def_args[i] = Var(args[i]);
     }
+
+    ReductionDomain rdom;
+    contents->init_def = Definition(init_def_args, values, rdom, true);
 
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
@@ -796,7 +802,7 @@ const std::vector<Definition> &Function::updates() const {
 }
 
 bool Function::has_pure_definition() const {
-    return !contents->init_def.values().empty();
+    return contents->init_def.defined();
 }
 
 bool Function::can_be_inlined() const {
