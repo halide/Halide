@@ -702,10 +702,13 @@ void Function::define_extern(const std::string &function_name,
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
-    auto &pure_def_args = contents->init_def.args();
+    vector<Expr> pure_def_args;
     while ((int)pure_def_args.size() < dimensionality) {
         pure_def_args.push_back(Var(unique_name('e')));
     }
+    ReductionDomain rdom;
+    contents->init_def = Definition(pure_def_args, {}, rdom, true);
+
     // Reset the storage dims to match the pure args
     vector<string> arg_names = this->args();
     contents->func_schedule.storage_dims().clear();
@@ -713,6 +716,7 @@ void Function::define_extern(const std::string &function_name,
         StorageDim sd {arg_names[i]};
         contents->func_schedule.storage_dims().push_back(sd);
     }
+
 }
 
 void Function::accept(IRVisitor *visitor) const {
