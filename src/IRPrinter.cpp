@@ -55,7 +55,11 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    stream << "Target = " << m.target().to_string() << "\n";
+    for (const auto &s : m.submodules()) {
+        stream << s << "\n";
+    }
+
+    stream << "module name=" << m.name() << ", target=" << m.target().to_string() << "\n";
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
