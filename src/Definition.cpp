@@ -105,7 +105,7 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
 Definition Definition::get_copy() const {
     internal_assert(contents.defined()) << "Cannot copy undefined Definition\n";
 
-    Definition copy;
+    Definition copy(new DefinitionContents);
     copy.contents->is_init = contents->is_init;
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
