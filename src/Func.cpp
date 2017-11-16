@@ -154,7 +154,7 @@ int Func::num_update_definitions() const {
 }
 
 /** Is this function external? */
-EXPORT bool Func::is_extern() const {
+bool Func::is_extern() const {
     return func.has_extern_definition();
 }
 
@@ -166,7 +166,12 @@ void Func::define_extern(const std::string &function_name,
                          NameMangling mangling,
                          DeviceAPI device_api,
                          bool uses_old_buffer_t) {
-    func.define_extern(function_name, args, types, dimensionality,
+    vector<string> dim_names(dimensionality);
+    // Use _0, _1, _2 etc for the storage dimensions
+    for (int i = 0; i < dimensionality; i++) {
+        dim_names[i] = Var::implicit(i).name();
+    }
+    func.define_extern(function_name, args, types, dim_names,
                        mangling, device_api, uses_old_buffer_t);
 }
 
@@ -1877,10 +1882,11 @@ Func Func::copy_to_device(DeviceAPI d) {
         << "Expected a single call to another Func with matching "
         << "dimensionality and argument order.\n";
 
-    // We'll preserve the pure vars
-    Expr rhs = value();
-    func.definition().values().clear();
-    func.extern_definition_proxy_expr() = rhs;
+    // Move the RHS value to the proxy slot
+    func.extern_definition_proxy_expr() = value();
+
+    // ... and delete the pure definition
+    func.definition() = Definition();
 
     ExternFuncArgument buffer;
     if (call->call_type == Call::Halide) {
@@ -1894,7 +1900,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, (int)call->args.size(),
+                       {call->type}, func.args(), // Reuse the existing dimension names
                        NameMangling::C, d, false);
     return *this;
 }
