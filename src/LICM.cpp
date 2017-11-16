@@ -347,11 +347,10 @@ class GroupLoopInvariants : public IRMutator2 {
 
     Expr visit(const Sub *op) override {
         if (op->type.is_float()) {
-            // Don't reassociate float exprs:
-            // -- if strict_float is on, we don't want to do reassociations,
-            // since that could produce expressions with different roundings
-            // -- if strict_float is off, reassociations could produce -0.0
-            // results, which can't be reliably dealth with in that mode.
+            // Don't reassociate float exprs.
+            // (If strict_float is off, we're allowed to reassociate,
+            // and we do reassociate elsewhere, but there's no benefit to it
+            // here and it's friendlier not to.)
             return IRMutator2::visit(op);
         }
 
@@ -360,11 +359,10 @@ class GroupLoopInvariants : public IRMutator2 {
 
     Expr visit(const Add *op) override {
         if (op->type.is_float()) {
-            // Don't reassociate float exprs:
-            // -- if strict_float is on, we don't want to do reassociations,
-            // since that could produce expressions with different roundings
-            // -- if strict_float is off, reassociations could produce -0.0
-            // results, which can't be reliably dealth with in that mode.
+            // Don't reassociate float exprs.
+            // (If strict_float is off, we're allowed to reassociate,
+            // and we do reassociate elsewhere, but there's no benefit to it
+            // here and it's friendlier not to.)
             return IRMutator2::visit(op);
         }
 
