@@ -10,6 +10,7 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
+#include "BoundSmallAllocations.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "Debug.h"
@@ -73,7 +74,7 @@ using std::map;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
              const vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
-             const vector<IRMutator *> &custom_passes) {
+             const vector<IRMutator2 *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
@@ -94,6 +95,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         Func(f).compute_root().store_root();
     }
 
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
     // Ensure that all ScheduleParams become well-defined constant Exprs.
     for (auto &f : env) {
         f.second.substitute_schedule_param_exprs();
@@ -291,9 +296,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
+    debug(1) << "Bounding small allocations...\n";
+    s = bound_small_allocations(s);
+    debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
+
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
-    s = loop_invariant_code_motion(s);
 
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Detecting varying attributes...\n";
@@ -308,6 +316,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
     s = simplify(s);
+    s = loop_invariant_code_motion(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     debug(1) << "Splitting off Hexagon offload...\n";
@@ -378,10 +387,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // We're about to drop the environment and outputs vector, which
     // contain the only strong refs to Functions that may still be
     // pointed to by the IR. So make those refs strong.
-    class StrengthenRefs : public IRMutator {
-        using IRMutator::visit;
-        void visit(const Call *c) {
-            IRMutator::visit(c);
+    class StrengthenRefs : public IRMutator2 {
+        using IRMutator2::visit;
+        Expr visit(const Call *c) override {
+            Expr expr = IRMutator2::visit(c);
             c = expr.as<Call>();
             internal_assert(c);
             if (c->func.defined()) {
@@ -391,6 +400,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
                                   ptr, c->value_index,
                                   c->image, c->param);
             }
+            return expr;
         }
     };
     s = StrengthenRefs().mutate(s);
@@ -418,7 +428,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 }
 
 EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
-                            const Target &t, const std::vector<IRMutator *> &custom_passes) {
+                            const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);

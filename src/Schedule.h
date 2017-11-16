@@ -94,7 +94,49 @@ enum class PrefetchBoundStrategy {
  * function is done by generating a loop nest that spans its
  * dimensions. We schedule the inputs to that function by
  * recursively injecting realizations for them at particular sites
- * in this loop nest. A LoopLevel identifies such a site. */
+ * in this loop nest. A LoopLevel identifies such a site.
+ *
+ * Note that a LoopLevel is essentially a pointer to an underlying value;
+ * all copies of a LoopLevel refer to the same site, so mutating one copy
+ * (via the set() method) will effectively mutate all copies:
+ \code
+ Func f;
+ Var x;
+ LoopLevel a(f, x);
+ // Both a and b refer to LoopLevel(f, x)
+ LoopLevel b = a;
+ // Now both a and b refer to LoopLevel::root()
+ a.set(LoopLevel::root());
+ \endcode
+ * This is quite useful when splitting Halide code into utility libraries, as it allows
+ * a library to schedule code according to a caller's specifications, even if the caller
+ * hasn't fully defined its pipeline yet:
+ \code
+ Func demosaic(Func input,
+              LoopLevel intermed_compute_at,
+              LoopLevel intermed_store_at,
+              LoopLevel output_compute_at) {
+    Func intermed = ...;
+    Func output = ...;
+    intermed.compute_at(intermed_compute_at).store_at(intermed_store_at);
+    output.compute_at(output_compute_at);
+    return output;
+ }
+
+ void process() {
+     // Note that these LoopLevels are all undefined when we pass them to demosaic()
+     LoopLevel intermed_compute_at, intermed_store_at, output_compute_at;
+     Func input = ...;
+     Func demosaiced = demosaic(input, intermed_compute_at, intermed_store_at, output_compute_at);
+     Func output = ...;
+
+     // We need to ensure all LoopLevels have a well-defined value prior to lowering:
+     intermed_compute_at.set(LoopLevel(output, y));
+     intermed_store_at.set(LoopLevel(output, y));
+     output_compute_at.set(LoopLevel(output, x));
+ }
+ \endcode
+ */
 class LoopLevel {
     template <typename T> friend class ScheduleParam;
     friend class ::Halide::Internal::ScheduleParamBase;
@@ -102,68 +144,80 @@ class LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
-    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
-
-    /** Mutate our contents to match the contents of 'other'. This is a potentially
-     * dangerous operation to do if you aren't careful, and exists solely to make
-     * ScheduleParam<LoopLevel> easy to implement; hence its private status. */
-    EXPORT void copy_from(const LoopLevel &other);
+    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar, bool locked = false);
 
 public:
     /** Identify the loop nest corresponding to some dimension of some function */
     // @{
-    EXPORT LoopLevel(Internal::Function f, VarOrRVar v);
-    EXPORT LoopLevel(Func f, VarOrRVar v);
+    EXPORT LoopLevel(const Internal::Function &f, VarOrRVar v);
+    EXPORT LoopLevel(const Func &f, VarOrRVar v);
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
-     * LoopLevel (other than defined() or operator==) will assert. */
-    LoopLevel() = default;
+     * LoopLevel (other than set()) will assert. */
+    EXPORT LoopLevel();
 
-    /** Return true iff the LoopLevel is defined. */
-    EXPORT bool defined() const;
-
-    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
-    EXPORT std::string func() const;
-
-    /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
-    EXPORT VarOrRVar var() const;
-
-    /** inlined is a special LoopLevel value that implies
+    /** Construct a special LoopLevel value that implies
      * that a function should be inlined away. */
     EXPORT static LoopLevel inlined();
 
-    /** Test if a loop level corresponds to inlining the function */
-    EXPORT bool is_inline() const;
-
-    /** root is a special LoopLevel value which represents the
-     * location outside of all for loops */
+    /** Construct a special LoopLevel value which represents the
+     * location outside of all for loops. */
     EXPORT static LoopLevel root();
 
-    /** Test if a loop level is 'root', which describes the site
-     * outside of all for loops */
+    /** Mutate our contents to match the contents of 'other'. */
+    EXPORT void set(const LoopLevel &other);
+
+    // All the public methods below this point are meant only for internal
+    // use by Halide, rather than user code; hence, they are deliberately
+    // documented with plain comments (rather than Doxygen) to avoid being
+    // present in user documentation.
+
+    // Lock this LoopLevel.
+    EXPORT LoopLevel &lock();
+
+    // Return the Func name. Asserts if the LoopLevel is_root() or is_inlined() or !defined().
+    EXPORT std::string func() const;
+
+    // Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inlined() or !defined().
+    EXPORT VarOrRVar var() const;
+
+    // Return true iff the LoopLevel is defined. (Only LoopLevels created
+    // with the default ctor are undefined.)
+    EXPORT bool defined() const;
+
+    // Test if a loop level corresponds to inlining the function.
+    EXPORT bool is_inlined() const;
+
+    // Test if a loop level is 'root', which describes the site
+    // outside of all for loops.
     EXPORT bool is_root() const;
 
-    /** Return a string of the form func.var -- note that this is safe
-     * to call for root or inline LoopLevels. */
+    // Return a string of the form func.var -- note that this is safe
+    // to call for root or inline LoopLevels, but asserts if !defined().
     EXPORT std::string to_string() const;
 
-    /** Compare this loop level against the variable name of a for
-     * loop, to see if this loop level refers to the site
-     * immediately inside this loop. */
+    // Compare this loop level against the variable name of a for
+    // loop, to see if this loop level refers to the site
+    // immediately inside this loop. Asserts if !defined().
     EXPORT bool match(const std::string &loop) const;
 
     EXPORT bool match(const LoopLevel &other) const;
 
-    /** Check if two loop levels are exactly the same. */
+    // Check if two loop levels are exactly the same.
     EXPORT bool operator==(const LoopLevel &other) const;
 
     bool operator!=(const LoopLevel &other) const { return !(*this == other); }
+
+private:
+    EXPORT void check_defined() const;
+    EXPORT void check_locked() const;
+    EXPORT void check_defined_and_locked() const;
 };
 
 namespace Internal {
 
-class IRMutator;
+class IRMutator2;
 struct ReductionVariable;
 
 struct Split {
@@ -295,7 +349,7 @@ public:
      * wrapper or clone during the lowering stage. If the string 'f' is empty,
      * it means replace all calls to the function by all other functions
      * (excluding itself) in the pipeline with the global identity wrapper.
-     * See \ref Func::in and \ref Func::clone for more details. */
+     * See \ref Func::in and \ref Func::clone_in for more details. */
     // @{
     const std::map<std::string, Internal::FunctionPtr> &wrappers() const;
     std::map<std::string, Internal::FunctionPtr> &wrappers();
@@ -319,9 +373,9 @@ public:
      * Schedule. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
-    void mutate(IRMutator *);
+    void mutate(IRMutator2 *);
 };
 
 
@@ -392,9 +446,9 @@ public:
      * Schedule. */
     void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
-    void mutate(IRMutator *);
+    void mutate(IRMutator2 *);
 };
 
 }

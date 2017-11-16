@@ -33,12 +33,12 @@ public:
 };
 
 // Check that the number of calls to sin is correct.
-class CheckSinCount : public IRMutator {
+class CheckSinCount : public IRMutator2 {
     int correct;
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         Counter c("");
         s.accept(&c);
         if (c.sin_count != correct) {
@@ -52,13 +52,13 @@ public:
 };
 
 // Check that the number of stores to a given func is correct
-class CheckStoreCount : public IRMutator {
+class CheckStoreCount : public IRMutator2 {
     string func;
     int correct;
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         Counter c(func);
         s.accept(&c);
         if (c.store_count != correct) {
