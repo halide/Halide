@@ -316,6 +316,13 @@ class GroupLoopInvariants : public IRMutator2 {
     }
 
     Expr reassociate_summation(const Expr &e) {
+        if (e.type().is_float()) {
+            // Don't reassociate float exprs; it doesn't play well with -ffast-math.
+            // TODO: It might be safe to do this if 'strict_float' is enabled;
+            // consider revisiting this after that feature lands.
+            return e;
+        }
+
         vector<Term> terms = extract_summation(e);
 
         Expr result;
