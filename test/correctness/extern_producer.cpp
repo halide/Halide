@@ -100,9 +100,12 @@ int main(int argc, char **argv) {
         Func source;
         source.define_extern("make_data",
                              std::vector<ExternFuncArgument>(),
-                             Float(32), 2);
+                             Float(32), {x, y});
         // Row stride should be 128B/32-element aligned.
-        source.align_storage(Var("e0"), 32);
+        for (auto i : source.args()) {
+          Halide::Internal::debug(0) << i << "\n";
+        }
+        source.align_storage(x, 32);
         Func sink;
         sink(x, y) = source(x, y) - sin(x + y);
 
@@ -129,7 +132,7 @@ int main(int argc, char **argv) {
         types.push_back(Float(32));
         multi.define_extern("make_data_multi",
                             std::vector<ExternFuncArgument>(),
-                            types, 2);
+                            types, {x, y});
         Func sink_multi;
         sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
                 multi(x, y)[1] - cos(x + y);
