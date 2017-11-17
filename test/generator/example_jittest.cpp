@@ -42,12 +42,6 @@ int main(int argc, char **argv) {
     }
 
     {
-        // We can also just call realize() directly, without assigning to a Func.
-        Buffer<int32_t> img = example::generate(context, {runtime_factor}).realize(kSize, kSize, 3);
-        verify(img, 1.f, runtime_factor, 3);
-    }
-
-    {
         // We can also (optionally) specify non-default values for the Generator's GeneratorParam<> fields.
         // Note that we could use an {initializer-list} for this struct, but usually do not:
         // the example::GeneratorParams struct is initialized to the correct default values,
