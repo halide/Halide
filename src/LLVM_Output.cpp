@@ -334,11 +334,7 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module.getTargetTriple())));
 
     // Make sure things marked as always-inline get inlined
-    #if LLVM_VERSION < 40
-    pass_manager.add(llvm::createAlwaysInlinerPass());
-    #else
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
-    #endif
 
     // Enable symbol rewriting. This allows code outside libHalide to
     // use symbol rewriting when compiling Halide code (for example, by
