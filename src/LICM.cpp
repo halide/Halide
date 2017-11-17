@@ -69,6 +69,12 @@ class LiftLoopInvariants : public IRMutator2 {
         // (We just skip all vectors on the principle that we don't want them
         // on the stack anyway.)
         if (e.type().is_vector()) return false;
+        if (const Cast *cast = e.as<Cast>()) {
+            if (cast->type.bytes() > cast->value.type().bytes()) {
+                // Don't lift widening casts.
+                return false;
+            }
+        }
         return true;
     }
 
