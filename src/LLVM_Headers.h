@@ -46,7 +46,6 @@
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
-#include <llvm/Target/TargetSubtargetInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
