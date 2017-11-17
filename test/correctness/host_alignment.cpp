@@ -87,9 +87,7 @@ int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     return c.count;
 }
 
-}  // namespace
-
-int main(int argc, char **argv) {
+int test() {
     Var x, y, c;
     std::map<string, int> m;
     ImageParam i1(Int(8), 1);
@@ -111,4 +109,10 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char **argv) {
+    return test();
 }

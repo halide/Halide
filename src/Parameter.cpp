@@ -154,41 +154,41 @@ bool Parameter::is_bound_before_lowering() const {
     return contents->is_bound_before_lowering;
 }
 
-Expr Parameter::get_scalar_expr() const {
+Expr Parameter::scalar_expr() const {
     check_is_scalar();
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
-        case 16: return Expr(get_scalar<float16_t>());
-        case 32: return Expr(get_scalar<float>());
-        case 64: return Expr(get_scalar<double>());
+        case 16: return Expr(scalar<float16_t>());
+        case 32: return Expr(scalar<float>());
+        case 64: return Expr(scalar<double>());
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
-        case 8: return Expr(get_scalar<int8_t>());
-        case 16: return Expr(get_scalar<int16_t>());
-        case 32: return Expr(get_scalar<int32_t>());
-        case 64: return Expr(get_scalar<int64_t>());
+        case 8: return Expr(scalar<int8_t>());
+        case 16: return Expr(scalar<int16_t>());
+        case 32: return Expr(scalar<int32_t>());
+        case 64: return Expr(scalar<int64_t>());
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
-        case 1: return make_bool(get_scalar<bool>());
-        case 8: return Expr(get_scalar<uint8_t>());
-        case 16: return Expr(get_scalar<uint16_t>());
-        case 32: return Expr(get_scalar<uint32_t>());
-        case 64: return Expr(get_scalar<uint64_t>());
+        case 1: return make_bool(scalar<bool>());
+        case 8: return Expr(scalar<uint8_t>());
+        case 16: return Expr(scalar<uint16_t>());
+        case 32: return Expr(scalar<uint32_t>());
+        case 64: return Expr(scalar<uint64_t>());
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
-        case 64: return Expr(get_scalar<uint64_t>());
+        case 64: return Expr(scalar<uint64_t>());
         }
     }
-    internal_error << "Unsupported type " << t << " in get_scalar_expr\n";
+    internal_error << "Unsupported type " << t << " in scalar_expr\n";
     return Expr();
 }
 
-Buffer<> Parameter::get_buffer() const {
+Buffer<> Parameter::buffer() const {
     check_is_buffer();
     return contents->buffer;
 }
@@ -205,7 +205,7 @@ void Parameter::set_buffer(Buffer<> b) {
     contents->buffer = b;
 }
 
-void *Parameter::get_scalar_address() const {
+void *Parameter::scalar_address() const {
     check_is_scalar();
     return &contents->data;
 }
@@ -301,7 +301,7 @@ void Parameter::set_min_value(Expr e) {
     contents->min_value = e;
 }
 
-Expr Parameter::get_min_value() const {
+Expr Parameter::min_value() const {
     check_is_scalar();
     return contents->min_value;
 }
@@ -318,7 +318,7 @@ void Parameter::set_max_value(Expr e) {
     contents->max_value = e;
 }
 
-Expr Parameter::get_max_value() const {
+Expr Parameter::max_value() const {
     check_is_scalar();
     return contents->max_value;
 }
@@ -328,7 +328,7 @@ void Parameter::set_estimate(Expr e) {
     contents->estimate = e;
 }
 
-Expr Parameter::get_estimate() const {
+Expr Parameter::estimate() const {
     check_is_scalar();
     return contents->estimate;
 }

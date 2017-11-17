@@ -19,7 +19,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-class InjectProfiling : public IRMutator {
+class InjectProfiling : public IRMutator2 {
 public:
     map<string, int> indices;   // maps from func name -> index in buffer.
 
@@ -36,7 +36,7 @@ public:
     map<int, uint64_t> func_stack_peak; // map from func id -> peak stack allocation
 
 private:
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     struct AllocSize {
         bool on_stack;
@@ -100,7 +100,7 @@ private:
         return size;
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         int idx = get_func_id(op->name);
 
         vector<Expr> new_extents;
@@ -130,6 +130,7 @@ private:
 
         Stmt body = mutate(op->body);
         Expr new_expr;
+        Stmt stmt;
         if (op->new_expr.defined()) {
             new_expr = mutate(op->new_expr);
         }
@@ -149,16 +150,17 @@ private:
                                        {profiler_pipeline_state, idx, size}, Call::Extern);
             stmt = Block::make(Evaluate::make(set_task), stmt);
         }
+        return stmt;
     }
 
-    void visit(const Free *op) {
+    Stmt visit(const Free *op) override {
         int idx = get_func_id(op->name);
 
         AllocSize alloc = func_alloc_sizes.get(op->name);
         internal_assert(alloc.size.type() == UInt(64));
         func_alloc_sizes.pop(op->name);
 
-        IRMutator::visit(op);
+        Stmt stmt = IRMutator2::visit(op);
 
         if (!is_zero(alloc.size)) {
             Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
@@ -179,9 +181,10 @@ private:
                          << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
             }
         }
+        return stmt;
     }
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         int idx;
         Stmt body;
         if (op->is_producer) {
@@ -205,10 +208,10 @@ private:
 
         body = Block::make(Evaluate::make(set_task), body);
 
-        stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+        return ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         Stmt body = op->body;
 
         // The for loop indicates a device transition or a
@@ -254,11 +257,12 @@ private:
             body = op->body;
         }
 
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
 
         if (update_active_threads) {
             stmt = Block::make({decr_active_threads, stmt, incr_active_threads});
         }
+        return stmt;
     }
 };
 

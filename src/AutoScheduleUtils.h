@@ -42,15 +42,15 @@ public:
 
 
 /** Substitute every variable with its estimate if specified. */
-class SubstituteVarEstimates: public IRMutator {
-    using IRMutator::visit;
+class SubstituteVarEstimates: public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Variable *var) {
+    Expr visit(const Variable *var) override {
         if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.get_estimate().defined()) {
-            expr = var->param.get_estimate();
+            var->param.estimate().defined()) {
+            return var->param.estimate();
         } else {
-            expr = var;
+            return var;
         }
     }
 };

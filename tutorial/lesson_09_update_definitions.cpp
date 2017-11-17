@@ -239,10 +239,10 @@ int main(int argc, char **argv) {
 
         // Consider the definition:
         Func f;
-        f(x, y) = x*y;
+        f(x, y) = x * y;
         // Set row zero to each row 8
         f(x, 0) = f(x, 8);
-        // Set column 1 equal to column 8 plus 2
+        // Set column zero equal to column 8 plus 2
         f(0, y) = f(8, y) + 2;
 
         // The pure variables in each stage can be scheduled
