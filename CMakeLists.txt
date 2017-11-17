@@ -4,7 +4,19 @@ cmake_minimum_required(VERSION 3.1.3)
 
 find_package(Threads QUIET)
 
-find_package(LLVM REQUIRED CONFIG)
+if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
+  # Find any version present.
+  find_package(LLVM REQUIRED CONFIG)
+else()
+  # Find a specific version.
+  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
+  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  message("Looking for LLVM version ${MAJOR}.${MINOR}")
+  find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
+  if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
+    message(FATAL_ERROR "LLVM version error: required ${MAJOR}${MINOR} but found ${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}")
+  endif()
+endif()
 
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
