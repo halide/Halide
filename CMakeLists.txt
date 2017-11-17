@@ -10,6 +10,12 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+if (MSVC)
+  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # fix this so we can use the paths right away.
+  string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
