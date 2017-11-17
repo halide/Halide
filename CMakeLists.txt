@@ -10,6 +10,12 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+if (MSVC)
+  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # fix this so we can use the paths right away.
+  string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -74,10 +80,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.9 is \"39\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
 endif()
-if (LLVM_VERSION LESS 39)
-  message(FATAL_ERROR "LLVM version must be 3.9 or newer")
+if (LLVM_VERSION LESS 40)
+  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -99,7 +105,7 @@ endfunction()
 check_llvm_target(X86 WITH_X86)
 check_llvm_target(ARM WITH_ARM)
 check_llvm_target(AArch64 WITH_AARCH64)
-check_llvm_target(Hexagon WITH_HEXAGON 39)
+check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)

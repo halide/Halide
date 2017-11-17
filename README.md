@@ -33,26 +33,26 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-3.9 or greater installed and run 'make' in the root
+Have llvm-4.0 or greater installed and run 'make' in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
-Building halide requires at least llvm 3.9, along with the matching
+Building halide requires at least llvm 4.0, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-3.9, you can find
+path. If your OS does not have packages for llvm-4.0, you can find
 binaries for it at http://llvm.org/releases/download.html. Download an
 appropriate package and then either install it, or at least put the
 bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversion:
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_39 llvm3.9
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_39 llvm3.9/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_40 llvm4.0
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_40 llvm4.0/tools/clang
 
 Then build it like so:
 
-    % cd llvm3.9
+    % cd llvm4.0
     % mkdir build
     % cd build
     % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -332,14 +332,14 @@ For examples of using the `hexagon` scheduling directive on both the simulator a
 Hexagon DSP, see the HelloHexagon example app.
 
 To build and run an example app using the Hexagon target,
-  1. Obtain and build LLVM and Clang v3.9 or later from llvm.org
+  1. Obtain and build LLVM and Clang v4.0 or later from llvm.org
   2. Download and install the Hexagon SDK and version 8.0 Hexagon Tools
   3. Build and run an example for Hexagon HVX
 
-#### 1. Obtain and build LLVM and clang v3.9 or later from llvm.org
+#### 1. Obtain and build LLVM and clang v4.0 or later from llvm.org
 The Hexagon backend is currently under development. So it's best to use trunk llvm. 
 These are the same instructions as above for building Clang/LLVM, but for trunk 
-Clang/LLVM instead of 3.9.
+Clang/LLVM instead of 4.0.
 
     cd <path to llvm>
     svn co http://llvm.org/svn/llvm-project/llvm/trunk .
