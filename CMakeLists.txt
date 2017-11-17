@@ -45,7 +45,7 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # It's theoretically possible that this could be legitimately empty,
   # but in practice that doesn't really happen, so we'll assume it means we
   # aren't configured correctly.
-  message(FATAL_ERROR "'llvm-config --system-libs' is empty; this is probably wrong.")
+  message(WARNING "'llvm-config --system-libs' is empty; this is possibly wrong.")
 endif()
 
 # Check LLVM
@@ -74,10 +74,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.9 is \"39\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
 endif()
-if (LLVM_VERSION LESS 39)
-  message(FATAL_ERROR "LLVM version must be 3.9 or newer")
+if (LLVM_VERSION LESS 40)
+  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -99,7 +99,7 @@ endfunction()
 check_llvm_target(X86 WITH_X86)
 check_llvm_target(ARM WITH_ARM)
 check_llvm_target(AArch64 WITH_AARCH64)
-check_llvm_target(Hexagon WITH_HEXAGON 39)
+check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
@@ -130,7 +130,6 @@ function(halide_project name folder)
   else()
     target_compile_options("${name}" PUBLIC "-fno-rtti")
   endif()
-  target_compile_definitions("${name}" PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")

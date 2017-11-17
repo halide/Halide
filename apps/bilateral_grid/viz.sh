@@ -3,7 +3,7 @@ export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
 rm -f $1/bilateral_grid.mp4
 make $1/filter_viz && \
-$1/filter_viz ../images/gray_small.png $1/out.small 0.2 0 | \
+$1/filter_viz ../images/gray_small.png $1/out_small.png 0.2 0 | \
 ../../bin/HalideTraceViz --timestep 1000 --size 1920 1080 \
 --gray --strides 1 0 0 1 \
 --max 1 --move 100 300 --func input \

@@ -60,6 +60,7 @@ protected:
     using CodeGen_CPU::buffer_t_type;
     using CodeGen_CPU::allocations;
     using CodeGen_CPU::register_destructor;
+    using CodeGen_CPU::alignment_info;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{

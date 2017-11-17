@@ -3,7 +3,9 @@
 #include <cassert>
 
 #include "bilateral_grid.h"
+#ifndef NO_AUTO_SCHEDULE
 #include "bilateral_grid_auto_schedule.h"
+#endif
 
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
@@ -36,11 +38,13 @@ int main(int argc, char **argv) {
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
+    #ifndef NO_AUTO_SCHEDULE
     // Auto-scheduled version
     double min_t_auto = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid_auto_schedule(input, r_sigma, output);
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    #endif
 
     convert_and_save_image(output, argv[2]);
 

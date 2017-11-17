@@ -92,7 +92,7 @@ public:
 
     /** Get the current value of this parameter. Only meaningful when jitting. */
     NO_INLINE T get() const {
-        return param.get_scalar<T>();
+        return param.scalar<T>();
     }
 
     /** Set the current value of this parameter. Only meaningful when jitting */
@@ -102,8 +102,8 @@ public:
 
     /** Get a pointer to the location that stores the current value of
      * this parameter. Only meaningful for jitting. */
-    NO_INLINE T *get_address() const {
-        return (T *)(param.get_scalar_address());
+    NO_INLINE T *address() const {
+        return (T *)(param.scalar_address());
     }
 
     /** Get the halide type of T */
@@ -133,12 +133,12 @@ public:
         param.set_max_value(max);
     }
 
-    Expr get_min_value() const {
-        return param.get_min_value();
+    Expr min_value() const {
+        return param.min_value();
     }
 
-    Expr get_max_value() const {
-        return param.get_max_value();
+    Expr max_value() const {
+        return param.max_value();
     }
     // @}
 
@@ -163,7 +163,7 @@ public:
      * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), Argument::InputScalar, type(), 0,
-            param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
+            param.scalar_expr(), param.min_value(), param.max_value());
     }
 };
 
