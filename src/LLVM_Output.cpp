@@ -313,12 +313,32 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     return raw_out;
 }
 
+namespace {
+
+// llvm::CloneModule has issues with debug info. As a workaround,
+// serialize it to bitcode in memory, and then parse the bitcode back in.
+std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
+    // Write the module to a buffer.
+    llvm::SmallVector<char, 1024> clone_buffer;
+    llvm::raw_svector_ostream clone_ostream(clone_buffer);
+    WriteBitcodeToFile(&module_in, clone_ostream);
+
+    // Read it back in.
+    llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
+    auto expected_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
+    internal_assert(expected_module);
+
+    return std::move(expected_module.get());
+}
+
+}  // namespace
+
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
 
     // Work on a copy of the module to avoid modifying the original.
-    std::unique_ptr<llvm::Module> module(llvm::CloneModule(&module_in));
+    std::unique_ptr<llvm::Module> module = clone_module(module_in);
 
     // Get the target specific parser.
     auto target_machine = Internal::make_target_machine(*module);
