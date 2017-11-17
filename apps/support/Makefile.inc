@@ -4,10 +4,11 @@ LDFLAGS ?=
 BIN ?= ./bin
 IMAGES ?= ../images
 HL_TARGET ?= host
+UNAME ?= $(shell uname)
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
-LDFLAGS += -lole32 -luuid -Wl,--stack,8388608
+LDFLAGS += -lole32 -lkernel32 -lpsapi -luuid -Wl,--stack,8388608
 else
 LDFLAGS += -ldl -lpthread -lz
 endif
@@ -28,7 +29,8 @@ GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --system-libs)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags) $(HALIDE_SYSTEM_LDFLAGS)
 
 LLVM_CONFIG ?= llvm-config
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
@@ -53,16 +55,21 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
-LIBJPEG_LIBS = -ljpeg
+# Workaround brew Cellar path for libpng-config output.
+LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/][Cc]ellar[/]libpng/!d;s=\(.*\)/[Cc]ellar/libpng/.*=\1/lib=')
+LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
+
+# There's no libjpeg-config, unfortunately. We should look for
+# jpeglib.h one directory level up from png.h . Also handle
+# Mac OS brew installs where libpng-config returns paths
+# into the PNG cellar.
 LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
-LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
+LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/[Cc]ellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/[Cc]ellar/libpng/.*=\1/include=')
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
-
-UNAME = $(shell uname)
 
 PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
 ifeq ($(UNAME), Darwin)
@@ -72,3 +79,25 @@ endif
 ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
+
+ifneq (, $(findstring metal,$(HL_TARGET)))
+  LDFLAGS += -framework Metal -framework Foundation
+endif
+
+$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
+	@mkdir -p $(@D)
+	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
+
+# Really, .SECONDARY is what we want, but it won't accept wildcards
+.PRECIOUS: $(BIN)/%.rungen
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
+	$(CXX) $(CXXFLAGS) -I$(BIN) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+
+RUNARGS ?=
+
+# Pseudo target that allows us to build-and-run in one step, e.g.
+#
+#     make foo.run RUNARGS='input=a output=baz'
+#
+$(BIN)/%.run: $(BIN)/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)

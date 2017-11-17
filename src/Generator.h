@@ -8,7 +8,7 @@
  * either purpose, but is especially convenient to use for AOT compilation.
  *
  * A Generator explicitly declares the Inputs and Outputs associated for a given
- * pipeline, and separates the code for constructing the outputs from the code from
+ * pipeline, and (optionally) separates the code for constructing the outputs from the code from
  * scheduling them. For instance:
  *
  * \code
@@ -34,12 +34,11 @@
  * Halide can compile a Generator into the correct pipeline by introspecting these
  * values and constructing an appropriate signature based on them.
  *
- * A Generator must provide implementations of two methods:
+ * A Generator provides implementations of two methods:
  *
- *   - generate(), which must fill in all Output Func(s), but should not do any
- * scheduling
- *   - schedule(), which should do scheduling for any intermediate and
- * output Funcs
+ *   - generate(), which must fill in all Output Func(s); it may optionally also do scheduling
+ *   if no schedule() method is present.
+ *   - schedule(), which (if present) should contain all scheduling code.
  *
  * Inputs can be any C++ scalar type:
  *
@@ -150,11 +149,7 @@
  * \endcode
  *
  * A Generator can also be customized via compile-time parameters (GeneratorParams
- * or ScheduleParams), which affect code generation. While a GeneratorParam can
- * be used from anywhere inside a Generator (either the generate() or
- * schedule() method), ScheduleParam should be accessed only within the
- * schedule() method. (This is not currently a compile-time error but may become
- * one in the future.)
+ * or ScheduleParams), which affect code generation.
  *
  * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
  * public and always declared at the top of the Generator class, in the order
@@ -177,15 +172,46 @@
  * some extra restrictions on underscore use). By convention, the name should match
  * the member-variable name.
  *
+ *
+ *  All Generators have three GeneratorParams that are implicitly provided
+ *  by the base class:
+ *
+ *      GeneratorParam<Target> target{"target", Target()};
+ *      GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+ *      GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+ *
+ *  - 'target' is the Halide::Target for which the Generator is producing code.
+ *    It is read-only during the Generator's lifetime, and must not be modified;
+ *    its value should always be filled in by the calling code: either the Halide
+ *    build system (for ahead-of-time compilation), or ordinary C++ code
+ *    (for JIT compilation).
+ *  - 'auto_schedule' indicates whether the auto-scheduler should be run for this
+ *    Generator:
+ *      - if 'false', the Generator should schedule its Funcs as it sees fit.
+ *      - if 'true', the Generator should only provide estimate()s for its Funcs,
+ *        and not call any other scheduling methods.
+ *  - 'machine_params' is only used if auto_schedule is true; it is ignored
+ *    if auto_schedule is false. It provides details about the machine architecture
+ *    being targeted which may be used to enhance the automatically-generated
+ *    schedule.
+ *
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
  * \code
- *      HALIDE_REGISTER_GENERATOR(ExampleGen, "jit_example")
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example)
  * \endcode
  *
  * The registered name of the Generator is provided must match the same rules as
  * Input names, above.
+ *
+ * Note that the class name of the generated Stub class will match the registered
+ * name by default; if you want to vary it (typically, to include namespaces),
+ * you can add it as an optional third argument:
+ *
+ * \code
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example, SomeNamespace::JitExampleStub)
+ * \endcode
  *
  * Note that a Generator is always executed with a specific Target assigned to it,
  * that you can access via the get_target() method. (You should *not* use the
@@ -209,6 +235,7 @@
 
 #include "Func.h"
 #include "ExternalCode.h"
+#include "ImageParam.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
 #include "ScheduleParam.h"
@@ -358,6 +385,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
@@ -442,6 +470,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
@@ -452,8 +481,10 @@ protected:
 private:
     T value_;
 
-    template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value &&
+                                                  !std::is_same<T2, MachineParams>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
+        check_value_writable();
         // Arithmetic types must roundtrip losslessly.
         if (!std::is_same<T, T2>::value &&
             std::is_arithmetic<T>::value &&
@@ -470,6 +501,12 @@ private:
     template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
         fail_wrong_type(msg);
+    }
+
+    template <typename T2, typename std::enable_if<std::is_same<T2, MachineParams>::value &&
+                                                   std::is_same<T, MachineParams>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char *msg) {
+        value_ = value;
     }
 };
 
@@ -499,6 +536,30 @@ public:
 
     std::string get_c_type() const override {
         return "Target";
+    }
+};
+
+template<typename T>
+class GeneratorParam_MachineParams : public GeneratorParamImpl<T> {
+public:
+    GeneratorParam_MachineParams(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
+
+    void set_from_string(const std::string &new_value_string) override {
+        this->set(MachineParams(new_value_string));
+    }
+
+    std::string to_string() const override {
+        return this->value().to_string();
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        std::ostringstream oss;
+        oss << v << ".to_string()";
+        return oss.str();
+    }
+
+    std::string get_c_type() const override {
+        return "MachineParams";
     }
 };
 
@@ -605,6 +666,14 @@ public:
     GeneratorParam_Enum(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
         : GeneratorParamImpl<T>(name, value), enum_map(enum_map) {}
 
+    // define a "set" that takes our specific enum (but don't hide the inherited virtual functions)
+    using GeneratorParamImpl<T>::set;
+
+    template <typename T2 = T, typename std::enable_if<!std::is_same<T2, Type>::value>::type * = nullptr>
+    void set(const T &e) {
+        this->set_impl(e);
+    }
+
     void set_from_string(const std::string &new_value_string) override {
         auto it = enum_map.find(new_value_string);
         user_assert(it != enum_map.end()) << "Enumeration value not found: " << new_value_string;
@@ -687,11 +756,12 @@ public:
 template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
-        cond<std::is_same<T, Target>::value,    GeneratorParam_Target<T>>,
-        cond<std::is_same<T, Type>::value,      GeneratorParam_Type<T>>,
-        cond<std::is_same<T, bool>::value,      GeneratorParam_Bool<T>>,
-        cond<std::is_arithmetic<T>::value,      GeneratorParam_Arithmetic<T>>,
-        cond<std::is_enum<T>::value,            GeneratorParam_Enum<T>>
+        cond<std::is_same<T, Target>::value,        GeneratorParam_Target<T>>,
+        cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
+        cond<std::is_same<T, Type>::value,          GeneratorParam_Type<T>>,
+        cond<std::is_same<T, bool>::value,          GeneratorParam_Bool<T>>,
+        cond<std::is_arithmetic<T>::value,          GeneratorParam_Arithmetic<T>>,
+        cond<std::is_enum<T>::value,                GeneratorParam_Enum<T>>
     >::type;
 
 }  // namespace Internal
@@ -1049,30 +1119,6 @@ private:
     }
 };
 
-class Constrainable {
-public:
-    virtual ~Constrainable() {}
-
-    virtual Parameter parameter() const = 0;
-
-    Dimension dim(int i) {
-        return Dimension(parameter(), i);
-    }
-
-    const Dimension dim(int i) const {
-        return Dimension(parameter(), i);
-    }
-
-    int host_alignment() const {
-        return parameter().host_alignment();
-    }
-
-    Constrainable &set_host_alignment(int alignment) {
-        parameter().set_host_alignment(alignment);
-        return *this;
-    }
-};
-
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
  * instantiations; it is not part of the public API and should never be
  * used directly by user code.
@@ -1104,8 +1150,8 @@ public:
     EXPORT const std::vector<Type> &types() const;
     EXPORT Type type() const;
 
-    EXPORT bool dimensions_defined() const;
-    EXPORT int dimensions() const;
+    EXPORT bool dims_defined() const;
+    EXPORT int dims() const;
 
     EXPORT const std::vector<Func> &funcs() const;
     EXPORT const std::vector<Expr> &exprs() const;
@@ -1115,7 +1161,7 @@ protected:
                    const std::string &name,
                    IOKind kind,
                    const std::vector<Type> &types,
-                   int dimensions);
+                   int dims);
     EXPORT virtual ~GIOBase();
 
     friend class GeneratorBase;
@@ -1126,7 +1172,7 @@ protected:
     const std::string name_;
     const IOKind kind_;
     std::vector<Type> types_;  // empty if type is unspecified
-    int dimensions_;           // -1 if dim is unspecified
+    int dims_;           // -1 if dim is unspecified
 
     // Exactly one of these will have nonzero length
     std::vector<Func> funcs_;
@@ -1148,15 +1194,6 @@ protected:
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
-
-    virtual bool allow_synthetic_generator_params() const {
-        return true;
-    }
-
-    virtual Parameter parameter() const {
-        internal_error << "Unimplemented";
-        return Parameter();
-    }
 
     virtual void check_value_writable() const = 0;
 
@@ -1193,6 +1230,8 @@ protected:
 
     std::vector<Parameter> parameters_;
 
+    EXPORT Parameter parameter() const;
+
     EXPORT void init_internals();
     EXPORT void set_inputs(const std::vector<StubInput> &inputs);
 
@@ -1205,8 +1244,8 @@ protected:
     virtual std::string get_c_type() const = 0;
 
     EXPORT void check_value_writable() const override;
-private:
-    EXPORT void init_parameters();
+
+    EXPORT void estimate_impl(Var var, Expr min, Expr extent);
 };
 
 
@@ -1270,8 +1309,30 @@ public:
     }
 };
 
+// When forwarding methods to ImageParam, Func, etc., we must take
+// care with the return types: many of the methods return a reference-to-self
+// (e.g., ImageParam&); since we create temporaries for most of these forwards,
+// returning a ref will crater because it refers to a now-defunct section of the
+// stack. Happily, simply removing the reference is solves this, since all of the
+// types in question satisfy the property of copies referring to the same underlying
+// structure (returning references is just an optimization). Since this is verbose
+// and used in several places, we'll use a helper macro:
+#define HALIDE_FORWARD_METHOD(Class, Method)                                \
+    template<typename ...Args>                                              \
+    inline auto Method(Args&&... args) ->                                   \
+        typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);          \
+    }
+
+#define HALIDE_FORWARD_METHOD_CONST(Class, Method)                          \
+    template<typename ...Args>                                              \
+    inline auto Method(Args&&... args) const ->                             \
+        typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);          \
+    }
+
 template<typename T>
-class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func>, public Constrainable {
+class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func> {
 private:
     using Super = GeneratorInputImpl<T, Func>;
 
@@ -1281,59 +1342,98 @@ protected:
     friend class ::Halide::Func;
     friend class ::Halide::Stage;
 
-    bool allow_synthetic_generator_params() const override {
-        return !T::has_static_halide_type();
-    }
-
     std::string get_c_type() const override {
-        if (T::has_static_halide_type()) {
+        if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubInputBuffer<" +
-                halide_type_to_c_type(T::static_halide_type()) +
+                halide_type_to_c_type(TBase::static_halide_type()) +
                 ">";
         } else {
             return "Halide::Internal::StubInputBuffer<>";
         }
     }
 
-    Parameter parameter() const override {
-        internal_assert(this->parameters_.size() == 1);
-        return this->parameters_.at(0);
+    static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
+
+    template<typename T2>
+    inline T2 as() const {
+        return (T2) *this;
     }
 
 public:
     GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!T::has_static_halide_type(), "Cannot use pass a Type argument for a Buffer with a non-void static type");
+        static_assert(!TBase::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
+        : Super(name, IOKind::Buffer, TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{}, d) {
     }
 
 
     template <typename... Args>
     Expr operator()(Args&&... args) const {
-        return this->funcs().at(0)(std::forward<Args>(args)...);
+        return Func(*this)(std::forward<Args>(args)...);
     }
 
     Expr operator()(std::vector<Expr> args) const {
-        return this->funcs().at(0)(args);
+        return Func(*this)(args);
     }
 
     template<typename T2>
     operator StubInputBuffer<T2>() const {
-        return StubInputBuffer<T2>(parameter());
+        return StubInputBuffer<T2>(this->parameter());
     }
 
     operator Func() const {
         return this->funcs().at(0);
     }
+
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->parameters_.at(0));
+    }
+
+    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+        this->estimate_impl(var, min, extent);
+        return *this;
+    }
+
+    Func in() {
+        return Func(*this).in();
+    }
+
+    Func in(Func other) {
+        return Func(*this).in(other);
+    }
+
+    Func in(const std::vector<Func> &others) {
+        return Func(*this).in(others);
+    }
+
+    operator ImageParam() const {
+        return ImageParam(this->parameter(), Func(*this));
+    }
+
+    /** Forward methods to the ImageParam. */
+    // @{
+    HALIDE_FORWARD_METHOD(ImageParam, dim)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, dim)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, host_alignment)
+    HALIDE_FORWARD_METHOD(ImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, dimensions)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, left)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, right)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, top)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, bottom)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, width)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, height)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
+    // }@
 };
 
 
@@ -1347,6 +1447,11 @@ protected:
 
     std::string get_c_type() const override {
         return "Func";
+    }
+
+    template<typename T2>
+    inline T2 as() const {
+        return (T2) *this;
     }
 
 public:
@@ -1400,6 +1505,44 @@ public:
     operator Func() const {
         return this->funcs().at(0);
     }
+
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->parameters_.at(0));
+    }
+
+    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+        this->estimate_impl(var, min, extent);
+        return *this;
+    }
+
+    Func in() {
+        return Func(*this).in();
+    }
+
+    Func in(Func other) {
+        return Func(*this).in(other);
+    }
+
+    Func in(const std::vector<Func> &others) {
+        return Func(*this).in(others);
+    }
+
+    /** Forward const methods to the underlying Func. (Non-const methods
+     * aren't available for Input<Func>.) */
+    // @{
+    HALIDE_FORWARD_METHOD_CONST(Func, args)
+    HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
+    HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
+    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_FORWARD_METHOD_CONST(Func, outputs)
+    HALIDE_FORWARD_METHOD_CONST(Func, rvars)
+    HALIDE_FORWARD_METHOD_CONST(Func, update_args)
+    HALIDE_FORWARD_METHOD_CONST(Func, update_value)
+    HALIDE_FORWARD_METHOD_CONST(Func, update_values)
+    HALIDE_FORWARD_METHOD_CONST(Func, value)
+    HALIDE_FORWARD_METHOD_CONST(Func, values)
+    // }@
 };
 
 
@@ -1447,7 +1590,11 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-
+    void set_estimate(const T &value) {
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(Expr(value));
+        }
+    }
 };
 
 template<typename T>
@@ -1596,72 +1743,73 @@ namespace Internal {
 
 
 class GeneratorOutputBase : public GIOBase {
+protected:
+    template<typename T2, typename std::enable_if<std::is_same<T2, Func>::value>::type * = nullptr>
+    NO_INLINE T2 as() const {
+        static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
+        internal_assert(kind() != IOKind::Scalar);
+        internal_assert(exprs_.empty());
+        user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
+        return funcs_[0];
+    }
+
 public:
-#define HALIDE_OUTPUT_FORWARD(method)                                       \
-    template<typename ...Args>                                              \
-    inline auto method(Args&&... args) ->                                   \
-        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) {\
-        return get_func_ref().method(std::forward<Args>(args)...);          \
-    }
-
-#define HALIDE_OUTPUT_FORWARD_CONST(method)                                 \
-    template<typename ...Args>                                              \
-    inline auto method(Args&&... args) const ->                             \
-        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) {\
-        return get_func_ref().method(std::forward<Args>(args)...);          \
-    }
-
     /** Forward schedule-related methods to the underlying Func. */
     // @{
-    HALIDE_OUTPUT_FORWARD(align_bounds)
-    HALIDE_OUTPUT_FORWARD(align_storage)
-    HALIDE_OUTPUT_FORWARD_CONST(args)
-    HALIDE_OUTPUT_FORWARD(bound)
-    HALIDE_OUTPUT_FORWARD(bound_extent)
-    HALIDE_OUTPUT_FORWARD(compute_at)
-    HALIDE_OUTPUT_FORWARD(compute_inline)
-    HALIDE_OUTPUT_FORWARD(compute_root)
-    HALIDE_OUTPUT_FORWARD_CONST(defined)
-    HALIDE_OUTPUT_FORWARD(fold_storage)
-    HALIDE_OUTPUT_FORWARD(fuse)
-    HALIDE_OUTPUT_FORWARD(glsl)
-    HALIDE_OUTPUT_FORWARD(gpu)
-    HALIDE_OUTPUT_FORWARD(gpu_blocks)
-    HALIDE_OUTPUT_FORWARD(gpu_single_thread)
-    HALIDE_OUTPUT_FORWARD(gpu_threads)
-    HALIDE_OUTPUT_FORWARD(gpu_tile)
-    HALIDE_OUTPUT_FORWARD_CONST(has_update_definition)
-    HALIDE_OUTPUT_FORWARD(hexagon)
-    HALIDE_OUTPUT_FORWARD(in)
-    HALIDE_OUTPUT_FORWARD(memoize)
-    HALIDE_OUTPUT_FORWARD_CONST(num_update_definitions)
-    HALIDE_OUTPUT_FORWARD_CONST(output_types)
-    HALIDE_OUTPUT_FORWARD_CONST(outputs)
-    HALIDE_OUTPUT_FORWARD(parallel)
-    HALIDE_OUTPUT_FORWARD(prefetch)
-    HALIDE_OUTPUT_FORWARD(rename)
-    HALIDE_OUTPUT_FORWARD(reorder)
-    HALIDE_OUTPUT_FORWARD(reorder_storage)
-    HALIDE_OUTPUT_FORWARD_CONST(rvars)
-    HALIDE_OUTPUT_FORWARD(serial)
-    HALIDE_OUTPUT_FORWARD(shader)
-    HALIDE_OUTPUT_FORWARD(specialize)
-    HALIDE_OUTPUT_FORWARD(specialize_fail)
-    HALIDE_OUTPUT_FORWARD(split)
-    HALIDE_OUTPUT_FORWARD(store_at)
-    HALIDE_OUTPUT_FORWARD(store_root)
-    HALIDE_OUTPUT_FORWARD(tile)
-    HALIDE_OUTPUT_FORWARD(unroll)
-    HALIDE_OUTPUT_FORWARD(update)
-    HALIDE_OUTPUT_FORWARD_CONST(update_args)
-    HALIDE_OUTPUT_FORWARD_CONST(update_value)
-    HALIDE_OUTPUT_FORWARD_CONST(update_values)
-    HALIDE_OUTPUT_FORWARD_CONST(value)
-    HALIDE_OUTPUT_FORWARD_CONST(values)
-    HALIDE_OUTPUT_FORWARD(vectorize)
+    HALIDE_FORWARD_METHOD(Func, align_bounds)
+    HALIDE_FORWARD_METHOD(Func, align_storage)
+    HALIDE_FORWARD_METHOD_CONST(Func, args)
+    HALIDE_FORWARD_METHOD(Func, bound)
+    HALIDE_FORWARD_METHOD(Func, bound_extent)
+    HALIDE_FORWARD_METHOD(Func, compute_at)
+    HALIDE_FORWARD_METHOD(Func, compute_inline)
+    HALIDE_FORWARD_METHOD(Func, compute_root)
+    HALIDE_FORWARD_METHOD(Func, define_extern)
+    HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD(Func, estimate)
+    HALIDE_FORWARD_METHOD(Func, fold_storage)
+    HALIDE_FORWARD_METHOD(Func, fuse)
+    HALIDE_FORWARD_METHOD(Func, glsl)
+    HALIDE_FORWARD_METHOD(Func, gpu)
+    HALIDE_FORWARD_METHOD(Func, gpu_blocks)
+    HALIDE_FORWARD_METHOD(Func, gpu_single_thread)
+    HALIDE_FORWARD_METHOD(Func, gpu_threads)
+    HALIDE_FORWARD_METHOD(Func, gpu_tile)
+    HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
+    HALIDE_FORWARD_METHOD(Func, hexagon)
+    HALIDE_FORWARD_METHOD(Func, in)
+    HALIDE_FORWARD_METHOD(Func, memoize)
+    HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
+    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_FORWARD_METHOD_CONST(Func, outputs)
+    HALIDE_FORWARD_METHOD(Func, parallel)
+    HALIDE_FORWARD_METHOD(Func, prefetch)
+    HALIDE_FORWARD_METHOD(Func, print_loop_nest)
+    HALIDE_FORWARD_METHOD(Func, rename)
+    HALIDE_FORWARD_METHOD(Func, reorder)
+    HALIDE_FORWARD_METHOD(Func, reorder_storage)
+    HALIDE_FORWARD_METHOD_CONST(Func, rvars)
+    HALIDE_FORWARD_METHOD(Func, serial)
+    HALIDE_FORWARD_METHOD(Func, shader)
+    HALIDE_FORWARD_METHOD(Func, specialize)
+    HALIDE_FORWARD_METHOD(Func, specialize_fail)
+    HALIDE_FORWARD_METHOD(Func, split)
+    HALIDE_FORWARD_METHOD(Func, store_at)
+    HALIDE_FORWARD_METHOD(Func, store_root)
+    HALIDE_FORWARD_METHOD(Func, tile)
+    HALIDE_FORWARD_METHOD(Func, trace_stores)
+    HALIDE_FORWARD_METHOD(Func, unroll)
+    HALIDE_FORWARD_METHOD(Func, update)
+    HALIDE_FORWARD_METHOD_CONST(Func, update_args)
+    HALIDE_FORWARD_METHOD_CONST(Func, update_value)
+    HALIDE_FORWARD_METHOD_CONST(Func, update_values)
+    HALIDE_FORWARD_METHOD_CONST(Func, value)
+    HALIDE_FORWARD_METHOD_CONST(Func, values)
+    HALIDE_FORWARD_METHOD(Func, vectorize)
     // }@
 
 #undef HALIDE_OUTPUT_FORWARD
+#undef HALIDE_OUTPUT_FORWARD_CONST
 
 protected:
     EXPORT GeneratorOutputBase(size_t array_size,
@@ -1680,6 +1828,8 @@ protected:
     friend class GeneratorBase;
     friend class StubEmitter;
 
+    EXPORT Parameter parameter() const;
+
     EXPORT void init_internals();
     EXPORT void resize(size_t size);
 
@@ -1688,18 +1838,6 @@ protected:
     }
 
     EXPORT void check_value_writable() const override;
-
-    NO_INLINE Func &get_func_ref() {
-        internal_assert(kind() != IOKind::Scalar);
-        internal_assert(funcs_.size() == array_size() && exprs_.empty());
-        return funcs_[0];
-    }
-
-    NO_INLINE const Func &get_func_ref() const {
-        internal_assert(kind() != IOKind::Scalar);
-        internal_assert(funcs_.size() == array_size() && exprs_.empty());
-        return funcs_[0];
-    }
 };
 
 template<typename T>
@@ -1787,25 +1925,55 @@ public:
 };
 
 template<typename T>
-class GeneratorOutput_Buffer : public GeneratorOutputImpl<T>, public Constrainable {
+class GeneratorOutput_Buffer : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
+
+    NO_INLINE void assign_from_func(const Func &f) {
+        this->check_value_writable();
+
+        internal_assert(f.defined());
+
+        const auto &output_types = f.output_types();
+        user_assert(output_types.size() == 1)
+            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
+
+        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
+        user_assert(T::can_convert_from(other))
+            << "Cannot assign to the Output \"" << this->name()
+            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+
+        if (this->types_defined()) {
+            user_assert(output_types.at(0) == this->type())
+                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+        }
+        if (this->dims_defined()) {
+            user_assert(f.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+        }
+
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        user_assert(!this->funcs_.at(0).defined());
+        this->funcs_[0] = f;
+    }
 
 protected:
     using TBase = typename Super::TBase;
 
+    static_assert(!std::is_array<T>::value, "Output<Buffer<>[]> is not a legal construct.");
+
 protected:
     GeneratorOutput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : t,
+                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : t,
                 d) {
-        if (T::has_static_halide_type()) {
+        if (TBase::has_static_halide_type) {
             user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
         } else {
             user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
@@ -1813,23 +1981,23 @@ protected:
     }
 
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
-        static_assert(T::has_static_halide_type(), "Must pass a Type argument for a Buffer with a static type of void");
+        : Super(name, IOKind::Buffer, std::vector<Type>{ TBase::static_halide_type() }, d) {
+        static_assert(TBase::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
     }
 
     NO_INLINE std::string get_c_type() const override {
-        if (T::has_static_halide_type()) {
+        if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubOutputBuffer<" +
-                halide_type_to_c_type(T::static_halide_type()) +
+                halide_type_to_c_type(TBase::static_halide_type()) +
                 ">";
         } else {
             return "Halide::Internal::StubOutputBuffer<>";
         }
     }
 
-    Parameter parameter() const override {
-        internal_assert(this->funcs().size() == 1);
-        return this->funcs().at(0).output_buffer().parameter();
+    template<typename T2, typename std::enable_if<!std::is_same<T2, Func>::value>::type * = nullptr>
+    NO_INLINE T2 as() const {
+        return (T2) *this;
     }
 
 public:
@@ -1852,9 +2020,9 @@ public:
             user_assert(Type(buffer.type()) == this->type())
                 << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
-        if (this->dimensions_defined()) {
-            user_assert(buffer.dimensions() == this->dimensions())
-                << "Output should have dim=" << this->dimensions() << " but saw dim=" << buffer.dimensions() << "\n";
+        if (this->dims_defined()) {
+            user_assert(buffer.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -1868,36 +2036,39 @@ public:
     // this allows us to pipeline the results of a Stub to the results
     // of the enclosing Generator.
     template<typename T2>
-    NO_INLINE GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
-        this->check_value_writable();
-
-        const auto &f = stub_output_buffer.f;
-        internal_assert(f.defined());
-
-        const auto &output_types = f.output_types();
-        user_assert(output_types.size() == 1)
-            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
-
-        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-        user_assert(T::can_convert_from(other))
-            << "Cannot assign to the Output \"" << this->name()
-            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
-
-        if (this->types_defined()) {
-            user_assert(output_types.at(0) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
-        }
-        if (this->dimensions_defined()) {
-            user_assert(f.dimensions() == this->dimensions())
-                << "Output should have dim=" << this->dimensions() << " but saw dim=" << f.dimensions() << "\n";
-        }
-
-        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
-        user_assert(!this->funcs_.at(0).defined());
-        this->funcs_[0] = f;
-
+    GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
+        assign_from_func(stub_output_buffer.f);
         return *this;
     }
+
+    // Allow assignment from a Func to an Output<Buffer>;
+    // this allows us to use helper functions that return a plain Func
+    // to simply set the output(s) without needing a wrapper Func.
+    GeneratorOutput_Buffer<T> &operator=(const Func &f) {
+        assign_from_func(f);
+        return *this;
+    }
+
+    operator OutputImageParam() const {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        return this->funcs_.at(0).output_buffer();
+    }
+
+    /** Forward methods to the OutputImageParam. */
+    // @{
+    HALIDE_FORWARD_METHOD(OutputImageParam, dim)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dim)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, host_alignment)
+    HALIDE_FORWARD_METHOD(OutputImageParam, set_host_alignment)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, dimensions)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, left)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, right)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, top)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, bottom)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, width)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, height)
+    HALIDE_FORWARD_METHOD_CONST(OutputImageParam, channels)
+    // }@
 };
 
 
@@ -1915,7 +2086,11 @@ protected:
     using TBase = typename Super::TBase;
 
 protected:
-    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
+    GeneratorOutput_Func(const std::string &name)
+        : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
+    }
+
+    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Function, t, d) {
     }
 
@@ -1942,9 +2117,18 @@ public:
         return get_assignable_func_ref(i);
     }
 
+    // Allow Func = Output<Func[]>
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     const Func &operator[](size_t i) const {
         return Super::operator[](i);
+    }
+
+    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        for (Func &f : this->funcs_) {
+            f.estimate(var, min, extent);
+        }
+        return *this;
     }
 };
 
@@ -2097,7 +2281,7 @@ private:
     template <typename T2 = T, typename std::enable_if<std::is_integral<T2>::value>::type * = nullptr>
     void set_from_string_impl(const std::string &new_value_string) {
         if (which == Dim) {
-            gio.dimensions_ = parse_scalar<T2>(new_value_string);
+            gio.dims_ = parse_scalar<T2>(new_value_string);
         } else if (which == ArraySize) {
             gio.array_size_ = parse_scalar<T2>(new_value_string);
         } else {
@@ -2114,17 +2298,58 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is an abstract interface that is used when constructing a Generator Stub;
+/** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
- * Generators are compiled in a compatible way; at present, this is used to propagate
- * the outer Target to the inner Generator. */
+ * Generators are compiled in a compatible way.
+ *
+ * If you are using this at "top level" (e.g. with the JIT), you can construct a GeneratorContext
+ * with a Target:
+ * \code
+ *   auto my_stub = MyStub(
+ *       GeneratorContext(get_target_from_environment()),
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *   );
+ * \endcode
+ *
+ * Note that all Generators inherit from GeneratorContext, so if you are using a Stub
+ * from within a Generator, you can just pass 'this' for the GeneratorContext:
+ * \code
+ *  struct SomeGen : Generator<SomeGen> {
+ *   void generate() {
+ *     ...
+ *     auto my_stub = MyStub(
+ *       this,  // GeneratorContext
+ *       // inputs
+ *       { ... },
+ *       // generator params
+ *       { ... }
+ *     );
+ *     ...
+ *   }
+ *  };
+ * \endcode
+ */
 class GeneratorContext {
 public:
-    virtual ~GeneratorContext() {};
-    virtual Target get_target() const = 0;
-
     using ExternsMap = std::map<std::string, ExternalCode>;
+
+    explicit GeneratorContext(const Target &t,
+                              bool auto_schedule = false,
+                              const MachineParams &machine_params = MachineParams::generic()) :
+        target("target", t),
+        auto_schedule("auto_schedule", auto_schedule),
+        machine_params("machine_params", machine_params),
+        externs_map(std::make_shared<ExternsMap>()),
+        value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+    virtual ~GeneratorContext() {}
+
+    inline Target get_target() const { return target; }
+    inline bool get_auto_schedule() const { return auto_schedule; }
+    inline MachineParams get_machine_params() const { return machine_params; }
 
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
@@ -2141,44 +2366,49 @@ public:
      *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
      *
      * See test/generator/external_code_generator.cpp for example use. */
-    virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
+    inline std::shared_ptr<ExternsMap> get_externs_map() const {
+        return externs_map;
+    }
+
+    template <typename T>
+    inline std::unique_ptr<T> create() const {
+        return T::create(*this);
+    }
+
+    template <typename T, typename... Args>
+    inline std::unique_ptr<T> apply(const Args &...args) const {
+        auto t = this->create<T>();
+        t->apply(args...);
+        return t;
+    }
 
 protected:
-    friend class Internal::GeneratorBase;
-    virtual std::shared_ptr<Internal::ValueTracker> get_value_tracker() const = 0;
-};
+    GeneratorParam<Target> target;
+    GeneratorParam<bool> auto_schedule;
+    GeneratorParam<MachineParams> machine_params;
+    std::shared_ptr<ExternsMap> externs_map;
+    std::shared_ptr<Internal::ValueTracker> value_tracker;
 
-/** JITGeneratorContext is a utility implementation of GeneratorContext that
- * is intended for use when using Generator Stubs with the JIT; it simply
- * allows you to wrap a specific Target in a GeneratorContext for use with a stub,
- * often in conjunction with the Halide::get_target_from_environment() call:
- *
- * \code
- *   auto my_stub = MyStub(
- *       JITGeneratorContext(get_target_from_environment()),
- *       // inputs
- *       { ... },
- *       // generator params
- *       { ... }
- *   );
- * \endcode
- */
-class JITGeneratorContext : public GeneratorContext {
-public:
-    explicit JITGeneratorContext(const Target &t)
-        : target(t)
-        , externs_map(std::make_shared<ExternsMap>())
-        , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
-    Target get_target() const override { return target; }
-    // Note that JITGeneratorContext is always "top-level", so it will never take
-    // an ExternsMap from a parent (since it has no parents).
-    std::shared_ptr<ExternsMap> get_externs_map() const override { return externs_map; }
-protected:
-    std::shared_ptr<Internal::ValueTracker> get_value_tracker() const override { return value_tracker; }
-private:
-    const Target target;
-    const std::shared_ptr<ExternsMap> externs_map;
-    const std::shared_ptr<Internal::ValueTracker> value_tracker;
+    GeneratorContext() : GeneratorContext(Target()) {}
+
+    inline void init_from_context(const Halide::GeneratorContext &context) {
+        target.set(context.get_target());
+        auto_schedule.set(context.get_auto_schedule());
+        machine_params.set(context.get_machine_params());
+        value_tracker = context.get_value_tracker();
+        externs_map = context.get_externs_map();
+    }
+
+    inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
+        return value_tracker;
+    }
+
+    // No copy
+    GeneratorContext(const GeneratorContext &) = delete;
+    void operator=(const GeneratorContext &) = delete;
+    // No move
+    GeneratorContext(GeneratorContext&&) = delete;
+    void operator=(GeneratorContext&&) = delete;
 };
 
 class NamesInterface {
@@ -2228,12 +2458,23 @@ struct NoRealizations<T, Args...> {
 class GeneratorStub;
 class SimpleGeneratorFactory;
 
+// Note that these functions must never return null:
+// if they cannot return a valid Generator, they must assert-fail.
+using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&)>;
+
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    GeneratorParam<Target> target{ "target", Halide::get_host_target() };
-
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
+        bool emit_o{false};
+        bool emit_h{true};
+        bool emit_cpp{false};
+        bool emit_assembly{false};
+        bool emit_bitcode{false};
+        bool emit_stmt{false};
+        bool emit_stmt_html{false};
+        bool emit_static_library{true};
+        bool emit_cpp_stub{false};
+        bool emit_schedule{false};
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2241,14 +2482,9 @@ public:
         // extensions are problematic, and avoids the need to rename output files
         // after the fact.
         std::map<std::string, std::string> substitutions;
-        EmitOptions()
-            : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();
-
-    Target get_target() const override { return target; }
 
     EXPORT void set_generator_param(const std::string &name, const std::string &value);
     EXPORT void set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params);
@@ -2330,19 +2566,13 @@ public:
     // calling from generate() as long as all Outputs have been defined.)
     EXPORT Pipeline get_pipeline();
 
-    // Return a map in which to register external code this Generator requires
-    // at link time.
-    EXPORT std::shared_ptr<ExternsMap> get_externs_map() const override;
-
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
-    EXPORT void init_from_context(const Halide::GeneratorContext &context);
+    EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT virtual Pipeline build_pipeline() = 0;
     EXPORT virtual void call_generate() = 0;
     EXPORT virtual void call_schedule() = 0;
-
-    std::shared_ptr<ValueTracker> get_value_tracker() const override { return value_tracker; }
 
     EXPORT void track_parameter_values(bool include_outputs);
 
@@ -2378,7 +2608,7 @@ protected:
         // and will advance directly to ScheduleCalled.)
         GenerateCalled,
 
-        // Generator has had its schedule() method called.
+        // Generator has had its schedule() method (if any) called.
         ScheduleCalled,
     } phase{Created};
 
@@ -2404,12 +2634,17 @@ private:
         // Ordered-list of non-null ptrs to ScheduleParam<> fields.
         std::vector<Internal::ScheduleParamBase *> schedule_params;
 
-        // Ordered-list of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        // Ordered-list of non-null ptrs to Input<> fields.
+        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
-        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
-        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
+        // Must be empty if the Generator has a build() method rather than generate()/schedule().
+        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::Parameter *> filter_params;
+
+        // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
+        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
         // Convenience structure to look up GP by name.
         std::map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
@@ -2429,12 +2664,10 @@ private:
     // Do not access directly: use the param_info() getter to lazy-init.
     std::unique_ptr<ParamInfo> param_info_ptr;
 
-    std::shared_ptr<Internal::ValueTracker> value_tracker;
-
     mutable std::shared_ptr<ExternsMap> externs_map;
 
     bool inputs_set{false};
-    std::string generator_name;
+    std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
 
     // Return our ParamInfo (lazy-initing as needed).
@@ -2457,11 +2690,6 @@ private:
     EXPORT Func get_first_output();
     EXPORT Func get_output(const std::string &n);
     EXPORT std::vector<Func> get_output_vector(const std::string &n);
-
-    void set_generator_name(const std::string &n) {
-        internal_assert(generator_name.empty());
-        generator_name = n;
-    }
 
     EXPORT void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -2608,50 +2836,18 @@ private:
     void operator=(GeneratorBase&& that) = delete;
 };
 
-class GeneratorFactory {
-public:
-    virtual ~GeneratorFactory() {}
-    // Note that this method must never return null:
-    // if it cannot return a valid Generator, it should assert-fail.
-    virtual std::unique_ptr<GeneratorBase> create(const GeneratorContext &context,
-                                                  const std::map<std::string, std::string> &params) const = 0;
-};
-
-using GeneratorCreateFunc = std::function<std::unique_ptr<Internal::GeneratorBase>(const GeneratorContext &context)>;
-
-class SimpleGeneratorFactory : public GeneratorFactory {
-public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name)
-        : create_func(create_func), generator_name(generator_name) {
-        internal_assert(create_func != nullptr);
-    }
-
-    std::unique_ptr<Internal::GeneratorBase> create(const GeneratorContext &context,
-                                                    const std::map<std::string, std::string> &params) const override {
-        auto g = create_func(context);
-        internal_assert(g.get() != nullptr);
-        g->set_generator_name(generator_name);
-        g->set_generator_and_schedule_param_values(params);
-        return g;
-    }
-private:
-    const GeneratorCreateFunc create_func;
-    const std::string generator_name;
-};
-
 class GeneratorRegistry {
 public:
-    EXPORT static void register_factory(const std::string &name, std::unique_ptr<GeneratorFactory> factory);
+    EXPORT static void register_factory(const std::string &name, GeneratorFactory generator_factory);
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                        const GeneratorContext &context,
-                                                        const std::map<std::string, std::string> &params);
+                                                        const GeneratorContext &context);
 
 private:
-    using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory>>;
+    using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
 
     GeneratorFactoryMap factories;
     std::mutex mutex;
@@ -2668,22 +2864,70 @@ private:
 template <class T>
 class Generator : public Internal::GeneratorBase {
 protected:
+
+    // TODO: This causes problems for existing code that declares helper
+    // methods (that use ImageParam, etc as arguments) outside the class body,
+    // as there is an ambiguity between Halide::ImageParam and Generator<T>::ImageParam.
+    //
+    // Consider re-enabling this at some point in the future when the likelihood of
+    // collision with existing code is much smaller.
+    //
+    // // Add wrapper types here that exists just to allow us to tag
+    // // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
+    // // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
+    // // but those are somewhat uncommon cases.)
+
+    // template<typename T2>
+    // class Param : public ::Halide::Param<T2> {
+    // public:
+    //     template <typename... Args>
+    //     HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
+    //     explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
+    // };
+
+    // class ImageParam : public ::Halide::ImageParam {
+    // public:
+    //     template <typename... Args>
+    //     HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
+    //     explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
+    // };
+
+protected:
     Generator() :
         Internal::GeneratorBase(sizeof(T),
                                 Internal::Introspection::get_introspection_helper<T>()) {}
 
 public:
-    static std::unique_ptr<Internal::GeneratorBase> create(const Halide::GeneratorContext &context) {
+    static std::unique_ptr<T> create(const Halide::GeneratorContext &context) {
         // We must have an object of type T (not merely GeneratorBase) to call a protected method,
         // because CRTP is a weird beast.
-        T *t = new T;
-        t->init_from_context(context);
-        return std::unique_ptr<Internal::GeneratorBase>(t);
+        auto g = std::unique_ptr<T>(new T());
+        g->init_from_context(context);
+        return g;
+    }
+
+    // This is public but intended only for use by the HALIDE_REGISTER_GENERATOR() macro.
+    static std::unique_ptr<T> create(const Halide::GeneratorContext &context,
+                                     const std::string &registered_name,
+                                     const std::string &stub_name) {
+        auto g = create(context);
+        g->set_generator_names(registered_name, stub_name);
+        return g;
+    }
+
+    using Internal::GeneratorBase::apply;
+    using Internal::GeneratorBase::create;
+
+    template <typename... Args>
+    void apply(const Args &...args) {
+        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value,
+            "apply() is not supported for old-style Generators.");
+        set_inputs(args...);
+        call_generate();
+        call_schedule();
     }
 
 private:
-    // Implementations for build_pipeline_impl(), specialized on whether we
-    // have build() or generate()/schedule() methods.
 
     // std::is_member_function_pointer will fail if there is no member of that name,
     // so we use a little SFINAE to detect if there are method-shaped members.
@@ -2704,33 +2948,42 @@ private:
 
     template <typename T2 = T,
               typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    Pipeline build_pipeline_impl() {
+
+    // Implementations for build_pipeline_impl(), specialized on whether we
+    // have build() or generate()/schedule() methods.
+
+    // MSVC apparently has some weirdness with the usual sfinae tricks
+    // for detecting method-shaped things, so we can't actually use
+    // the helpers above outside of static_assert. Instead we make as
+    // many overloads as we can exist, and then use C++'s preference
+    // for treating a 0 as an int rather than a double to choose one
+    // of them.
+    Pipeline build_pipeline_impl(double) {
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
         post_build();
         return p;
     }
+
     template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
-    Pipeline build_pipeline_impl() {
-        ((T *)this)->call_generate_impl();
-        ((T *)this)->call_schedule_impl();
+              typename = decltype(std::declval<T2>().generate())>
+    Pipeline build_pipeline_impl(int) {
+        ((T *)this)->call_generate_impl(0);
+        ((T *)this)->call_schedule_impl(0, 0);
         return get_pipeline();
     }
 
     // Implementations for call_generate_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
 
-    template <typename T2 = T,
-              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    void call_generate_impl() {
+    void call_generate_impl(double) {
         user_error << "Unimplemented";
     }
 
     template <typename T2 = T,
-              typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
-    void call_generate_impl() {
+              typename = decltype(std::declval<T2>().generate())>
+    void call_generate_impl(int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
         pre_generate();
@@ -2741,15 +2994,22 @@ private:
     // Implementations for call_schedule_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
 
-    template <typename T2 = T,
-              typename std::enable_if<!has_schedule_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+    void call_schedule_impl(double, double) {
         user_error << "Unimplemented";
     }
 
-    template <typename T2 = T,
-              typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
-    void call_schedule_impl() {
+    template<typename T2 = T,
+             typename = decltype(std::declval<T2>().generate())>
+    void call_schedule_impl(double, int) {
+        // Generator has a generate() method but no schedule() method. This is ok. Just advance the phase.
+        pre_schedule();
+        post_schedule();
+    }
+
+    template<typename T2 = T,
+             typename = decltype(std::declval<T2>().generate()),
+             typename = decltype(std::declval<T2>().schedule())>
+    void call_schedule_impl(int, int) {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
         pre_schedule();
@@ -2759,20 +3019,22 @@ private:
 
 protected:
     Pipeline build_pipeline() override {
-        return this->build_pipeline_impl();
+        return this->build_pipeline_impl(0);
     }
 
     void call_generate() override {
-        this->call_generate_impl();
+        this->call_generate_impl(0);
     }
 
     void call_schedule() override {
-        this->call_schedule_impl();
+        this->call_schedule_impl(0, 0);
     }
+
 private:
     friend void ::Halide::Internal::generator_test();
     friend class Internal::SimpleGeneratorFactory;
     friend void ::Halide::Internal::generator_test();
+    friend class ::Halide::GeneratorContext;
 
     // No copy
     Generator(const Generator &) = delete;
@@ -2782,16 +3044,14 @@ private:
     void operator=(Generator&& that) = delete;
 };
 
-template <class GeneratorClass>
+namespace Internal {
+
 class RegisterGenerator {
 public:
-    RegisterGenerator(const char* generator_name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
-        Internal::GeneratorRegistry::register_factory(generator_name, std::move(f));
+    RegisterGenerator(const char* registered_name, GeneratorFactory generator_factory) {
+        Internal::GeneratorRegistry::register_factory(registered_name, generator_factory);
     }
 };
-
-namespace Internal {
 
 class GeneratorStub : public NamesInterface {
 public:
@@ -2853,8 +3113,6 @@ public:
     virtual ~GeneratorStub() {}
 
 protected:
-    typedef std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&, const std::map<std::string, std::string>&)> GeneratorFactory;
-
     EXPORT GeneratorStub(const GeneratorContext &context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
@@ -2881,11 +3139,6 @@ protected:
 
     bool has_generator() const {
         return generator != nullptr;
-    }
-
-    template<typename Ratio>
-    static double ratio_to_double() {
-        return (double)Ratio::num / (double)Ratio::den;
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -2933,8 +3186,57 @@ private:
 
 }  // namespace Halide
 
-#define HALIDE_REGISTER_GENERATOR(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
-    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
+// Define this namespace at global scope so that anonymous namespaces won't
+// defeat our static_assert check; define a dummy type inside so we can
+// check for type aliasing injected by anonymous namespace usage
+namespace halide_register_generator {
+    struct halide_global_ns;
+};
 
+#define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    namespace halide_register_generator { \
+        struct halide_global_ns; \
+        namespace GEN_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context) { \
+                return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); \
+            } \
+        } \
+        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
+    } \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
+                 "HALIDE_REGISTER_GENERATOR must be used at global scope");
+
+#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
+    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, GEN_REGISTRY_NAME)
+
+#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)
+
+// MSVC has a broken implementation of variadic macros: it expands __VA_ARGS__
+// as a single token in argument lists (rather than multiple tokens).
+// Jump through some hoops to work around this.
+#define __HALIDE_REGISTER_ARGCOUNT_IMPL(_1, _2, _3, COUNT, ...) \
+   COUNT
+
+#define _HALIDE_REGISTER_ARGCOUNT_IMPL(ARGS) \
+   __HALIDE_REGISTER_ARGCOUNT_IMPL ARGS
+
+#define _HALIDE_REGISTER_ARGCOUNT(...) \
+   _HALIDE_REGISTER_ARGCOUNT_IMPL((__VA_ARGS__, 3, 2, 1, 0))
+
+#define ___HALIDE_REGISTER_CHOOSER(COUNT) \
+    _HALIDE_REGISTER_GENERATOR##COUNT
+
+#define __HALIDE_REGISTER_CHOOSER(COUNT) \
+    ___HALIDE_REGISTER_CHOOSER(COUNT)
+
+#define _HALIDE_REGISTER_CHOOSER(COUNT) \
+    __HALIDE_REGISTER_CHOOSER(COUNT)
+
+#define _HALIDE_REGISTER_GENERATOR_PASTE(A, B) \
+    A B
+
+#define HALIDE_REGISTER_GENERATOR(...) \
+    _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__))
 
 #endif  // HALIDE_GENERATOR_H_

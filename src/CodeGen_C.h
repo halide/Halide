@@ -41,6 +41,9 @@ public:
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
 
+    /** The target we're generating code for */
+    const Target &get_target() const { return target; }
+
     EXPORT static void test();
 
 protected:
@@ -64,15 +67,19 @@ protected:
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
 
-    /** Remember already emitted funcitons. */
-    std::set<std::string> emitted;
-
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
     std::string print_expr(Expr);
 
+    /** Like print_expr, but cast the Expr to the given Type */
+    std::string print_cast_expr(const Type &, Expr);
+
     /** Emit a statement */
     void print_stmt(Stmt);
+
+    void create_assertion(const std::string &id_cond, const std::string &id_msg);
+    void create_assertion(const std::string &id_cond, Expr message);
+    void create_assertion(Expr cond, Expr message);
 
     enum AppendSpaceIfNeeded {
         DoNotAppendSpace,
@@ -91,6 +98,16 @@ protected:
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
+
+    /** Add typedefs for vector types. Not needed for OpenCL, might
+     * use different syntax for other C-like languages. */
+    virtual void add_vector_typedefs(const std::set<Type> &vector_types);
+
+    /** Bottleneck to allow customization of calls to generic Extern/PureExtern calls.  */
+    virtual std::string print_extern_call(const Call *op);
+
+    /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
+    std::string print_scalarized_expr(Expr e);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
@@ -115,14 +132,13 @@ protected:
 
     struct Allocation {
         Type type;
-        std::string free_function;
     };
 
     /** Track the types of allocations to avoid unnecessary casts. */
     Scope<Allocation> allocations;
 
     /** Track which allocations actually went on the heap. */
-    Scope<int> heap_allocations;
+    Scope<> heap_allocations;
 
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
@@ -130,8 +146,15 @@ protected:
     /** Track current calling convention scope. */
     bool extern_c_open;
 
+    /** True if at least one gpu-based for loop is used. */
+    bool uses_gpu_for_loops;
+
     /** Track which handle types have been forward-declared already. */
     std::set<const halide_handle_cplusplus_type *> forward_declared;
+
+    /** If the Type is a handle type, emit a forward-declaration for it
+     * if we haven't already. */
+    void forward_declare_type_if_needed(const Type &t);
 
     void set_name_mangling_mode(NameMangling mode);
 
@@ -168,6 +191,8 @@ protected:
     void visit(const AssertStmt *);
     void visit(const ProducerConsumer *);
     void visit(const For *);
+    void visit(const Ramp *);
+    void visit(const Broadcast *);
     void visit(const Provide *);
     void visit(const Allocate *);
     void visit(const Free *);
@@ -178,6 +203,23 @@ protected:
     void visit(const Prefetch *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
+
+    template<typename T>
+    static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
+        std::ostringstream o;
+        for (size_t i = 0; i < v.size(); ++i) {
+            if (i > 0) {
+                o << sep;
+            }
+            o << v[i];
+        }
+        return o.str();
+    }
+
+    template<typename T>
+    static std::string with_commas(const std::vector<T> &v) {
+        return with_sep<T>(v, ", ");
+    }
 };
 
 }

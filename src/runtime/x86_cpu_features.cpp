@@ -19,7 +19,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
                             (1ULL << halide_target_feature_avx512) |
                             (1ULL << halide_target_feature_avx512_knl) |
                             (1ULL << halide_target_feature_avx512_skylake) |
-                            (1ULL << halide_target_feature_avx512_cannonlake));                            
+                            (1ULL << halide_target_feature_avx512_cannonlake));
 
     uint64_t available = 0;
 

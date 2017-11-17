@@ -83,7 +83,7 @@ binaries.withType(NativeExecutableBinary) { binary ->
                 println "Executing: " + linkTask.outputFile + " ..."
                 destDir.mkdirs()
                 def envVars = [ "DYLD_LIBRARY_PATH=${projectDir}/../../bin", "LD_LIBRARY_PATH=${projectDir}/../../bin" ]
-                def proc = [linkTask.outputFile, "-o", "${destDir}", "target=${hl_target}"].execute(envVars, destDir)
+                def proc = [linkTask.outputFile, "-g", "hello", "-o", "${destDir}", "target=${hl_target}"].execute(envVars, destDir)
                 proc.waitFor()
                 if (proc.exitValue() != 0) {
                     println "return code: ${proc.exitValue()}"

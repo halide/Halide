@@ -21,7 +21,7 @@ using namespace Halide::Runtime;
 
 // Just copies in -> out.
 extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
-    if (in->host == nullptr) {
+    if (in->is_bounds_query()) {
         in->dim[0].extent = 4;
         in->dim[1].extent = 4;
         in->dim[2].extent = 3;

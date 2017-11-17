@@ -74,9 +74,8 @@ private:
         if (op->name == var) {
             result = in;
         } else {
-            scope.push(op->name, in);
+            ScopedBinding<Interval> p(scope, op->name, in);
             op->body.accept(this);
-            scope.pop(op->name);
         }
     }
 
@@ -89,9 +88,8 @@ private:
         if (op->name == var) {
             result = in;
         } else {
-            scope.push(op->name, in);
+            ScopedBinding<Interval> p(scope, op->name, in);
             op->body.accept(this);
-            scope.pop(op->name);
         }
     }
 };
@@ -104,12 +102,12 @@ Interval bounds_of_inner_var(string var, Stmt s) {
 
 }
 
-class BoundsInference : public IRMutator {
+class BoundsInference : public IRMutator2 {
 public:
     const vector<Function> &funcs;
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions;
-    Scope<int> in_stages;
+    Scope<> in_stages;
     const Target target;
 
     struct CondValue {
@@ -239,6 +237,11 @@ public:
             }
             internal_assert(result.size() == 2);
             exprs = result[0];
+
+            if (func.extern_definition_proxy_expr().defined()) {
+                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+            }
+
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
         }
 
@@ -263,7 +266,7 @@ public:
         Stmt define_bounds(Stmt s,
                            string producing_stage,
                            string loop_level,
-                           const Scope<int> &in_stages,
+                           const Scope<> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions,
                            const Target &target) {
@@ -314,7 +317,8 @@ public:
                 }
             }
 
-            if (func.has_extern_definition()) {
+            if (func.has_extern_definition() &&
+                !func.extern_definition_proxy_expr().defined()) {
                 // After we define our bounds required, we need to
                 // figure out what we're actually going to compute,
                 // and what inputs we need. To do this we:
@@ -334,7 +338,6 @@ public:
 
                 // 4)
                 s = do_bounds_query(s, in_pipeline, target);
-
 
                 if (!in_pipeline.empty()) {
                     // 3)
@@ -646,7 +649,7 @@ public:
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
-                f[i].schedule().compute_level().is_inline() &&
+                f[i].schedule().compute_level().is_inlined() &&
                 f[i].can_be_inlined()) {
                 inlined[i] = true;
             } else {
@@ -696,7 +699,7 @@ public:
         // Remove the inlined stages
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (!stages[i].func.schedule().compute_level().is_inline() ||
+            if (!stages[i].func.schedule().compute_level().is_inlined() ||
                 !stages[i].func.can_be_inlined()) {
                 new_stages.push_back(stages[i]);
             }
@@ -724,7 +727,8 @@ public:
             // Compute all the boxes of the producers this consumer
             // uses.
             map<string, Box> boxes;
-            if (consumer.func.has_extern_definition()) {
+            if (consumer.func.has_extern_definition() &&
+                !consumer.func.extern_definition_proxy_expr().defined()) {
 
                 const vector<ExternFuncArgument> &args = consumer.func.extern_arguments();
                 // Stage::define_bounds is going to compute a query
@@ -747,7 +751,6 @@ public:
                         merge_boxes(boxes[f.name()], b);
                     }
                 }
-
             } else {
                 for (const auto &cval : consumer.exprs) {
                     map<string, Box> new_boxes;
@@ -837,9 +840,9 @@ public:
         }
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -874,7 +877,7 @@ public:
             }
         }
 
-        in_stages.push(stage_name, 0);
+        in_stages.push(stage_name);
 
         // Figure out how much of it we're producing
         Box box;
@@ -975,14 +978,15 @@ public:
 
         in_stages.pop(stage_name);
 
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
-    void visit(const ProducerConsumer *p) {
+    Stmt visit(const ProducerConsumer *p) override {
         in_pipeline.insert(p->name);
-        IRMutator::visit(p);
+        Stmt stmt = IRMutator2::visit(p);
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
+        return stmt;
     }
 
 };

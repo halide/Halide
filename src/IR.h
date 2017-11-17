@@ -453,13 +453,13 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image,        //< A load from an input image
-                  Extern,       //< A call to an external C-ABI function, possibly with side-effects
-                  ExternCPlusPlus, //< A call to an external C-ABI function, possibly with side-effects
-                  PureExtern,   //< A call to a guaranteed-side-effect-free external function
-                  Halide,       //< A call to a Func
-                  Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
-                  PureIntrinsic //< A side-effect-free version of the above.
+    typedef enum {Image,        ///< A load from an input image
+                  Extern,       ///< A call to an external C-ABI function, possibly with side-effects
+                  ExternCPlusPlus, ///< A call to an external C-ABI function, possibly with side-effects
+                  PureExtern,   ///< A call to a guaranteed-side-effect-free external function
+                  Halide,       ///< A call to a Func
+                  Intrinsic,    ///< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                  PureIntrinsic ///< A side-effect-free version of the above.
     } CallType;
     CallType call_type;
 
@@ -511,6 +511,7 @@ struct Call : public ExprNode<Call> {
         cast_mask,
         select_mask,
         extract_mask_element,
+        require,
         size_of_halide_buffer_t;
 
     // We also declare some symbolic names for some of the runtime
@@ -536,13 +537,12 @@ struct Call : public ExprNode<Call> {
         buffer_init,
         buffer_init_from_buffer,
         buffer_crop,
+        buffer_set_bounds,
         trace;
 
     // If it's a call to another halide function, this call node holds
-    // onto a pointer to that function for the purposes of reference
-    // counting only. Self-references in update definitions do not
-    // have this set, to avoid cycles.
-    IntrusivePtr<FunctionContents> func;
+    // a possibly-weak reference to that function.
+    FunctionPtr func;
 
     // If that function has multiple values, which value does this
     // call node refer to?
@@ -557,7 +557,7 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     EXPORT static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
-                            IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
+                            FunctionPtr func = FunctionPtr(), int value_index = 0,
                             Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
@@ -565,12 +565,12 @@ struct Call : public ExprNode<Call> {
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(Buffer<> image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
+        return make(image.type(), image.name(), args, Image, FunctionPtr(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer<>(), param);
+        return make(param.type(), param.name(), args, Image, FunctionPtr(), 0, Buffer<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -585,11 +585,19 @@ struct Call : public ExprNode<Call> {
                 call_type == PureIntrinsic);
     }
 
+    bool is_intrinsic() const {
+        return (call_type == Intrinsic ||
+                call_type == PureIntrinsic);
+    }
+
     bool is_intrinsic(ConstString intrin_name) const {
-        return
-            ((call_type == Intrinsic ||
-              call_type == PureIntrinsic) &&
-             name == intrin_name);
+        return is_intrinsic() && name == intrin_name;
+    }
+
+    bool is_extern() const {
+        return (call_type == Extern ||
+                call_type == ExternCPlusPlus ||
+                call_type == PureExtern);
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;

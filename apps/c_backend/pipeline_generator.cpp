@@ -7,22 +7,22 @@ HalideExtern_2(int, an_extern_func, int, int);
 
 class Pipeline : public Halide::Generator<Pipeline> {
 public:
-    ImageParam input{UInt(16), 2, "input"};
-    Func build() {
+    Input<Buffer<uint16_t>> input{"input", 2};
+    Output<Buffer<uint16_t>> output{"output", 2};
+
+    void generate() {
         Var x, y;
 
-        Func f, g, h;
-        f(x, y) = (input(clamp(x+2, 0, input.width()-1), clamp(y-2, 0, input.height()-1)) * 17)/13;
+        Func f, h;
+        f(x, y) = (input(clamp(x+2, 0, input.dim(0).extent()-1), clamp(y-2, 0, input.dim(1).extent()-1)) * 17)/13;
         h.define_extern("an_extern_stage", {f}, Int(16), 0, NameMangling::C);
-        g(x, y) = cast<uint16_t>(f(y, x) + f(x, y) + an_extern_func(x, y) + h());
+        output(x, y) = cast<uint16_t>(max(0, f(y, x) + f(x, y) + an_extern_func(x, y) + h()));
 
-        f.compute_root();
+        f.compute_root().vectorize(x, 8);
         h.compute_root();
-
-        return g;
     }
 };
 
-Halide::RegisterGenerator<Pipeline> register_me{"pipeline"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Pipeline, pipeline)

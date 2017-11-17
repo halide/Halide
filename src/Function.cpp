@@ -1,6 +1,7 @@
 #include <set>
 #include <stdlib.h>
 #include <atomic>
+#include <memory>
 
 #include "IR.h"
 #include "IRMutator.h"
@@ -9,6 +10,7 @@
 #include "CSE.h"
 #include "Random.h"
 #include "Introspection.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ParallelRVar.h"
@@ -21,18 +23,41 @@ using std::vector;
 using std::string;
 using std::set;
 using std::map;
+using std::pair;
 
-typedef map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
-ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgument &src,
-                                                         DeepCopyMap &copied_map);
-void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
-                                        IntrusivePtr<FunctionContents> &dst,
-                                        DeepCopyMap &copied_map);
-IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-    const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map);
+typedef map<FunctionPtr, FunctionPtr> DeepCopyMap;
+
+struct FunctionContents;
+
+namespace {
+// Weaken all the references to a particular Function to break
+// reference cycles. Also count the number of references found.
+class WeakenFunctionPtrs : public IRMutator2 {
+    using IRMutator2::visit;
+
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
+        c = expr.as<Call>();
+        internal_assert(c);
+        if (c->func.defined() &&
+            c->func.get() == func) {
+            FunctionPtr ptr = c->func;
+            ptr.weaken();
+            expr = Call::make(c->type, c->name, c->args, c->call_type,
+                              ptr, c->value_index,
+                              c->image, c->param);
+            count++;
+        }
+        return expr;
+    }
+    FunctionContents *func;
+public:
+    int count = 0;
+    WeakenFunctionPtrs(FunctionContents *f) : func(f) {}
+};
+}
 
 struct FunctionContents {
-    mutable RefCount ref_count;
     std::string name;
     std::vector<Type> output_types;
 
@@ -49,21 +74,15 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
-    NameMangling extern_mangling;
-    DeviceAPI extern_function_device_api;
-    bool extern_uses_old_buffer_t;
 
-    bool trace_loads, trace_stores, trace_realizations;
+    NameMangling extern_mangling = NameMangling::Default;
+    DeviceAPI extern_function_device_api = DeviceAPI::Host;
+    bool extern_uses_old_buffer_t = false;
+    Expr extern_proxy_expr;
 
-    bool frozen;
+    bool trace_loads = false, trace_stores = false, trace_realizations = false;
 
-    FunctionContents() : extern_mangling(NameMangling::Default),
-                         extern_function_device_api(DeviceAPI::Host),
-                         extern_uses_old_buffer_t(false),
-                         trace_loads(false),
-                         trace_stores(false),
-                         trace_realizations(false),
-                         frozen(false) {}
+    bool frozen = false;
 
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
@@ -76,15 +95,20 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument i : extern_arguments) {
                 if (i.is_func()) {
+                    user_assert(i.func.get() != this)
+                        << "Extern Func has itself as an argument";
                     i.func->accept(visitor);
                 } else if (i.is_expr()) {
                     i.expr.accept(visitor);
                 }
             }
+            if (extern_proxy_expr.defined()) {
+                extern_proxy_expr.accept(visitor);
+            }
         }
 
         for (Parameter i : output_buffers) {
-            for (size_t j = 0; j < init_def.args().size() && j < 4; j++) {
+            for (size_t j = 0; j < init_def.args().size(); j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);
                 }
@@ -98,8 +122,8 @@ struct FunctionContents {
         }
     }
 
-    // Pass an IRMutator through to all Exprs referenced in the FunctionContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the FunctionContents
+    void mutate(IRMutator2 *mutator) {
         func_schedule.mutate(mutator);
 
         init_def.mutate(mutator);
@@ -109,23 +133,31 @@ struct FunctionContents {
 
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
-                if (i.is_func()) {
-                    i.func->mutate(mutator);
-                } else if (i.is_expr()) {
+                if (i.is_expr()) {
                     i.expr = mutator->mutate(i.expr);
                 }
             }
+            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
         }
     }
 };
 
+struct FunctionGroup {
+    mutable RefCount ref_count;
+    vector<FunctionContents> members;
+};
+
+FunctionContents *FunctionPtr::get() const {
+    return &(group()->members[idx]);
+}
+
 template<>
-EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {
+EXPORT RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
     return f->ref_count;
 }
 
 template<>
-EXPORT void destroy<FunctionContents>(const FunctionContents *f) {
+EXPORT void destroy<FunctionGroup>(const FunctionGroup *f) {
     delete f;
 }
 
@@ -136,7 +168,7 @@ EXPORT void destroy<FunctionContents>(const FunctionContents *f) {
 struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
-    Scope<int> defined_internally;
+    Scope<> defined_internally;
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
@@ -147,9 +179,8 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Let *let) {
         let->value.accept(this);
-        defined_internally.push(let->name, 0);
+        ScopedBinding<> bind(defined_internally, let->name);
         let->body.accept(this);
-        defined_internally.pop(let->name);
     }
 
     void visit(const Call *op) {
@@ -205,28 +236,6 @@ struct CheckVars : public IRGraphVisitor {
     }
 };
 
-struct DeleteSelfReferences : public IRMutator {
-    IntrusivePtr<FunctionContents> func;
-
-    // Also count the number of self references so we know if a Func
-    // has a recursive definition.
-    int count = 0;
-
-    using IRMutator::visit;
-
-    void visit(const Call *c) {
-        IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-        if (c->func.same_as(func)) {
-            expr = Call::make(c->type, c->name, c->args, c->call_type,
-                              nullptr, c->value_index,
-                              c->image, c->param);
-            count++;
-        }
-    }
-};
-
 // Mark all functions found in an expr as frozen.
 class FreezeFunctions : public IRGraphVisitor {
     using IRGraphVisitor::visit;
@@ -251,21 +260,24 @@ namespace {
 static std::atomic<int> rand_counter;
 }
 
-Function::Function() : contents(new FunctionContents) {
+Function::Function() {
 }
 
-Function::Function(const IntrusivePtr<FunctionContents> &ptr) : contents(ptr) {
+Function::Function(const FunctionPtr &ptr) : contents(ptr) {
+    contents.strengthen();
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined FunctionContents ptr\n";
 }
 
-Function::Function(const std::string &n) : contents(new FunctionContents) {
+Function::Function(const std::string &n) {
     for (size_t i = 0; i < n.size(); i++) {
         user_assert(n[i] != '.')
             << "Func name \"" << n << "\" is invalid. "
             << "Func names may not contain the character '.', "
             << "as it is used internally by Halide as a separator\n";
     }
+    contents.strong = new FunctionGroup;
+    contents.strong->members.resize(1);
     contents->name = n;
 }
 
@@ -287,97 +299,59 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
     // If the FunctionContents has already been deep-copied previously, i.e.
     // it's in the 'copied_map', use the deep-copied version from the map instead
     // of creating a new deep-copy
-    IntrusivePtr<FunctionContents> &copied_func = copied_map[src.func];
-    if (copied_func.defined()) {
-        copy.func = copied_func;
-    } else {
-        copy.func = deep_copy_function_contents_helper(src.func, copied_map);
-        copied_map[src.func] = copy.func;
-    }
+    FunctionPtr &copied_func = copied_map[src.func];
+    internal_assert(copied_func.defined());
+    copy.func = copied_func;
     return copy;
 }
 
-// Return a deep-copy of FunctionContents 'src'
-IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-        const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map) {
+void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
+    internal_assert(copy.defined() && contents.defined())
+        << "Cannot deep-copy undefined Function\n";
 
-    IntrusivePtr<FunctionContents> copy(new FunctionContents);
-    deep_copy_function_contents_helper(src, copy, copied_map);
-    return copy;
-}
+    // Add reference to this Function's deep-copy to the map in case of
+    // self-reference, e.g. self-reference in an Definition.
+    copied_map[contents] = copy;
 
-// Return a deep-copy of FunctionContents 'src'
-void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &src,
-                                        IntrusivePtr<FunctionContents> &dst,
-                                        DeepCopyMap &copied_map) {
-    debug(4) << "Deep-copy function contents: \"" << src->name << "\"\n";
+    debug(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
 
-    internal_assert(dst.defined() && src.defined()) << "Cannot deep-copy undefined FunctionContents\n";
-
-    dst->name = src->name;
-    dst->output_types = src->output_types;
-    dst->debug_file = src->debug_file;
-    dst->extern_function_name = src->extern_function_name;
-    dst->extern_mangling = src->extern_mangling;
-    dst->extern_function_device_api = src->extern_function_device_api;
-    dst->extern_uses_old_buffer_t = src->extern_uses_old_buffer_t;
-    dst->trace_loads = src->trace_loads;
-    dst->trace_stores = src->trace_stores;
-    dst->trace_realizations = src->trace_realizations;
-    dst->frozen = src->frozen;
-    dst->output_buffers = src->output_buffers;
-    dst->func_schedule = src->func_schedule.deep_copy(copied_map);
+    copy->name = contents->name;
+    copy->output_types = contents->output_types;
+    copy->debug_file = contents->debug_file;
+    copy->extern_function_name = contents->extern_function_name;
+    copy->extern_mangling = contents->extern_mangling;
+    copy->extern_function_device_api = contents->extern_function_device_api;
+    copy->extern_uses_old_buffer_t = contents->extern_uses_old_buffer_t;
+    copy->extern_proxy_expr = contents->extern_proxy_expr;
+    copy->trace_loads = contents->trace_loads;
+    copy->trace_stores = contents->trace_stores;
+    copy->trace_realizations = contents->trace_realizations;
+    copy->frozen = contents->frozen;
+    copy->output_buffers = contents->output_buffers;
+    copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
 
     // Copy the pure definition
-    dst->init_def = src->init_def.get_copy();
-    internal_assert(dst->init_def.is_init());
-    internal_assert(dst->init_def.schedule().rvars().empty())
+    copy->init_def = contents->init_def.get_copy();
+    internal_assert(copy->init_def.is_init());
+    internal_assert(copy->init_def.schedule().rvars().empty())
         << "Init definition shouldn't have reduction domain\n";
 
-    for (const Definition &def : src->updates) {
+    for (const Definition &def : contents->updates) {
         internal_assert(!def.is_init());
         Definition def_copy = def.get_copy();
         internal_assert(!def_copy.is_init());
-        dst->updates.push_back(std::move(def_copy));
+        copy->updates.push_back(std::move(def_copy));
     }
 
-    for (const ExternFuncArgument &e : src->extern_arguments) {
+    for (const ExternFuncArgument &e : contents->extern_arguments) {
         ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
-        dst->extern_arguments.push_back(std::move(e_copy));
+        copy->extern_arguments.push_back(std::move(e_copy));
     }
 }
 
-void Function::deep_copy(Function &copy,
-                         std::map<Function, Function, Function::Compare> &copied_map) const {
-    internal_assert(copy.contents.defined() && contents.defined())
-        << "Cannot deep-copy undefined Function\n";
-    // Need to copy over the contents of Functions in 'copied_map' since
-    // deep_copy_function_contents_helper() takes a map of
-    // <FunctionContents, FunctionContents> (DeepCopyMap)
-    DeepCopyMap copied_funcs_map;
-    for (const auto &iter : copied_map) {
-        copied_funcs_map[iter.first.contents] = iter.second.contents;
-    }
-    // Add reference to this Function's deep-copy to the map in case of
-    // self-reference, e.g. self-reference in an Definition.
-    copied_funcs_map[contents] = copy.contents;
-
-    // Perform the deep-copies
-    deep_copy_function_contents_helper(contents, copy.contents, copied_funcs_map);
-
-    // Copy over all new deep-copies of FunctionContents into 'copied_map'.
-    for (const auto &iter : copied_funcs_map) {
-        Function old_func = Function(iter.first);
-        if (copied_map.count(old_func)) {
-            // Need to make sure that deep_copy_function_contents_helper() uses
-            // the already existing deep-copy of FunctionContents instead of
-            // creating a new deep-copy
-            internal_assert(copied_map[old_func].contents.same_as(iter.second))
-                << old_func.name() << " is deep-copied twice\n";
-            continue;
-        }
-        copied_map[old_func] = Function(iter.second);
-    }
+void Function::deep_copy(string name, FunctionPtr copy, DeepCopyMap &copied_map) const {
+    deep_copy(copy, copied_map);
+    copy->name = name;
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
@@ -438,7 +412,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "Reduction domain referenced in pure function definition.\n";
 
     if (!contents.defined()) {
-        contents = new FunctionContents;
+        contents.strong = new FunctionGroup;
+        contents.strong->members.resize(1);
         contents->name = unique_name('f');
     }
 
@@ -623,18 +598,16 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // The update value and args probably refer back to the
     // function itself, introducing circular references and hence
     // memory leaks. We need to break these cycles.
-    DeleteSelfReferences deleter;
-    deleter.func = contents;
-    deleter.count = 0;
+    WeakenFunctionPtrs weakener(contents.get());
     for (size_t i = 0; i < args.size(); i++) {
-        args[i] = deleter.mutate(args[i]);
+        args[i] = weakener.mutate(args[i]);
     }
     for (size_t i = 0; i < values.size(); i++) {
-        values[i] = deleter.mutate(values[i]);
+        values[i] = weakener.mutate(values[i]);
     }
     if (check.reduction_domain.defined()) {
         check.reduction_domain.set_predicate(
-            deleter.mutate(check.reduction_domain.predicate()));
+            weakener.mutate(check.reduction_domain.predicate()));
     }
 
     Definition r(args, values, check.reduction_domain, false);
@@ -676,7 +649,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // the args are pure, then this definition completely hides
     // earlier ones!
     if (!check.reduction_domain.defined() &&
-        deleter.count == 0 &&
+        weakener.count == 0 &&
         pure) {
         user_warning
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
@@ -724,17 +697,24 @@ void Function::define_extern(const std::string &function_name,
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
     auto &pure_def_args = contents->init_def.args();
-    pure_def_args.resize(dimensionality);
+    while ((int)pure_def_args.size() < dimensionality) {
+        pure_def_args.push_back(Var(unique_name('e')));
+    }
+    // Reset the storage dims to match the pure args
+    vector<string> arg_names = this->args();
+    contents->func_schedule.storage_dims().clear();
     for (int i = 0; i < dimensionality; i++) {
-        string arg = unique_name('e');
-        pure_def_args[i] = Var(arg);
-        StorageDim sd = {arg};
+        StorageDim sd {arg_names[i]};
         contents->func_schedule.storage_dims().push_back(sd);
     }
 }
 
 void Function::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
+}
+
+void Function::mutate(IRMutator2 *mutator) {
+    contents->mutate(mutator);
 }
 
 const std::string &Function::name() const {
@@ -758,6 +738,18 @@ const std::vector<std::string> Function::args() const {
         arg_names[i] = var->name;
     }
     return arg_names;
+}
+
+bool Function::is_pure_arg(const std::string &name) const {
+    const auto &pure_def_args = contents->init_def.args();
+    for (size_t i = 0; i < pure_def_args.size(); i++) {
+        const Variable *var = pure_def_args[i].as<Variable>();
+        internal_assert(var);
+        if (var->name == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int Function::dimensions() const {
@@ -848,7 +840,19 @@ bool Function::extern_definition_uses_old_buffer_t() const {
     return contents->extern_uses_old_buffer_t;
 }
 
+Expr Function::extern_definition_proxy_expr() const {
+    return contents->extern_proxy_expr;
+}
+
+Expr &Function::extern_definition_proxy_expr() {
+    return contents->extern_proxy_expr;
+}
+
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
+    return contents->extern_arguments;
+}
+
+std::vector<ExternFuncArgument> &Function::extern_arguments() {
     return contents->extern_arguments;
 }
 
@@ -891,52 +895,112 @@ void Function::freeze() {
     contents->frozen = true;
 }
 
+void Function::lock_loop_levels() {
+    auto &schedule = contents->func_schedule;
+    schedule.compute_level().lock();
+    schedule.store_level().lock();
+    // If store_level is inlined, use the compute_level instead.
+    // (Note that we deliberately do *not* do the same if store_level
+    // is undefined.)
+    if (schedule.store_level().is_inlined()) {
+        schedule.store_level() = schedule.compute_level();
+    }
+}
+
 bool Function::frozen() const {
     return contents->frozen;
 }
 
-const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
+const map<string, FunctionPtr> &Function::wrappers() const {
     return contents->func_schedule.wrappers();
+}
+
+Function Function::new_function_in_same_group(const std::string &f) {
+    int group_size = (int)(contents.group()->members.size());
+    contents.group()->members.resize(group_size+1);
+    contents.group()->members[group_size].name = f;
+    FunctionPtr ptr;
+    ptr.strong = contents.group();
+    ptr.idx = group_size;
+    return Function(ptr);
 }
 
 void Function::add_wrapper(const std::string &f, Function &wrapper) {
     wrapper.freeze();
-    contents->func_schedule.add_wrapper(f, wrapper.contents);
+    FunctionPtr ptr = wrapper.contents;
+
+    // Weaken the pointer from the function to its wrapper
+    ptr.weaken();
+    contents->func_schedule.add_wrapper(f, ptr);
+
+    // Weaken the pointer from the wrapper back to the function.
+    WeakenFunctionPtrs weakener(contents.get());
+    wrapper.mutate(&weakener);
+}
+
+const Call *Function::is_wrapper() const {
+    const vector<Expr> &rhs = values();
+    if (rhs.size() != 1) {
+        return nullptr;
+    }
+    const Call *call = rhs[0].as<Call>();
+    if (!call) {
+        return nullptr;
+    }
+    vector<Expr> expected_args;
+    for (const string &v : args()) {
+        expected_args.push_back(Variable::make(Int(32), v));
+    }
+    Expr expected_rhs =
+        Call::make(call->type, call->name, expected_args, call->call_type,
+                   call->func, call->value_index, call->image, call->param);
+    if (equal(rhs[0], expected_rhs)) {
+        return call;
+    } else {
+        return nullptr;
+    }
 }
 
 namespace {
 
 // Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator {
-    using IRMutator::visit;
+class SubstituteCalls : public IRMutator2 {
+    using IRMutator2::visit;
 
-    map<Function, Function, Function::Compare> substitutions;
+    map<FunctionPtr, FunctionPtr> substitutions;
 
-    void visit(const Call *c) {
-        IRMutator::visit(c);
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
-        if ((c->call_type == Call::Halide) && c->func.defined() && substitutions.count(Function(c->func))) {
-            const Function &subs = substitutions[Function(c->func)];
+        if ((c->call_type == Call::Halide) &&
+            c->func.defined() &&
+            substitutions.count(c->func)) {
+            FunctionPtr subs = substitutions[c->func];
+            internal_assert(subs.defined()) << "Function not in environment: " << subs->name << "\n";
             debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << subs.name() << "\"\n";
-            expr = Call::make(subs, c->args, c->value_index);
+                     << "\"" << subs->name << "\"\n";
+            expr = Call::make(c->type, subs->name, c->args, c->call_type,
+                              subs, c->value_index,
+                              c->image, c->param);
         }
+        return expr;
     }
 public:
-    SubstituteCalls(const map<Function, Function, Function::Compare> &substitutions)
+    SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
         : substitutions(substitutions) {}
 };
 
-class SubstituteScheduleParamExprs : public IRMutator {
-    using IRMutator::visit;
+class SubstituteScheduleParamExprs : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Variable *v) override {
-        IRMutator::visit(v);
+    Expr visit(const Variable *v) override {
+        Expr expr = IRMutator2::visit(v);
         if (v->param.defined() && v->param.is_bound_before_lowering()) {
-            expr = mutate(v->param.get_scalar_expr());
+            expr = mutate(v->param.scalar_expr());
         }
+        return expr;
     }
 
 public:
@@ -946,9 +1010,8 @@ public:
 
 } // anonymous namespace
 
-Function &Function::substitute_calls(const map<Function, Function, Compare> &substitutions) {
+Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
-
     if (substitutions.empty()) {
         return *this;
     }
@@ -958,8 +1021,8 @@ Function &Function::substitute_calls(const map<Function, Function, Compare> &sub
 }
 
 Function &Function::substitute_calls(const Function &orig, const Function &substitute) {
-    map<Function, Function, Compare> substitutions;
-    substitutions.emplace(orig, substitute);
+    map<FunctionPtr, FunctionPtr> substitutions;
+    substitutions.emplace(orig.get_contents(), substitute.get_contents());
     return substitute_calls(substitutions);
 }
 
@@ -968,6 +1031,60 @@ Function &Function::substitute_schedule_param_exprs() {
     contents->mutate(&sub_schedule_params);
     return *this;
 }
+
+// Deep copy an entire Function DAG.
+pair<vector<Function>, map<string, Function>> deep_copy(
+    const vector<Function> &outputs, const map<string, Function> &env) {
+    vector<Function> copy_outputs;
+    map<string, Function> copy_env;
+
+    // Create empty deep-copies of all Functions in 'env'
+    DeepCopyMap copied_map; // Original Function -> Deep-copy
+    IntrusivePtr<FunctionGroup> group(new FunctionGroup);
+    group->members.resize(env.size());
+    int i = 0;
+    for (const auto &iter : env) {
+        // Make a weak pointer to the function to use for within-group references.
+        FunctionPtr ptr;
+        ptr.weak = group.get();
+        ptr.idx = i;
+        ptr->name = iter.second.name();
+        copied_map[iter.second.get_contents()] = ptr;
+        i++;
+    }
+
+    // Deep copy all Functions in 'env' into their corresponding empty copies
+    for (const auto &iter : env) {
+        iter.second.deep_copy(copied_map[iter.second.get_contents()], copied_map);
+    }
+
+    // Need to substitute-in all old Function references in all Exprs referenced
+    // within the Function with the deep-copy versions
+    for (auto &iter : copied_map) {
+        Function(iter.second).substitute_calls(copied_map);
+    }
+
+    // Populate the env with the deep-copy version
+    for (const auto &iter : copied_map) {
+        FunctionPtr ptr = iter.second;
+        copy_env.emplace(iter.first->name, Function(ptr));
+    }
+
+    for (const auto &func : outputs) {
+        const auto &iter = copied_map.find(func.get_contents());
+        if (iter != copied_map.end()) {
+            FunctionPtr ptr = iter->second;
+            debug(4) << "Adding deep-copied version to outputs: " << func.name() << "\n";
+            copy_outputs.push_back(Function(ptr));
+        } else {
+            debug(4) << "Adding original version to outputs: " << func.name() << "\n";
+            copy_outputs.push_back(func);
+        }
+    }
+
+    return { copy_outputs, copy_env };
+}
+
 
 }
 }

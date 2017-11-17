@@ -22,7 +22,7 @@ namespace Internal {
  * own function (e.g. because it's the body of a parallel for loop. */
 class Closure : public IRVisitor {
 protected:
-    Scope<int> ignore;
+    Scope<> ignore;
 
     using IRVisitor::visit;
 

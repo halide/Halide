@@ -10,7 +10,6 @@
 #include "Var.h"
 #include "Function.h"
 #include "Param.h"
-#include "OutputImageParam.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITModule.h"
@@ -22,6 +21,8 @@
 #include <map>
 
 namespace Halide {
+
+class OutputImageParam;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -410,6 +411,14 @@ public:
     EXPORT Internal::Function function() const {return func;}
 };
 
+/** Explicit overloads of min and max for FuncRef. These exist to
+ * disambiguate calls to min on FuncRefs when a user has pulled both
+ * Halide::min and std::min into their namespace. */
+// @{
+inline Expr min(FuncRef a, FuncRef b) {return min(Expr(std::move(a)), Expr(std::move(b)));}
+inline Expr max(FuncRef a, FuncRef b) {return max(Expr(std::move(a)), Expr(std::move(b)));}
+// @}
+
 /** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
  * z are Vars or Exprs. If could be the left hand side of an update
  * definition, or it could be a call to a function. We don't know
@@ -483,7 +492,7 @@ public:
 
 namespace Internal {
 struct ErrorBuffer;
-class IRMutator;
+class IRMutator2;
 }
 
 /** A halide function. This class represents one stage in a Halide
@@ -837,18 +846,18 @@ public:
     template<typename T>
     void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
-        // cast it to a deleter that takes a IRMutator *. The custom
+        // cast it to a deleter that takes a IRMutator2 *. The custom
         // deleter lives in user code, so that deletion is on the same
         // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator *) =
-            (void (*)(Internal::IRMutator *))(&delete_lowering_pass<T>);
+        void (*deleter)(Internal::IRMutator2 *) =
+            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
         add_custom_lowering_pass(pass, deleter);
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass, void (*deleter)(Internal::IRMutator *));
+    EXPORT void add_custom_lowering_pass(Internal::IRMutator2 *pass, void (*deleter)(Internal::IRMutator2 *));
 
     /** Remove all previously-set custom lowering passes */
     EXPORT void clear_custom_lowering_passes();
@@ -1022,7 +1031,7 @@ public:
     }
     // @}
 
-    /** Creates and returns a new Func that wraps this Func. During
+    /** Creates and returns a new identity Func that wraps this Func. During
      * compilation, Halide replaces all calls to this Func done by 'f'
      * with calls to the wrapper. If this Func is already wrapped for
      * use in 'f', will return the existing wrapper.
@@ -1111,17 +1120,65 @@ public:
      */
     EXPORT Func in(const Func &f);
 
-    /** Create and return a wrapper shared by all the Funcs in
-     * 'fs'. If any of the Funcs in 'fs' already have a custom
-     * wrapper, this will throw an error. */
+    /** Create and return an identity wrapper shared by all the Funcs in
+     * 'fs'. If any of the Funcs in 'fs' already have a custom wrapper,
+     * this will throw an error. */
     EXPORT Func in(const std::vector<Func> &fs);
 
-    /** Create and return a global wrapper, which wraps all calls to
-     * this Func by any other Func. If a global wrapper already
-     * exists, returns it. The global wrapper is only used by callers
-     * for which no custom wrapper has been specified.
+    /** Create and return a global identity wrapper, which wraps all calls to
+     * this Func by any other Func. If a global wrapper already exists,
+     * returns it. The global identity wrapper is only used by callers for
+     * which no custom wrapper has been specified.
      */
     EXPORT Func in();
+
+    /** Similar to \ref Func::in; however, instead of replacing the call to
+     * this Func with an identity Func that refers to it, this replaces the
+     * call with a clone of this Func.
+     *
+     * For example, f.clone_in(g) would rewrite a pipeline like this:
+     \code
+     f(x, y) = x + y;
+     g(x, y) = f(x, y) + 2;
+     h(x, y) = f(x, y) - 3;
+     \endcode
+     * into a pipeline like this:
+     \code
+     f(x, y) = x + y;
+     f_clone(x, y) = x + y;
+     g(x, y) = f_clone(x, y) + 2;
+     h(x, y) = f(x, y) - 3;
+     \endcode
+     *
+     */
+    //@{
+    EXPORT Func clone_in(const Func &f);
+    EXPORT Func clone_in(const std::vector<Func> &fs);
+    //@}
+
+    /** Declare that this function should be implemented by a call to
+     * halide_buffer_copy with the given target device API. Asserts
+     * that the Func has a pure definition which is a simple call to a
+     * single input, and no update definitions. The wrapper Funcs
+     * returned by in() are suitable candidates. Consumes all pure
+     * variables, and rewrites the Func to have an extern definition
+     * that calls halide_buffer_copy. */
+    EXPORT Func copy_to_device(DeviceAPI d = DeviceAPI::Default_GPU);
+
+    /** Declare that this function should be implemented by a call to
+     * halide_buffer_copy with a NULL target device API. Equivalent to
+     * copy_to_device(DeviceAPI::Host). Asserts that the Func has a
+     * pure definition which is a simple call to a single input, and
+     * no update definitions. The wrapper Funcs returned by in() are
+     * suitable candidates. Consumes all pure variables, and rewrites
+     * the Func to have an extern definition that calls
+     * halide_buffer_copy.
+     *
+     * Note that if the source Func is already valid in host memory,
+     * this compiles to code that does the minimum number of calls to
+     * memcpy.
+     */
+    EXPORT Func copy_to_host();
 
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
@@ -1187,6 +1244,14 @@ public:
      * more of this function than the bounds you have stated, a
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Statically declare the range over which the function will be
+     * evaluated in the general case. This provides a basis for the auto
+     * scheduler to make trade-offs and scheduling decisions. The auto
+     * generated schedules might break when the sizes of the dimensions are
+     * very different from the estimates specified. These estimates are used
+     * only by the auto scheduler if the function is a pipeline output. */
+    EXPORT Func &estimate(Var var, Expr min, Expr extent);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a

@@ -90,7 +90,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         stack_bytes = constant_bytes;
 
         if (stack_bytes > target.maximum_buffer_size()) {
-            const string str_max_size = target.has_feature(Target::LargeBuffers) ? "2^63 - 1" : "2^31 - 1";
+            const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (!can_allocation_fit_on_stack(stack_bytes)) {
             stack_bytes = 0;

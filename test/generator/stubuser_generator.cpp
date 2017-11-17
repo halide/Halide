@@ -52,7 +52,7 @@ public:
         calculated_output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
-        // can really only be assigned to another Output<Buffer>; this is 
+        // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
         float32_buffer_output = stub.typed_buffer_output;
@@ -69,10 +69,6 @@ private:
     StubTest stub;
 };
 
-// Note that HALIDE_REGISTER_GENERATOR() with just two args is functionally
-// identical to the old Halide::RegisterGenerator<> syntax: no stub being defined,
-// just AOT usage. (If you try to generate a stub for this class you'll
-// fail with an error at generation time.)
-HALIDE_REGISTER_GENERATOR(StubUser, "stubuser")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(StubUser, stubuser)

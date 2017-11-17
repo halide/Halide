@@ -1,0 +1,5 @@
+# Note that this requires you to have built the toplevel Halide 'distrib' folder via 'make distrib'
+local_repository(
+  name = "halide",
+  path = "../../distrib",
+)
