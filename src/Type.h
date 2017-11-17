@@ -34,6 +34,9 @@
  * r-value references.  These features cannot be used in extern
  * function calls from Halide or in the generated function from
  * Halide, but their applicability seems limited anyway.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it.
  */
 struct halide_cplusplus_type_name {
     /// An enum to indicate whether a C++ type is non-composite, a struct, class, or union
@@ -73,6 +76,9 @@ struct halide_cplusplus_type_name {
  * This is intended to be a constexpr usable type, but we don't depend
  * on C++11 yet. In C++14, it is possible this will be replaced with
  * introspection/reflection facilities.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it.
  */
 struct halide_handle_cplusplus_type {
     halide_cplusplus_type_name inner_name;
@@ -119,6 +125,13 @@ struct halide_handle_cplusplus_type {
 };
 //@}
 
+/** halide_c_type_to_name is a utility class used to provide a user-extensible
+ * way of naming Handle types.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it
+ * directly (use the HALIDE_DECLARE_EXTERN_xxx macros instead).
+ */
 template<typename T>
 struct halide_c_type_to_name {
     static constexpr bool known_type = false;
@@ -221,6 +234,9 @@ template<typename T>
  * A NULL pointer of type halide_handle_traits represents "void *".
  * This is chosen for compactness or representation as Type is a very
  * widely used data structure.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it directly.
  */
 template<typename T>
 struct halide_handle_traits {
