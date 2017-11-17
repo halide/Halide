@@ -72,6 +72,8 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_v65 = halide_target_feature_hvx_v65,
+        HVX_v66 = halide_target_feature_hvx_v66,
         HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
@@ -180,6 +182,8 @@ struct Target {
     /** Does this target allow using a certain type. Generally all
      * types except 64-bit float and int/uint should be supported by
      * all backends.
+     *
+     * It is likely better to call the version below which takes a DeviceAPI.
      */
     bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
@@ -193,9 +197,14 @@ struct Target {
         return true;
     }
 
+    /** Does this target allow using a certain type on a certain device.
+     * This is the prefered version of this routine.
+     */
+    EXPORT bool supports_type(const Type &t, DeviceAPI device) const;
+
     /** Returns whether a particular device API can be used with this
      * Target. */
-    bool supports_device_api(DeviceAPI api) const;
+    EXPORT bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&
@@ -280,11 +289,16 @@ struct Target {
         return natural_vector_size(type_of<data_t>());
     }
 
+    /** Return true iff 64 bits and has_feature(LargeBuffers). */
+    bool has_large_buffers() const {
+        return bits == 64 && has_feature(LargeBuffers);
+    }
+
     /** Return the maximum buffer size in bytes supported on this
-     * Target. This is 2^31 - 1 except when the LargeBuffers feature
-     * is enabled, which expands the maximum to 2^63 - 1. */
+     * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
+     * feature is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        if (bits == 64 && has_feature(LargeBuffers)) {
+        if (has_large_buffers()) {
             return (((uint64_t)1) << 63) - 1;
         } else {
             return (((uint64_t)1) << 31) - 1;

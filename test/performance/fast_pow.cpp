@@ -6,17 +6,16 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-// 32-bit windows defines powf as a macro, which won't work for us.
 #ifdef _WIN32
-extern "C" __declspec(dllexport) float pow_ref(float x, float y) {
-    return pow(x, y);
-}
+#define DLLEXPORT __declspec(dllexport)
 #else
-extern "C" float pow_ref(float x, float y) {
-    return powf(x, y);
-}
+#define DLLEXPORT
 #endif
 
+// powf() is a macro in some environments, so always wrap it
+extern "C" DLLEXPORT float pow_ref(float x, float y) {
+    return powf(x, y);
+}
 HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {
@@ -43,16 +42,14 @@ int main(int argc, char **argv) {
     g.realize(fast_result);
     h.realize(faster_result);
 
-    const int trials = 10;
-    const int iterations = 10;
     pows_per_pixel.set(20);
 
     // All profiling runs are done into the same buffer, to avoid
     // cache weirdness.
     Buffer<float> timing_scratch(256, 256);
-    double t1 = 1e3 * benchmark(3, 3, [&]() { f.realize(timing_scratch); });
-    double t2 = 1e3 * benchmark(trials, iterations, [&]() { g.realize(timing_scratch); });
-    double t3 = 1e3 * benchmark(trials, iterations, [&]() { h.realize(timing_scratch); });
+    double t1 = 1e3 * benchmark([&]() { f.realize(timing_scratch); });
+    double t2 = 1e3 * benchmark([&]() { g.realize(timing_scratch); });
+    double t3 = 1e3 * benchmark([&]() { h.realize(timing_scratch); });
 
     RDom r(correct_result);
     Func fast_error, faster_error;

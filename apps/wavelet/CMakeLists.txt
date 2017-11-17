@@ -5,51 +5,33 @@
 # Generators in a simple app.
 #
 # To use:
-# mkdir build_cmake && cd build_cmake && cmake .. && make -j8 && ./bin/wavelet ../../images/gray.png .
+# mkdir cmake_build && cd cmake_build && cmake .. && make -j8 && ./bin/wavelet ../../images/gray.png .
 
 project(wavelet)
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.1.3)
 
-include(../../HalideGenerator.cmake)
+# halide.cmake requires that HALIDE_DISTRIB_DIR be set to point to the Halide distribution folder we use.
+# This assumes it's built at the toplevel via 'make distrib' (ironically, the CMake build isn't
+# yet capable of producing a distrib folder).
+set(HALIDE_DISTRIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../../distrib")
 
-# HalideGenerator.cmake makes this assumptions
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+# halide.cmake defaults to using the shared-library version of libHalide;
+# we can make it prefer the static-library version by setting this:
+# set(HALIDE_DISTRIB_USE_STATIC_LIBRARY TRUE)
 
-SET(HALIDE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../" CACHE PATH "Root of Halide source Tree")
-include_directories ("${HALIDE_SRC_DIR}/apps/support")
-include_directories("${HALIDE_SRC_DIR}/include")
-include_directories("${HALIDE_SRC_DIR}/tools")
+include("${HALIDE_DISTRIB_DIR}/halide.cmake")
 
+# Define the wavelet app
 add_executable(wavelet "${CMAKE_CURRENT_SOURCE_DIR}/wavelet.cpp")
-target_compile_options(wavelet PRIVATE "-std=c++11" "-fno-rtti")
+set_target_properties(wavelet PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+target_include_directories(wavelet PRIVATE "${HALIDE_INCLUDE_DIR}" "${HALIDE_TOOLS_DIR}")
+halide_use_image_io(wavelet)
 
-find_package(PNG)
-target_link_libraries(wavelet PRIVATE ${PNG_LIBRARIES})
-target_include_directories(wavelet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" ${PNG_INCLUDE_DIRS})
-target_compile_definitions(wavelet PRIVATE ${PNG_DEFINITIONS})
-
-find_package(JPEG)
-target_link_libraries(wavelet PRIVATE ${JPEG_LIBRARIES})
-target_include_directories(wavelet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" ${JPEG_INCLUDE_DIRS})
-target_compile_definitions(wavelet PRIVATE ${JPEG_DEFINITIONS})
-
-# GENS := *_generator.cpp
+# Define a halide_library() for each generator we have, and link each one into wavelet
 file(GLOB GENS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*_generator.cpp")
-
 foreach(GEN_SRC ${GENS})
-    # GEN_NAME := *.generator
     string(REPLACE "_generator.cpp" "" GEN_NAME "${GEN_SRC}")
-    # GEN_EXECUTABLE := *.generator
-    string(REPLACE "_generator.cpp" "" GEN_EXECUTABLE "${GEN_SRC}.generator")
-    add_executable("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/GenGen.cpp" "${GEN_SRC}")
-    target_compile_options("${GEN_EXECUTABLE}" PRIVATE "-std=c++11" "-fno-rtti")
-    target_link_libraries("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../lib/libHalide.a" z)
-
-    halide_add_aot_library("${GEN_NAME}"
-                           GENERATOR_TARGET ${GEN_EXECUTABLE}
-                           GENERATOR_NAME ${GEN_NAME}
-                           GENERATED_FUNCTION ${GEN_NAME}
-                           GENERATOR_ARGS "target=host")
-    halide_add_aot_library_dependency(wavelet "${GEN_NAME}")
-
+    halide_library("${GEN_NAME}" SRCS ${GEN_SRC})
+    target_link_libraries(wavelet PUBLIC "${GEN_NAME}")
 endforeach()
+

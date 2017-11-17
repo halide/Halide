@@ -343,6 +343,7 @@ public:
     HALIDE_BUFFER_FORWARD(slice)
     HALIDE_BUFFER_FORWARD_CONST(sliced)
     HALIDE_BUFFER_FORWARD(embed)
+    HALIDE_BUFFER_FORWARD_CONST(embedded)
     HALIDE_BUFFER_FORWARD(set_min)
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD(transpose)
@@ -356,20 +357,24 @@ public:
     HALIDE_BUFFER_FORWARD(set_device_dirty)
     HALIDE_BUFFER_FORWARD(device_sync)
     HALIDE_BUFFER_FORWARD(device_malloc)
+    HALIDE_BUFFER_FORWARD(device_wrap_native)
+    HALIDE_BUFFER_FORWARD(device_detach_native)
     HALIDE_BUFFER_FORWARD(allocate)
     HALIDE_BUFFER_FORWARD(deallocate)
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
     HALIDE_BUFFER_FORWARD(fill)
     HALIDE_BUFFER_FORWARD_CONST(for_each_element)
-    HALIDE_BUFFER_FORWARD(for_each_value)
 
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
-    static constexpr bool has_static_halide_type() {
-        return Runtime::Buffer<T>::has_static_halide_type();
+    template<typename Fn, typename ...Args>
+    void for_each_value(Fn &&f, Args... other_buffers) {
+        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
     }
+
+    static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
 
     static halide_type_t static_halide_type() {
         return Runtime::Buffer<T>::static_halide_type();
@@ -382,6 +387,11 @@ public:
 
     Type type() const {
         return contents->buf.type();
+    }
+
+    template<typename T2>
+    Buffer<T2> as() const {
+        return Buffer<T2>(*this);
     }
 
     Buffer<T> copy() const {
@@ -443,24 +453,32 @@ public:
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.copy_to_device(get_default_device_interface_for_target(t));
+        return copy_to_device(DeviceAPI::Default_GPU, t);
     }
 
     /** Copy to the GPU, using the given device API */
     int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t));
+        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t, "Buffer::copy_to_device"));
     }
 
     /** Allocate on the GPU, using the device API that is the default for the given Target. */
     int device_malloc(const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_malloc(get_default_device_interface_for_target(t));
+        return device_malloc(DeviceAPI::Default_GPU, t);
     }
 
     /** Allocate storage on the GPU, using the given device API */
     int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
+        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t, "Buffer::device_malloc"));
     }
 
+    /** Wrap a native handle, using the given device API.
+     * It is a bad idea to pass DeviceAPI::Default_GPU to this routine
+     * as the handle argument must match the API that the default
+     * resolves to and it is clearer and more reliable to pass the
+     * resolved DeviceAPI explicitly. */
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle);
+    }
 
 };
 

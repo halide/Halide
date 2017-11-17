@@ -89,6 +89,36 @@ bool is_no_op(const Stmt &s) {
     return e && is_const(e->value);
 }
 
+class ExprIsPure : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = true;
+};
+
+bool is_pure(const Expr &e) {
+    ExprIsPure pure;
+    e.accept(&pure);
+    return pure.result;
+}
+
 const int64_t *as_const_int(const Expr &e) {
     if (!e.defined()) {
         return nullptr;
@@ -716,6 +746,20 @@ Expr BufferBuilder::build() const {
     return e;
 }
 
+Expr strided_ramp_base(Expr e, int stride) {
+    const Ramp *r = e.as<Ramp>();
+    if (r == nullptr) {
+        return Expr();
+    }
+
+    const IntImm *i = r->stride.as<IntImm>();
+    if (i != nullptr && i->value == stride) {
+        return r->base;
+    }
+
+    return Expr();
+}
+
 } // namespace Internal
 
 Expr fast_log(Expr x) {
@@ -823,13 +867,9 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
                              "halide_error_requirement_failed",
                              {stringify({condition}), combine_strings(args)},
                              Internal::Call::Extern);
-    // Just cast to the type expected by the success path: since the actual
-    // value will never be used in the failure branch, it doesn't really matter
-    // what it is, but the type must match.
-    Expr failure_value = cast(args[0].type(), requirement_failed_error);
     return Internal::Call::make(args[0].type(),
-                                Internal::Call::if_then_else,
-                                {likely(std::move(condition)), args[0], failure_value},
+                                Internal::Call::require,
+                                {likely(std::move(condition)), args[0], requirement_failed_error},
                                 Internal::Call::PureIntrinsic);
 }
 

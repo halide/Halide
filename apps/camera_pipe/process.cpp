@@ -2,7 +2,12 @@
 #include "fcam/Demosaic_ARM.h"
 
 #include "halide_benchmark.h"
+
 #include "camera_pipe.h"
+#ifndef NO_AUTO_SCHEDULE
+#include "camera_pipe_auto_schedule.h"
+#endif
+
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 #include "halide_malloc_trace.h"
@@ -27,7 +32,7 @@ int main(int argc, char **argv) {
 #endif
 
     fprintf(stderr, "input: %s\n", argv[1]);
-    Buffer<uint16_t> input = load_image(argv[1]);
+    Buffer<uint16_t> input = load_and_convert_image(argv[1]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
     Buffer<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
@@ -68,10 +73,21 @@ int main(int argc, char **argv) {
                     color_temp, gamma, contrast, blackLevel, whiteLevel,
                     output);
     });
-    fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
+    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+
+    #ifndef NO_AUTO_SCHEDULE
+    best = benchmark(timing_iterations, 1, [&]() {
+        camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
+            color_temp, gamma, contrast, blackLevel, whiteLevel,
+            output);
+    });
+    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    #endif
+
     fprintf(stderr, "output: %s\n", argv[6]);
-    save_image(output, argv[6]);
+    convert_and_save_image(output, argv[6]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
+
 
     Buffer<uint8_t> output_c(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {
@@ -80,7 +96,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
     if (argc > 7) {
         fprintf(stderr, "output_c: %s\n", argv[7]);
-        save_image(output_c, argv[7]);
+        convert_and_save_image(output_c, argv[7]);
     }
     fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
 
@@ -91,7 +107,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
     if (argc > 8) {
         fprintf(stderr, "output_asm: %s\n", argv[8]);
-        save_image(output_asm, argv[8]);
+        convert_and_save_image(output_asm, argv[8]);
     }
     fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
 

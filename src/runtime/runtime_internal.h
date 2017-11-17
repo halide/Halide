@@ -74,7 +74,7 @@ void *memset(void *s, int val, size_t n);
 // Use fopen+fileno+fclose instead of open+close - the value of the
 // flags passed to open are different on every platform
 void *fopen(const char *, const char *);
-int fileno(void *); 
+int fileno(void *);
 int fclose(void *);
 int close(int);
 size_t fwrite(const void *, size_t, size_t, void *);
@@ -216,6 +216,8 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
     memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
     return ret;
 }
+
+extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
 
 }}}
 

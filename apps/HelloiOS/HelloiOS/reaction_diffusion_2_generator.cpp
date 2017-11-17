@@ -27,8 +27,6 @@ private:
     Var x, y, xi, yi, c;
 };
 
-HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Init, "reaction_diffusion_2_init")
-
 class ReactionDiffusion2Update : public Halide::Generator<ReactionDiffusion2Update> {
 public:
     Input<Buffer<float>> state{"state", 3};
@@ -82,8 +80,8 @@ public:
         G = clamp(G, 0.0f, 1.0f);
         B = clamp(B, 0.0f, 1.0f);
 
-        new_state(x, y, c) = select(c == 0, R, 
-                                    c == 1, G, 
+        new_state(x, y, c) = select(c == 0, R,
+                                    c == 1, G,
                                             B);
 
         // Noise at the edges
@@ -102,8 +100,8 @@ public:
         Expr dx = clobber.x - mouse_x;
         Expr dy = clobber.y - mouse_y;
         Expr radius = dx * dx + dy * dy;
-        new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 
-                                                    1.0f, 
+        new_state(clobber.x, clobber.y, c) = select(radius < 400.0f,
+                                                    1.0f,
                                                     new_state(clobber.x, clobber.y, c));
     }
 
@@ -168,13 +166,11 @@ private:
     RDom clobber;
 };
 
-HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Update, "reaction_diffusion_2_update")
-
 class ReactionDiffusion2Render : public Halide::Generator<ReactionDiffusion2Render> {
 public:
     Input<Buffer<float>> state{"state", 3};
     // TODO(srj): should be Input<bool>; using Input<int> to work around Issue #1760
-    Input<int> output_bgra{"output_bgra", 0, 0, 1};  
+    Input<int> output_bgra{"output_bgra", 0, 0, 1};
     Output<Buffer<uint8_t>> render{"render", 3};
 
     void generate() {
@@ -194,13 +190,13 @@ public:
         // Calculate both here and select() the right one;
         // we'll add specialize() paths in the schedule to
         // make this efficient.
-        Expr bgra = select(c == 0, cast<uint8_t>(B * 255), 
-                           c == 1, cast<uint8_t>(G * 255), 
+        Expr bgra = select(c == 0, cast<uint8_t>(B * 255),
+                           c == 1, cast<uint8_t>(G * 255),
                            c == 2, cast<uint8_t>(R * 255),
                            /*c==3*/cast<uint8_t>(A * 255));
 
-        Expr rgba = select(c == 0, cast<uint8_t>(R * 255), 
-                           c == 1, cast<uint8_t>(G * 255), 
+        Expr rgba = select(c == 0, cast<uint8_t>(R * 255),
+                           c == 1, cast<uint8_t>(G * 255),
                            c == 2, cast<uint8_t>(B * 255),
                            /*c==3*/cast<uint8_t>(A * 255));
 
@@ -236,6 +232,10 @@ private:
     Var x, y, c, xi, yi;
 };
 
-HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Render, "reaction_diffusion_2_render")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Init, reaction_diffusion_2_init)
+HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Update, reaction_diffusion_2_update)
+HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Render, reaction_diffusion_2_render)
+
+

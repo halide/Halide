@@ -1,12 +1,15 @@
-# Generator
-halide_add_generator(local_laplacian.generator
-                     SRCS local_laplacian_generator.cpp)
-halide_add_aot_library(local_laplacian
-                       GENERATOR_TARGET local_laplacian.generator
-                       GENERATOR_ARGS target=host)
+add_executable(local_laplacian_process process.cpp)
+halide_use_image_io(local_laplacian_process)
 
-# Final executable
-add_executable(ll_process process.cpp)
-halide_add_aot_library_dependency(ll_process local_laplacian)
-use_image_io(ll_process)
-target_compile_options(ll_process PRIVATE "-std=c++11")
+halide_generator(local_laplacian.generator SRCS local_laplacian_generator.cpp)
+foreach(AUTO_SCHEDULE false true)
+    if(${AUTO_SCHEDULE})
+        set(LIB local_laplacian_auto_schedule)
+    else()
+        set(LIB local_laplacian)
+    endif()
+    halide_library_from_generator(${LIB}
+                                  GENERATOR local_laplacian.generator
+                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
+    target_link_libraries(local_laplacian_process PRIVATE ${LIB})
+endforeach()

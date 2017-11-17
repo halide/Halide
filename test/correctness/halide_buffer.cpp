@@ -26,8 +26,6 @@ void check_equal(const Buffer<T1> &a, const Buffer<T2> &b) {
     });
 }
 
-
-
 int main(int argc, char **argv) {
     {
         // Check copying a buffer

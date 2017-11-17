@@ -33,7 +33,7 @@ public:
     // We declare a three-dimensional input image. The first two
     // dimensions will be x, and y, and the third dimension will be
     // the color channel.
-    ImageParam input{UInt(8), 3, "input"};
+    Input<Buffer<uint8_t>> input{"input", 3};
 
     // We will compile this generator in several ways to accept
     // several different memory layouts for the input and output. This
@@ -48,16 +48,18 @@ public:
                  { "either",        Layout::Either },
                  { "specialized",   Layout::Specialized }}};
 
-    // We also declare a scalar parameter to control the amount of
+    // We also declare a scalar input to control the amount of
     // brightening.
-    Param<uint8_t> offset{"offset"};
+    Input<uint8_t> offset{"offset"};
+
+    // Declare our outputs
+    Output<Buffer<uint8_t>> brighter{"brighter", 3};
 
     // Declare our Vars
     Var x, y, c;
 
-    Func build() {
+    void generate() {
         // Define the Func.
-        Func brighter("brighter");
         brighter(x, y, c) = input(x, y, c) + offset;
 
         // Schedule it.
@@ -126,7 +128,7 @@ public:
                 .dim(0).set_stride(3) // stride in dimension 0 (x) is three
                 .dim(2).set_stride(1); // stride in dimension 2 (c) is one
 
-            brighter.output_buffer()
+            brighter
                 .dim(0).set_stride(3)
                 .dim(2).set_stride(1);
 
@@ -137,7 +139,7 @@ public:
             // and unrolled.
 
             input.dim(2).set_bounds(0, 3); // Dimension 2 (c) starts at 0 and has extent 3.
-            brighter.output_buffer().dim(2).set_bounds(0, 3);
+            brighter.dim(2).set_bounds(0, 3);
 
             // Move the loop over color channels innermost and unroll
             // it.
@@ -157,7 +159,7 @@ public:
                                              // undefined Expr to mean
                                              // there is no constraint.
 
-            brighter.output_buffer().dim(0).set_stride(Expr());
+            brighter.dim(0).set_stride(Expr());
 
         } else if (layout == Layout::Specialized) {
             // We can accept any memory layout with good performance
@@ -170,7 +172,7 @@ public:
                                              // mean there is no
                                              // constraint.
 
-            brighter.output_buffer().dim(0).set_stride(Expr());
+            brighter.dim(0).set_stride(Expr());
 
             // The we construct boolean Exprs that detect at runtime
             // whether we're planar or interleaved. The conditions
@@ -184,11 +186,11 @@ public:
                  input.dim(2).extent() == 3);
 
             Expr output_is_planar =
-                (brighter.output_buffer().dim(0).stride() == 1);
+                (brighter.dim(0).stride() == 1);
             Expr output_is_interleaved =
-                (brighter.output_buffer().dim(0).stride() == 3 &&
-                 brighter.output_buffer().dim(2).stride() == 1 &&
-                 brighter.output_buffer().dim(2).extent() == 3);
+                (brighter.dim(0).stride() == 3 &&
+                 brighter.dim(2).stride() == 1 &&
+                 brighter.dim(2).extent() == 3);
 
             // We can then use Func::specialize to write a schedule
             // that switches at runtime to specialized code based on a
@@ -219,14 +221,12 @@ public:
             // memory layouts are known, you probably want to use
             // set_stride and set_extent instead.
         }
-
-        return brighter;
     }
 };
 
 // As in lesson 15, we register our generator and then compile this
 // file along with tools/GenGen.cpp.
-RegisterGenerator<Brighten> my_first_generator{"brighten"};
+HALIDE_REGISTER_GENERATOR(Brighten, brighten)
 
 // After compiling this file, see how to use it in
 // lesson_16_rgb_run.cpp

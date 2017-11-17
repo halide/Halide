@@ -3,7 +3,7 @@
 // Include the machine-generated .stub.h header file.
 #include "example.stub.h"
 
-using Halide::Buffer;
+using namespace Halide;
 
 const int kSize = 32;
 
@@ -16,7 +16,7 @@ void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_
 }
 
 int main(int argc, char **argv) {
-    Halide::JITGeneratorContext context(Halide::get_target_from_environment());
+    GeneratorContext context(get_jit_target_from_environment());
 
     {
         // Create a Generator and set its Inputs and GeneratorParams.
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         // We must call schedule() before calling realize()
         gen.schedule();
 
-        Halide::Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
+        Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
         verify(img, 2.5f, 1, 3);
     }
 
@@ -47,12 +47,27 @@ int main(int argc, char **argv) {
         // the GeneratorParams entirely to use their default values.
         auto gen = example(context, /* inputs: */ { 1.f });
 
-        // We'll set "vectorize=false" in the ScheduleParams, just to
+        // We'll set "vectorize=false parallelize=false" in the ScheduleParams, just to
         // show that we can:
         gen.vectorize.set(false);
+        gen.parallelize.set(false);
         gen.schedule();
 
-        Halide::Buffer<int32_t> img(kSize, kSize, 3);
+        Buffer<int32_t> img(kSize, kSize, 3);
+        gen.realize(img);
+        verify(img, 1, 1, 3);
+    }
+
+    {
+        auto gen = example(context, /* inputs: */ { 1.f });
+
+        // Same as before, but we'll use chained setters for the ScheduleParams;
+        // this is identical in function to the previous block, but a style that
+        // some people prefer. Note that we can also chain the "schedule()"
+        // call on the end.
+        gen.set_vectorize(false).set_parallelize(false).schedule();
+
+        Buffer<int32_t> img(kSize, kSize, 3);
         gen.realize(img);
         verify(img, 1, 1, 3);
     }

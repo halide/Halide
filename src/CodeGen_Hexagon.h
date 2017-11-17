@@ -104,6 +104,8 @@ protected:
     llvm::Value *vlut(llvm::Value *lut, const std::vector<int> &indices);
     ///@}
 
+    llvm::Value *vdelta(llvm::Value *lut, const std::vector<int> &indices);
+
     /** Because HVX intrinsics operate on vectors of i32, using them
      * requires a lot of extraneous bitcasts, which make it difficult
      * to manipulate the IR. This function avoids generating redundant
