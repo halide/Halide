@@ -424,7 +424,7 @@ endif()
 add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include
                DEPS HalideIncludes)
 add_to_distrib("${CMAKE_BINARY_DIR}/include/HalideBuffer.h" include)
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/include/HalideRuntime*.h")
+file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 foreach(F ${FILES})
   add_to_distrib(${F} include)
 endforeach()
