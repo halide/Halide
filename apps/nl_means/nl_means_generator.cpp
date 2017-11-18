@@ -6,8 +6,6 @@ using namespace Halide;
 
 class NonLocalMeans : public Halide::Generator<NonLocalMeans> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-
     Input<Buffer<float>>  input{"input", 3};
     Input<int>            patch_size{"patch_size"};
     Input<int>            search_area{"search_area"};
@@ -87,9 +85,6 @@ public:
             non_local_means.estimate(x, 0, 614)
                 .estimate(y, 0, 1024)
                 .estimate(c, 0, 3);
-            // Auto schedule the pipeline: this calls auto_schedule() for
-            // all of the Outputs in this Generator
-            auto_schedule_outputs();
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: the GPU schedule is currently using to much shared memory
             // because the simplifier can't simplify the expr (it can't cancel

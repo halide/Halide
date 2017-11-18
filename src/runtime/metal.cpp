@@ -676,6 +676,10 @@ WEAK int halide_metal_run(void *user_context,
             // Metal requires natural alignment for all types in structures.
             // Assert arg_size is exactly a power of two and adjust size to start
             // on the next multiple of that power of two.
+            //
+            // TODO(zalman): This seems fishy - if the arguments are
+            // not already sorted in decreasing order of size, wrong
+            // results occur. To repro, remove the sorting code in CodeGen_GPU_Host
             halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
             total_args_size = (total_args_size + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
             total_args_size += arg_sizes[i];

@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 
 using Halide::Runtime::Buffer;
+using Halide::Tools::benchmark;
 
 int main(int argc, char **argv) {
     int size = 1024;

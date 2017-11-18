@@ -30,8 +30,6 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
-
     ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
     ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
     ScheduleParam<LoopLevel> output_compute_at{"output_compute_at"};
@@ -186,7 +184,6 @@ class CameraPipe : public Halide::Generator<CameraPipe> {
 public:
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
     Input<Buffer<uint16_t>> input{"input", 2};
@@ -341,7 +338,6 @@ void CameraPipe::generate() {
     Func deinterleaved = deinterleave(denoised);
 
     auto demosaiced = create<Demosaic>();
-    demosaiced->auto_schedule.set(auto_schedule);
     demosaiced->apply(deinterleaved);
 
     Func corrected = color_correct(demosaiced->output);
@@ -366,10 +362,6 @@ void CameraPipe::generate() {
             .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
-
-        // Auto schedule the pipeline: this calls auto_schedule() for
-        // all of the Outputs in this Generator
-        auto_schedule_outputs();
 
     } else {
 

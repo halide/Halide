@@ -1,6 +1,7 @@
 #include "IR.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -775,6 +776,51 @@ template<> EXPORT void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((c
 template<> EXPORT void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> EXPORT void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 template<> EXPORT void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
+
+template<> EXPORT Expr ExprNode<IntImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const IntImm *)this); }
+template<> EXPORT Expr ExprNode<UIntImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const UIntImm *)this); }
+template<> EXPORT Expr ExprNode<FloatImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const FloatImm *)this); }
+template<> EXPORT Expr ExprNode<StringImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const StringImm *)this); }
+template<> EXPORT Expr ExprNode<Cast>::mutate_expr(IRMutator2 *v) const { return v->visit((const Cast *)this); }
+template<> EXPORT Expr ExprNode<Variable>::mutate_expr(IRMutator2 *v) const { return v->visit((const Variable *)this); }
+template<> EXPORT Expr ExprNode<Add>::mutate_expr(IRMutator2 *v) const { return v->visit((const Add *)this); }
+template<> EXPORT Expr ExprNode<Sub>::mutate_expr(IRMutator2 *v) const { return v->visit((const Sub *)this); }
+template<> EXPORT Expr ExprNode<Mul>::mutate_expr(IRMutator2 *v) const { return v->visit((const Mul *)this); }
+template<> EXPORT Expr ExprNode<Div>::mutate_expr(IRMutator2 *v) const { return v->visit((const Div *)this); }
+template<> EXPORT Expr ExprNode<Mod>::mutate_expr(IRMutator2 *v) const { return v->visit((const Mod *)this); }
+template<> EXPORT Expr ExprNode<Min>::mutate_expr(IRMutator2 *v) const { return v->visit((const Min *)this); }
+template<> EXPORT Expr ExprNode<Max>::mutate_expr(IRMutator2 *v) const { return v->visit((const Max *)this); }
+template<> EXPORT Expr ExprNode<EQ>::mutate_expr(IRMutator2 *v) const { return v->visit((const EQ *)this); }
+template<> EXPORT Expr ExprNode<NE>::mutate_expr(IRMutator2 *v) const { return v->visit((const NE *)this); }
+template<> EXPORT Expr ExprNode<LT>::mutate_expr(IRMutator2 *v) const { return v->visit((const LT *)this); }
+template<> EXPORT Expr ExprNode<LE>::mutate_expr(IRMutator2 *v) const { return v->visit((const LE *)this); }
+template<> EXPORT Expr ExprNode<GT>::mutate_expr(IRMutator2 *v) const { return v->visit((const GT *)this); }
+template<> EXPORT Expr ExprNode<GE>::mutate_expr(IRMutator2 *v) const { return v->visit((const GE *)this); }
+template<> EXPORT Expr ExprNode<And>::mutate_expr(IRMutator2 *v) const { return v->visit((const And *)this); }
+template<> EXPORT Expr ExprNode<Or>::mutate_expr(IRMutator2 *v) const { return v->visit((const Or *)this); }
+template<> EXPORT Expr ExprNode<Not>::mutate_expr(IRMutator2 *v) const { return v->visit((const Not *)this); }
+template<> EXPORT Expr ExprNode<Select>::mutate_expr(IRMutator2 *v) const { return v->visit((const Select *)this); }
+template<> EXPORT Expr ExprNode<Load>::mutate_expr(IRMutator2 *v) const { return v->visit((const Load *)this); }
+template<> EXPORT Expr ExprNode<Ramp>::mutate_expr(IRMutator2 *v) const { return v->visit((const Ramp *)this); }
+template<> EXPORT Expr ExprNode<Broadcast>::mutate_expr(IRMutator2 *v) const { return v->visit((const Broadcast *)this); }
+template<> EXPORT Expr ExprNode<Call>::mutate_expr(IRMutator2 *v) const { return v->visit((const Call *)this); }
+template<> EXPORT Expr ExprNode<Shuffle>::mutate_expr(IRMutator2 *v) const { return v->visit((const Shuffle *)this); }
+template<> EXPORT Expr ExprNode<Let>::mutate_expr(IRMutator2 *v) const { return v->visit((const Let *)this); }
+
+template<> EXPORT Stmt StmtNode<LetStmt>::mutate_stmt(IRMutator2 *v) const { return v->visit((const LetStmt *)this); }
+template<> EXPORT Stmt StmtNode<AssertStmt>::mutate_stmt(IRMutator2 *v) const { return v->visit((const AssertStmt *)this); }
+template<> EXPORT Stmt StmtNode<ProducerConsumer>::mutate_stmt(IRMutator2 *v) const { return v->visit((const ProducerConsumer *)this); }
+template<> EXPORT Stmt StmtNode<For>::mutate_stmt(IRMutator2 *v) const { return v->visit((const For *)this); }
+template<> EXPORT Stmt StmtNode<Store>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Store *)this); }
+template<> EXPORT Stmt StmtNode<Provide>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Provide *)this); }
+template<> EXPORT Stmt StmtNode<Allocate>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Allocate *)this); }
+template<> EXPORT Stmt StmtNode<Free>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Free *)this); }
+template<> EXPORT Stmt StmtNode<Realize>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Realize *)this); }
+template<> EXPORT Stmt StmtNode<Block>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Block *)this); }
+template<> EXPORT Stmt StmtNode<IfThenElse>::mutate_stmt(IRMutator2 *v) const { return v->visit((const IfThenElse *)this); }
+template<> EXPORT Stmt StmtNode<Evaluate>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Evaluate *)this); }
+template<> EXPORT Stmt StmtNode<Prefetch>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Prefetch *)this); }
+
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";

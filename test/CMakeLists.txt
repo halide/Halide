@@ -84,7 +84,7 @@ if (WITH_TEST_GENERATORS)
 
     add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
     add_to_group(build_tests "${TARGET}" BUILD)
-    add_to_group(test_generators "${TARGET}" EXECUTE)
+    add_to_group(test_generator "${TARGET}" EXECUTE)
     target_include_directories("${TARGET}" PRIVATE 
                                "${CMAKE_SOURCE_DIR}/tools" 
                                "${CMAKE_SOURCE_DIR}" 
@@ -167,7 +167,7 @@ if (WITH_TEST_GENERATORS)
                    "${GEN_TEST_DIR}/${FILE}")
     target_link_libraries("generator_jit_${NAME}" PRIVATE "${NAME}.generator")
     add_to_group(build_tests "generator_jit_${NAME}" BUILD)
-    add_to_group(test_generators "generator_jit_${NAME}" EXECUTE)
+    add_to_group(test_generator "generator_jit_${NAME}" EXECUTE)
   endforeach()
 
   # ------ Generator tests for ahead-of-time mode: ------

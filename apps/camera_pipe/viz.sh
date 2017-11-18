@@ -33,5 +33,5 @@ $1/viz/process ../images/bayer_small.png 3700 1.8 50 1 $1/out.png |
 --move 1140 360 --func output --label output "demosaiced" 10 \
 --move 1400 360 --func corrected --label corrected "color-corrected" 10 \
 --max 256 --move 1660 360 --func curved --label curved "gamma-corrected" 10 |\
-#avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 $1/camera_pipe.mp4
-mplayer -demuxer rawvideo -rawvideo w=1920:h=1080:format=rgba:fps=30 -idle -fixed-vo -
+avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 $1/camera_pipe.mp4
+#mplayer -demuxer rawvideo -rawvideo w=1920:h=1080:format=rgba:fps=30 -idle -fixed-vo -
