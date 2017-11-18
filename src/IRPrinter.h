@@ -63,6 +63,12 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const ForType &);
 /** Emit a halide name mangling value in a human readable format */
 EXPORT std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 
+/** Emit a halide LoweredFunc in a human readable format */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
+
+/** Emit a halide linkage value in a human readable format */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &);
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
