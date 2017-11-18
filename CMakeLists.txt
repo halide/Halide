@@ -217,13 +217,16 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
   endforeach()
 endforeach()
 
-function(define_group GROUP)
+function(define_test_group GROUP)
   if(TARGET "${GROUP}")
     message(FATAL_ERROR "Group ${GROUP} is already defined.")    
   endif()
   add_custom_target("${GROUP}")
   set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
+
+define_test_group(build_tests)
+define_test_group(run_tests)
 
 # Make a target that aggregates a number of other targets;
 # this can be used to group builds (e.g. "build_tests")
@@ -241,74 +244,59 @@ endfunction()
 # TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-function(add_to_group GROUP TARGET)
-  set(options BUILD EXECUTE)
+function(add_test TARGET)
+  set(options EXPECT_FAILURE)
   set(oneValueArgs WORKING_DIRECTORY)
-  set(multiValueArgs )
+  set(multiValueArgs GROUPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  if(NOT TARGET "${GROUP}")
-    define_group("${GROUP}")
-  endif()
-  if (${args_EXECUTE})
-    # Execute the target (e.g. for a test_foo target)
-    set(NAME "_execute_${TARGET}")
-    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
-    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
-      add_custom_target("${NAME}" 
-                         COMMAND "${TARGET}"
-                         WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
-                         COMMENT "Executing ${TARGET}"
-                         DEPENDS "${TARGET}")
-    elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
-      # It's probably a custom target or a group: just depend on it.
-      add_custom_target("${NAME}" 
-                         DEPENDS "${TARGET}")
-    else()
-      message(FATAL_ERROR "add_to_group(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+  foreach(GROUP ${args_GROUPS})
+    if(NOT TARGET "${GROUP}")
+      define_test_group("${GROUP}")
     endif()
-  elseif(${args_BUILD})
-    # Just depend on the target (e.g. for a build_foo target)
-    set(NAME "_build_${TARGET}")
-    add_custom_target("${NAME}" 
-                       DEPENDS "${TARGET}")
+  endforeach()
+
+  set(BUILD_NAME "${TARGET}")
+  # add_custom_target("${BUILD_NAME}" DEPENDS "${TARGET}")
+  set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  add_dependencies(build_tests "${BUILD_NAME}")
+
+  set(EXEC_NAME "run_${TARGET}")
+  get_target_property(TARGET_TYPE "${TARGET}" TYPE)
+  if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
+    if(${args_EXPECT_FAILURE})
+      set(COMMAND "${CMAKE_SOURCE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
+    else()
+      set(COMMAND "${TARGET}")
+    endif()
+    add_custom_target("${EXEC_NAME}" 
+                     COMMAND ${COMMAND}
+                     WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
+                     COMMENT "Executing ${TARGET}"
+                     DEPENDS "${TARGET}")
+  elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
+    # It's probably a custom target or a group: just depend on it.
+    add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
   else()
-    message(FATAL_ERROR "add_to_group() requires BUILD or EXECUTE")
+    message(FATAL_ERROR "add_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
   endif()
-  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  add_dependencies("${GROUP}" "${NAME}")
+  set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  foreach(GROUP ${args_GROUPS})
+    add_dependencies("${GROUP}" "${EXEC_NAME}")
+  endforeach()
+
 endfunction()
 
 # Only groups that are defined in *this file* will have projects reliably
 # defined for them in MSVC builds; pre-define the targets we want to be available
 # here to ensure that happens.
-define_group(build_tests)
-define_group(test_auto_schedule)
-define_group(test_correctness)
-define_group(test_error)
-define_group(test_generator)
-define_group(test_internal)
-define_group(test_opengl)
-define_group(test_performance)
-define_group(test_tutorials)
-define_group(test_warning)
-
-define_group(run_tests)
-if(WITH_TESTS)
-  add_to_group(run_tests test_correctness BUILD)
-  add_to_group(run_tests test_error BUILD)
-  add_to_group(run_tests test_generator BUILD)
-  add_to_group(run_tests test_internal BUILD)
-  add_to_group(run_tests test_warning BUILD)
-endif()
-if(WITH_TUTORIALS)
-  add_to_group(run_tests test_tutorials BUILD)
-endif()
-
-# TODO(srj): these need to be run one-at-a-time, without any -j option,
-# otherwise we can get false slowdown failures.
-# add_to_group(run_tests test_performance BUILD)
-# add_to_group(run_tests test_auto_schedule BUILD)
-
+define_test_group(test_auto_schedule)
+define_test_group(test_correctness)
+define_test_group(test_error)
+define_test_group(test_generator)
+define_test_group(test_opengl)
+define_test_group(test_performance)
+define_test_group(test_tutorials)
+define_test_group(test_warning)
 
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
