@@ -318,17 +318,19 @@ namespace {
 // llvm::CloneModule has issues with debug info. As a workaround,
 // serialize it to bitcode in memory, and then parse the bitcode back in.
 std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
+    Internal::debug(2) << "Cloning module " << module_in.getName().str() << "\n";
+
     // Write the module to a buffer.
-    llvm::SmallVector<char, 1024> clone_buffer;
+    llvm::SmallVector<char, 16> clone_buffer;
     llvm::raw_svector_ostream clone_ostream(clone_buffer);
     WriteBitcodeToFile(&module_in, clone_ostream);
 
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
-    auto expected_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
-    internal_assert(expected_module);
+    auto cloned_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
+    internal_assert(cloned_module);
 
-    return std::move(expected_module.get());
+    return std::move(cloned_module.get());
 }
 
 }  // namespace
