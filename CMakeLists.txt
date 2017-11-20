@@ -4,11 +4,29 @@ cmake_minimum_required(VERSION 3.1.3)
 
 find_package(Threads QUIET)
 
-find_package(LLVM REQUIRED CONFIG)
+if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
+  # Find any version present.
+  find_package(LLVM REQUIRED CONFIG)
+else()
+  # Find a specific version.
+  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
+  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  message("Looking for LLVM version ${MAJOR}.${MINOR}")
+  find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
+  if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
+    message(FATAL_ERROR "LLVM version error: required ${MAJOR}${MINOR} but found ${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}")
+  endif()
+endif()
 
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+if (MSVC)
+  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # fix this so we can use the paths right away.
+  string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
+endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -74,10 +92,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.9 is \"39\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
 endif()
-if (LLVM_VERSION LESS 39)
-  message(FATAL_ERROR "LLVM version must be 3.9 or newer")
+if (LLVM_VERSION LESS 40)
+  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -99,7 +117,7 @@ endfunction()
 check_llvm_target(X86 WITH_X86)
 check_llvm_target(ARM WITH_ARM)
 check_llvm_target(AArch64 WITH_AARCH64)
-check_llvm_target(Hexagon WITH_HEXAGON 39)
+check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
@@ -279,7 +297,7 @@ define_group(build_tests)
 define_group(test_auto_schedule)
 define_group(test_correctness)
 define_group(test_error)
-define_group(test_generator)
+define_group(test_generators)
 define_group(test_internal)
 define_group(test_opengl)
 define_group(test_performance)

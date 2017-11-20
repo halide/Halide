@@ -35,9 +35,6 @@ using namespace llvm;
 // avoid needing to #ifdef random patches of code, we just replace all LLVM intrinsics
 // with not_intrinsic.
 #ifdef WITH_HEXAGON
-#if LLVM_VERSION < 39
-#error "Hexagon target requires LLVM version 3.9 or later."
-#endif
 
 #define IPICK(is_128B, i64) (is_128B ? i64##_128B : i64)
 #else
@@ -1506,7 +1503,11 @@ string CodeGen_Hexagon::mattrs() const {
         attrs << "+hvx-length64b";
 #endif
     }
+#if LLVM_VERSION >= 50
     attrs << ",+long-calls";
+#else
+    user_error << "LLVM version 5.0 or greater is required for the Hexagon backend";
+#endif
     return attrs.str();
 }
 
