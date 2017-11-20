@@ -96,6 +96,8 @@ if (WITH_TEST_GENERATORS)
 
     set(TARGET "generator_aot_${NAME}")
     add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
+    add_test("${TARGET}"
+             GROUPS test_generators run_tests)
     target_include_directories("${TARGET}" PRIVATE 
                                "${CMAKE_SOURCE_DIR}/tools" 
                                "${CMAKE_SOURCE_DIR}" 
@@ -113,7 +115,7 @@ if (WITH_TEST_GENERATORS)
     endif()
 
     add_test("${TARGET}"
-             GROUPS test_generator run_tests)
+             GROUPS test_generators run_tests)
   endfunction(halide_define_aot_test)
 
   # Find all the files of form "foo_generator.cpp" in test/generator
