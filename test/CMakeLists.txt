@@ -96,8 +96,6 @@ if (WITH_TEST_GENERATORS)
 
     set(TARGET "generator_aot_${NAME}")
     add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
-    add_test("${TARGET}"
-             GROUPS test_generators run_tests)
     target_include_directories("${TARGET}" PRIVATE 
                                "${CMAKE_SOURCE_DIR}/tools" 
                                "${CMAKE_SOURCE_DIR}" 
