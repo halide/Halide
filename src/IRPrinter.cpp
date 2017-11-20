@@ -245,19 +245,19 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 }
 
 
-std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
+std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &type) {
     switch (type) {
     case LoweredFunc::ExternalPlusMetadata:
-        out << "external_plus_metadata";
+        stream << "external_plus_metadata";
         break;
     case LoweredFunc::External:
-        out << "external";
+        stream << "external";
         break;
     case LoweredFunc::Internal:
-        out << "internal";
+        stream << "internal";
         break;
     }
-    return out;
+    return stream;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {
