@@ -274,7 +274,7 @@ function(halide_library_from_generator BASENAME)
 
   # BASENAME.run simply runs the BASENAME.rungen target
   add_custom_target("${BASENAME}.run" 
-                    COMMAND "${RUNGEN}" "$(RUNARGS)"
+                    COMMAND "${RUNGEN}" "${RUNARGS}"
                     DEPENDS "${RUNGEN}")
   set_target_properties("${BASENAME}.run" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
