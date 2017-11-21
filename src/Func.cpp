@@ -154,7 +154,7 @@ int Func::num_update_definitions() const {
 }
 
 /** Is this function external? */
-EXPORT bool Func::is_extern() const {
+bool Func::is_extern() const {
     return func.has_extern_definition();
 }
 
@@ -166,7 +166,12 @@ void Func::define_extern(const std::string &function_name,
                          NameMangling mangling,
                          DeviceAPI device_api,
                          bool uses_old_buffer_t) {
-    func.define_extern(function_name, args, types, dimensionality,
+    vector<string> dim_names(dimensionality);
+    // Use _0, _1, _2 etc for the storage dimensions
+    for (int i = 0; i < dimensionality; i++) {
+        dim_names[i] = Var::implicit(i).name();
+    }
+    func.define_extern(function_name, args, types, dim_names,
                        mangling, device_api, uses_old_buffer_t);
 }
 
@@ -1732,6 +1737,14 @@ Stage &Stage::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr off
     return *this;
 }
 
+/** Attempt to get the source file and line where this stage was
+ * defined by parsing the process's own debug symbols. Returns an
+ * empty string if no debug symbols were found or the debug
+ * symbols were not understood. Works on OS X and Linux only. */
+std::string Stage::source_location() const {
+    return definition.source_location();
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -1869,10 +1882,11 @@ Func Func::copy_to_device(DeviceAPI d) {
         << "Expected a single call to another Func with matching "
         << "dimensionality and argument order.\n";
 
-    // We'll preserve the pure vars
-    Expr rhs = value();
-    func.definition().values().clear();
-    func.extern_definition_proxy_expr() = rhs;
+    // Move the RHS value to the proxy slot
+    func.extern_definition_proxy_expr() = value();
+
+    // ... and delete the pure definition
+    func.definition() = Definition();
 
     ExternFuncArgument buffer;
     if (call->call_type == Call::Halide) {
@@ -1886,7 +1900,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, (int)call->args.size(),
+                       {call->type}, func.args(), // Reuse the existing dimension names
                        NameMangling::C, d, false);
     return *this;
 }
@@ -2860,6 +2874,11 @@ Pipeline Func::pipeline() {
 
 vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
+}
+
+std::string Func::source_location() const {
+    user_assert(defined()) << "A Func with no definition has no source_location\n";
+    return func.definition().source_location();
 }
 
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
