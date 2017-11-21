@@ -1,4 +1,3 @@
-
 #include "Param.h"
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
@@ -597,10 +596,12 @@ void defineParam() {
     defineParam_impl<uint8_t>("_uint8", h::UInt(8));
     defineParam_impl<uint16_t>("_uint16", h::UInt(16));
     defineParam_impl<uint32_t>("_uint32", h::UInt(32));
+    defineParam_impl<uint64_t>("_uint64", h::UInt(64));
 
     defineParam_impl<int8_t>("_int8", h::Int(8));
     defineParam_impl<int16_t>("_int16", h::Int(16));
     defineParam_impl<int32_t>("_int32", h::Int(32));
+    defineParam_impl<int64_t>("_int64", h::Int(64));
 
     defineParam_impl<float>("_float32", h::Float(32));
     defineParam_impl<double>("_float64", h::Float(64));
