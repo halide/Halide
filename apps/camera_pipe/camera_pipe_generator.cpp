@@ -30,9 +30,9 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
-    ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
-    ScheduleParam<LoopLevel> output_compute_at{"output_compute_at"};
+    GeneratorParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
+    GeneratorParam<LoopLevel> intermed_store_at{"intermed_store_at"};
+    GeneratorParam<LoopLevel> output_compute_at{"output_compute_at"};
 
     // Inputs and outputs
     Input<Func> deinterleaved{ "deinterleaved", Int(16), 3 };

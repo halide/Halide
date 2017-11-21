@@ -45,6 +45,7 @@ public:
 
         StubTest::GeneratorParams gp;
         gp.untyped_buffer_output_type = int32_buffer_output.type();
+        //gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
 
         stub = StubTest(this, inputs, gp);
 
@@ -60,8 +61,8 @@ public:
     }
 
     void schedule() {
+        stub.schedule();
         stub.vectorize.set(true);
-        stub.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
     }
 
 private:

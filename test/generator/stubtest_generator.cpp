@@ -27,7 +27,7 @@ public:
                                         { "plastic", BagType::Plastic } } };
 
     ScheduleParam<bool> vectorize{ "vectorize", true };
-    ScheduleParam<LoopLevel> intermediate_level{ "intermediate_level", LoopLevel::root() };
+    GeneratorParam<LoopLevel> intermediate_level{ "intermediate_level", LoopLevel::root() };
 
     Input<Buffer<uint8_t>> typed_buffer_input{ "typed_buffer_input", 3 };
     Input<Buffer<>> untyped_buffer_input{ "untyped_buffer_input" };
@@ -54,7 +54,7 @@ public:
         untyped_buffer_output(x, y, c) = cast(untyped_buffer_output_type, untyped_buffer_input(x, y, c));
 
         // Gratuitous intermediate for the purpose of exercising
-        // ScheduleParam<LoopLevel>
+        // GeneratorParam<LoopLevel>
         intermediate(x, y, c) = simple_input(x, y, c) * float_arg;
 
         tuple_output(x, y, c) = Tuple(
