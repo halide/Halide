@@ -160,12 +160,6 @@ Target calculate_host_target() {
 #endif
 #endif
 
-#if defined(__has_feature)
-#if __has_feature(memory_sanitizer)
-    initial_features.push_back(Target::MSAN);
-#endif
-#endif
-
     return Target(os, arch, bits, initial_features);
 }
 
@@ -294,6 +288,11 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+    host.set_feature(Target::MSAN);
+#endif
+#endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
