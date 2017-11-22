@@ -28,14 +28,14 @@ namespace Internal {
  */
 class EXPORT IRMutator : public IRVisitor {
 public:
-    EXPORT virtual ~IRMutator();
+    virtual ~IRMutator();
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
-    EXPORT virtual Expr mutate(const Expr &expr);
-    EXPORT virtual Stmt mutate(const Stmt &stmt);
+    virtual Expr mutate(const Expr &expr);
+    virtual Stmt mutate(const Stmt &stmt);
 
 protected:
 
@@ -47,48 +47,48 @@ protected:
      * new value */
     Stmt stmt;
 
-    EXPORT virtual void visit(const IntImm *);
-    EXPORT virtual void visit(const UIntImm *);
-    EXPORT virtual void visit(const FloatImm *);
-    EXPORT virtual void visit(const StringImm *);
-    EXPORT virtual void visit(const Cast *);
-    EXPORT virtual void visit(const Variable *);
-    EXPORT virtual void visit(const Add *);
-    EXPORT virtual void visit(const Sub *);
-    EXPORT virtual void visit(const Mul *);
-    EXPORT virtual void visit(const Div *);
-    EXPORT virtual void visit(const Mod *);
-    EXPORT virtual void visit(const Min *);
-    EXPORT virtual void visit(const Max *);
-    EXPORT virtual void visit(const EQ *);
-    EXPORT virtual void visit(const NE *);
-    EXPORT virtual void visit(const LT *);
-    EXPORT virtual void visit(const LE *);
-    EXPORT virtual void visit(const GT *);
-    EXPORT virtual void visit(const GE *);
-    EXPORT virtual void visit(const And *);
-    EXPORT virtual void visit(const Or *);
-    EXPORT virtual void visit(const Not *);
-    EXPORT virtual void visit(const Select *);
-    EXPORT virtual void visit(const Load *);
-    EXPORT virtual void visit(const Ramp *);
-    EXPORT virtual void visit(const Broadcast *);
-    EXPORT virtual void visit(const Call *);
-    EXPORT virtual void visit(const Let *);
-    EXPORT virtual void visit(const LetStmt *);
-    EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const ProducerConsumer *);
-    EXPORT virtual void visit(const For *);
-    EXPORT virtual void visit(const Store *);
-    EXPORT virtual void visit(const Provide *);
-    EXPORT virtual void visit(const Allocate *);
-    EXPORT virtual void visit(const Free *);
-    EXPORT virtual void visit(const Realize *);
-    EXPORT virtual void visit(const Block *);
-    EXPORT virtual void visit(const IfThenElse *);
-    EXPORT virtual void visit(const Evaluate *);
-    EXPORT virtual void visit(const Shuffle *);
-    EXPORT virtual void visit(const Prefetch *);
+    virtual void visit(const IntImm *);
+    virtual void visit(const UIntImm *);
+    virtual void visit(const FloatImm *);
+    virtual void visit(const StringImm *);
+    virtual void visit(const Cast *);
+    virtual void visit(const Variable *);
+    virtual void visit(const Add *);
+    virtual void visit(const Sub *);
+    virtual void visit(const Mul *);
+    virtual void visit(const Div *);
+    virtual void visit(const Mod *);
+    virtual void visit(const Min *);
+    virtual void visit(const Max *);
+    virtual void visit(const EQ *);
+    virtual void visit(const NE *);
+    virtual void visit(const LT *);
+    virtual void visit(const LE *);
+    virtual void visit(const GT *);
+    virtual void visit(const GE *);
+    virtual void visit(const And *);
+    virtual void visit(const Or *);
+    virtual void visit(const Not *);
+    virtual void visit(const Select *);
+    virtual void visit(const Load *);
+    virtual void visit(const Ramp *);
+    virtual void visit(const Broadcast *);
+    virtual void visit(const Call *);
+    virtual void visit(const Let *);
+    virtual void visit(const LetStmt *);
+    virtual void visit(const AssertStmt *);
+    virtual void visit(const ProducerConsumer *);
+    virtual void visit(const For *);
+    virtual void visit(const Store *);
+    virtual void visit(const Provide *);
+    virtual void visit(const Allocate *);
+    virtual void visit(const Free *);
+    virtual void visit(const Realize *);
+    virtual void visit(const Block *);
+    virtual void visit(const IfThenElse *);
+    virtual void visit(const Evaluate *);
+    virtual void visit(const Shuffle *);
+    virtual void visit(const Prefetch *);
 };
 
 
@@ -105,63 +105,63 @@ protected:
  */
 class EXPORT IRMutator2 {
 public:
-    EXPORT virtual ~IRMutator2();
+    virtual ~IRMutator2();
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
-    EXPORT virtual Expr mutate(const Expr &expr);
-    EXPORT virtual Stmt mutate(const Stmt &stmt);
+    virtual Expr mutate(const Expr &expr);
+    virtual Stmt mutate(const Stmt &stmt);
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
     template<typename T> friend struct ExprNode;
     template<typename T> friend struct StmtNode;
 
-    EXPORT virtual Expr visit(const IntImm *);
-    EXPORT virtual Expr visit(const UIntImm *);
-    EXPORT virtual Expr visit(const FloatImm *);
-    EXPORT virtual Expr visit(const StringImm *);
-    EXPORT virtual Expr visit(const Cast *);
-    EXPORT virtual Expr visit(const Variable *);
-    EXPORT virtual Expr visit(const Add *);
-    EXPORT virtual Expr visit(const Sub *);
-    EXPORT virtual Expr visit(const Mul *);
-    EXPORT virtual Expr visit(const Div *);
-    EXPORT virtual Expr visit(const Mod *);
-    EXPORT virtual Expr visit(const Min *);
-    EXPORT virtual Expr visit(const Max *);
-    EXPORT virtual Expr visit(const EQ *);
-    EXPORT virtual Expr visit(const NE *);
-    EXPORT virtual Expr visit(const LT *);
-    EXPORT virtual Expr visit(const LE *);
-    EXPORT virtual Expr visit(const GT *);
-    EXPORT virtual Expr visit(const GE *);
-    EXPORT virtual Expr visit(const And *);
-    EXPORT virtual Expr visit(const Or *);
-    EXPORT virtual Expr visit(const Not *);
-    EXPORT virtual Expr visit(const Select *);
-    EXPORT virtual Expr visit(const Load *);
-    EXPORT virtual Expr visit(const Ramp *);
-    EXPORT virtual Expr visit(const Broadcast *);
-    EXPORT virtual Expr visit(const Call *);
-    EXPORT virtual Expr visit(const Let *);
-    EXPORT virtual Expr visit(const Shuffle *);
+    virtual Expr visit(const IntImm *);
+    virtual Expr visit(const UIntImm *);
+    virtual Expr visit(const FloatImm *);
+    virtual Expr visit(const StringImm *);
+    virtual Expr visit(const Cast *);
+    virtual Expr visit(const Variable *);
+    virtual Expr visit(const Add *);
+    virtual Expr visit(const Sub *);
+    virtual Expr visit(const Mul *);
+    virtual Expr visit(const Div *);
+    virtual Expr visit(const Mod *);
+    virtual Expr visit(const Min *);
+    virtual Expr visit(const Max *);
+    virtual Expr visit(const EQ *);
+    virtual Expr visit(const NE *);
+    virtual Expr visit(const LT *);
+    virtual Expr visit(const LE *);
+    virtual Expr visit(const GT *);
+    virtual Expr visit(const GE *);
+    virtual Expr visit(const And *);
+    virtual Expr visit(const Or *);
+    virtual Expr visit(const Not *);
+    virtual Expr visit(const Select *);
+    virtual Expr visit(const Load *);
+    virtual Expr visit(const Ramp *);
+    virtual Expr visit(const Broadcast *);
+    virtual Expr visit(const Call *);
+    virtual Expr visit(const Let *);
+    virtual Expr visit(const Shuffle *);
 
-    EXPORT virtual Stmt visit(const LetStmt *);
-    EXPORT virtual Stmt visit(const AssertStmt *);
-    EXPORT virtual Stmt visit(const ProducerConsumer *);
-    EXPORT virtual Stmt visit(const For *);
-    EXPORT virtual Stmt visit(const Store *);
-    EXPORT virtual Stmt visit(const Provide *);
-    EXPORT virtual Stmt visit(const Allocate *);
-    EXPORT virtual Stmt visit(const Free *);
-    EXPORT virtual Stmt visit(const Realize *);
-    EXPORT virtual Stmt visit(const Block *);
-    EXPORT virtual Stmt visit(const IfThenElse *);
-    EXPORT virtual Stmt visit(const Evaluate *);
-    EXPORT virtual Stmt visit(const Prefetch *);
+    virtual Stmt visit(const LetStmt *);
+    virtual Stmt visit(const AssertStmt *);
+    virtual Stmt visit(const ProducerConsumer *);
+    virtual Stmt visit(const For *);
+    virtual Stmt visit(const Store *);
+    virtual Stmt visit(const Provide *);
+    virtual Stmt visit(const Allocate *);
+    virtual Stmt visit(const Free *);
+    virtual Stmt visit(const Realize *);
+    virtual Stmt visit(const Block *);
+    virtual Stmt visit(const IfThenElse *);
+    virtual Stmt visit(const Evaluate *);
+    virtual Stmt visit(const Prefetch *);
 };
 
 /** A mutator that caches and reapplies previously-done mutations, so
@@ -173,8 +173,8 @@ protected:
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
 public:
-    EXPORT Stmt mutate(const Stmt &s) override;
-    EXPORT Expr mutate(const Expr &e) override;
+    Stmt mutate(const Stmt &s) override;
+    Expr mutate(const Expr &e) override;
 };
 
 }
