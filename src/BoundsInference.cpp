@@ -136,6 +136,10 @@ public:
         vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
             vector<vector<CondValue>> result(2); // <args, values>
 
+            if (!def.defined()) {
+                return result;
+            }
+
             // Default case (no specialization)
             vector<Expr> predicates = def.split_predicate();
             for (const ReductionVariable &rv : def.schedule().rvars()) {
