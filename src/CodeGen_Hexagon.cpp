@@ -996,7 +996,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here, such as vdelta/vrdelta.
 
-    if (element_bits <= 16 && max < 256) {
+    if (element_bits <= 16) {
         return vlut(concat_vectors({a, b}), indices);
     } else {
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
