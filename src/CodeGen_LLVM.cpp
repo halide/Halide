@@ -2004,7 +2004,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
             alignment = gcd(alignment, host_alignment);
         } else if (get_target().has_feature(Target::JIT) && load->image.defined()) {
             // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
-          alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & ~(int)0));
+            alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & std::numeric_limits<int>::max()));
         }
     }
 
