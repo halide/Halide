@@ -904,7 +904,6 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
         }
-        // This is something else and the indices fit in 8 bits, use a vlut.
         return vlut(concat_vectors({a, b}), indices);
     }
 
