@@ -56,14 +56,14 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFF
 
 # LLVM doesn't appear to expose --system-libs via its CMake interface, 
 # so we must shell out to llvm-config to find this info
-execute_process(COMMAND ${LLVM_CONFIG} --system-libs OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
+execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
 string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
 string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
 if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # It's theoretically possible that this could be legitimately empty,
   # but in practice that doesn't really happen, so we'll assume it means we
   # aren't configured correctly.
-  message(WARNING "'llvm-config --system-libs' is empty; this is possibly wrong.")
+  message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
 endif()
 
 # Check LLVM
