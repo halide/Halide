@@ -273,7 +273,7 @@ WEAK int halide_metal_release_context(void *user_context) {
     return 0;
 }
 
-WEAK int halide_metal_acquire_command_buffer(void* user_context, mtl_device *device,
+WEAK int halide_metal_acquire_command_buffer(void* user_context,
                                              mtl_command_queue *queue,
                                              mtl_command_buffer **command_buffer_ret) {
     debug(user_context) << "Metal - Internal halide_metal_acquire_command_buffer() called\n";
@@ -286,7 +286,20 @@ WEAK int halide_metal_acquire_command_buffer(void* user_context, mtl_device *dev
     return 0;
 }
 
+WEAK int halide_metal_release_command_buffer(void* user_context,
+                                             mtl_command_queue *queue,
+                                             mtl_command_buffer **command_buffer,
+                                             bool must_release) {
+    commit_command_buffer(*command_buffer);
+    *command_buffer = NULL;
+    return 0;
+}
+
 } // extern "C"
+
+namespace {
+  mtl_command_buffer *current_command_buffer = NULL;
+}
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
@@ -478,7 +491,13 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 
 namespace {
 
-inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
+inline void halide_metal_device_sync_internal(mtl_command_queue *queue,
+                                              struct halide_buffer_t *buffer) {
+    // if the current command buffer has not been committed, we must commit it first
+    if (current_command_buffer != NULL) {
+        halide_metal_release_command_buffer(NULL, queue, &current_command_buffer, true);
+    }
+
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
     if (buffer != NULL) {
         mtl_buffer *metal_buffer = (mtl_buffer *)buffer->device;
@@ -654,11 +673,12 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
-    mtl_command_buffer *command_buffer;
-    if (halide_metal_acquire_command_buffer(user_context, metal_context.device, metal_context.queue,
-          &command_buffer) != 0) {
+    if (halide_metal_acquire_command_buffer(user_context, metal_context.queue,
+          &current_command_buffer) != 0) {
         error(user_context) << "Metal: Could not acquire command buffer.\n";
     }
+
+    mtl_command_buffer *command_buffer = current_command_buffer;
 
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
     if (encoder == 0) {
@@ -771,7 +791,9 @@ WEAK int halide_metal_run(void *user_context,
 
     add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
 
-    commit_command_buffer(command_buffer);
+    //commit_command_buffer(command_buffer);
+    halide_metal_release_command_buffer(user_context, metal_context.queue,
+        &current_command_buffer, false);
 
     release_ns_object(pipeline_state);
     release_ns_object(function);

@@ -88,14 +88,14 @@ extern int halide_metal_acquire_context(void *user_context, struct halide_metal_
 extern int halide_metal_release_context(void *user_context);
 
 // TODO(shoaibkamil): write doc for this function
-extern int halide_metal_acquire_command_buffer(void* user_context, struct halide_metal_device *device,
+extern int halide_metal_acquire_command_buffer(void* user_context,
                                                struct halide_metal_command_queue *queue,
                                                struct halide_metal_command_buffer **command_buffer_ret);
 
 // TODO(shoaibkamil): write doc for this function
-extern int halide_metal_release_command_buffer(void* user_context, struct halide_metal_device *device,
+extern int halide_metal_release_command_buffer(void* user_context,
                                                struct halide_metal_command_queue *queue,
-                                               struct halide_metal_command_buffer *command_buffer,
+                                               struct halide_metal_command_buffer **command_buffer,
                                                bool must_release);
 
 #ifdef __cplusplus

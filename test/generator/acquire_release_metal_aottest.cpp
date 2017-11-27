@@ -18,25 +18,50 @@ extern "C" {
 
 bool acquire_called = false;
 bool release_called = false;
+halide_metal_command_buffer *saved_command_buffer = NULL;
+halide_metal_command_queue *saved_command_queue = NULL;
 
-int halide_metal_acquire_command_buffer(void *user_context, halide_metal_device *device,
+int halide_metal_acquire_command_buffer(void *user_context,
                                          halide_metal_command_queue *queue,
                                          halide_metal_command_buffer **buffer_ret) {
+    printf("Custom halide_metal_acquire_command_buffer() called\n");
     acquire_called = true;
-    *buffer_ret = (halide_metal_command_buffer*)objc_msgSend((objc_object*)queue, sel_getUid("commandBuffer"));
+    if (queue == saved_command_queue && saved_command_buffer != NULL) {
+        printf("\tReturning previously-created command buffer\n");
+        *buffer_ret = saved_command_buffer;
+    } else {
+        printf("\tCreating command buffer\n");
+        *buffer_ret = (halide_metal_command_buffer*)objc_msgSend((objc_object*)queue, sel_getUid("commandBuffer"));
+        objc_msgSend((objc_object*)(*buffer_ret), sel_getUid("retain"));
+        saved_command_buffer = *buffer_ret;
+        saved_command_queue = queue;
 
-    if (!(*buffer_ret)) {
-        return -1;
+        if (!(*buffer_ret)) {
+            return -1;
+        }
     }
 
     return 0;
 }
 
-int halide_metal_release_command_buffer(void *user_context, halide_metal_device *device,
+int halide_metal_release_command_buffer(void *user_context,
                                         halide_metal_command_queue *queue,
-                                        halide_metal_command_buffer *buffer,
+                                        halide_metal_command_buffer **command_buffer,
                                         bool must_release) {
-    return -1;
+    printf("Custom halide_metal_release_command_buffer() called\n");
+    if (must_release) {
+        printf("\tmust_release is true\n");
+        release_called = true;
+        objc_msgSend((objc_object*)(*command_buffer), sel_getUid("commit"));
+        objc_msgSend((objc_object*)(*command_buffer), sel_getUid("release"));
+        *command_buffer = NULL;
+        saved_command_buffer = NULL;
+        saved_command_queue = NULL;
+    } else {
+        printf("\tmust_release is not true, so not releasing\n");
+    }
+
+    return 0;
 }
 
 } // extern "C"
@@ -80,7 +105,7 @@ int main(int argc, char **argv) {
     input.device_free();
     output.device_free();
 
-    if (!acquire_called) {
+    if (!acquire_called || !release_called) {
       printf("FAILED\n");
       return -1;
     }
