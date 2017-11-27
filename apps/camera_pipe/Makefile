@@ -20,14 +20,14 @@ $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
 
-$(BIN)/process: process.cpp $(BIN)/camera_pipe.a $(BIN)/camera_pipe_auto_schedule.a $(BIN)/Demosaic.o $(BIN)/Demosaic_ARM.o
+$(BIN)/process: process.cpp $(BIN)/camera_pipe.a $(BIN)/camera_pipe_auto_schedule.a
 	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
-$(BIN)/viz/process: process.cpp $(BIN)/viz/camera_pipe.a $(BIN)/Demosaic.o $(BIN)/Demosaic_ARM.o
+$(BIN)/viz/process: process.cpp $(BIN)/viz/camera_pipe.a
 	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -Wall -O3 -I$(BIN)/viz $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/out.png: $(BIN)/process
-	$(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 $(TIMING_ITERATIONS) $@ $(BIN)/h_auto.png
+	$(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 1.0 $(TIMING_ITERATIONS) $@ $(BIN)/h_auto.png
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
