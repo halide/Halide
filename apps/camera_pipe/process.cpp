@@ -1,6 +1,3 @@
-#include "fcam/Demosaic.h"
-#include "fcam/Demosaic_ARM.h"
-
 #include "halide_benchmark.h"
 
 #include "camera_pipe.h"
@@ -23,7 +20,7 @@ using namespace Halide::Tools;
 int main(int argc, char **argv) {
     if (argc < 7) {
         printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
-               "e.g. ./process raw.png 3200 2 50 5 output.png [fcam_c.png] [fcam_arm.png]");
+               "e.g. ./process raw.png 3200 2 50 5 output.png");
         return 0;
     }
 
@@ -87,32 +84,6 @@ int main(int argc, char **argv) {
     fprintf(stderr, "output: %s\n", argv[6]);
     convert_and_save_image(output, argv[6]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
-
-
-    Buffer<uint8_t> output_c(output.width(), output.height(), output.channels());
-    best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
-    });
-    fprintf(stderr, "C++:\t%gus\n", best * 1e6);
-    if (argc > 7) {
-        fprintf(stderr, "output_c: %s\n", argv[7]);
-        convert_and_save_image(output_c, argv[7]);
-    }
-    fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
-
-    Buffer<uint8_t> output_asm(output.width(), output.height(), output.channels());
-    best = benchmark(timing_iterations, 1, [&]() {
-        FCam::demosaic_ARM(input, output_asm, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
-    });
-    fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
-    if (argc > 8) {
-        fprintf(stderr, "output_asm: %s\n", argv[8]);
-        convert_and_save_image(output_asm, argv[8]);
-    }
-    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
-
-    // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
-    // Halide: 722ms, FCam: 741ms
 
     return 0;
 }
