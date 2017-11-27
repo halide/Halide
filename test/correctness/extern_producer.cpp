@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
                              std::vector<ExternFuncArgument>(),
                              Float(32), 2);
         // Row stride should be 128B/32-element aligned.
-        source.align_storage(Var("e0"), 32);
+        source.align_storage(_0, 32);
         Func sink;
         sink(x, y) = source(x, y) - sin(x + y);
 

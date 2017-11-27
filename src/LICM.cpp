@@ -69,6 +69,12 @@ class LiftLoopInvariants : public IRMutator2 {
         // (We just skip all vectors on the principle that we don't want them
         // on the stack anyway.)
         if (e.type().is_vector()) return false;
+        if (const Cast *cast = e.as<Cast>()) {
+            if (cast->type.bytes() > cast->value.type().bytes()) {
+                // Don't lift widening casts.
+                return false;
+            }
+        }
         return true;
     }
 
@@ -346,10 +352,26 @@ class GroupLoopInvariants : public IRMutator2 {
     }
 
     Expr visit(const Sub *op) override {
+        if (op->type.is_float()) {
+            // Don't reassociate float exprs.
+            // (If strict_float is off, we're allowed to reassociate,
+            // and we do reassociate elsewhere, but there's no benefit to it
+            // here and it's friendlier not to.)
+            return IRMutator2::visit(op);
+        }
+
         return reassociate_summation(op);
     }
 
     Expr visit(const Add *op) override {
+        if (op->type.is_float()) {
+            // Don't reassociate float exprs.
+            // (If strict_float is off, we're allowed to reassociate,
+            // and we do reassociate elsewhere, but there's no benefit to it
+            // here and it's friendlier not to.)
+            return IRMutator2::visit(op);
+        }
+
         return reassociate_summation(op);
     }
 
