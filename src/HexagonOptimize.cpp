@@ -1806,6 +1806,58 @@ private:
         return IRMutator2::visit(op);
     }
 };
+
+// Convert some expressions to an equivalent form which could get better
+// optimized in later stages for hexagon
+class RearrangeExpressions : public IRMutator2 {
+private:
+    using IRMutator2::visit;
+
+    Expr visit(const Mul *op) {
+        if (!op->type.is_vector()) {
+            // Only do this for vectors (where we have vmpa).
+            return IRMutator2::visit(op);
+        }
+
+        if (op->a.as<Broadcast>() && !op->b.as<Broadcast>()) {
+            // Ensures broadcasts always occurs as op1 not op0
+            return mutate(op->b * op->a);
+        }
+
+        if (op->b.as<Broadcast>() && op->a.type().is_int() &&
+            (op->a.type().bits() == 16 || op->a.type().bits() == 32)) {
+            // Distributing broadcasts helps creating more vmpa
+            // because of more adds of muls. Since muls are
+            // generally widening ops we need not check if op->a
+            // is a sum of widening casts.
+            if (const Add *add = op->a.as<Add>()) {
+                // simplify() ensures that if add->a is also
+                // a scalar multiplications, then we combine the two
+                // broadcasts produced in add->a * op->b. For eg:
+                // add->a = bc * i16, then simplify combines
+                // bc * op->b into a single expression.
+                // Since the simplifier is used on the individual operands
+                // after distributing the broadcast, the mutation does not
+                // compete with the simplifier [the next mutation always occurs
+                // on the simplified operands]. For eg:
+                // Consider initial expression:
+                //      ((v0 * bc(x) + v1 * bc(y)) + v2) * bc(z)
+                // Mutation sequence:
+                // Step 1:
+                //      mutate((v0 * bc(x) + v1 * bc(y)) * bc(z) + v2 * bc(z))
+                // Step 2:
+                //      mutate((v0 * bc(x) + v1 * bc(y)) * bc(z)) + mutate(v2 * bc(z))
+                // Step 3 [Result]:
+                //      ((v0 * bc(x * z) + v1 * bc(y *z)) + v2 * bc(z))
+                return mutate(simplify(add->a * op->b) + simplify(add->b * op->b));
+            } else if (const Sub *sub = op->a.as<Sub>()) {
+                return mutate(simplify(sub->a * op->b) - simplify(sub->b * op->b));
+            }
+        }
+        return IRMutator2::visit(op);
+    }
+};
+
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -1823,6 +1875,10 @@ Stmt vtmpy_generator(Stmt s) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
+    // Convert some expressions to an equivalent form which get better
+    // optimized in later stages for hexagon
+    s = RearrangeExpressions().mutate(s);
+
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);

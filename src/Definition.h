@@ -47,7 +47,7 @@ public:
     EXPORT Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                       const ReductionDomain &rdom, bool is_init);
 
-    /** Construct an empty Definition. By default, it is a init definition. */
+    /** Construct an undefined Definition object. */
     EXPORT Definition();
 
     /** Return a copy of this Definition. */
@@ -57,6 +57,9 @@ public:
     bool same_as(const Definition &other) const {
         return contents.same_as(other.contents);
     }
+
+    /** Definition objects are nullable. Does this definition exist? */
+    EXPORT bool defined() const;
 
     /** Is this an init definition; otherwise it's an update definition */
     EXPORT bool is_init() const;
@@ -107,6 +110,11 @@ public:
     EXPORT const Specialization &add_specialization(Expr condition);
     // @}
 
+    /** Attempt to get the source file and line where this definition
+     * was made using DWARF introspection. Returns an empty string if
+     * no debug symbols were found or the debug symbols were not
+     * understood. Works on OS X and Linux only. */
+    EXPORT std::string source_location() const;
 };
 
 struct Specialization {
