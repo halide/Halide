@@ -17,8 +17,8 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
 typedef halide_metal_device mtl_device;
 typedef halide_metal_command_queue mtl_command_queue;
+typedef halide_metal_command_buffer mtl_command_buffer;
 struct mtl_buffer;
-struct mtl_command_buffer;
 struct mtl_compute_command_encoder;
 struct mtl_blit_command_encoder;
 struct mtl_compute_pipeline_state;
@@ -270,6 +270,19 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 
 WEAK int halide_metal_release_context(void *user_context) {
     __sync_lock_release(&thread_lock);
+    return 0;
+}
+
+WEAK int halide_metal_acquire_command_buffer(void* user_context, mtl_device *device,
+                                             mtl_command_queue *queue,
+                                             mtl_command_buffer **command_buffer_ret) {
+    debug(user_context) << "Metal - Internal halide_metal_acquire_command_buffer() called\n";
+    *command_buffer_ret = new_command_buffer(queue);
+    if (*command_buffer_ret == 0) {
+        error(user_context) << "Metal: Could not create command buffer.\n";
+        return -1;
+    }
+
     return 0;
 }
 
@@ -641,10 +654,10 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
-    mtl_command_buffer *command_buffer = new_command_buffer(metal_context.queue);
-    if (command_buffer == 0) {
-        error(user_context) << "Metal: Could not allocate command buffer.\n";
-        return -1;
+    mtl_command_buffer *command_buffer;
+    if (halide_metal_acquire_command_buffer(user_context, metal_context.device, metal_context.queue,
+          &command_buffer) != 0) {
+        error(user_context) << "Metal: Could not acquire command buffer.\n";
     }
 
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);

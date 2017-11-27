@@ -61,6 +61,7 @@ extern uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffe
 
 struct halide_metal_device;
 struct halide_metal_command_queue;
+struct halide_metal_command_buffer;
 
 /** This prototype is exported as applications will typically need to
  * replace it to get Halide filters to execute on the same device and
@@ -85,6 +86,17 @@ extern int halide_metal_acquire_context(void *user_context, struct halide_metal_
  * as well.
  */
 extern int halide_metal_release_context(void *user_context);
+
+// TODO(shoaibkamil): write doc for this function
+extern int halide_metal_acquire_command_buffer(void* user_context, struct halide_metal_device *device,
+                                               struct halide_metal_command_queue *queue,
+                                               struct halide_metal_command_buffer **command_buffer_ret);
+
+// TODO(shoaibkamil): write doc for this function
+extern int halide_metal_release_command_buffer(void* user_context, struct halide_metal_device *device,
+                                               struct halide_metal_command_queue *queue,
+                                               struct halide_metal_command_buffer *command_buffer,
+                                               bool must_release);
 
 #ifdef __cplusplus
 } // End extern "C"
