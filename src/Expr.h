@@ -150,7 +150,7 @@ struct StmtNode : public BaseStmtNode {
 /** IR nodes are passed around opaque handles to them. This is a
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
-struct IRHandle : public IntrusivePtr<const IRNode> {
+struct EXPORT IRHandle : public IntrusivePtr<const IRNode> {
     IRHandle() : IntrusivePtr<const IRNode>() {}
     IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
 
@@ -273,7 +273,7 @@ struct StringImm : public ExprNode<StringImm> {
 /** A fragment of Halide syntax. It's implemented as reference-counted
  * handle to a concrete expression node, but it's immutable, so you
  * can treat it as a value type. */
-struct Expr : public Internal::IRHandle {
+struct EXPORT Expr : public Internal::IRHandle {
     /** Make an undefined expression */
     Expr() : Internal::IRHandle() {}
 
@@ -282,21 +282,21 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    EXPORT explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    EXPORT explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-    EXPORT          Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    EXPORT explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    EXPORT explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    EXPORT explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    EXPORT explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    EXPORT explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-    EXPORT          Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-    EXPORT          Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    EXPORT explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+             Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
+             Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
+             Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    EXPORT          Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+             Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
 
     /** Get the type of this expression node */
     Type type() const {
@@ -353,7 +353,7 @@ enum class ForType {
 
 
 /** A reference-counted handle to a statement node. */
-struct Stmt : public IRHandle {
+struct EXPORT Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
 
