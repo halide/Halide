@@ -1007,11 +1007,7 @@ void CodeGen_LLVM::optimize_module() {
     public:
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         virtual void add(Pass *p) override {
-#if LLVM_VERSION >= 40
             debug(2) << "Adding function pass: " << p->getPassName().str() << "\n";
-#else
-            debug(2) << "Adding function pass: " << p->getPassName() << "\n";
-#endif
             legacy::FunctionPassManager::add(p);
         }
     };
@@ -1019,11 +1015,7 @@ void CodeGen_LLVM::optimize_module() {
     class MyModulePassManager : public legacy::PassManager {
     public:
         virtual void add(Pass *p) override {
-#if LLVM_VERSION >= 40
             debug(2) << "Adding module pass: " << p->getPassName().str() << "\n";
-#else
-            debug(2) << "Adding module pass: " << p->getPassName() << "\n";
-#endif
             legacy::PassManager::add(p);
         }
     };
@@ -2006,9 +1998,14 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // If it is an external buffer, then we cannot assume that the host pointer
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
-    if (is_external && load->param.defined()) {
-        int host_alignment = load->param.host_alignment();
-        alignment = gcd(alignment, host_alignment);
+    if (is_external) {
+        if (load->param.defined()) {
+            int host_alignment = load->param.host_alignment();
+            alignment = gcd(alignment, host_alignment);
+        } else if (get_target().has_feature(Target::JIT) && load->image.defined()) {
+            // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
+            alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & std::numeric_limits<int>::max()));
+        }
     }
 
     // For dense vector loads wider than the native vector

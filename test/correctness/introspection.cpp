@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+using namespace Halide;
+
 // The check has to go in the Halide namespace, because get_source_location looks for the first thing outside of it
 namespace Halide {
 void check(const void *var, const std::string &type,
@@ -180,6 +182,21 @@ int main(int argc, char **argv) {
     check(&SomeStruct::static_member_double_array[5], "double", "SomeStruct::static_member_double_array[5]", __FILE__, __LINE__);
 
     check(&SomeStruct::substruct.a, "int", "SomeStruct::substruct.a", __FILE__, __LINE__);
+
+    // Check that we can query front-end objects for their source locations
+    {
+        std::string loc;
+        Func f;
+        Var x;
+        f(x) = x;
+        loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
+        assert(f.source_location() == loc);
+
+        f(x) += 1;
+        loc = std::string(__FILE__) + ":" + std::to_string(__LINE__ - 1);
+        assert(f.update().source_location() == loc);
+    }
+
 
     printf("Success!\n");
 

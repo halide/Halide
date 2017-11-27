@@ -144,7 +144,7 @@ public:
     EXPORT const Definition &definition() const;
 
     /** Get the pure arguments. */
-    EXPORT const std::vector<std::string> args() const;
+    EXPORT const std::vector<std::string> &args() const;
 
     /** Get the dimensionality. */
     EXPORT int dimensions() const;
@@ -157,7 +157,8 @@ public:
     /** Get the types of the outputs. */
     EXPORT const std::vector<Type> &output_types() const;
 
-    /** Get the right-hand-side of the pure definition. */
+    /** Get the right-hand-side of the pure definition. Returns an
+     * empty vector if there is no pure definition. */
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
@@ -232,7 +233,7 @@ public:
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
-                              int dimensionality,
+                              const std::vector<std::string> &dims,
                               NameMangling mangling,
                               DeviceAPI device_api,
                               bool uses_old_buffer_t);

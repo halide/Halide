@@ -6,25 +6,24 @@ BIN ?= bin
 # android ndk to make a standalone toolchain to use for this app.
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
-CXX-hexagon-32-qurt-hvx_64 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
-CXX-hexagon-32-qurt-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
+CXX-hexagon-32-noos-hvx_64 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
+CXX-hexagon-32-noos-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 
 CXXFLAGS-arm-64-android ?= -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= -llog -fPIE -pie
-CXXFLAGS-hexagon-32-qurt-hvx_64 ?= -mhvx -G0
-CXXFLAGS-hexagon-32-qurt-hvx_128 ?= -mhvx-double -G0
+CXXFLAGS-hexagon-32-noos-hvx_64 ?= -mhvx -G0
+CXXFLAGS-hexagon-32-noos-hvx_128 ?= -mhvx-double -G0
 
 LDFLAGS-host ?= -lpthread -ldl
-LDFLAGS-hexagon-32-qurt-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt
-LDFLAGS-hexagon-32-qurt-hvx_128 ?= -L../../tools/sim_qurt -lsim_qurt
-
+LDFLAGS-hexagon-32-noos-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt
+LDFLAGS-hexagon-32-noos-hvx_128 ?= -L../../tools/sim_qurt -lsim_qurt
 
 all: \
 	$(BIN)/driver-host \
 	$(BIN)/driver-arm-64-android \
 	$(BIN)/driver-arm-32-android \
-	$(BIN)/driver-hexagon-32-qurt-hvx_64 \
-	$(BIN)/driver-hexagon-32-qurt-hvx_128 \
+	$(BIN)/driver-hexagon-32-noos-hvx_64 \
+	$(BIN)/driver-hexagon-32-noos-hvx_128 \
 
 $(BIN)/%/filters.h:
 	@mkdir -p $(@D)
