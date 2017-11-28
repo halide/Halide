@@ -26,12 +26,18 @@ public:
     MyCustomErrorReporter() : errors_occurred(0), warnings_occurred(0) {}
 
     void warning(const char* msg) {
-        printf("Custom warning: %s\n", msg);
+        // Emitting "warning.*:" to stdout or stderr will cause CMake to report the
+        // test as "warning generaed" on Windows, regardless of error code returned,
+        // hence the abbreviation to "warn".
+        printf("Custom warn: %s\n", msg);
         warnings_occurred++;
     }
 
     void error(const char* msg) {
-        printf("Custom error: %s\n", msg);
+        // Emitting "error.*:" to stdout or stderr will cause CMake to report the
+        // test as a failure on Windows, regardless of error code returned,
+        // hence the abbreviation to "err".
+        printf("Custom err: %s\n", msg);
         errors_occurred++;
 
         if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {
