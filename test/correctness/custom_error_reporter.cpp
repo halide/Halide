@@ -35,9 +35,11 @@ public:
 
     void error(const char* msg) {
         // Emitting "error.*:" to stdout or stderr will cause CMake to report the
-        // test as a failure on Windows, regardless of error code returned,
-        // hence the abbreviation to "err".
-        printf("Custom err: %s\n", msg);
+        // test as a failure on Windows, regardless of error code returned.
+        // The error text we get from ErrorReport probably contains some variant
+        // of this, so let's make sure it doesn't match that pattern.
+        auto msg_safe = Halide::Internal::replace_all(msg, ":", "(semicolon)");
+        printf("Custom err: %s\n", msg_safe.c_str());
         errors_occurred++;
 
         if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {
