@@ -43,16 +43,13 @@ int halide_metal_acquire_command_buffer(void *user_context,
 }
 
 int halide_metal_release_command_buffer(void *user_context,
-                                        halide_metal_command_queue *queue,
-                                        halide_metal_command_buffer **command_buffer,
                                         bool must_release) {
     printf("Custom halide_metal_release_command_buffer() called\n");
     if (must_release) {
         printf("\tmust_release is true\n");
         release_command_buffer_called = true;
-        objc_msgSend((objc_object*)(*command_buffer), sel_getUid("commit"));
-        objc_msgSend((objc_object*)(*command_buffer), sel_getUid("release"));
-        *command_buffer = NULL;
+        objc_msgSend((objc_object*)(saved_command_buffer), sel_getUid("commit"));
+        objc_msgSend((objc_object*)(saved_command_buffer), sel_getUid("release"));
         saved_command_buffer = NULL;
         saved_command_queue = NULL;
     } else {
@@ -85,7 +82,16 @@ int main(int argc, char **argv) {
 
     Buffer<float> output(W, H);
 
-    acquire_release(input, output);
+    for (int i=0; i<5; i++)
+        acquire_release(input, output);
+
+    // Even though copy_to_host() will call release, we call it manually here to show
+    // how a client would normally issue a commit at the end of a frame
+    //
+    // A client can also just commit the command buffer directly if they so choose,
+    // so long as their implementations of acquire/release will not try to return
+    // or commit the already-committed command buffer
+    halide_metal_release_command_buffer(nullptr, true);
 
     output.copy_to_host();
 
