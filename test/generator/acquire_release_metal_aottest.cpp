@@ -14,10 +14,8 @@
 
 extern "C" {
 
-// Support for calling out to Objective C
-
-bool acquire_called = false;
-bool release_called = false;
+bool acquire_command_buffer_called = false;
+bool release_command_buffer_called = false;
 halide_metal_command_buffer *saved_command_buffer = NULL;
 halide_metal_command_queue *saved_command_queue = NULL;
 
@@ -25,7 +23,7 @@ int halide_metal_acquire_command_buffer(void *user_context,
                                          halide_metal_command_queue *queue,
                                          halide_metal_command_buffer **buffer_ret) {
     printf("Custom halide_metal_acquire_command_buffer() called\n");
-    acquire_called = true;
+    acquire_command_buffer_called = true;
     if (queue == saved_command_queue && saved_command_buffer != NULL) {
         printf("\tReturning previously-created command buffer\n");
         *buffer_ret = saved_command_buffer;
@@ -51,7 +49,7 @@ int halide_metal_release_command_buffer(void *user_context,
     printf("Custom halide_metal_release_command_buffer() called\n");
     if (must_release) {
         printf("\tmust_release is true\n");
-        release_called = true;
+        release_command_buffer_called = true;
         objc_msgSend((objc_object*)(*command_buffer), sel_getUid("commit"));
         objc_msgSend((objc_object*)(*command_buffer), sel_getUid("release"));
         *command_buffer = NULL;
@@ -105,7 +103,8 @@ int main(int argc, char **argv) {
     input.device_free();
     output.device_free();
 
-    if (!acquire_called || !release_called) {
+    if (!acquire_command_buffer_called || !release_command_buffer_called) {
+      printf("Custom acquire/release not called for command buffer\n");
       printf("FAILED\n");
       return -1;
     }
@@ -115,9 +114,9 @@ int main(int argc, char **argv) {
 }
 
 #else
-// This test requires macOS
+// This test requires macOS/Metal
 int main(int argc, char **argv) {
-  printf("Skipping test on non-macOS platform\n");
+  printf("Skipping test on non-macOS/non-Metal platform\n");
   return 0;
 }
 #endif
