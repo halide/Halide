@@ -1998,9 +1998,14 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // If it is an external buffer, then we cannot assume that the host pointer
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
-    if (is_external && load->param.defined()) {
-        int host_alignment = load->param.host_alignment();
-        alignment = gcd(alignment, host_alignment);
+    if (is_external) {
+        if (load->param.defined()) {
+            int host_alignment = load->param.host_alignment();
+            alignment = gcd(alignment, host_alignment);
+        } else if (get_target().has_feature(Target::JIT) && load->image.defined()) {
+            // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
+            alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & std::numeric_limits<int>::max()));
+        }
     }
 
     // For dense vector loads wider than the native vector
