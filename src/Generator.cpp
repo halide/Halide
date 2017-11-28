@@ -212,14 +212,12 @@ public:
                 const std::string &generator_registered_name,
                 const std::string &generator_stub_name,
                 const std::vector<Internal::GeneratorParamBase *>& generator_params,
-                const std::vector<Internal::ScheduleParamBase *>& schedule_params,
                 const std::vector<Internal::GeneratorInputBase *>& inputs,
                 const std::vector<Internal::GeneratorOutputBase *>& outputs)
         : stream(dest),
           generator_registered_name(generator_registered_name),
           generator_stub_name(generator_stub_name),
           generator_params(select_generator_params(generator_params)),
-          schedule_params(schedule_params),
           inputs(inputs),
           outputs(outputs) {
        namespaces = split_string(generator_stub_name, "::");
@@ -241,8 +239,6 @@ private:
     std::string class_name;
     std::vector<std::string> namespaces;
     const std::vector<Internal::GeneratorParamBase *> generator_params;
-    const std::vector<Internal::GeneratorParamBase *> schedule_params_old;
-    const std::vector<Internal::ScheduleParamBase *> schedule_params;
     const std::vector<Internal::GeneratorInputBase *> inputs;
     const std::vector<Internal::GeneratorOutputBase *> outputs;
     int indent_level{0};
@@ -265,7 +261,6 @@ private:
 
     void emit_inputs_struct();
     void emit_generator_params_struct();
-    void emit_schedule_params_setters();
 };
 
 std::string StubEmitter::indent() {
@@ -334,31 +329,6 @@ void StubEmitter::emit_generator_params_struct() {
 
     indent_level--;
     stream << indent() << "};\n";
-    stream << "\n";
-}
-
-void StubEmitter::emit_schedule_params_setters() {
-    stream << indent() << "// set_schedule_param methods\n";
-    stream << indent() << "template <typename T>\n";
-    stream << indent() << "inline " << class_name << " &set_schedule_param(const std::string &name, const T &value) {\n";
-    indent_level++;
-    stream << indent() << "(void) GeneratorStub::set_schedule_param(name, value);\n";
-    stream << indent() << "return *this;\n";
-    indent_level--;
-    stream << indent() << "}\n";
-
-    const auto &v = schedule_params;
-    if (!v.empty()) {
-        for (auto *p : v) {
-            std::string c_type = p->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(p->scalar_type());
-            stream << indent() << "inline " << class_name << " &set_" << p->name() << "(const " << c_type << " &value) {\n";
-            indent_level++;
-            stream << indent() << "this->" << p->name() << ".set(value);\n";
-            stream << indent() << "return *this;\n";
-            indent_level--;
-            stream << indent() << "}\n";
-        }
-    }
     stream << "\n";
 }
 
@@ -492,19 +462,7 @@ void StubEmitter::emit() {
     emit_inputs_struct();
     emit_generator_params_struct();
 
-    if (!schedule_params.empty()) {
-        stream << indent() << "NO_INLINE " << class_name << "() :\n";
-        indent_level++;
-        for (auto *sp : schedule_params) {
-            std::string comma = sp != schedule_params.back() ? "," : "";
-            stream << indent() << sp->name() << "(\"" << sp->name() << "\")" << comma << "\n";
-        }
-        indent_level--;
-        stream << indent() << "{}\n";
-
-    } else {
-        stream << indent() << class_name << "() {}\n";
-    }
+    stream << indent() << class_name << "() {}\n";
     stream << "\n";
 
     stream << indent() << "NO_INLINE " << class_name << "(\n";
@@ -523,9 +481,6 @@ void StubEmitter::emit() {
     }
     indent_level--;
     stream << indent() << "})\n";
-    for (auto *sp : schedule_params) {
-        stream << indent() << ", " << sp->name() << "(get_schedule_param(\"" << sp->name() << "\"))\n";
-    }
     for (const auto &out : out_info) {
         stream << indent() << ", " << out.name << "(" << out.getter << ")\n";
     }
@@ -556,15 +511,10 @@ void StubEmitter::emit() {
     stream << indent() << "}\n";
     stream << "\n";
 
-    emit_schedule_params_setters();
-
     stream << indent() << "// move constructor\n";
     stream << indent() << class_name << "("<< class_name << "&& that)\n";
     indent_level++;
     stream << indent() << ": GeneratorStub(std::move(that))\n";
-    for (auto *sp : schedule_params) {
-        stream << indent() << ", " << sp->name() << "(std::move(that." << sp->name() << "))\n";
-    }
     for (const auto &out : out_info) {
         stream << indent() << ", " << out.name << "(std::move(that." << out.name << "))\n";
     }
@@ -577,22 +527,12 @@ void StubEmitter::emit() {
     stream << indent() << class_name << "& operator=("<< class_name << "&& that) {\n";
     indent_level++;
     stream << indent() << "GeneratorStub::operator=(std::move(that));\n";
-    for (auto *sp : schedule_params) {
-        stream << indent() << sp->name() << " = std::move(that." << sp->name() << ");\n";
-    }
     for (const auto &out : out_info) {
         stream << indent() << out.name << " = std::move(that." << out.name << ");\n";
     }
     stream << indent() << "return *this;\n";
     indent_level--;
     stream << indent() << "}\n";
-    stream << "\n";
-
-    stream << indent() << "// ScheduleParams(s)\n";
-    for (auto *sp : schedule_params) {
-        std::string c_type = sp->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(sp->scalar_type());
-        stream << indent() << "ScheduleParam<" << c_type << "> " << sp->name() << ";\n";
-    }
     stream << "\n";
 
     stream << indent() << "// Output(s)\n";
@@ -634,7 +574,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(context)) {
-    generator->set_generator_and_schedule_param_values(generator_params);
+    generator->set_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
     generator->call_generate();
 }
@@ -875,7 +815,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
                     auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
-                    gen->set_generator_and_schedule_param_values(sub_generator_args);
+                    gen->set_generator_param_values(sub_generator_args);
                     return gen->build_module(name);
                 };
             if (targets.size() > 1 || !emit_options.substitutions.empty()) {
@@ -1072,19 +1012,6 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
     for (auto &g : owned_synthetic_params) {
         g->generator = generator;
     }
-
-    std::vector<void *> vs = ObjectInstanceRegistry::instances_in_range(
-        generator, size, ObjectInstanceRegistry::ScheduleParam);
-    for (auto v : vs) {
-        auto *param = static_cast<ScheduleParamBase*>(v);
-        internal_assert(param != nullptr);
-        user_assert(!param->name().empty()) << "ScheduleParams must have explicit names when used in Generators.";
-        user_assert(is_valid_name(param->name())) << "Invalid ScheduleParam name: " << param->name();
-        user_assert(!names.count(param->name())) << "Duplicate ScheduleParam name: " << param->name();
-        names.insert(param->name());
-        schedule_params.push_back(param);
-        schedule_params_by_name[param->name()] = param;
-    }
 }
 
 GeneratorBase::ParamInfo &GeneratorBase::param_info() {
@@ -1141,7 +1068,7 @@ Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const 
     return *it->second;
 }
 
-void GeneratorBase::set_generator_and_schedule_param_values(const GeneratorParamsMap &params) {
+void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
     ParamInfo &pi = param_info();
     for (auto &key_value : params) {
         auto gp = pi.generator_params_by_name.find(key_value.first);
@@ -1157,29 +1084,8 @@ void GeneratorBase::set_generator_and_schedule_param_values(const GeneratorParam
             }
             continue;
         }
-        auto sp = pi.schedule_params_by_name.find(key_value.first);
-        if (sp != pi.schedule_params_by_name.end()) {
-            if (sp->second->is_looplevel_param()) {
-                if (!key_value.second.string_value.empty()) {
-                    sp->second->set_from_string(key_value.second.string_value);
-                } else {
-                    sp->second->set(key_value.second.loop_level);
-                }
-            } else {
-                sp->second->set_from_string(key_value.second.string_value);
-            }
-            continue;
-        }
-        user_error << "Generator has no GeneratorParam or ScheduleParam named: " << key_value.first << "\n";
+        user_error << "Generator has no GeneratorParam named: " << key_value.first << "\n";
     }
-}
-
-Internal::ScheduleParamBase &GeneratorBase::find_schedule_param_by_name(const std::string &name) {
-    ParamInfo &pi = param_info();
-    auto it = pi.schedule_params_by_name.find(name);
-    user_assert(it != pi.schedule_params_by_name.end()) << "Generator has no ScheduleParam named: " << name << "\n";
-    internal_assert(it->second != nullptr);
-    return *it->second;
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
@@ -1396,7 +1302,7 @@ void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params, pi.schedule_params, pi.filter_inputs, pi.filter_outputs);
+    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params, pi.filter_inputs, pi.filter_outputs);
     emit.emit();
 }
 
@@ -1737,10 +1643,6 @@ void generator_test() {
             GeneratorParam<float> gp1{"gp1", 1.f};
             GeneratorParam<uint64_t> gp2{"gp2", 2};
 
-            ScheduleParam<int> sp0{"sp0", 100};
-            ScheduleParam<float> sp1{"sp1", 101.f};
-            ScheduleParam<uint64_t> sp2{"sp2", 102};
-
             Input<int> input{"input"};
             Output<Func> output{"output", Int(32), 1};
 
@@ -1752,9 +1654,7 @@ void generator_test() {
                 output(x) = input + gp0;
             }
             void schedule() {
-                // internal_assert(sp0 == 200);
-                // internal_assert(sp1 == 201.f);
-                // internal_assert(sp2 == (uint64_t) 202);
+                // empty
             }
         };
 
@@ -1762,9 +1662,8 @@ void generator_test() {
         tester.init_from_context(context);
         internal_assert(tester.phase == GeneratorBase::Created);
 
-        // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
+        // Verify that calling GeneratorParam::set() works.
         tester.gp0.set(1);
-        tester.sp0.set(200);
 
         tester.set_inputs_vector({{StubInput(42)}});
         internal_assert(tester.phase == GeneratorBase::InputsSet);
@@ -1773,14 +1672,12 @@ void generator_test() {
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
-        tester.sp1.set(201.f);
 
         tester.call_generate();
         internal_assert(tester.phase == GeneratorBase::GenerateCalled);
 
         // tester.set_inputs_vector({{StubInput(44)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
-        tester.sp2.set(202);  // OK to set ScheduleParams after generate(), but not after schedule()
 
         tester.call_schedule();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
@@ -1788,55 +1685,6 @@ void generator_test() {
         // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
-    }
-
-    // Verify that set_schedule_param<T>
-    // works properly, even if the specific subtype of Generator is not known.
-    {
-        class Tester : public Generator<Tester> {
-        public:
-            GeneratorParam<int> gp0{"gp0", 0};
-            GeneratorParam<float> gp1{"gp1", 1.f};
-            GeneratorParam<uint64_t> gp2{"gp2", 2};
-
-            ScheduleParam<int> sp0{"sp0", 100};
-            ScheduleParam<float> sp1{"sp1", 101.f};
-            ScheduleParam<uint64_t> sp2{"sp2", 102};
-
-            Input<int> input{"input"};
-            Output<Func> output{"output", Int(32), 1};
-
-            void generate() {
-                internal_assert(gp0 == 0);
-                internal_assert(gp1 == 1.f);
-                internal_assert(gp2 == (uint64_t) 2);
-                Var x;
-                output(x) = input + gp0;
-            }
-            void schedule() {
-                // internal_assert(sp0 == 200);
-                // internal_assert(sp1 == 201.f);
-                // internal_assert(sp2 == (uint64_t) 202);
-            }
-        };
-
-        Tester tester_instance;
-        tester_instance.init_from_context(context);
-        // Use a base-typed reference to verify the code below doesn't know about subtype
-        GeneratorBase &tester = tester_instance;
-
-        // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
-        tester.set_schedule_param("sp0", 200);
-
-        tester.set_inputs_vector({{StubInput(42)}});
-
-        tester.set_schedule_param("sp1", 201.f);
-
-        tester.call_generate();
-
-        tester.set_schedule_param("sp2", 202);
-
-        tester.call_schedule();
     }
 
     // Verify that the Generator's internal phase actually prevents unsupported
@@ -1848,19 +1696,12 @@ void generator_test() {
             GeneratorParam<float> gp1{"gp1", 1.f};
             GeneratorParam<uint64_t> gp2{"gp2", 2};
 
-            ScheduleParam<int> sp0{"sp0", 100};
-            ScheduleParam<float> sp1{"sp1", 101.f};
-            ScheduleParam<uint64_t> sp2{"sp2", 102};
-
             Input<int> input{"input"};
 
             Func build() {
                 internal_assert(gp0 == 1);
                 internal_assert(gp1 == 2.f);
                 internal_assert(gp2 == (uint64_t) 2);  // unchanged
-                // internal_assert(sp0 == 200);
-                // internal_assert(sp1 == 201.f);
-                // internal_assert(sp2 == (uint64_t) 102);
                 Var x;
                 Func output;
                 output(x) = input + gp0;
@@ -1872,9 +1713,8 @@ void generator_test() {
         tester.init_from_context(context);
         internal_assert(tester.phase == GeneratorBase::Created);
 
-        // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
+        // Verify that calling GeneratorParam::set() works.
         tester.gp0.set(1);
-        tester.sp0.set(200);
 
         // set_inputs_vector() can't be called on an old-style Generator;
         // that's OK, since we can skip from Created -> GenerateCalled anyway
@@ -1885,7 +1725,6 @@ void generator_test() {
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
-        tester.sp1.set(201.f);
 
         tester.build_pipeline();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);

@@ -17,6 +17,8 @@ void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_
 
 int main(int argc, char **argv) {
     GeneratorContext context(get_jit_target_from_environment());
+using T = decltype((bool)0 && (bool)1);
+static_assert(std::is_same<T, bool>::value, "oops");
 
     {
         // Create a Generator and set its Inputs and GeneratorParams.
@@ -46,26 +48,7 @@ int main(int argc, char **argv) {
         // Here, we'll use an initializer list for inputs, and omit
         // the GeneratorParams entirely to use their default values.
         auto gen = example(context, /* inputs: */ { 1.f });
-
-        // We'll set "vectorize=false parallelize=false" in the ScheduleParams, just to
-        // show that we can:
-        gen.vectorize.set(false);
-        gen.parallelize.set(false);
         gen.schedule();
-
-        Buffer<int32_t> img(kSize, kSize, 3);
-        gen.realize(img);
-        verify(img, 1, 1, 3);
-    }
-
-    {
-        auto gen = example(context, /* inputs: */ { 1.f });
-
-        // Same as before, but we'll use chained setters for the ScheduleParams;
-        // this is identical in function to the previous block, but a style that
-        // some people prefer. Note that we can also chain the "schedule()"
-        // call on the end.
-        gen.set_vectorize(false).set_parallelize(false).schedule();
 
         Buffer<int32_t> img(kSize, kSize, 3);
         gen.realize(img);
