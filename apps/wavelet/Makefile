@@ -21,6 +21,15 @@ $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	@mkdir -p $(@D)
 	@$< -g $(*F) -f $(*F) -o $(BIN) target=$(HL_TARGET)-no_runtime
 
+# Since we build with the -no_runtime flag, add a rule to build just-the-runtime separately.
+$(BIN)/runtime.generator: $(HALIDE_GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(HALIDE_GENERATOR_CXXFLAGS) $(filter-out %.h,$^) $(HALIDE_GENERATOR_LDFLAGS) -o $@
+
+$(BIN)/runtime.a: $(BIN)/runtime.generator
+	@mkdir -p $(@D)
+	$< -r runtime -o $(@D) target=$(HL_TARGET)
+
 MODULES = \
 	$(BIN)/daubechies_x.a \
 	$(BIN)/haar_x.a \
