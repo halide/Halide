@@ -25,3 +25,6 @@ $(BIN)/test: $(BIN)/halide_blur.a test.cpp
 
 clean:
 	rm -rf $(BIN)
+
+test: $(BIN)/test
+	$(BIN)/test

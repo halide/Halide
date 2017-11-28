@@ -42,3 +42,6 @@ $(BIN)/local_laplacian.mp4: $(BIN)/process_viz ../../bin/HalideTraceViz
 
 clean:
 	rm -rf $(BIN)
+
+
+test: $(BIN)/out.png
