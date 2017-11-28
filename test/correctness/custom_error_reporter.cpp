@@ -26,10 +26,8 @@ public:
     MyCustomErrorReporter() : errors_occurred(0), warnings_occurred(0) {}
 
     void warning(const char* msg) {
-        // Emitting "warning.*:" to stdout or stderr will cause CMake to report the
-        // test as "warning generaed" on Windows, regardless of error code returned,
-        // hence the abbreviation to "warn".
-        printf("Custom warn: %s\n", msg);
+        auto msg_safe = Halide::Internal::replace_all(msg, ":", "(semicolon)");
+        printf("Custom warn: %s\n", msg_safe.c_str());
         warnings_occurred++;
     }
 
