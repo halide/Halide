@@ -199,6 +199,7 @@ extern WEAK halide_device_interface_t metal_device_interface;
 volatile int WEAK thread_lock = 0;
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
+WEAK mtl_command_buffer *current_command_buffer = NULL;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -273,6 +274,22 @@ WEAK int halide_metal_release_context(void *user_context) {
     return 0;
 }
 
+// The default implementation of halide_metal_acquire_command_buffer and the
+// matching halide_metal_release_command_buffer work synchronously; that is,
+// the acquire always creates a new command buffer and the release always
+// commits it.  Overriding implementations may choose to defer committing the
+// command buffer (e.g. if they want to add non-Halide commands to the buffer)
+// if must_release is not true.  Specifically, overriding implementations must
+// ensure:
+// - only one command buffer is accessible to Halide at one time; that is, if
+//   the overriding release does not commit the command buffer, the subsequent
+//   acquire must return the same command buffer
+// - the command buffer must not be committed by application code, but rather
+//   only through a (direct or indirect) call to halide_device_sync()
+// - the Halide runtime will not call retain/release on the command buffer; the
+//   overriding implementations are responsible for memory management
+// - an overriding halide_metal_release_command_buffer implementation must commit
+//   the command buffer and set the pointer to NULL if must_release is true
 WEAK int halide_metal_acquire_command_buffer(void* user_context,
                                              mtl_command_queue *queue,
                                              mtl_command_buffer **command_buffer_ret) {
@@ -296,10 +313,6 @@ WEAK int halide_metal_release_command_buffer(void* user_context,
 }
 
 } // extern "C"
-
-namespace {
-  mtl_command_buffer *current_command_buffer = NULL;
-}
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
