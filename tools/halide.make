@@ -80,15 +80,6 @@ ifeq ($(OS), Windows_NT)
 	HALIDE_GENERATOR_LDFLAGS += -Wl,--stack,8388608
 endif
 
-# ----------- Runtime support (for when building with no_runtime flag)
-$(BIN)/runtime.generator: $(HALIDE_GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(HALIDE_GENERATOR_CXXFLAGS) $(filter-out %.h,$^) $(HALIDE_GENERATOR_LDFLAGS) -o $@
-
-$(BIN)/runtime.a: $(BIN)/runtime.generator
-	@mkdir -p $(@D)
-	$< -r runtime -o $(@D) target=$(HL_TARGET)
-
 # ----------- halide_image_io.h support: helpers for libpng and libjpeg
 LIBPNG_LDFLAGS ?= $(shell libpng-config --ldflags)
 LIBPNG_CXXFLAGS ?= $(shell libpng-config --cflags)
@@ -112,7 +103,7 @@ HALIDE_IMAGE_IO_CXXFLAGS = $(LIBPNG_CXXFLAGS) $(LIBJPEG_CXXFLAGS)
 
 # ----------- RunGen support
 # Rule patterns to allow RunGen to work with generator targets.
-# (Really, we assume that any .a outptu can potentially work with RunGen;
+# (Really, we assume that any .a output can potentially work with RunGen;
 # this will fail for non-generator targets, but that's OK.)
 $(BIN)/RunGen.o: $(HALIDE_TOOLS_DIR)/RunGen.cpp
 	@mkdir -p $(@D)
