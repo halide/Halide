@@ -313,14 +313,17 @@ void StubEmitter::emit_generator_params_struct() {
         stream << "\n";
     }
 
-    stream << indent() << "inline NO_INLINE std::map<std::string, std::string> to_string_map() const {\n";
+    stream << indent() << "inline NO_INLINE Halide::Internal::GeneratorParamsMap to_string_map() const {\n";
     indent_level++;
-    stream << indent() << "std::map<std::string, std::string> m;\n";
+    stream << indent() << "return {\n";
+    indent_level++;
+    std::string comma = "";
     for (auto p : v) {
-        stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
-                        << "m[\"" << p->name << "\"] = " << p->call_to_string(p->name) << ";\n";
+        stream << indent() << comma << "{\"" << p->name << "\", " << p->call_to_string(p->name) << "}\n";
+        comma = ", ";
     }
-    stream << indent() << "return m;\n";
+    indent_level--;
+    stream << indent() << "};\n";
     indent_level--;
     stream << indent() << "}\n";
 
@@ -780,7 +783,7 @@ void StubEmitter::emit() {
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory,
-                             const std::map<std::string, std::string> &generator_params,
+                             const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(context)) {
     generator->set_generator_and_schedule_param_values(generator_params);
@@ -870,7 +873,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                                                       { "-n", "" },
                                                       { "-x", "" },
                                                       { "-r", "" }};
-    std::map<std::string, std::string> generator_args;
+    GeneratorParamsMap generator_args;
 
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] != '-') {
@@ -1299,7 +1302,7 @@ Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const 
     return *it->second;
 }
 
-void GeneratorBase::set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params) {
+void GeneratorBase::set_generator_and_schedule_param_values(const GeneratorParamsMap &params) {
     ParamInfo &pi = param_info();
     for (auto &key_value : params) {
         auto gp = pi.generator_params_by_name.find(key_value.first);
