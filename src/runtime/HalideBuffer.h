@@ -171,16 +171,16 @@ private:
     }
 
     struct DevRefCountCropped : DeviceRefCount {
-        Buffer<T, D> parent;
-        DevRefCountCropped(const Buffer<T, D> &parent) : parent(parent) {
+        Buffer<T, D> cropped_from;
+        DevRefCountCropped(const Buffer<T, D> &cropped_from) : cropped_from(cropped_from) {
             ownership = BufferDeviceOwnership::Cropped; 
         }
     };
 
-    /** Setup the device ref count for a buffer to indicate it is a crop of parent */
-    void parent_crop(const Buffer<T, D> &parent) {
+    /** Setup the device ref count for a buffer to indicate it is a crop of cropped_from */
+    void crop_from(const Buffer<T, D> &cropped_from) {
         assert(dev_ref_count == nullptr);
-        dev_ref_count = new DevRefCountCropped(parent);
+        dev_ref_count = new DevRefCountCropped(cropped_from);
     }
 
     /** Decrement the reference count of any owned allocation and free host
@@ -223,7 +223,7 @@ private:
             }
             if (dev_ref_count) {
                 if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                    delete((DevRefCountCropped *)dev_ref_count);
+                    delete (DevRefCountCropped *)dev_ref_count;
                 } else {
                     delete dev_ref_count;
                 }
@@ -399,15 +399,15 @@ private:
             result_host_cropped.device_deallocate();
             // TODO: plumb through user context
             if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
-                const Buffer<T, D> *parent = this;
+                const Buffer<T, D> *cropped_from = this;
                 // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
                 // is it possible to get to this point without incref having run at least once since
                 // the device field was set? (I.e. in the internal logic of crop. incref might have been
                 // called.)
                 if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                    parent = &((DevRefCountCropped *)dev_ref_count)->parent;
+                    cropped_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
                 }
-                result_host_cropped.parent_crop(*parent);
+                result_host_cropped.crop_from(*cropped_from);
             }
         }
     }
