@@ -1096,7 +1096,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     }
 
     // Emit a warning if only some of the steps have been scheduled.
-    bool any_scheduled = f.definition().schedule().touched();
+    bool any_scheduled = f.has_pure_definition() && f.definition().schedule().touched();
     for (const Definition &r : f.updates()) {
         any_scheduled = any_scheduled || r.schedule().touched();
     }
@@ -1118,7 +1118,9 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // If the func is scheduled on the gpu, check that the relevant
     // api is enabled in the target.
     vector<Definition> definitions;
-    definitions.push_back(f.definition());
+    if (f.has_pure_definition()) {
+        definitions.push_back(f.definition());
+    }
     for (const Definition &def : f.updates()) {
         definitions.push_back(def);
     }

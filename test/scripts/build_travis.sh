@@ -17,7 +17,10 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
   LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\.//' | cut -b1,2 )"
   mkdir -p build/ && cd build/
-  cmake -DLLVM_DIR="/usr/local/llvm/share/llvm/cmake/" \
+  # Require a specific version of LLVM, just in case the Travis instance has
+  # an older clang/llvm version present
+  cmake -DHALIDE_REQUIRE_LLVM_VERSION="${LLVM_VERSION_NO_DOT}" \
+        -DLLVM_DIR="/usr/local/llvm/lib/cmake/llvm/" \
         -DHALIDE_SHARED_LIBRARY="${HALIDE_SHARED_LIBRARY}" \
         -DWITH_APPS=OFF \
         -DWITH_TESTS=ON \

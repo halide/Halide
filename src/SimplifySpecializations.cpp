@@ -122,6 +122,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
+        internal_assert(s_def.defined());
+
         vector<Definition> s_result = propagate_specialization_in_definition(s_def, name);
 
         if (var && eq) {
@@ -156,7 +158,9 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
-        propagate_specialization_in_definition(func.definition(), func.name());
+        if (func.definition().defined()) {
+            propagate_specialization_in_definition(func.definition(), func.name());
+        }
     }
 }
 

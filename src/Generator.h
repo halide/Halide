@@ -404,7 +404,6 @@ protected:
     // All GeneratorParams are settable from string.
     virtual void set_from_string(const std::string &value_string) = 0;
 
-    virtual std::string to_string() const = 0;
     virtual std::string call_to_string(const std::string &v) const = 0;
     virtual std::string get_c_type() const = 0;
 
@@ -412,17 +411,7 @@ protected:
         return "";
     }
 
-    virtual std::string get_default_value() const {
-        return to_string();
-    }
-
-    virtual std::string get_template_type() const {
-        return get_c_type();
-    }
-
-    virtual std::string get_template_value() const {
-        return get_default_value();
-    }
+    virtual std::string get_default_value() const = 0;
 
     virtual bool is_synthetic_param() const {
         return false;
@@ -524,7 +513,7 @@ public:
         this->set(Target(new_value_string));
     }
 
-    std::string to_string() const override {
+    std::string get_default_value() const override {
         return this->value().to_string();
     }
 
@@ -548,7 +537,7 @@ public:
         this->set(MachineParams(new_value_string));
     }
 
-    std::string to_string() const override {
+    std::string get_default_value() const override {
         return this->value().to_string();
     }
 
@@ -588,7 +577,7 @@ public:
         this->set(t);
     }
 
-    std::string to_string() const override {
+    std::string get_default_value() const override {
         std::ostringstream oss;
         oss << this->value();
         if (std::is_same<T, float>::value) {
@@ -645,7 +634,7 @@ public:
         this->set(v);
     }
 
-    std::string to_string() const override {
+    std::string get_default_value() const override {
         return this->value() ? "true" : "false";
     }
 
@@ -678,10 +667,6 @@ public:
         auto it = enum_map.find(new_value_string);
         user_assert(it != enum_map.end()) << "Enumeration value not found: " << new_value_string;
         this->set_impl(it->second);
-    }
-
-    std::string to_string() const override {
-        return enum_to_string(enum_map, this->value());
     }
 
     std::string call_to_string(const std::string &v) const override {
@@ -734,14 +719,6 @@ public:
 
     std::string get_c_type() const override {
         return "Type";
-    }
-
-    std::string get_template_type() const override {
-        return "typename";
-    }
-
-    std::string get_template_value() const override {
-        return halide_type_to_c_type(this->value());
     }
 
     std::string get_default_value() const override {
@@ -2247,7 +2224,7 @@ public:
         set_from_string_impl<T>(new_value_string);
     }
 
-    std::string to_string() const override {
+    std::string get_default_value() const override {
         internal_error;
         return std::string();
     }
@@ -2462,6 +2439,8 @@ class SimpleGeneratorFactory;
 // if they cannot return a valid Generator, they must assert-fail.
 using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&)>;
 
+using GeneratorParamsMap = std::map<std::string, std::string>;
+
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     struct EmitOptions {
@@ -2487,7 +2466,7 @@ public:
     EXPORT virtual ~GeneratorBase();
 
     EXPORT void set_generator_param(const std::string &name, const std::string &value);
-    EXPORT void set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params);
+    EXPORT void set_generator_and_schedule_param_values(const GeneratorParamsMap &params);
 
     template<typename T>
     GeneratorBase &set_generator_param(const std::string &name, const T &value) {
@@ -3115,7 +3094,7 @@ public:
 protected:
     EXPORT GeneratorStub(const GeneratorContext &context,
                   GeneratorFactory generator_factory,
-                  const std::map<std::string, std::string> &generator_params,
+                  const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     ScheduleParamBase &get_schedule_param(const std::string &n) const {
