@@ -107,7 +107,7 @@ public:
     const vector<Function> &funcs;
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions;
-    Scope<int> in_stages;
+    Scope<> in_stages;
     const Target target;
 
     struct CondValue {
@@ -135,6 +135,10 @@ public:
         // set for later use.
         vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
             vector<vector<CondValue>> result(2); // <args, values>
+
+            if (!def.defined()) {
+                return result;
+            }
 
             // Default case (no specialization)
             vector<Expr> predicates = def.split_predicate();
@@ -266,7 +270,7 @@ public:
         Stmt define_bounds(Stmt s,
                            string producing_stage,
                            string loop_level,
-                           const Scope<int> &in_stages,
+                           const Scope<> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions,
                            const Target &target) {
@@ -877,7 +881,7 @@ public:
             }
         }
 
-        in_stages.push(stage_name, 0);
+        in_stages.push(stage_name);
 
         // Figure out how much of it we're producing
         Box box;

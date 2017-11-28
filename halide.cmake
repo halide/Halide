@@ -274,7 +274,7 @@ function(halide_library_from_generator BASENAME)
 
   # BASENAME.run simply runs the BASENAME.rungen target
   add_custom_target("${BASENAME}.run" 
-                    COMMAND "${RUNGEN}" "$(RUNARGS)"
+                    COMMAND "${RUNGEN}" "${RUNARGS}"
                     DEPENDS "${RUNGEN}")
   set_target_properties("${BASENAME}.run" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
@@ -618,7 +618,7 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/halide_config.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/halide_config.cmake")
   else()
-    message(FATAL_ERROR "HALIDE_SYSTEM_LIBS is not set and we could not find halide_config.cmake")
+    message(WARNING "HALIDE_SYSTEM_LIBS is not set and we could not find halide_config.cmake")
   endif()
 endif()
 

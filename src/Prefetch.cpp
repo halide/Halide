@@ -70,7 +70,6 @@ private:
     const map<string, Box> &external_buffers;
     const Function *current_func;
     int stage;
-    Scope<Interval> scope;
     Scope<Box> buffer_bounds;
 
 private:
@@ -130,69 +129,6 @@ private:
         return IRMutator2::visit(op);
     }
 
-    // To prevent combinatorial code explosion when calling the
-    // bounds_of_expr_in_scope, we only substitute the let's value
-    // directly if it is either a constant or a variable.
-    bool should_substitute_let(Expr e) {
-        return is_const(e) || ( e.as<Variable>() != nullptr);
-    }
-
-    template<typename LetOrLetStmt, typename T>
-    T visit_let(const LetOrLetStmt *op) {
-        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
-
-        bool fixed = value_bounds.is_single_point();
-        value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
-
-        if (should_substitute_let(value_bounds.min) &&
-            (fixed || should_substitute_let(value_bounds.max))) {
-            ScopedBinding<Interval> bind(scope, op->name, value_bounds);
-            return IRMutator2::visit(op);
-        } else {
-            string max_name = unique_name('t');
-            string min_name = unique_name('t');
-
-            T result;
-            {
-                ScopedBinding<Interval> bind(scope, op->name, Interval(Variable::make(op->value.type(), min_name),
-                                                                       Variable::make(op->value.type(), max_name)));
-                result = IRMutator2::visit(op);
-            }
-
-            op = result.template as<LetOrLetStmt>();
-            internal_assert(op);
-            T body = op->body;
-
-            if (stmt_or_expr_uses_var(body, max_name)) {
-                body = LetOrLetStmt::make(max_name, value_bounds.max, body);
-            }
-            if (stmt_or_expr_uses_var(body, min_name)) {
-                body = LetOrLetStmt::make(min_name, value_bounds.min, body);
-            }
-            if (!body.same_as(op->body)) {
-                return LetOrLetStmt::make(op->name, op->value, body);
-            }
-        }
-        return T();
-    }
-
-    Expr visit(const Let *op) override {
-        Expr let = visit_let<Let, Expr>(op);
-        if (let.defined()) {
-            return let;
-        }
-        return Expr(op);
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        Stmt let_stmt = visit_let<LetStmt, Stmt>(op);
-        if (let_stmt.defined()) {
-            return let_stmt;
-        }
-        return Stmt(op);
-    }
-
     Stmt add_prefetch(string buf_name, const Parameter &param, const Box &box, Stmt body) {
         // Construct the region to be prefetched.
         Region bounds;
@@ -222,13 +158,8 @@ private:
 
         const vector<PrefetchDirective> &prefetch_list = get_prefetch_list(op->name);
 
-        // Add loop variable to interval scope for any inner loop prefetch
         Expr loop_var = Variable::make(Int(32), op->name);
-        Stmt body;
-        {
-            ScopedBinding<Interval> bind(scope, op->name, Interval(loop_var, loop_var));
-            body = mutate(op->body);
-        }
+        Stmt body = mutate(op->body);
 
         if (!prefetch_list.empty()) {
             // If there are multiple prefetches of the same Func or ImageParam,
@@ -243,11 +174,7 @@ private:
 
                 // Add loop variable + prefetch offset to interval scope for box computation
                 Expr fetch_at = loop_var + p.offset;
-                map<string, Box> boxes_rw;
-                {
-                    ScopedBinding<Interval> bind(scope, op->name, Interval(fetch_at, fetch_at));
-                    boxes_rw = boxes_touched(body, scope);
-                }
+                map<string, Box> boxes_rw = boxes_touched(LetStmt::make(op->name, fetch_at, body));
 
                 // TODO(psuriana): Only prefetch the newly accessed data. We
                 // should subtract the box accessed during previous iteration

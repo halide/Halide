@@ -324,7 +324,25 @@ std::map<std::string, std::string> Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 
-void Module::compile(const Outputs &output_files) const {
+void Module::compile(const Outputs &output_files_arg) const {
+    Outputs output_files = output_files_arg;
+
+    // output stmt and html prior to resolving submodules. We need to
+    // clear the output after writing it, otherwise the output will
+    // be overwritten by recursive calls after submodules are resolved.
+    if (!output_files.stmt_name.empty()) {
+        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
+        std::ofstream file(output_files.stmt_name);
+        file << *this;
+        output_files.stmt_name.clear();
+    }
+    if (!output_files.stmt_html_name.empty()) {
+        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
+        Internal::print_to_html(output_files.stmt_html_name, *this);
+        output_files.stmt_html_name.clear();
+    }
+
+
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
@@ -396,15 +414,6 @@ void Module::compile(const Outputs &output_files) const {
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
-    }
-    if (!output_files.stmt_name.empty()) {
-        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
-        std::ofstream file(output_files.stmt_name);
-        file << *this;
-    }
-    if (!output_files.stmt_html_name.empty()) {
-        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
-        Internal::print_to_html(output_files.stmt_html_name, *this);
     }
     if (!output_files.schedule_name.empty()) {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
