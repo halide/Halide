@@ -17,8 +17,7 @@ public:
     enum class SomeEnum { Foo, Bar };
 
     GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
-
-    ScheduleParam<bool> vectorize{ "vectorize", true };
+    GeneratorParam<bool> vectorize{ "vectorize", true };
 
     Input<float> runtime_factor{ "runtime_factor", 1.0 };
     Input<int> runtime_offset{ "runtime_offset", 0 };
@@ -53,9 +52,6 @@ int main(int argc, char **argv) {
         // GeneratorContext.apply<GenType>() with values for all Inputs.
         // (Note that this uses the default values for all GeneratorParams.)
         auto gen = context.apply<Example>(kRuntimeFactor, kRuntimeOffset);  // gen's type is std::unique_ptr<Example>
-        // Remember: ScheduleParams can be set at any time before lowering,
-        // so it's fine to set them here.
-        gen->vectorize.set(false);
 
         Buffer<int32_t> img = gen->realize(kSize, kSize, 3);
         verify(img, gen->compiletime_factor, kRuntimeFactor, kRuntimeOffset);
@@ -70,8 +66,6 @@ int main(int argc, char **argv) {
         // GeneratorParams must be set before calling apply()
         // (you'll assert-fail if you set them later).
         gen->compiletime_factor.set(2.5f);
-        // ScheduleParams can be set before or after the call to apply().
-        gen->vectorize.set(false);
 
         gen->apply(kRuntimeFactor, kRuntimeOffset);
 
