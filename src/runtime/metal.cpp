@@ -692,12 +692,11 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
+    mtl_command_buffer *command_buffer;
     if (halide_metal_acquire_command_buffer(user_context, metal_context.queue,
-          &current_command_buffer) != 0) {
+          &command_buffer) != 0) {
         error(user_context) << "Metal: Could not acquire command buffer.\n";
     }
-
-    mtl_command_buffer *command_buffer = current_command_buffer;
 
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
     if (encoder == 0) {
