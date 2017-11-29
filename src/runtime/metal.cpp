@@ -481,9 +481,14 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
             return -1;
         }
 
+        // Pre-create the pipeline states here, so we can quickly access them when running a pipeline
+        // First, get the set of function names and their counts
         NSArray* func_names = get_function_names_from_library((*state)->library);
         size_t func_count = get_array_count(func_names);
         debug(user_context) << "Metal - library contains " << (uint64_t)func_count << " functions.\n";
+
+        // Store the function names, their corresponding pipeline states, and the number of functions
+        // in the state object
         (*state)->function_names = (char**)malloc(sizeof(char*) * func_count);
         (*state)->pipeline_states = (mtl_compute_pipeline_state**)malloc(sizeof(mtl_compute_pipeline_state*) * func_count);
         (*state)->num_functions = func_count;
@@ -491,7 +496,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
         for (size_t i=0; i<func_count; i++) {
             NSString *ns_name = (NSString*)get_array_object_at_index(func_names, i);
             char* entry_name = c_string_from_nsstring(ns_name);
-            debug(user_context) << "Function " << (uint64_t)i << " is called " << entry_name << "\n";
+            debug(user_context) << "Metal: Function " << (uint64_t)i << " is named " << entry_name << "\n";
 
             mtl_function *function = new_function_with_name((*state)->library, entry_name, strlen(entry_name));
             if (function == 0) {
@@ -506,7 +511,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
                 release_ns_object(function);
                 return -1;
             }
-            objc_msgSend(pipeline_state, sel_getUid("retain"));
+            // Need to copy the string here, because it is an internal property of the NSString
             (*state)->function_names[i] = (char*)malloc(sizeof(char) * strlen(entry_name));
             strncpy((*state)->function_names[i], entry_name, strlen(entry_name)+1);
             (*state)->pipeline_states[i] = pipeline_state;
