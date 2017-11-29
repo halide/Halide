@@ -512,9 +512,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
             (*state)->pipeline_states[i] = pipeline_state;
 
             release_ns_object(function);
-            objc_msgSend(function, sel_getUid("retain"));
         }
-        release_ns_object(func_names);
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after_compile = halide_current_time_ns(user_context);
@@ -594,18 +592,19 @@ WEAK int halide_metal_device_release(void *user_context) {
                 release_ns_object(state->library);
                 state->library = NULL;
             }
-            for (size_t i=0; i<state->num_functions; i++) {
-                debug(user_context) << "Metal - Releasing: pipeline_state " << state->pipeline_states[i] << "\n";
-                release_ns_object(state->pipeline_states[i]);
-                free(state->function_names[i]);
+            if (state->pipeline_states) {
+                for (size_t i=0; i<state->num_functions; i++) {
+                    debug(user_context) << "Metal - Releasing: pipeline_state " << state->pipeline_states[i] << "\n";
+                    release_ns_object(state->pipeline_states[i]);
+                    free(state->function_names[i]);
+                }
+                free(state->pipeline_states);
+                state->pipeline_states = NULL;
             }
+
             if (state->function_names) {
                 free(state->function_names);
                 state->function_names = NULL;
-            }
-            if (state->pipeline_states) {
-                free(state->pipeline_states);
-                state->pipeline_states = NULL;
             }
             state->num_functions = 0;
             state = state->next;
