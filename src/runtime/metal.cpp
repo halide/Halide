@@ -850,9 +850,6 @@ WEAK int halide_metal_run(void *user_context,
 
     commit_command_buffer(command_buffer);
 
-    //release_ns_object(pipeline_state);
-    //release_ns_object(function);
-
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "Time for halide_metal_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n";
