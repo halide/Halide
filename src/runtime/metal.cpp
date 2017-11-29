@@ -605,12 +605,10 @@ WEAK int halide_metal_device_release(void *user_context) {
                 }
                 free(state->pipeline_states);
                 state->pipeline_states = NULL;
-            }
-
-            if (state->function_names) {
                 free(state->function_names);
                 state->function_names = NULL;
             }
+
             state->num_functions = 0;
             state = state->next;
         }
@@ -738,7 +736,8 @@ WEAK int halide_metal_run(void *user_context,
 
     mtl_compute_pipeline_state *pipeline_state = NULL;
     for (size_t i=0; i<state->num_functions; i++) {
-        // TODO(shoaibkamil): we could probably speed this up by skipping "kernel__"
+        // TODO(shoaibkamil): we could probably speed this up by skipping "kernel_", but that would
+        // require making sure GPU kernels always have that naming pattern
         if (strcmp(state->function_names[i], entry_name) == 0) {
             pipeline_state = state->pipeline_states[i];
             debug(user_context) << "Found pipeline state for " << entry_name << ": " << pipeline_state << "\n";
