@@ -796,8 +796,6 @@ WEAK int halide_metal_run(void *user_context,
             args_buffer = new_buffer(metal_context.device, total_args_size);
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
-                //release_ns_object(pipeline_state);
-                //release_ns_object(function);
                 return -1;
             }
             args_ptr = (char *)buffer_contents(args_buffer);
