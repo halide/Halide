@@ -26,7 +26,7 @@ namespace Internal {
  * the appropriate visit method and then return the value of expr or
  * stmt after the call to visit.
  */
-class EXPORT IRMutator : public IRVisitor {
+class IRMutator : public IRVisitor {
 public:
     EXPORT virtual ~IRMutator();
 
@@ -103,7 +103,7 @@ protected:
  * the appropriate visit() method and then return the value of expr or
  * stmt after the call to visit.
  */
-class EXPORT IRMutator2 {
+class IRMutator2 {
 public:
     EXPORT virtual ~IRMutator2();
 
@@ -167,7 +167,7 @@ protected:
 /** A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
-class EXPORT IRGraphMutator2 : public IRMutator2 {
+class IRGraphMutator2 : public IRMutator2 {
 protected:
     std::map<Expr, Expr, ExprCompare> expr_replacements;
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
