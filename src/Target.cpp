@@ -67,14 +67,13 @@ Target calculate_host_target() {
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
+    std::vector<Target::Feature> initial_features;
 
 #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
-    return Target(os, arch, bits);
 #else
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
-    return Target(os, arch, bits);
 #else
 #if defined(__powerpc__) && defined(__linux__)
     Target::Arch arch = Target::POWERPC;
@@ -91,8 +90,6 @@ Target calculate_host_target() {
     std::vector<Target::Feature> initial_features;
     if (have_vsx)     initial_features.push_back(Target::VSX);
     if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
-
-    return Target(os, arch, bits, initial_features);
 #else
     Target::Arch arch = Target::X86;
 
@@ -114,7 +111,6 @@ Target calculate_host_target() {
         << ", " << info[3]
         << std::dec << "\n";
 
-    std::vector<Target::Feature> initial_features;
     if (have_sse41) initial_features.push_back(Target::SSE41);
     if (have_avx)   initial_features.push_back(Target::AVX);
     if (have_f16c)  initial_features.push_back(Target::F16C);
@@ -160,10 +156,11 @@ Target calculate_host_target() {
 #endif
 #endif
 
+#endif
+#endif
+#endif
+
     return Target(os, arch, bits, initial_features);
-#endif
-#endif
-#endif
 }
 
 }  // namespace
@@ -291,6 +288,11 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+    host.set_feature(Target::MSAN);
+#endif
+#endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
