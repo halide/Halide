@@ -736,20 +736,9 @@ WEAK int halide_metal_run(void *user_context,
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state*)state_ptr;
 
-    //mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
-    //if (function == 0) {
-        //error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
-        //return -1;
-    //}
-
-    //mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
-    //if (pipeline_state == 0) {
-        //error(user_context) << "Metal: Could not allocate pipeline state.\n";
-        //release_ns_object(function);
-        //return -1;
-    //}
     mtl_compute_pipeline_state *pipeline_state = NULL;
     for (size_t i=0; i<state->num_functions; i++) {
+        // TODO(shoaibkamil): we could probably speed this up by skipping "kernel__"
         if (strcmp(state->function_names[i], entry_name) == 0) {
             pipeline_state = state->pipeline_states[i];
             debug(user_context) << "Found pipeline state for " << entry_name << ": " << pipeline_state << "\n";
