@@ -158,6 +158,34 @@ WEAK mtl_function *new_function_with_name(mtl_library *library, const char *name
     return result;
 }
 
+struct NSArray;
+struct NSString;
+
+WEAK NSArray* get_function_names_from_library(mtl_library *library) {
+    typedef NSArray *(*function_names_method)(objc_id obj, objc_sel sel);
+    function_names_method func_names = (function_names_method)&objc_msgSend;
+    return (*func_names)(library, sel_getUid("functionNames"));
+}
+
+// TODO(shoaibkamil): perhaps replace by fast enumeration
+WEAK size_t get_array_count(NSArray* arr) {
+  typedef size_t (*count_method)(objc_id obj, objc_sel sel);
+  count_method count = (count_method)&objc_msgSend;
+  return (*count)(arr, sel_getUid("count"));
+}
+
+WEAK objc_id get_array_object_at_index(NSArray* arr, size_t index) {
+  typedef objc_id (*object_at_index_method)(objc_id obj, objc_sel sel, size_t index);
+  object_at_index_method object_at_index = (object_at_index_method)&objc_msgSend;
+  return (*object_at_index)(arr, sel_getUid("objectAtIndex:"), index);
+}
+
+WEAK char* c_string_from_nsstring(NSString* str) {
+  typedef char *(*UTF8String_method)(objc_id obj, objc_sel sel);
+  UTF8String_method UTF8String = (UTF8String_method)&objc_msgSend;
+  return (*UTF8String)(str, sel_getUid("UTF8String"));
+}
+
 WEAK void set_input_buffer(mtl_compute_command_encoder *encoder, mtl_buffer *input_buffer, uint32_t index) {
     typedef void (*set_buffer_method)(objc_id encoder, objc_sel sel,
                                       mtl_buffer *input_buffer, size_t offset, size_t index);
@@ -206,6 +234,9 @@ WEAK mtl_command_queue *queue;
 // when then context is released.
 struct module_state {
     mtl_library *library;
+    char **function_names;
+    size_t num_functions;
+    mtl_compute_pipeline_state **pipeline_states;
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
@@ -424,6 +455,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
         (*state)->library = NULL;
+        (*state)->num_functions = 0;
         (*state)->next = state_list;
         state_list = *state;
     }
@@ -448,6 +480,41 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
             error(user_context) << "Metal: new_library_with_source failed.\n";
             return -1;
         }
+
+        NSArray* func_names = get_function_names_from_library((*state)->library);
+        size_t func_count = get_array_count(func_names);
+        debug(user_context) << "Metal - library contains " << (uint64_t)func_count << " functions.\n";
+        (*state)->function_names = (char**)malloc(sizeof(char*) * func_count);
+        (*state)->pipeline_states = (mtl_compute_pipeline_state**)malloc(sizeof(mtl_compute_pipeline_state*) * func_count);
+        (*state)->num_functions = func_count;
+
+        for (size_t i=0; i<func_count; i++) {
+            NSString *ns_name = (NSString*)get_array_object_at_index(func_names, i);
+            char* entry_name = c_string_from_nsstring(ns_name);
+            debug(user_context) << "Function " << (uint64_t)i << " is called " << entry_name << "\n";
+
+            mtl_function *function = new_function_with_name((*state)->library, entry_name, strlen(entry_name));
+            if (function == 0) {
+                error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
+                return -1;
+            }
+
+            debug(user_context) << "Metal - Allocating - pipeline_state\n";
+            mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
+            if (pipeline_state == 0) {
+                error(user_context) << "Metal: Could not allocate pipeline state.\n";
+                release_ns_object(function);
+                return -1;
+            }
+            objc_msgSend(pipeline_state, sel_getUid("retain"));
+            (*state)->function_names[i] = (char*)malloc(sizeof(char) * strlen(entry_name));
+            strncpy((*state)->function_names[i], entry_name, strlen(entry_name)+1);
+            (*state)->pipeline_states[i] = pipeline_state;
+
+            release_ns_object(function);
+            objc_msgSend(function, sel_getUid("retain"));
+        }
+        release_ns_object(func_names);
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after_compile = halide_current_time_ns(user_context);
@@ -522,11 +589,25 @@ WEAK int halide_metal_device_release(void *user_context) {
         // object.
         module_state *state = state_list;
         while (state) {
-          if (state->library) {
+            if (state->library) {
                 debug(user_context) << "Metal - Releasing: new_library_with_source " << state->library << "\n";
                 release_ns_object(state->library);
                 state->library = NULL;
             }
+            for (size_t i=0; i<state->num_functions; i++) {
+                debug(user_context) << "Metal - Releasing: pipeline_state " << state->pipeline_states[i] << "\n";
+                release_ns_object(state->pipeline_states[i]);
+                free(state->function_names[i]);
+            }
+            if (state->function_names) {
+                free(state->function_names);
+                state->function_names = NULL;
+            }
+            if (state->pipeline_states) {
+                free(state->pipeline_states);
+                state->pipeline_states = NULL;
+            }
+            state->num_functions = 0;
             state = state->next;
         }
 
@@ -647,28 +728,44 @@ WEAK int halide_metal_run(void *user_context,
         return -1;
     }
 
+   
+    halide_assert(user_context, state_ptr);
+    module_state *state = (module_state*)state_ptr;
+
+    //mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
+    //if (function == 0) {
+        //error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
+        //return -1;
+    //}
+
+    //mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
+    //if (pipeline_state == 0) {
+        //error(user_context) << "Metal: Could not allocate pipeline state.\n";
+        //release_ns_object(function);
+        //return -1;
+    //}
+    mtl_compute_pipeline_state *pipeline_state = NULL;
+    for (size_t i=0; i<state->num_functions; i++) {
+        if (strcmp(state->function_names[i], entry_name) == 0) {
+            pipeline_state = state->pipeline_states[i];
+            debug(user_context) << "Found pipeline state for " << entry_name << ": " << pipeline_state << "\n";
+            break;
+        }
+    }
+
+    if (pipeline_state == NULL) {
+        error(user_context) << "Metal: Unable to find pipeline state for function " << entry_name << "\n";
+        return -1;
+    }
+
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
     if (encoder == 0) {
         error(user_context) << "Metal: Could not allocate compute command encoder.\n";
         return -1;
     }
 
-    halide_assert(user_context, state_ptr);
-    module_state *state = (module_state*)state_ptr;
-
-    mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
-    if (function == 0) {
-        error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
-        return -1;
-    }
-
-    mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
-    if (pipeline_state == 0) {
-        error(user_context) << "Metal: Could not allocate pipeline state.\n";
-        release_ns_object(function);
-        return -1;
-    }
     set_compute_pipeline_state(encoder, pipeline_state);
+    debug(user_context) << "Set compute pipeline state on the encoder\n";
 
     size_t total_args_size = 0;
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
@@ -706,8 +803,8 @@ WEAK int halide_metal_run(void *user_context,
             args_buffer = new_buffer(metal_context.device, total_args_size);
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
-                release_ns_object(pipeline_state);
-                release_ns_object(function);
+                //release_ns_object(pipeline_state);
+                //release_ns_object(function);
                 return -1;
             }
             args_ptr = (char *)buffer_contents(args_buffer);
@@ -760,8 +857,8 @@ WEAK int halide_metal_run(void *user_context,
 
     commit_command_buffer(command_buffer);
 
-    release_ns_object(pipeline_state);
-    release_ns_object(function);
+    //release_ns_object(pipeline_state);
+    //release_ns_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
