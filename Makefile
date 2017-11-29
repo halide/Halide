@@ -1157,6 +1157,11 @@ $(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g matlab $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-matlab
 
+# Ensure we have a build with metal enabled.
+$(FILTERS_DIR)/acquire_release_metal.a: $(BIN_DIR)/acquire_release.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g acquire_release -f acquire_release_metal $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-metal
+
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
@@ -1267,16 +1272,10 @@ $(BIN_DIR)/$(TARGET)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
 
-ifneq ($(TEST_METAL), )
-# acquire_release_metal explicitly Objective C runtime functions, so link them here.
-$(BIN_DIR)/$(TARGET)/generator_aot_acquire_release_metal: $(ROOT_DIR)/test/generator/acquire_release_metal_aottest.cpp $(FILTERS_DIR)/acquire_release.a $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+# Note that METAL_LD_FLAGS are included in GEN_AOT_LD_FLAGS when TEST_METAL is defined
+$(BIN_DIR)/$(TARGET)/generator_aot_acquire_release_metal: $(ROOT_DIR)/test/generator/acquire_release_metal_aottest.cpp $(FILTERS_DIR)/acquire_release_metal.a $(FILTERS_DIR)/acquire_release_metal.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -lobjc -o $@
-else
-$(BIN_DIR)/$(TARGET)/generator_aot_acquire_release_metal: $(ROOT_DIR)/test/generator/acquire_release_metal_aottest.cpp $(FILTERS_DIR)/acquire_release.a $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -o $@
-endif
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.cpp $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
