@@ -21,6 +21,7 @@ namespace Internal {
  */
 class IRVisitor {
 public:
+    EXPORT IRVisitor();
     EXPORT virtual ~IRVisitor();
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
