@@ -10,7 +10,7 @@
 #include <string.h>
 #include <objc/message.h>
 
-#include "acquire_release.h"
+#include "acquire_release_metal.h"
 
 extern "C" {
 
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     Buffer<float> output(W, H);
 
     for (int i=0; i<5; i++)
-        acquire_release(input, output);
+        acquire_release_metal(input, output);
 
     // Even though copy_to_host() will call release, we call it manually here to show
     // how a client would normally issue a commit at the end of a frame
