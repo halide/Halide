@@ -429,6 +429,7 @@ void StubEmitter::emit() {
         std::string ctype;
         std::string getter;
     };
+    bool all_outputs_are_func = true;
     std::vector<OutputInfo> out_info;
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
@@ -441,6 +442,9 @@ void StubEmitter::emit() {
             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
             getter + "(\"" + output->name() + "\")"
         });
+        if (c_type != "Func") {
+            all_outputs_are_func = false;
+        }
     }
 
     std::ostringstream guard;
@@ -491,6 +495,159 @@ void StubEmitter::emit() {
 
     emit_inputs_struct();
     emit_generator_params_struct();
+
+    stream << indent() << "struct Outputs final {\n";
+    indent_level++;
+    stream << indent() << "// Outputs\n";
+    for (const auto &out : out_info) {
+        stream << indent() << out.ctype << " " << out.name << ";\n";
+    }
+
+    if (!schedule_params.empty()) {
+        stream << "\n";
+        stream << indent() << "// ScheduleParams\n";
+        for (auto *p : schedule_params) {
+            std::string c_type = p->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(p->scalar_type());
+            stream << indent() << "ScheduleParam<" <<c_type << "> " << p->name() << ";\n";
+        }
+    }
+
+    stream << "\n";
+    stream << indent() << "// The Target used\n";
+    stream << indent() << "Target target;\n";
+
+    if (out_info.size() == 1) {
+        stream << "\n";
+        if (all_outputs_are_func) {
+            // If there is exactly one output, add overloads
+            // for operator Func and operator().
+            std::string name = out_info.at(0).name;
+
+            stream << indent() << "operator Halide::Func() const {\n";
+            indent_level++;
+            stream << indent() << "return " << name << ";\n";
+            indent_level--;
+            stream << indent() << "}\n";
+
+            stream << "\n";
+            stream << indent() << "template <typename... Args>\n";
+            stream << indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
+            indent_level++;
+            stream << indent() << "return " << name << "(std::forward<Args>(args)...);\n";
+            indent_level--;
+            stream << indent() << "}\n";
+
+            stream << "\n";
+            stream << indent() << "template <typename ExprOrVar>\n";
+            stream << indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
+            indent_level++;
+            stream << indent() << "return " << name << "()(args);\n";
+            indent_level--;
+            stream << indent() << "}\n";
+        } else {
+            stream << indent() << "// operator Func() and operator()() overloads omitted because the sole Output is not Func.\n";
+        }
+    }
+
+    stream << "\n";
+    if (all_outputs_are_func) {
+        stream << indent() << "Halide::Pipeline get_pipeline() const {\n";
+        indent_level++;
+        stream << indent() << "return Halide::Pipeline(std::vector<Halide::Func>{\n";
+        indent_level++;
+        int commas = (int)out_info.size() - 1;
+        for (const auto &out : out_info) {
+            stream << indent() << out.name << (commas-- ? "," : "") << "\n";
+        }
+        indent_level--;
+        stream << indent() << "});\n";
+        indent_level--;
+        stream << indent() << "}\n";
+
+        stream << "\n";
+        stream << indent() << "Halide::Realization realize(std::vector<int32_t> sizes) {\n";
+        indent_level++;
+        stream << indent() << "return get_pipeline().realize(sizes, target);\n";
+        indent_level--;
+        stream << indent() << "}\n";
+
+        stream << "\n";
+        stream << indent() << "template <typename... Args, typename std::enable_if<Halide::Internal::NoRealizations<Args...>::value>::type * = nullptr>\n";
+        stream << indent() << "Halide::Realization realize(Args&&... args) {\n";
+        indent_level++;
+        stream << indent() << "return get_pipeline().realize(std::forward<Args>(args)..., target);\n";
+        indent_level--;
+        stream << indent() << "}\n";
+
+        stream << "\n";
+        stream << indent() << "void realize(Halide::Realization r) {\n";
+        indent_level++;
+        stream << indent() << "get_pipeline().realize(r, target);\n";
+        indent_level--;
+        stream << indent() << "}\n";
+    } else {
+        stream << indent() << "// get_pipeline() and realize() overloads omitted because some Outputs are not Func.\n";
+    }
+
+    indent_level--;
+    stream << indent() << "};\n";
+    stream << "\n";
+
+    stream << indent() << "NO_INLINE static Outputs generate(\n";
+    indent_level++;
+    stream << indent() << "const GeneratorContext& context,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    stream << indent() << class_name << " self(context, inputs, generator_params);\n";
+    stream << indent() << "self.schedule();\n";
+    stream << indent() << "return {\n";
+    indent_level++;
+    for (const auto &out : out_info) {
+        stream << indent() << "self." << out.name << ",\n";
+    }
+    for (auto *p : schedule_params) {
+        stream << indent() << "self." << p->name() << ",\n";
+    }
+    stream << indent() << "self.get_target()\n";
+    indent_level--;
+    stream << indent() << "};\n";
+    indent_level--;
+    stream << indent() << "}\n";
+    stream << "\n";
+
+    stream << indent() << "// overload to allow GeneratorContext-pointer\n";
+    stream << indent() << "inline static Outputs generate(\n";
+    indent_level++;
+    stream << indent() << "const GeneratorContext* context,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    stream << indent() << "return generate(*context, inputs, generator_params);\n";
+    indent_level--;
+    stream << indent() << "}\n";
+    stream << "\n";
+
+    stream << indent() << "// overload to allow Target instead of GeneratorContext.\n";
+    stream << indent() << "inline static Outputs generate(\n";
+    indent_level++;
+    stream << indent() << "const Target& target,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    stream << indent() << "return generate(Halide::GeneratorContext(target), inputs, generator_params);\n";
+    indent_level--;
+    stream << indent() << "}\n";
+    stream << "\n";
 
     if (!schedule_params.empty()) {
         stream << indent() << "NO_INLINE " << class_name << "() :\n";
