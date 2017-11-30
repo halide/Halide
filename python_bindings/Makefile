@@ -14,7 +14,7 @@ endif
 ifeq ($(UNAME), Darwin)
 # The /opt includes are in case this is a macports install of python and boost python
 # Disable some warnings that are pervasive in Boost
-CCFLAGS=$(shell python-config --cflags) -I $(HALIDE_DIR)/include -I /opt/local/include -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
+CCFLAGS=$(shell python-config --cflags) -I $(HALIDE_DIR)/include -I /opt/local/include -I $(ROOT_DIR) -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
 LDFLAGS=$(shell python-config --ldflags) -L /opt/local/lib -lboost_python3-mt -lz
 endif
 
