@@ -14,7 +14,6 @@ class OutputImageParam;
 
 namespace Internal {
 
-class Constrainable;
 struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
@@ -68,7 +67,7 @@ public:
     /** Return true iff the name was explicitly specified */
     EXPORT bool is_explicit_name() const;
 
-    /** Return true iff this Parameter is expected to be replaced with a 
+    /** Return true iff this Parameter is expected to be replaced with a
      * constant at the start of lowering, and thus should not be used to
      * infer arguments */
     EXPORT bool is_bound_before_lowering() const;
@@ -79,17 +78,17 @@ public:
     /** If the parameter is a scalar parameter, get its currently
      * bound value. Only relevant when jitting */
     template<typename T>
-    NO_INLINE T get_scalar() const {
-        // Allow get_scalar<uint64_t>() for all Handle types
+    NO_INLINE T scalar() const {
+        // Allow scalar<uint64_t>() for all Handle types
         user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't get Param<" << type()
             << "> as scalar of type " << type_of<T>() << "\n";
-        return *((const T *)(get_scalar_address()));
+        return *((const T *)(scalar_address()));
     }
 
-    /** This returns the current value of get_scalar<type()>()
+    /** This returns the current value of scalar<type()>()
      * as an Expr. */
-    EXPORT Expr get_scalar_expr() const;
+    EXPORT Expr scalar_expr() const;
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
@@ -99,12 +98,12 @@ public:
         user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't set Param<" << type()
             << "> to scalar of type " << type_of<T>() << "\n";
-        *((T *)(get_scalar_address())) = val;
+        *((T *)(scalar_address())) = val;
     }
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
-    EXPORT Buffer<> get_buffer() const;
+    EXPORT Buffer<> buffer() const;
 
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
@@ -114,7 +113,7 @@ public:
      * parameter. For a given parameter, this address will never
      * change. Only relevant when jitting. */
 
-    EXPORT void *get_scalar_address() const;
+    EXPORT void *scalar_address() const;
 
     /** Tests if this handle is the same as another handle */
     EXPORT bool same_as(const Parameter &other) const;
@@ -122,16 +121,20 @@ public:
     /** Tests if this handle is non-nullptr */
     EXPORT bool defined() const;
 
-    /** Get and set constraints for the min, extent, and stride (see
-     * ImageParam::set_extent) */
+    /** Get and set constraints for the min, extent, stride, and estimates on
+     * the min/extent. */
     //@{
     EXPORT void set_min_constraint(int dim, Expr e);
     EXPORT void set_extent_constraint(int dim, Expr e);
     EXPORT void set_stride_constraint(int dim, Expr e);
+    EXPORT void set_min_constraint_estimate(int dim, Expr min);
+    EXPORT void set_extent_constraint_estimate(int dim, Expr extent);
     EXPORT void set_host_alignment(int bytes);
     EXPORT Expr min_constraint(int dim) const;
     EXPORT Expr extent_constraint(int dim) const;
     EXPORT Expr stride_constraint(int dim) const;
+    EXPORT Expr min_constraint_estimate(int dim) const;
+    EXPORT Expr extent_constraint_estimate(int dim) const;
     EXPORT int host_alignment() const;
     //@}
 
@@ -139,90 +142,13 @@ public:
      * directly by Param, so they must be exported. */
     // @{
     EXPORT void set_min_value(Expr e);
-    EXPORT Expr get_min_value() const;
+    EXPORT Expr min_value() const;
     EXPORT void set_max_value(Expr e);
-    EXPORT Expr get_max_value() const;
+    EXPORT Expr max_value() const;
+    EXPORT void set_estimate(Expr e);
+    EXPORT Expr estimate() const;
     // @}
 };
-
-class Dimension {
-public:
-    /** Get an expression representing the minimum coordinates of this image
-     * parameter in the given dimension. */
-    EXPORT Expr min() const;
-
-    /** Get an expression representing the extent of this image
-     * parameter in the given dimension */
-    EXPORT Expr extent() const;
-
-    /** Get an expression representing the maximum coordinates of
-     * this image parameter in the given dimension. */
-    EXPORT Expr max() const;
-
-    /** Get an expression representing the stride of this image in the
-     * given dimension */
-    EXPORT Expr stride() const;
-
-    /** Set the min in a given dimension to equal the given
-     * expression. Setting the mins to zero may simplify some
-     * addressing math. */
-    EXPORT Dimension set_min(Expr e);
-
-    /** Set the extent in a given dimension to equal the given
-     * expression. Images passed in that fail this check will generate
-     * a runtime error. Returns a reference to the ImageParam so that
-     * these calls may be chained.
-     *
-     * This may help the compiler generate better
-     * code. E.g:
-     \code
-     im.dim(0).set_extent(100);
-     \endcode
-     * tells the compiler that dimension zero must be of extent 100,
-     * which may result in simplification of boundary checks. The
-     * value can be an arbitrary expression:
-     \code
-     im.dim(0).set_extent(im.dim(1).extent());
-     \endcode
-     * declares that im is a square image (of unknown size), whereas:
-     \code
-     im.dim(0).set_extent((im.dim(0).extent()/32)*32);
-     \endcode
-     * tells the compiler that the extent is a multiple of 32. */
-    EXPORT Dimension set_extent(Expr e);
-
-    /** Set the stride in a given dimension to equal the given
-     * value. This is particularly helpful to set when
-     * vectorizing. Known strides for the vectorized dimension
-     * generate better code. */
-    EXPORT Dimension set_stride(Expr e);
-
-    /** Set the min and extent in one call. */
-    EXPORT Dimension set_bounds(Expr min, Expr extent);
-
-    /** Get a different dimension of the same buffer */
-    // @{
-    EXPORT Dimension dim(int i);
-    EXPORT const Dimension dim(int i) const;
-    // @}
-
-private:
-    friend class ::Halide::OutputImageParam;
-    friend class Constrainable;
-
-    /** Construct a Dimension representing dimension d of some
-     * Internal::Parameter p. Only friends may construct
-     * these. */
-    EXPORT Dimension(const Internal::Parameter &p, int d);
-
-    /** Only friends may copy these, too. This prevents
-     * users removing constness by making a non-const copy. */
-    Dimension(const Dimension &) = default;
-
-    Parameter param;
-    int d;
-};
-
 
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);

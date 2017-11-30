@@ -6,9 +6,9 @@
 
 #include "halide_benchmark.h"
 
-#include "pipeline_cpu.h"
-#include "pipeline_hvx64.h"
-#include "pipeline_hvx128.h"
+#include "matmul_cpu.h"
+#include "matmul_hvx64.h"
+#include "matmul_hvx128.h"
 
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
@@ -28,13 +28,13 @@ int main(int argc, char **argv) {
 
     int (*pipeline)(halide_buffer_t *, halide_buffer_t*, halide_buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
-        pipeline = pipeline_cpu;
+        pipeline = matmul_cpu;
         printf("Using CPU schedule\n");
     } else if (strcmp(argv[1], "hvx64") == 0) {
-        pipeline = pipeline_hvx64;
+        pipeline = matmul_hvx64;
         printf("Using HVX 64 schedule\n");
     } else if (strcmp(argv[1], "hvx128") == 0) {
-        pipeline = pipeline_hvx128;
+        pipeline = matmul_hvx128;
         printf("Using HVX 128 schedule\n");
     } else {
         printf("Unknown schedule, valid schedules are cpu, hvx64, or hvx128\n");
@@ -84,6 +84,10 @@ int main(int argc, char **argv) {
     // to default to save power.
     halide_hexagon_power_hvx_off(nullptr);
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
+
+    // Copy the output back to the host. If the buffer is zero-copy (as
+    // it should be on a real device), this will be a no-op.
+    mat_ab.copy_to_host();
 
     // Validate that the algorithm did what we expect.
     mat_ab.for_each_element([&](int x, int y) {

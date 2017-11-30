@@ -1,5 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
 #include "IRVisitor.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {

@@ -4,18 +4,17 @@ namespace {
 
 class VariableNumThreads : public Halide::Generator<VariableNumThreads> {
 public:
-    Func build() {
+    Output<Buffer<float>> output{"output", 2};
+
+    void generate() {
         // A job with lots of nested parallelism
-        Func f;
         Var x, y;
 
-        f(x, y) = sqrt(sqrt(x*y));
-        f.parallel(x).parallel(y);
-
-        return f;
+        output(x, y) = sqrt(sqrt(x*y));
+        output.parallel(x).parallel(y);
     }
 };
 
-Halide::RegisterGenerator<VariableNumThreads> register_my_gen{"variable_num_threads"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(VariableNumThreads, variable_num_threads)

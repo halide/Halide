@@ -124,6 +124,25 @@ string simt_intrinsic(const string &name) {
 }
 }
 
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name));
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    ostringstream rhs;
+    rhs << op->name << "(" << with_commas(args) << ")";
+    return rhs.str();
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Max *op) {
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Min *op) {
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {

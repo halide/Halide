@@ -1,10 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
- 
+
 #include "test/common/halide_test_dirs.h"
 
 using namespace Halide;
-  
+
 void testCompileToOutput(Func j) {
     std::string fn_object = Internal::get_test_tmp_dir() + "compile_to_native.o";
     printf("fn_object is %s\n",fn_object.c_str());

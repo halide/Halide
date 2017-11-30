@@ -90,6 +90,7 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.c_source_name.empty()) out.c_source_name = add_suffix(in.c_source_name, suffix);
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
+    if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
     return out;
 }
 
@@ -108,12 +109,13 @@ uint64_t target_feature_mask(const Target &target) {
 
 struct ModuleContents {
     mutable RefCount ref_count;
-    std::string name;
+    std::string name, auto_schedule;
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
     std::vector<ExternalCode> external_code;
+    std::map<std::string, std::string> metadata_name_map;
 };
 
 template<>
@@ -154,12 +156,21 @@ Module::Module(const std::string &name, const Target &target) :
     contents->target = target;
 }
 
+void Module::set_auto_schedule(const std::string &auto_schedule) {
+    internal_assert(contents->auto_schedule.empty());
+    contents->auto_schedule = auto_schedule;
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
 
 const std::string &Module::name() const {
     return contents->name;
+}
+
+const std::string &Module::auto_schedule() const {
+    return contents->auto_schedule;
 }
 
 const std::vector<Buffer<>> &Module::buffers() const {
@@ -203,7 +214,7 @@ void Module::append(const Internal::LoweredFunc &function) {
 void Module::append(const Module &module) {
     contents->submodules.push_back(module);
 }
- 
+
 void Module::append(const ExternalCode &external_code) {
     contents->external_code.push_back(external_code);
 }
@@ -241,7 +252,7 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
     if (target().arch == Target::Hexagon) {
         return compile_module_to_hexagon_shared_object(*this);
     }
-    
+
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
@@ -303,7 +314,35 @@ Module Module::resolve_submodules() const {
     return lowered_module;
 }
 
-void Module::compile(const Outputs &output_files) const {
+void Module::remap_metadata_name(const std::string &from, const std::string &to) const {
+    internal_assert(contents->metadata_name_map.find(from) == contents->metadata_name_map.end());
+    internal_assert(contents->metadata_name_map.find(to) == contents->metadata_name_map.end());
+    contents->metadata_name_map[from] = to;
+}
+
+std::map<std::string, std::string> Module::get_metadata_name_map() const {
+    return contents->metadata_name_map;
+}
+
+void Module::compile(const Outputs &output_files_arg) const {
+    Outputs output_files = output_files_arg;
+
+    // output stmt and html prior to resolving submodules. We need to
+    // clear the output after writing it, otherwise the output will
+    // be overwritten by recursive calls after submodules are resolved.
+    if (!output_files.stmt_name.empty()) {
+        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
+        std::ofstream file(output_files.stmt_name);
+        file << *this;
+        output_files.stmt_name.clear();
+    }
+    if (!output_files.stmt_html_name.empty()) {
+        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
+        Internal::print_to_html(output_files.stmt_html_name, *this);
+        output_files.stmt_html_name.clear();
+    }
+
+
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
@@ -376,14 +415,14 @@ void Module::compile(const Outputs &output_files) const {
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
-    if (!output_files.stmt_name.empty()) {
-        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
-        std::ofstream file(output_files.stmt_name);
-        file << *this;
-    }
-    if (!output_files.stmt_html_name.empty()) {
-        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
-        Internal::print_to_html(output_files.stmt_html_name, *this);
+    if (!output_files.schedule_name.empty()) {
+        debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
+        std::ofstream file(output_files.schedule_name);
+        if (contents->auto_schedule.empty()) {
+           file << "// auto_schedule_outputs() was not called for this Generator.\n";
+        } else {
+           file << contents->auto_schedule;
+        }
     }
 }
 
@@ -582,6 +621,8 @@ void compile_multitarget(const std::string &fn_name,
     if (!output_files.c_header_name.empty()) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::ExternalPlusMetadata));
+        // Add a wrapper to accept old buffer_ts
+        add_legacy_wrapper(header_module, header_module.functions().back());
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
         futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";

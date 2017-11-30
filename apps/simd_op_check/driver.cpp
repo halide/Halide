@@ -56,7 +56,7 @@ halide_buffer_t make_buffer(int w, int h) {
     buf.type = halide_type_of<T>();
     buf.dim[0].stride = 1;
     buf.dim[1].stride = w;
-    buf.dim[0].min = 0;
+    buf.dim[0].min = -128;
     buf.dim[1].min = 0;
 
     for (int i = 0; i < w*h; i++) {

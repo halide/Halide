@@ -14,7 +14,7 @@
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
-//    make tutorial_lesson_19_staging_func_or_image_param
+//    make tutorial_lesson_19_wrapper_funcs
 // in a shell at the top of the halide source tree.
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.

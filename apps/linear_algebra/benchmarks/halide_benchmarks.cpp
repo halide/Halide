@@ -19,7 +19,6 @@
 #include "clock.h"
 #include "macros.h"
 
-
 template<class T>
 struct BenchmarksBase {
     typedef T Scalar;

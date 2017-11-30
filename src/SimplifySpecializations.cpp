@@ -29,11 +29,11 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
-class SimplifyUsingFact : public IRMutator {
+class SimplifyUsingFact : public IRMutator2 {
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) override {
         if (e.type().is_bool()) {
             if (equal(fact, e) ||
                 can_prove(!fact || e)) {
@@ -47,7 +47,7 @@ public:
                 return const_false();
             }
         }
-        return IRMutator::mutate(e);
+        return IRMutator2::mutate(e);
     }
 
     Expr fact;
@@ -109,13 +109,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         def.values() = s_def.values();
         def.args() = s_def.args();
 
-        // Only some parts of the schedule need to be copied over. The rests
-        // are only mutable from the default definition.
-        def.schedule().splits() = s_def.schedule().splits();
-        def.schedule().dims() = s_def.schedule().dims();
-        def.schedule().prefetches() = s_def.schedule().prefetches();
-        def.schedule().touched() = s_def.schedule().touched();
-        def.schedule().allow_race_conditions() = s_def.schedule().allow_race_conditions();
+        // Copy over the schedule.
+        def.schedule() = s_def.schedule().get_copy();
 
         // Append our sub-specializations to the Definition's list
         specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());
@@ -126,6 +121,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         Definition &s_def = specializations[i-1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
+
+        internal_assert(s_def.defined());
 
         vector<Definition> s_result = propagate_specialization_in_definition(s_def, name);
 
@@ -161,7 +158,9 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
-        propagate_specialization_in_definition(func.definition(), func.name());
+        if (func.definition().defined()) {
+            propagate_specialization_in_definition(func.definition(), func.name());
+        }
     }
 }
 

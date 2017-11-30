@@ -1,51 +1,28 @@
-function(halide_add_aot_cpp_dependency TARGET AOT_LIBRARY_TARGET)
-    halide_generator_genfiles_dir(${AOT_LIBRARY_TARGET} GENFILES_DIR)
-    add_dependencies("${TARGET}" "${AOT_LIBRARY_TARGET}.exec_generator")
-
-    add_library(${AOT_LIBRARY_TARGET}.cpplib STATIC "${GENFILES_DIR}/${AOT_LIBRARY_TARGET}.cpp")
-    target_compile_options(${AOT_LIBRARY_TARGET}.cpplib PRIVATE "-std=c++11")
-    target_link_libraries("${TARGET}" PRIVATE ${AOT_LIBRARY_TARGET}.cpplib)
-    target_include_directories("${TARGET}" PRIVATE "${GENFILES_DIR}")
-endfunction(halide_add_aot_cpp_dependency)
-
 # Generator(s)
-halide_add_generator(pipeline.generator
-                     SRCS pipeline_generator.cpp)
-halide_add_aot_library(pipeline_c
-                       GENERATOR_TARGET pipeline.generator
-                       GENERATED_FUNCTION pipeline_c
-                       GENERATOR_OUTPUTS cpp h
-                       GENERATOR_ARGS target=host)
+halide_generator(pipeline.generator
+                 SRCS pipeline_generator.cpp)
+halide_library_from_generator(pipeline_c
+                              GENERATOR pipeline.generator)
+halide_library_from_generator(pipeline_native
+                              GENERATOR pipeline.generator)
 
-halide_add_aot_library(pipeline_native
-                       GENERATOR_TARGET pipeline.generator
-                       GENERATED_FUNCTION pipeline_native
-                       GENERATOR_OUTPUTS static_library h
-                       GENERATOR_ARGS target=host)
-
-halide_add_generator(pipeline_cpp.generator
-                     SRCS pipeline_cpp_generator.cpp)
-halide_add_aot_library(pipeline_cpp_cpp
-                       GENERATOR_TARGET pipeline_cpp.generator
-                       GENERATED_FUNCTION pipeline_cpp_cpp
-                       GENERATOR_OUTPUTS cpp h
-                       GENERATOR_ARGS target=host-c_plus_plus_name_mangling)
-halide_add_aot_library(pipeline_cpp_native
-                       GENERATOR_TARGET pipeline_cpp.generator
-                       GENERATED_FUNCTION pipeline_cpp_native
-                       GENERATOR_OUTPUTS static_library h
-                       GENERATOR_ARGS target=host-c_plus_plus_name_mangling)
+halide_generator(pipeline_cpp.generator
+                 SRCS pipeline_cpp_generator.cpp)
+halide_library_from_generator(pipeline_cpp_cpp
+                              GENERATOR pipeline_cpp.generator
+                              HALIDE_TARGET_FEATURES c_plus_plus_name_mangling)
+halide_library_from_generator(pipeline_cpp_native
+                              GENERATOR pipeline_cpp.generator
+                              HALIDE_TARGET_FEATURES c_plus_plus_name_mangling)
 
 # Final executable(s)
 add_executable(run_c_backend_and_native run.cpp)
-target_compile_options(run_c_backend_and_native PRIVATE "-std=c++11")
-halide_add_aot_cpp_dependency(run_c_backend_and_native pipeline_c)
-halide_add_aot_library_dependency(run_c_backend_and_native pipeline_native)
+target_link_libraries(run_c_backend_and_native 
+                      PUBLIC pipeline_native pipeline_c_cc)
 
 add_executable(run_c_backend_and_native_cpp run_cpp.cpp)
-target_compile_options(run_c_backend_and_native_cpp PRIVATE "-std=c++11")
-halide_add_aot_cpp_dependency(run_c_backend_and_native_cpp pipeline_cpp_cpp)
-halide_add_aot_library_dependency(run_c_backend_and_native_cpp pipeline_cpp_native)
+target_link_libraries(run_c_backend_and_native_cpp 
+                      PUBLIC pipeline_cpp_native pipeline_cpp_cpp_cc)
 
 
 

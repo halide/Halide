@@ -227,8 +227,8 @@ int main(int argc, char **argv) {
                         real * other.imag + imag * other.real};
             }
 
-            // Complex magnitude
-            Expr magnitude() const {
+            // Complex magnitude, squared for efficiency
+            Expr magnitude_squared() const {
                 return real * real + imag * imag;
             }
 
@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
         // would return the index of the first time the expression is
         // true.
 
-        Expr escape_condition = Complex(mandelbrot(x, y, r)).magnitude() < 16.0f;
+        Expr escape_condition = Complex(mandelbrot(x, y, r)).magnitude_squared() < 16.0f;
         Tuple first_escape = argmin(escape_condition);
 
         // We only want the index, not the value, but argmin returns

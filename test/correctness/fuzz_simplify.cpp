@@ -4,8 +4,10 @@
 #include <random>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
+namespace {
 
-using namespace std;
+using std::map;
+using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -68,7 +70,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
 Expr random_expr(Type T, int depth, bool overflow_undef = false);
 
 Expr random_condition(Type T, int depth, bool maybe_scalar) {
-    typedef Expr (*make_bin_op_fn)(const Expr &, const Expr &);
+    typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -90,7 +92,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
 }
 
 Expr random_expr(Type T, int depth, bool overflow_undef) {
-    typedef Expr (*make_bin_op_fn)(const Expr &, const Expr &);
+    typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         Add::make,
         Sub::make,
@@ -257,6 +259,8 @@ Expr b(Variable::make(Int(0), fuzz_var(1)));
 Expr c(Variable::make(Int(0), fuzz_var(2)));
 Expr d(Variable::make(Int(0), fuzz_var(3)));
 Expr e(Variable::make(Int(0), fuzz_var(4)));
+
+}  // namespace
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
