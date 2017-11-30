@@ -26,3 +26,5 @@ run: $(BIN)/process
 
 clean:
 	rm -rf $(BIN)
+
+test: run
