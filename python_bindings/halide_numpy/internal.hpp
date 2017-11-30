@@ -12,6 +12,8 @@
  *  This should only be included by source files in the boost.numpy library itself.
  */
 
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
 #include <boost/python.hpp>
 #ifdef HALIDE_NUMPY_INTERNAL
 #define NO_IMPORT_ARRAY
