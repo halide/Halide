@@ -65,7 +65,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
                                     const vector<Expr> &site,
                                     const vector<Expr> &values,
                                     const vector<Expr> &predicates,
-                                    const Schedule &s,
+                                    const FuncSchedule &func_s,
+                                    const StageSchedule &stage_s,
                                     bool is_update) {
 
 
@@ -82,7 +83,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     map<string, Expr> dim_extent_alignment;
 
     // First hunt through the bounds for them.
-    for (const Bound &i : s.bounds()) {
+    for (const Bound &i : func_s.bounds()) {
         if (i.extent.defined()) {
             dim_extent_alignment[i.var] = i.extent;
         }
@@ -91,11 +92,11 @@ Stmt build_provide_loop_nest_helper(string func_name,
         }
     }
     // Then use any reduction domain.
-    for (const ReductionVariable &i : s.rvars()) {
+    for (const ReductionVariable &i : stage_s.rvars()) {
         dim_extent_alignment[i.var] = i.extent;
     }
 
-    vector<Split> splits = s.splits();
+    vector<Split> splits = stage_s.splits();
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
@@ -117,8 +118,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
     vector<Container> nest;
 
     // Put the desired loop nest into the containers vector.
-    for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
-        const Dim &dim = s.dims()[i];
+    for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
+        const Dim &dim = stage_s.dims()[i];
         Container c = {Container::For, i, prefix + dim.var, Expr()};
         nest.push_back(c);
     }
@@ -153,7 +154,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
     // Resort the containers vector so that lets are as far outwards
     // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
+    for (int i = (int)stage_s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::Let);
@@ -207,7 +208,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
             stmt = IfThenElse::make(nest[i].value, stmt, Stmt());
         } else {
             internal_assert(nest[i].type == Container::For);
-            const Dim &dim = s.dims()[nest[i].dim_idx];
+            const Dim &dim = stage_s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
             stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
@@ -248,7 +249,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
 
     // Define the loop mins and extents for the reduction domain (if there is any)
     // in terms of the mins and maxs produced by bounds inference
-    for (const ReductionVariable &rv : s.rvars()) {
+    for (const ReductionVariable &rv : stage_s.rvars()) {
         string p = prefix + rv.var;
         Expr rmin = Variable::make(Int(32), p + ".min");
         Expr rmax = Variable::make(Int(32), p + ".max");
@@ -264,6 +265,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
 Stmt build_provide_loop_nest(string func_name,
                              string prefix,
                              const vector<string> &dims,
+                             const FuncSchedule &f_sched,
                              const Definition &def,
                              bool is_update) {
 
@@ -289,7 +291,7 @@ Stmt build_provide_loop_nest(string func_name,
 
     // Default schedule/values if there is no specialization
     Stmt stmt = build_provide_loop_nest_helper(
-        func_name, prefix, dims, site, values, def.split_predicate(), def.schedule(), is_update);
+        func_name, prefix, dims, site, values, def.split_predicate(), f_sched, def.schedule(), is_update);
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
@@ -299,7 +301,7 @@ Stmt build_provide_loop_nest(string func_name,
         const Definition &s_def = s.definition;
         Stmt then_case;
         if (s.failure_message.empty()) {
-            then_case = build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
+            then_case = build_provide_loop_nest(func_name, prefix, dims, f_sched, s_def, is_update);
         } else {
             internal_assert(equal(c, const_true()));
             // specialize_fail() should only be possible on the final specialization
@@ -346,16 +348,66 @@ Stmt build_produce(Function f, const Target &target) {
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
-                for (int k = 0; k < input.outputs(); k++) {
-                    string buf_name = input.name();
-                    if (input.outputs() > 1) {
-                        buf_name += "." + std::to_string(k);
+                if (input.schedule().store_level() == input.schedule().compute_level()) {
+                    for (int k = 0; k < input.outputs(); k++) {
+                        string buf_name = input.name();
+                        if (input.outputs() > 1) {
+                            buf_name += "." + std::to_string(k);
+                        }
+                        buf_name += ".buffer";
+                        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+                        extern_call_args.push_back(buffer);
+                        buffers_to_annotate.push_back({buffer, input.dimensions()});
+                        buffers_contents_to_annotate.push_back(buffer);
                     }
-                    buf_name += ".buffer";
-                    Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
-                    extern_call_args.push_back(buffer);
-                    buffers_to_annotate.push_back({buffer, input.dimensions()});
-                    buffers_contents_to_annotate.push_back(buffer);
+                } else {
+                    // Make a local crop of just the region required,
+                    // in case the input was folded. We have no
+                    // protocol for passing folded buffers to extern
+                    // stages, so if the fold does indeed occur, we'll
+                    // assert later that the crop doesn't cross over a
+                    // fold.
+                    string stage_name = input.name() + ".s" + std::to_string(input.updates().size()) + ".";
+                    const vector<string> input_args = input.args();
+                    for (int k = 0; k < input.outputs(); k++) {
+                        string src_buf_name = input.name();
+                        if (input.outputs() > 1) {
+                            src_buf_name += "." + std::to_string(k);
+                        }
+                        src_buf_name += ".buffer";
+                        Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
+
+                        Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
+                        Expr cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                                          {alloca_size}, Call::Intrinsic);
+
+                        vector<Expr> args(5);
+                        args[0] = cropped_input;
+                        args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                             {(int)sizeof(halide_dimension_t) * input.dimensions()}, Call::Intrinsic);
+                        args[2] = src_buffer;
+
+                        vector<Expr> mins, extents;
+                        internal_assert(input.dimensions() == (int)input.args().size());
+                        for (const string arg : input.args()) {
+                            string var = stage_name + arg;
+                            Expr min = Variable::make(Int(32), var + ".min");
+                            Expr max = Variable::make(Int(32), var + ".max");
+                            mins.push_back(min);
+                            extents.push_back(max - min + 1);
+                        }
+                        args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
+                        args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
+
+                        cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
+                                                   args, Call::Extern);
+
+                        string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
+                        extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+                        buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
+                        buffers_contents_to_annotate.push_back(cropped_input);
+                        lets.push_back({ buf_name, cropped_input });
+                    }
                 }
             } else if (arg.is_buffer()) {
                 Buffer<> b = arg.buffer;
@@ -384,6 +436,7 @@ Stmt build_produce(Function f, const Target &target) {
         // ones already injected by allocation bounds inference. If
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
+        vector<pair<Expr, Expr>> cropped_buffers;
         if (f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
@@ -400,10 +453,6 @@ Stmt build_produce(Function f, const Target &target) {
         } else {
             // Store level doesn't match compute level. Make an output
             // buffer just for this subregion.
-            string stride_name = f.name();
-            if (f.outputs() > 1) {
-                stride_name += ".0";
-            }
             string stage_name = f.name() + ".s0.";
             const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
@@ -443,6 +492,7 @@ Stmt build_produce(Function f, const Target &target) {
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
                 buffers_to_annotate.push_back({extern_call_args.back(), f.dimensions()});
+                cropped_buffers.push_back({extern_call_args.back(), src_buffer});
                 lets.push_back({ buf_name, output_buffer_t });
             }
         }
@@ -494,6 +544,40 @@ Stmt build_produce(Function f, const Target &target) {
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
         check = LetStmt::make(result_name, e, check);
 
+        if (!cropped_buffers.empty()) {
+            // We need to clean up the temporary crops we made for the
+            // outputs in case any of them have device allocations.
+            vector<Expr> cleanup_args;
+
+            // Make a struct with the buffers and their uncropped parents
+            for (auto p : cropped_buffers) {
+                // The cropped buffer_t
+                cleanup_args.push_back(p.first);
+                // Its parent
+                cleanup_args.push_back(p.second);
+            }
+
+            if (cropped_buffers.size() > 1) {
+                // NULL-terminate it
+                cleanup_args.push_back(make_zero(type_of<struct halide_buffer_t *>()));
+            }
+
+            Expr cleanup_struct = Call::make(Handle(),
+                                             Call::make_struct,
+                                             cleanup_args,
+                                             Call::Intrinsic);
+
+            // We have to anticipate failures in the extern stage, so
+            // call this by registering a destructor before the extern
+            // call and triggering it afterwards using an Allocate node.
+            string destructor_name = unique_name('d');
+            const char *fn = (cropped_buffers.size() == 1 ?
+                              "_halide_buffer_retire_crop_after_extern_stage" :
+                              "_halide_buffer_retire_crops_after_extern_stage");
+            check = Allocate::make(destructor_name, Handle(), {},
+                                   const_true(), check, cleanup_struct, fn);
+        }
+
         for (size_t i = 0; i < lets.size(); i++) {
             check = LetStmt::make(lets[i].first, lets[i].second, check);
         }
@@ -501,12 +585,17 @@ Stmt build_produce(Function f, const Target &target) {
         if (annotate.defined()) {
             check = Block::make(annotate, check);
         }
+
+        // Add the dummy outermost loop.
+        string outermost = f.name() + ".s0." + Var::outermost().name();
+        check = For::make(outermost, 0, 1, ForType::Serial, DeviceAPI::None, check);
+
         return check;
     } else {
 
         string prefix = f.name() + ".s0.";
         vector<string> dims = f.args();
-        return build_provide_loop_nest(f.name(), prefix, dims, f.definition(), false);
+        return build_provide_loop_nest(f.name(), prefix, dims, f.schedule(), f.definition(), false);
     }
 }
 
@@ -521,7 +610,7 @@ vector<Stmt> build_update(Function f) {
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
         vector<string> dims = f.args();
-        Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, def, true);
+        Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, f.schedule(), def, true);
         updates.push_back(loop);
     }
 
@@ -541,7 +630,7 @@ pair<Stmt, Stmt> build_production(Function func, const Target &target) {
 // injects assertions that check that those bounds are sufficiently
 // large to cover the inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {
-    const Schedule &s = func.schedule();
+    const FuncSchedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (size_t i = 0; i < s.bounds().size(); i++) {
             Bound b = s.bounds()[i];
@@ -606,7 +695,7 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
-class InjectRealization : public IRMutator {
+class InjectRealization : public IRMutator2 {
 public:
     const Function &func;
     bool is_output, found_store_level, found_compute_level;
@@ -673,9 +762,9 @@ private:
         }
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old = producing;
             producing = op->name;
@@ -683,16 +772,16 @@ private:
             producing = old;
 
             if (body.same_as(op->body)) {
-                stmt = op;
+                return op;
             } else {
-                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+                return ProducerConsumer::make(op->name, op->is_producer, body);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const For *for_loop) {
+    Stmt visit(const For *for_loop) override {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const LoopLevel &compute_level = func.schedule().compute_level();
         const LoopLevel &store_level = func.schedule().store_level();
@@ -702,21 +791,31 @@ private:
         // Dig through any let statements
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
+            if (!is_pure(l->value)) {
+                // The consumer of the Func we're injecting may be an
+                // extern stage, which shows up in the IR as a let
+                // stmt with a side-effecty RHS. We need to take care
+                // not to blow past it and risk injecting the producer
+                // *after* the consumer. In general it seems unwise to
+                // reorder the computation of a Func past something
+                // side-effecty, so we stop here.
+                break;
+            }
             lets.push_back({ l->name, l->value });
             body = l->body;
         }
 
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
-            func.schedule().compute_level().is_inline() &&
+            func.schedule().compute_level().is_inlined() &&
             for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
-            stmt = build_realize(build_pipeline(for_loop));
+            Stmt stmt = build_realize(build_pipeline(for_loop));
             found_store_level = found_compute_level = true;
-            return;
+            return stmt;
         }
 
         body = mutate(body);
@@ -747,9 +846,9 @@ private:
         }
 
         if (body.same_as(for_loop->body)) {
-            stmt = for_loop;
+            return for_loop;
         } else {
-            stmt = For::make(for_loop->name,
+            return For::make(for_loop->name,
                              for_loop->min,
                              for_loop->extent,
                              for_loop->for_type,
@@ -759,17 +858,18 @@ private:
     }
 
     // If we're an inline update or extern, we may need to inject a realization here
-    virtual void visit(const Provide *op) {
+    Stmt visit(const Provide *op) override {
         if (op->name != func.name() &&
             !func.is_pure() &&
-            func.schedule().compute_level().is_inline() &&
+            func.schedule().compute_level().is_inlined() &&
             function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
-            stmt = build_realize(build_pipeline(op));
+            Stmt stmt = build_realize(build_pipeline(op));
             found_store_level = found_compute_level = true;
+            return stmt;
         } else {
-            stmt = op;
+            return op;
         }
     }
 };
@@ -811,6 +911,9 @@ private:
             internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
+        // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
+        // thus any new ones we synthesize we must explicitly lock.
+        loop_level.lock();
         Site s = {f->is_parallel() ||
                   f->for_type == ForType::Vectorized,
                   loop_level};
@@ -862,7 +965,7 @@ string schedule_to_source(Function f,
                           LoopLevel compute_at) {
     std::ostringstream ss;
     ss << f.name();
-    if (compute_at.is_inline()) {
+    if (compute_at.is_inlined()) {
         ss << ".compute_inline()";
     } else {
         if (!store_at.match(compute_at)) {
@@ -920,7 +1023,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const For *op) {
         if (ends_with(op->name, Var::outermost().name()) ||
-            ends_with(op->name, LoopLevel::root().to_string())) {
+            ends_with(op->name, LoopLevel::root().lock().to_string())) {
             IRVisitor::visit(op);
         } else {
 
@@ -982,7 +1085,8 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
-                if (g.schedule().compute_level().is_inline()) {
+                if (!g.is_wrapper() &&
+                    g.schedule().compute_level().is_inlined()) {
                     user_error
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
@@ -992,7 +1096,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     }
 
     // Emit a warning if only some of the steps have been scheduled.
-    bool any_scheduled = f.schedule().touched();
+    bool any_scheduled = f.has_pure_definition() && f.definition().schedule().touched();
     for (const Definition &r : f.updates()) {
         any_scheduled = any_scheduled || r.schedule().touched();
     }
@@ -1014,7 +1118,9 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // If the func is scheduled on the gpu, check that the relevant
     // api is enabled in the target.
     vector<Definition> definitions;
-    definitions.push_back(f.definition());
+    if (f.has_pure_definition()) {
+        definitions.push_back(f.definition());
+    }
     for (const Definition &def : f.updates()) {
         definitions.push_back(def);
     }
@@ -1026,7 +1132,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     }
 
     for (const Definition &def : definitions) {
-        const Schedule &s = def.schedule();
+        const StageSchedule &s = def.schedule();
         for (const Dim &d : s.dims()) {
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()
@@ -1065,7 +1171,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // pure function. An inlined Halide Func with multiple stages technically
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
-    if (store_at.is_inline() && compute_at.is_inline()) {
+    if (store_at.is_inlined() && compute_at.is_inlined()) {
         if (f.is_pure()) {
             validate_schedule_inlined_function(f);
         }
@@ -1118,26 +1224,26 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     return true;
 }
 
-class RemoveLoopsOverOutermost : public IRMutator {
-    using IRMutator::visit;
+class RemoveLoopsOverOutermost : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
             is_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
-            stmt = mutate(substitute(op->name, op->min, op->body));
+            return mutate(substitute(op->name, op->min, op->body));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (ends_with(op->name, ".__outermost.loop_extent") ||
             ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {
-            stmt = mutate(substitute(op->name, simplify(op->value), op->body));
+            return mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
@@ -1148,7 +1254,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
 
-    string root_var = LoopLevel::root().to_string();
+    string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
@@ -1174,7 +1280,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (f.can_be_inlined() &&
-            f.schedule().compute_level().is_inline()) {
+            f.schedule().compute_level().is_inlined()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {

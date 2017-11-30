@@ -287,7 +287,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
 
     buf->device = the_buffer;
     buf->device_interface = &openglcompute_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
 
     debug(user_context) << "Allocated dev_buffer(i.e. vbo) " << the_buffer << "\n";
 
@@ -323,7 +323,7 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
     global_state.DeleteBuffers(1, &the_buffer);
 
     buf->device = 0;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
 
 #ifdef DEBUG_RUNTIME
@@ -480,7 +480,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 return -1;
             }
         } else {
-            uint64_t arg_value = *(uint64_t *)args[i];
+            uint64_t arg_value = ((halide_buffer_t *)args[i])->device;
 
             GLuint the_buffer = (GLuint)arg_value;
             global_state.BindBufferBase(GL_SHADER_STORAGE_BUFFER, i, the_buffer);
@@ -590,7 +590,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         GLuint shader = global_state.CreateShader(GL_COMPUTE_SHADER);
         if (global_state.CheckAndReportError(user_context, "create shader")) { return -1; }
         const GLchar* sources = { src };
-        const GLint sources_lengths = { src_len };
+        const GLint sources_lengths = { (GLint) src_len };
 
         debug(user_context) << "Compute shader source for " << kernel_name << " :" << src;
         debug(user_context) << "\n";
@@ -672,7 +672,7 @@ WEAK const struct halide_device_interface_t *halide_openglcompute_device_interfa
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGLCompute {
 
-WEAK halide_device_interface_t openglcompute_device_interface = {
+WEAK halide_device_interface_impl_t openglcompute_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_openglcompute_device_malloc,
@@ -683,6 +683,29 @@ WEAK halide_device_interface_t openglcompute_device_interface = {
     halide_openglcompute_copy_to_device,
     halide_openglcompute_device_and_host_malloc,
     halide_openglcompute_device_and_host_free,
+    halide_default_buffer_copy,
+    halide_default_device_crop,
+    halide_default_device_release_crop,
+    halide_default_device_wrap_native,
+    halide_default_device_detach_native,
+};
+
+
+WEAK halide_device_interface_t openglcompute_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_release_crop,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    &openglcompute_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenGLCompute

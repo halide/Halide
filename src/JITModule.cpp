@@ -285,11 +285,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     TargetMachine *tm = engine_builder.selectTarget();
     internal_assert(tm) << error_string << "\n";
-    #if LLVM_VERSION == 37
-    DataLayout target_data_layout(*(tm->getDataLayout()));
-    #else
     DataLayout target_data_layout(tm->createDataLayout());
-    #endif
     if (initial_module_data_layout != target_data_layout) {
         internal_error << "Warning: data layout mismatch between module ("
                        << initial_module_data_layout.getStringRepresentation()
@@ -581,7 +577,7 @@ void *get_library_symbol_handler(void *lib, const char *name) {
 template <typename function_t>
 function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
     auto iter = exports.find(hook_name);
-    internal_assert(iter != exports.end());
+    internal_assert(iter != exports.end()) << "Failed to find function " << hook_name << "\n";
     function_t (*hook_setter)(function_t) =
         reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
     return (*hook_setter)(hook);

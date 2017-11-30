@@ -6,6 +6,9 @@ namespace Internal {
 IRVisitor::~IRVisitor() {
 }
 
+IRVisitor::IRVisitor() {
+}
+
 void IRVisitor::visit(const IntImm *) {
 }
 
@@ -239,22 +242,16 @@ void IRVisitor::visit(const Shuffle *op) {
 }
 
 void IRGraphVisitor::include(const Expr &e) {
-    if (visited.count(e.get())) {
-        return;
-    } else {
+    if (!visited.count(e.get())) {
         visited.insert(e.get());
         e.accept(this);
-        return;
     }
 }
 
 void IRGraphVisitor::include(const Stmt &s) {
-    if (visited.count(s.get())) {
-        return;
-    } else {
+    if (!visited.count(s.get())) {
         visited.insert(s.get());
         s.accept(this);
-        return;
     }
 }
 

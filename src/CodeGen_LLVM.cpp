@@ -535,7 +535,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
+            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
+                names.simple_name, f.args, input.get_metadata_name_map());
 
             if (target.has_feature(Target::Matlab)) {
                 define_matlab_wrapper(module.get(), wrapper, metadata_getter);
@@ -546,7 +547,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     debug(2) << module.get() << "\n";
 
     // Verify the module is ok
-    verifyModule(*module);
+    internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize
@@ -657,8 +658,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         }
     }
 
-    llvm::raw_os_ostream os(std::cerr);
-    internal_assert(!verifyFunction(*function, &os));
+    internal_assert(!verifyFunction(*function, &llvm::errs()));
 
     current_function_args.clear();
 }
@@ -784,6 +784,7 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
+    stack_slot = builder->CreatePointerCast(stack_slot, i8_t->getPointerTo()->getPointerTo());
     Value *should_call = ConstantInt::get(i1_t, 1);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
@@ -902,16 +903,21 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
     // This call should never inline
     result->setIsNoInline();
     builder->CreateRet(result);
-    llvm::raw_os_ostream os(std::cerr);
-    llvm::verifyFunction(*wrapper, &os);
+    internal_assert(!verifyFunction(*wrapper, &llvm::errs()));
     return wrapper;
 }
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args) {
+        const std::string &function_name, const std::vector<LoweredArgument> &args,
+        const std::map<std::string, std::string> &metadata_name_map) {
     Constant *zero = ConstantInt::get(i32_t, 0);
 
     const int num_args = (int) args.size();
+
+    auto map_string = [&metadata_name_map](const std::string &from) -> std::string {
+        auto it = metadata_name_map.find(from);
+        return it == metadata_name_map.end() ? from : it->second;
+    };
 
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
@@ -935,7 +941,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
             def = min = max = Expr();
         }
         Constant *argument_fields[] = {
-            create_string_constant(args[arg].name),
+            create_string_constant(map_string(args[arg].name)),
             ConstantInt::get(i32_t, args[arg].kind),
             ConstantInt::get(i32_t, args[arg].dimensions),
             type,
@@ -958,8 +964,8 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         /* version */ zero,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
-        /* target */ create_string_constant(target.to_string()),
-        /* name */ create_string_constant(function_name)
+        /* target */ create_string_constant(map_string(target.to_string())),
+        /* name */ create_string_constant(map_string(function_name))
     };
 
     GlobalVariable *metadata_storage = new GlobalVariable(
@@ -975,7 +981,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module.get()->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     builder->CreateRet(metadata_storage);
-    llvm::verifyFunction(*metadata_getter);
+    internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
 
     return metadata_getter;
 }
@@ -1001,11 +1007,7 @@ void CodeGen_LLVM::optimize_module() {
     public:
         MyFunctionPassManager(llvm::Module *m) : legacy::FunctionPassManager(m) {}
         virtual void add(Pass *p) override {
-#if LLVM_VERSION >= 40
             debug(2) << "Adding function pass: " << p->getPassName().str() << "\n";
-#else
-            debug(2) << "Adding function pass: " << p->getPassName() << "\n";
-#endif
             legacy::FunctionPassManager::add(p);
         }
     };
@@ -1013,11 +1015,7 @@ void CodeGen_LLVM::optimize_module() {
     class MyModulePassManager : public legacy::PassManager {
     public:
         virtual void add(Pass *p) override {
-#if LLVM_VERSION >= 40
             debug(2) << "Adding module pass: " << p->getPassName().str() << "\n";
-#else
-            debug(2) << "Adding module pass: " << p->getPassName() << "\n";
-#endif
             legacy::PassManager::add(p);
         }
     };
@@ -1038,6 +1036,13 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+#if LLVM_VERSION >= 50
+    if (TM) {
+        TM->adjustPassManager(b);
+    }
+#endif
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
@@ -1798,17 +1803,6 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
 }
 
-// Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
-Expr unbroadcast(Expr e) {
-    if (e.type().is_vector()) {
-        const Broadcast *broadcast = e.as<Broadcast>();
-        internal_assert(broadcast);
-        return broadcast->value;
-    } else {
-        return e;
-    }
-}
-
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     internal_assert(vecs.size() >= 1);
     for (size_t i = 1; i < vecs.size(); i++) {
@@ -2004,9 +1998,14 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // If it is an external buffer, then we cannot assume that the host pointer
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
-    if (is_external && load->param.defined()) {
-        int host_alignment = load->param.host_alignment();
-        alignment = gcd(alignment, host_alignment);
+    if (is_external) {
+        if (load->param.defined()) {
+            int host_alignment = load->param.host_alignment();
+            alignment = gcd(alignment, host_alignment);
+        } else if (get_target().has_feature(Target::JIT) && load->image.defined()) {
+            // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
+            alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & std::numeric_limits<int>::max()));
+        }
     }
 
     // For dense vector loads wider than the native vector
@@ -2076,11 +2075,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 }
 
 void CodeGen_LLVM::visit(const Call *op) {
-    internal_assert(op->call_type == Call::Extern ||
-                    op->call_type == Call::ExternCPlusPlus ||
-                    op->call_type == Call::Intrinsic ||
-                    op->call_type == Call::PureExtern ||
-                    op->call_type == Call::PureIntrinsic)
+    internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
     // Some call nodes are actually injected at various stages as a
@@ -2101,7 +2096,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
 
         Value *buffer = codegen(op->args[2]);
-        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        buffer = builder->CreatePointerCast(buffer, debug_to_file->getFunctionType()->getParamType(3));
         args.push_back(buffer);
 
         value = builder->CreateCall(debug_to_file, args);
@@ -2282,7 +2277,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            builder->CreateCondBr(codegen(cond), true_bb, false_bb);
+            Value *c = codegen(cond);
+            if (c->getType() != i1_t) {
+                c = builder->CreateIsNotNull(c);
+            }
+            builder->CreateCondBr(c, true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
@@ -2299,6 +2298,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             phi->addIncoming(false_value, false_pred);
 
             value = phi;
+        }
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        Expr cond = op->args[0];
+        if (cond.type().is_vector()) {
+            scalarize(op);
+        } else {
+            create_assertion(codegen(cond), op->args[2]);
+            value = codegen(op->args[1]);
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {
@@ -2425,7 +2433,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     call_args.push_back(ConstantInt::get(i32_t, t.bits() == 64 ? 1 : 0));
                     dst = builder->CreateCall(append_double, call_args);
                 } else if (t == type_of<halide_buffer_t *>()) {
-                    call_args.push_back(codegen(op->args[i]));
+                    Value *buf = codegen(op->args[i]);
+                    buf = builder->CreatePointerCast(buf, append_buffer->getFunctionType()->getParamType(2));
+                    call_args.push_back(buf);
                     dst = builder->CreateCall(append_buffer, call_args);
                 } else {
                     internal_assert(t.is_handle());
@@ -2467,8 +2477,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
         internal_assert(fn);
-        Expr arg = op->args[1];
-        internal_assert(arg.type().is_handle());
         llvm::Function *f = module->getFunction(fn->value);
         if (!f) {
             llvm::Type *arg_types[] = {i8_t->getPointerTo(), i8_t->getPointerTo()};
@@ -2476,7 +2484,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
             f->setCallingConv(CallingConv::C);
         }
-        register_destructor(f, codegen(arg), Always);
+        internal_assert(op->args[1].type().is_handle());
+        Value *arg = codegen(op->args[1]);
+        value = register_destructor(f, arg, Always);
     } else if (op->is_intrinsic(Call::call_cached_indirect_function)) {
         // Arguments to call_cached_indirect_function are of the form
         //
@@ -2645,8 +2655,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
-    } else if (op->call_type == Call::Intrinsic ||
-               op->call_type == Call::PureIntrinsic) {
+    } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
         internal_assert(op->args.size() == 2);

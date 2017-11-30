@@ -379,3 +379,36 @@ define weak_odr <64 x i16> @halide.hexagon.trunc_satuh.vw(<64 x i32> %arg) nounw
   %r = bitcast <32 x i32> %r_32 to <64 x i16>
   ret <64 x i16> %r
 }
+
+declare <64 x i32> @llvm.hexagon.V6.vtmpybus.128B(<64 x i32>, i32)
+declare <64 x i32> @llvm.hexagon.V6.vtmpyb.128B(<64 x i32>, i32)
+declare <64 x i32> @llvm.hexagon.V6.vtmpyhb.128B(<64 x i32>, i32)
+
+define weak_odr <128 x i16> @halide.hexagon.vtmpy.vub.vub.b.b(<128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
+  %low = bitcast <128 x i8> %low_v to <32 x i32>
+  %high = bitcast <128 x i8> %high_v to <32 x i32>
+  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
+  %res = call <64 x i32> @llvm.hexagon.V6.vtmpybus.128B(<64 x i32> %dv, i32 %const)
+  %ret_val = bitcast <64 x i32> %res to <128 x i16>
+  ret <128 x i16> %ret_val
+}
+
+define weak_odr <128 x i16> @halide.hexagon.vtmpy.vb.vb.b.b(<128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
+  %low = bitcast <128 x i8> %low_v to <32 x i32>
+  %high = bitcast <128 x i8> %high_v to <32 x i32>
+  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
+  %res = call <64 x i32> @llvm.hexagon.V6.vtmpyb.128B(<64 x i32> %dv, i32 %const)
+  %ret_val = bitcast <64 x i32> %res to <128 x i16>
+  ret <128 x i16> %ret_val
+}
+
+define weak_odr <64 x i32> @halide.hexagon.vtmpy.vh.vh.b.b(<64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+  %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
+  %low = bitcast <64 x i16> %low_v to <32 x i32>
+  %high = bitcast <64 x i16> %high_v to <32 x i32>
+  %dv = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %high, <32 x i32> %low)
+  %res = call <64 x i32> @llvm.hexagon.V6.vtmpyhb.128B(<64 x i32> %dv, i32 %const)
+  ret <64 x i32> %res
+}

@@ -36,6 +36,9 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
 /** Emit a halide device api type in a human readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
+/** Emit a halide LoopLevel in a human readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+
 namespace Internal {
 
 struct AssociativePattern;
@@ -60,12 +63,20 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const ForType &);
 /** Emit a halide name mangling value in a human readable format */
 EXPORT std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 
+/** Emit a halide LoweredFunc in a human readable format */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
+
+/** Emit a halide linkage value in a human readable format */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &);
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
  */
 class IRPrinter : public IRVisitor {
 public:
+    EXPORT virtual ~IRPrinter();
+
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
     EXPORT IRPrinter(std::ostream &);

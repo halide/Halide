@@ -10,11 +10,7 @@
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
-#if LLVM_VERSION >= 39
 namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
-#else
-namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
-#endif
 #endif
 
 namespace Halide {
@@ -77,6 +73,12 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         }
     }
 
+    // Get the alignment of the integer arguments
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].alignment.modulus) {
+            alignment_info.push(args[i].name, args[i].alignment);
+        }
+    }
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
@@ -303,10 +305,18 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         target_machine(target->createTargetMachine(triple.str(),
                                                    mcpu(), mattrs(), options,
                                                    llvm::Reloc::PIC_,
+#if LLVM_VERSION < 60
                                                    llvm::CodeModel::Default,
+#else
+                                                   llvm::CodeModel::Small,
+#endif
                                                    CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
+
+    #if LLVM_VERSION >= 60
+    module->setDataLayout(target_machine->createDataLayout());
+    #endif
 
     // Set up passes
     llvm::SmallString<8> outstr;
@@ -389,10 +399,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
-
-    #if LLVM_VERSION < 38
-    ostream.flush();
-    #endif
 
     if (debug::debug_level() >= 2) {
         dump();

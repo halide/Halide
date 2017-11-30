@@ -328,7 +328,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     do_indent();
     Allocation alloc;
     alloc.type = op->type;
-    alloc.free_function = op->free_function;
     allocations.push(op->name, alloc);
 
     internal_assert(op->extents.size() >= 1);

@@ -1,5 +1,4 @@
 #include "PrintLoopNest.h"
-#include "DeepCopy.h"
 #include "FindCalls.h"
 #include "Function.h"
 #include "Func.h"
@@ -158,8 +157,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
-        map<string, Function> more_funcs = find_transitive_calls(f);
-        env.insert(more_funcs.begin(), more_funcs.end());
+        populate_environment(f, env);
     }
 
     // Create a deep-copy of the entire graph of Funcs.
@@ -169,6 +167,16 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
         Func(f).compute_root().store_root();
+    }
+
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
+
+    // Ensure that all ScheduleParams become well-defined constant Exprs.
+    for (auto &f : env) {
+        f.second.substitute_schedule_param_exprs();
     }
 
     // Substitute in wrapper Funcs
