@@ -6,6 +6,9 @@ namespace Internal {
 using std::pair;
 using std::vector;
 
+IRMutator::IRMutator() {
+}
+
 IRMutator::~IRMutator() {
 }
 
@@ -376,6 +379,9 @@ void IRMutator::visit(const Shuffle *op) {
     }
 }
 
+
+IRMutator2::IRMutator2() {
+}
 
 IRMutator2::~IRMutator2() {
 }

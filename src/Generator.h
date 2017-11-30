@@ -309,11 +309,6 @@ inline std::string halide_type_to_enum_string(const Type &t) {
     return enum_to_string(get_halide_type_enum_map(), t);
 }
 
-EXPORT extern const std::map<std::string, Halide::LoopLevel> &get_halide_looplevel_enum_map();
-inline std::string halide_looplevel_to_enum_string(const LoopLevel &loop_level){
-    return enum_to_string(get_halide_looplevel_enum_map(), loop_level);
-}
-
 // Convert a Halide Type into a string representation of its C source.
 // e.g., Int(32) -> "Halide::Int(32)"
 EXPORT std::string halide_type_to_c_source(const Type &t);
@@ -387,6 +382,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
 
@@ -414,6 +410,10 @@ protected:
     virtual std::string get_default_value() const = 0;
 
     virtual bool is_synthetic_param() const {
+        return false;
+    }
+
+    virtual bool is_looplevel_param() const {
         return false;
     }
 
@@ -461,6 +461,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
 
@@ -471,7 +472,8 @@ private:
     T value_;
 
     template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value &&
-                                                  !std::is_same<T2, MachineParams>::value>::type * = nullptr>
+                                                  !std::is_same<T2, MachineParams>::value &&
+                                                  !std::is_same<T2, LoopLevel>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
         check_value_writable();
         // Arithmetic types must roundtrip losslessly.
@@ -492,8 +494,8 @@ private:
         fail_wrong_type(msg);
     }
 
-    template <typename T2, typename std::enable_if<std::is_same<T2, MachineParams>::value &&
-                                                   std::is_same<T, MachineParams>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
+                                                   (std::is_same<T, MachineParams>::value || std::is_same<T, LoopLevel>::value)>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char *msg) {
         value_ = value;
     }
@@ -549,6 +551,56 @@ public:
 
     std::string get_c_type() const override {
         return "MachineParams";
+    }
+};
+
+class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
+public:
+    GeneratorParam_LoopLevel(const std::string &name, const LoopLevel &value) : GeneratorParamImpl<LoopLevel>(name, value) {}
+
+    void set_from_string(const std::string &new_value_string) override {
+        if (new_value_string == "root") {
+            this->set(LoopLevel::root());
+        } else if (new_value_string == "inlined") {
+            this->set(LoopLevel::inlined());
+        } else {
+            user_error << "Unable to parse " << this->name << ": " << new_value_string;
+        }
+    }
+
+    std::string get_default_value() const override {
+        // This is dodgy but safe in this case: we want to
+        // see what the value of our LoopLevel is *right now*,
+        // so we make a copy and lock the copy so we can inspect it.
+        // (Note that ordinarily this is a bad idea, since LoopLevels
+        // can be mutated later on; however, this method is only
+        // called by the Generator infrastructure, on LoopLevels that
+        // will never be mutated, so this is really just an elaborate way
+        // to avoid runtime assertions.)
+        LoopLevel copy;
+        copy.set(this->value());
+        copy.lock();
+        if (copy.is_inlined()) {
+            return "LoopLevel::inlined()";
+        } else if (copy.is_root()) {
+            return "LoopLevel::root()";
+        } else {
+            internal_error;
+            return "";
+        }
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        internal_error;
+        return std::string();
+    }
+
+    std::string get_c_type() const override {
+        return "LoopLevel";
+    }
+
+    bool is_looplevel_param() const override {
+        return true;
     }
 };
 
@@ -735,6 +787,7 @@ using GeneratorParamImplBase =
     typename select_type<
         cond<std::is_same<T, Target>::value,        GeneratorParam_Target<T>>,
         cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
+        cond<std::is_same<T, LoopLevel>::value,     GeneratorParam_LoopLevel>,
         cond<std::is_same<T, Type>::value,          GeneratorParam_Type<T>>,
         cond<std::is_same<T, bool>::value,          GeneratorParam_Bool<T>>,
         cond<std::is_arithmetic<T>::value,          GeneratorParam_Arithmetic<T>>,
@@ -2439,7 +2492,15 @@ class SimpleGeneratorFactory;
 // if they cannot return a valid Generator, they must assert-fail.
 using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&)>;
 
-using GeneratorParamsMap = std::map<std::string, std::string>;
+struct StringOrLoopLevel {
+    std::string string_value;
+    LoopLevel loop_level;
+
+    StringOrLoopLevel() = default;
+    /*not-explicit*/ StringOrLoopLevel(const std::string &s) : string_value(s) {}
+    /*not-explicit*/ StringOrLoopLevel(const LoopLevel &loop_level) : loop_level(loop_level) {}
+};
+using GeneratorParamsMap = std::map<std::string, StringOrLoopLevel>;
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
@@ -2465,14 +2526,7 @@ public:
 
     EXPORT virtual ~GeneratorBase();
 
-    EXPORT void set_generator_param(const std::string &name, const std::string &value);
     EXPORT void set_generator_and_schedule_param_values(const GeneratorParamsMap &params);
-
-    template<typename T>
-    GeneratorBase &set_generator_param(const std::string &name, const T &value) {
-        find_generator_param_by_name(name).set(value);
-        return *this;
-    }
 
     template<typename T>
     GeneratorBase &set_schedule_param(const std::string &name, const T &value) {
