@@ -239,10 +239,10 @@ int main(int argc, char **argv) {
 
         // Consider the definition:
         Func f;
-        f(x, y) = x*y;
+        f(x, y) = x * y;
         // Set row zero to each row 8
         f(x, 0) = f(x, 8);
-        // Set column 1 equal to column 8 plus 2
+        // Set column zero equal to column 8 plus 2
         f(0, y) = f(8, y) + 2;
 
         // The pure variables in each stage can be scheduled
@@ -854,7 +854,7 @@ int main(int argc, char **argv) {
                         __m128i minimum_storage, maximum_storage;
 
                         // The pure step for the maximum is a vector of zeros
-                        maximum_storage = (__m128i)_mm_setzero_ps();
+                        maximum_storage = _mm_setzero_si128();
 
                         // The update step for maximum
                         for (int max_y = y - 2; max_y <= y + 2; max_y++) {
@@ -870,8 +870,8 @@ int main(int argc, char **argv) {
                         // The pure step for the minimum is a vector of
                         // ones. Create it by comparing something to
                         // itself.
-                        minimum_storage = (__m128i)_mm_cmpeq_ps(_mm_setzero_ps(),
-                                                                _mm_setzero_ps());
+                        minimum_storage = _mm_cmpeq_epi32(_mm_setzero_si128(),
+                                                          _mm_setzero_si128());
 
                         // The update step for minimum.
                         for (int min_y = y - 2; min_y <= y + 2; min_y++) {

@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <map>
 
+namespace {
+
 using std::map;
 using std::string;
 
@@ -811,15 +813,15 @@ int argmin_rfactor_test() {
     inner_extent.set(20);
     outer_extent.set(40);
 
-    ref() = Tuple(10, 20, 30);
+    ref() = Tuple(10, 20.0f, 30.0f);
     ref() = Tuple(min(ref()[0], f(r.x, r.y)),
-                  select(ref()[0] < f(r.x, r.y), ref()[1], r.x),
-                  select(ref()[0] < f(r.x, r.y), ref()[2], r.y));
+                  select(ref()[0] < f(r.x, r.y), ref()[1], cast<float>(r.x)),
+                  select(ref()[0] < f(r.x, r.y), ref()[2], cast<float>(r.y)));
 
-    g() = Tuple(10, 20, 30);
+    g() = Tuple(10, 20.0f, 30.0f);
     g() = Tuple(min(g()[0], f(r.x, r.y)),
-                select(g()[0] < f(r.x, r.y), g()[1], r.x),
-                select(g()[0] < f(r.x, r.y), g()[2], r.y));
+                select(g()[0] < f(r.x, r.y), g()[1], cast<float>(r.x)),
+                select(g()[0] < f(r.x, r.y), g()[2], cast<float>(r.y)));
 
     RVar rxi("rxi"), rxo("rxo");
     g.update(0).split(r.x, rxo, rxi, 2);
@@ -831,12 +833,12 @@ int argmin_rfactor_test() {
 
     Realization ref_rn = ref.realize();
     Buffer<int> ref_im1(ref_rn[0]);
-    Buffer<int> ref_im2(ref_rn[1]);
-    Buffer<int> ref_im3(ref_rn[2]);
+    Buffer<float> ref_im2(ref_rn[1]);
+    Buffer<float> ref_im3(ref_rn[2]);
     Realization rn = g.realize();
     Buffer<int> im1(rn[0]);
-    Buffer<int> im2(rn[1]);
-    Buffer<int> im3(rn[2]);
+    Buffer<float> im2(rn[1]);
+    Buffer<float> im3(rn[2]);
 
     auto func1 = [&ref_im1](int x, int y, int z) {
         return ref_im1(x, y);
@@ -1030,6 +1032,8 @@ int self_assignment_rfactor_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     printf("Running self assignment rfactor test\n");

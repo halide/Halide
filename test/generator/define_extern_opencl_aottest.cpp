@@ -117,7 +117,7 @@ void destroy_extern_program() {
 }
 
 extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
-    if (input->host == nullptr) {
+    if (input->is_bounds_query()) {
         printf("gpu_input: Bounds query for output size %d\n", output->dim[0].extent);
         input->type = output->type;
         input->dimensions = 1;

@@ -19,15 +19,16 @@
 #include <string>
 #include <cstring>
 
-// by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
-#if defined(_WIN32) && defined(Halide_SHARED)
+#ifndef EXPORT
+#if defined(_MSC_VER)
 #ifdef Halide_EXPORTS
 #define EXPORT __declspec(dllexport)
 #else
 #define EXPORT __declspec(dllimport)
 #endif
 #else
-#define EXPORT
+#define EXPORT __attribute__((visibility("default")))
+#endif
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.
@@ -252,6 +253,20 @@ bool sub_would_overflow(int bits, int64_t a, int64_t b);
 bool mul_would_overflow(int bits, int64_t a, int64_t b);
 // @}
 
+/** Helper class for saving/restoring variable values on the stack, to allow
+ * for early-exit that preserves correctness */
+template<typename T>
+struct ScopedValue {
+    T &var;
+    const T old_value;
+    /** Preserve the old value, restored at dtor time */
+    ScopedValue(T &var) : var(var), old_value(var) {}
+    /** Preserve the old value, then set the var to a new value. */
+    ScopedValue(T &var, T new_value) : var(var), old_value(var) { var = new_value; }
+    ~ScopedValue() { var = old_value; }
+    operator T() const { return old_value; }
+};
+
 // Wrappers for some C++14-isms that are useful and trivially implementable
 // in C++11; these are defined in the Halide::Internal namespace. If we
 // are compiling under C++14 or later, we just use the standard implementations
@@ -267,30 +282,30 @@ using std::make_index_sequence;
 #else
 
 // C++11: std::integer_sequence (etc) is standard in C++14 but not C++11, but
-// is easily written in C++11. This is a simple version that could 
+// is easily written in C++11. This is a simple version that could
 // probably be improved.
 
-template<typename T, T... Ints> 
+template<typename T, T... Ints>
 struct integer_sequence {
     static constexpr size_t size() { return sizeof...(Ints); }
 };
 
-template<typename T> 
+template<typename T>
 struct next_integer_sequence;
 
-template<typename T, T... Ints> 
+template<typename T, T... Ints>
 struct next_integer_sequence<integer_sequence<T, Ints...>> {
     using type = integer_sequence<T, Ints..., sizeof...(Ints)>;
 };
 
-template<typename T, T I, T N> 
+template<typename T, T I, T N>
 struct make_integer_sequence_helper {
     using type = typename next_integer_sequence<
         typename make_integer_sequence_helper<T, I+1, N>::type
     >::type;
 };
 
-template<typename T, T N> 
+template<typename T, T N>
 struct make_integer_sequence_helper<T, N, N> {
     using type = integer_sequence<T>;
 };
@@ -304,6 +319,23 @@ using index_sequence = integer_sequence<size_t, Ints...>;
 template<size_t N>
 using make_index_sequence = make_integer_sequence<size_t, N>;
 
+#endif
+
+// Helpers for timing blocks of code. Put 'TIC;' at the start and
+// 'TOC;' at the end. Timing is reported at the toc via
+// debug(0). The calls can be nested and will pretty-print
+// appropriately. Took this idea from matlab via Jon Barron.
+//
+// Note that this uses global state internally, and is not thread-safe
+// at all. Only use it for single-threaded debugging sessions.
+
+void halide_tic_impl(const char *file, int line);
+void halide_toc_impl(const char *file, int line);
+#define HALIDE_TIC Halide::Internal::halide_tic_impl(__FILE__, __LINE__)
+#define HALIDE_TOC Halide::Internal::halide_toc_impl(__FILE__, __LINE__)
+#ifdef COMPILING_HALIDE
+#define TIC HALIDE_TIC
+#define TOC HALIDE_TOC
 #endif
 
 }  // namespace Internal

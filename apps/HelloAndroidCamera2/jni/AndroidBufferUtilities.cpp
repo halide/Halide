@@ -49,16 +49,16 @@ JNIEXPORT jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUti
 }
 
 JNIEXPORT
-jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_rotateNativeYuvBufferT180(    
+jboolean JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_rotateNativeYuvBufferT180(
     JNIEnv *env, jobject obj, jlong handle) {
     if (handle == 0L) {
         return false;
     }
     YuvBufferT *yuvBufferT = reinterpret_cast<YuvBufferT *>(handle);
     yuvBufferT->rotate180();
-    return true;    
+    return true;
 }
-    
+
 JNIEXPORT jlong JNICALL Java_com_example_helloandroidcamera2_AndroidBufferUtilities_lockSurface(
     JNIEnv *env, jobject obj, jobject surface) {
     return reinterpret_cast<jlong>(LockedSurface::lock(env, surface));

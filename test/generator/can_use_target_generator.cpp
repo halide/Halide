@@ -4,16 +4,17 @@ namespace {
 
 class CanUseTarget : public Halide::Generator<CanUseTarget> {
 public:
+    Output<Buffer<uint32_t>> output{"output", 2};
+
     // Current really just a placeholder: can_use_target_aottest.cpp just
     // needs to test the runtime itself, not the generator function.
-    Func build() {
+    void generate() {
         Var x, y;
-        Func f("f");
-        f(x, y) = cast<uint32_t>((int32_t)0xdeadbeef);
-        return f;
+        output(x, y) = cast<uint32_t>((int32_t)0xdeadbeef);
     }
 };
 
-Halide::RegisterGenerator<CanUseTarget> register_my_gen{"can_use_target"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(CanUseTarget, can_use_target)
+

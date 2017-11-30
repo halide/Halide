@@ -13,6 +13,7 @@
 #include "Reduction.h"
 #include "Definition.h"
 #include "Buffer.h"
+#include "Util.h"
 
 #include <map>
 
@@ -58,6 +59,8 @@ enum class NameMangling {
 
 namespace Internal {
 
+struct Call;
+
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
@@ -99,9 +102,13 @@ public:
      * This method also takes a map of <old Function, deep-copied version> as input
      * and would use the deep-copied Function from the map if exists instead of
      * creating a new deep-copy to avoid creating deep-copies of the same Function
-     * multiple times.
+     * multiple times. If 'name' is specified, copy's name will be set to that.
      */
+    // @{
     EXPORT void deep_copy(FunctionPtr copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+    EXPORT void deep_copy(std::string name, FunctionPtr copy,
+                          std::map<FunctionPtr, FunctionPtr> &copied_map) const;
+    // @}
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -125,7 +132,7 @@ public:
 
     /** Accept a mutator to mutator all of the definitions and
      * arguments of this function. */
-    EXPORT void mutate(IRMutator *visitor);
+    EXPORT void mutate(IRMutator2 *mutator);
 
     /** Get the name of the function. */
     EXPORT const std::string &name() const;
@@ -137,7 +144,7 @@ public:
     EXPORT const Definition &definition() const;
 
     /** Get the pure arguments. */
-    EXPORT const std::vector<std::string> args() const;
+    EXPORT const std::vector<std::string> &args() const;
 
     /** Get the dimensionality. */
     EXPORT int dimensions() const;
@@ -150,7 +157,8 @@ public:
     /** Get the types of the outputs. */
     EXPORT const std::vector<Type> &output_types() const;
 
-    /** Get the right-hand-side of the pure definition. */
+    /** Get the right-hand-side of the pure definition. Returns an
+     * empty vector if there is no pure definition. */
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
@@ -210,17 +218,31 @@ public:
      * buffer_t type. */
     EXPORT bool extern_definition_uses_old_buffer_t() const;
 
+    /** Get the proxy Expr for the extern stage. This is an expression
+     * known to have the same data access pattern as the extern
+     * stage. It must touch at least all of the memory that the extern
+     * stage does, though it is permissible for it to be conservative
+     * and touch a superset. For most Functions, including those with
+     * extern definitions, this will be an undefined Expr. */
+    // @{
+    EXPORT Expr extern_definition_proxy_expr() const;
+    EXPORT Expr &extern_definition_proxy_expr();
+    // @}
+
     /** Add an external definition of this Func. */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
-                              int dimensionality,
+                              const std::vector<std::string> &dims,
                               NameMangling mangling,
                               DeviceAPI device_api,
                               bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
+    // @{
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
+    EXPORT std::vector<ExternFuncArgument> &extern_arguments();
+    // @}
 
     /** Get the name of the extern function called for an extern
      * definition. */
@@ -256,6 +278,10 @@ public:
     EXPORT bool is_tracing_realizations() const;
     // @}
 
+    /** Replace this Function's LoopLevels with locked copies that
+     * cannot be mutated further. */
+    EXPORT void lock_loop_levels();
+
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
     EXPORT void freeze();
@@ -281,6 +307,12 @@ public:
     EXPORT const std::map<std::string, FunctionPtr> &wrappers() const;
     // @}
 
+    /** Check if a Function is a trivial wrapper around another
+     * Function, Buffer, or Parameter. Returns the Call node if it
+     * is. Otherwise returns null.
+     */
+    EXPORT const Call *is_wrapper() const;
+
     /** Replace every call to Functions in 'substitutions' keys by all Exprs
      * referenced in this Function to call to their substitute Functions (i.e.
      * the corresponding values in 'substitutions' map). */
@@ -292,6 +324,9 @@ public:
     /** Find all Vars that are placeholders for ScheduleParams and substitute in
      * the corresponding constant value. */
     EXPORT Function &substitute_schedule_param_exprs();
+
+    /** Return true iff the name matches one of the Function's pure args. */
+    EXPORT bool is_pure_arg(const std::string &name) const;
 };
 
 /** Deep copy an entire Function DAG. */

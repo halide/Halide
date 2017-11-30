@@ -40,7 +40,7 @@ load(
 halide_generator(
     name = "stubtest_generator",
     srcs = ["stubtest_generator.cpp"],
-    generator_name = "StubNS1::StubNS2::StubTest",
+    generator_name = "stubtest",
     includes = ["."],
 )
 

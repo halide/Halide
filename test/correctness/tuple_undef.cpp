@@ -18,13 +18,13 @@ protected:
     }
 };
 
-class CheckStoreCount : public IRMutator {
+class CheckStoreCount : public IRMutator2 {
     int correct;
 public:
     CheckStoreCount(int correct) : correct(correct) {}
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         CountStores c;
         s.accept(&c);
 

@@ -55,7 +55,11 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    stream << "Target = " << m.target().to_string() << "\n";
+    for (const auto &s : m.submodules()) {
+        stream << s << "\n";
+    }
+
+    stream << "module name=" << m.name() << ", target=" << m.target().to_string() << "\n";
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
@@ -97,11 +101,14 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
 
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
-        << (loop_level.defined() ? loop_level.to_string() : "undefined") 
+        << (loop_level.defined() ? loop_level.to_string() : "undefined")
         << ")";
 }
 
 namespace Internal {
+
+IRPrinter::~IRPrinter() {
+}
 
 void IRPrinter::test() {
     Type i32 = Int(32);
@@ -155,7 +162,7 @@ void IRPrinter::test() {
 ostream& operator<<(ostream &stream, const AssociativePattern &p) {
     stream << "{\n";
     for (size_t i = 0; i < p.ops.size(); ++i) {
-        stream << "  op_" << i << " ->" << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
+        stream << "  op_" << i << " -> " << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
     }
     stream << "  is commutative? " << p.is_commutative << "\n";
     stream << "}\n";
@@ -238,19 +245,19 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 }
 
 
-std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
+std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &type) {
     switch (type) {
     case LoweredFunc::ExternalPlusMetadata:
-        out << "external_plus_metadata";
+        stream << "external_plus_metadata";
         break;
     case LoweredFunc::External:
-        out << "external";
+        stream << "external";
         break;
     case LoweredFunc::Internal:
-        out << "internal";
+        stream << "internal";
         break;
     }
-    return out;
+    return stream;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {

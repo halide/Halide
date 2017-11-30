@@ -4,6 +4,7 @@ halide_library(
     name = "bazeldemo",
     srcs = ["bazeldemo_generator.cpp"],
     includes = ["."],
+    extra_outputs=["stmt", "schedule"],
 )
 
 cc_binary(

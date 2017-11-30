@@ -10,6 +10,7 @@
 #include "CSE.h"
 #include "Random.h"
 #include "Introspection.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ParallelRVar.h"
@@ -31,11 +32,11 @@ struct FunctionContents;
 namespace {
 // Weaken all the references to a particular Function to break
 // reference cycles. Also count the number of references found.
-class WeakenFunctionPtrs : public IRMutator {
-    using IRMutator::visit;
+class WeakenFunctionPtrs : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Call *c) {
-        IRMutator::visit(c);
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
         if (c->func.defined() &&
@@ -47,6 +48,7 @@ class WeakenFunctionPtrs : public IRMutator {
                               c->image, c->param);
             count++;
         }
+        return expr;
     }
     FunctionContents *func;
 public:
@@ -58,6 +60,12 @@ public:
 struct FunctionContents {
     std::string name;
     std::vector<Type> output_types;
+
+    // The names of the dimensions of the Function. Corresponds to the
+    // LHS of the pure definition if there is one. Is also the initial
+    // stage of the dims and storage_dims. Used to identify dimensions
+    // of the Function by name.
+    std::vector<string> args;
 
     // Function-specific schedule. This schedule is applied to all stages
     // within the function.
@@ -72,9 +80,11 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
+
     NameMangling extern_mangling = NameMangling::Default;
     DeviceAPI extern_function_device_api = DeviceAPI::Host;
     bool extern_uses_old_buffer_t = false;
+    Expr extern_proxy_expr;
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
 
@@ -83,7 +93,9 @@ struct FunctionContents {
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
 
-        init_def.accept(visitor);
+        if (init_def.defined()) {
+            init_def.accept(visitor);
+        }
         for (const Definition &def : updates) {
             def.accept(visitor);
         }
@@ -91,15 +103,20 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument i : extern_arguments) {
                 if (i.is_func()) {
+                    user_assert(i.func.get() != this)
+                        << "Extern Func has itself as an argument";
                     i.func->accept(visitor);
                 } else if (i.is_expr()) {
                     i.expr.accept(visitor);
                 }
             }
+            if (extern_proxy_expr.defined()) {
+                extern_proxy_expr.accept(visitor);
+            }
         }
 
         for (Parameter i : output_buffers) {
-            for (size_t j = 0; j < init_def.args().size(); j++) {
+            for (size_t j = 0; j < args.size(); j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);
                 }
@@ -113,23 +130,24 @@ struct FunctionContents {
         }
     }
 
-    // Pass an IRMutator through to all Exprs referenced in the FunctionContents
-    void mutate(IRMutator *mutator) {
+    // Pass an IRMutator2 through to all Exprs referenced in the FunctionContents
+    void mutate(IRMutator2 *mutator) {
         func_schedule.mutate(mutator);
 
-        init_def.mutate(mutator);
+        if (init_def.defined()) {
+            init_def.mutate(mutator);
+        }
         for (Definition &def : updates) {
             def.mutate(mutator);
         }
 
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
-                if (i.is_func()) {
-                    i.func->mutate(mutator);
-                } else if (i.is_expr()) {
+                if (i.is_expr()) {
                     i.expr = mutator->mutate(i.expr);
                 }
             }
+            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
         }
     }
 };
@@ -160,7 +178,7 @@ EXPORT void destroy<FunctionGroup>(const FunctionGroup *f) {
 struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
-    Scope<int> defined_internally;
+    Scope<> defined_internally;
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
@@ -171,9 +189,8 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Let *let) {
         let->value.accept(this);
-        defined_internally.push(let->name, 0);
+        ScopedBinding<> bind(defined_internally, let->name);
         let->body.accept(this);
-        defined_internally.pop(let->name);
     }
 
     void visit(const Call *op) {
@@ -309,12 +326,14 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     debug(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
 
     copy->name = contents->name;
+    copy->args = contents->args;
     copy->output_types = contents->output_types;
     copy->debug_file = contents->debug_file;
     copy->extern_function_name = contents->extern_function_name;
     copy->extern_mangling = contents->extern_mangling;
     copy->extern_function_device_api = contents->extern_function_device_api;
     copy->extern_uses_old_buffer_t = contents->extern_uses_old_buffer_t;
+    copy->extern_proxy_expr = contents->extern_proxy_expr;
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
@@ -323,10 +342,12 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
 
     // Copy the pure definition
-    copy->init_def = contents->init_def.get_copy();
-    internal_assert(copy->init_def.is_init());
-    internal_assert(copy->init_def.schedule().rvars().empty())
-        << "Init definition shouldn't have reduction domain\n";
+    if (contents->init_def.defined()) {
+        copy->init_def = contents->init_def.get_copy();
+        internal_assert(copy->init_def.is_init());
+        internal_assert(copy->init_def.schedule().rvars().empty())
+            << "Init definition shouldn't have reduction domain\n";
+    }
 
     for (const Definition &def : contents->updates) {
         internal_assert(!def.is_init());
@@ -339,6 +360,11 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
         ExternFuncArgument e_copy = deep_copy_extern_func_argument_helper(e, copied_map);
         copy->extern_arguments.push_back(std::move(e_copy));
     }
+}
+
+void Function::deep_copy(string name, FunctionPtr copy, DeepCopyMap &copied_map) const {
+    deep_copy(copy, copied_map);
+    copy->name = name;
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
@@ -404,18 +430,20 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents->name = unique_name('f');
     }
 
-    internal_assert(contents->init_def.is_init());
-
-    user_assert(contents->init_def.values().empty())
+    user_assert(!contents->init_def.defined())
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func is already defined.\n";
 
-    contents->init_def.values() = values;
-    auto &pure_def_args = contents->init_def.args();
-    pure_def_args.resize(args.size());
+    contents->args = args;
+
+    std::vector<Expr> init_def_args;
+    init_def_args.resize(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        pure_def_args[i] = Var(args[i]);
+        init_def_args[i] = Var(args[i]);
     }
+
+    ReductionDomain rdom;
+    contents->init_def = Definition(init_def_args, values, rdom, true);
 
     for (size_t i = 0; i < args.size(); i++) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
@@ -504,7 +532,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // pure args in the pure definition.
     bool pure = true;
     vector<string> pure_args(args.size());
-    const auto &pure_def_args = contents->init_def.args();
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
         user_assert(args[i].defined())
@@ -512,11 +539,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             << "Argument " << i
             << " in left-hand-side of update definition is undefined.\n";
         if (const Variable *var = args[i].as<Variable>()) {
-            const Variable *pure_var = pure_def_args[i].as<Variable>();
-            internal_assert(pure_var);
             if (!var->param.defined() &&
                 !var->reduction_domain.defined() &&
-                var->name == pure_var->name) {
+                var->name == contents->args[i]) {
                 pure_args[i] = var->name;
             } else {
                 pure = false;
@@ -651,9 +676,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 }
 
 void Function::define_extern(const std::string &function_name,
-                             const std::vector<ExternFuncArgument> &args,
+                             const std::vector<ExternFuncArgument> &extern_args,
                              const std::vector<Type> &types,
-                             int dimensionality,
+                             const std::vector<string> &args,
                              NameMangling mangling,
                              DeviceAPI device_api,
                              bool use_old_buffer_t) {
@@ -666,8 +691,9 @@ void Function::define_extern(const std::string &function_name,
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func already has an extern definition.\n";
 
+    contents->args = args;
     contents->extern_function_name = function_name;
-    contents->extern_arguments = args;
+    contents->extern_arguments = extern_args;
     contents->output_types = types;
     contents->extern_mangling = mangling;
     contents->extern_function_device_api = device_api;
@@ -678,26 +704,23 @@ void Function::define_extern(const std::string &function_name,
         if (types.size() > 1) {
             buffer_name += '.' + std::to_string((int)i);
         }
-        Parameter output(types[i], true, dimensionality, buffer_name);
+        Parameter output(types[i], true, (int)args.size(), buffer_name);
         contents->output_buffers.push_back(output);
     }
 
-    // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
-    auto &pure_def_args = contents->init_def.args();
-    pure_def_args.resize(dimensionality);
-    for (int i = 0; i < dimensionality; i++) {
-        string arg = unique_name('e');
-        pure_def_args[i] = Var(arg);
-        StorageDim sd = {arg};
-        contents->func_schedule.storage_dims().push_back(sd);
+    // Reset the storage dims to match the pure args
+    contents->func_schedule.storage_dims().clear();
+    for (size_t i = 0; i < args.size(); i++) {
+        contents->func_schedule.storage_dims().push_back(StorageDim {args[i]});
     }
+
 }
 
 void Function::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Function::mutate(IRMutator *mutator) {
+void Function::mutate(IRMutator2 *mutator) {
     contents->mutate(mutator);
 }
 
@@ -713,19 +736,16 @@ const Definition &Function::definition() const {
     return contents->init_def;
 }
 
-const std::vector<std::string> Function::args() const {
-    const auto &pure_def_args = contents->init_def.args();
-    std::vector<std::string> arg_names(pure_def_args.size());
-    for (size_t i = 0; i < pure_def_args.size(); i++) {
-        const Variable *var = pure_def_args[i].as<Variable>();
-        internal_assert(var);
-        arg_names[i] = var->name;
-    }
-    return arg_names;
+const std::vector<std::string> &Function::args() const {
+    return contents->args;
+}
+
+bool Function::is_pure_arg(const std::string &name) const {
+    return std::find(args().begin(), args().end(), name) != args().end();
 }
 
 int Function::dimensions() const {
-    return contents->init_def.args().size();
+    return args().size();
 }
 
 const std::vector<Type> &Function::output_types() const {
@@ -733,7 +753,12 @@ const std::vector<Type> &Function::output_types() const {
 }
 
 const std::vector<Expr> &Function::values() const {
-    return contents->init_def.values();
+    static const std::vector<Expr> empty;
+    if (has_pure_definition()) {
+        return contents->init_def.values();
+    } else {
+        return empty;
+    }
 }
 
 FuncSchedule &Function::schedule() {
@@ -768,7 +793,7 @@ const std::vector<Definition> &Function::updates() const {
 }
 
 bool Function::has_pure_definition() const {
-    return !contents->init_def.values().empty();
+    return contents->init_def.defined();
 }
 
 bool Function::can_be_inlined() const {
@@ -812,7 +837,19 @@ bool Function::extern_definition_uses_old_buffer_t() const {
     return contents->extern_uses_old_buffer_t;
 }
 
+Expr Function::extern_definition_proxy_expr() const {
+    return contents->extern_proxy_expr;
+}
+
+Expr &Function::extern_definition_proxy_expr() {
+    return contents->extern_proxy_expr;
+}
+
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
+    return contents->extern_arguments;
+}
+
+std::vector<ExternFuncArgument> &Function::extern_arguments() {
     return contents->extern_arguments;
 }
 
@@ -855,6 +892,18 @@ void Function::freeze() {
     contents->frozen = true;
 }
 
+void Function::lock_loop_levels() {
+    auto &schedule = contents->func_schedule;
+    schedule.compute_level().lock();
+    schedule.store_level().lock();
+    // If store_level is inlined, use the compute_level instead.
+    // (Note that we deliberately do *not* do the same if store_level
+    // is undefined.)
+    if (schedule.store_level().is_inlined()) {
+        schedule.store_level() = schedule.compute_level();
+    }
+}
+
 bool Function::frozen() const {
     return contents->frozen;
 }
@@ -886,16 +935,39 @@ void Function::add_wrapper(const std::string &f, Function &wrapper) {
     wrapper.mutate(&weakener);
 }
 
+const Call *Function::is_wrapper() const {
+    const vector<Expr> &rhs = values();
+    if (rhs.size() != 1) {
+        return nullptr;
+    }
+    const Call *call = rhs[0].as<Call>();
+    if (!call) {
+        return nullptr;
+    }
+    vector<Expr> expected_args;
+    for (const string &v : args()) {
+        expected_args.push_back(Variable::make(Int(32), v));
+    }
+    Expr expected_rhs =
+        Call::make(call->type, call->name, expected_args, call->call_type,
+                   call->func, call->value_index, call->image, call->param);
+    if (equal(rhs[0], expected_rhs)) {
+        return call;
+    } else {
+        return nullptr;
+    }
+}
+
 namespace {
 
 // Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator {
-    using IRMutator::visit;
+class SubstituteCalls : public IRMutator2 {
+    using IRMutator2::visit;
 
     map<FunctionPtr, FunctionPtr> substitutions;
 
-    void visit(const Call *c) {
-        IRMutator::visit(c);
+    Expr visit(const Call *c) override {
+        Expr expr = IRMutator2::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -910,20 +982,22 @@ class SubstituteCalls : public IRMutator {
                               subs, c->value_index,
                               c->image, c->param);
         }
+        return expr;
     }
 public:
     SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
         : substitutions(substitutions) {}
 };
 
-class SubstituteScheduleParamExprs : public IRMutator {
-    using IRMutator::visit;
+class SubstituteScheduleParamExprs : public IRMutator2 {
+    using IRMutator2::visit;
 
-    void visit(const Variable *v) override {
-        IRMutator::visit(v);
+    Expr visit(const Variable *v) override {
+        Expr expr = IRMutator2::visit(v);
         if (v->param.defined() && v->param.is_bound_before_lowering()) {
-            expr = mutate(v->param.get_scalar_expr());
+            expr = mutate(v->param.scalar_expr());
         }
+        return expr;
     }
 
 public:

@@ -1,4 +1,4 @@
-load("@halide//:halide_config.bzl", "halide_config_linkopts")
+load("@halide//:halide_config.bzl", "halide_system_libs")
 
 def halide_language_copts():
   _common_opts = [
@@ -56,7 +56,7 @@ def halide_language_linkopts():
           _osx_opts,
       "//conditions:default":
           _linux_opts,
-  }) + halide_config_linkopts().split(" ")
+  }) + halide_system_libs().split(" ")
 
 
 def halide_runtime_linkopts():
@@ -289,6 +289,8 @@ def _config_settings(halide_target):
   return ["@halide//:%s" % s for (s, _) in _config_setting_names_and_cpus(halide_target)]
 
 
+# The second argument is True if there is a separate file generated
+# for each subtarget of a multitarget output, False if not.
 _output_extensions = {
     "static_library": ("a", False),
     "o": ("o", False),
@@ -297,6 +299,7 @@ _output_extensions = {
     "assembly": ("s.txt", True),
     "bitcode": ("bc", True),
     "stmt": ("stmt", True),
+    "schedule": ("schedule", True),
     "html": ("html", True),
     "cpp": ("generated.cpp", True),
 }
@@ -343,24 +346,24 @@ def _gengen_impl(ctx):
       remaps += ["%s=%s" % (ct.replace("-", "_"), t.replace("-", "_"))]
 
   outputs = [
-      ctx.new_file(f)
+      ctx.actions.declare_file(f)
       for f in _gengen_outputs(
           ctx.attr.filename,
           ctx.attr.halide_target,  # *not* halide_target
           ctx.attr.outputs).values()
   ]
 
+  leafname = ctx.attr.filename.split('/')[-1]
   arguments = ["-o", outputs[0].dirname]
   if ctx.attr.generate_runtime:
-    arguments += ["-r", ctx.attr.filename]
+    arguments += ["-r", leafname]
     if len(halide_target) > 1:
       fail("Only one halide_target allowed here")
     if ctx.attr.halide_function_name:
       fail("halide_function_name not allowed here")
   else:
     arguments += ["-g", ctx.attr.generator_closure.generator_name]
-    if ctx.attr.filename:
-      arguments += ["-n", ctx.attr.filename]
+    arguments += ["-n", leafname]
     if ctx.attr.halide_function_name:
       arguments += ["-f", ctx.attr.halide_function_name]
 
@@ -380,11 +383,21 @@ def _gengen_impl(ctx):
     input_manifests = None
     hexagon_code_signer = ""
 
+  progress_message = "Executing generator %s with target (%s) args (%s)." % (
+      ctx.attr.generator_closure.generator_name,
+       ",".join(halide_target),
+       ctx.attr.halide_generator_args)
+  for o in outputs:
+    s = o.path
+    if s.endswith(".h") or s.endswith(".a") or s.endswith(".lib"):
+      continue
+    progress_message += "\nEmitting extra Halide output: %s" % s
+
   env = {
       "HL_DEBUG_CODEGEN": str(ctx.attr.debug_codegen_level),
       "HL_HEXAGON_CODE_SIGNER": hexagon_code_signer,
   }
-  ctx.action(
+  ctx.actions.run(
       # If you need to force the tools to run locally (e.g. for experimentation),
       # uncomment this line.
       # execution_requirements={"local":"1"},
@@ -395,10 +408,7 @@ def _gengen_impl(ctx):
       input_manifests=input_manifests,
       inputs=additional_inputs,
       outputs=outputs,
-      progress_message="Executing generator %s with target (%s) args (%s)..." %
-      (ctx.attr.generator_closure.generator_name,
-       ",".join(halide_target),
-       ctx.attr.halide_generator_args)
+      progress_message=progress_message
   )
 
 
@@ -443,7 +453,7 @@ def _add_target_features(target, features):
 
 
 def _has_dupes(some_list):
-  clean = list(set(some_list))
+  clean = depset(some_list).to_list()
   return sorted(some_list) != sorted(clean)
 
 
@@ -501,8 +511,8 @@ _gengen_closure = rule(
 
 def _discard_useless_features(halide_target_features = []):
   # Discard target features which do not affect the contents of the runtime.
-  useless_features = set(["user_context", "no_asserts", "no_bounds_query", "profile"])
-  return sorted(list(set([f for f in halide_target_features if f not in useless_features])))
+  useless_features = depset(["user_context", "no_asserts", "no_bounds_query", "profile"])
+  return sorted(depset([f for f in halide_target_features if f not in useless_features.to_list()]).to_list())
 
 def _halide_library_runtime_target_name(halide_target_features = []):
   return "_".join(["halide_library_runtime"] + _discard_useless_features(halide_target_features))
@@ -510,27 +520,23 @@ def _halide_library_runtime_target_name(halide_target_features = []):
 def _define_halide_library_runtime(halide_target_features = []):
   target_name = _halide_library_runtime_target_name(halide_target_features)
 
-  if not native.existing_rule("halide_library_runtime_generator"):
+  if not native.existing_rule("halide_library_runtime.generator"):
     halide_generator(
-        name="halide_library_runtime_generator",
+        name="halide_library_runtime.generator",
         srcs=[],
         deps=[],
         visibility=["//visibility:private"])
   condition_deps = {}
   for base_target, _, _, _ in _HALIDE_TARGET_CONFIG_INFO:
     settings = _config_settings(base_target)
-    if base_target == "armeabi-32-android":
-      # For armeabi-32-android, just generate an arm-32-android runtime
-      halide_target = "arm-32-android"
-    else:
-      halide_target = base_target
-    sub_name = (target_name + "_" +
-                _halide_target_to_bazel_rule_name(base_target))
+    # For armeabi-32-android, just generate an arm-32-android runtime
+    halide_target = "arm-32-android" if base_target == "armeabi-32-android" else base_target
+    halide_target_name = _halide_target_to_bazel_rule_name(base_target);
     _gengen(
-        name=sub_name,
-        filename=sub_name,
+        name="%s_%s" % (halide_target_name, target_name),
+        filename="%s/%s" % (halide_target_name, target_name),
         generate_runtime=True,
-        generator_closure="halide_library_runtime_generator_closure",
+        generator_closure="halide_library_runtime.generator_closure",
         halide_target=["-".join([halide_target] + _discard_useless_features(halide_target_features))],
         sanitizer=select({
             "@halide//:halide_config_msan": "msan",
@@ -543,7 +549,7 @@ def _define_halide_library_runtime(halide_target_features = []):
         ]
     )
     for s in settings:
-      condition_deps[s] = [":%s.o" % sub_name]
+      condition_deps[s] = ["%s/%s.o" % (halide_target_name, target_name)]
 
   native.cc_library(
       name=target_name,
@@ -570,7 +576,7 @@ def _standard_library_runtime_features():
   return [f for f in standard_features] + [f + ["debug"] for f in standard_features]
 
 def _standard_library_runtime_names():
-  return set([_halide_library_runtime_target_name(f) for f in _standard_library_runtime_features()])
+  return depset([_halide_library_runtime_target_name(f) for f in _standard_library_runtime_features()])
 
 def halide_library_runtimes():
   runtime_package = ""
@@ -588,18 +594,18 @@ def halide_generator(name,
                      includes=[],
                      tags=[],
                      visibility=None):
-  if not name.endswith("_generator"):
-    fail("halide_generator rules must end in _generator")
+  if not name.endswith(".generator"):
+    fail("halide_generator rules must end in .generator")
 
   if not generator_name:
-    generator_name = name[:-10]  # strip "_generator" suffix
+    generator_name = name[:-10]  # strip ".generator" suffix
 
   native.cc_library(
       name="%s_library" % name,
       srcs=srcs,
       alwayslink=1,
       copts=copts + halide_language_copts(),
-      deps=set([
+      deps=depset([
           "@halide//:language"
       ] + deps),
       tags=["manual"] + tags,
@@ -634,7 +640,7 @@ def halide_generator(name,
         halide_target_map={})
     _gengen(
         name="%s_stub_gen" % name,
-        filename=name[:-10],  # strip "_generator" suffix
+        filename=name[:-10],  # strip ".generator" suffix
         generator_closure=":%s_closure" % name,
         halide_target=stub_header_target,
         outputs=["cpp_stub"],
@@ -662,7 +668,7 @@ def halide_library_from_generator(name,
                                   deps=[],
                                   extra_outputs=[],
                                   function_name=None,
-                                  generator_args="",
+                                  generator_args=[],
                                   halide_target_features=[],
                                   halide_target_map=halide_library_default_target_map(),
                                   hexagon_code_signer=None,
@@ -676,6 +682,10 @@ def halide_library_from_generator(name,
   if namespace:
     function_name = "%s::%s" % (namespace, function_name)
 
+  # For generator_args, we support both arrays of strings, and space separated strings
+  if type(generator_args) != type(""):
+    generator_args = " ".join(generator_args);
+
   # Escape backslashes and double quotes.
   generator_args = generator_args.replace("\\", '\\\\"').replace('"', '\\"')
 
@@ -685,26 +695,27 @@ def halide_library_from_generator(name,
   if _has_dupes(extra_outputs):
     fail("Duplicate values in extra_outputs: %s" % str(extra_outputs))
 
-  full_halide_target_features = sorted(list(set(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"])))
-  user_halide_target_features = sorted(list(set(halide_target_features)))
+  full_halide_target_features = sorted(depset(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"]).to_list())
+  user_halide_target_features = sorted(depset(halide_target_features).to_list())
 
   if "cpp" in extra_outputs:
     fail("halide_library('%s') doesn't support 'cpp' in extra_outputs; please depend on '%s_cc' instead." % (name, name))
 
-  outputs = ["static_library"] + extra_outputs
   generator_closure = "%s_closure" % generator
 
+  outputs = ["static_library", "h"] + extra_outputs
+
   condition_deps = {}
+  condition_hdrs = {}
   for base_target, _, _, _ in _HALIDE_TARGET_CONFIG_INFO:
     multitarget = _select_multitarget(
         base_target=base_target,
         halide_target_features=full_halide_target_features,
         halide_target_map=halide_target_map)
-    arch = _halide_target_to_bazel_rule_name(base_target)
-    sub_name = "%s_%s" % (name, arch)
+    base_target_name = _halide_target_to_bazel_rule_name(base_target)
     _gengen(
-        name=sub_name,
-        filename=sub_name,
+        name="%s_%s" % (base_target_name, name),
+        filename="%s/%s" % (base_target_name, name),
         halide_generator_args=generator_args,
         generator_closure=generator_closure,
         halide_target=multitarget,
@@ -717,57 +728,56 @@ def halide_library_from_generator(name,
         hexagon_code_signer=hexagon_code_signer,
         tags=["manual"] + tags,
         outputs=outputs)
-    libname = "halide_internal_%s_%s" % (name, arch)
+    libname = "halide_internal_%s_%s" % (name, base_target_name)
     native.cc_library(
         name=libname,
-        srcs=[":%s.a" % sub_name],
+        srcs=["%s/%s.a" % (base_target_name, name)],
+        hdrs=["%s/%s.h" % (base_target_name, name)],
         tags=["manual"] + tags,
         visibility=["//visibility:private"])
-    settings = _config_settings(base_target)
-    for s in settings:
-      condition_deps[s] = _HALIDE_RUNTIME_OVERRIDES.get(base_target, []) + [":%s" % libname]
+    for s in _config_settings(base_target):
+      condition_deps[s] = [":%s" % libname]
+      condition_hdrs[s] = ["%s/%s.h" % (base_target_name, name)]
 
-  # Note that we always build the .h file using the first entry in
-  # the _HALIDE_TARGET_CONFIG_INFO table.
-  header_target = _select_multitarget(
-      base_target=_HALIDE_TARGET_CONFIG_INFO[0][0],
-      halide_target_features=full_halide_target_features,
-      halide_target_map=halide_target_map)
-  if len(header_target) > 1:
-    # This can happen if someone uses halide_target_map
-    # to force everything to be multitarget. In that
-    # case, just use the first entry.
-    header_target = [header_target[0]]
-
-  outputs = ["h"]
-  _gengen(
+  # Copy the header file so that include paths are correct
+  native.genrule(
       name="%s_h" % name,
-      filename=name,
-      halide_generator_args=generator_args,
-      generator_closure=generator_closure,
-      halide_target=header_target,
-      halide_function_name=function_name,
-      outputs=outputs,
-      tags=tags)
-
+      srcs=select(condition_hdrs),
+      outs=["%s.h" % name],
+      cmd="for i in $(SRCS); do cp $$i $(@D); done",
+      tags=tags,
+      visibility=visibility
+  )
   # Create a _cc target for (unusual) applications that want C++ source output;
   # we don't support this via extra_outputs=["cpp"] because it can end up being
   # compiled by Bazel, producing duplicate symbols; also, targets that want this
   # sometimes want to compile it via a separate tool (e.g., XCode to produce
   # certain bitcode variants). Note that this deliberately does not produce
   # a cc_library() output.
+
+  # Use a canonical target to build CC, regardless of config detected
+  cc_target = _select_multitarget(
+      base_target=_HALIDE_TARGET_CONFIG_INFO[0][0],
+      halide_target_features=full_halide_target_features,
+      halide_target_map=halide_target_map)
+  if len(cc_target) > 1:
+    # This can happen if someone uses halide_target_map
+    # to force everything to be multitarget. In that
+    # case, just use the first entry.
+    cc_target = [cc_target[0]]
+
   _gengen(
       name="%s_cc" % name,
       filename=name,
       halide_generator_args=generator_args,
       generator_closure=generator_closure,
-      halide_target=header_target,
+      halide_target=cc_target,
       halide_function_name=function_name,
       outputs=["cpp"],
       tags=["manual"] + tags)
 
   runtime_library = _halide_library_runtime_target_name(user_halide_target_features)
-  if runtime_library in _standard_library_runtime_names():
+  if runtime_library in _standard_library_runtime_names().to_list():
     runtime_library = "@halide//:%s" % runtime_library
   else:
     if not native.existing_rule(runtime_library):
@@ -836,7 +846,7 @@ def halide_library(name,
                    extra_outputs=[],  # "stmt" and/or "assembly" are useful for debugging
                    filter_deps=[],
                    function_name=None,
-                   generator_args="",
+                   generator_args=[],
                    generator_deps=[],
                    generator_name=None,
                    halide_target_features=[],
@@ -846,7 +856,7 @@ def halide_library(name,
                    namespace=None,
                    visibility=None):
   halide_generator(
-      name="%s_generator" % name,
+      name="%s.generator" % name,
       srcs=srcs,
       generator_name=generator_name,
       deps=generator_deps,
@@ -856,7 +866,7 @@ def halide_library(name,
 
   return halide_library_from_generator(
       name=name,
-      generator=":%s_generator" % name,
+      generator=":%s.generator" % name,
       deps=filter_deps,
       visibility=visibility,
       namespace=namespace,

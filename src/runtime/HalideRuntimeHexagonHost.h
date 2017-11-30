@@ -113,7 +113,8 @@ extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_pow
 // @{
 extern int halide_hexagon_initialize_kernels(void *user_context,
                                              void **module_ptr,
-                                             const uint8_t *code, uint64_t code_size);
+                                             const uint8_t *code, uint64_t code_size,
+                                             const uint8_t *runtime, uint64_t runtime_size);
 extern int halide_hexagon_run(void *user_context,
                               void *module_ptr,
                               const char *name,

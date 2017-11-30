@@ -36,9 +36,9 @@ Halide::Expr Type::max() const {
         if (bits() == 16) {
             return Internal::FloatImm::make(*this, 65504.0);
         } else if (bits() == 32) {
-            return Internal::FloatImm::make(*this, FLT_MAX);
+            return Internal::FloatImm::make(*this, std::numeric_limits<float>::infinity());
         } else if (bits() == 64) {
-            return Internal::FloatImm::make(*this, DBL_MAX);
+            return Internal::FloatImm::make(*this, std::numeric_limits<double>::infinity());
         } else {
             internal_error
                 << "Unknown float type: " << (*this) << "\n";
@@ -60,9 +60,9 @@ Halide::Expr Type::min() const {
         if (bits() == 16) {
             return Internal::FloatImm::make(*this, -65504.0);
         } else if (bits() == 32) {
-            return Internal::FloatImm::make(*this, -FLT_MAX);
+            return Internal::FloatImm::make(*this, -std::numeric_limits<float>::infinity());
         } else if (bits() == 64) {
-            return Internal::FloatImm::make(*this, -DBL_MAX);
+            return Internal::FloatImm::make(*this, -std::numeric_limits<double>::infinity());
         } else {
             internal_error
                 << "Unknown float type: " << (*this) << "\n";

@@ -537,6 +537,7 @@ struct Call : public ExprNode<Call> {
         buffer_init,
         buffer_init_from_buffer,
         buffer_crop,
+        buffer_set_bounds,
         trace;
 
     // If it's a call to another halide function, this call node holds
@@ -584,11 +585,19 @@ struct Call : public ExprNode<Call> {
                 call_type == PureIntrinsic);
     }
 
+    bool is_intrinsic() const {
+        return (call_type == Intrinsic ||
+                call_type == PureIntrinsic);
+    }
+
     bool is_intrinsic(ConstString intrin_name) const {
-        return
-            ((call_type == Intrinsic ||
-              call_type == PureIntrinsic) &&
-             name == intrin_name);
+        return is_intrinsic() && name == intrin_name;
+    }
+
+    bool is_extern() const {
+        return (call_type == Extern ||
+                call_type == ExternCPlusPlus ||
+                call_type == PureExtern);
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;

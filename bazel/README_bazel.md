@@ -8,7 +8,7 @@ rules are intended to replace the experimental rules implementation provided
 by https://github.com/halide/halide_bazel, which are now considered
 deprecated.
 
-Bazel 0.5 or later is required.
+Bazel 0.6 or later is required.
 
 ## Overview
 
@@ -112,7 +112,7 @@ halide_library(name, srcs, copts, debug_codegen_level, extra_outputs
     depends on it.)
 
 *   **generator_name** *(String; optional)* The registered name of the Halide
-    generator (i.e., the name passed as the first argument to RegisterGenerator
+    generator (i.e., the name passed as the second argument to HALIDE_REGISTER_GENERATOR
     in the Generator source file). If empty (or omitted), assumed to be the same
     as the Bazel rule name.
 
@@ -228,7 +228,7 @@ Process](#halide-compilation-process).
     by the Generator.
 
 *   **generator_name** *(String; optional)* The registered name of the Halide
-    generator (i.e., the name passed as the first argument to RegisterGenerator
+    generator (i.e., the name passed as the second argument to HALIDE_REGISTER_GENERATOR
     in the Generator source file). If empty (or omitted), assumed to be the same
     as the Bazel rule name.
 

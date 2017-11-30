@@ -2,6 +2,9 @@
 #include <chrono>
 
 #include "local_laplacian.h"
+#ifndef NO_AUTO_SCHEDULE
+#include "local_laplacian_auto_schedule.h"
+#endif
 
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
@@ -25,14 +28,23 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> output(input.width(), input.height(), 3);
     int timing = atoi(argv[5]);
 
+    local_laplacian(input, levels, alpha/(levels-1), beta, output);
+
     // Timing code
-    double best = benchmark(timing, 1, [&]() {
+
+    // Manually-tuned version
+    double best_manual = benchmark(timing, 1, [&]() {
         local_laplacian(input, levels, alpha/(levels-1), beta, output);
     });
-    printf("%gus\n", best * 1e6);
+    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
-
-    local_laplacian(input, levels, alpha/(levels-1), beta, output);
+    #ifndef NO_AUTO_SCHEDULE
+    // Auto-scheduled version
+    double best_auto = benchmark(timing, 1, [&]() {
+        local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output);
+    });
+    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    #endif
 
     convert_and_save_image(output, argv[6]);
 

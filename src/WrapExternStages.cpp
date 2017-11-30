@@ -27,8 +27,8 @@ Stmt make_checked_call(Expr call) {
     return s;
 }
 
-class WrapExternStages : public IRMutator {
-    using IRMutator::visit;
+class WrapExternStages : public IRMutator2 {
+    using IRMutator2::visit;
 
     string make_wrapper(const Call *op) {
         string wrapper_name = replace_all(prefix + op->name, ":", "_");
@@ -70,7 +70,7 @@ class WrapExternStages : public IRMutator {
         for (Argument a : args) {
             if (a.kind == Argument::InputBuffer ||
                 a.kind == Argument::OutputBuffer) {
-                Expr new_buffer_var = Variable::make(a.type, a.name + ".buffer");
+                Expr new_buffer_var = Variable::make(type_of<struct halide_buffer_t *>(), a.name + ".buffer");
 
                 // Allocate some stack space for the old buffer
                 string old_buffer_name = a.name + ".old_buffer_t";
@@ -118,10 +118,8 @@ class WrapExternStages : public IRMutator {
         return wrapper_name;
     }
 
-    void visit(const Call *op) {
-        if ((op->call_type == Call::Extern ||
-             op->call_type == Call::ExternCPlusPlus) &&
-            op->func.defined()) {
+    Expr visit(const Call *op) override {
+        if (op->is_extern() && op->func.defined()) {
             Function f(op->func);
             internal_assert(f.has_extern_definition());
             if (f.extern_definition_uses_old_buffer_t()) {
@@ -129,12 +127,12 @@ class WrapExternStages : public IRMutator {
                 for (Expr e : op->args) {
                     new_args.push_back(mutate(e));
                 }
-                expr = Call::make(op->type, make_wrapper(op), new_args, Call::Extern, op->func);
+                return Call::make(op->type, make_wrapper(op), new_args, Call::Extern, op->func);
             } else {
-                IRMutator::visit(op);
+                return IRMutator2::visit(op);
             }
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 

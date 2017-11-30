@@ -441,6 +441,10 @@ struct halide_trace_packet_t {
         return (const int *)(this + 1);
     }
 
+    HALIDE_ALWAYS_INLINE int *coordinates() {
+        return (int *)(this + 1);
+    }
+
     /** Get the value, assuming this packet is laid out in memory as
      * it was written. The packet comes immediately after the coordinates
      * array. */
@@ -448,10 +452,18 @@ struct halide_trace_packet_t {
         return (const void *)(coordinates() + dimensions);
     }
 
+    HALIDE_ALWAYS_INLINE void *value() {
+        return (void *)(coordinates() + dimensions);
+    }
+
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
         return (const char *)value() + type.lanes * type.bytes();
+    }
+
+    HALIDE_ALWAYS_INLINE char *func() {
+        return (char *)value() + type.lanes * type.bytes();
     }
     #endif
 };
@@ -515,6 +527,11 @@ struct halide_device_interface_t {
     int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
                                   const struct halide_device_interface_t *device_interface);
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
+                       const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
+    int (*device_crop)(void *user_context, const struct halide_buffer_t *src,
+                       struct halide_buffer_t *dst);
+    int (*device_release_crop)(void *user_context, struct halide_buffer_t *buf);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
@@ -540,6 +557,42 @@ extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                  const struct halide_device_interface_t *device_interface);
+
+/** Copy data from one buffer to another. The buffers may have
+ * different shapes and sizes, but the destination buffer's shape must
+ * be contained within the source buffer's shape. That is, for each
+ * dimension, the min on the destination buffer must be greater than
+ * or equal to the min on the source buffer, and min+extent on the
+ * destination buffer must be less that or equal to min+extent on the
+ * source buffer. The source data is pulled from either device or
+ * host memory on the source, depending on the dirty flags. host is
+ * preferred if both are valid. The dst_device_interface parameter
+ * controls the destination memory space. NULL means host memory. */
+extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                              const struct halide_device_interface_t *dst_device_interface,
+                              struct halide_buffer_t *dst);
+
+/** Give the destination buffer a device allocation which is an alias
+ * for the same coordinate range in the source buffer. Modifies the
+ * device, device_interface, and the device_dirty flag only. Only
+ * supported by some device APIs (others will return
+ * halide_error_code_device_crop_unsupported). Call
+ * halide_device_release_crop instead of halide_device_free to clean
+ * up resources associated with the cropped view. Do not free the
+ * device allocation on the source buffer while the destination buffer
+ * still lives. Note that the two buffers do not share dirty flags, so
+ * care must be taken to update them together as needed. Note also
+ * that device interfaces which support cropping may still not support
+ * cropping a crop. Instead, create a new crop of the parent
+ * buffer. */
+extern int halide_device_crop(void *user_context,
+                              const struct halide_buffer_t *src,
+                              struct halide_buffer_t *dst);
+
+/** Release any resources associated with a cropped view of another
+ * buffer. */
+extern int halide_device_release_crop(void *user_context,
+                                      struct halide_buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
@@ -772,8 +825,8 @@ enum halide_error_code_t {
      * more details. */
     halide_error_code_device_free_failed = -18,
 
-    /** A device operation was attempted on a buffer with no device
-     * interface. */
+    /** Buffer has a non-zero device but no device interface, which
+     * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
     /** An error occurred when attempting to initialize the Matlab
@@ -833,6 +886,46 @@ enum halide_error_code_t {
      * to see more details. */
     halide_error_code_device_detach_native_failed = -33,
 
+    /** The host field on an input or output was null, the device
+     * field was not zero, and the pipeline tries to use the buffer on
+     * the host. You may be passing a GPU-only buffer to a pipeline
+     * which is scheduled to use it on the CPU. */
+    halide_error_code_host_is_null = -34,
+
+    /** A folded buffer was passed to an extern stage, but the region
+     * touched wraps around the fold boundary. */
+    halide_error_code_bad_extern_fold = -35,
+
+    /** Buffer has a non-null device_interface but device is 0, which
+     * violates a Halide invariant. */
+    halide_error_code_device_interface_no_device= -36,
+
+    /** Buffer has both host and device dirty bits set, which violates
+     * a Halide invariant. */
+    halide_error_code_host_and_device_dirty = -37,
+
+    /** The halide_buffer_t * passed to a halide runtime routine is
+     * nullptr and this is not allowed. */
+    halide_error_code_buffer_is_null = -38,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from one buffer to another. Turn on -debug in your target
+     * string to see more details. */
+    halide_error_code_device_buffer_copy_failed = -39,
+
+    /** Attempted to make cropped alias of a buffer with a device
+     * field, but the device_interface does not support cropping. */
+    halide_error_code_device_crop_unsupported = -40,
+
+    /** Cropping a buffer failed for some other reason. Turn on -debug
+     * in your target string. */
+    halide_error_code_device_crop_failed = -41,
+
+    /** An operation on a buffer required an allocation on a
+     * particular device interface, but a device allocation already
+     * existed on a different device interface. Free the old one
+     * first. */
+    halide_error_code_incompatible_device_interface = -42,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -889,6 +982,7 @@ extern int halide_error_buffer_argument_is_null(void *user_context, const char *
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
 extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+extern int halide_error_host_is_null(void *user_context, const char *func_name);
 extern int halide_error_failed_to_upgrade_buffer_t(void *user_context,
                                                    const char *input_name,
                                                    const char *reason);
@@ -897,11 +991,17 @@ extern int halide_error_failed_to_downgrade_buffer_t(void *user_context,
                                                      const char *reason);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);
+extern int halide_error_bad_extern_fold(void *user_context, const char *func_name,
+                                        int dim, int min, int extent, int valid_min, int fold_factor);
 
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
 extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 extern int halide_error_specialize_fail(void *user_context, const char *message);
+extern int halide_error_no_device_interface(void *user_context);
+extern int halide_error_device_interface_no_device(void *user_context);
+extern int halide_error_host_and_device_dirty(void *user_context);
+extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 
 // @}
 
@@ -952,7 +1052,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
     halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
     halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
@@ -1153,6 +1253,24 @@ typedef struct halide_buffer_t {
             index += dim[i].stride * (pos[i] - dim[i].min);
         }
         return host + index * type.bytes();
+    }
+
+    /** Attempt to call device_sync for the buffer. If the buffer
+     * has no device_interface (or no device_sync), this is a quiet no-op.
+     * Calling this explicitly should rarely be necessary, except for profiling. */
+    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = NULL) {
+        if (device_interface && device_interface->device_sync) {
+            return device_interface->device_sync(ctx, this);
+        }
+        return 0;
+    }
+
+    /** Check if an input buffer passed extern stage is a querying
+     * bounds. Compared to doing the host pointer check directly,
+     * this both adds clarity to code and will facilitate moving to
+     * another representation for bounds query arguments. */
+    HALIDE_ALWAYS_INLINE bool is_bounds_query() const {
+        return host == NULL && device == 0;
     }
 
 #endif

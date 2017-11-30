@@ -32,13 +32,17 @@ Interval bounds_of_expr_in_scope(Expr expr,
                                  const FuncValueBounds &func_bounds = FuncValueBounds(),
                                  bool const_bound = false);
 
-/* Given a varying expression, try to find a constant that is either:
+/** Given a varying expression, try to find a constant that is either:
  * An upper bound (always greater than or equal to the expression), or
  * A lower bound (always less than or equal to the expression)
  * If it fails, returns an undefined Expr. */
 enum class Direction {Upper, Lower};
-Expr find_constant_bound(Expr e, Direction d,
+Expr find_constant_bound(const Expr &e, Direction d,
                          const Scope<Interval> &scope = Scope<Interval>());
+
+/** Find bounds for a varying expression that are either constants or
+ * +/-inf. */
+Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
 
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
@@ -62,6 +66,18 @@ struct Box {
 
     /** Check if the used condition is defined and not trivially true. */
     bool maybe_unused() const {return used.defined() && !is_one(used);}
+
+    friend std::ostream& operator<<(std::ostream& stream, const Box& b) {
+        stream << "{";
+        for (size_t dim = 0; dim < b.size(); dim++) {
+            if (dim > 0) {
+                stream << ", ";
+            }
+            stream << "[" << b[dim].min << ", " << b[dim].max << "]";
+        }
+        stream << "}";
+        return stream;
+    }
 };
 
 /** Expand box a to encompass box b */

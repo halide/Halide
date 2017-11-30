@@ -27,20 +27,53 @@ const Definition &get_stage_definition(const Function &f, int stage_num) {
     return f.update(stage_num - 1);
 }
 
-class InjectPrefetch : public IRMutator {
+// Collect the bounds of all the externally referenced buffers in a stmt.
+class CollectExternalBufferBounds : public IRVisitor {
 public:
-    InjectPrefetch(const map<string, Function> &e)
-        : env(e), current_func(nullptr), stage(-1) { }
+    map<string, Box> buffers;
+
+    using IRVisitor::visit;
+
+    void add_buffer_bounds(const string &name, Buffer<> image, Parameter param, int dims) {
+        Box b;
+        for (int i = 0; i < dims; ++i) {
+            string dim_name = std::to_string(i);
+            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name,
+                                            image, param, ReductionDomain());
+            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name,
+                                               image, param, ReductionDomain());
+            Expr buf_max_i = buf_min_i + buf_extent_i - 1;
+            b.push_back(Interval(buf_min_i, buf_max_i));
+        }
+        buffers.emplace(name, b);
+    }
+
+    void visit(const Call *op) {
+        IRVisitor::visit(op);
+        add_buffer_bounds(op->name, op->image, op->param, (int)op->args.size());
+    }
+
+    void visit(const Variable *op) {
+        if (op->param.defined() && op->param.is_buffer()) {
+            add_buffer_bounds(op->name, Buffer<>(), op->param, op->param.dimensions());
+        }
+    }
+};
+
+class InjectPrefetch : public IRMutator2 {
+public:
+    InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
+        : env(e), external_buffers(buffers), current_func(nullptr), stage(-1) { }
 
 private:
     const map<string, Function> &env;
+    const map<string, Box> &external_buffers;
     const Function *current_func;
     int stage;
-    Scope<Interval> scope;
     Scope<Box> buffer_bounds;
 
 private:
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
     const vector<PrefetchDirective> &get_prefetch_list(const string &loop_name) {
         if (!current_func || !starts_with(loop_name, current_func->name() + ".s" + std::to_string(stage))) {
@@ -53,7 +86,7 @@ private:
             internal_assert(v[1].substr(0, 1) == "s");
             {
                 string str = v[1].substr(1, v[1].size() - 1);
-                bool has_only_digits = (str.find_first_not_of( "0123456789" ) == string::npos);
+                bool has_only_digits = (str.find_first_not_of("0123456789") == string::npos);
                 internal_assert(has_only_digits);
                 stage = atoi(str.c_str());
             }
@@ -77,90 +110,23 @@ private:
             return b;
         }
 
-        // It is an image
+        // It is an external buffer.
         user_assert(env.find(name) == env.end())
             << "Prefetch to buffer \"" << name << "\" which has not been allocated\n" ;
-        Box b;
-        for (int i = 0; i < dims; i++) {
-            string dim_name = std::to_string(i);
-            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name);
-            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name);
-            Expr buf_max_i = buf_min_i + buf_extent_i - 1;
-            b.push_back(Interval(buf_min_i, buf_max_i));
-        }
-        return b;
+
+        const auto &iter = external_buffers.find(name);
+        internal_assert(iter != external_buffers.end());
+        return iter->second;
     }
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         Box b;
         b.used = op->condition;
         for (const auto &r : op->bounds) {
             b.push_back(Interval(r.min, r.min + r.extent - 1));
         }
-        buffer_bounds.push(op->name, b);
-        IRMutator::visit(op);
-        buffer_bounds.pop(op->name);
-    }
-
-    // To prevent combinatorial code explosion when calling the
-    // bounds_of_expr_in_scope, we only substitute the let's value
-    // directly if it is either a constant or a variable.
-    bool should_substitute_let(Expr e) {
-        return is_const(e) || ( e.as<Variable>() != nullptr);
-    }
-
-    template<typename LetOrLetStmt, typename T>
-    T visit_let(const LetOrLetStmt *op) {
-        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
-
-        bool fixed = value_bounds.is_single_point();
-        value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
-
-        if (should_substitute_let(value_bounds.min) &&
-            (fixed || should_substitute_let(value_bounds.max))) {
-            scope.push(op->name, value_bounds);
-            IRMutator::visit(op);
-            scope.pop(op->name);
-        } else {
-            string max_name = unique_name('t');
-            string min_name = unique_name('t');
-
-            scope.push(op->name, Interval(Variable::make(op->value.type(), min_name),
-                                          Variable::make(op->value.type(), max_name)));
-            IRMutator::visit(op);
-            scope.pop(op->name);
-
-            bool is_stmt = std::is_same<T, Stmt>::value;
-            op = is_stmt ? stmt.as<LetOrLetStmt>() : expr.as<LetOrLetStmt>();
-            internal_assert(op);
-            T body = op->body;
-
-            if (stmt_or_expr_uses_var(body, max_name)) {
-                body = LetOrLetStmt::make(max_name, value_bounds.max, body);
-            }
-            if (stmt_or_expr_uses_var(body, min_name)) {
-                body = LetOrLetStmt::make(min_name, value_bounds.min, body);
-            }
-            if (!body.same_as(op->body)) {
-                return LetOrLetStmt::make(op->name, op->value, body);
-            }
-        }
-        return T();
-    }
-
-    void visit(const Let *op) {
-        Expr let = visit_let<Let, Expr>(op);
-        if (let.defined()) {
-            expr = let;
-        }
-    }
-
-    void visit(const LetStmt *op) {
-        Stmt let_stmt = visit_let<LetStmt, Stmt>(op);
-        if (let_stmt.defined()) {
-            stmt = let_stmt;
-        }
+        ScopedBinding<Box> bind(buffer_bounds, op->name, b);
+        return IRMutator2::visit(op);
     }
 
     Stmt add_prefetch(string buf_name, const Parameter &param, const Box &box, Stmt body) {
@@ -186,17 +152,14 @@ private:
         return Block::make({prefetch, body});
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         const Function *old_func = current_func;
         int old_stage = stage;
 
         const vector<PrefetchDirective> &prefetch_list = get_prefetch_list(op->name);
 
-        // Add loop variable to interval scope for any inner loop prefetch
         Expr loop_var = Variable::make(Int(32), op->name);
-        scope.push(op->name, Interval(loop_var, loop_var));
         Stmt body = mutate(op->body);
-        scope.pop(op->name);
 
         if (!prefetch_list.empty()) {
             // If there are multiple prefetches of the same Func or ImageParam,
@@ -211,9 +174,7 @@ private:
 
                 // Add loop variable + prefetch offset to interval scope for box computation
                 Expr fetch_at = loop_var + p.offset;
-                scope.push(op->name, Interval(fetch_at, fetch_at));
-                map<string, Box> boxes_rw = boxes_touched(body, scope);
-                scope.pop(op->name);
+                map<string, Box> boxes_rw = boxes_touched(LetStmt::make(op->name, fetch_at, body));
 
                 // TODO(psuriana): Only prefetch the newly accessed data. We
                 // should subtract the box accessed during previous iteration
@@ -248,6 +209,7 @@ private:
             }
         }
 
+        Stmt stmt;
         if (!body.same_as(op->body)) {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         } else {
@@ -256,18 +218,19 @@ private:
 
         current_func = old_func;
         stage = old_stage;
+        return stmt;
     }
 };
 
 // Reduce the prefetch dimension if bigger than 'max_dim'. It keeps the 'max_dim'
 // innermost dimensions and replaces the rests with for-loops.
-class ReducePrefetchDimension : public IRMutator {
-    using IRMutator::visit;
+class ReducePrefetchDimension : public IRMutator2 {
+    using IRMutator2::visit;
 
     size_t max_dim;
 
-    void visit(const Evaluate *op) {
-        IRMutator::visit(op);
+    Stmt visit(const Evaluate *op) override {
+        Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
         const Call *call = op->value.as<Call>();
@@ -304,6 +267,7 @@ class ReducePrefetchDimension : public IRMutator {
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
                      << "Before:\n" << Expr(call) << "\nAfter:\n" << stmt << "\n";
         }
+        return stmt;
     }
 
 public:
@@ -313,13 +277,13 @@ public:
 // If the prefetched data is larger than 'max_byte_size', we need to tile the
 // prefetch. This will split the prefetch call into multiple calls by adding
 // an outer for-loop around the prefetch.
-class SplitPrefetch : public IRMutator {
-    using IRMutator::visit;
+class SplitPrefetch : public IRMutator2 {
+    using IRMutator2::visit;
 
     Expr max_byte_size;
 
-    void visit(const Evaluate *op) {
-        IRMutator::visit(op);
+    Stmt visit(const Evaluate *op) override {
+        Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<Evaluate>();
         internal_assert(op);
         const Call *call = op->value.as<Call>();
@@ -367,6 +331,7 @@ class SplitPrefetch : public IRMutator {
             debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"
                      << "Before:\n" << Expr(call) << "\nAfter:\n" << stmt << "\n";
         }
+        return stmt;
     }
 
 public:
@@ -376,7 +341,9 @@ public:
 } // anonymous namespace
 
 Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
-    return InjectPrefetch(env).mutate(s);
+    CollectExternalBufferBounds finder;
+    s.accept(&finder);
+    return InjectPrefetch(env, finder.buffers).mutate(s);
 }
 
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {

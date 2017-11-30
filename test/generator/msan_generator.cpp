@@ -37,6 +37,6 @@ private:
     Func input, msan_extern_stage;
 };
 
-Halide::RegisterGenerator<MSAN> register_my_gen{"msan"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(MSAN, msan)

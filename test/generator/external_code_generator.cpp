@@ -15,7 +15,7 @@ public:
     Input<Buffer<int32_t>> input{ "input", 2 };
     Output<Buffer<float>> output{ "output", 2 };
     HalidePureExtern_1(float, gen_extern_tester, float);
- 
+
     void generate() {
         Var x("x"), y("y");
         Func f("f");
@@ -42,7 +42,7 @@ public:
             get_externs_map()->insert({name,
                   Halide::ExternalCode::c_plus_plus_code_wrapper(code_vector, name)});
         }
-        
+
         output(x, y) = gen_extern_tester(cast<float>(input(x, y)));
     }
 
@@ -50,6 +50,7 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ExternalCode> register_my_gen{"external_code"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ExternalCode, external_code)
+

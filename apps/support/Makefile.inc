@@ -8,7 +8,7 @@ UNAME ?= $(shell uname)
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
-LDFLAGS += -lole32 -lkernel32 -luuid -Wl,--stack,8388608
+LDFLAGS += -lole32 -lkernel32 -lpsapi -luuid -Wl,--stack,8388608
 else
 LDFLAGS += -ldl -lpthread -lz
 endif
@@ -55,9 +55,16 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
-LIBJPEG_LIBS = -ljpeg
+# Workaround brew Cellar path for libpng-config output.
+LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/][Cc]ellar[/]libpng/!d;s=\(.*\)/[Cc]ellar/libpng/.*=\1/lib=')
+LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
+
+# There's no libjpeg-config, unfortunately. We should look for
+# jpeglib.h one directory level up from png.h . Also handle
+# Mac OS brew installs where libpng-config returns paths
+# into the PNG cellar.
 LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
-LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
+LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/[Cc]ellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/[Cc]ellar/libpng/.*=\1/include=')
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
@@ -78,13 +85,13 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
 endif
 
 $(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
 $(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
-	$(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER=$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
 

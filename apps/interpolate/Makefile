@@ -5,11 +5,11 @@ CXXFLAGS += -g -Wall
 .PHONY: clean
 
 $(BIN)/interpolate: interpolate.cpp
-	@-mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) interpolate.cpp $(LIB_HALIDE) -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) $(LLVM_SHARED_LIBS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/out.png: $(BIN)/interpolate
-	@-mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$^ $(IMAGES)/rgba.png $@
 
 clean:
