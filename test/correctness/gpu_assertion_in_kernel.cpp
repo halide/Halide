@@ -4,7 +4,10 @@ using namespace Halide;
 
 bool errored = false;
 void my_error(void *, const char *msg) {
-    printf("Expected error: %s\n", msg);
+    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
+    // test as a failure on Windows, regardless of error code returned,
+    // hence the abbreviation to "err".
+    printf("Expected err: %s\n", msg);
     errored = true;
 }
 
