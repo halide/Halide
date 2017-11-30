@@ -22,14 +22,14 @@ NUMPY_PATH=$(shell python3 -c "import numpy; print(numpy.__path__[0] + '/core/in
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/python/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/python/%.cpp=build/py_%.o)
-NUMPY_SRCS=$(shell ls $(ROOT_DIR)/numpy/*.cpp)
-NUMPY_OBJS=$(NUMPY_SRCS:$(ROOT_DIR)/numpy/%.cpp=build/numpy_%.o)
+NUMPY_SRCS=$(shell ls $(ROOT_DIR)/halide_numpy/*.cpp)
+NUMPY_OBJS=$(NUMPY_SRCS:$(ROOT_DIR)/halide_numpy/%.cpp=build/numpy_%.o)
 
 build/py_%.o: $(ROOT_DIR)/python/%.cpp
 	mkdir -p build
 	$(CXX) $(CCFLAGS) -c $< -o $@
 
-build/numpy_%.o: $(ROOT_DIR)/numpy/%.cpp
+build/numpy_%.o: $(ROOT_DIR)/halide_numpy/%.cpp
 	mkdir -p build
 	$(CXX) $(CCFLAGS) -I $(NUMPY_PATH) -c $< -o $@
 
