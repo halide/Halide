@@ -313,13 +313,18 @@ void StubEmitter::emit_generator_params_struct() {
         stream << "\n";
     }
 
-    stream << indent() << "inline NO_INLINE Halide::Internal::GeneratorParamsMap to_string_map() const {\n";
+    stream << indent() << "inline NO_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
     indent_level++;
     stream << indent() << "return {\n";
     indent_level++;
     std::string comma = "";
     for (auto p : v) {
-        stream << indent() << comma << "{\"" << p->name << "\", " << p->call_to_string(p->name) << "}\n";
+        stream << indent() << comma << "{\"" << p->name << "\", ";
+        if (p->is_looplevel_param()) {
+            stream << p->name << "}\n";
+        } else {
+            stream << p->call_to_string(p->name) << "}\n";
+        }
         comma = ", ";
     }
     indent_level--;
@@ -424,6 +429,7 @@ void StubEmitter::emit() {
         std::string ctype;
         std::string getter;
     };
+    bool all_outputs_are_func = true;
     std::vector<OutputInfo> out_info;
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
@@ -436,6 +442,9 @@ void StubEmitter::emit() {
             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
             getter + "(\"" + output->name() + "\")"
         });
+        if (c_type != "Func") {
+            all_outputs_are_func = false;
+        }
     }
 
     std::ostringstream guard;
@@ -487,6 +496,159 @@ void StubEmitter::emit() {
     emit_inputs_struct();
     emit_generator_params_struct();
 
+    stream << indent() << "struct Outputs final {\n";
+    indent_level++;
+    stream << indent() << "// Outputs\n";
+    for (const auto &out : out_info) {
+        stream << indent() << out.ctype << " " << out.name << ";\n";
+    }
+
+    if (!schedule_params.empty()) {
+        stream << "\n";
+        stream << indent() << "// ScheduleParams\n";
+        for (auto *p : schedule_params) {
+            std::string c_type = p->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(p->scalar_type());
+            stream << indent() << "ScheduleParam<" <<c_type << "> " << p->name() << ";\n";
+        }
+    }
+
+    stream << "\n";
+    stream << indent() << "// The Target used\n";
+    stream << indent() << "Target target;\n";
+
+    if (out_info.size() == 1) {
+        stream << "\n";
+        if (all_outputs_are_func) {
+            // If there is exactly one output, add overloads
+            // for operator Func and operator().
+            std::string name = out_info.at(0).name;
+
+            stream << indent() << "operator Halide::Func() const {\n";
+            indent_level++;
+            stream << indent() << "return " << name << ";\n";
+            indent_level--;
+            stream << indent() << "}\n";
+
+            stream << "\n";
+            stream << indent() << "template <typename... Args>\n";
+            stream << indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
+            indent_level++;
+            stream << indent() << "return " << name << "(std::forward<Args>(args)...);\n";
+            indent_level--;
+            stream << indent() << "}\n";
+
+            stream << "\n";
+            stream << indent() << "template <typename ExprOrVar>\n";
+            stream << indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
+            indent_level++;
+            stream << indent() << "return " << name << "()(args);\n";
+            indent_level--;
+            stream << indent() << "}\n";
+        } else {
+            stream << indent() << "// operator Func() and operator()() overloads omitted because the sole Output is not Func.\n";
+        }
+    }
+
+    stream << "\n";
+    if (all_outputs_are_func) {
+        stream << indent() << "Halide::Pipeline get_pipeline() const {\n";
+        indent_level++;
+        stream << indent() << "return Halide::Pipeline(std::vector<Halide::Func>{\n";
+        indent_level++;
+        int commas = (int)out_info.size() - 1;
+        for (const auto &out : out_info) {
+            stream << indent() << out.name << (commas-- ? "," : "") << "\n";
+        }
+        indent_level--;
+        stream << indent() << "});\n";
+        indent_level--;
+        stream << indent() << "}\n";
+
+        stream << "\n";
+        stream << indent() << "Halide::Realization realize(std::vector<int32_t> sizes) {\n";
+        indent_level++;
+        stream << indent() << "return get_pipeline().realize(sizes, target);\n";
+        indent_level--;
+        stream << indent() << "}\n";
+
+        stream << "\n";
+        stream << indent() << "template <typename... Args, typename std::enable_if<Halide::Internal::NoRealizations<Args...>::value>::type * = nullptr>\n";
+        stream << indent() << "Halide::Realization realize(Args&&... args) {\n";
+        indent_level++;
+        stream << indent() << "return get_pipeline().realize(std::forward<Args>(args)..., target);\n";
+        indent_level--;
+        stream << indent() << "}\n";
+
+        stream << "\n";
+        stream << indent() << "void realize(Halide::Realization r) {\n";
+        indent_level++;
+        stream << indent() << "get_pipeline().realize(r, target);\n";
+        indent_level--;
+        stream << indent() << "}\n";
+    } else {
+        stream << indent() << "// get_pipeline() and realize() overloads omitted because some Outputs are not Func.\n";
+    }
+
+    indent_level--;
+    stream << indent() << "};\n";
+    stream << "\n";
+
+    stream << indent() << "NO_INLINE static Outputs generate(\n";
+    indent_level++;
+    stream << indent() << "const GeneratorContext& context,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    stream << indent() << class_name << " self(context, inputs, generator_params);\n";
+    stream << indent() << "self.schedule();\n";
+    stream << indent() << "return {\n";
+    indent_level++;
+    for (const auto &out : out_info) {
+        stream << indent() << "self." << out.name << ",\n";
+    }
+    for (auto *p : schedule_params) {
+        stream << indent() << "self." << p->name() << ",\n";
+    }
+    stream << indent() << "self.get_target()\n";
+    indent_level--;
+    stream << indent() << "};\n";
+    indent_level--;
+    stream << indent() << "}\n";
+    stream << "\n";
+
+    stream << indent() << "// overload to allow GeneratorContext-pointer\n";
+    stream << indent() << "inline static Outputs generate(\n";
+    indent_level++;
+    stream << indent() << "const GeneratorContext* context,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    stream << indent() << "return generate(*context, inputs, generator_params);\n";
+    indent_level--;
+    stream << indent() << "}\n";
+    stream << "\n";
+
+    stream << indent() << "// overload to allow Target instead of GeneratorContext.\n";
+    stream << indent() << "inline static Outputs generate(\n";
+    indent_level++;
+    stream << indent() << "const Target& target,\n";
+    stream << indent() << "const Inputs& inputs,\n";
+    stream << indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
+    indent_level--;
+    stream << indent() << ")\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    stream << indent() << "return generate(Halide::GeneratorContext(target), inputs, generator_params);\n";
+    indent_level--;
+    stream << indent() << "}\n";
+    stream << "\n";
+
     if (!schedule_params.empty()) {
         stream << indent() << "NO_INLINE " << class_name << "() :\n";
         indent_level++;
@@ -510,7 +672,7 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << ")\n";
     indent_level++;
-    stream << indent() << ": GeneratorStub(context, halide_register_generator::" << generator_registered_name << "_ns::factory, params.to_string_map(), {\n";
+    stream << indent() << ": GeneratorStub(context, halide_register_generator::" << generator_registered_name << "_ns::factory, params.to_generator_params_map(), {\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
         stream << indent() << "to_stub_input_vector(inputs." << inputs[i]->name() << ")";
@@ -693,14 +855,6 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
-const std::map<std::string, LoopLevel> &get_halide_looplevel_enum_map() {
-    static const std::map<std::string, LoopLevel> halide_looplevel_enum_map{
-        {"root", LoopLevel::root()},
-        {"inline", LoopLevel::inlined()},
-    };
-    return halide_looplevel_enum_map;
-}
-
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
@@ -843,8 +997,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         emit_options.substitutions[subst_pair[0]] = subst_pair[1];
     }
 
-    const auto target_string = generator_args["target"];
-    auto target_strings = split_string(target_string, ",");
+    auto target_strings = split_string(generator_args["target"].string_value, ",");
     std::vector<Target> targets;
     for (const auto &s : target_strings) {
         targets.push_back(Target(s));
@@ -1150,12 +1303,28 @@ void GeneratorBase::set_generator_and_schedule_param_values(const GeneratorParam
     for (auto &key_value : params) {
         auto gp = pi.generator_params_by_name.find(key_value.first);
         if (gp != pi.generator_params_by_name.end()) {
-            gp->second->set_from_string(key_value.second);
+            if (gp->second->is_looplevel_param()) {
+                if (!key_value.second.string_value.empty()) {
+                    gp->second->set_from_string(key_value.second.string_value);
+                } else {
+                    gp->second->set(key_value.second.loop_level);
+                }
+            } else {
+                gp->second->set_from_string(key_value.second.string_value);
+            }
             continue;
         }
         auto sp = pi.schedule_params_by_name.find(key_value.first);
         if (sp != pi.schedule_params_by_name.end()) {
-            sp->second->set_from_string(key_value.second);
+            if (sp->second->is_looplevel_param()) {
+                if (!key_value.second.string_value.empty()) {
+                    sp->second->set_from_string(key_value.second.string_value);
+                } else {
+                    sp->second->set(key_value.second.loop_level);
+                }
+            } else {
+                sp->second->set_from_string(key_value.second.string_value);
+            }
             continue;
         }
         user_error << "Generator has no GeneratorParam or ScheduleParam named: " << key_value.first << "\n";
@@ -1778,8 +1947,8 @@ void generator_test() {
         // tester.sp2.set(202);  // This will assert-fail.
     }
 
-    // Verify that set_generator_param<T> and set_schedule_param<T>
-    // work properly, even if the specific subtype of Generator is not known.
+    // Verify that set_schedule_param<T>
+    // works properly, even if the specific subtype of Generator is not known.
     {
         class Tester : public Generator<Tester> {
         public:
@@ -1795,9 +1964,9 @@ void generator_test() {
             Output<Func> output{"output", Int(32), 1};
 
             void generate() {
-                internal_assert(gp0 == 1);
-                internal_assert(gp1 == 2.f);
-                internal_assert(gp2 == (uint64_t) 2);  // unchanged
+                internal_assert(gp0 == 0);
+                internal_assert(gp1 == 1.f);
+                internal_assert(gp2 == (uint64_t) 2);
                 Var x;
                 output(x) = input + gp0;
             }
@@ -1814,13 +1983,11 @@ void generator_test() {
         GeneratorBase &tester = tester_instance;
 
         // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
-        tester.set_generator_param("gp0", 1)
-              .set_schedule_param("sp0", 200);
+        tester.set_schedule_param("sp0", 200);
 
         tester.set_inputs_vector({{StubInput(42)}});
 
-        tester.set_generator_param("gp1", 2.f)
-              .set_schedule_param("sp1", 201.f);
+        tester.set_schedule_param("sp1", 201.f);
 
         tester.call_generate();
 

@@ -1,5 +1,5 @@
 if (NOT CBLAS_FOUND)
-  message(STATUS "linear_algebra: No CBLAS header, skipping CBLAD tests")
+  message(STATUS "linear_algebra: No CBLAS header, skipping CBLAS tests")
   return()
 endif()
 

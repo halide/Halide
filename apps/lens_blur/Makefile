@@ -26,3 +26,5 @@ $(BIN)/out.png: $(BIN)/process
 
 clean:
 	rm -rf $(BIN)
+
+test: $(BIN)/out.png
