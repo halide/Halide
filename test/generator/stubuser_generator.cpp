@@ -46,6 +46,7 @@ public:
 
         StubTest::GeneratorParams gp;
         gp.untyped_buffer_output_type = int32_buffer_output.type();
+        gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
         // can really only be assigned to another Output<Buffer>; this is
@@ -62,7 +63,6 @@ public:
         // Stub outputs also may contain ScheduleParams, which we may set as
         // we see fit.
         out.vectorize.set(true);
-        out.intermediate_level.set(LoopLevel(calculated_output, c));
     }
 };
 

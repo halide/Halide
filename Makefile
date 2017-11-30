@@ -1461,64 +1461,27 @@ time_compilation_opengl_%: $(BIN_DIR)/opengl_%
 time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
 
+TEST_APPS=\
+	HelloMatlab \
+	bilateral_grid \
+	blur \
+	c_backend \
+	conv_layer \
+	fft \
+	interpolate \
+	lens_blur \
+	linear_algebra \
+	local_laplacian \
+	nl_means \
+	resize \
+	wavelet \
+
 .PHONY: test_apps
-test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
-	mkdir -p apps
-	# Make a local copy of the apps if we're building out-of-tree,
-	# because the app Makefiles are written to build in-tree
-	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
-	  echo "Building out-of-tree, so making local copy of apps"; \
-	  cp -r $(ROOT_DIR)/apps/bilateral_grid \
-	        $(ROOT_DIR)/apps/conv_layer \
-	        $(ROOT_DIR)/apps/lens_blur \
-	        $(ROOT_DIR)/apps/local_laplacian \
-	        $(ROOT_DIR)/apps/nl_means \
-	        $(ROOT_DIR)/apps/interpolate \
-	        $(ROOT_DIR)/apps/blur \
-	        $(ROOT_DIR)/apps/wavelet \
-	        $(ROOT_DIR)/apps/c_backend \
-	        $(ROOT_DIR)/apps/HelloMatlab \
-	        $(ROOT_DIR)/apps/fft \
-	        $(ROOT_DIR)/apps/linear_algebra \
-	        $(ROOT_DIR)/apps/linear_blur \
-	        $(ROOT_DIR)/apps/resize \
-	        $(ROOT_DIR)/apps/images \
-	        $(ROOT_DIR)/apps/support \
-                apps; \
-	  cp -r $(ROOT_DIR)/tools .; \
-	fi
-	make -C apps/bilateral_grid clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/bilateral_grid bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/conv_layer clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/conv_layer run  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/lens_blur clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/lens_blur bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/local_laplacian clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/local_laplacian bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/nl_means clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/nl_means bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/interpolate clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/interpolate bin/out.png  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/blur clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/blur bin/test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	apps/blur/bin/test
-	make -C apps/wavelet clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/wavelet test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/c_backend clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/c_backend test  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/fft bench_16x16  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/fft bench_32x32  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/fft bench_48x48  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) HALIDE_CXX="$(CXX)" ./run_blur.sh
-	# Only test the linear algebra app if cblas.h exists in the expected place
-	if [ -f /usr/include/cblas.h ]; then \
-	  make -C apps/linear_algebra clean HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
-	  make -C apps/linear_algebra test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
-	fi
-	make -C apps/linear_blur clean HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
-	make -C apps/linear_blur test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
-	make -C apps/resize clean  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
-	make -C apps/resize all  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
+test_apps: distrib
+	@for APP in $(TEST_APPS); do \
+		echo Testing app $${APP}... ; \
+		make -C $(ROOT_DIR)/apps/$${APP} test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP} || exit 1 ; \
+	done
 
 # Bazel depends on the distrib archive being built
 .PHONY: test_bazel
