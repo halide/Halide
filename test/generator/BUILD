@@ -78,11 +78,17 @@ halide_generator(
 ]]
 
 # Generators that need extra args, etc
+cc_library(
+    name = "cxx_mangling_externs",
+    srcs = ["cxx_mangling_externs.cpp"]
+)
+
 halide_library_from_generator(
     name = "cxx_mangling",
     generator = ":cxx_mangling_generator",
     includes = ["."],
     namespace = "HalideTest::AnotherNamespace",
+    deps = [":cxx_mangling_externs"],
 )
 
 halide_library_from_generator(
@@ -91,6 +97,14 @@ halide_library_from_generator(
     #halide_target_features = ["cuda"],     # TODO
     includes = ["."],
     namespace = "HalideTest",
+    deps = [":cxx_mangling_externs"],
+)
+
+cc_library(
+    name = "cxx_mangling_define_extern_externs",
+    srcs = ["cxx_mangling_define_extern_externs.cpp"],
+    deps = [":cxx_mangling"],
+    linkstatic=1,  # TODO: necessary on OSX. Figure out why.
 )
 
 halide_library_from_generator(
@@ -99,7 +113,10 @@ halide_library_from_generator(
     halide_target_features = ["user_context"],
     includes = ["."],
     namespace = "HalideTest",
-    deps = [":cxx_mangling"],  # referenced via define_extern
+    deps = [
+        ":cxx_mangling",  # referenced via define_extern
+        ":cxx_mangling_define_extern_externs", 
+    ],
 )
 
 halide_library_from_generator(

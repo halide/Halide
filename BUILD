@@ -6,7 +6,6 @@
 # TODO apps/opengl_demo
 # TODO apps/openglcompute
 # TODO apps/simd_op_check
-# TODO apps/templates -- should probably be upgraded to Bazel-only?
 
 package(
     default_visibility = ["//visibility:private"],

@@ -24,6 +24,8 @@ load(
     "halide_runtime_linkopts",
 )
 
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application")
+
 [halide_generator(
     name = "reaction_diffusion_2_%s_generator" % phase,
     srcs = ["HelloiOS/reaction_diffusion_2_generator.cpp"],
@@ -63,10 +65,7 @@ load(
 
 objc_library(
     name = "HelloiOS",
-    srcs = glob(
-        ["HelloiOS/*.mm"],
-        exclude = ["HelloiOS/main.mm"],
-    ),
+    srcs = glob(["HelloiOS/*.mm"]),
     hdrs = glob(["HelloiOS/*.h"]),
     copts = ["-std=c++11"],
     tags = ["manual"],
@@ -81,26 +80,40 @@ objc_library(
     ],
 )
 
-objc_binary(
-    name = "ios-app-binary",
-    srcs = [
-        "HelloiOS/main.mm",
-    ],
-    linkopts = halide_runtime_linkopts(),
-    sdk_frameworks = [
-        "CoreGraphics",
-        "Metal",
-        "QuartzCore",
-    ],
-    tags = ["manual"],
-    deps = [
-        ":HelloiOS",
-    ],
-)
+# objc_binary(
+#     name = "ios-app-binary",
+#     srcs = [
+#         "HelloiOS/main.mm",
+#     ],
+#     linkopts = halide_runtime_linkopts(),
+#     sdk_frameworks = [
+#         "CoreGraphics",
+#         "Metal",
+#         "QuartzCore",
+#     ],
+#     tags = ["manual"],
+#     deps = [
+#         ":HelloiOS",
+#     ],
+# )
 
 ios_application(
     name = "ios-app",
-    binary = ":ios-app-binary",
-    infoplist = "HelloiOS/HelloiOS-Info.plist",
-    tags = ["manual"],
+    bundle_id = "org.halide-lang.apps.HelloiOS",
+    families = [
+        "iphone",
+        "ipad",
+    ],
+    infoplists = ["HelloiOS/HelloiOS-Info.plist"],
+    minimum_os_version = "8.0",
+    deps = [
+        ":HelloiOS",
+    ],
+    sdk_frameworks = [
+        "CoreGraphics",
+        "Foundation",
+        "Metal",
+        "QuartzCore",
+        "UIKit",
+    ]
 )

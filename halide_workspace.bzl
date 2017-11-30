@@ -9,7 +9,7 @@ def _check_version(x):
       fail("Current Bazel version is {}, expected at least {}".format(native.bazel_version, x))
 
 def halide_workspace():
-  _check_version("0.5.3")
+  _check_version("0.8.0")
 
   # For external dependencies that rarely change, prefer http_archive over git_repository.
   native.new_http_archive(
