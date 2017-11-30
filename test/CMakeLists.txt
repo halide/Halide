@@ -256,7 +256,7 @@ if (WITH_TEST_GENERATORS)
                          FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
                          FILTER_DEPS cxx_mangling_externs)
 
-  if (TARGET_METAL)
+  if (TARGET_METAL AND HL_TARGET MATCHES "metal")
     # There is no "acquire_release_metal_generator", so don't try to build it
     halide_define_aot_test(acquire_release_metal OMIT_DEFAULT_GENERATOR)
 
