@@ -504,7 +504,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
                 return -1;
             }
 
-            debug(user_context) << "Metal - Allocating - pipeline_state\n";
+            debug(user_context) << "Metal - Allocating: pipeline_state\n";
             mtl_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(metal_context.device, function);
             if (pipeline_state == 0) {
                 error(user_context) << "Metal: Could not allocate pipeline state.\n";

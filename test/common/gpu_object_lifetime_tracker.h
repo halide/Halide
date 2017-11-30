@@ -21,7 +21,7 @@ class GpuObjectLifetimeTracker {
             is_global(is_global), total_created(0), live_count(0) {}
     };
 
-    std::array<ObjectType, 13> object_types = {{
+    std::array<ObjectType, 14> object_types = {{
         // OpenCL objects
         {"clCreateContext", "clReleaseContext", true},
         {"clCreateCommandQueue", "clReleaseCommandQueue", true},
@@ -40,6 +40,7 @@ class GpuObjectLifetimeTracker {
         {"Allocating: MTLCreateSystemDefaultDevice", "Releasing: MTLCreateSystemDefaultDevice", true},
         {"Allocating: new_command_queue", "Releasing: new_command_queue"},
         {"Allocating: new_library_with_source", "Releasing: new_library_with_source"},
+        {"Allocating: pipeline_state", "Releasing: pipeline_state"},
 
         // Hexagon objects
         {"halide_remote_load_library", "halide_remote_release_library"},
