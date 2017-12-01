@@ -148,7 +148,7 @@ void defineRDom() {
                                                    "Construct a reduction domain that iterates over all points in "
                                                    "a given Buffer, Image, or ImageParam. "
                                                    "Has the same dimensionality as the argument."))
-                          .def(p::init<h::ImageParam>(p::args("self", "image_param"),
+                          .def(p::init<h::OutputImageParam>(p::args("self", "image_param"),
                                                       "Construct a reduction domain that iterates over all points in "
                                                       "a given Buffer, Image, or ImageParam. "
                                                       "Has the same dimensionality as the argument."))
