@@ -35,9 +35,6 @@ using namespace llvm;
 // avoid needing to #ifdef random patches of code, we just replace all LLVM intrinsics
 // with not_intrinsic.
 #ifdef WITH_HEXAGON
-#if LLVM_VERSION < 39
-#error "Hexagon target requires LLVM version 3.9 or later."
-#endif
 
 #define IPICK(is_128B, i64) (is_128B ? i64##_128B : i64)
 #else
@@ -906,11 +903,8 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         if (is_concat_or_slice(indices) || element_bits > 16) {
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
-        } else if (max < 256) {
-            // This is something else and the indices fit in 8 bits, use a vlut.
-            return vlut(concat_vectors({a, b}), indices);
         }
-        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+        return vlut(concat_vectors({a, b}), indices);
     }
 
     if (stride == 1) {
@@ -999,7 +993,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here, such as vdelta/vrdelta.
 
-    if (element_bits <= 16 && max < 256) {
+    if (element_bits <= 16) {
         return vlut(concat_vectors({a, b}), indices);
     } else {
         return CodeGen_Posix::shuffle_vectors(a, b, indices);

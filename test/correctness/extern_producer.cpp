@@ -102,9 +102,6 @@ int main(int argc, char **argv) {
                              std::vector<ExternFuncArgument>(),
                              Float(32), {x, y});
         // Row stride should be 128B/32-element aligned.
-        for (auto i : source.args()) {
-          Halide::Internal::debug(0) << i << "\n";
-        }
         source.align_storage(x, 32);
         Func sink;
         sink(x, y) = source(x, y) - sin(x + y);

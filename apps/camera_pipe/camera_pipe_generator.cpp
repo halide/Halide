@@ -30,9 +30,9 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
-    ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
-    ScheduleParam<LoopLevel> output_compute_at{"output_compute_at"};
+    GeneratorParam<LoopLevel> intermed_compute_at{"intermed_compute_at", LoopLevel::inlined()};
+    GeneratorParam<LoopLevel> intermed_store_at{"intermed_store_at", LoopLevel::inlined()};
+    GeneratorParam<LoopLevel> output_compute_at{"output_compute_at", LoopLevel::inlined()};
 
     // Inputs and outputs
     Input<Func> deinterleaved{ "deinterleaved", Int(16), 3 };
@@ -220,7 +220,7 @@ Func CameraPipe::hot_pixel_suppression(Func input) {
 
 Func CameraPipe::deinterleave(Func raw) {
     // Deinterleave the color channels
-    Func deinterleaved;
+    Func deinterleaved("deinterleaved");
 
     deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
                                     c == 1, raw(2*x+1, 2*y),
@@ -344,12 +344,8 @@ void CameraPipe::generate() {
 
     processed(x, y, c) = apply_curve(corrected)(x, y, c);
 
-    Pipeline p(processed);
-
     // Schedule
     if (auto_schedule) {
-        Pipeline p(processed);
-
         input.dim(0).set_bounds_estimate(0, 2592);
         input.dim(1).set_bounds_estimate(0, 1968);
 

@@ -1,14 +1,32 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.2)
 
 find_package(Threads QUIET)
 
-find_package(LLVM REQUIRED CONFIG)
+if("${HALIDE_REQUIRE_LLVM_VERSION}" STREQUAL "")
+  # Find any version present.
+  find_package(LLVM REQUIRED CONFIG)
+else()
+  # Find a specific version.
+  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 0 1 MAJOR)
+  string(SUBSTRING "${HALIDE_REQUIRE_LLVM_VERSION}" 1 1 MINOR)
+  message("Looking for LLVM version ${MAJOR}.${MINOR}")
+  find_package(LLVM "${MAJOR}.${MINOR}" REQUIRED CONFIG)
+  if(NOT "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "${MAJOR}${MINOR}")
+    message(FATAL_ERROR "LLVM version error: required ${MAJOR}${MINOR} but found ${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}")
+  endif()
+endif()
 
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+if (MSVC)
+  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # fix this so we can use the paths right away.
+  string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
+endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -38,14 +56,14 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFF
 
 # LLVM doesn't appear to expose --system-libs via its CMake interface, 
 # so we must shell out to llvm-config to find this info
-execute_process(COMMAND ${LLVM_CONFIG} --system-libs OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS)
-string(STRIP "${HALIDE_SYSTEM_LIBS}" HALIDE_SYSTEM_LIBS)  # strip whitespace from start & end
-string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS}")  # convert into a list
+execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
+string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
+string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
 if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # It's theoretically possible that this could be legitimately empty,
   # but in practice that doesn't really happen, so we'll assume it means we
   # aren't configured correctly.
-  message(WARNING "'llvm-config --system-libs' is empty; this is possibly wrong.")
+  message(WARNING "'llvm-config --system-libs --link-static' is empty; this is possibly wrong.")
 endif()
 
 # Check LLVM
@@ -74,10 +92,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.9 is \"39\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 4.0 is \"40\"")
 endif()
-if (LLVM_VERSION LESS 39)
-  message(FATAL_ERROR "LLVM version must be 3.9 or newer")
+if (LLVM_VERSION LESS 40)
+  message(FATAL_ERROR "LLVM version must be 4.0 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
@@ -99,7 +117,7 @@ endfunction()
 check_llvm_target(X86 WITH_X86)
 check_llvm_target(ARM WITH_ARM)
 check_llvm_target(AArch64 WITH_AARCH64)
-check_llvm_target(Hexagon WITH_HEXAGON 39)
+check_llvm_target(Hexagon WITH_HEXAGON 40)
 check_llvm_target(Mips WITH_MIPS)
 check_llvm_target(PowerPC WITH_POWERPC)
 check_llvm_target(NVPTX WITH_NVPTX)
@@ -211,13 +229,16 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
   endforeach()
 endforeach()
 
-function(define_group GROUP)
+function(define_test_group GROUP)
   if(TARGET "${GROUP}")
     message(FATAL_ERROR "Group ${GROUP} is already defined.")    
   endif()
   add_custom_target("${GROUP}")
   set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
+
+define_test_group(build_tests)
+define_test_group(run_tests)
 
 # Make a target that aggregates a number of other targets;
 # this can be used to group builds (e.g. "build_tests")
@@ -235,74 +256,59 @@ endfunction()
 # TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-function(add_to_group GROUP TARGET)
-  set(options BUILD EXECUTE)
+function(add_test TARGET)
+  set(options EXPECT_FAILURE)
   set(oneValueArgs WORKING_DIRECTORY)
-  set(multiValueArgs )
+  set(multiValueArgs GROUPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  if(NOT TARGET "${GROUP}")
-    define_group("${GROUP}")
-  endif()
-  if (${args_EXECUTE})
-    # Execute the target (e.g. for a test_foo target)
-    set(NAME "_execute_${TARGET}")
-    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
-    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
-      add_custom_target("${NAME}" 
-                         COMMAND "${TARGET}"
-                         WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
-                         COMMENT "Executing ${TARGET}"
-                         DEPENDS "${TARGET}")
-    elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
-      # It's probably a custom target or a group: just depend on it.
-      add_custom_target("${NAME}" 
-                         DEPENDS "${TARGET}")
-    else()
-      message(FATAL_ERROR "add_to_group(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+  foreach(GROUP ${args_GROUPS})
+    if(NOT TARGET "${GROUP}")
+      define_test_group("${GROUP}")
     endif()
-  elseif(${args_BUILD})
-    # Just depend on the target (e.g. for a build_foo target)
-    set(NAME "_build_${TARGET}")
-    add_custom_target("${NAME}" 
-                       DEPENDS "${TARGET}")
+  endforeach()
+
+  set(BUILD_NAME "${TARGET}")
+  # add_custom_target("${BUILD_NAME}" DEPENDS "${TARGET}")
+  set_target_properties("${BUILD_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  add_dependencies(build_tests "${BUILD_NAME}")
+
+  set(EXEC_NAME "run_${TARGET}")
+  get_target_property(TARGET_TYPE "${TARGET}" TYPE)
+  if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
+    if(${args_EXPECT_FAILURE})
+      set(COMMAND "${CMAKE_SOURCE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
+    else()
+      set(COMMAND "${TARGET}")
+    endif()
+    add_custom_target("${EXEC_NAME}" 
+                     COMMAND ${COMMAND}
+                     WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
+                     COMMENT "Executing ${TARGET}"
+                     DEPENDS "${TARGET}")
+  elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
+    # It's probably a custom target or a group: just depend on it.
+    add_custom_target("${EXEC_NAME}" DEPENDS "${TARGET}")
   else()
-    message(FATAL_ERROR "add_to_group() requires BUILD or EXECUTE")
+    message(FATAL_ERROR "add_test(): unsupported type ${TARGET_TYPE} for ${TARGET}")
   endif()
-  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-  add_dependencies("${GROUP}" "${NAME}")
+  set_target_properties("${EXEC_NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  foreach(GROUP ${args_GROUPS})
+    add_dependencies("${GROUP}" "${EXEC_NAME}")
+  endforeach()
+
 endfunction()
 
 # Only groups that are defined in *this file* will have projects reliably
 # defined for them in MSVC builds; pre-define the targets we want to be available
 # here to ensure that happens.
-define_group(build_tests)
-define_group(test_auto_schedule)
-define_group(test_correctness)
-define_group(test_error)
-define_group(test_generator)
-define_group(test_internal)
-define_group(test_opengl)
-define_group(test_performance)
-define_group(test_tutorials)
-define_group(test_warning)
-
-define_group(run_tests)
-if(WITH_TESTS)
-  add_to_group(run_tests test_correctness BUILD)
-  add_to_group(run_tests test_error BUILD)
-  add_to_group(run_tests test_generators BUILD)
-  add_to_group(run_tests test_internal BUILD)
-  add_to_group(run_tests test_warning BUILD)
-endif()
-if(WITH_TUTORIALS)
-  add_to_group(run_tests test_tutorials BUILD)
-endif()
-
-# TODO(srj): these need to be run one-at-a-time, without any -j option,
-# otherwise we can get false slowdown failures.
-# add_to_group(run_tests test_performance BUILD)
-# add_to_group(run_tests test_auto_schedule BUILD)
-
+define_test_group(test_auto_schedule)
+define_test_group(test_correctness)
+define_test_group(test_error)
+define_test_group(test_generator)
+define_test_group(test_opengl)
+define_test_group(test_performance)
+define_test_group(test_tutorials)
+define_test_group(test_warning)
 
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
@@ -355,3 +361,151 @@ if (WITH_UTILS)
 else()
   message(STATUS "Building utils disabled")
 endif()
+
+# ------------------------------------------------
+# 'make distrib' support
+
+add_custom_target(build_distrib_dir)
+set(DISTRIB_DIR "${CMAKE_BINARY_DIR}/distrib")
+
+function(_make_distrib_subdir TARGET DIR)
+  set(NAME "_make_distrib_dir_${TARGET}")
+  add_custom_target("${NAME}" 
+                    COMMAND cmake -E make_directory "${DISTRIB_DIR}/${DIR}")
+  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  add_dependencies("${TARGET}" "${NAME}" )
+endfunction()
+
+# Copy the file produced by TARGET into the distrib folder, in the subdir DIR
+function(add_to_distrib TARGET DIR)
+  set(options )
+  set(oneValueArgs )
+  set(multiValueArgs DEPS)
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  if(TARGET "${TARGET}")
+    set(NAME "_distrib_${TARGET}")
+    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
+    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE" OR 
+       "${TARGET_TYPE}" STREQUAL "STATIC_LIBRARY" OR
+       "${TARGET_TYPE}" STREQUAL "SHARED_LIBRARY")
+      add_custom_target("${NAME}" 
+                         COMMAND cmake -E copy $<TARGET_FILE:${TARGET}> "${DISTRIB_DIR}/${DIR}"
+                         DEPENDS "${TARGET}")
+      _make_distrib_subdir("${NAME}" "${DIR}")
+    else()
+      message(FATAL_ERROR "TARGET ${TARGET} has type ${TARGET_TYPE}")
+    endif()
+    set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  else()
+    get_filename_component(FNAME "${TARGET}" NAME)
+    set(NAME "_distrib_${DIR}_${FNAME}")
+    string(REPLACE "/" "_" NAME "${NAME}")
+    string(REPLACE "\\" "_" NAME "${NAME}")
+    add_custom_target("${NAME}" 
+                       COMMAND cmake -E copy "${TARGET}" "${DISTRIB_DIR}/${DIR}"
+                       DEPENDS "${TARGET}")
+    _make_distrib_subdir("${NAME}" "${DIR}")
+  endif()
+  if(NOT "${args_DEPS}" STREQUAL "")
+    add_dependencies("${NAME}" ${args_DEPS})
+  endif()
+  add_dependencies(build_distrib_dir "${NAME}")
+endfunction()
+
+# ---- libHalide
+if("${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
+  add_to_distrib(Halide bin)
+else()
+  add_to_distrib(Halide lib)
+endif()
+
+# ---- Header files
+add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include
+               DEPS HalideIncludes)
+add_to_distrib("${CMAKE_BINARY_DIR}/include/HalideBuffer.h" include)
+file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
+foreach(F ${FILES})
+  add_to_distrib(${F} include)
+endforeach()
+
+# ---- Tutorials
+foreach(EXT cpp h sh)
+  set(DIR "${CMAKE_SOURCE_DIR}/tutorial")
+  file(GLOB FILES "${DIR}/*.${EXT}")
+  foreach(F ${FILES})
+    add_to_distrib(${F} tutorial)
+  endforeach()
+endforeach()
+foreach(EXT gif jpg mp4)
+  set(DIR "${CMAKE_SOURCE_DIR}/tutorial/figures")
+  file(GLOB FILES "${DIR}/*.${EXT}")
+  foreach(F ${FILES})
+    add_to_distrib(${F} tutorial/figures)
+  endforeach()
+endforeach()
+foreach(EXT png)
+  set(DIR "${CMAKE_SOURCE_DIR}/tutorial/images")
+  file(GLOB FILES "${DIR}/*.${EXT}")
+  foreach(F ${FILES})
+    add_to_distrib(${F} tutorial/images)
+  endforeach()
+endforeach()
+
+# ---- Tools
+foreach(F mex_halide.m 
+          GenGen.cpp 
+          RunGen.cpp 
+          RunGenStubs.cpp 
+          halide_benchmark.h  
+          halide_image.h 
+          halide_image_io.h 
+          halide_image_info.h)
+  add_to_distrib("${CMAKE_SOURCE_DIR}/tools/${F}" tools)
+endforeach()
+
+# ---- README
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.md")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
+# ---- Bazel 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/bazel/*")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
+# ---- CMake 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.cmake")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
+# ---- halide_config 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/tools/halide_config.*.tpl")
+foreach(F ${FILES})
+  # Can't rely on sed on Windows, so just do the trivial transform we need right here.
+  file(READ ${F} CONTENTS)
+  get_filename_component(FNAME "${F}" NAME)  # Extract filename
+  string(REGEX REPLACE "\\.tpl$" "" FNAME "${FNAME}")  # Strip .tpl extension
+  string(REPLACE "\${LLVM_SYSTEM_LIBS}" "${HALIDE_SYSTEM_LIBS_RAW}" NEW_CONTENTS "${CONTENTS}")
+  file(WRITE "${CMAKE_BINARY_DIR}/${FNAME}" ${NEW_CONTENTS})
+  add_to_distrib("${CMAKE_BINARY_DIR}/${FNAME}" "")
+endforeach()
+
+# ---- distrib.tgz and distrib.zip
+file(TO_NATIVE_PATH "${DISTRIB_DIR}" NATIVE_DISTRIB_DIR)
+file(TO_NATIVE_PATH "${DISTRIB_DIR}/../" NATIVE_ARCHIVE_DIR)
+if (MSVC)
+  # 'cmake -E tar' can create zipfiles as of v3.2+
+  add_custom_target(halide_archive
+      DEPENDS build_distrib_dir
+      COMMAND cmake -E tar -cf "${NATIVE_ARCHIVE_DIR}/halide.zip" --format=zip "${NATIVE_DISTRIB_DIR}")
+else()
+  add_custom_target(halide_archive
+      DEPENDS build_distrib_dir
+      COMMAND cmake -E tar -czf "${NATIVE_ARCHIVE_DIR}/halide.tgz" "${NATIVE_DISTRIB_DIR}")
+endif()
+
+add_custom_target(distrib)
+add_dependencies(distrib build_distrib_dir halide_archive)
