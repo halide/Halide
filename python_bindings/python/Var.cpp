@@ -105,13 +105,6 @@ void defineVar() {
                          .def("expr", &var_as_expr, p::arg("self"),  //operator Expr() const
                               "A Var can be treated as an Expr of type Int(32)")
 
-                         .def("gpu_blocks", &Var::gpu_blocks,  // no args
-                              "Vars to use for scheduling producer/consumer pairs on the gpu.")
-                         .staticmethod("gpu_blocks")
-                         .def("gpu_threads", &Var::gpu_threads,  // no args
-                              "Vars to use for scheduling producer/consumer pairs on the gpu.")
-                         .staticmethod("gpu_threads")
-
                          .def("outermost", &Var::outermost,  // no args
                               "A Var that represents the location outside the outermost loop.")
                          .staticmethod("outermost")

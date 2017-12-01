@@ -495,9 +495,15 @@ private:
     }
 
     template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
-                                                   (std::is_same<T, MachineParams>::value || std::is_same<T, LoopLevel>::value)>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char *msg) {
+                                                   std::is_same<T, MachineParams>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const MachineParams &value, const char *msg) {
         value_ = value;
+    }
+
+    template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
+                                                   std::is_same<T, LoopLevel>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const LoopLevel &value, const char *msg) {
+        value_.set(value);
     }
 };
 
@@ -3230,6 +3236,7 @@ namespace halide_register_generator {
     namespace halide_register_generator { \
         struct halide_global_ns; \
         namespace GEN_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context); \
             std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context) { \
                 return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); \
             } \
