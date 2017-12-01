@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.2)
 
 find_package(Threads QUIET)
 
@@ -56,9 +56,9 @@ file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFF
 
 # LLVM doesn't appear to expose --system-libs via its CMake interface, 
 # so we must shell out to llvm-config to find this info
-execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS)
-string(STRIP "${HALIDE_SYSTEM_LIBS}" HALIDE_SYSTEM_LIBS)  # strip whitespace from start & end
-string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS}")  # convert into a list
+execute_process(COMMAND ${LLVM_CONFIG} --system-libs --link-static OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS_RAW)
+string(STRIP "${HALIDE_SYSTEM_LIBS_RAW}" HALIDE_SYSTEM_LIBS_RAW)  # strip whitespace from start & end
+string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS_RAW}")  # convert into a list
 if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # It's theoretically possible that this could be legitimately empty,
   # but in practice that doesn't really happen, so we'll assume it means we
@@ -361,3 +361,151 @@ if (WITH_UTILS)
 else()
   message(STATUS "Building utils disabled")
 endif()
+
+# ------------------------------------------------
+# 'make distrib' support
+
+add_custom_target(build_distrib_dir)
+set(DISTRIB_DIR "${CMAKE_BINARY_DIR}/distrib")
+
+function(_make_distrib_subdir TARGET DIR)
+  set(NAME "_make_distrib_dir_${TARGET}")
+  add_custom_target("${NAME}" 
+                    COMMAND cmake -E make_directory "${DISTRIB_DIR}/${DIR}")
+  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  add_dependencies("${TARGET}" "${NAME}" )
+endfunction()
+
+# Copy the file produced by TARGET into the distrib folder, in the subdir DIR
+function(add_to_distrib TARGET DIR)
+  set(options )
+  set(oneValueArgs )
+  set(multiValueArgs DEPS)
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  if(TARGET "${TARGET}")
+    set(NAME "_distrib_${TARGET}")
+    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
+    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE" OR 
+       "${TARGET_TYPE}" STREQUAL "STATIC_LIBRARY" OR
+       "${TARGET_TYPE}" STREQUAL "SHARED_LIBRARY")
+      add_custom_target("${NAME}" 
+                         COMMAND cmake -E copy $<TARGET_FILE:${TARGET}> "${DISTRIB_DIR}/${DIR}"
+                         DEPENDS "${TARGET}")
+      _make_distrib_subdir("${NAME}" "${DIR}")
+    else()
+      message(FATAL_ERROR "TARGET ${TARGET} has type ${TARGET_TYPE}")
+    endif()
+    set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  else()
+    get_filename_component(FNAME "${TARGET}" NAME)
+    set(NAME "_distrib_${DIR}_${FNAME}")
+    string(REPLACE "/" "_" NAME "${NAME}")
+    string(REPLACE "\\" "_" NAME "${NAME}")
+    add_custom_target("${NAME}" 
+                       COMMAND cmake -E copy "${TARGET}" "${DISTRIB_DIR}/${DIR}"
+                       DEPENDS "${TARGET}")
+    _make_distrib_subdir("${NAME}" "${DIR}")
+  endif()
+  if(NOT "${args_DEPS}" STREQUAL "")
+    add_dependencies("${NAME}" ${args_DEPS})
+  endif()
+  add_dependencies(build_distrib_dir "${NAME}")
+endfunction()
+
+# ---- libHalide
+if("${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
+  add_to_distrib(Halide bin)
+else()
+  add_to_distrib(Halide lib)
+endif()
+
+# ---- Header files
+add_to_distrib("${CMAKE_BINARY_DIR}/include/Halide.h" include
+               DEPS HalideIncludes)
+add_to_distrib("${CMAKE_BINARY_DIR}/include/HalideBuffer.h" include)
+file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
+foreach(F ${FILES})
+  add_to_distrib(${F} include)
+endforeach()
+
+# ---- Tutorials
+foreach(EXT cpp h sh)
+  set(DIR "${CMAKE_SOURCE_DIR}/tutorial")
+  file(GLOB FILES "${DIR}/*.${EXT}")
+  foreach(F ${FILES})
+    add_to_distrib(${F} tutorial)
+  endforeach()
+endforeach()
+foreach(EXT gif jpg mp4)
+  set(DIR "${CMAKE_SOURCE_DIR}/tutorial/figures")
+  file(GLOB FILES "${DIR}/*.${EXT}")
+  foreach(F ${FILES})
+    add_to_distrib(${F} tutorial/figures)
+  endforeach()
+endforeach()
+foreach(EXT png)
+  set(DIR "${CMAKE_SOURCE_DIR}/tutorial/images")
+  file(GLOB FILES "${DIR}/*.${EXT}")
+  foreach(F ${FILES})
+    add_to_distrib(${F} tutorial/images)
+  endforeach()
+endforeach()
+
+# ---- Tools
+foreach(F mex_halide.m 
+          GenGen.cpp 
+          RunGen.cpp 
+          RunGenStubs.cpp 
+          halide_benchmark.h  
+          halide_image.h 
+          halide_image_io.h 
+          halide_image_info.h)
+  add_to_distrib("${CMAKE_SOURCE_DIR}/tools/${F}" tools)
+endforeach()
+
+# ---- README
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.md")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
+# ---- Bazel 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/bazel/*")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
+# ---- CMake 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.cmake")
+foreach(F ${FILES})
+  add_to_distrib(${F} "")
+endforeach()
+
+# ---- halide_config 
+file(GLOB FILES "${CMAKE_SOURCE_DIR}/tools/halide_config.*.tpl")
+foreach(F ${FILES})
+  # Can't rely on sed on Windows, so just do the trivial transform we need right here.
+  file(READ ${F} CONTENTS)
+  get_filename_component(FNAME "${F}" NAME)  # Extract filename
+  string(REGEX REPLACE "\\.tpl$" "" FNAME "${FNAME}")  # Strip .tpl extension
+  string(REPLACE "\${LLVM_SYSTEM_LIBS}" "${HALIDE_SYSTEM_LIBS_RAW}" NEW_CONTENTS "${CONTENTS}")
+  file(WRITE "${CMAKE_BINARY_DIR}/${FNAME}" ${NEW_CONTENTS})
+  add_to_distrib("${CMAKE_BINARY_DIR}/${FNAME}" "")
+endforeach()
+
+# ---- distrib.tgz and distrib.zip
+file(TO_NATIVE_PATH "${DISTRIB_DIR}" NATIVE_DISTRIB_DIR)
+file(TO_NATIVE_PATH "${DISTRIB_DIR}/../" NATIVE_ARCHIVE_DIR)
+if (MSVC)
+  # 'cmake -E tar' can create zipfiles as of v3.2+
+  add_custom_target(halide_archive
+      DEPENDS build_distrib_dir
+      COMMAND cmake -E tar -cf "${NATIVE_ARCHIVE_DIR}/halide.zip" --format=zip "${NATIVE_DISTRIB_DIR}")
+else()
+  add_custom_target(halide_archive
+      DEPENDS build_distrib_dir
+      COMMAND cmake -E tar -czf "${NATIVE_ARCHIVE_DIR}/halide.tgz" "${NATIVE_DISTRIB_DIR}")
+endif()
+
+add_custom_target(distrib)
+add_dependencies(distrib build_distrib_dir halide_archive)

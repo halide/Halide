@@ -140,6 +140,9 @@ WEAK int halide_cuda_release_context(void *user_context) {
 // any sort of scoping must be handled by that of the
 // halide_cuda_acquire_context/halide_cuda_release_context pair, not this call.
 WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
+    // There are two default streams we could use. stream 0 is fully
+    // synchronous. stream 2 gives a separate non-blocking stream per
+    // thread.
     *stream = 0;
     return 0;
 }
@@ -724,7 +727,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         src = dst;
     }
 
-    bool from_host = !src->device_dirty();
+    bool from_host = !src->device_dirty() && src->host;
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);

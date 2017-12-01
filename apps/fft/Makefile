@@ -58,3 +58,9 @@ fft_aot_test: $(BIN)/fft_aot_test
 	$(BIN)/fft_aot_test
 
 all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64
+
+# Ensure these are run sequentially and not in parallel
+test: $(BIN)/bench_fft
+	$(BIN)/bench_fft 16 16 $(BIN)/
+	$(BIN)/bench_fft 32 32 $(BIN)/
+	$(BIN)/bench_fft 48 48 $(BIN)/
