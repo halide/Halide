@@ -512,6 +512,8 @@ __QAIC_STUB_EXPORT remote_handle _halide_hexagon_remote_handle(void) {
 
 #endif //__qdsp6__
 
+int remote_register_dma_handle(int, uint32_t);
+
 __QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_skel_invoke)(uint32_t _sc, remote_arg* _pra) __QAIC_STUB_ATTRIBUTE {
    return __QAIC_REMOTE(remote_handle_invoke)(_halide_hexagon_remote_handle(), _sc, _pra);
 }
@@ -524,7 +526,6 @@ __QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_skel_invoke)(uint32_t _
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern int remote_register_dma_handle(int, uint32_t);
 static __inline int _stub_method(remote_handle _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], char* _in1[1], uint32_t _in1Len[1], uint32_t _rout2[1]) {
    int _numIn[1];
    remote_arg _pra[4];
@@ -610,7 +611,7 @@ static __inline int _stub_unpack_1(remote_arg* _praROutPost, remote_arg* _ppraRO
    _ppraROutPostStart[0] += (_praROutPost - _praROutPostStart) +0;
    return _nErr;
 }
-static __inline int _stub_pack(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], remote_arg* _praHIn, remote_arg* _ppraHIn[1], remote_arg* _praHROut, remote_arg* _ppraHROut[1], void* _primIn, void* _primROut, char* _rout0[1], uint32_t _rout0Len[1]) {
+static __inline int _stub_pack(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], void* _primIn, void* _primROut, char* _rout0[1], uint32_t _rout0Len[1]) {
    int _nErr = 0;
    remote_arg* _praInStart = _praIn;
    remote_arg** _ppraInStart = _ppraIn;
@@ -625,7 +626,7 @@ static __inline int _stub_pack(_allocator* _al, remote_arg* _praIn, remote_arg* 
    _ppraROutStart[0] += (_praROut - _praROutStart) +1;
    return _nErr;
 }
-static __inline int _stub_pack_1(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], remote_arg* _praHIn, remote_arg* _ppraHIn[1], remote_arg* _praHROut, remote_arg* _ppraHROut[1], void* _primIn, void* _primROut, char* _in0[1], uint32_t _in0Len[1]) {
+static __inline int _stub_pack_1(_allocator* _al, remote_arg* _praIn, remote_arg* _ppraIn[1], remote_arg* _praROut, remote_arg* _ppraROut[1], void* _primIn, void* _primROut, char* _in0[1], uint32_t _in0Len[1]) {
    int _nErr = 0;
    remote_arg* _praInStart = _praIn;
    remote_arg** _ppraInStart = _ppraIn;
@@ -640,24 +641,18 @@ static __inline int _stub_pack_1(_allocator* _al, remote_arg* _praIn, remote_arg
    _ppraROutStart[0] += (_praROut - _praROutStart) +0;
    return _nErr;
 }
-static __inline void _count(int _numIn[1], int _numROut[1], int _numInH[1], int _numROutH[1], char* _rout0[1], uint32_t _rout0Len[1]) {
+static __inline void _count(int _numIn[1], int _numROut[1], char* _rout0[1], uint32_t _rout0Len[1]) {
    _numIn[0] += 0;
    _numROut[0] += 1;
-   _numInH[0] += 0;
-   _numROutH[0] += 0;
 }
-static __inline void _count_1(int _numIn[1], int _numROut[1], int _numInH[1], int _numROutH[1], char* _in0[1], uint32_t _in0Len[1]) {
+static __inline void _count_1(int _numIn[1], int _numROut[1], char* _in0[1], uint32_t _in0Len[1]) {
    _numIn[0] += 1;
    _numROut[0] += 0;
-   _numInH[0] += 0;
-   _numROutH[0] += 0;
 }
 static __inline int _stub_method_3(remote_handle _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _in1[1], void* _in2[1], uint32_t _in2Len[1], void* _rout3[1], uint32_t _rout3Len[1], char* _in4[1], uint32_t _in4Len[1]) {
    remote_arg* _pra;
    int _numIn[1];
    int _numROut[1];
-   int _numInH[1];
-   int _numROutH[1];
    char* _seq_nat2;
    int _ii;
    char* _seq_nat3;
@@ -669,27 +664,21 @@ static __inline int _stub_method_3(remote_handle _handle, uint32_t _mid, uint32_
    remote_arg** _ppraROutPost = &_praROutPost;
    remote_arg** _ppraIn = &_praIn;
    remote_arg** _ppraROut = &_praROut;
-   remote_arg* _praHIn = 0;
-   remote_arg** _ppraHIn = &_praHIn;
-   remote_arg* _praHROut = 0;
-   remote_arg** _ppraHROut = &_praHROut;
    char* _seq_primIn2;
    int _nErr = 0;
    char* _seq_primIn3;
    _numIn[0] = 3;
    _numROut[0] = 0;
-   _numInH[0] = 0;
-   _numROutH[0] = 0;
    for(_ii = 0, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
-      _count_1(_numIn, _numROut, _numInH, _numROutH, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2])));
+      _count_1(_numIn, _numROut, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2])));
    }
    for(_ii = 0, _seq_nat3 = (char*)_rout3[0];_ii < (int)_rout3Len[0];++_ii, _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
    {
-      _count(_numIn, _numROut, _numInH, _numROutH, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2])));
+      _count(_numIn, _numROut, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2])));
    }
    _allocator_init(_al, 0, 0);
-   _ALLOCATE(_nErr, _al, ((((((((_numIn[0] + _numROut[0]) + _numInH[0]) + _numROutH[0]) + 1) + 0) + 0) + 0) * sizeof(_pra[0])), 4, _pra);
+   _ALLOCATE(_nErr, _al, ((((_numIn[0] + _numROut[0]) + 1) + 0) * sizeof(_pra[0])), 4, _pra);
    _pra[0].buf.pv = (void*)_primIn;
    _pra[0].buf.nLen = sizeof(_primIn);
    _praIn = (_pra + 1);
@@ -698,31 +687,23 @@ static __inline int _stub_method_3(remote_handle _handle, uint32_t _mid, uint32_
    _COPY(_primIn, 0, _in0, 0, 4);
    _COPY(_primIn, 4, _in1, 0, 4);
    _COPY(_primIn, 8, _in2Len, 0, 4);
-   if(_praHIn == 0)
-   {
-      _praHIn = ((_praROut + _numROut[0]) + 0);
-   }
-   if(_praHROut == 0)
-      (_praHROut = _praHIn + _numInH[0] + 0);
    _ALLOCATE(_nErr, _al, (_in2Len[0] * 4), 4, _praIn[0].buf.pv);
    _praIn[0].buf.nLen = (4 * _in2Len[0]);
    for(_ii = 0, _seq_primIn2 = (char*)_praIn[0].buf.pv, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_primIn2 = (_seq_primIn2 + 4), _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
-      _TRY(_nErr, _stub_pack_1(_al, (_praIn + 1), _ppraIn, (_praROut + 0), _ppraROut, _praHIn, _ppraHIn, _praHROut, _ppraHROut, _seq_primIn2, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
+      _TRY(_nErr, _stub_pack_1(_al, (_praIn + 1), _ppraIn, (_praROut + 0), _ppraROut, _seq_primIn2, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
    }
    _COPY(_primIn, 12, _rout3Len, 0, 4);
    _ALLOCATE(_nErr, _al, (_rout3Len[0] * 4), 4, _praIn[1].buf.pv);
    _praIn[1].buf.nLen = (4 * _rout3Len[0]);
    for(_ii = 0, _seq_primIn3 = (char*)_praIn[1].buf.pv, _seq_nat3 = (char*)_rout3[0];_ii < (int)_rout3Len[0];++_ii, _seq_primIn3 = (_seq_primIn3 + 4), _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
    {
-      _TRY(_nErr, _stub_pack(_al, (_praIn + 2), _ppraIn, (_praROut + 0), _ppraROut, _praHIn, _ppraHIn, _praHROut, _ppraHROut, _seq_primIn3, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2]))));
+      _TRY(_nErr, _stub_pack(_al, (_praIn + 2), _ppraIn, (_praROut + 0), _ppraROut, _seq_primIn3, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2]))));
    }
    _COPY(_primIn, 16, _in4Len, 0, 4);
    _praIn[2].buf.pv = _in4[0];
    _praIn[2].buf.nLen = (8 * _in4Len[0]);
-   _ASSERT(_nErr, (_numInH[0] + 0) <= 15);
-   _ASSERT(_nErr, (_numROutH[0] + 0) <= 15);
-   _TRY(_nErr, __QAIC_REMOTE(remote_handle_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, (_numIn[0] + 1), (_numROut[0] + 0), (_numInH[0] + 0), (_numROutH[0] + 0)), _pra));
+   _TRY(_nErr, __QAIC_REMOTE(remote_handle_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, (_numIn[0] + 1), (_numROut[0] + 0), 0, 0), _pra));
    for(_ii = 0, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _stub_unpack_1((_praROutPost + 0), _ppraROutPost, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
