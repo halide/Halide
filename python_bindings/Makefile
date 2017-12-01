@@ -6,7 +6,7 @@ HALIDE_DIR ?= ..
 
 ifeq ($(UNAME), Linux)
 # Disable some warnings that are pervasive in Boost
-CCFLAGS=$(shell python3-config --cflags) -I $(HALIDE_DIR)/include -std=c++11 -fPIC -Wno-unused-local-typedef -Wno-shorten-64-to-32
+CCFLAGS=$(shell python3-config --cflags) -I $(HALIDE_DIR)/include -I $(ROOT_DIR) -std=c++11 -fPIC -Wno-unused-local-typedef -Wno-shorten-64-to-32
 PYTHON_VER=$(shell python3 --version | cut -d' ' -f2 | cut -b1,3)
 LDFLAGS=$(shell python3-config --ldflags) -lboost_python-py$(PYTHON_VER) -lz
 endif
