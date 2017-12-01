@@ -60,6 +60,9 @@ int main(int argc, char **argv) {
     // the Stub wants Expr, so make a conversion in place
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
+    // Pass in a set of GeneratorParams: even though we aren't customizing
+    // the values, we can set the LoopLevel values after-the-fact.
+    StubTest::GeneratorParams gp;
     auto gen = StubTest(
         GeneratorContext(get_jit_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
@@ -70,12 +73,10 @@ int main(int argc, char **argv) {
             { Func(array_input[0]), Func(array_input[1]) },
             1.25f,
             int_args_expr
-        });
+        },
+        gp);
 
-    // This generator defaults intermediate_level to "undefined",
-    // so we *must* specify something for it (else we'll crater at
-    // Halide compile time). We'll use this:
-    gen.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
+    gp.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
     gen.schedule();
 
     Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
