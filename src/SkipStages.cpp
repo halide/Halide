@@ -402,6 +402,8 @@ class MightBeSkippable : public IRVisitor {
 
     using IRVisitor::visit;
 
+    bool in_conditional_stmt{false};
+
     void visit(const Call *op) {
         IRVisitor::visit(op);
         if (op->call_type == Call::Halide) {
@@ -415,6 +417,7 @@ class MightBeSkippable : public IRVisitor {
         std::set<string> old;
         unconditionally_used.swap(old);
 
+        ScopedValue<bool> old_in_conditional(in_conditional_stmt, true);
         op->then_case.accept(this);
 
         std::set<string> used_in_true;
@@ -454,7 +457,7 @@ class MightBeSkippable : public IRVisitor {
     void visit(const ProducerConsumer *op) {
         if (!op->is_producer) {
             op->body.accept(this);
-            if (!unconditionally_used.count(op->name)) {
+            if (!unconditionally_used.count(op->name) || in_conditional_stmt) {
                 // This Func has a least one consume clause in which
                 // it is only used conditionally.
                 candidates.insert(op->name);

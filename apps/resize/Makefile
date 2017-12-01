@@ -69,3 +69,6 @@ $(BIN)/out_%_down.png: $(BIN)/resize
 
 clean:
 	rm -rf $(BIN)
+
+
+test: all

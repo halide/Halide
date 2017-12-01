@@ -10,8 +10,7 @@
 #ifdef USE_BOOST_NUMPY
 #include <boost/numpy.hpp>
 #else
-// we use Halide::numpy
-#include "../numpy/numpy.hpp"
+#include "halide_numpy/numpy.hpp"
 #endif
 #endif  // USE_NUMPY
 
