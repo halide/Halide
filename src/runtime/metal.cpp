@@ -299,7 +299,7 @@ WEAK int halide_metal_acquire_command_buffer(void* user_context,
     debug(user_context) << "Metal - Internal halide_metal_acquire_command_buffer() called\n";
     if (!current_command_buffer) {
         current_command_buffer = new_command_buffer(queue);
-        if (current_command_buffer == 0) {
+        if (!current_command_buffer) {
             error(user_context) << "Metal: Could not create command buffer.\n";
             return -1;
         }
