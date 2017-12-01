@@ -37,3 +37,5 @@ $(BIN)/camera_pipe.mp4: $(BIN)/viz/process viz.sh $(HALIDE_TRACE_VIZ) ../../bin/
 
 clean:
 	rm -rf $(BIN)
+
+test: $(BIN)/out.png
