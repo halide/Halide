@@ -260,6 +260,22 @@ if (WITH_TEST_GENERATORS)
                          FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
                          FILTER_DEPS cxx_mangling_externs)
 
+  if (TARGET_METAL)
+    # There is no "acquire_release_metal_generator", so don't try to build it
+    halide_define_aot_test(acquire_release_metal OMIT_DEFAULT_GENERATOR)
+
+    # Instead, make a custom version of acquire_release with metal enabled
+    halide_library_from_generator(acquire_release_metal
+                                  GENERATOR acquire_release.generator
+                                  HALIDE_TARGET_FEATURES metal)
+
+    # Link it in (and also the objc library)
+    target_link_libraries(generator_aot_acquire_release_metal PUBLIC 
+                          acquire_release_metal
+                          "-framework Metal" 
+                          "-framework Foundation")
+  endif()
+
   if (TARGET_PTX)
     halide_library_from_generator(cxx_mangling_gpu
                                   GENERATOR cxx_mangling.generator
