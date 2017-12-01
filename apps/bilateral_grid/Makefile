@@ -35,3 +35,5 @@ $(BIN)/out.png: $(BIN)/filter
 
 clean:
 	rm -rf $(BIN)
+
+test: $(BIN)/out.png

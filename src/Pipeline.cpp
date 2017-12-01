@@ -716,7 +716,13 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             << " because Buffer is " << dst[i].dimensions()
             << "-dimensional, but Func \"" << func.name()
             << "\" is " << dims << "-dimensional.\n";
-        user_assert(dst[i].type() == type)
+        // For our purposes here, consider all Handle types equivalent:
+        // Buffer<> doesn't retain handle-traits (thus it collapses all
+        // all Handle types into void*), but Func does not, so we can have
+        // confusing cases where Buffer<char*> is not "compatible" with Func<char*>.
+        // (Buffer-of-handle-type is a degenerate case anyway...)
+        user_assert(dst[i].type() == type ||
+                    (dst[i].type().is_handle() && type.is_handle()))
             << "Can't realize Func \"" << func.name()
             << "\" into Buffer at " << (void *)dst[i].data()
             << " because Buffer has type " << Type(dst[i].type())
