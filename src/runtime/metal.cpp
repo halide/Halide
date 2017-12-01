@@ -692,7 +692,6 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
-    debug(user_context) << "Here....\n";
     mtl_command_buffer *command_buffer;
     if (halide_metal_acquire_command_buffer(user_context, metal_context.queue,
           &command_buffer) != 0) {
