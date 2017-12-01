@@ -299,7 +299,7 @@ WEAK int halide_metal_acquire_command_buffer(void* user_context,
     debug(user_context) << "Metal - Internal halide_metal_acquire_command_buffer() called\n";
     if (!current_command_buffer) {
         current_command_buffer = new_command_buffer(queue);
-        if (*command_buffer_ret == 0) {
+        if (current_command_buffer == 0) {
             error(user_context) << "Metal: Could not create command buffer.\n";
             return -1;
         }
@@ -692,6 +692,7 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
+    debug(user_context) << "Here....\n";
     mtl_command_buffer *command_buffer;
     if (halide_metal_acquire_command_buffer(user_context, metal_context.queue,
           &command_buffer) != 0) {
