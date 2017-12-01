@@ -132,7 +132,7 @@ public:
 
     /** Accept a mutator to mutator all of the definitions and
      * arguments of this function. */
-    EXPORT void mutate(IRMutator *mutator);
+    EXPORT void mutate(IRMutator2 *mutator);
 
     /** Get the name of the function. */
     EXPORT const std::string &name() const;
@@ -144,7 +144,7 @@ public:
     EXPORT const Definition &definition() const;
 
     /** Get the pure arguments. */
-    EXPORT const std::vector<std::string> args() const;
+    EXPORT const std::vector<std::string> &args() const;
 
     /** Get the dimensionality. */
     EXPORT int dimensions() const;
@@ -157,7 +157,8 @@ public:
     /** Get the types of the outputs. */
     EXPORT const std::vector<Type> &output_types() const;
 
-    /** Get the right-hand-side of the pure definition. */
+    /** Get the right-hand-side of the pure definition. Returns an
+     * empty vector if there is no pure definition. */
     EXPORT const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
@@ -232,7 +233,7 @@ public:
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
-                              int dimensionality,
+                              const std::vector<std::string> &dims,
                               NameMangling mangling,
                               DeviceAPI device_api,
                               bool uses_old_buffer_t);
@@ -276,6 +277,10 @@ public:
     EXPORT bool is_tracing_stores() const;
     EXPORT bool is_tracing_realizations() const;
     // @}
+
+    /** Replace this Function's LoopLevels with locked copies that
+     * cannot be mutated further. */
+    EXPORT void lock_loop_levels();
 
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */

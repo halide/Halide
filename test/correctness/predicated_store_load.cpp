@@ -7,6 +7,8 @@
 
 #include "test/common/check_call_graphs.h"
 
+namespace {
+
 using std::map;
 using std::vector;
 using std::string;
@@ -39,15 +41,15 @@ protected:
     }
 };
 
-class CheckPredicatedStoreLoad : public IRMutator {
+class CheckPredicatedStoreLoad : public IRMutator2 {
     int has_store_count;
     int has_load_count;
 public:
     CheckPredicatedStoreLoad(bool store, bool load) :
         has_store_count(store), has_load_count(load) {}
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         CountPredicatedStoreLoad c;
         s.accept(&c);
 
@@ -387,6 +389,8 @@ int vectorized_predicated_load_const_index_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
 

@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-BIN = bin
+BIN ?= bin
 BUILD = $(BIN)/build
 CXXFLAGS += -O3 -fopenmp -Wall -march=native
 HL_TARGET ?= host
@@ -71,11 +71,16 @@ BENCHMARKS = \
 all: $(BENCHMARKS)
 	make run_benchmarks
 
+ifneq ("$(wildcard /usr/include/cblas.h)","")
 test: $(BIN)/test_halide_blas
 	$(BIN)/test_halide_blas
+else
+test:
+	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
+endif
 
 clean:
-	rm -rf bin
+	rm -rf $(BIN)
 
 KERNEL_HEADERS = $(KERNELS:%=$(BUILD)/halide_%.h)
 KERNEL_OBJECTS = $(KERNELS:%=$(BUILD)/halide_%.o) $(BUILD)/halide_runtime.o

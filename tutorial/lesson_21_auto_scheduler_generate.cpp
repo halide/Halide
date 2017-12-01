@@ -28,8 +28,6 @@ using namespace Halide;
 // We will define a generator to auto-schedule.
 class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-
     Input<Buffer<float>>  input{"input", 3};
     Input<float>          factor{"factor"};
 
@@ -100,16 +98,24 @@ public:
             // they are to the actual use-case values, the better the generated
             // schedule will be.
 
-            // Now, let's auto-schedule the pipeline by calling auto_schedule_outputs(),
-            // which takes in a MachineParams object as an argument. The machine_params
-            // argument is optional. If none is specified, the default machine parameters
-            // for a generic CPU architecture are going to be used by the auto-scheduler.
+            // To auto-schedule the the pipeline, we don't have to do anything else:
+            // every Generator implicitly has a GeneratorParam named "auto_schedule";
+            // if this is set to true, Halide will call auto_schedule() on all of
+            // our pipeline's outputs automatically.
 
-            // Let's use some arbitrary but plausible values for the machine parameters.
-            const int kParallelism = 32;
-            const int kLastLevelCacheSize = 16 * 1024 * 1024;
-            const int kBalance = 40;
-            MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
+            // Every Generator also implicitly has a GeneratorParams named "machine_params",
+            // which allows you to specify characteristics of the machine architecture
+            // for the auto-scheduler; it's generally specified in your Makefile.
+            // If none is specified, the default machine parameters for a generic CPU
+            // architecture will be used by the auto-scheduler.
+
+            // Let's see some arbitrary but plausible values for the machine parameters.
+            //
+            //      const int kParallelism = 32;
+            //      const int kLastLevelCacheSize = 16 * 1024 * 1024;
+            //      const int kBalance = 40;
+            //      MachineParams machine_params(kParallelism, kLastLevelCacheSize, kBalance);
+            //
             // The arguments to MachineParams are the maximum level of parallelism
             // available, the size of the last-level cache (in KB), and the ratio
             // between the cost of a miss at the last level cache and the cost
@@ -118,15 +124,14 @@ public:
             // Note that when using the auto-scheduler, no schedule should have
             // been applied to the pipeline; otherwise, the auto-scheduler will
             // throw an error. The current auto-scheduler cannot handle a
-            // partially-schedule pipeline.
-            //
-            // Calling auto_schedule_outputs() will apply the generated schedule
-            // automatically to members of the pipeline in addition to returning
-            // a string representation of the schedule.
-            std::string schedule = auto_schedule_outputs(machine_params);
-            std::cout << "\nSchedule:\n\n" << schedule << "\n";
+            // partially-scheduled pipeline.
 
-            // The generated schedule that is dumped to std::cout is an actual
+            // If HL_DEBUG_CODEGEN is set to 3 or greater, the schedule will be dumped
+            // to stdout (along with much other information); a more useful way is
+            // to add "schedule" to the -e flag to the Generator. (In CMake and Bazel,
+            // this is done using the "extra_outputs" flag.)
+
+            // The generated schedule that is dumped to file is an actual
             // Halide C++ source, which is readily copy-pasteable back into
             // this very same source file with few modifications. Programmers
             // can use this as a starting schedule and iteratively improve the

@@ -5,8 +5,11 @@ compiler:
   - gcc
 env:
   global:
-    - BAZEL_VERSION="0.5.2"
+    - BAZEL_VERSION="0.6.1"
     - JDK=openjdk8
+    # The Travis Ubuntu Trusty environment we run in currently promises 2 cores,
+    # so running lengthy make steps with -j2 is almost certainly a win.
+    - MAKEFLAGS=-j2
   matrix:
     # Configurations
     #
@@ -15,8 +18,8 @@ env:
     #
     # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
-    - LLVM_VERSION=3.9.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
     - LLVM_VERSION=4.0.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
+    - LLVM_VERSION=5.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
     - LLVM_VERSION=4.0.1 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
 cache: apt ccache
 dist: trusty
@@ -27,9 +30,8 @@ before_install:
   - export CC=${CC_}
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
-  # Disabled for now: see https://github.com/halide/Halide/issues/2195
-  # - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
-  # - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
+  - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
+  - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
 install:
   - sudo apt-get -y --force-yes install ${CXX} ${CC} libedit-dev
   # Make gcc4.8 the default gcc version

@@ -134,7 +134,7 @@ set<string> get_parents(Function f, int stage) {
             } else if (arg.is_image_param() || arg.is_buffer()) {
                 Buffer<> buf;
                 if (arg.is_image_param()) {
-                    buf = arg.image_param.get_buffer();
+                    buf = arg.image_param.buffer();
                 } else {
                     buf = arg.buffer;
                 }

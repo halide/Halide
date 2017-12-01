@@ -439,14 +439,14 @@ protected:
     /** Get the result of modulus-remainder analysis for a given expr. */
     ModulusRemainder get_alignment_info(Expr e);
 
+    /** Alignment info for Int(32) variables in scope. */
+    Scope<ModulusRemainder> alignment_info;
+
 private:
 
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
-
-    /** Alignment info for Int(32) variables in scope. */
-    Scope<ModulusRemainder> alignment_info;
 
     /** String constants already emitted to the module. Tracked to
      * prevent emitting the same string many times. */
@@ -463,7 +463,8 @@ private:
      * pointer-to-constant-data.
      */
     llvm::Function* embed_metadata_getter(const std::string &metadata_getter_name,
-        const std::string &function_name, const std::vector<LoweredArgument> &args);
+        const std::string &function_name, const std::vector<LoweredArgument> &args,
+        const std::map<std::string, std::string> &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);

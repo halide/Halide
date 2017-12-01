@@ -22,7 +22,7 @@ struct FunctionContents;
 namespace Internal {
 
 class IRVisitor;
-class IRMutator;
+class IRMutator2;
 struct Specialization;
 
 /** A Function definition which can either represent a init or an update
@@ -47,7 +47,7 @@ public:
     EXPORT Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                       const ReductionDomain &rdom, bool is_init);
 
-    /** Construct an empty Definition. By default, it is a init definition. */
+    /** Construct an undefined Definition object. */
     EXPORT Definition();
 
     /** Return a copy of this Definition. */
@@ -58,6 +58,9 @@ public:
         return contents.same_as(other.contents);
     }
 
+    /** Definition objects are nullable. Does this definition exist? */
+    EXPORT bool defined() const;
+
     /** Is this an init definition; otherwise it's an update definition */
     EXPORT bool is_init() const;
 
@@ -65,9 +68,9 @@ public:
      * definition. */
     EXPORT void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * definition. */
-    EXPORT void mutate(IRMutator *);
+    EXPORT void mutate(IRMutator2 *);
 
     /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
     // @{
@@ -107,6 +110,11 @@ public:
     EXPORT const Specialization &add_specialization(Expr condition);
     // @}
 
+    /** Attempt to get the source file and line where this definition
+     * was made using DWARF introspection. Returns an empty string if
+     * no debug symbols were found or the debug symbols were not
+     * understood. Works on OS X and Linux only. */
+    EXPORT std::string source_location() const;
 };
 
 struct Specialization {

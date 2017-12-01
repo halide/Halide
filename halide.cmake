@@ -219,6 +219,8 @@ function(halide_library_from_generator BASENAME)
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.bc")
     elseif ("${OUTPUT}" STREQUAL "stmt")
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.stmt")
+    elseif ("${OUTPUT}" STREQUAL "schedule")
+      list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.schedule")
     elseif ("${OUTPUT}" STREQUAL "html")
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.html")
     endif()
@@ -272,7 +274,7 @@ function(halide_library_from_generator BASENAME)
 
   # BASENAME.run simply runs the BASENAME.rungen target
   add_custom_target("${BASENAME}.run" 
-                    COMMAND "${RUNGEN}" "$(RUNARGS)"
+                    COMMAND "${RUNGEN}" "${RUNARGS}"
                     DEPENDS "${RUNGEN}")
   set_target_properties("${BASENAME}.run" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
@@ -312,7 +314,6 @@ endfunction()
 # Set the C++ options necessary for using libHalide.
 function(_halide_set_cxx_options TARGET)
   set_target_properties("${TARGET}" PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
-  target_compile_definitions("${TARGET}" PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
   if (MSVC)
     target_compile_definitions("${TARGET}" PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
     target_compile_options("${TARGET}" PRIVATE "/GR-")
@@ -617,7 +618,7 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/halide_config.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/halide_config.cmake")
   else()
-    message(FATAL_ERROR "HALIDE_SYSTEM_LIBS is not set and we could not find halide_config.cmake")
+    message(WARNING "HALIDE_SYSTEM_LIBS is not set and we could not find halide_config.cmake")
   endif()
 endif()
 

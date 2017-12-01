@@ -157,15 +157,6 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     return generate_schedules(contents->outputs, target, arch_params);
 }
 
-string Pipeline::auto_schedule(const Target &target) {
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "Automatic scheduling is currently supported only on these architectures.";
-    // Default machine parameters for generic CPU architecture.
-    MachineParams arch_params(16, 16 * 1024 * 1024, 40);
-    return generate_schedules(contents->outputs, target, arch_params);
-}
-
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
@@ -387,7 +378,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         // We can avoid relowering and just reuse the existing module.
         debug(2) << "Reusing old module\n";
     } else {
-        vector<IRMutator *> custom_passes;
+        vector<IRMutator2 *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
@@ -514,7 +505,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     return contents->jit_externs;
 }
 
-void Pipeline::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
+void Pipeline::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
@@ -725,7 +716,13 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             << " because Buffer is " << dst[i].dimensions()
             << "-dimensional, but Func \"" << func.name()
             << "\" is " << dims << "-dimensional.\n";
-        user_assert(dst[i].type() == type)
+        // For our purposes here, consider all Handle types equivalent:
+        // Buffer<> doesn't retain handle-traits (thus it collapses all
+        // all Handle types into void*), but Func does not, so we can have
+        // confusing cases where Buffer<char*> is not "compatible" with Func<char*>.
+        // (Buffer-of-handle-type is a degenerate case anyway...)
+        user_assert(dst[i].type() == type ||
+                    (dst[i].type().is_handle() && type.is_handle()))
             << "Can't realize Func \"" << func.name()
             << "\" into Buffer at " << (void *)dst[i].data()
             << " because Buffer has type " << Type(dst[i].type())
@@ -740,7 +737,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer<> buf = arg.param.get_buffer();
+            Buffer<> buf = arg.param.buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -749,7 +746,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             }
             debug(1) << "JIT input ImageParam argument ";
         } else if (arg.param.defined()) {
-            arg_values.push_back(arg.param.get_scalar_address());
+            arg_values.push_back(arg.param.scalar_address());
             debug(1) << "JIT input scalar argument ";
         } else {
             debug(1) << "JIT input Image argument ";
@@ -916,7 +913,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
         JITModule::Symbol reset_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_reset");
         if (report_sym.address && reset_sym.address) {
-            void *uc = jit_context.user_context_param.get_scalar<void *>();
+            void *uc = jit_context.user_context_param.scalar<void *>();
             void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
             report_fn_ptr(uc);
 
@@ -1007,7 +1004,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
-        internal_assert(!ia.param.get_buffer().defined());
+        internal_assert(!ia.param.buffer().defined());
 
         // Allocate enough memory with the right type and dimensionality.
         tracked_buffers[i].query.allocate();
