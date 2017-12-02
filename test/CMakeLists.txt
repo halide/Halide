@@ -113,7 +113,7 @@ if (WITH_TEST_GENERATORS)
     endif()
 
     add_test("${TARGET}"
-             GROUPS test_generators run_tests)
+             GROUPS test_generator run_tests)
   endfunction(halide_define_aot_test)
 
   # Find all the files of form "foo_generator.cpp" in test/generator
