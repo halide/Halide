@@ -111,6 +111,7 @@ void defineTarget() {
 
         .value("OpenCL", Target::Feature::OpenCL)
         .value("CLDoubles", Target::Feature::CLDoubles)
+        .value("CLHalf", Target::Feature::CLHalf)
 
         .value("OpenGL", Target::Feature::OpenGL)
         .value("UserContext", Target::Feature::UserContext)
