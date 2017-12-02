@@ -85,7 +85,6 @@ private:
 
     void include_parameter(Parameter p) {
         if (!p.defined()) return;
-        if (p.is_bound_before_lowering()) return;
         if (already_have(p.name())) return;
 
         Expr def, min, max;
