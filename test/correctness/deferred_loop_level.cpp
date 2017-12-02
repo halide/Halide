@@ -3,9 +3,9 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-class CheckScheduleParams : public IRVisitor {
+class CheckLoopLevels : public IRVisitor {
 public:
-    CheckScheduleParams(const std::string &inner_loop_level,
+    CheckLoopLevels(const std::string &inner_loop_level,
                         const std::string &outer_loop_level) :
         inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {}
 
@@ -69,7 +69,7 @@ struct Test {
         Buffer<float> result = outer.realize(1, 1, 1);
 
         Module m = outer.compile_to_module({outer.infer_arguments()});
-        CheckScheduleParams c(inner_loop_level, outer_loop_level);
+        CheckLoopLevels c(inner_loop_level, outer_loop_level);
         m.functions().front().body.accept(&c);
     }
 };

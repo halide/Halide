@@ -321,10 +321,6 @@ public:
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
 
-    /** Find all Vars that are placeholders for ScheduleParams and substitute in
-     * the corresponding constant value. */
-    EXPORT Function &substitute_schedule_param_exprs();
-
     /** Return true iff the name matches one of the Function's pure args. */
     EXPORT bool is_pure_arg(const std::string &name) const;
 };
