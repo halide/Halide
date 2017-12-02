@@ -239,7 +239,7 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t* buf) {
 
 WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, const char* src, int size) {
     debug(user_context)
-        << "CL: halide_vulkan_init_kernels (user_context: " << user_context
+        << "Vulkan: halide_vulkan_init_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
         << ", program: " << (void *)src
         << ", size: " << size << "\n";
@@ -281,7 +281,7 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
 
 // Used to generate correct timings when tracing
 WEAK int halide_vulkan_device_sync(void *user_context, halide_buffer_t *) {
-    debug(user_context) << "CL: halide_vulkan_device_sync (user_context: " << user_context << ")\n";
+    debug(user_context) << "Vulkan: halide_vulkan_device_sync (user_context: " << user_context << ")\n";
 
     VulkanContext ctx(user_context);
     halide_assert(user_context, ctx.error == VK_SUCCESS);
@@ -338,30 +338,14 @@ WEAK int halide_vulkan_device_release(void *user_context) {
 }
 
 WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
-#if 0
-typedef struct VkBufferCreateInfo {
-    VkStructureType        sType;
-    const void*            pNext;
-    VkBufferCreateFlags    flags;
-    VkDeviceSize           size;
-    VkBufferUsageFlags     usage;
-    VkSharingMode          sharingMode;
-    uint32_t               queueFamilyIndexCount;
-    const uint32_t*        pQueueFamilyIndices;
-} VkBufferCreateInfo;
-#endif
-
     debug(user_context)
         << "halide_vulkan_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     VulkanContext context(user_context);
-#if 0
-    VulkanContext ctx(user_context);
     if (ctx.error != VK_SUCCESS) {
-        return ctx.error;
+        return -1;
     }
-#endif
 
     size_t size = buf->size_in_bytes();
     halide_assert(user_context, size != 0);
@@ -372,7 +356,6 @@ typedef struct VkBufferCreateInfo {
     for (int i = 0; i < buf->dimensions; i++) {
         halide_assert(user_context, buf->dim[i].stride >= 0);
     }
-
 
     debug(user_context) << "    allocating " << *buf << "\n";
 
@@ -448,7 +431,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
     }
 
     debug(user_context)
-        << "CL: halide_vulkan_copy_to_device (user_context: " << user_context
+        << "Vulkan: halide_vulkan_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
@@ -481,7 +464,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
 
 WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
-        << "CL: halide_copy_to_host (user_context: " << user_context
+        << "Vulkan: halide_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
@@ -526,7 +509,7 @@ WEAK int halide_vulkan_run(void *user_context,
                            int num_coords_dim0,
                            int num_coords_dim1) {
     debug(user_context)
-        << "CL: halide_vulkan_run (user_context: " << user_context << ", "
+        << "Vulkan: halide_vulkan_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
