@@ -1624,7 +1624,11 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(ROOT_DIR)/bazel/* \
 						   $(BUILD_DIR)/halide_config.bzl \
 						   $(BUILD_DIR)/halide_config.cmake \
-						   $(ROOT_DIR)/halide.cmake
+						   $(BUILD_DIR)/halide_config.make \
+						   $(ROOT_DIR)/halide.cmake \
+						   $(ROOT_DIR)/tools/*.h \
+						   $(ROOT_DIR)/tools/*.cpp \
+						   $(ROOT_DIR)/tools/halide.make
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
 	         $(DISTRIB_DIR)/lib \
@@ -1652,6 +1656,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide.make $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
