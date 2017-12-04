@@ -14,3 +14,4 @@ foreach(AUTO_SCHEDULE false true)
                                   GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
     target_link_libraries(camera_pipe_process PRIVATE ${LIB} ${curved_lib})
 endforeach()
+
