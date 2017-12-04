@@ -17,8 +17,8 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
 
 typedef halide_metal_device mtl_device;
 typedef halide_metal_command_queue mtl_command_queue;
+typedef halide_metal_command_buffer mtl_command_buffer;
 struct mtl_buffer;
-struct mtl_command_buffer;
 struct mtl_compute_command_encoder;
 struct mtl_blit_command_encoder;
 struct mtl_compute_pipeline_state;
@@ -199,6 +199,7 @@ extern WEAK halide_device_interface_t metal_device_interface;
 volatile int WEAK thread_lock = 0;
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
+WEAK mtl_command_buffer *current_command_buffer = NULL;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -270,6 +271,52 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 
 WEAK int halide_metal_release_context(void *user_context) {
     __sync_lock_release(&thread_lock);
+    return 0;
+}
+
+// The default implementation of halide_metal_acquire_command_buffer and the
+// matching halide_metal_release_command_buffer work synchronously; that is,
+// the acquire always creates a new command buffer and the release always
+// commits it.  Overriding implementations may choose to defer committing the
+// command buffer (e.g. if they want to add non-Halide commands to the buffer)
+// if must_release is not true.  Specifically, overriding implementations must
+// ensure:
+// - only one command buffer is accessible to Halide at one time; that is, if
+//   the overriding release does not commit the command buffer, the subsequent
+//   acquire must return the same command buffer *or* commit that command buffer
+//   manually before returning a new one. Practically, this also means that
+//   a thread must commit its command buffer before any other thread
+//   calls into Halide
+// - the command buffer may be committed by the application through a direct
+//   call to :commit or through halide_metal_release_command_buffer()
+// - the Halide runtime will not call retain/release on the command buffer; the
+//   overriding implementations are responsible for memory management
+// - an overriding halide_metal_release_command_buffer implementation must commit
+//   the command buffer if must_release is true
+WEAK int halide_metal_acquire_command_buffer(void* user_context,
+                                             mtl_command_queue *queue,
+                                             mtl_command_buffer **command_buffer_ret) {
+    debug(user_context) << "Metal - Internal halide_metal_acquire_command_buffer() called\n";
+    if (!current_command_buffer) {
+        current_command_buffer = new_command_buffer(queue);
+        if (!current_command_buffer) {
+            error(user_context) << "Metal: Could not create command buffer.\n";
+            return -1;
+        }
+    }
+    halide_assert(user_context, current_command_buffer);
+
+    *command_buffer_ret = current_command_buffer;
+
+    return 0;
+}
+
+WEAK int halide_metal_release_command_buffer(void* user_context,
+                                             bool must_release) {
+    if (current_command_buffer) {
+        commit_command_buffer(current_command_buffer);
+        current_command_buffer = NULL;
+    }
     return 0;
 }
 
@@ -465,7 +512,11 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 
 namespace {
 
-inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
+inline void halide_metal_device_sync_internal(mtl_command_queue *queue,
+                                              struct halide_buffer_t *buffer) {
+    // if there is an active command buffer, we must commit it first
+    halide_metal_release_command_buffer(NULL, true);
+
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
     if (buffer != NULL) {
         mtl_buffer *metal_buffer = (mtl_buffer *)buffer->device;
@@ -641,10 +692,10 @@ WEAK int halide_metal_run(void *user_context,
         return metal_context.error;
     }
 
-    mtl_command_buffer *command_buffer = new_command_buffer(metal_context.queue);
-    if (command_buffer == 0) {
-        error(user_context) << "Metal: Could not allocate command buffer.\n";
-        return -1;
+    mtl_command_buffer *command_buffer;
+    if (halide_metal_acquire_command_buffer(user_context, metal_context.queue,
+          &command_buffer) != 0) {
+        error(user_context) << "Metal: Could not acquire command buffer.\n";
     }
 
     mtl_compute_command_encoder *encoder = new_compute_command_encoder(command_buffer);
@@ -758,7 +809,7 @@ WEAK int halide_metal_run(void *user_context,
 
     add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
 
-    commit_command_buffer(command_buffer);
+    halide_metal_release_command_buffer(user_context, false);
 
     release_ns_object(pipeline_state);
     release_ns_object(function);

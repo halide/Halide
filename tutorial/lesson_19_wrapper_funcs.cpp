@@ -296,6 +296,7 @@ int main(int argc, char **argv) {
         } else {
             target.set_feature(Target::OpenCL);
         }
+        target.set_feature(Target::Debug);
 
         // Create an interesting input image to use.
         Buffer<int> input(258, 258);

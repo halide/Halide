@@ -61,6 +61,7 @@ extern uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffe
 
 struct halide_metal_device;
 struct halide_metal_command_queue;
+struct halide_metal_command_buffer;
 
 /** This prototype is exported as applications will typically need to
  * replace it to get Halide filters to execute on the same device and
@@ -85,6 +86,36 @@ extern int halide_metal_acquire_context(void *user_context, struct halide_metal_
  * as well.
  */
 extern int halide_metal_release_context(void *user_context);
+
+/** The default implementation of halide_metal_acquire_command_buffer and the
+ * matching halide_metal_release_command_buffer work synchronously; that is,
+ * the acquire always creates a new command buffer and the release always
+ * commits it.  Overriding implementations may choose to defer committing the
+ * command buffer (e.g. if they want to add non-Halide commands to the buffer)
+ * if must_release is not true.  Specifically, overriding implementations must
+ * ensure:
+ * - only one command buffer is accessible to Halide at one time; that is, if
+ *   the overriding release does not commit the command buffer, the subsequent
+ *   acquire must return the same command buffer *or* commit that command buffer
+ *   manually before returning a new one. Practically, this also means that
+ *   a thread must commit its command buffer before any other thread
+ *   calls into Halide
+ * - the command buffer may be committed by the application through a direct
+ *   call to its commit method or through halide_metal_release_command_buffer()
+ * - the Halide runtime will not call retain/release on the command buffer; the
+ *   overriding implementations are responsible for memory management
+ * - an overriding halide_metal_release_command_buffer implementation must commit
+ *   the command buffer if must_release is true
+ */
+extern int halide_metal_acquire_command_buffer(void* user_context,
+                                               struct halide_metal_command_queue *queue,
+                                               struct halide_metal_command_buffer **command_buffer_ret);
+
+/** This call must be replaced if halide_metal_acquire_command_buffer is replaced,
+ * and must commit the buffer if must_release is true.
+ */
+extern int halide_metal_release_command_buffer(void* user_context,
+                                               bool must_release);
 
 #ifdef __cplusplus
 } // End extern "C"
