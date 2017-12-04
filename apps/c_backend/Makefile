@@ -1,40 +1,45 @@
-include ../support/Makefile.inc
+# halide.make requires that HALIDE_DISTRIB_DIR be set to point to the Halide distribution folder we use.
+# This assumes it's built at the toplevel via 'make distrib'.
+HALIDE_DISTRIB_DIR ?= ../../distrib
+
+include $(HALIDE_DISTRIB_DIR)/halide.make
+
+all: test
+
+clean:
+	@rm -rf $(BIN)
 
 test: $(BIN)/run $(BIN)/run_cpp
+	@echo Testing $<...
 	$(BIN)/run
 	$(BIN)/run_cpp
 
-all: $(BIN)/test
-
-$(BIN)/pipeline.generator: pipeline_generator.cpp $(GENERATOR_DEPS)
+# By default, %.generator is produced by building %_generator.cpp
+$(BIN)/%.generator: %_generator.cpp $(HALIDE_GENERATOR_DEPS)
+	@echo Building Generator $(filter %_generator.cpp,$^)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+	@$(CXX) $(filter-out %.h,$^) $(HALIDE_GENERATOR_CXXFLAGS) $(HALIDE_GENERATOR_LDFLAGS) -o $@
 
-$(BIN)/pipeline_native.a: $(BIN)/pipeline.generator
+# "normal" Generator outputs
+$(BIN)/%_native.a $(BIN)/%_native.h: $(BIN)/%.generator
+	@echo Running Generator $< for native output
 	@mkdir -p $(@D)
-	$^ -g pipeline -o $(BIN) -f pipeline_native -e static_library,h target=$(HL_TARGET)
+	@$< -g $(*F) -f $(*F)_native -o $(BIN) target=$(HL_TARGET)-c_plus_plus_name_mangling
 
-$(BIN)/pipeline_c.cpp: $(BIN)/pipeline.generator
+# C-code Generator outputs (no C++ name mangling)
+$(BIN)/%_c.cpp $(BIN)/%_c.h: $(BIN)/%.generator
+	@echo Running Generator $< for C output
 	@mkdir -p $(@D)
-	$^ -g pipeline -o $(BIN) -f pipeline_c -e cpp,h target=$(HL_TARGET)
+	@$< -g $(*F) -f $(*F)_c -o $(BIN) -e cpp,h target=$(HL_TARGET)
+
+# C++-code Generator outputs
+$(BIN)/%_cpp.cpp $(BIN)/%_cpp.h: $(BIN)/%.generator
+	@echo Running Generator $< for C++ output
+	@mkdir -p $(@D)
+	@$< -g $(*F) -f $(*F)_cpp -o $(BIN) -e cpp,h target=$(HL_TARGET)-c_plus_plus_name_mangling
 
 $(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
 
-$(BIN)/pipeline_cpp.generator: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-
-$(BIN)/pipeline_cpp_cpp.cpp: $(BIN)/pipeline_cpp.generator
-	@mkdir -p $(@D)
-	$^ -g pipeline_cpp -o $(BIN) -f pipeline_cpp_cpp -e cpp,h target=host-c_plus_plus_name_mangling
-
-$(BIN)/pipeline_cpp_native.a: $(BIN)/pipeline_cpp.generator
-	@mkdir -p $(@D)
-	$^ -g pipeline_cpp -o $(BIN) -f pipeline_cpp_native -e static_library,h target=host-c_plus_plus_name_mangling
-
 $(BIN)/run_cpp: run_cpp.cpp $(BIN)/pipeline_cpp_cpp.cpp $(BIN)/pipeline_cpp_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
-
-clean:
-	rm -rf $(BIN)
