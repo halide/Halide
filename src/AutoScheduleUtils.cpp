@@ -60,9 +60,9 @@ Definition get_stage_definition(const Function &f, int stage_num) {
 }
 
 vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
-    static vector<Dim> empty = {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar}};
+    static vector<Dim> outermost_only = {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar}};
     if (f.has_extern_definition()) {
-        return empty;
+        return outermost_only;
     }
     Definition def = get_stage_definition(f, stage_num);
     internal_assert(def.defined());
