@@ -380,10 +380,10 @@ private:
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
             Stmt cache_key_alloc =
-                Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
+                Allocate::make(cache_key_name, UInt(8), MemoryType::Stack, {key_info.key_size()},
                                const_true(), generate_key);
 
-            return Realize::make(op->name, op->types, op->bounds, op->condition, cache_key_alloc);
+            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, cache_key_alloc);
         } else {
             return IRMutator2::visit(op);
         }
@@ -504,7 +504,7 @@ private:
                 const Allocate *allocation = allocations[i - 1];
 
                 // Make the allocation node
-                body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
+                body = Allocate::make(allocation->name, allocation->type, allocation->memory_type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,
                                                  { Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
                                       "halide_memoization_cache_release");

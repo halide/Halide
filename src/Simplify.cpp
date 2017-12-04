@@ -60,8 +60,7 @@ bool is_var_relop_simple_const(const Expr &e, string* name) {
                 *name = v->name;
                 return true;
             }
-        }
-        else if (is_simple_const(r->a)) {
+        } else if (is_simple_const(r->a)) {
             const Variable *v = r->b.template as<Variable>();
             if (v) {
                 *name = v->name;
@@ -526,6 +525,13 @@ private:
     }
 
     Expr visit(const Variable *op) override {
+        if (bounds_info.contains(op->name)) {
+            std::pair<int64_t, int64_t> bounds = bounds_info.get(op->name);
+            if (bounds.first == bounds.second) {
+                return make_const(op->type, bounds.first);
+            }
+        }
+
         if (var_info.contains(op->name)) {
             VarInfo &info = var_info.ref(op->name);
 
@@ -1038,6 +1044,11 @@ private:
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : nullptr;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : nullptr;
 
+        if (add_a) {
+            add_a_a = add_a->a.as<Add>();
+            add_a_b = add_a->b.as<Add>();
+        }
+
         if (div_a) {
             add_a_a = div_a->a.as<Add>();
             add_a_b = div_a->b.as<Add>();
@@ -1278,6 +1289,26 @@ private:
                    equal(add_a->b, add_b->a)) {
             // (b + a) - (a + c) -> b - c
             return mutate(add_a->a - add_b->b);
+        } else if (add_a &&
+                   add_a_a &&
+                   equal(add_a_a->a, b)) {
+            // ((a + b) + c) - a -> b + c
+            return mutate(add_a_a->b + add_a->b);
+        } else if (add_a &&
+                   add_a_a &&
+                   equal(add_a_a->b, b)) {
+            // ((a + b) + c) - b -> a + c
+            return mutate(add_a_a->a + add_a->b);
+        } else if (add_a &&
+                   add_a_b &&
+                   equal(add_a_b->a, b)) {
+            // (a + (b + c)) - b -> a + c
+            return mutate(add_a->a + add_a_b->b);
+        } else if (add_a &&
+                   add_a_b &&
+                   equal(add_a_b->b, b)) {
+            // (a + (b + c)) - c -> a + b
+            return mutate(add_a->a + add_a_b->a);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
                    is_simple_const(a) &&
@@ -1451,6 +1482,22 @@ private:
                    equal(div_b_a->a, a)) {
             // x - (x/4)*4 -> x%4
             return mutate(a % mul_b->b);
+        } else if (mul_a &&
+                   mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   ib % ia == 0) {
+            // x * a - y * (a * b) -> (x - y * b) * a
+            Expr ratio = make_const(a.type(), div_imp(ib, ia));
+            return mutate((mul_a->a - mul_b->a * ratio) * mul_a->b);
+        } else if (mul_a &&
+                   mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   ia % ib == 0) {
+            // x * (a * b) - y * a -> (x * b - y) * a
+            Expr ratio = make_const(a.type(), div_imp(ia, ib));
+            return mutate((mul_a->a * ratio - mul_b->a) * mul_b->b);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1751,7 +1798,7 @@ private:
             return expr;
         }
 
-        int64_t ia = 0, ib = 0, ic = 0;
+        int64_t ia = 0, ib = 0, ic = 0, id = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
 
@@ -1868,9 +1915,11 @@ private:
                    broadcast_b &&
                    const_int(broadcast_b->value, &ib) &&
                    ib != 0 &&
-                   mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
-            // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
+                   (ic = gcd(mod_rem.modulus, ib)) > 1 &&
+                   div_imp((int64_t)mod_rem.remainder, ic) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ic)) {
+            // ramp(k*(a*c) + x, y, w) / (b*c) = broadcast(k/b, w) if x/c == (x + (w-1)*y)/c
+            // The ramp lanes can't actually change the result, so we
+            // can just divide the base and broadcast it.
             return mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->lanes));
         } else if (no_overflow(op->type) &&
                    div_a &&
@@ -2045,6 +2094,20 @@ private:
             // (y + 8) / 2 -> y/2 + 4
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             return mutate((add_a->a / b) + ratio);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   const_int(add_a->b, &ib) &&
+                   mul_a_a &&
+                   const_int(mul_a_a->b, &ia) &&
+                   const_int(b, &ic) &&
+                   ic > 0 &&
+                   (id = gcd(ia, ic)) != 1) {
+            // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
+            // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
+            ia = div_imp(ia, id);
+            ib = div_imp(ib, id);
+            ic = div_imp(ic, id);
+            return mutate((mul_a_a->a * make_const(op->type, ia) + make_const(op->type, ib)) / make_const(op->type, ic));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    equal(add_a->a, b)) {
@@ -2229,6 +2292,15 @@ private:
                    (ia % ib == 0)) {
             // (x * (b*a)) % b -> 0
             return make_zero(op->type);
+        } else if (no_overflow(op->type) &&
+                   mul_a &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   const_int(mul_a->b, &ia) &&
+                   (ib % ia == 0)) {
+            // (x * a) % (a * b) -> (x % b) * a
+            Expr ratio = make_const(a.type(), div_imp(ib, ia));
+            return mutate((mul_a->a % ratio) * mul_a->b);
         } else if (no_overflow(op->type) &&
                    add_a &&
                    mul_a_a &&
@@ -4052,6 +4124,14 @@ private:
                    equal(sel_f->true_value, true_value)) {
             // select(a, d, select(b, d, c)) -> select(a || b, d, c)
             return mutate(Select::make(condition || sel_f->condition, true_value, sel_f->false_value));
+        } else if (sel_t &&
+                   equal(sel_t->condition, condition)) {
+            // select(a, select(a, b, c), d) -> select(a, b, d)
+            return mutate(Select::make(condition, sel_t->true_value, false_value));
+        } else if (sel_f &&
+                   equal(sel_f->condition, condition)) {
+            // select(a, b, select(a, c, d)) -> select(a, b, d)
+            return mutate(Select::make(condition, true_value, sel_f->false_value));
         } else if (add_t &&
                    add_f &&
                    equal(add_t->a, add_f->a)) {
@@ -4323,11 +4403,17 @@ private:
                 return expr;
             }
 
-            int64_t ib = 0;
-            uint64_t ub = 0;
+            int64_t ia, ib = 0;
+            uint64_t ua, ub = 0;
             int bits;
 
-            if (const_int(b, &ib) &&
+            if (const_int(a, &ia) &&
+                const_int(b, &ib)) {
+                return make_const(op->type, ia & ib);
+            } else if (const_uint(a, &ua) &&
+                       const_uint(b, &ub)) {
+                return make_const(op->type, ua & ub) ;
+            } else if (const_int(b, &ib) &&
                 !b.type().is_max(ib) &&
                 is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
                 return Mod::make(a, make_const(a.type(), ib + 1));
@@ -4348,10 +4434,57 @@ private:
             if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
                 return expr;
             }
-            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            int64_t ia, ib;
+            uint64_t ua, ub;
+            if (const_int(a, &ia) &&
+                const_int(b, &ib)) {
+                return make_const(op->type, ia | ib);
+            } else if (const_uint(a, &ua) &&
+                       const_uint(b, &ub)) {
+                return make_const(op->type, ua | ub);
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 return op;
             } else {
                 return a | b;
+            }
+        } else if (op->is_intrinsic(Call::bitwise_not)) {
+            Expr a = mutate(op->args[0]);
+            Expr expr;
+            if (propagate_indeterminate_expression(a, op->type, &expr)) {
+                return expr;
+            }
+            int64_t ia;
+            uint64_t ua;
+            if (const_int(a, &ia)) {
+                return make_const(op->type, ~ia);
+            } else if (const_uint(a, &ua)) {
+                return make_const(op->type, ~ua);
+            } else if (a.same_as(op->args[0])) {
+                return op;
+            } else {
+                return ~a;
+            }
+        } else if (op->is_intrinsic(Call::reinterpret)) {
+            Expr a = mutate(op->args[0]);
+            Expr expr;
+            if (propagate_indeterminate_expression(a, op->type, &expr)) {
+                return expr;
+            }
+            int64_t ia;
+            uint64_t ua;
+            bool vector = op->type.is_vector() || a.type().is_vector();
+            if (op->type == a.type()) {
+                return a;
+            } else if (const_int(a, &ia) && op->type.is_uint() && !vector) {
+                // int -> uint
+                return make_const(op->type, (uint64_t)ia);
+            } else if (const_uint(a, &ua) && op->type.is_int() && !vector) {
+                // uint -> int
+                return make_const(op->type, (int64_t)ua);
+            } else if (a.same_as(op->args[0])) {
+                return op;
+            } else {
+                return reinterpret(op->type, a);
             }
         } else if (op->is_intrinsic(Call::abs)) {
             // Constant evaluate abs(x).
@@ -5164,9 +5297,9 @@ private:
             equal(op->condition, body_if->condition)) {
             // We can move the allocation into the if body case. The
             // else case must not use it.
-            Stmt stmt = Allocate::make(op->name, op->type, new_extents,
-                                  condition, body_if->then_case,
-                                  new_expr, op->free_function);
+            Stmt stmt = Allocate::make(op->name, op->type, op->memory_type,
+                                       new_extents, condition, body_if->then_case,
+                                       new_expr, op->free_function);
             return IfThenElse::make(body_if->condition, stmt, body_if->else_case);
         } else if (all_extents_unmodified &&
                    body.same_as(op->body) &&
@@ -5174,8 +5307,8 @@ private:
                    new_expr.same_as(op->new_expr)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, new_extents,
-                                  condition, body,
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body,
                                   new_expr, op->free_function);
         }
     }
@@ -5499,6 +5632,11 @@ void check_algebra() {
     check(xf + yf*-2.0f, xf - y*2.0f);
     check(xf*-2.0f + yf, yf - x*2.0f);
 
+    check((x * 8) - (y * 4), (x * 2 - y) * 4);
+    check((x * 4) - (y * 8), (x - y * 2) * 4);
+
+    check((x * 2) % 6, (x % 3) * 2);
+
     check(x - (x/8)*8, x % 8);
     check((x/8)*8 - x, -(x % 8));
     check((x/8)*8 < x + y, 0 < x%8 + y);
@@ -5558,6 +5696,10 @@ void check_algebra() {
     check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
     check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
 
+    // Pull out the gcd of the numerator and divisor
+    check((x * 12 + 5) / 9, (x * 4 + 1) / 3);
+    check((x * 12 + 19) / 9, (x * 4) / 3 + 2);
+
     // Cancellations in non-const integer divisions
     check((x*y)/x, y);
     check((y*x)/x, y);
@@ -5590,6 +5732,11 @@ void check_algebra() {
 
     check((x - y) - (z - y), x - z);
     check((y - z) - (y - x), x - z);
+
+    check(((x + y) + z) - x, y + z);
+    check(((x + y) + z) - y, x + z);
+    check((x + (y + z)) - y, x + z);
+    check((x + (y + z)) - z, x + y);
 
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
@@ -6102,6 +6249,9 @@ void check_boolean() {
 
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
+
+    check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
+    check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
 
     check((1 - xf)*6 < 3, 0.5f < xf);
 
@@ -6644,6 +6794,10 @@ void simplify_test() {
     // TODO: more coverage of bitwise_and and bitwise_or.
     check(cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa),
           cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
+
+    // Check constant-folding of bitwise ops (and indirectly, reinterpret)
+    check(Let::make(x.as<Variable>()->name, 5, ((~x) & 3) | 16), (~5 & 3) | 16);
+    check(Let::make(x.as<Variable>()->name, 5, ((~cast<uint8_t>(x)) & 3) | 16), make_const(UInt(8), (~5 & 3) | 16));
 
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.

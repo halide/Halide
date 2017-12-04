@@ -220,6 +220,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
 
         DeviceAPI touching_device = DeviceAPI::None;
         for (DeviceAPI d : finder.devices_touched) {
+            if (d == DeviceAPI::Host) continue;
             internal_assert(touching_device == DeviceAPI::None)
                 << "Buffer " << buffer << " was touched on multiple devices within a single leaf Stmt!\n";
             touching_device = d;
@@ -454,7 +455,7 @@ class InjectBufferCopies : public IRMutator2 {
 
                 // The allocate node is innermost
                 Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
-                body = Allocate::make(buffer, type, extents, condition, body,
+                body = Allocate::make(buffer, type, MemoryType::Heap, extents, condition, body,
                                       host, "halide_device_host_nop_free");
 
                 // Then the destructor
@@ -575,7 +576,8 @@ class InjectBufferCopies : public IRMutator2 {
                 body = substitute(op->name, reinterpret(Handle(), make_zero(UInt(64))), body);
             }
 
-            return Allocate::make(op->name, op->type, op->extents, condition, body, op->new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
+                                  condition, body, op->new_expr, op->free_function);
         }
     }
 

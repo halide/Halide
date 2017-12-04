@@ -46,10 +46,10 @@ EXPORT bool reduce_expr_modulo(Expr e, int modulus, int *remainder, const Scope<
 EXPORT void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */
-EXPORT int gcd(int, int);
+EXPORT int64_t gcd(int64_t, int64_t);
 
 /** The least common multiple of two integers */
-EXPORT int lcm(int, int);
+EXPORT int64_t lcm(int64_t, int64_t);
 
 }
 }

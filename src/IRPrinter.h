@@ -36,6 +36,9 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
 /** Emit a halide device api type in a human readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
+/** Emit a halide memory type in a human readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const MemoryType &);
+
 /** Emit a halide LoopLevel in a human readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
 

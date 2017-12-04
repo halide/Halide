@@ -325,6 +325,12 @@ public:
     std::vector<StorageDim> &storage_dims();
     // @}
 
+    /** The memory type (heap/stack/shared/etc) used to back this Func. */
+    // @{
+    MemoryType memory_type() const;
+    MemoryType &memory_type();
+    // @}
+
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
      * \ref Func::bound and \ref Func::align_bounds */

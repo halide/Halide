@@ -338,17 +338,51 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon};
 
+/** An enum describing different address spaces to be used with Func::store_in. */
+enum class MemoryType {
+    /** Let Halide select a storage type automatically */
+    Auto,
+
+    /** Heap/global memory. Allocated using halide_malloc, or
+     * halide_device_malloc */
+    Heap,
+
+    /** Stack memory. Allocated using alloca. Requires a constant
+     * size. Corresponds to per-thread local memory on the GPU. If all
+     * accesses are at constant coordinates, may be promoted into the
+     * register file at the discretion of the register allocator. */
+    Stack,
+
+    /** Register memory. The allocation should be promoted into the
+     * register file. All stores must be at constant coordinates. May
+     * be spilled to the stack at the discretion of the register
+     * allocator. */
+    Register,
+
+    /** Allocation is stored in GPU shared memory. Can be shared
+     * across GPU threads within the same block. */
+    GPUShared,
+};
+
 namespace Internal {
 
-/** An enum describing a type of loop traversal. Used in schedules, and in
- * the For loop IR node. GPUBlock and GPUThread are implicitly parallel */
+/** An enum describing a type of loop traversal. Used in schedules,
+ * and in the For loop IR node. Serial is a conventional ordered for
+ * loop. Iterations occur in increasing order, and each iteration must
+ * appear to have finished before the next begins. Parallel, GPUBlock,
+ * and GPUThread are parallel and unordered: iterations may occur in
+ * any order, and multiple iterations may occur
+ * simultaneously. Vectorized and GPULane are parallel and
+ * synchronous: they act as if all iterations occur at the same time
+ * in lockstep. */
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
     Unrolled,
     GPUBlock,
-    GPUThread
+    GPUThread,
+    GPULane
 };
 
 
