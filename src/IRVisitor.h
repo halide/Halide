@@ -60,12 +60,14 @@ protected:
     EXPORT virtual void visit(const AssertStmt *);
     EXPORT virtual void visit(const ProducerConsumer *);
     EXPORT virtual void visit(const For *);
+    EXPORT virtual void visit(const Acquire *);
     EXPORT virtual void visit(const Store *);
     EXPORT virtual void visit(const Provide *);
     EXPORT virtual void visit(const Allocate *);
     EXPORT virtual void visit(const Free *);
     EXPORT virtual void visit(const Realize *);
     EXPORT virtual void visit(const Block *);
+    EXPORT virtual void visit(const Fork *);
     EXPORT virtual void visit(const IfThenElse *);
     EXPORT virtual void visit(const Evaluate *);
     EXPORT virtual void visit(const Shuffle *);
@@ -136,6 +138,8 @@ protected:
     EXPORT void visit(const Evaluate *) override;
     EXPORT void visit(const Shuffle *) override;
     EXPORT void visit(const Prefetch *) override;
+    EXPORT void visit(const Acquire *) override;
+    EXPORT void visit(const Fork *) override;
     // @}
 };
 

@@ -75,10 +75,13 @@ private:
 private:
     using IRMutator2::visit;
 
-    const vector<PrefetchDirective> &get_prefetch_list(const string &loop_name) {
+    vector<PrefetchDirective> get_prefetch_list(const string &loop_name) {
         if (!current_func || !starts_with(loop_name, current_func->name() + ".s" + std::to_string(stage))) {
             vector<string> v = split_string(loop_name, ".");
-            internal_assert(v.size() > 2);
+            if (v.size() < 2) {
+                // must be a synthetic loop not associated with a Func.
+                return vector<PrefetchDirective>();
+            }
             const string &func_name = v[0];
 
             // Get the stage index
@@ -130,6 +133,11 @@ private:
     }
 
     Stmt add_prefetch(string buf_name, const Parameter &param, const Box &box, Stmt body) {
+        // Walk inside any Acquire nodes
+        if (const Acquire *acq = body.as<Acquire>()) {
+            return Acquire::make(acq->semaphore, acq->count, add_prefetch(buf_name, param, box, acq->body));
+        }
+
         // Construct the region to be prefetched.
         Region bounds;
         for (size_t i = 0; i < box.size(); i++) {

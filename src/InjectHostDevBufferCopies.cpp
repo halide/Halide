@@ -225,6 +225,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
             touching_device = d;
         }
 
+
         // Then figure out what to do
         bool needs_device_malloc = (touched_on_device &&
                                     (state.device_allocation_exists != True));
@@ -329,7 +330,11 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
     // leaf.
 
     Stmt visit(const For *op) override {
-        // All copies happen at the same loop level as the allocation
+        // All copies happen at the same loop level as the allocation (TODO: This prevents hoisting allocations)
+        return do_copies(op);
+    }
+
+    Stmt visit(const Fork *op) override {
         return do_copies(op);
     }
 

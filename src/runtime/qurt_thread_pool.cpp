@@ -66,7 +66,6 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 
 WEAK void halide_mutex_destroy(halide_mutex *mutex) {
     qurt_mutex_destroy((qurt_mutex_t *)mutex);
-    memset(mutex, 0, sizeof(halide_mutex));
 }
 
 WEAK void halide_cond_init(struct halide_cond *cond) {
@@ -171,10 +170,75 @@ WEAK int halide_do_task(void *user_context, halide_task_t f,
         return f(user_context, idx, c->closure);
     }
 }
+
+int halide_do_loop_task(void *user_context, halide_loop_task_t f,
+                        int min, int extent, uint8_t *closure) {
+    // Dig the appropriate hvx mode out of the wrapped closure and lock it.
+    wrapped_closure *c = (wrapped_closure *)closure;
+    // We don't own the thread-pool lock here, so we can safely
+    // acquire the hvx context lock (if needed) to run some code.
+    if (c->hvx_mode != -1) {
+        qurt_hvx_lock((qurt_hvx_mode_t)c->hvx_mode);
+        int ret = f(user_context, min, extent, c->closure);
+        qurt_hvx_unlock();
+        return ret;
+    } else {
+        return f(user_context, min, extent, c->closure);
+    }
+}
+
+int halide_do_parallel_tasks(void *user_context, int num_tasks,
+                             struct halide_parallel_task_t *tasks) {
+    // Do a set of parallel tasks. The logic is the same as in do_par_for.
+
+    int hvx_mode = qurt_hvx_get_mode();
+
+    int old_num_threads =
+        halide_set_num_threads((hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4);
+
+    if (hvx_mode != -1) {
+        if (qurt_hvx_unlock() != QURT_EOK) {
+            hvx_mode = -1;
+        }
+    }
+
+    // Wrap all the closures
+    wrapped_closure *closures = (wrapped_closure *)__builtin_alloca(num_tasks * sizeof(wrapped_closure));
+    for (int i = 0; i < num_tasks; i++) {
+        closures[i].closure = tasks[i].closure;
+        closures[i].hvx_mode = hvx_mode;
+        tasks[i].closure = (uint8_t *)(closures + i);
+    }
+
+    int ret = halide_default_do_parallel_tasks(user_context, num_tasks, tasks);
+
+    if (hvx_mode != -1) {
+        qurt_hvx_lock((qurt_hvx_mode_t)hvx_mode);
+    }
+
+    halide_set_num_threads(old_num_threads);
+
+    return ret;
+}
+
+int halide_semaphore_init(struct halide_semaphore_t *sema, int count) {
+    return halide_default_semaphore_init(sema, count);
+}
+
+int halide_semaphore_release(struct halide_semaphore_t *sema, int count) {
+    return halide_default_semaphore_release(sema, count);
+}
+
+bool halide_semaphore_try_acquire(struct halide_semaphore_t *sema, int count) {
+    return halide_default_semaphore_try_acquire(sema, count);
+}
+
+
 namespace {
 __attribute__((destructor))
 WEAK void halide_thread_pool_cleanup() {
     halide_shutdown_thread_pool();
 }
 }
+
 }

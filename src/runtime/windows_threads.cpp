@@ -11,7 +11,6 @@ extern "C" {
 
 // These sizes are large enough for 32-bit and 64-bit
 typedef uint64_t ConditionVariable;
-typedef uint64_t InitOnce;
 typedef void * Thread;
 typedef struct {
     uint64_t buf[5];
@@ -26,21 +25,10 @@ extern WIN32API void DeleteCriticalSection(CriticalSection *);
 extern WIN32API void EnterCriticalSection(CriticalSection *);
 extern WIN32API void LeaveCriticalSection(CriticalSection *);
 extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
-extern WIN32API bool InitOnceExecuteOnce(InitOnce *, bool WIN32API (*f)(InitOnce *, void *, void **), void *, void **);
 
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
-
-struct windows_mutex {
-    InitOnce once;
-    CriticalSection critical_section;
-};
-WEAK WIN32API bool init_mutex(InitOnce *, void *mutex_arg, void **) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    InitializeCriticalSection(&mutex->critical_section);
-    return true;
-}
 
 struct spawned_thread {
     void(*f)(void *);
@@ -71,23 +59,24 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     free(thread);
 }
 
+WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
+    CriticalSection *mutex = (CriticalSection *)mutex_arg;
+    InitializeCriticalSection(mutex);    
+}
+
 WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    if (mutex->once != 0) {
-        DeleteCriticalSection(&mutex->critical_section);
-        memset(mutex_arg, 0, sizeof(halide_mutex));
-    }
+    CriticalSection *mutex = (CriticalSection *)mutex_arg;
+    DeleteCriticalSection(mutex);
 }
 
 WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    InitOnceExecuteOnce(&mutex->once, init_mutex, mutex, NULL);
-    EnterCriticalSection(&mutex->critical_section);
+    CriticalSection *mutex = (CriticalSection *)mutex_arg;
+    EnterCriticalSection(mutex);
 }
 
 WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    LeaveCriticalSection(&mutex->critical_section);
+    CriticalSection *mutex = (CriticalSection *)mutex_arg;
+    LeaveCriticalSection(mutex);
 }
 
 WEAK void halide_cond_init(struct halide_cond *cond_arg) {
@@ -108,8 +97,8 @@ WEAK void halide_cond_broadcast(struct halide_cond *cond_arg) {
 
 WEAK void halide_cond_wait(struct halide_cond *cond_arg, struct halide_mutex *mutex_arg) {
     ConditionVariable *cond = (ConditionVariable *)cond_arg;
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    SleepConditionVariableCS(cond, &mutex->critical_section, -1);
+    CriticalSection *mutex = (CriticalSection *)mutex_arg;
+    SleepConditionVariableCS(cond, mutex, -1);
 }
 
 WEAK int halide_host_cpu_count() {

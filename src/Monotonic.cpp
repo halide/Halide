@@ -346,6 +346,10 @@ class MonotonicVisitor : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
+    void visit(const Acquire *op) {
+        internal_error << "Monotonic of statement\n";
+    }
+
     void visit(const Store *op) {
         internal_error << "Monotonic of statement\n";
     }
@@ -367,6 +371,10 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const Block *op) {
+        internal_error << "Monotonic of statement\n";
+    }
+
+    void visit(const Fork *op) {
         internal_error << "Monotonic of statement\n";
     }
 

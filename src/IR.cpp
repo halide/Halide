@@ -343,6 +343,17 @@ Stmt For::make(const std::string &name, Expr min, Expr extent, ForType for_type,
     return node;
 }
 
+Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
+    internal_assert(semaphore.defined()) << "Acquire with undefined semaphore\n";
+    internal_assert(body.defined()) << "Acquire with undefined body\n";
+
+    Acquire *node = new Acquire;
+    node->semaphore = std::move(semaphore);
+    node->count = std::move(count);
+    node->body = std::move(body);
+    return node;
+}
+
 Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
@@ -505,6 +516,25 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     }
     return result;
 }
+
+Stmt Fork::make(Stmt first, Stmt rest) {
+    internal_assert(first.defined()) << "Fork of undefined\n";
+    internal_assert(rest.defined()) << "Fork of undefined\n";
+
+    Fork *node = new Fork;
+
+    if (const Fork *b = first.as<Fork>()) {
+        // Use a canonical fork nesting order
+        node->first = b->first;
+        node->rest  = Fork::make(b->rest, std::move(rest));
+    } else {
+        node->first = std::move(first);
+        node->rest = std::move(rest);
+    }
+
+    return node;
+}
+
 
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
@@ -776,6 +806,8 @@ template<> EXPORT void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((c
 template<> EXPORT void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> EXPORT void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 template<> EXPORT void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
+template<> EXPORT void StmtNode<Acquire>::accept(IRVisitor *v) const { v->visit((const Acquire *)this); }
+template<> EXPORT void StmtNode<Fork>::accept(IRVisitor *v) const { v->visit((const Fork *)this); }
 
 template<> EXPORT Expr ExprNode<IntImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const IntImm *)this); }
 template<> EXPORT Expr ExprNode<UIntImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const UIntImm *)this); }
@@ -820,7 +852,8 @@ template<> EXPORT Stmt StmtNode<Block>::mutate_stmt(IRMutator2 *v) const { retur
 template<> EXPORT Stmt StmtNode<IfThenElse>::mutate_stmt(IRMutator2 *v) const { return v->visit((const IfThenElse *)this); }
 template<> EXPORT Stmt StmtNode<Evaluate>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Evaluate *)this); }
 template<> EXPORT Stmt StmtNode<Prefetch>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Prefetch *)this); }
-
+template<> EXPORT Stmt StmtNode<Acquire>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Acquire *)this); }
+template<> EXPORT Stmt StmtNode<Fork>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Fork *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";

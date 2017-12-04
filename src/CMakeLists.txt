@@ -27,7 +27,6 @@ set(RUNTIME_CPP
   errors
   fake_thread_pool
   float16_t
-  gcd_thread_pool
   gpu_device_selection
   hexagon_cpu_features
   hexagon_host
@@ -250,6 +249,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleUtils.h
   BoundaryConditions.h
@@ -408,6 +408,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ApplySplit.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp

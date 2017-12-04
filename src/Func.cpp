@@ -1946,6 +1946,12 @@ Func &Func::memoize() {
     return *this;
 }
 
+Func &Func::async() {
+    invalidate_cache();
+    func.schedule().async() = true;
+    return *this;
+}
+
 Stage Func::specialize(Expr c) {
     invalidate_cache();
     return Stage(func.definition(), name(), args(), func.schedule()).specialize(c);

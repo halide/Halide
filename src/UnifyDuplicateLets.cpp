@@ -50,8 +50,7 @@ protected:
     }
 
     Expr visit(const Load *op) override {
-        is_impure |= ((op->name == producing) ||
-                      starts_with(op->name + ".", producing));
+        is_impure = true;
         return IRMutator2::visit(op);
     }
 

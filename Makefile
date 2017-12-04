@@ -282,6 +282,7 @@ SOURCE_FILES = \
   ApplySplit.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
+  AsyncProducers.cpp \
   AutoSchedule.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
@@ -416,6 +417,7 @@ HEADER_FILES = \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
+  AsyncProducers.h \
   AutoSchedule.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
@@ -573,7 +575,6 @@ RUNTIME_CPP_COMPONENTS = \
   errors \
   fake_thread_pool \
   float16_t \
-  gcd_thread_pool \
   gpu_device_selection \
   hexagon_cpu_features \
   hexagon_host \
@@ -895,6 +896,9 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 
 # https://github.com/halide/Halide/issues/2082
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/2093
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_coroutine,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generators: $(GENERATOR_AOTCPP_TESTS)
 

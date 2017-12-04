@@ -60,20 +60,23 @@ public:
                 Var yo("yo");
                 blur.compute_root()
                     .hexagon()
-                    .prefetch(input, y, 2)
-                    .split(y, yo, y, 128).parallel(yo)
                     .vectorize(x, vector_size * 2, TailStrategy::RoundUp);
                 blur_y
+                    .store_at(blur, c)
                     .compute_at(blur, y)
+                    .fold_storage(y, 32)
+                    .async()
                     .vectorize(x, vector_size, TailStrategy::RoundUp);
 
                 // Line buffer the boundary condition, which is expensive. Line
                 // buffering it computes it once per row, instead of 5 times per row.
                 input_bounded
                     .compute_at(blur, y)
-                    .store_at(blur, yo)
+                    .prefetch(input, y, 2)
+                    .store_at(blur, c)
                     .align_storage(x, 64)
-                    .fold_storage(y, 8)
+                    .fold_storage(y, 64)
+                    .async()
                     .vectorize(x, vector_size, TailStrategy::RoundUp);
 
                 // Require scanlines of the input and output to be aligned.
