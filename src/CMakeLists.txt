@@ -537,8 +537,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Default to not exporting symbols from libHalide
-set_target_properties(Halide PROPERTIES CXX_VISIBILITY_PRESET hidden)
-set_target_properties(Halide PROPERTIES VISIBILITY_INLINES_HIDDEN 1)
+set_target_properties(Halide PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN 1)
 # Ensure that these tools are build first
 add_dependencies(Halide
   binary2cpp

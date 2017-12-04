@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.3)
 
 find_package(Threads QUIET)
 
@@ -42,6 +42,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
+# Allow VISIBILITY_INLINES_HIDDEN to work for static libraries as well as shared
+# (since these may later be linked into dynamic libraries). Requires CMake 3.3+.
+cmake_policy(SET CMP0063 NEW)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -138,17 +141,20 @@ option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
+  message(STATUS "Building Halide as a shared library")
 else()
   set(HALIDE_LIBRARY_TYPE STATIC)
+  message(STATUS "Building Halide as a static library")
 endif()
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
+    target_compile_options("${name}" PRIVATE "/GR-")
   else()
-    target_compile_options("${name}" PUBLIC "-fno-rtti")
+    target_compile_options("${name}" PRIVATE "-fno-rtti")
   endif()
-  target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries("${name}" PRIVATE ${HALIDE_COMPILER_LIB} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")

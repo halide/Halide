@@ -1,6 +1,9 @@
 include(CMakeParseArguments)
 
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.3)
+
+# Allow VISIBILITY_INLINES_HIDDEN to work for static libraries as well as shared. Requires CMake 3.3+.
+cmake_policy(SET CMP0063 NEW)
 
 # ----------------------- Public Functions. 
 # These are all documented in README_cmake.md.
@@ -50,10 +53,6 @@ function(halide_generator NAME)
   add_executable("${NAME}_binary" "${HALIDE_TOOLS_DIR}/GenGen.cpp")
   _halide_set_cxx_options("${NAME}_binary")
   target_include_directories("${NAME}_binary" PRIVATE "${HALIDE_TOOLS_DIR}")
-  target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_COMPILER_LIB} ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  if (MSVC)
-    target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
-  endif()
 
   list(LENGTH args_SRCS SRCSLEN)
   # Don't create an empty object-library: that can cause quiet failures in MSVC builds.
@@ -71,24 +70,20 @@ function(halide_generator NAME)
     endforeach()
     # Ensure that Halide.h is built prior to any Generator
     add_dependencies("${GENLIB}" ${HALIDE_COMPILER_LIB})
+    _halide_link_whole_archive("${NAME}_binary" "${GENLIB}")
+  endif()
 
-    _halide_get_static_library_actual_path(${GENLIB} GENLIB_ACTUAL_PATH)
-
-    # We need to ensure that the libraries are linked in with --whole-archive
-    # (or the equivalent), to ensure that the Generator-registration code
-    # isn't omitted. Sadly, there's no portable way to do this, so we do some
-    # special-casing here:
-    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-      target_link_libraries("${NAME}_binary" PRIVATE "${GENLIB}")
-      set_target_properties("${NAME}_binary" PROPERTIES LINK_FLAGS -Wl,-force_load,${GENLIB_ACTUAL_PATH})
-    elseif(MSVC)
-      # Note that this requires VS2015 R2+
-      target_link_libraries("${NAME}_binary" PRIVATE "${GENLIB}")
-      set_target_properties("${NAME}_binary" PROPERTIES LINK_FLAGS "/WHOLEARCHIVE:${GENLIB}.lib")
-    else()
-      # Assume Linux or similar
-      target_link_libraries("${NAME}_binary" PRIVATE -Wl,--whole-archive "${GENLIB}" -Wl,-no-whole-archive)
-    endif()
+  target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_SYSTEM_LIBS} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+  if (MSVC)
+    target_link_libraries("${NAME}_binary" PRIVATE Kernel32)
+  endif()
+  if ("${HALIDE_LIBRARY_TYPE}" STREQUAL "STATIC")
+    # Getting link order for static libraries is nearly impossible in CMake;
+    # to avoid flakiness, always link libHalide via --whole-archive
+    # when in static-library mode.
+    _halide_link_whole_archive("${NAME}_binary" "${HALIDE_COMPILER_LIB}")
+  else()
+    target_link_libraries("${NAME}_binary" PRIVATE ${HALIDE_COMPILER_LIB})
   endif()
 
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
@@ -104,15 +99,14 @@ function(halide_generator NAME)
   set_property(TARGET "${NAME}_stub_gen" PROPERTY _HALIDE_GENERATOR_NAME "${args_GENERATOR_NAME}")
 
   if("${SRCSLEN}" GREATER 0)
+    _halide_get_static_library_actual_path(${GENLIB} GENLIB_ACTUAL_PATH)
     add_library("${NAME}" STATIC IMPORTED)
-    set_target_properties("${NAME}" PROPERTIES 
-      IMPORTED_LOCATION "${GENLIB_ACTUAL_PATH}")
+    set_target_properties("${NAME}" PROPERTIES IMPORTED_LOCATION "${GENLIB_ACTUAL_PATH}")
   else()
     add_library("${NAME}" INTERFACE)
   endif()
   add_dependencies("${NAME}" "${NAME}_stub_gen")
-  set_target_properties("${NAME}" PROPERTIES 
-    INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
+  set_target_properties("${NAME}" PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
 endfunction()
 
 # Use a Generator target to emit a code library.
@@ -579,6 +573,31 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
   foreach(OUT ${args_OUTPUTS})
     set_source_files_properties(${OUT} PROPERTIES GENERATED TRUE)
   endforeach()
+endfunction()
+
+# We need to ensure that some libraries are linked in with --whole-archive
+# (or the equivalent), to ensure that the Generator-registration code
+# isn't omitted. Sadly, there's no portable way to do this, so we do some
+# special-casing here:
+function(_halide_link_whole_archive EXECUTABLE LIBRARY)
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    _halide_get_static_library_actual_path("${LIBRARY}" LIBRARY_ACTUAL_PATH)
+    target_link_libraries("${EXECUTABLE}" PRIVATE "${LIBRARY}")
+    # Append to LINK_FLAGS, since we may call this multiple times
+    get_property(flags TARGET "${EXECUTABLE}" PROPERTY LINK_FLAGS)
+    set(flags "${flags} -Wl,-force_load,${LIBRARY_ACTUAL_PATH}")
+    set_target_properties("${EXECUTABLE}" PROPERTIES LINK_FLAGS ${flags})
+  elseif(MSVC)
+    # Note that this requires VS2015 R2+
+    target_link_libraries("${EXECUTABLE}" PRIVATE "${LIBRARY}")
+    # Append to LINK_FLAGS, since we may call this multiple times
+    get_property(flags TARGET "${EXECUTABLE}" PROPERTY LINK_FLAGS)
+    set(flags "${flags} /WHOLEARCHIVE:${LIBRARY}.lib")
+    set_target_properties("${EXECUTABLE}" PROPERTIES LINK_FLAGS ${flags})
+  else()
+    # Assume Linux or similar
+    target_link_libraries("${EXECUTABLE}" PRIVATE -Wl,--whole-archive "${LIBRARY}" -Wl,-no-whole-archive)
+  endif()
 endfunction()
 
 # ----------------------- Configuration code
