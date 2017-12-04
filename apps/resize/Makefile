@@ -19,11 +19,11 @@ OUTPUTS = $(foreach V,$(VARIANTS),$(BIN)/out_$(V).png)
 
 all: $(OUTPUTS)
 
-$(BIN)/resize.generator: resize_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/resize_generator: resize_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
-$(BIN)/resize_%.a: $(BIN)/resize.generator
+$(BIN)/resize_%.a: $(BIN)/resize_generator
 	@mkdir -p $(@D)
 	$^ -g resize -o $(BIN) -f resize_$* \
 	target=$(HL_TARGET)-no_runtime \
@@ -31,7 +31,7 @@ $(BIN)/resize_%.a: $(BIN)/resize.generator
 	input.type=$$(echo $* | cut -d_ -f2) \
 	upsample=$$(echo $* | cut -d_ -f3 | sed 's/up/true/;s/down/false/')
 
-$(BIN)/runtime.a: $(BIN)/resize.generator
+$(BIN)/runtime.a: $(BIN)/resize_generator
 	@mkdir -p $(@D)
 	$^ -r runtime -o $(BIN) target=$(HL_TARGET)
 
@@ -69,6 +69,3 @@ $(BIN)/out_%_down.png: $(BIN)/resize
 
 clean:
 	rm -rf $(BIN)
-
-
-test: all

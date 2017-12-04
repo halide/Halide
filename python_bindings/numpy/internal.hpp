@@ -12,12 +12,14 @@
  *  This should only be included by source files in the boost.numpy library itself.
  */
 
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-
 #include <boost/python.hpp>
 #ifdef HALIDE_NUMPY_INTERNAL
 #define NO_IMPORT_ARRAY
 #define NO_IMPORT_UFUNC
+#else
+#ifndef HALIDE_NUMPY_INTERNAL_MAIN
+ERROR_internal_hpp_is_for_internal_use_only
+#endif
 #endif
 #define PY_ARRAY_UNIQUE_SYMBOL HALIDE_NUMPY_ARRAY_API
 #define PY_UFUNC_UNIQUE_SYMBOL HALIDE_UFUNC_ARRAY_API

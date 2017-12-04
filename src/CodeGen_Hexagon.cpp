@@ -35,6 +35,9 @@ using namespace llvm;
 // avoid needing to #ifdef random patches of code, we just replace all LLVM intrinsics
 // with not_intrinsic.
 #ifdef WITH_HEXAGON
+#if LLVM_VERSION < 39
+#error "Hexagon target requires LLVM version 3.9 or later."
+#endif
 
 #define IPICK(is_128B, i64) (is_128B ? i64##_128B : i64)
 #else
@@ -148,11 +151,12 @@ bool is_dense_ramp(Expr x) {
 // In Hexagon, we assume that we can read one vector past the end of
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
-class SloppyUnpredicateLoads : public IRMutator2 {
-    Expr visit(const Load *op) override {
+class SloppyUnpredicateLoads : public IRMutator {
+    void visit(const Load *op) {
         // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
         if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         Expr predicate = mutate(op->predicate);
@@ -165,10 +169,10 @@ class SloppyUnpredicateLoads : public IRMutator2 {
         }
         predicate = Broadcast::make(condition, predicate.type().lanes());
 
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 Stmt sloppy_unpredicate_loads(Stmt s) {
@@ -903,8 +907,11 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         if (is_concat_or_slice(indices) || element_bits > 16) {
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
+        } else if (max < 256) {
+            // This is something else and the indices fit in 8 bits, use a vlut.
+            return vlut(concat_vectors({a, b}), indices);
         }
-        return vlut(concat_vectors({a, b}), indices);
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
     }
 
     if (stride == 1) {
@@ -993,7 +1000,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     // TODO: There are more HVX permute instructions that could be
     // implemented here, such as vdelta/vrdelta.
 
-    if (element_bits <= 16) {
+    if (element_bits <= 16 && max < 256) {
         return vlut(concat_vectors({a, b}), indices);
     } else {
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
@@ -1500,11 +1507,7 @@ string CodeGen_Hexagon::mattrs() const {
         attrs << "+hvx-length64b";
 #endif
     }
-#if LLVM_VERSION >= 50
     attrs << ",+long-calls";
-#else
-    user_error << "LLVM version 5.0 or greater is required for the Hexagon backend";
-#endif
     return attrs.str();
 }
 

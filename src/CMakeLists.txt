@@ -239,43 +239,41 @@ foreach (i ${RUNTIME_HEADER_FILES})
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
 
-# The externally-visible header files that go into making Halide.h. 
-# Don't include anything here that includes llvm headers.
 set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
-  AlignLoads.h
   AllocationBoundsInference.h
   ApplySplit.h
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
   AutoSchedule.h
+  AutoScheduleOld.h
   AutoScheduleUtils.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
-  BoundSmallAllocations.h
   Buffer.h
+  CSE.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Hexagon.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
   CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
-  CodeGen_Posix.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
+  CodeGen_Posix.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
-  CSE.h
-  CanonicalizeGPUVars.h
   Debug.h
   DebugArguments.h
   DebugToFile.h
@@ -302,31 +300,29 @@ set(HEADER_FILES
   Generator.h
   HexagonOffload.h
   HexagonOptimize.h
-  runtime/HalideRuntime.h
-  runtime/HalideBuffer.h
-  ImageParam.h
-  InferArguments.h
-  InjectHostDevBufferCopies.h
-  InjectOpenGLIntrinsics.h
-  Inline.h
-  InlineReductions.h
-  IntegerDivisionTable.h
-  Interval.h
-  Introspection.h
-  IntrusivePtr.h
-  IREquality.h
   IR.h
+  IREquality.h
   IRMatch.h
   IRMutator.h
   IROperator.h
   IRPrinter.h
   IRVisitor.h
+  ImageParam.h
+  InferArguments.h
+  Interval.h
+  InjectHostDevBufferCopies.h
+  InjectOpenGLIntrinsics.h
+  Inline.h
+  InlineReductions.h
+  IntegerDivisionTable.h
+  Introspection.h
+  IntrusivePtr.h
   JITModule.h
+  LLVM_Output.h
+  LLVM_Runtime_Linker.h
   Lambda.h
   Lerp.h
   LICM.h
-  LLVM_Output.h
-  LLVM_Runtime_Linker.h
   LoopCarry.h
   Lower.h
   MainPage.h
@@ -336,19 +332,20 @@ set(HEADER_FILES
   ModulusRemainder.h
   Monotonic.h
   ObjectInstanceRegistry.h
-  Outputs.h
   OutputImageParam.h
+  Outputs.h
   ParallelRVar.h
-  Parameter.h
   Param.h
+  Parameter.h
   PartitionLoops.h
   Pipeline.h
+  PrintLoopNest.h
   Prefetch.h
   Profiling.h
   Qualify.h
+  RDom.h
   Random.h
   RealizationOrder.h
-  RDom.h
   Reduction.h
   RegionCosts.h
   RemoveDeadAllocations.h
@@ -356,6 +353,7 @@ set(HEADER_FILES
   RemoveUndef.h
   Schedule.h
   ScheduleFunctions.h
+  ScheduleParam.h
   Scope.h
   SelectGPUAPI.h
   Simplify.h
@@ -384,17 +382,16 @@ set(HEADER_FILES
   VectorizeLoops.h
   WrapCalls.h
   WrapExternStages.h
+  runtime/HalideRuntime.h
+  runtime/HalideBuffer.h
 )
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
-  COMMAND build_halide_h ${HEADER_FILES} HalideFooter.h > "${NATIVE_INCLUDE_PATH}Halide.h"
+  COMMAND build_halide_h ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h ${HEADER_FILES})
-add_custom_target(
-    HalideIncludes
-    DEPENDS "${CMAKE_BINARY_DIR}/include/Halide.h")
 
 foreach (i ${RUNTIME_HEADER_FILES})
   configure_file(runtime/${i} "${CMAKE_BINARY_DIR}/include" COPYONLY)
@@ -409,11 +406,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AssociativeOpsTable.cpp
   Associativity.cpp
   AutoSchedule.cpp
+  AutoScheduleOld.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
-  BoundSmallAllocations.cpp
   Buffer.cpp
   Closure.cpp
   CodeGen_ARM.cpp
@@ -505,6 +502,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
+  ScheduleParam.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
   SimplifySpecializations.cpp
@@ -531,6 +529,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   VectorizeLoops.cpp
   WrapCalls.cpp
   WrapExternStages.cpp
+  "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
@@ -543,7 +542,6 @@ set_target_properties(Halide PROPERTIES VISIBILITY_INLINES_HIDDEN 1)
 add_dependencies(Halide
   binary2cpp
   build_halide_h
-  HalideIncludes
 )
 
 # List of LLVM Components required

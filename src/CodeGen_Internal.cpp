@@ -274,10 +274,11 @@ namespace {
 
 // This mutator rewrites predicated loads and stores as unpredicated
 // loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator2 {
-    Expr visit(const Load *op) override {
+class UnpredicateLoadsStores : public IRMutator {
+    void visit(const Load *op) {
         if (is_one(op->predicate)) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         Expr predicate = mutate(op->predicate);
@@ -287,7 +288,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
                                                 const_true(op->type.lanes()));
-            return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
+            expr = Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
                               Call::PureIntrinsic);
         } else {
             string index_name = "scalarized_load_index";
@@ -306,15 +307,16 @@ class UnpredicateLoadsStores : public IRMutator2 {
                                 make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
                 ramp.push_back(i);
             }
-            Expr expr = Shuffle::make(lanes, ramp);
+            expr = Shuffle::make(lanes, ramp);
             expr = Let::make(predicate_name, predicate, expr);
-            return Let::make(index_name, index, expr);
+            expr = Let::make(index_name, index, expr);
         }
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         if (is_one(op->predicate)) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         Expr predicate = mutate(op->predicate);
@@ -323,7 +325,7 @@ class UnpredicateLoadsStores : public IRMutator2 {
 
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()));
-            return IfThenElse::make(scalar_pred->value, unpredicated_store);
+            stmt = IfThenElse::make(scalar_pred->value, unpredicated_store);
         } else {
             string value_name = "scalarized_store_value";
             Expr value_var = Variable::make(value.type(), value_name);
@@ -340,14 +342,14 @@ class UnpredicateLoadsStores : public IRMutator2 {
                 Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
                 lanes.push_back(lane);
             }
-            Stmt stmt = Block::make(lanes);
+            stmt = Block::make(lanes);
             stmt = LetStmt::make(predicate_name, predicate, stmt);
             stmt = LetStmt::make(value_name, value, stmt);
-            return LetStmt::make(index_name, index, stmt);
+            stmt = LetStmt::make(index_name, index, stmt);
        }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 };
 
 }  // namespace
@@ -397,6 +399,13 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     #endif
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
+
+    #if LLVM_VERSION < 40
+    // Turn off approximate reciprocals for division. It's too
+    // inaccurate even for us. In LLVM 4.0+ this moved to be a
+    // function attribute.
+    options.Reciprocals.setDefaults("all", false, 0);
+    #endif
 
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
@@ -465,9 +474,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 }
 
 void set_function_attributes_for_target(llvm::Function *fn, Target t) {
+    #if LLVM_VERSION >= 40
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");
+    #endif
 }
 
 }

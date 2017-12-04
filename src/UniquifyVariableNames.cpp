@@ -8,9 +8,9 @@ namespace Internal {
 using std::string;
 using std::map;
 
-class UniquifyVariableNames : public IRMutator2 {
+class UniquifyVariableNames : public IRMutator {
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     map<string, int> vars;
 
@@ -38,7 +38,7 @@ class UniquifyVariableNames : public IRMutator2 {
         vars[s]--;
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         Expr value = mutate(op->value);
         push_name(op->name);
         string new_name = get_name(op->name);
@@ -48,14 +48,14 @@ class UniquifyVariableNames : public IRMutator2 {
         if (new_name == op->name &&
             body.same_as(op->body) &&
             value.same_as(op->value)) {
-            return op;
+            stmt = op;
         } else {
-            return LetStmt::make(new_name, value, body);
+            stmt = LetStmt::make(new_name, value, body);
         }
 
     }
 
-    Expr visit(const Let *op) override {
+    void visit(const Let *op) {
         Expr value = mutate(op->value);
         push_name(op->name);
         string new_name = get_name(op->name);
@@ -65,14 +65,14 @@ class UniquifyVariableNames : public IRMutator2 {
         if (new_name == op->name &&
             body.same_as(op->body) &&
             value.same_as(op->value)) {
-            return op;
+            expr = op;
         } else {
-            return Let::make(new_name, value, body);
+            expr = Let::make(new_name, value, body);
         }
 
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         push_name(op->name);
@@ -84,18 +84,18 @@ class UniquifyVariableNames : public IRMutator2 {
             body.same_as(op->body) &&
             min.same_as(op->min) &&
             extent.same_as(op->extent)) {
-            return op;
+            stmt = op;
         } else {
-            return For::make(new_name, min, extent, op->for_type, op->device_api, body);
+            stmt = For::make(new_name, min, extent, op->for_type, op->device_api, body);
         }
     }
 
-    Expr visit(const Variable *op) override {
+    void visit(const Variable *op) {
         string new_name = get_name(op->name);
         if (op->name != new_name) {
-            return Variable::make(op->type, new_name);
+            expr = Variable::make(op->type, new_name);
         } else {
-            return op;
+            expr = op;
         }
     }
 };

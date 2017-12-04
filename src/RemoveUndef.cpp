@@ -10,83 +10,85 @@ namespace Internal {
 
 using std::vector;
 
-class RemoveUndef : public IRMutator2 {
+class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Scope<> dead_vars;
+    Scope<int> dead_vars;
 
-    Expr visit(const Variable *op) override {
+    void visit(const Variable *op) {
         if (dead_vars.contains(op->name)) {
-            return Expr();
+            expr = Expr();
         } else {
-            return op;
+            expr = op;
         }
     }
 
     template<typename T>
-    Expr mutate_binary_operator(const T *op) {
+    void mutate_binary_operator(const T *op) {
         Expr a = mutate(op->a);
-        if (!a.defined()) return Expr();
+        if (!a.defined()) return;
         Expr b = mutate(op->b);
-        if (!b.defined()) return Expr();
+        if (!b.defined()) return;
         if (a.same_as(op->a) &&
             b.same_as(op->b)) {
-            return op;
+            expr = op;
         } else {
-            return T::make(std::move(a), std::move(b));
+            expr = T::make(std::move(a), std::move(b));
         }
+        stmt = Stmt();
     }
 
-    Expr visit(const Cast *op) override {
+    void visit(const Cast *op) {
         Expr value = mutate(op->value);
-        if (!value.defined()) return Expr();
+        if (!value.defined()) return;
         if (value.same_as(op->value)) {
-            return op;
+            expr = op;
         } else {
-            return Cast::make(op->type, std::move(value));
+            expr = Cast::make(op->type, std::move(value));
         }
     }
 
-    Expr visit(const Add *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Sub *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mul *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Div *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mod *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Min *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Max *op) override {return mutate_binary_operator(op);}
-    Expr visit(const EQ *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const NE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const LT *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const LE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const GT *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const GE *op)  override {return mutate_binary_operator(op);}
-    Expr visit(const And *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Or *op)  override {return mutate_binary_operator(op);}
+    void visit(const Add *op)     {mutate_binary_operator(op);}
+    void visit(const Sub *op)     {mutate_binary_operator(op);}
+    void visit(const Mul *op)     {mutate_binary_operator(op);}
+    void visit(const Div *op)     {mutate_binary_operator(op);}
+    void visit(const Mod *op)     {mutate_binary_operator(op);}
+    void visit(const Min *op)     {mutate_binary_operator(op);}
+    void visit(const Max *op)     {mutate_binary_operator(op);}
+    void visit(const EQ *op)      {mutate_binary_operator(op);}
+    void visit(const NE *op)      {mutate_binary_operator(op);}
+    void visit(const LT *op)      {mutate_binary_operator(op);}
+    void visit(const LE *op)      {mutate_binary_operator(op);}
+    void visit(const GT *op)      {mutate_binary_operator(op);}
+    void visit(const GE *op)      {mutate_binary_operator(op);}
+    void visit(const And *op)     {mutate_binary_operator(op);}
+    void visit(const Or *op)      {mutate_binary_operator(op);}
 
-    Expr visit(const Not *op) override {
+    void visit(const Not *op) {
         Expr a = mutate(op->a);
-        if (!a.defined()) return Expr();
+        if (!a.defined()) return;
         if (a.same_as(op->a)) {
-            return op;
-        } else {
-            return Not::make(a);
+            expr = op;
         }
+        else expr = Not::make(a);
     }
 
-    Expr visit(const Select *op) override {
+    void visit(const Select *op)  {
         Expr cond = mutate(op->condition);
         Expr t = mutate(op->true_value);
         Expr f = mutate(op->false_value);
 
         if (!cond.defined()) {
-            return Expr();
+            expr = Expr();
+            return;
         }
 
         if (!t.defined() && !f.defined()) {
-            return Expr();
+            expr = Expr();
+            return;
         }
 
         if (!t.defined()) {
@@ -104,54 +106,52 @@ private:
             } else {
                 predicate = cond;
             }
-            return t;
+            expr = t;
         } else if (cond.same_as(op->condition) &&
             t.same_as(op->true_value) &&
             f.same_as(op->false_value)) {
-            return op;
+            expr = op;
         } else {
-            return Select::make(cond, t, f);
+            expr = Select::make(cond, t, f);
         }
     }
 
-    Expr visit(const Load *op) override {
+    void visit(const Load *op) {
         Expr pred = mutate(op->predicate);
-        if (!pred.defined()) return Expr();
+        if (!pred.defined()) return;
         Expr index = mutate(op->index);
-        if (!index.defined()) return Expr();
+        if (!index.defined()) return;
         if (pred.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
+            expr = op;
         } else {
-            return Load::make(op->type, op->name, index, op->image, op->param, pred);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, pred);
         }
     }
 
-    Expr visit(const Ramp *op) override {
+    void visit(const Ramp *op) {
         Expr base = mutate(op->base);
-        if (!base.defined()) return Expr();
+        if (!base.defined()) return;
         Expr stride = mutate(op->stride);
-        if (!stride.defined()) return Expr();
+        if (!stride.defined()) return;
         if (base.same_as(op->base) &&
             stride.same_as(op->stride)) {
-            return op;
+            expr = op;
         } else {
-            return Ramp::make(base, stride, op->lanes);
+            expr = Ramp::make(base, stride, op->lanes);
         }
     }
 
-    Expr visit(const Broadcast *op) override {
+    void visit(const Broadcast *op) {
         Expr value = mutate(op->value);
-        if (!value.defined()) return Expr();
-        if (value.same_as(op->value)) {
-            return op;
-        } else {
-            return Broadcast::make(value, op->lanes);
-        }
+        if (!value.defined()) return;
+        if (value.same_as(op->value)) expr = op;
+        else expr = Broadcast::make(value, op->lanes);
     }
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         if (op->is_intrinsic(Call::undef)) {
-            return Expr();
+            expr = Expr();
+            return;
         }
 
         vector<Expr> new_args(op->args.size());
@@ -161,138 +161,142 @@ private:
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.defined()) return Expr();
+            if (!new_arg.defined()) return;
             if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
 
         if (!changed) {
-            return op;
+            expr = op;
         } else {
-            return Call::make(op->type, op->name, new_args, op->call_type,
+            expr = Call::make(op->type, op->name, new_args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }
     }
 
-    Expr visit(const Let *op) override {
+    void visit(const Let *op) {
         Expr value = mutate(op->value);
         if (!value.defined()) {
-            dead_vars.push(op->name);
+            dead_vars.push(op->name, 0);
         }
         Expr body = mutate(op->body);
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!body.defined()) return Expr();
+        if (!body.defined()) return;
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
-            return op;
+            expr = op;
         } else if (!value.defined()) {
-            return body;
+            expr = body;
         } else {
-            Expr expr = Let::make(op->name, value, body);
+            expr = Let::make(op->name, value, body);
             predicate = substitute(op->name, value, predicate);
-            return expr;
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         Expr value = mutate(op->value);
         if (!value.defined()) {
-            dead_vars.push(op->name);
+            dead_vars.push(op->name, 0);
         }
         Stmt body = mutate(op->body);
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) return;
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else if (!value.defined()) {
-            return body;
+            stmt = body;
         } else {
-            return LetStmt::make(op->name, value, body);
+            stmt = LetStmt::make(op->name, value, body);
         }
     }
 
-    Stmt visit(const AssertStmt *op) override {
+    void visit(const AssertStmt *op) {
         Expr condition = mutate(op->condition);
         if (!condition.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
 
         Expr message = mutate(op->message);
         if (!message.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
 
         if (condition.same_as(op->condition) && message.same_as(op->message)) {
-            return op;
+            stmt = op;
         } else {
-            return AssertStmt::make(condition, message);
+            stmt = AssertStmt::make(condition, message);
         }
     }
 
-    Stmt visit(const ProducerConsumer *op) override {
+    void visit(const ProducerConsumer *op) {
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) return;
         if (body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         Expr min = mutate(op->min);
         if (!min.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
         Expr extent = mutate(op->extent);
         if (!extent.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) return;
         if (min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else {
-            return For::make(op->name, min, extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
         }
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         predicate = Expr();
 
         Expr pred = mutate(op->predicate);
         Expr value = mutate(op->value);
         if (!value.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
 
         Expr index = mutate(op->index);
         if (!index.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            Stmt stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
+            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
             predicate = Expr();
-            return stmt;
         } else if (pred.same_as(op->predicate) &&
                    value.same_as(op->value) &&
                    index.same_as(op->index)) {
-            return op;
+            stmt = op;
         } else {
-            return Store::make(op->name, value, index, op->param, pred);
+            stmt = Store::make(op->name, value, index, op->param, pred);
         }
     }
 
-    Stmt visit(const Provide *op) override {
+    void visit(const Provide *op) {
         predicate = Expr();
 
         vector<Expr> new_args(op->args.size());
@@ -307,7 +311,8 @@ private:
             predicate = Expr();
             Expr new_arg = mutate(old_arg);
             if (!new_arg.defined()) {
-                return Stmt();
+                stmt = Stmt();
+                return;
             }
             args_predicates.push_back(predicate);
             if (!new_arg.same_as(old_arg)) changed = true;
@@ -337,7 +342,8 @@ private:
         }
 
         if (all_values_undefined) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
 
         for (size_t i = 1; i < values_predicates.size(); i++) {
@@ -348,31 +354,31 @@ private:
         }
 
         if (predicate.defined()) {
-            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
+            stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
             predicate = Expr();
-            return stmt;
         } else if (!changed) {
-            return op;
+            stmt = op;
         } else {
-            return Provide::make(op->name, new_values, new_args);
+            stmt = Provide::make(op->name, new_values, new_args);
         }
     }
 
-    Stmt visit(const Allocate *op) override {
+    void visit(const Allocate *op) {
         std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
             if (!new_extents.back().defined()) {
-                return Stmt();
+                stmt = Stmt();
+                return;
             }
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) return;
 
         Expr condition = mutate(op->condition);
-        if (!condition.defined()) return Stmt();
+        if (!condition.defined()) return;
 
         Expr new_expr;
         if (op->new_expr.defined()) {
@@ -383,17 +389,17 @@ private:
             body.same_as(op->body) &&
             condition.same_as(op->condition) &&
             new_expr.same_as(op->new_expr)) {
-            return op;
+            stmt = op;
         } else {
-            return Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
         }
     }
 
-    Stmt visit(const Free *op) override {
-        return op;
+    void visit(const Free *op) {
+        stmt = op;
     }
 
-    Stmt visit(const Realize *op) override {
+    void visit(const Realize *op) {
         Region new_bounds(op->bounds.size());
         bool bounds_changed = false;
 
@@ -403,11 +409,13 @@ private:
             Expr old_extent = op->bounds[i].extent;
             Expr new_min    = mutate(old_min);
             if (!new_min.defined()) {
-                return Stmt();
+                stmt = Stmt();
+                return;
             }
             Expr new_extent = mutate(old_extent);
             if (!new_extent.defined()) {
-                return Stmt();
+                stmt = Stmt();
+                return;
             }
             if (!new_min.same_as(old_min))       bounds_changed = true;
             if (!new_extent.same_as(old_extent)) bounds_changed = true;
@@ -415,45 +423,47 @@ private:
         }
 
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) return;
 
         Expr condition = mutate(op->condition);
-        if (!condition.defined()) return Stmt();
+        if (!condition.defined()) return;
 
         if (!bounds_changed &&
             body.same_as(op->body) &&
             condition.same_as(op->condition)) {
-            return op;
+            stmt = op;
         } else {
-            return Realize::make(op->name, op->types, new_bounds, condition, body);
+            stmt = Realize::make(op->name, op->types, new_bounds, condition, body);
         }
     }
 
-    Stmt visit(const Block *op) override {
+    void visit(const Block *op) {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
         if (!first.defined()) {
-            return rest;
+            stmt = rest;
         } else if (!rest.defined()) {
-            return first;
+            stmt = first;
         } else if (first.same_as(op->first) &&
                    rest.same_as(op->rest)) {
-            return op;
+            stmt = op;
         } else {
-            return Block::make(first, rest);
+            stmt = Block::make(first, rest);
         }
     }
 
-    Stmt visit(const IfThenElse *op) override {
+    void visit(const IfThenElse *op) {
         Expr condition = mutate(op->condition);
         if (!condition.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
 
         if (!then_case.defined() && !else_case.defined()) {
-            return Stmt();
+            stmt = Stmt();
+            return;
         }
 
         if (!then_case.defined()) {
@@ -465,20 +475,20 @@ private:
         if (condition.same_as(op->condition) &&
             then_case.same_as(op->then_case) &&
             else_case.same_as(op->else_case)) {
-            return op;
+            stmt = op;
         } else {
-            return IfThenElse::make(condition, then_case, else_case);
+            stmt = IfThenElse::make(condition, then_case, else_case);
         }
     }
 
-    Stmt visit(const Evaluate *op) override {
+    void visit(const Evaluate *op) {
         Expr v = mutate(op->value);
         if (!v.defined()) {
-            return Stmt();
+            stmt = Stmt();
         } else if (v.same_as(op->value)) {
-            return op;
+            stmt = op;
         } else {
-            return Evaluate::make(v);
+            stmt = Evaluate::make(v);
         }
     }
 };

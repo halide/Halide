@@ -29,11 +29,11 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
-class SimplifyUsingFact : public IRMutator2 {
+class SimplifyUsingFact : public IRMutator {
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) override {
+    Expr mutate(const Expr &e) {
         if (e.type().is_bool()) {
             if (equal(fact, e) ||
                 can_prove(!fact || e)) {
@@ -47,7 +47,7 @@ public:
                 return const_false();
             }
         }
-        return IRMutator2::mutate(e);
+        return IRMutator::mutate(e);
     }
 
     Expr fact;
@@ -122,8 +122,6 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
-        internal_assert(s_def.defined());
-
         vector<Definition> s_result = propagate_specialization_in_definition(s_def, name);
 
         if (var && eq) {
@@ -158,9 +156,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
-        if (func.definition().defined()) {
-            propagate_specialization_in_definition(func.definition(), func.name());
-        }
+        propagate_specialization_in_definition(func.definition(), func.name());
     }
 }
 

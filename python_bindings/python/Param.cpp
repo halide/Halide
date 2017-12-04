@@ -1,3 +1,4 @@
+
 #include "Param.h"
 
 // to avoid compiler confusion, python.hpp must be include before Halide headers
@@ -332,7 +333,7 @@ void defineParam_impl(const std::string suffix, const h::Type type) {
              "Get the current value of this parameter. Only meaningful when jitting.")
         .def("set", &Param<T>::set, p::args("self", "val"),
              "Set the current value of this parameter. Only meaningful when jitting")
-        //            .def("address", &Param<T>::address, p::arg("self"),
+        //            .def("get_address", &Param<T>::get_address, p::arg("self"),
         //                 "Get a pointer to the location that stores the current value of
         //                 "this parameter. Only meaningful for jitting.")
 
@@ -348,8 +349,8 @@ void defineParam_impl(const std::string suffix, const h::Type type) {
         .def("set_max_value", &Param<T>::set_max_value, p::args("self", "max"),
              "Get or set the possible range of this parameter. "
              "Use undefined Exprs to mean unbounded.")
-        .def("min_value", &Param<T>::min_value, p::arg("self"))
-        .def("max_value", &Param<T>::max_value, p::arg("self"))
+        .def("get_min_value", &Param<T>::get_min_value, p::arg("self"))
+        .def("get_max_value", &Param<T>::get_max_value, p::arg("self"))
 
         .def("expr", &param_as_expr<T>, p::arg("self"),
              "You can use this parameter as an expression in a halide "
@@ -596,12 +597,10 @@ void defineParam() {
     defineParam_impl<uint8_t>("_uint8", h::UInt(8));
     defineParam_impl<uint16_t>("_uint16", h::UInt(16));
     defineParam_impl<uint32_t>("_uint32", h::UInt(32));
-    defineParam_impl<uint64_t>("_uint64", h::UInt(64));
 
     defineParam_impl<int8_t>("_int8", h::Int(8));
     defineParam_impl<int16_t>("_int16", h::Int(16));
     defineParam_impl<int32_t>("_int32", h::Int(32));
-    defineParam_impl<int64_t>("_int64", h::Int(64));
 
     defineParam_impl<float>("_float32", h::Float(32));
     defineParam_impl<double>("_float64", h::Float(64));

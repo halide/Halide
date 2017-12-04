@@ -12,7 +12,7 @@
 namespace Halide {
 namespace Internal {
 
-template<typename T = void>
+template<typename T>
 class ExprUsesVars : public IRGraphVisitor {
     using IRGraphVisitor::visit;
 
@@ -50,9 +50,9 @@ public:
 /** Test if a statement or expression references the given variable. */
 template<typename StmtOrExpr>
 inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v) {
-    Scope<> s;
-    s.push(v);
-    ExprUsesVars<> uses(s);
+    Scope<int> s;
+    s.push(v, 0);
+    ExprUsesVars<int> uses(s);
     e.accept(&uses);
     return uses.result;
 }

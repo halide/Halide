@@ -25,19 +25,19 @@ namespace {
 
 // For a given var, replace expressions like shuffle_vector(var, 4)
 // with var.lane.4
-class ReplaceShuffleVectors : public IRMutator2 {
+class ReplaceShuffleVectors : public IRMutator {
     string var;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr visit(const Shuffle *op) override {
+    void visit(const Shuffle *op) {
         const Variable *v;
         if (op->indices.size() == 1 &&
             (v = op->vectors[0].as<Variable>()) &&
             v->name == var) {
-            return Variable::make(op->type, var + ".lane." + std::to_string(op->indices[0]));
+            expr = Variable::make(op->type, var + ".lane." + std::to_string(op->indices[0]));
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 public:
@@ -181,12 +181,12 @@ Interval bounds_of_lanes(Expr e) {
 // dimension to represent the separate copy of the allocation per
 // vector lane. This means loads and stores to them need to be
 // rewritten slightly.
-class RewriteAccessToVectorAlloc : public IRMutator2 {
+class RewriteAccessToVectorAlloc : public IRMutator {
     Expr var;
     string alloc;
     int lanes;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Expr mutate_index(string a, Expr index) {
         index = mutate(index);
@@ -197,13 +197,13 @@ class RewriteAccessToVectorAlloc : public IRMutator2 {
         }
     }
 
-    Expr visit(const Load *op) override {
-        return Load::make(op->type, op->name, mutate_index(op->name, op->index),
+    void visit(const Load *op) {
+        expr = Load::make(op->type, op->name, mutate_index(op->name, op->index),
                           op->image, op->param, mutate(op->predicate));
     }
 
-    Stmt visit(const Store *op) override {
-        return Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
+    void visit(const Store *op) {
+        stmt = Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
                            op->param, mutate(op->predicate));
     }
 
@@ -232,7 +232,7 @@ bool uses_gpu_vars(Expr s) {
 }
 
 // Wrap a vectorized predicate around a Load/Store node.
-class PredicateLoadStore : public IRMutator2 {
+class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
     bool in_hexagon;
@@ -241,7 +241,7 @@ class PredicateLoadStore : public IRMutator2 {
     bool valid;
     bool vectorized;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool should_predicate_store_load(int bit_size) {
         if (in_hexagon) {
@@ -266,10 +266,11 @@ class PredicateLoadStore : public IRMutator2 {
         return pred;
     }
 
-    Expr visit(const Load *op) override {
+    void visit(const Load *op) {
         valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
-            return op;
+            expr = op;
+            return;
         }
 
         Expr predicate, index;
@@ -283,21 +284,24 @@ class PredicateLoadStore : public IRMutator2 {
             predicate = mutate(Broadcast::make(op->predicate, lanes));
             index = mutate(Broadcast::make(op->index, lanes));
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         predicate = merge_predicate(predicate, vector_predicate);
         if (!valid) {
-            return op;
+            expr = op;
+            return;
         }
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
         vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         valid = valid && should_predicate_store_load(op->value.type().bits());
         if (!valid) {
-            return op;
+            stmt = op;
+            return;
         }
 
         Expr predicate, value, index;
@@ -314,21 +318,23 @@ class PredicateLoadStore : public IRMutator2 {
             value = mutate(Broadcast::make(op->value, lanes));
             index = mutate(Broadcast::make(op->index, lanes));
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         predicate = merge_predicate(predicate, vector_predicate);
         if (!valid) {
-            return op;
+            stmt = op;
+            return;
         }
+        stmt = Store::make(op->name, value, op->index, op->param, predicate);
         vectorized = true;
-        return Store::make(op->name, value, op->index, op->param, predicate);
     }
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         // We should not vectorize calls with side-effects
         valid = valid && op->is_pure();
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
     }
 
 public:
@@ -345,7 +351,7 @@ public:
 
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
-class VectorSubs : public IRMutator2 {
+class VectorSubs : public IRMutator {
     // The var we're vectorizing
     string var;
 
@@ -379,91 +385,91 @@ class VectorSubs : public IRMutator2 {
         return Expr();
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr visit(const Cast *op) override {
+    virtual void visit(const Cast *op) {
         Expr value = mutate(op->value);
         if (value.same_as(op->value)) {
-            return op;
+            expr = op;
         } else {
             Type t = op->type.with_lanes(value.type().lanes());
-            return Cast::make(t, value);
+            expr = Cast::make(t, value);
         }
     }
 
-    Expr visit(const Variable *op) override {
+    virtual void visit(const Variable *op) {
         string widened_name = op->name + widening_suffix;
         if (op->name == var) {
-            return replacement;
+            expr = replacement;
         } else if (scope.contains(op->name)) {
             // If the variable appears in scope then we previously widened
             // it and we use the new widened name for the variable.
-            return Variable::make(scope.get(op->name).type(), widened_name);
+            expr = Variable::make(scope.get(op->name).type(), widened_name);
         } else {
-            return op;
+            expr = op;
         }
     }
 
     template<typename T>
-    Expr mutate_binary_operator(const T *op) {
+    void mutate_binary_operator(const T *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
         if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
+            expr = op;
         } else {
             int w = std::max(a.type().lanes(), b.type().lanes());
-            return T::make(widen(a, w), widen(b, w));
+            expr = T::make(widen(a, w), widen(b, w));
         }
     }
 
-    Expr visit(const Add *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Sub *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mul *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Div *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Mod *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Min *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Max *op) override {return mutate_binary_operator(op);}
-    Expr visit(const EQ *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const NE *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const LT *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const LE *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const GT *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const GE *op) override  {return mutate_binary_operator(op);}
-    Expr visit(const And *op) override {return mutate_binary_operator(op);}
-    Expr visit(const Or *op) override  {return mutate_binary_operator(op);}
+    void visit(const Add *op) {mutate_binary_operator(op);}
+    void visit(const Sub *op) {mutate_binary_operator(op);}
+    void visit(const Mul *op) {mutate_binary_operator(op);}
+    void visit(const Div *op) {mutate_binary_operator(op);}
+    void visit(const Mod *op) {mutate_binary_operator(op);}
+    void visit(const Min *op) {mutate_binary_operator(op);}
+    void visit(const Max *op) {mutate_binary_operator(op);}
+    void visit(const EQ *op)  {mutate_binary_operator(op);}
+    void visit(const NE *op)  {mutate_binary_operator(op);}
+    void visit(const LT *op)  {mutate_binary_operator(op);}
+    void visit(const LE *op)  {mutate_binary_operator(op);}
+    void visit(const GT *op)  {mutate_binary_operator(op);}
+    void visit(const GE *op)  {mutate_binary_operator(op);}
+    void visit(const And *op) {mutate_binary_operator(op);}
+    void visit(const Or *op)  {mutate_binary_operator(op);}
 
-    Expr visit(const Select *op) override {
+    void visit(const Select *op) {
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
         if (condition.same_as(op->condition) &&
             true_value.same_as(op->true_value) &&
             false_value.same_as(op->false_value)) {
-            return op;
+            expr = op;
         } else {
             int lanes = std::max(true_value.type().lanes(), false_value.type().lanes());
             lanes = std::max(lanes, condition.type().lanes());
             // Widen the true and false values, but we don't have to widen the condition
             true_value = widen(true_value, lanes);
             false_value = widen(false_value, lanes);
-            return Select::make(condition, true_value, false_value);
+            expr = Select::make(condition, true_value, false_value);
         }
     }
 
-    Expr visit(const Load *op) override {
+    void visit(const Load *op) {
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
         if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
+            expr = op;
         } else {
             int w = index.type().lanes();
             predicate = widen(predicate, w);
-            return Load::make(op->type.with_lanes(w), op->name, index, op->image,
+            expr = Load::make(op->type.with_lanes(w), op->name, index, op->image,
                               op->param, predicate);
         }
     }
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         // Widen the call by changing the lanes of all of its
         // arguments and its return type
         vector<Expr> new_args(op->args.size());
@@ -480,7 +486,7 @@ class VectorSubs : public IRMutator2 {
         }
 
         if (!changed) {
-            return op;
+            expr = op;
         } else if (op->name == Call::trace) {
             // Call::trace vectorizes uniquely, because we want a
             // single trace call for the entire vector, instead of
@@ -502,18 +508,18 @@ class VectorSubs : public IRMutator2 {
             // records the number of vector lanes in the type being
             // stored.
             new_args[5] = max_lanes;
-            return Call::make(op->type, Call::trace, new_args, op->call_type);
+            expr = Call::make(op->type, Call::trace, new_args, op->call_type);
         } else {
             // Widen the args to have the same lanes as the max lanes found
             for (size_t i = 0; i < new_args.size(); i++) {
                 new_args[i] = widen(new_args[i], max_lanes);
             }
-            return Call::make(op->type.with_lanes(max_lanes), op->name, new_args,
+            expr = Call::make(op->type.with_lanes(max_lanes), op->name, new_args,
                               op->call_type, op->func, op->value_index, op->image, op->param);
         }
     }
 
-    Expr visit(const Let *op) override {
+    void visit(const Let *op) {
 
         // Vectorize the let value and check to see if it was vectorized by
         // this mutator. The type of the expression might already be vector
@@ -534,16 +540,16 @@ class VectorSubs : public IRMutator2 {
 
         if (mutated_value.same_as(op->value) &&
             mutated_body.same_as(op->body)) {
-            return op;
+            expr = op;
         } else if (was_vectorized) {
             scope.pop(op->name);
-            return Let::make(vectorized_name, mutated_value, mutated_body);
+            expr = Let::make(vectorized_name, mutated_value, mutated_body);
         } else {
-            return Let::make(op->name, mutated_value, mutated_body);
+            expr = Let::make(op->name, mutated_value, mutated_body);
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         Expr mutated_value = mutate(op->value);
         std::string mutated_name = op->name;
 
@@ -602,13 +608,13 @@ class VectorSubs : public IRMutator2 {
 
         if (mutated_value.same_as(op->value) &&
             mutated_body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else {
-            return LetStmt::make(mutated_name, mutated_value, mutated_body);
+            stmt = LetStmt::make(mutated_name, mutated_value, mutated_body);
         }
     }
 
-    Stmt visit(const Provide *op) override {
+    void visit(const Provide *op) {
         vector<Expr> new_args(op->args.size());
         vector<Expr> new_values(op->values.size());
         bool changed = false;
@@ -632,7 +638,7 @@ class VectorSubs : public IRMutator2 {
         }
 
         if (!changed) {
-            return op;
+            stmt = op;
         } else {
             // Widen the args to have the same lanes as the max lanes found
             for (size_t i = 0; i < new_args.size(); i++) {
@@ -641,29 +647,33 @@ class VectorSubs : public IRMutator2 {
             for (size_t i = 0; i < new_values.size(); i++) {
                 new_values[i] = widen(new_values[i], max_lanes);
             }
-            return Provide::make(op->name, new_values, new_args);
+            stmt = Provide::make(op->name, new_values, new_args);
         }
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
+            stmt = op;
         } else {
             int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
-            return Store::make(op->name, widen(value, lanes), widen(index, lanes),
+            stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes),
                                op->param, widen(predicate, lanes));
         }
     }
 
-    Stmt visit(const AssertStmt *op) override {
-        return (op->condition.type().lanes() > 1) ? scalarize(op) : op;
+    void visit(const AssertStmt *op) {
+        if (op->condition.type().lanes() > 1) {
+            stmt = scalarize(op);
+        } else {
+            stmt = op;
+        }
     }
 
-    Stmt visit(const IfThenElse *op) override {
+    void visit(const IfThenElse *op) {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
         debug(3) << "Vectorizing over " << var << "\n"
@@ -717,29 +727,26 @@ class VectorSubs : public IRMutator2 {
                     Stmt without_likelies =
                         IfThenElse::make(op->condition.as<Call>()->args[0],
                                          op->then_case, op->else_case);
-                    Stmt stmt =
+                    stmt =
                         IfThenElse::make(all_true,
                                          then_case,
                                          scalarize(without_likelies));
                     debug(4) << "...With all_true likely: \n" << stmt << "\n";
-                    return stmt;
                 } else {
-                    Stmt stmt =
+                    stmt =
                         IfThenElse::make(all_true,
                                          then_case,
                                          predicated_stmt);
                     debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
-                    return stmt;
                 }
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
-                    debug(4) << "...Scalarizing vector predicate: \n" << Stmt(op) << "\n";
-                    return scalarize(op);
+                    debug(4) << "...Scalarizing vector predicate: \n" << stmt << "\n";
+                    stmt = scalarize(op);
                 } else {
-                    Stmt stmt = predicated_stmt;
+                    stmt = predicated_stmt;
                     debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
-                    return stmt;
                 }
             }
         } else {
@@ -748,14 +755,14 @@ class VectorSubs : public IRMutator2 {
             if (cond.same_as(op->condition) &&
                 then_case.same_as(op->then_case) &&
                 else_case.same_as(op->else_case)) {
-                return op;
+                stmt = op;
             } else {
-                return IfThenElse::make(cond, then_case, else_case);
+                stmt = IfThenElse::make(cond, then_case, else_case);
             }
         }
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         ForType for_type = op->for_type;
         if (for_type == ForType::Vectorized) {
             user_warning << "Warning: Encountered vector for loop over " << op->name
@@ -774,7 +781,8 @@ class VectorSubs : public IRMutator2 {
             Expr var = Variable::make(Int(32), op->name);
             Stmt body = substitute(op->name, var + op->min, op->body);
             Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->device_api, body);
-            return mutate(transformed);
+            stmt = mutate(transformed);
+            return;
         }
 
         if (extent.type().is_vector()) {
@@ -793,13 +801,13 @@ class VectorSubs : public IRMutator2 {
             extent.same_as(op->extent) &&
             body.same_as(op->body) &&
             for_type == op->for_type) {
-            return op;
+            stmt = op;
         } else {
-            return For::make(op->name, min, extent, for_type, op->device_api, body);
+            stmt = For::make(op->name, min, extent, for_type, op->device_api, body);
         }
     }
 
-    Stmt visit(const Allocate *op) override {
+    void visit(const Allocate *op) {
         std::vector<Expr> new_extents;
         Expr new_expr;
 
@@ -845,7 +853,7 @@ class VectorSubs : public IRMutator2 {
         // The variable itself could still exist inside an inner scalarized block.
         body = substitute(v, Variable::make(Int(32), var), body);
 
-        return Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
+        stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
 
     Stmt scalarize(Stmt s) {
@@ -860,7 +868,9 @@ class VectorSubs : public IRMutator2 {
 
         const Ramp *r = replacement.as<Ramp>();
         internal_assert(r) << "Expected replacement in VectorSubs to be a ramp\n";
-        return For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
+        s = For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
+
+        return s;
     }
 
     Expr scalarize(Expr e) {
@@ -904,19 +914,18 @@ public:
 };
 
 // Vectorize all loops marked as such in a Stmt
-class VectorizeLoops : public IRMutator2 {
+class VectorizeLoops : public IRMutator {
     const Target &target;
     bool in_hexagon;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const For *for_loop) override {
+    void visit(const For *for_loop) {
         bool old_in_hexagon = in_hexagon;
         if (for_loop->device_api == DeviceAPI::Hexagon) {
             in_hexagon = true;
         }
 
-        Stmt stmt;
         if (for_loop->for_type == ForType::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
@@ -931,14 +940,12 @@ class VectorizeLoops : public IRMutator2 {
             Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
             stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
         } else {
-            stmt = IRMutator2::visit(for_loop);
+            IRMutator::visit(for_loop);
         }
 
         if (for_loop->device_api == DeviceAPI::Hexagon) {
             in_hexagon = old_in_hexagon;
         }
-
-        return stmt;
     }
 
 public:

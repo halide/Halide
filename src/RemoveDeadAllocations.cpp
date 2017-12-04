@@ -6,12 +6,12 @@
 namespace Halide {
 namespace Internal {
 
-class RemoveDeadAllocations : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveDeadAllocations : public IRMutator {
+    using IRMutator::visit;
 
     Scope<int> allocs;
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         if (op->is_extern()) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
@@ -24,45 +24,45 @@ class RemoveDeadAllocations : public IRMutator2 {
             }
         }
 
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
     }
 
-    Expr visit(const Load *op) override {
+    void visit(const Load *op) {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }
 
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }
 
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
     }
 
-    Stmt visit(const Allocate *op) override {
+    void visit(const Allocate *op) {
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
 
         if (allocs.contains(op->name) && op->free_function.empty()) {
+            stmt = body;
             allocs.pop(op->name);
-            return body;
         } else if (body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else {
-            return Allocate::make(op->name, op->type, op->extents, op->condition, body, op->new_expr, op->free_function);
+            stmt = Allocate::make(op->name, op->type, op->extents, op->condition, body, op->new_expr, op->free_function);
         }
     }
 
-    Stmt visit(const Free *op) override {
+    void visit(const Free *op) {
         if (allocs.contains(op->name)) {
             // We have reached a Free Stmt without ever using this buffer, do nothing.
-            return Evaluate::make(0);
+            stmt = Evaluate::make(0);
         } else {
-            return op;
+            stmt = op;
         }
     }
 };

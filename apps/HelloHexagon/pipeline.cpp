@@ -73,7 +73,7 @@ public:
                     .compute_at(blur, y)
                     .store_at(blur, yo)
                     .align_storage(x, 64)
-                    .fold_storage(y, 8)
+                    //.fold_storage(y, 8)
                     .vectorize(x, vector_size, TailStrategy::RoundUp);
 
                 // Require scanlines of the input and output to be aligned.

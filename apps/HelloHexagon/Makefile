@@ -24,24 +24,24 @@ BIN ?= bin
 
 all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
-$(BIN)/blur.generator: blur_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
-$(BIN)/%/blur_cpu.o: $(BIN)/blur.generator
+$(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -g blur -o $(BIN)/$* -e o,h -f blur_cpu target=$*
+	$^ -g blur -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
 
-$(BIN)/%/blur_hvx64.o: $(BIN)/blur.generator
+$(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -g blur -o $(BIN)/$* -e o,h -f blur_hvx64 target=$*-hvx_64
+	$^ -g blur -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
 
-$(BIN)/%/blur_hvx128.o: $(BIN)/blur.generator
+$(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -g blur -o $(BIN)/$* -e o,h -f blur_hvx128 target=$*-hvx_128
+	$^ -g blur -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
 
-$(BIN)/process-%: process.cpp $(BIN)/%/blur_cpu.o $(BIN)/%/blur_hvx64.o $(BIN)/%/blur_hvx128.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/blur_cpu.o $(BIN)/$*/blur_hvx64.o $(BIN)/$*/blur_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
+$(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 DEVICE_PATH ?= /data/local/tmp/HelloHexagon
 DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""

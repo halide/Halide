@@ -135,28 +135,28 @@ Expr scratch_index(int i, Type t) {
  * the next time step's version of some arbitrary Expr (which may be a
  * nasty graph). Variables that move non-linearly through time are
  * undefined Exprs in the scope. */
-class StepForwards : public IRGraphMutator2 {
+class StepForwards : public IRGraphMutator {
     const Scope<Expr> &linear;
 
-    using IRGraphMutator2::visit;
+    using IRGraphMutator::visit;
 
-    Expr visit(const Variable *op) override {
+    void visit(const Variable *op) {
         if (linear.contains(op->name)) {
             Expr step = linear.get(op->name);
             if (!step.defined()) {
                 // It's non-linear
                 success = false;
-                return op;
+                expr = op;
             } else if (is_zero(step)) {
                 // It's a known inner constant
-                return op;
+                expr = op;
             } else {
                 // It's linear
-                return Expr(op) + step;
+                expr = Expr(op) + step;
             }
         } else {
             // It's some external constant
-            return op;
+            expr = op;
         }
     }
 
@@ -182,29 +182,28 @@ Expr step_forwards(Expr e, const Scope<Expr> &linear) {
 }
 
 /** Carry loads over a single For loop body. */
-class LoopCarryOverLoop : public IRMutator2 {
+class LoopCarryOverLoop : public IRMutator {
     // Track vars that step linearly with loop iterations
     Scope<Expr> linear;
     vector<pair<string, Expr>> containing_lets;
 
     // Productions we're in a consume node for. They're fixed and safe
     // to lift out.
-    const Scope<> &in_consume;
+    const Scope<int> &in_consume;
 
     int max_carried_values;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         // Track containing LetStmts and their linearity w.r.t. the
         // loop variable.
         Expr value = mutate(op->value);
         Expr step = is_linear(value, linear);
-        ScopedBinding<Expr> bind(linear, op->name, step);
+        linear.push(op->name, step);
 
         containing_lets.push_back({ op->name, value });
 
-        Stmt stmt;
         Stmt body = mutate(op->body);
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
@@ -214,14 +213,14 @@ class LoopCarryOverLoop : public IRMutator2 {
         }
 
         containing_lets.pop_back();
-        return stmt;
+        linear.pop(op->name);
     }
 
-    Stmt visit(const Store *op) override {
-        return lift_carried_values_out_of_stmt(op);
+    void visit(const Store *op) {
+        stmt = lift_carried_values_out_of_stmt(op);
     }
 
-    Stmt visit(const Block *op) override {
+    void visit(const Block *op) {
         vector<Stmt> v = block_to_vector(op);
 
         vector<Stmt> stores;
@@ -241,10 +240,10 @@ class LoopCarryOverLoop : public IRMutator2 {
             result.push_back(lift_carried_values_out_of_stmt(Block::make(stores)));
         }
 
-        return Block::make(result);
+        stmt = Block::make(result);
     }
 
-    Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
+    Stmt lift_carried_values_out_of_stmt(Stmt orig_stmt) {
         debug(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
 
         // The stmts, as graphs (lets subtituted in). We must only use
@@ -468,20 +467,20 @@ class LoopCarryOverLoop : public IRMutator2 {
         return s;
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         // Don't lift loads out of code that might not run. Besides,
         // stashing things in registers while we run an inner loop
         // probably isn't a good use of registers.
-        return op;
+        stmt = op;
     }
 
-    Stmt visit(const IfThenElse *op) override {
+    void visit(const IfThenElse *op) {
         // Don't lift loads out of code that might not run.
-        return op;
+        stmt = op;
     }
 
 public:
-    LoopCarryOverLoop(const string &var, const Scope<> &s, int max_carried_values)
+    LoopCarryOverLoop(const string &var, const Scope<int> &s, int max_carried_values)
         : in_consume(s), max_carried_values(max_carried_values) {
         linear.push(var, 1);
     }
@@ -496,25 +495,25 @@ public:
     vector<ScratchAllocation> allocs;
 };
 
-class LoopCarry : public IRMutator2 {
-    using IRMutator2::visit;
+class LoopCarry : public IRMutator {
+    using IRMutator::visit;
 
     int max_carried_values;
-    Scope<> in_consume;
+    Scope<int> in_consume;
 
-    Stmt visit(const ProducerConsumer *op) override {
+    void visit(const ProducerConsumer *op) {
         if (op->is_producer) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         } else {
-            ScopedBinding<> bind(in_consume, op->name);
+            in_consume.push(op->name, 0);
             Stmt body = mutate(op->body);
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            in_consume.pop(op->name);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (op->for_type == ForType::Serial && !is_one(op->extent)) {
-            Stmt stmt;
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
             body = carry.mutate(body);
@@ -532,9 +531,9 @@ class LoopCarry : public IRMutator2 {
             if (!carry.allocs.empty()) {
                 stmt = IfThenElse::make(op->extent > 0, stmt);
             }
-            return stmt;
+
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 

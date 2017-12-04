@@ -48,6 +48,7 @@ src/test_*.s
 *.guru
 *.dSYM
 .*.swp
+Doxyfile
 tools/objc/BUILD
 tools/objc/*.mobileprovision
 *.xcworkspacedata

@@ -7,13 +7,14 @@
 namespace Halide {
 namespace Internal {
 
-class RemoveTrivialForLoops : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveTrivialForLoops : public IRMutator {
+    using IRMutator::visit;
 
-    Stmt visit(const For *for_loop) override {
+    void visit(const For *for_loop) {
         if (for_loop->device_api != DeviceAPI::None) {
             // Don't assume any device API loops are trivial.
-            return IRMutator2::visit(for_loop);
+            IRMutator::visit(for_loop);
+            return;
         }
 
         Stmt body = mutate(for_loop->body);
@@ -30,17 +31,17 @@ class RemoveTrivialForLoops : public IRMutator2 {
                           << for_loop->name << " has extent one. "
                           << "Not vectorizing.\n";
             }
-            return LetStmt::make(for_loop->name, for_loop->min, body);
+            stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (is_zero(for_loop->extent)) {
-            return Evaluate::make(0);
+            stmt = Evaluate::make(0);
         } else if (can_prove(for_loop->extent <= 1)) {
             // Loop has at most one iteration
-            Stmt stmt = LetStmt::make(for_loop->name, for_loop->min, body);
-            return IfThenElse::make(for_loop->extent > 0, stmt, Stmt());
+            stmt = LetStmt::make(for_loop->name, for_loop->min, body);
+            stmt = IfThenElse::make(for_loop->extent > 0, stmt, Stmt());
         } else if (body.same_as(for_loop->body)) {
-            return for_loop;
+            stmt = for_loop;
         } else {
-            return For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, for_loop->device_api, body);
+            stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, for_loop->device_api, body);
         }
     }
 };

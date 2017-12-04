@@ -14,7 +14,7 @@ using std::ostringstream;
 
 namespace Internal {
 
-class FindFreeVars : public IRMutator2 {
+class FindFreeVars : public IRMutator {
 public:
     vector<Var> free_vars;
     vector<Expr> call_args;
@@ -28,30 +28,31 @@ private:
     bool explicit_rdom;
     const string &name;
 
-    Scope<> internal;
+    Scope<int> internal;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr visit(const Let *op) override {
+    void visit(const Let *op) {
         Expr value = mutate(op->value);
-        internal.push(op->name);
+        internal.push(op->name, 0);
         Expr body = mutate(op->body);
         internal.pop(op->name);
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
-            return op;
+            expr = op;
         } else {
-            return Let::make(op->name, value, body);
+            expr = Let::make(op->name, value, body);
         }
     }
 
-    Expr visit(const Variable *v) override {
+    void visit(const Variable *v) {
+
         string var_name = v->name;
-        Expr expr = v;
+        expr = v;
 
         if (internal.contains(var_name)) {
             // Don't capture internally defined vars
-            return expr;
+            return;
         }
 
         if (v->reduction_domain.defined()) {
@@ -59,7 +60,7 @@ private:
                 if (v->reduction_domain.same_as(rdom.domain())) {
                     // This variable belongs to the explicit reduction domain, so
                     // skip it.
-                    return expr;
+                    return;
                 } else {
                     // This should be converted to a pure variable and
                     // added to the free vars list.
@@ -71,7 +72,7 @@ private:
                     // We're looking for a reduction domain, and this variable
                     // has one. Capture it.
                     rdom = RDom(v->reduction_domain);
-                    return expr;
+                    return;
                 } else if (!rdom.domain().same_as(v->reduction_domain)) {
                     // We were looking for a reduction domain, and already
                     // found one. This one is different!
@@ -80,25 +81,22 @@ private:
                                << v->name << ", " << rdom.x.name() << "\n";
                 } else {
                     // Recapturing an already-known reduction domain
-                    return expr;
+                    return;
                 }
             }
         }
 
         if (v->param.defined()) {
             // Skip parameters
-            return expr;
+            return;
         }
 
         for (size_t i = 0; i < free_vars.size(); i++) {
-            if (var_name == free_vars[i].name()) {
-                return expr;
-            }
+            if (var_name == free_vars[i].name()) return;
         }
 
         free_vars.push_back(Var(var_name));
         call_args.push_back(v);
-        return expr;
     }
 };
 }

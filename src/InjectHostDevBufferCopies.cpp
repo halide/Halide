@@ -133,8 +133,8 @@ public:
 // stmts. We walk this sequence of leaves, tracking what we know about
 // the buffer as we go, sniffing usage within each leaf using
 // FindBufferUsage, and injecting device buffer logic as needed.
-class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
-    using IRMutator2::visit;
+class InjectBufferCopiesForSingleBuffer : public IRMutator {
+    using IRMutator::visit;
 
     // The buffer being managed
     string buffer;
@@ -220,6 +220,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
 
         DeviceAPI touching_device = DeviceAPI::None;
         for (DeviceAPI d : finder.devices_touched) {
+            if (d == DeviceAPI::Host) continue;
             internal_assert(touching_device == DeviceAPI::None)
                 << "Buffer " << buffer << " was touched on multiple devices within a single leaf Stmt!\n";
             touching_device = d;
@@ -328,30 +329,30 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
     // stmts, and possibly do copies and update state around each
     // leaf.
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         // All copies happen at the same loop level as the allocation
-        return do_copies(op);
+        stmt = do_copies(op);
     }
 
-    Stmt visit(const Evaluate *op) override {
-        return do_copies(op);
+    void visit(const Evaluate *op) {
+        stmt = do_copies(op);
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         // If op->value uses the buffer, we need to treat this as a
         // single leaf. Otherwise we can recurse.
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         op->value.accept(&finder);
         if (finder.devices_touched.empty() &&
             !finder.touched_by_extern) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         } else {
-            return do_copies(op);
+            stmt = do_copies(op);
         }
     }
 
-    Stmt visit(const AssertStmt *op) override {
-        return do_copies(op);
+    void visit(const AssertStmt *op) {
+        stmt = do_copies(op);
     }
 
     // Check if a stmt has any for loops (and hence possible device
@@ -365,7 +366,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         bool result = false;
     };
 
-    Stmt visit(const Block *op) override {
+    void visit(const Block *op) {
         // If both sides of the block have no loops (and hence no
         // device transitions), treat it as a single leaf. This stops
         // host dirties from getting in between blocks of store stmts
@@ -373,24 +374,24 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         HasLoops loops;
         op->accept(&loops);
         if (loops.result) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         } else {
-            return do_copies(op);
+            stmt = do_copies(op);
         }
     }
 
-    Stmt visit(const Store *op) override {
-        return do_copies(op);
+    void visit(const Store *op) {
+        stmt = do_copies(op);
     }
 
-    Stmt visit(const IfThenElse *op) override {
+    void visit(const IfThenElse *op) {
         State old = state;
         Stmt then_case = mutate(op->then_case);
         State then_state = state;
         state = old;
         Stmt else_case = mutate(op->else_case);
         state.union_with(then_state);
-        return IfThenElse::make(op->condition, then_case, else_case);
+        stmt = IfThenElse::make(op->condition, then_case, else_case);
     }
 
 public:
@@ -413,25 +414,25 @@ public:
 
 // Inject the buffer-handling logic for all internal
 // allocations. Inputs and outputs are handled below.
-class InjectBufferCopies : public IRMutator2 {
-    using IRMutator2::visit;
+class InjectBufferCopies : public IRMutator {
+    using IRMutator::visit;
 
     // Inject the registration of a device destructor just after the
     // .buffer symbol is defined (which is safely before the first
     // device_malloc).
-    class InjectDeviceDestructor : public IRMutator2 {
-        using IRMutator2::visit;
+    class InjectDeviceDestructor : public IRMutator {
+        using IRMutator::visit;
 
-        Stmt visit(const LetStmt *op) override {
+        void visit(const LetStmt *op) {
             if (op->name == buffer) {
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buffer);
                 Stmt destructor =
                     Evaluate::make(Call::make(Int(32), Call::register_destructor,
                                               {Expr("halide_device_free_as_destructor"), buf}, Call::Intrinsic));
                 Stmt body = Block::make(destructor, op->body);
-                return LetStmt::make(op->name, op->value, body);
+                stmt = LetStmt::make(op->name, op->value, body);
             } else {
-                return IRMutator2::visit(op);
+                IRMutator::visit(op);
             }
         }
 
@@ -444,10 +445,11 @@ class InjectBufferCopies : public IRMutator2 {
     // it a combined host/dev allocation, a destructor registration,
     // and an Allocate node that takes its host field from the
     // .buffer.
-    class InjectCombinedAllocation : public IRMutator2 {
-        using IRMutator2::visit;
+    class InjectCombinedAllocation : public IRMutator {
 
-        Stmt visit(const LetStmt *op) override {
+        using IRMutator::visit;
+
+        void visit(const LetStmt *op) {
             if (op->name == buffer + ".buffer") {
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buffer + ".buffer");
                 Stmt body = op->body;
@@ -477,9 +479,9 @@ class InjectBufferCopies : public IRMutator2 {
                 Expr value = substitute(buffer, reinterpret(Handle(), make_zero(UInt(64))), op->value);
 
                 // Rewrap the letstmt
-                return LetStmt::make(op->name, value, body);
+                stmt = LetStmt::make(op->name, value, body);
             } else {
-                return IRMutator2::visit(op);
+                IRMutator::visit(op);
             }
         }
 
@@ -493,24 +495,24 @@ class InjectBufferCopies : public IRMutator2 {
             buffer(b), type(t), extents(e), condition(c), device_api(d) {}
     };
 
-    class FreeAfterLastUse : public IRMutator2 {
+    class FreeAfterLastUse : public IRMutator {
         Stmt last_use;
         Stmt free_stmt;
     public:
-        using IRMutator2::mutate;
+        using IRMutator::mutate;
 
-        Stmt mutate(const Stmt &s) override {
+        Stmt mutate(const Stmt &s) {
             if (s.same_as(last_use)) {
                 return Block::make(last_use, free_stmt);
             } else {
-                return IRMutator2::mutate(s);
+                return IRMutator::mutate(s);
             }
         }
 
         FreeAfterLastUse(Stmt s, Stmt f) : last_use(s), free_stmt(f) {}
     };
 
-    Stmt visit(const Allocate *op) override {
+    void visit(const Allocate *op) {
         FindBufferUsage finder(op->name, DeviceAPI::Host);
         op->body.accept(&finder);
 
@@ -519,7 +521,8 @@ class InjectBufferCopies : public IRMutator2 {
 
         if (!touched_on_device && !finder.touched_by_extern) {
             // Boring.
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         Stmt body = mutate(op->body);
@@ -547,7 +550,7 @@ class InjectBufferCopies : public IRMutator2 {
                 body = FreeAfterLastUse(injector.last_use, device_free).mutate(body);
             }
 
-            return InjectCombinedAllocation(op->name, op->type, op->extents,
+            stmt = InjectCombinedAllocation(op->name, op->type, op->extents,
                                             op->condition, touching_device).mutate(body);
         } else {
             // Only touched on host but passed to an extern stage, or
@@ -575,17 +578,17 @@ class InjectBufferCopies : public IRMutator2 {
                 body = substitute(op->name, reinterpret(Handle(), make_zero(UInt(64))), body);
             }
 
-            return Allocate::make(op->name, op->type, op->extents, condition, body, op->new_expr, op->free_function);
+            stmt = Allocate::make(op->name, op->type, op->extents, condition, body, op->new_expr, op->free_function);
         }
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (op->device_api != DeviceAPI::Host &&
             op->device_api != DeviceAPI::None) {
             // Don't enter device loops
-            return op;
+            stmt = op;
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };
@@ -617,7 +620,7 @@ public:
 
 // Inject the buffer handling code for the inputs and outputs at the
 // appropriate site.
-class InjectBufferCopiesForInputsAndOutputs : public IRMutator2 {
+class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
     Stmt site;
 
     // Find all references to external buffers.
@@ -657,9 +660,9 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator2 {
     };
 
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
-    Stmt mutate(const Stmt &s) override {
+    Stmt mutate(const Stmt &s) {
         if (s.same_as(site)) {
             FindInputsAndOutputs finder;
             s.accept(&finder);
@@ -669,7 +672,7 @@ public:
             }
             return new_stmt;
         } else {
-            return IRMutator2::mutate(s);
+            return IRMutator::mutate(s);
         }
     }
 

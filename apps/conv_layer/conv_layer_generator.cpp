@@ -6,6 +6,8 @@ using namespace Halide;
 
 class ConvolutionLayer : public Halide::Generator<ConvolutionLayer> {
 public:
+    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
+
     Input<Buffer<float>>  input{"input", 4};
     Input<Buffer<float>>  filter{"filter", 4};
     Input<Buffer<float>>  bias{"bias", 1};
@@ -49,6 +51,10 @@ public:
                 .estimate(y, 0, 128)
                 .estimate(z, 0, 64)
                 .estimate(n, 0, 4);
+
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
 
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: Turn off the manual GPU schedule for now.

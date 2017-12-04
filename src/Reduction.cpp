@@ -113,8 +113,8 @@ struct ReductionDomainContents {
         }
     }
 
-    // Pass an IRMutator2 through to all Exprs referenced in the ReductionDomainContents
-    void mutate(IRMutator2 *mutator) {
+    // Pass an IRMutator through to all Exprs referenced in the ReductionDomainContents
+    void mutate(IRMutator *mutator) {
         for (ReductionVariable &rvar : domain) {
             if (rvar.min.defined()) {
                 rvar.min = mutator->mutate(rvar.min);
@@ -155,18 +155,18 @@ const std::vector<ReductionVariable> &ReductionDomain::domain() const {
 }
 
 namespace {
-class DropSelfReferences : public IRMutator2 {
-    using IRMutator2::visit;
+class DropSelfReferences : public IRMutator {
+    using IRMutator::visit;
 
-    Expr visit(const Variable *op) override {
+    void visit(const Variable *op) {
         if (op->reduction_domain.defined()) {
             user_assert(op->reduction_domain.same_as(domain))
                 << "An RDom's predicate may only refer to its own RVars, "
                 << " not the RVars of some other RDom. "
                 << "Cannot set the predicate to : " << predicate << "\n";
-            return Variable::make(op->type, op->name);
+            expr = Variable::make(op->type, op->name);
         } else {
-            return op;
+            expr = op;
         }
     }
 public:
@@ -211,7 +211,7 @@ void ReductionDomain::accept(IRVisitor *visitor) const {
     }
 }
 
-void ReductionDomain::mutate(IRMutator2 *mutator) {
+void ReductionDomain::mutate(IRMutator *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }

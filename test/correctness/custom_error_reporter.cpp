@@ -26,18 +26,12 @@ public:
     MyCustomErrorReporter() : errors_occurred(0), warnings_occurred(0) {}
 
     void warning(const char* msg) {
-        auto msg_safe = Halide::Internal::replace_all(msg, ":", "(semicolon)");
-        printf("Custom warn: %s\n", msg_safe.c_str());
+        printf("Custom warning: %s\n", msg);
         warnings_occurred++;
     }
 
     void error(const char* msg) {
-        // Emitting "error.*:" to stdout or stderr will cause CMake to report the
-        // test as a failure on Windows, regardless of error code returned.
-        // The error text we get from ErrorReport probably contains some variant
-        // of this, so let's make sure it doesn't match that pattern.
-        auto msg_safe = Halide::Internal::replace_all(msg, ":", "(semicolon)");
-        printf("Custom err: %s\n", msg_safe.c_str());
+        printf("Custom error: %s\n", msg);
         errors_occurred++;
 
         if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {

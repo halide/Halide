@@ -4,10 +4,8 @@
 #include <random>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
-namespace {
 
-using std::map;
-using std::string;
+using namespace std;
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -259,8 +257,6 @@ Expr b(Variable::make(Int(0), fuzz_var(1)));
 Expr c(Variable::make(Int(0), fuzz_var(2)));
 Expr d(Variable::make(Int(0), fuzz_var(3)));
 Expr e(Variable::make(Int(0), fuzz_var(4)));
-
-}  // namespace
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.

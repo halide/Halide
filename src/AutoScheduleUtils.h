@@ -42,15 +42,15 @@ public:
 
 
 /** Substitute every variable with its estimate if specified. */
-class SubstituteVarEstimates: public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteVarEstimates: public IRMutator {
+    using IRMutator::visit;
 
-    Expr visit(const Variable *var) override {
+    void visit(const Variable *var) {
         if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
-            return var->param.estimate();
+            var->param.get_estimate().defined()) {
+            expr = var->param.get_estimate();
         } else {
-            return var;
+            expr = var;
         }
     }
 };
@@ -94,14 +94,14 @@ std::set<std::string> get_parents(Function f, int stage);
 template<typename K, typename V>
 V get_element(const std::map<K, V> &m, const K &key) {
     const auto &iter = m.find(key);
-    internal_assert(iter != m.end());
+    internal_assert(iter != m.end()) << "Cannot find: " << key << "\n";
     return iter->second;
 }
 
 template<typename K, typename V>
 V &get_element(std::map<K, V> &m, const K &key) {
     const auto &iter = m.find(key);
-    internal_assert(iter != m.end());
+    internal_assert(iter != m.end()) << "Cannot find: " << key << "\n";
     return iter->second;
 }
 // @}

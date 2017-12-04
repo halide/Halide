@@ -298,12 +298,6 @@ public:
         return prefetch(image.parameter(), var, offset, strategy);
     }
     // @}
-
-    /** Attempt to get the source file and line where this stage was
-     * defined by parsing the process's own debug symbols. Returns an
-     * empty string if no debug symbols were found or the debug
-     * symbols were not understood. Works on OS X and Linux only. */
-    EXPORT std::string source_location() const;
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -498,7 +492,7 @@ public:
 
 namespace Internal {
 struct ErrorBuffer;
-class IRMutator2;
+class IRMutator;
 }
 
 /** A halide function. This class represents one stage in a Halide
@@ -852,18 +846,18 @@ public:
     template<typename T>
     void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
-        // cast it to a deleter that takes a IRMutator2 *. The custom
+        // cast it to a deleter that takes a IRMutator *. The custom
         // deleter lives in user code, so that deletion is on the same
         // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator2 *) =
-            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
+        void (*deleter)(Internal::IRMutator *) =
+            (void (*)(Internal::IRMutator *))(&delete_lowering_pass<T>);
         add_custom_lowering_pass(pass, deleter);
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    EXPORT void add_custom_lowering_pass(Internal::IRMutator2 *pass, void (*deleter)(Internal::IRMutator2 *));
+    EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass, void (*deleter)(Internal::IRMutator *));
 
     /** Remove all previously-set custom lowering passes */
     EXPORT void clear_custom_lowering_passes();
@@ -1832,7 +1826,7 @@ public:
     EXPORT Func &compute_at(LoopLevel loop_level);
 
     /** Compute all of this function once ahead of time. Reusing
-     * the example in \ref Func::compute_at :
+     * the example in \ref Func::compute_at:
      *
      \code
      Func f, g;
@@ -2062,10 +2056,6 @@ public:
      \endcode
      */
     EXPORT std::vector<Argument> infer_arguments() const;
-
-    /** Get the source location of the pure definition of this
-     * Func. See Stage::source_location() */
-    EXPORT std::string source_location() const;
 };
 
 namespace Internal {

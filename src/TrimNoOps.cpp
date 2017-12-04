@@ -23,16 +23,16 @@ using std::map;
 namespace {
 
 /** Remove identity functions, even if they have side-effects. */
-class StripIdentities : public IRMutator2 {
-    using IRMutator2::visit;
+class StripIdentities : public IRMutator {
+    using IRMutator::visit;
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         if (op->is_intrinsic(Call::return_second) ||
             op->is_intrinsic(Call::likely) ||
             op->is_intrinsic(Call::likely_if_innermost)) {
-            return mutate(op->args.back());
+            expr = mutate(op->args.back());
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };
@@ -174,14 +174,14 @@ public:
     Expr condition = const_true();
 };
 
-class SimplifyUsingBounds : public IRMutator2 {
+class SimplifyUsingBounds : public IRMutator {
     struct ContainingLoop {
         string var;
         Interval i;
     };
     vector<ContainingLoop> containing_loops;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     // Can we prove a condition over the non-rectangular domain of the for loops we're in?
     bool provably_true_over_domain(Expr test) {
@@ -231,72 +231,71 @@ class SimplifyUsingBounds : public IRMutator2 {
         return is_one(test);
     }
 
-    Expr visit(const Min *op) override {
+    void visit(const Min *op) {
         if (!op->type.is_int() || op->type.bits() < 32) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
             Expr test = a <= b;
             if (provably_true_over_domain(a <= b)) {
-                return a;
+                expr = a;
             } else if (provably_true_over_domain(b <= a)) {
-                return b;
+                expr = b;
             } else {
-                return Min::make(a, b);
+                expr = Min::make(a, b);
             }
         }
     }
 
-    Expr visit(const Max *op) override {
+    void visit(const Max *op) {
         if (!op->type.is_int() || op->type.bits() < 32) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         } else {
             Expr a = mutate(op->a);
             Expr b = mutate(op->b);
             if (provably_true_over_domain(a >= b)) {
-                return a;
+                expr = a;
             } else if (provably_true_over_domain(b >= a)) {
-                return b;
+                expr = b;
             } else {
-                return Max::make(a, b);
+                expr = Max::make(a, b);
             }
         }
     }
 
     template<typename Cmp>
-    Expr visit_cmp(const Cmp *op) {
-        Expr expr = IRMutator2::visit(op);
+    void visit_cmp(const Cmp *op) {
+        IRMutator::visit(op);
         if (provably_true_over_domain(expr)) {
             expr = make_one(op->type);
         } else if (provably_true_over_domain(!expr)) {
             expr = make_zero(op->type);
         }
-        return expr;
     }
 
-    Expr visit(const LE *op) override {
-        return visit_cmp(op);
+    void visit(const LE *op) {
+        visit_cmp(op);
     }
 
-    Expr visit(const LT *op) override {
-        return visit_cmp(op);
+    void visit(const LT *op) {
+        visit_cmp(op);
     }
 
-    Expr visit(const GE *op) override {
-        return visit_cmp(op);
+    void visit(const GE *op) {
+        visit_cmp(op);
     }
 
-    Expr visit(const GT *op) override {
-        return visit_cmp(op);
+    void visit(const GT *op) {
+        visit_cmp(op);
     }
 
-    Expr visit(const EQ *op) override {
-        return visit_cmp(op);
+    void visit(const EQ *op) {
+        visit_cmp(op);
     }
 
-    Expr visit(const NE *op) override {
-        return visit_cmp(op);
+    void visit(const NE *op) {
+        visit_cmp(op);
     }
 
     template<typename StmtOrExpr, typename LetStmtOrLet>
@@ -308,22 +307,22 @@ class SimplifyUsingBounds : public IRMutator2 {
         return LetStmtOrLet::make(op->name, value, body);
     }
 
-    Expr visit(const Let *op) override {
-        return visit_let<Expr, Let>(op);
+    void visit(const Let *op) {
+        expr = visit_let<Expr, Let>(op);
     }
 
-    Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt, LetStmt>(op);
+    void visit(const LetStmt *op) {
+        stmt = visit_let<Stmt, LetStmt>(op);
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         // Simplify the loop bounds.
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         containing_loops.push_back({op->name, {min, min + extent - 1}});
         Stmt body = mutate(op->body);
         containing_loops.pop_back();
-        return For::make(op->name, min, extent, op->for_type, op->device_api, body);
+        stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
 public:
     SimplifyUsingBounds(const string &v, const Interval &i) {
@@ -333,14 +332,15 @@ public:
     SimplifyUsingBounds() {}
 };
 
-class TrimNoOps : public IRMutator2 {
-    using IRMutator2::visit;
+class TrimNoOps : public IRMutator {
+    using IRMutator::visit;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         // Bounds of GPU loops can't depend on outer gpu loop vars
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         Stmt body = mutate(op->body);
@@ -356,10 +356,12 @@ class TrimNoOps : public IRMutator2 {
 
         if (is_one(is_no_op.condition)) {
             // This loop is definitely useless
-            return Evaluate::make(0);
+            stmt = Evaluate::make(0);
+            return;
         } else if (is_zero(is_no_op.condition)) {
             // This loop is definitely needed
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            return;
         }
 
         // The condition is something interesting. Try to see if we
@@ -371,12 +373,14 @@ class TrimNoOps : public IRMutator2 {
 
         if (i.is_everything()) {
             // Nope.
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            return;
         }
 
         if (i.is_empty()) {
             // Empty loop
-            return Evaluate::make(0);
+            stmt = Evaluate::make(0);
+            return;
         }
 
         // Simplify the body to take advantage of the fact that the
@@ -412,7 +416,7 @@ class TrimNoOps : public IRMutator2 {
 
         Expr new_extent = new_max_var - new_min_var;
 
-        Stmt stmt = For::make(op->name, new_min_var, new_extent, op->for_type, op->device_api, body);
+        stmt = For::make(op->name, new_min_var, new_extent, op->for_type, op->device_api, body);
         stmt = LetStmt::make(new_max_name, new_max, stmt);
         stmt = LetStmt::make(new_min_name, new_min, stmt);
         stmt = LetStmt::make(old_max_name, old_max, stmt);
@@ -421,8 +425,6 @@ class TrimNoOps : public IRMutator2 {
         debug(3) << "Rewrote loop.\n"
                  << "Old: " << Stmt(op) << "\n"
                  << "New: " << stmt << "\n";
-
-        return stmt;
     }
 };
 

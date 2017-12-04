@@ -4,6 +4,7 @@ namespace {
 
 class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
+    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<int>   s_sigma{"s_sigma", 8};
 
     Input<Buffer<float>>  input{"input", 2};
@@ -77,6 +78,9 @@ public:
             blurx.estimate(z, 0, 12);
             blury.estimate(z, 0, 12);
             bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 
@@ -94,17 +98,14 @@ public:
             histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y);
             histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
 
+            // An alternative schedule for histogram that doesn't use shared memory:
+            // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
+            // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c);
+
             // Schedule the remaining blurs and the sampling at the end similarly.
-            blurx.compute_root().reorder(c, x, y, z)
-                .reorder_storage(c, x, y, z).vectorize(c)
-                .unroll(y, 2, TailStrategy::RoundUp)
-                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-            blury.compute_root().reorder(c, x, y, z)
-                .reorder_storage(c, x, y, z).vectorize(c)
-                .unroll(y, 2, TailStrategy::RoundUp)
-                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
-            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
-            interpolated.compute_at(bilateral_grid, xi).vectorize(c);
+            blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
+            blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
+            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);

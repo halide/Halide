@@ -102,12 +102,12 @@ Interval bounds_of_inner_var(string var, Stmt s) {
 
 }
 
-class BoundsInference : public IRMutator2 {
+class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions;
-    Scope<> in_stages;
+    Scope<int> in_stages;
     const Target target;
 
     struct CondValue {
@@ -135,10 +135,6 @@ public:
         // set for later use.
         vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
             vector<vector<CondValue>> result(2); // <args, values>
-
-            if (!def.defined()) {
-                return result;
-            }
 
             // Default case (no specialization)
             vector<Expr> predicates = def.split_predicate();
@@ -270,7 +266,7 @@ public:
         Stmt define_bounds(Stmt s,
                            string producing_stage,
                            string loop_level,
-                           const Scope<> &in_stages,
+                           const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions,
                            const Target &target) {
@@ -653,7 +649,7 @@ public:
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
-                f[i].schedule().compute_level().is_inlined() &&
+                f[i].schedule().compute_level().is_inline() &&
                 f[i].can_be_inlined()) {
                 inlined[i] = true;
             } else {
@@ -703,7 +699,7 @@ public:
         // Remove the inlined stages
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (!stages[i].func.schedule().compute_level().is_inlined() ||
+            if (!stages[i].func.schedule().compute_level().is_inline() ||
                 !stages[i].func.can_be_inlined()) {
                 new_stages.push_back(stages[i]);
             }
@@ -844,9 +840,9 @@ public:
         }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -881,7 +877,7 @@ public:
             }
         }
 
-        in_stages.push(stage_name);
+        in_stages.push(stage_name, 0);
 
         // Figure out how much of it we're producing
         Box box;
@@ -982,15 +978,14 @@ public:
 
         in_stages.pop(stage_name);
 
-        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
-    Stmt visit(const ProducerConsumer *p) override {
+    void visit(const ProducerConsumer *p) {
         in_pipeline.insert(p->name);
-        Stmt stmt = IRMutator2::visit(p);
+        IRMutator::visit(p);
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
-        return stmt;
     }
 
 };

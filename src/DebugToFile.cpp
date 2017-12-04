@@ -14,12 +14,12 @@ using std::map;
 using std::vector;
 using std::ostringstream;
 
-class DebugToFile : public IRMutator2 {
+class DebugToFile : public IRMutator {
     const map<string, Function> &env;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const Realize *op) override {
+    void visit(const Realize *op) {
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() && !iter->second.debug_file().empty()) {
             Function f = iter->second;
@@ -80,10 +80,10 @@ class DebugToFile : public IRMutator2 {
             body = LetStmt::make(call_result_name, call, body);
             body = Block::make(mutate(op->body), body);
 
-            return Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
 
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
@@ -91,18 +91,19 @@ public:
     DebugToFile(const map<string, Function> &e) : env(e) {}
 };
 
-class RemoveDummyRealizations : public IRMutator2 {
+class RemoveDummyRealizations : public IRMutator {
     const vector<Function> &outputs;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const Realize *op) override {
+    void visit(const Realize *op) {
         for (Function f : outputs) {
             if (op->name == f.name()) {
-                return mutate(op->body);
+                stmt = mutate(op->body);
+                return;
             }
         }
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
     }
 
 public:

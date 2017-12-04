@@ -7,22 +7,22 @@ namespace Internal {
 using std::string;
 
 // Prefix all names in an expression with some string.
-class QualifyExpr : public IRMutator2 {
-    using IRMutator2::visit;
+class QualifyExpr : public IRMutator {
+    using IRMutator::visit;
 
     const string &prefix;
 
-    Expr visit(const Variable *v) override {
+    void visit(const Variable *v) {
         if (v->param.defined()) {
-            return v;
+            expr = v;
         } else {
-            return Variable::make(v->type, prefix + v->name, v->reduction_domain);
+            expr = Variable::make(v->type, prefix + v->name, v->reduction_domain);
         }
     }
-    Expr visit(const Let *op) override {
+    void visit(const Let *op) {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
-        return Let::make(prefix + op->name, value, body);
+        expr = Let::make(prefix + op->name, value, body);
     }
 public:
     QualifyExpr(const string &p) : prefix(p) {}

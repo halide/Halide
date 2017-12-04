@@ -14,5 +14,3 @@ $(BIN)/out.png: $(BIN)/interpolate
 
 clean:
 	rm -rf $(BIN)
-
-test: $(BIN)/out.png

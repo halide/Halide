@@ -695,7 +695,7 @@ bool function_is_used_in_stmt(Function f, Stmt s) {
 
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
-class InjectRealization : public IRMutator2 {
+class InjectRealization : public IRMutator {
 public:
     const Function &func;
     bool is_output, found_store_level, found_compute_level;
@@ -762,9 +762,9 @@ private:
         }
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const ProducerConsumer *op) override {
+    void visit(const ProducerConsumer *op) {
         if (op->is_producer) {
             string old = producing;
             producing = op->name;
@@ -772,16 +772,16 @@ private:
             producing = old;
 
             if (body.same_as(op->body)) {
-                return op;
+                stmt = op;
             } else {
-                return ProducerConsumer::make(op->name, op->is_producer, body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const For *for_loop) override {
+    void visit(const For *for_loop) {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const LoopLevel &compute_level = func.schedule().compute_level();
         const LoopLevel &store_level = func.schedule().store_level();
@@ -807,15 +807,15 @@ private:
 
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
-            func.schedule().compute_level().is_inlined() &&
+            func.schedule().compute_level().is_inline() &&
             for_loop->for_type == ForType::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
-            Stmt stmt = build_realize(build_pipeline(for_loop));
+            stmt = build_realize(build_pipeline(for_loop));
             found_store_level = found_compute_level = true;
-            return stmt;
+            return;
         }
 
         body = mutate(body);
@@ -846,9 +846,9 @@ private:
         }
 
         if (body.same_as(for_loop->body)) {
-            return for_loop;
+            stmt = for_loop;
         } else {
-            return For::make(for_loop->name,
+            stmt = For::make(for_loop->name,
                              for_loop->min,
                              for_loop->extent,
                              for_loop->for_type,
@@ -858,18 +858,17 @@ private:
     }
 
     // If we're an inline update or extern, we may need to inject a realization here
-    Stmt visit(const Provide *op) override {
+    virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
             !func.is_pure() &&
-            func.schedule().compute_level().is_inlined() &&
+            func.schedule().compute_level().is_inline() &&
             function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
-            Stmt stmt = build_realize(build_pipeline(op));
+            stmt = build_realize(build_pipeline(op));
             found_store_level = found_compute_level = true;
-            return stmt;
         } else {
-            return op;
+            stmt = op;
         }
     }
 };
@@ -911,9 +910,6 @@ private:
             internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
-        // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
-        // thus any new ones we synthesize we must explicitly lock.
-        loop_level.lock();
         Site s = {f->is_parallel() ||
                   f->for_type == ForType::Vectorized,
                   loop_level};
@@ -965,7 +961,7 @@ string schedule_to_source(Function f,
                           LoopLevel compute_at) {
     std::ostringstream ss;
     ss << f.name();
-    if (compute_at.is_inlined()) {
+    if (compute_at.is_inline()) {
         ss << ".compute_inline()";
     } else {
         if (!store_at.match(compute_at)) {
@@ -1023,7 +1019,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const For *op) {
         if (ends_with(op->name, Var::outermost().name()) ||
-            ends_with(op->name, LoopLevel::root().lock().to_string())) {
+            ends_with(op->name, LoopLevel::root().to_string())) {
             IRVisitor::visit(op);
         } else {
 
@@ -1086,7 +1082,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             if (arg.is_func()) {
                 Function g(arg.func);
                 if (!g.is_wrapper() &&
-                    g.schedule().compute_level().is_inlined()) {
+                    g.schedule().compute_level().is_inline()) {
                     user_error
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
@@ -1096,7 +1092,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     }
 
     // Emit a warning if only some of the steps have been scheduled.
-    bool any_scheduled = f.has_pure_definition() && f.definition().schedule().touched();
+    bool any_scheduled = f.definition().schedule().touched();
     for (const Definition &r : f.updates()) {
         any_scheduled = any_scheduled || r.schedule().touched();
     }
@@ -1118,9 +1114,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // If the func is scheduled on the gpu, check that the relevant
     // api is enabled in the target.
     vector<Definition> definitions;
-    if (f.has_pure_definition()) {
-        definitions.push_back(f.definition());
-    }
+    definitions.push_back(f.definition());
     for (const Definition &def : f.updates()) {
         definitions.push_back(def);
     }
@@ -1171,7 +1165,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // pure function. An inlined Halide Func with multiple stages technically
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
-    if (store_at.is_inlined() && compute_at.is_inlined()) {
+    if (store_at.is_inline() && compute_at.is_inline()) {
         if (f.is_pure()) {
             validate_schedule_inlined_function(f);
         }
@@ -1224,26 +1218,26 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     return true;
 }
 
-class RemoveLoopsOverOutermost : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveLoopsOverOutermost : public IRMutator {
+    using IRMutator::visit;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (ends_with(op->name, ".__outermost") &&
             is_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
-            return mutate(substitute(op->name, op->min, op->body));
+            stmt = mutate(substitute(op->name, op->min, op->body));
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         if (ends_with(op->name, ".__outermost.loop_extent") ||
             ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {
-            return mutate(substitute(op->name, simplify(op->value), op->body));
+            stmt = mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };
@@ -1254,7 +1248,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
 
-    string root_var = LoopLevel::root().lock().to_string();
+    string root_var = LoopLevel::root().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
@@ -1280,7 +1274,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if (f.can_be_inlined() &&
-            f.schedule().compute_level().is_inlined()) {
+            f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {

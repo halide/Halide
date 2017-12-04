@@ -30,9 +30,11 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    GeneratorParam<LoopLevel> intermed_compute_at{"intermed_compute_at", LoopLevel::inlined()};
-    GeneratorParam<LoopLevel> intermed_store_at{"intermed_store_at", LoopLevel::inlined()};
-    GeneratorParam<LoopLevel> output_compute_at{"output_compute_at", LoopLevel::inlined()};
+    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+
+    ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
+    ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
+    ScheduleParam<LoopLevel> output_compute_at{"output_compute_at"};
 
     // Inputs and outputs
     Input<Func> deinterleaved{ "deinterleaved", Int(16), 3 };
@@ -184,6 +186,7 @@ class CameraPipe : public Halide::Generator<CameraPipe> {
 public:
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
+    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
     Input<Buffer<uint16_t>> input{"input", 2};
@@ -220,7 +223,7 @@ Func CameraPipe::hot_pixel_suppression(Func input) {
 
 Func CameraPipe::deinterleave(Func raw) {
     // Deinterleave the color channels
-    Func deinterleaved("deinterleaved");
+    Func deinterleaved;
 
     deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y),
                                     c == 1, raw(2*x+1, 2*y),
@@ -338,14 +341,19 @@ void CameraPipe::generate() {
     Func deinterleaved = deinterleave(denoised);
 
     auto demosaiced = create<Demosaic>();
+    demosaiced->auto_schedule.set(auto_schedule);
     demosaiced->apply(deinterleaved);
 
     Func corrected = color_correct(demosaiced->output);
 
     processed(x, y, c) = apply_curve(corrected)(x, y, c);
 
+    Pipeline p(processed);
+
     // Schedule
     if (auto_schedule) {
+        Pipeline p(processed);
+
         input.dim(0).set_bounds_estimate(0, 2592);
         input.dim(1).set_bounds_estimate(0, 1968);
 
@@ -358,6 +366,10 @@ void CameraPipe::generate() {
             .estimate(c, 0, 3)
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
+
+        // Auto schedule the pipeline: this calls auto_schedule() for
+        // all of the Outputs in this Generator
+        auto_schedule_outputs();
 
     } else {
 

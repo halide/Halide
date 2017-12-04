@@ -40,15 +40,14 @@ extern "C" DLLEXPORT const Variable *record_varying(const Variable *op) {
 HalideExtern_1(const Variable *, record_varying, const Variable *);
 
 // This visitor inserts the above function in the IR tree.
-class CountVarying : public IRMutator2 {
-    using IRMutator2::visit;
+class CountVarying : public IRMutator {
+    using IRMutator::visit;
 
-    Expr visit(const Variable *op) override {
-        Expr expr = IRMutator2::visit(op);
+    void visit(const Variable *op) {
+        IRMutator::visit(op);
         if (ends_with(op->name, ".varying")) {
             expr = record_varying(op);
         }
-        return expr;
     }
 };
 

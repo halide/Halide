@@ -85,13 +85,14 @@ private:
 
     void include_parameter(Parameter p) {
         if (!p.defined()) return;
+        if (p.is_bound_before_lowering()) return;
         if (already_have(p.name())) return;
 
         Expr def, min, max;
         if (!p.is_buffer()) {
-            def = p.scalar_expr();
-            min = p.min_value();
-            max = p.max_value();
+            def = p.get_scalar_expr();
+            min = p.get_min_value();
+            max = p.get_max_value();
         }
 
         InferredArgument a = {

@@ -4,10 +4,7 @@
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
-    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
-    // test as a failure on Windows, regardless of error code returned,
-    // hence the abbreviation to "err".
-    printf("Saw (Expected) Halide Err: %s\n", msg);
+    printf("Saw (Expected) Halide Error: %s\n", msg);
     error_occurred = true;
 }
 

@@ -38,7 +38,7 @@ struct TraceEventBuilder {
     }
 };
 
-class InjectTracing : public IRMutator2 {
+class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
     bool trace_all_loads, trace_all_stores, trace_all_realizations;
@@ -63,10 +63,10 @@ public:
     }
 
 private:
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr visit(const Call *op) override {
-        Expr expr = IRMutator2::visit(op);
+    void visit(const Call *op) {
+        IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -76,7 +76,7 @@ private:
             auto it = env.find(op->name);
             internal_assert(it != env.end()) << op->name << " not in environment\n";
             Function f = it->second;
-            internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
+            internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
             trace_it = f.is_tracing_loads() || trace_all_loads;
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
@@ -103,18 +103,17 @@ private:
                              Call::make(op->type, Call::return_second,
                                         {trace, value_var}, Call::PureIntrinsic));
         }
-        return expr;
     }
 
-    Stmt visit(const Provide *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+    void visit(const Provide *op) {
+        IRMutator::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) return;
         Function f = iter->second;
-        internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
+        internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
         if (f.is_tracing_stores() || trace_all_stores) {
             // Wrap each expr in a tracing call
@@ -160,16 +159,15 @@ private:
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }
         }
-        return stmt;
     }
 
-    Stmt visit(const Realize *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+    void visit(const Realize *op) {
+        IRMutator::visit(op);
         op = stmt.as<Realize>();
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) return;
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call before and after the realize body
@@ -198,15 +196,15 @@ private:
             new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
             stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         }
-        return stmt;
+
     }
 
-    Stmt visit(const ProducerConsumer *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+    void visit(const ProducerConsumer *op) {
+        IRMutator::visit(op);
         op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) return;
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call around each pipeline event
@@ -240,21 +238,21 @@ private:
             stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
                                  ProducerConsumer::make(op->name, op->is_producer, new_body));
         }
-        return stmt;
     }
 };
 
-class RemoveRealizeOverOutput : public IRMutator2 {
-    using IRMutator2::visit;
+class RemoveRealizeOverOutput : public IRMutator {
+    using IRMutator::visit;
     const vector<Function> &outputs;
 
-    Stmt visit(const Realize *op) override {
+    void visit(const Realize *op) {
         for (Function f : outputs) {
             if (op->name == f.name()) {
-                return mutate(op->body);
+                stmt = mutate(op->body);
+                return;
             }
         }
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
     }
 
 public:

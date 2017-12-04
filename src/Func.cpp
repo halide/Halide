@@ -154,7 +154,7 @@ int Func::num_update_definitions() const {
 }
 
 /** Is this function external? */
-bool Func::is_extern() const {
+EXPORT bool Func::is_extern() const {
     return func.has_extern_definition();
 }
 
@@ -166,12 +166,7 @@ void Func::define_extern(const std::string &function_name,
                          NameMangling mangling,
                          DeviceAPI device_api,
                          bool uses_old_buffer_t) {
-    vector<string> dim_names(dimensionality);
-    // Use _0, _1, _2 etc for the storage dimensions
-    for (int i = 0; i < dimensionality; i++) {
-        dim_names[i] = Var::implicit(i).name();
-    }
-    func.define_extern(function_name, args, types, dim_names,
+    func.define_extern(function_name, args, types, dimensionality,
                        mangling, device_api, uses_old_buffer_t);
 }
 
@@ -357,15 +352,15 @@ std::string Stage::dump_argument_list() const {
 
 namespace {
 
-class SubstituteSelfReference : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteSelfReference : public IRMutator {
+    using IRMutator::visit;
 
     const string func;
     const Function substitute;
     const vector<Var> new_args;
 
-    Expr visit(const Call *c) override {
-        Expr expr = IRMutator2::visit(c);
+    void visit(const Call *c) {
+        IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
 
@@ -377,7 +372,6 @@ class SubstituteSelfReference : public IRMutator2 {
             args.insert(args.end(), new_args.begin(), new_args.end());
             expr = Call::make(substitute, args, c->value_index);
         }
-        return expr;
     }
 public:
     SubstituteSelfReference(const string &func, const Function &substitute,
@@ -1737,14 +1731,6 @@ Stage &Stage::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr off
     return *this;
 }
 
-/** Attempt to get the source file and line where this stage was
- * defined by parsing the process's own debug symbols. Returns an
- * empty string if no debug symbols were found or the debug
- * symbols were not understood. Works on OS X and Linux only. */
-std::string Stage::source_location() const {
-    return definition.source_location();
-}
-
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -1882,11 +1868,10 @@ Func Func::copy_to_device(DeviceAPI d) {
         << "Expected a single call to another Func with matching "
         << "dimensionality and argument order.\n";
 
-    // Move the RHS value to the proxy slot
-    func.extern_definition_proxy_expr() = value();
-
-    // ... and delete the pure definition
-    func.definition() = Definition();
+    // We'll preserve the pure vars
+    Expr rhs = value();
+    func.definition().values().clear();
+    func.extern_definition_proxy_expr() = rhs;
 
     ExternFuncArgument buffer;
     if (call->call_type == Call::Halide) {
@@ -1900,7 +1885,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, func.args(), // Reuse the existing dimension names
+                       {call->type}, (int)call->args.size(),
                        NameMangling::C, d, false);
     return *this;
 }
@@ -2369,11 +2354,9 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
 Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
     func.schedule().compute_level() = loop_level;
-    // We want to set store_level = compute_level iff store_level is inlined,
-    // but we can't do that here, since the value in store_level could
-    // be mutated at any time prior to lowering. Instead, we check at
-    // the start of lowering (via Function::lock_loop_levels() method) and
-    // do the compute_level -> store_level propagation then.
+    if (func.schedule().store_level().is_inline()) {
+        func.schedule().store_level() = loop_level;
+    }
     return *this;
 }
 
@@ -2876,11 +2859,6 @@ vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
 }
 
-std::string Func::source_location() const {
-    user_assert(defined()) << "A Func with no definition has no source_location\n";
-    return func.definition().source_location();
-}
-
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
     return pipeline().compile_to_module(args, fn_name, target);
 }
@@ -3000,7 +2978,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
+void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 

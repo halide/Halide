@@ -44,28 +44,16 @@ int static_sign(Expr x) {
 }
 } // anonymous namespace
 
-Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
-    Interval interval = find_constant_bounds(e, scope);
+Expr find_constant_bound(Expr e, Direction d, const Scope<Interval> &scope) {
+    Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
     Expr bound;
     if (interval.has_lower_bound() && (d == Direction::Lower)) {
-        bound = interval.min;
+        bound = simplify(interval.min);
     } else if (interval.has_upper_bound() && (d == Direction::Upper)) {
-        bound = interval.max;
+        bound = simplify(interval.max);
     }
+    internal_assert(!bound.defined() || is_const(bound));
     return bound;
-}
-
-Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
-    Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
-
-    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
-    // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) interval.min = Interval::neg_inf;
-    if (!is_const(interval.max)) interval.max = Interval::pos_inf;
-
-    return interval;
 }
 
 
@@ -218,14 +206,14 @@ private:
 
             if (op->param.defined() &&
                 !op->param.is_buffer() &&
-                (op->param.min_value().defined() ||
-                 op->param.max_value().defined())) {
+                (op->param.get_min_value().defined() ||
+                 op->param.get_max_value().defined())) {
 
-                if (op->param.max_value().defined() && is_const(op->param.max_value())) {
-                    interval.max = Interval::make_min(interval.max, op->param.max_value());
+                if (op->param.get_max_value().defined() && is_const(op->param.get_max_value())) {
+                    interval.max = Interval::make_min(interval.max, op->param.get_max_value());
                 }
-                if (op->param.min_value().defined() && is_const(op->param.min_value())) {
-                    interval.min = Interval::make_max(interval.min, op->param.min_value());
+                if (op->param.get_min_value().defined() && is_const(op->param.get_min_value())) {
+                    interval.min = Interval::make_max(interval.min, op->param.get_min_value());
                 }
             }
         } else {
@@ -680,7 +668,6 @@ private:
         }
 
         if (const_args &&
-            !const_bound &&
             (op->call_type == Call::PureExtern ||
              op->call_type == Call::Image)) {
             Expr call = Call::make(t, op->name, new_args, op->call_type,
@@ -742,9 +729,8 @@ private:
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
 
-        } else if (!const_bound &&
-                   (op->name == Call::buffer_get_min ||
-                    op->name == Call::buffer_get_max)) {
+        } else if (op->name == Call::buffer_get_min ||
+                   op->name == Call::buffer_get_max) {
             // Bounds query results should have perfect nesting. Their
             // max over a loop is just the same bounds query call at
             // an outer loop level. This requires that the query is
@@ -1086,13 +1072,13 @@ private:
 };
 
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
-class SolveIfThenElse : public IRMutator2 {
+class SolveIfThenElse : public IRMutator {
     // Scope of variable names and their depths. Higher depth indicates
     // variable defined more innermost.
     Scope<int> vars_depth;
     int depth = -1;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     void push_var(const string &var) {
         depth += 1;
@@ -1104,22 +1090,20 @@ class SolveIfThenElse : public IRMutator2 {
         vars_depth.pop(var);
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         push_var(op->name);
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
         pop_var(op->name);
-        return stmt;
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         push_var(op->name);
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
         pop_var(op->name);
-        return stmt;
     }
 
-    Stmt visit(const IfThenElse *op) override {
-        Stmt stmt = IRMutator2::visit(op);
+    void visit(const IfThenElse *op) {
+        IRMutator::visit(op);
         op = stmt.as<IfThenElse>();
         internal_assert(op);
 
@@ -1131,7 +1115,6 @@ class SolveIfThenElse : public IRMutator2 {
                 stmt = IfThenElse::make(condition, op->then_case, op->else_case);
             }
         }
-        return stmt;
     }
 };
 

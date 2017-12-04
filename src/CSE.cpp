@@ -23,7 +23,7 @@ namespace {
 // This list should at least avoid lifting the same cases as that of the
 // simplifier for lets, otherwise CSE and the simplifier will fight each
 // other pointlessly.
-bool should_extract(const Expr &e, bool lift_all) {
+bool should_extract(const Expr &e) {
     if (is_const(e)) {
         return false;
     }
@@ -32,27 +32,12 @@ bool should_extract(const Expr &e, bool lift_all) {
         return false;
     }
 
-    if (const Call *a = e.as<Call>()) {
-        if (!a->is_pure() && (a->call_type != Call::Halide)) {
-            // Impure calls may have side-effects, thus may not be re-ordered
-            // or reduced in number.
-            // Call to Halide function may give different value depending on
-            // where it is evaluated; however, the value is constant within
-            // an expr. Thus, it is okay to lift out.
-            return false;
-        }
-    }
-
-    if (lift_all) {
-        return true;
-    }
-
     if (const Broadcast *a = e.as<Broadcast>()) {
-        return should_extract(a->value, false);
+        return should_extract(a->value);
     }
 
     if (const Cast *a = e.as<Cast>()) {
-        return should_extract(a->value, false);
+        return should_extract(a->value);
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -75,12 +60,23 @@ bool should_extract(const Expr &e, bool lift_all) {
         return !is_const(a->stride);
     }
 
+    if (const Call *a = e.as<Call>()) {
+        if (!a->is_pure() && (a->call_type != Call::Halide)) {
+            // Impure calls may have side-effects, thus may not be re-ordered
+            // or reduced in number.
+            // Call to Halide function may give different value depending on
+            // where it is evaluated; however, the value is constant within
+            // an expr. Thus, it is okay to lift out.
+            return false;
+        }
+    }
+
     return true;
 }
 
 // A global-value-numbering of expressions. Returns canonical form of
 // the Expr and writes out a global value numbering as a side-effect.
-class GVN : public IRMutator2 {
+class GVN : public IRMutator {
 public:
     struct Entry {
         Expr expr;
@@ -100,7 +96,7 @@ public:
 
     GVN() : number(0), cache(8) {}
 
-    Stmt mutate(const Stmt &s) override {
+    Stmt mutate(const Stmt &s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -109,7 +105,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(const Expr &e) override {
+    Expr mutate(const Expr &e) {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -140,7 +136,7 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        Expr new_e = IRMutator2::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
@@ -163,9 +159,9 @@ public:
     }
 
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr visit(const Let *let) override {
+    void visit(const Let *let) {
         // Visit the value and add it to the numbering.
         Expr value = mutate(let->value);
 
@@ -178,10 +174,10 @@ public:
         let_substitutions.pop(let->name);
 
         // Just return the body. We've removed the Let.
-        return body;
+        expr = body;
     }
 
-    Expr visit(const Load *op) override {
+    void visit(const Load *op) {
         Expr predicate = op->predicate;
         // If the predicate is trivially true, there is no point to lift it out
         if (!is_one(predicate)) {
@@ -189,12 +185,13 @@ public:
         }
         Expr index = mutate(op->index);
         if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
-            return op;
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
         }
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         Expr predicate = op->predicate;
         // If the predicate is trivially true, there is no point to lift it out
         if (!is_one(predicate)) {
@@ -203,9 +200,9 @@ public:
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
-            return op;
+            stmt = op;
         } else {
-            return Store::make(op->name, value, index, op->param, predicate);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 };
@@ -213,9 +210,8 @@ public:
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
-    bool lift_all;
 public:
-    ComputeUseCounts(GVN &g, bool l) : gvn(g), lift_all(l) {}
+    ComputeUseCounts(GVN &g) : gvn(g) {}
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
@@ -224,8 +220,8 @@ public:
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        debug(4) << "Include: " << e << "; should extract: " << should_extract(e, lift_all) << "\n";
-        if (!should_extract(e, lift_all)) {
+        debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
+        if (!should_extract(e)) {
             e.accept(this);
             return;
         }
@@ -243,12 +239,12 @@ public:
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
-class Replacer : public IRMutator2 {
+class Replacer : public IRMutator {
 public:
     map<Expr, Expr, ExprCompare> replacements;
     Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
     Expr mutate(const Expr &e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
@@ -258,7 +254,7 @@ public:
         }
 
         // Rebuild it, replacing children.
-        Expr new_e = IRMutator2::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // In case we encounter this expr again.
         replacements[e] = new_e;
@@ -267,24 +263,18 @@ public:
     }
 };
 
-class CSEEveryExprInStmt : public IRMutator2 {
-    bool lift_all;
-
+class CSEEveryExprInStmt : public IRMutator {
 public:
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) override {
-        return common_subexpression_elimination(e, lift_all);
+    Expr mutate(const Expr &e) {
+        return common_subexpression_elimination(e);
     }
-
-    CSEEveryExprInStmt(bool l) : lift_all(l) {}
 };
 
 } // namespace
 
-Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
-    Expr e = e_in;
-
+Expr common_subexpression_elimination(Expr e) {
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
@@ -293,7 +283,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     GVN gvn;
     e = gvn.mutate(e);
 
-    ComputeUseCounts count_uses(gvn, lift_all);
+    ComputeUseCounts count_uses(gvn);
     count_uses.include(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
@@ -335,8 +325,8 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     return e;
 }
 
-Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
-    return CSEEveryExprInStmt(lift_all).mutate(s);
+Stmt common_subexpression_elimination(Stmt s) {
+    return CSEEveryExprInStmt().mutate(s);
 }
 
 
@@ -346,28 +336,28 @@ namespace {
 
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
-class NormalizeVarNames : public IRMutator2 {
+class NormalizeVarNames : public IRMutator {
     int counter;
 
     map<string, string> new_names;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Expr visit(const Variable *var) override {
+    void visit(const Variable *var) {
         map<string, string>::iterator iter = new_names.find(var->name);
         if (iter == new_names.end()) {
-            return var;
+            expr = var;
         } else {
-            return Variable::make(var->type, iter->second);
+            expr = Variable::make(var->type, iter->second);
         }
     }
 
-    Expr visit(const Let *let) override {
+    void visit(const Let *let) {
         string new_name = "t" + std::to_string(counter++);
         new_names[let->name] = new_name;
         Expr value = mutate(let->value);
         Expr body = mutate(let->body);
-        return Let::make(new_name, value, body);
+        expr = Let::make(new_name, value, body);
     }
 
 public:

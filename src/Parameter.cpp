@@ -27,9 +27,11 @@ struct ParameterContents {
     const bool is_buffer;
     const bool is_explicit_name;
     const bool is_registered;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
+    const bool is_bound_before_lowering;
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r, bool is_bound_before_lowering)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
-          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
+          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r),
+          is_bound_before_lowering(is_bound_before_lowering) {
 
         min_constraint.resize(dimensions);
         extent_constraint.resize(dimensions);
@@ -76,7 +78,7 @@ Parameter::Parameter() : contents(nullptr) {
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true, false)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents->is_registered) {
@@ -84,8 +86,8 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance, bool is_bound_before_lowering) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance, is_bound_before_lowering)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
@@ -147,41 +149,46 @@ bool Parameter::is_buffer() const {
     return contents->is_buffer;
 }
 
-Expr Parameter::scalar_expr() const {
+bool Parameter::is_bound_before_lowering() const {
+    check_defined();
+    return contents->is_bound_before_lowering;
+}
+
+Expr Parameter::get_scalar_expr() const {
     check_is_scalar();
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
-        case 16: return Expr(scalar<float16_t>());
-        case 32: return Expr(scalar<float>());
-        case 64: return Expr(scalar<double>());
+        case 16: return Expr(get_scalar<float16_t>());
+        case 32: return Expr(get_scalar<float>());
+        case 64: return Expr(get_scalar<double>());
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
-        case 8: return Expr(scalar<int8_t>());
-        case 16: return Expr(scalar<int16_t>());
-        case 32: return Expr(scalar<int32_t>());
-        case 64: return Expr(scalar<int64_t>());
+        case 8: return Expr(get_scalar<int8_t>());
+        case 16: return Expr(get_scalar<int16_t>());
+        case 32: return Expr(get_scalar<int32_t>());
+        case 64: return Expr(get_scalar<int64_t>());
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
-        case 1: return make_bool(scalar<bool>());
-        case 8: return Expr(scalar<uint8_t>());
-        case 16: return Expr(scalar<uint16_t>());
-        case 32: return Expr(scalar<uint32_t>());
-        case 64: return Expr(scalar<uint64_t>());
+        case 1: return make_bool(get_scalar<bool>());
+        case 8: return Expr(get_scalar<uint8_t>());
+        case 16: return Expr(get_scalar<uint16_t>());
+        case 32: return Expr(get_scalar<uint32_t>());
+        case 64: return Expr(get_scalar<uint64_t>());
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
-        case 64: return Expr(scalar<uint64_t>());
+        case 64: return Expr(get_scalar<uint64_t>());
         }
     }
-    internal_error << "Unsupported type " << t << " in scalar_expr\n";
+    internal_error << "Unsupported type " << t << " in get_scalar_expr\n";
     return Expr();
 }
 
-Buffer<> Parameter::buffer() const {
+Buffer<> Parameter::get_buffer() const {
     check_is_buffer();
     return contents->buffer;
 }
@@ -198,7 +205,7 @@ void Parameter::set_buffer(Buffer<> b) {
     contents->buffer = b;
 }
 
-void *Parameter::scalar_address() const {
+void *Parameter::get_scalar_address() const {
     check_is_scalar();
     return &contents->data;
 }
@@ -294,7 +301,7 @@ void Parameter::set_min_value(Expr e) {
     contents->min_value = e;
 }
 
-Expr Parameter::min_value() const {
+Expr Parameter::get_min_value() const {
     check_is_scalar();
     return contents->min_value;
 }
@@ -311,7 +318,7 @@ void Parameter::set_max_value(Expr e) {
     contents->max_value = e;
 }
 
-Expr Parameter::max_value() const {
+Expr Parameter::get_max_value() const {
     check_is_scalar();
     return contents->max_value;
 }
@@ -321,7 +328,7 @@ void Parameter::set_estimate(Expr e) {
     contents->estimate = e;
 }
 
-Expr Parameter::estimate() const {
+Expr Parameter::get_estimate() const {
     check_is_scalar();
     return contents->estimate;
 }

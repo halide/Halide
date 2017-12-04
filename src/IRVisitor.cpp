@@ -6,9 +6,6 @@ namespace Internal {
 IRVisitor::~IRVisitor() {
 }
 
-IRVisitor::IRVisitor() {
-}
-
 void IRVisitor::visit(const IntImm *) {
 }
 

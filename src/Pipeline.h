@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "AutoSchedule.h"
+#include "AutoScheduleOld.h"
 #include "ExternalCode.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
@@ -25,7 +26,7 @@ struct Outputs;
 struct PipelineContents;
 
 namespace Internal {
-class IRMutator2;
+class IRMutator;
 }  // namespace Internal
 
 /**
@@ -47,8 +48,8 @@ void delete_lowering_pass(T *pass) {
 
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
 struct CustomLoweringPass {
-    Internal::IRMutator2 *pass;
-    void (*deleter)(Internal::IRMutator2 *);
+    Internal::IRMutator *pass;
+    void (*deleter)(Internal::IRMutator *);
 };
 
 struct JITExtern;
@@ -82,7 +83,11 @@ public:
     /** Generate a schedule for the pipeline. */
     //@{
     EXPORT std::string auto_schedule(const Target &target,
-                                     const MachineParams &arch_params = MachineParams::generic());
+                                     const MachineParams &arch_params);
+    EXPORT std::string auto_schedule(const Target &target);
+    EXPORT std::string auto_schedule_old(const Target &target,
+                                         const MachineParams &arch_params);
+    EXPORT std::string auto_schedule_old(const Target &target);
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the
@@ -331,19 +336,19 @@ public:
     template<typename T>
     void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
-        // cast it to a deleter that takes a IRMutator2 *. The custom
+        // cast it to a deleter that takes a IRMutator *. The custom
         // deleter lives in user code, so that deletion is on the same
         // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator2 *) =
-            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
+        void (*deleter)(Internal::IRMutator *) =
+            (void (*)(Internal::IRMutator *))(&delete_lowering_pass<T>);
         add_custom_lowering_pass(pass, deleter);
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    EXPORT void add_custom_lowering_pass(Internal::IRMutator2 *pass,
-                                         void (*deleter)(Internal::IRMutator2 *));
+    EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass,
+                                         void (*deleter)(Internal::IRMutator *));
 
     /** Remove all previously-set custom lowering passes */
     EXPORT void clear_custom_lowering_passes();

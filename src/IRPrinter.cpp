@@ -55,11 +55,7 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    for (const auto &s : m.submodules()) {
-        stream << s << "\n";
-    }
-
-    stream << "module name=" << m.name() << ", target=" << m.target().to_string() << "\n";
+    stream << "Target = " << m.target().to_string() << "\n";
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
@@ -245,19 +241,19 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 }
 
 
-std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &type) {
+std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
     switch (type) {
     case LoweredFunc::ExternalPlusMetadata:
-        stream << "external_plus_metadata";
+        out << "external_plus_metadata";
         break;
     case LoweredFunc::External:
-        stream << "external";
+        out << "external";
         break;
     case LoweredFunc::Internal:
-        stream << "internal";
+        out << "internal";
         break;
     }
-    return stream;
+    return out;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {

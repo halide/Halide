@@ -10,15 +10,12 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
-#include <iterator>
-
 namespace Halide {
 namespace Internal {
 
 using std::string;
 using std::vector;
 using std::map;
-using std::set;
 
 namespace {
 
@@ -56,8 +53,8 @@ private:
     string buffer;
     bool varies;
     bool treat_selects_as_guards;
-    Scope<> varying;
-    Scope<> in_pipeline;
+    Scope<int> varying;
+    Scope<int> in_pipeline;
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -72,7 +69,7 @@ private:
         bool should_pop = false;
         if (!is_one(op->extent) || min_varies) {
             should_pop = true;
-            varying.push(op->name);
+            varying.push(op->name, 0);
         }
         op->body.accept(this);
         if (should_pop) {
@@ -91,7 +88,7 @@ private:
         bool value_varies = varies;
         varies |= old_varies;
         if (value_varies) {
-            varying.push(name);
+            varying.push(name, 0);
         }
         body.accept(this);
         if (value_varies) {
@@ -111,7 +108,7 @@ private:
     }
 
     void visit(const ProducerConsumer *op) {
-        ScopedBinding<> bind(in_pipeline, op->name);
+        in_pipeline.push(op->name, 0);
         if (op->is_producer) {
             if (op->name != buffer) {
                 op->body.accept(this);
@@ -119,6 +116,7 @@ private:
         } else {
             IRVisitor::visit(op);
         }
+        in_pipeline.pop(op->name);
     }
 
     // Logical operators with eager constant folding
@@ -228,14 +226,15 @@ private:
         // allocation don't get moved outside the allocation and are
         // marked as varying if predicate depends on the value of the
         // allocation.
-        ScopedBinding<>
-            bind_host_ptr(varying, op->name),
-            bind_buffer(varying, op->name + ".buffer");
+        varying.push(op->name, 0);
+        varying.push(op->name + ".buffer", 0);
         IRVisitor::visit(op);
+        varying.pop(op->name + ".buffer");
+        varying.pop(op->name);
     }
 };
 
-class ProductionGuarder : public IRMutator2 {
+class ProductionGuarder : public IRMutator {
 public:
     ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
         buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
@@ -244,7 +243,7 @@ private:
     Expr compute_predicate;
     Expr alloc_predicate;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     bool memoize_call_uses_buffer(const Call *op) {
         internal_assert(op->call_type == Call::Extern);
@@ -260,7 +259,7 @@ private:
         return false;
     }
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
 
         if ((op->name == "halide_memoization_cache_lookup") &&
              memoize_call_uses_buffer(op)) {
@@ -272,24 +271,24 @@ private:
             // hence, we need to allocate some scratch memory for the consumer
             // to load from. For memoized func, the memory might already be in
             // the cache, so we perform the lookup instead of allocating a new one.
-            return Call::make(op->type, Call::if_then_else,
+            expr = Call::make(op->type, Call::if_then_else,
                               {alloc_predicate, op, 0}, Call::PureIntrinsic);
         } else if ((op->name == "halide_memoization_cache_store") &&
                     memoize_call_uses_buffer(op)) {
             // We need to wrap the halide_memoization_cache_store with the
             // compute_predicate, since the data to be written is only valid if
             // the producer of the buffer is executed.
-            return Call::make(op->type, Call::if_then_else,
+            expr = Call::make(op->type, Call::if_then_else,
                               {compute_predicate, op, 0}, Call::PureIntrinsic);
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const ProducerConsumer *op) override {
+    void visit(const ProducerConsumer *op) {
         // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
 
         if (op->is_producer) {
             op = stmt.as<ProducerConsumer>();
@@ -299,58 +298,53 @@ private:
                 stmt = ProducerConsumer::make(op->name, op->is_producer, body);
             }
         }
-        return stmt;
     }
 };
 
-class StageSkipper : public IRMutator2 {
+class StageSkipper : public IRMutator {
 public:
     StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
 private:
     string func;
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Scope<> vector_vars;
+    Scope<int> vector_vars;
     bool in_vector_loop;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         bool old_in_vector_loop = in_vector_loop;
 
         // We want to be sure that the predicate doesn't vectorize.
         if (op->for_type == ForType::Vectorized) {
-            vector_vars.push(op->name);
+            vector_vars.push(op->name, 0);
             in_vector_loop = true;
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
 
         if (op->for_type == ForType::Vectorized) {
             vector_vars.pop(op->name);
         }
 
         in_vector_loop = old_in_vector_loop;
-
-        return stmt;
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         bool should_pop = false;
         if (in_vector_loop &&
             expr_uses_vars(op->value, vector_vars)) {
             should_pop = true;
-            vector_vars.push(op->name);
+            vector_vars.push(op->name, 0);
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
 
         if (should_pop) {
             vector_vars.pop(op->name);
         }
-
-        return stmt;
     }
 
-    Stmt visit(const Realize *op) override {
+    void visit(const Realize *op) {
         if (op->name == func) {
             debug(3) << "Finding compute predicate for " << op->name << "\n";
             PredicateFinder find_compute(op->name, true);
@@ -384,112 +378,94 @@ private:
 
                 debug(3) << "Done guarding computation for " << op->name << "\n";
 
-                return Realize::make(op->name, op->types, op->bounds,
+                stmt = Realize::make(op->name, op->types, op->bounds,
                                      alloc_predicate, body);
             } else {
-                return IRMutator2::visit(op);
+                IRMutator::visit(op);
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };
 
-// Find Funcs where at least one of the consume nodes only uses the
-// Func conditionally. We may want to guard the production of these
-// Funcs.
+// Check if all calls to a given function are behind an if of some
+// sort (but don't worry about what it is).
 class MightBeSkippable : public IRVisitor {
 
     using IRVisitor::visit;
 
-    bool in_conditional_stmt{false};
-
     void visit(const Call *op) {
         IRVisitor::visit(op);
-        if (op->call_type == Call::Halide) {
-            unconditionally_used.insert(op->name);
+        if (op->name == func || extern_call_uses_buffer(op, func)) {
+            result &= guarded;
         }
     }
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
 
-        std::set<string> old;
-        unconditionally_used.swap(old);
+        bool old = guarded;
+        guarded = true;
 
-        ScopedValue<bool> old_in_conditional(in_conditional_stmt, true);
         op->then_case.accept(this);
-
-        std::set<string> used_in_true;
-        used_in_true.swap(unconditionally_used);
         if (op->else_case.defined()) {
             op->else_case.accept(this);
         }
 
-        // Take the set intersection of the true and false paths, and add them to the set.
-        std::set_intersection(used_in_true.begin(), used_in_true.end(),
-                              unconditionally_used.begin(), unconditionally_used.end(),
-                              std::inserter(old, old.begin()));
-
-        unconditionally_used.swap(old);
+        guarded = old;
     }
 
     void visit(const Select *op) {
         op->condition.accept(this);
 
-        std::set<string> old;
-        unconditionally_used.swap(old);
+        bool old = guarded;
+        guarded = true;
 
         op->true_value.accept(this);
-        std::set<string> used_in_true;
-        used_in_true.swap(unconditionally_used);
-
         op->false_value.accept(this);
 
-        // Again, take the set intersection
-        std::set_intersection(used_in_true.begin(), used_in_true.end(),
-                              unconditionally_used.begin(), unconditionally_used.end(),
-                              std::inserter(old, old.begin()));
+        guarded = old;
+    }
 
-        unconditionally_used.swap(old);
+    void visit(const Realize *op) {
+        if (op->name == func) {
+            guarded = false;
+        }
+        IRVisitor::visit(op);
     }
 
     void visit(const ProducerConsumer *op) {
-        if (!op->is_producer) {
+        if (!op->is_producer && (op->name == func)) {
+            bool old_result = result;
+            result = true;
             op->body.accept(this);
-            if (!unconditionally_used.count(op->name) || in_conditional_stmt) {
-                // This Func has a least one consume clause in which
-                // it is only used conditionally.
-                candidates.insert(op->name);
-            }
+            result = result || old_result;
         } else {
             IRVisitor::visit(op);
-            // Calls inside the produce don't count - that's the block of code we intend to guard.
-            unconditionally_used.erase(op->name);
         }
     }
 
-    set<string> unconditionally_used;
+    string func;
+    bool guarded;
+
 public:
-    set<string> candidates;
+    bool result;
+
+    MightBeSkippable(string f) : func(f), guarded(false), result(false) {}
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // Don't consider the last stage, because it's the output, so it's
     // never skippable.
-    MightBeSkippable check;
-    stmt.accept(&check);
     for (size_t i = order.size()-1; i > 0; i--) {
         debug(2) << "skip_stages checking " << order[i-1] << "\n";
-        if (check.candidates.count(order[i-1])) {
+        MightBeSkippable check(order[i-1]);
+        stmt.accept(&check);
+        if (check.result) {
             debug(2) << "skip_stages can skip " << order[i-1] << "\n";
             StageSkipper skipper(order[i-1]);
-            Stmt new_stmt = skipper.mutate(stmt);
-            if (!new_stmt.same_as(stmt)) {
-                // Might have made earlier stages skippable too
-                new_stmt.accept(&check);
-            }
-            stmt = new_stmt;
+            stmt = skipper.mutate(stmt);
         }
     }
     return stmt;

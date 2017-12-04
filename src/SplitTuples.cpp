@@ -51,39 +51,38 @@ inline bool uses_extern_image(Stmt s) {
     return uses.result;
 }
 
-class SplitTuples : public IRMutator2 {
-    using IRMutator2::visit;
+class SplitTuples : public IRMutator {
+    using IRMutator::visit;
 
     map<string, set<int>> func_value_indices;
 
-    Stmt visit(const Realize *op) override {
-        ScopedBinding<int> bind(realizations, op->name, 0);
+    void visit(const Realize *op) {
+        realizations.push(op->name, 0);
         if (op->types.size() > 1) {
             // Make a nested set of realize nodes for each tuple element
             Stmt body = mutate(op->body);
             for (int i = (int)op->types.size() - 1; i >= 0; i--) {
                 body = Realize::make(op->name + "." + std::to_string(i), {op->types[i]}, op->bounds, op->condition, body);
             }
-            return body;
+            stmt = body;
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
+        realizations.pop(op->name);
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         map<string, set<int>> old_func_value_indices = func_value_indices;
 
         FindCallValueIndices find;
         op->body.accept(&find);
 
         func_value_indices = find.func_value_indices;
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
         func_value_indices = old_func_value_indices;
-        return stmt;
     }
 
-    Stmt visit(const Prefetch *op) override {
-        Stmt stmt;
+    void visit(const Prefetch *op) {
         if (!op->param.defined() && (op->types.size() > 1)) {
             // Split the prefetch from a multi-dimensional halide tuple to
             // prefetches of each tuple element. Keep only prefetches of
@@ -99,12 +98,11 @@ class SplitTuples : public IRMutator2 {
                 stmt = Block::make(stmt, Prefetch::make(op->name + "." + std::to_string(*it), {op->types[(*it)]}, op->bounds));
             }
         } else {
-            stmt = IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
-        return stmt;
     }
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         if (op->call_type == Call::Halide) {
             auto it = env.find(op->name);
             internal_assert(it != env.end());
@@ -121,15 +119,16 @@ class SplitTuples : public IRMutator2 {
             // unconditionally. This expr never gets held by a
             // Function, so there can't be a cycle. We do this even
             // for scalar provides.
-            return Call::make(op->type, name, args, op->call_type, f.get_contents());
+            expr = Call::make(op->type, name, args, op->call_type, f.get_contents());
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const Provide *op) override {
+    void visit(const Provide *op) {
         if (op->values.size() == 1) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         // Detect if the provide needs to be lowered atomically. By
@@ -187,7 +186,7 @@ class SplitTuples : public IRMutator2 {
             result = LetStmt::make(p.first, p.second, result);
         }
 
-        return result;
+        stmt = result;
     }
 
     const map<string, Function> &env;

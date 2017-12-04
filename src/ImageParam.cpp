@@ -48,7 +48,7 @@ void ImageParam::set(Buffer<> b) {
 }
 
 Buffer<> ImageParam::get() const {
-    return param.buffer();
+    return param.get_buffer();
 }
 
 void ImageParam::reset() {

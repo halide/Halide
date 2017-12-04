@@ -25,10 +25,9 @@ int main(int argc, char **argv) {
     f.realize(result);
 
     if (result(50, 100) != 123 || result(99, 199) != 234) {
-        fprintf(stderr, "Err: f(50, 100) = %d (supposed to be 123)\n"
+        printf("Error: f(50, 100) = %d (supposed to be 123)\n"
                "f(99, 199) = %d (supposed to be 234)\n",
                result(50, 100), result(99, 199));
-        return -1;
     }
 
     printf("Success!\n");

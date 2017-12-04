@@ -68,10 +68,10 @@ public:
     int nthreads;
 };
 
-class CanonicalizeGPUVars : public IRMutator2 {
+class CanonicalizeGPUVars : public IRMutator {
     map<string, string> gpu_vars;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     string gpu_name(vector<string> v, const string &new_var) {
         v.push_back(new_var);
@@ -108,7 +108,7 @@ class CanonicalizeGPUVars : public IRMutator2 {
         }
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         string name = op->name;
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
@@ -149,14 +149,14 @@ class CanonicalizeGPUVars : public IRMutator2 {
             min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else {
-            return For::make(name, min, extent, op->for_type, op->device_api, body);
+            stmt = For::make(name, min, extent, op->for_type, op->device_api, body);
         }
     }
 
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         Expr value = mutate(op->value);
         Stmt body = mutate(op->body);
 
@@ -170,13 +170,13 @@ class CanonicalizeGPUVars : public IRMutator2 {
         if ((name == op->name) &&
             value.same_as(op->value) &&
             body.same_as(op->body)) {
-            return op;
+            stmt = op;
         } else {
-            return LetStmt::make(name, value, body);
+            stmt = LetStmt::make(name, value, body);
         }
     }
 
-    Stmt visit(const IfThenElse *op) override {
+    void visit(const IfThenElse *op) {
         Expr condition = mutate(op->condition);
 
         map<string, string> old_gpu_vars;
@@ -189,9 +189,9 @@ class CanonicalizeGPUVars : public IRMutator2 {
         if (condition.same_as(op->condition) &&
             then_case.same_as(op->then_case) &&
             else_case.same_as(op->else_case)) {
-            return op;
+            stmt = op;
         } else {
-            return IfThenElse::make(condition, then_case, else_case);
+            stmt = IfThenElse::make(condition, then_case, else_case);
         }
     }
 };

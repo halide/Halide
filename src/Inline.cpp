@@ -19,7 +19,7 @@ void validate_schedule_inlined_function(Function f) {
     const FuncSchedule &func_s = f.schedule();
     const StageSchedule &stage_s = f.definition().schedule();
 
-    if (!func_s.store_level().is_inlined()) {
+    if (!func_s.store_level().is_inline()) {
         user_error << "Function " << f.name() << " is scheduled to be computed inline, "
                    << "but is not scheduled to be stored inline. A storage schedule "
                    << "is meaningless for functions computed inline.\n";
@@ -91,12 +91,12 @@ void validate_schedule_inlined_function(Function f) {
     }
 }
 
-class Inliner : public IRMutator2 {
-    using IRMutator2::visit;
+class Inliner : public IRMutator {
+    using IRMutator::visit;
 
     Function func;
 
-    Expr visit(const Call *op) override {
+    void visit(const Call *op) {
         if (op->name == func.name()) {
 
             // Mutate the args
@@ -116,16 +116,16 @@ class Inliner : public IRMutator2 {
                 body = Let::make(func.name() + "." + func_args[i], args[i], body);
             }
 
+            expr = body;
+
             found = true;
 
-            return body;
-
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Expr visit(const Variable *op) override {
+    void visit(const Variable *op) {
         if (op->name == func.name() + ".buffer") {
             const Call *call = func.is_wrapper();
             internal_assert(call);
@@ -138,30 +138,29 @@ class Inliner : public IRMutator2 {
                     buf_name += "." + std::to_string(call->value_index);
                 }
                 buf_name += ".buffer";
-                return Variable::make(type_of<halide_buffer_t *>(), buf_name);
+                expr = Variable::make(type_of<halide_buffer_t *>(), buf_name);
             } else if (call->param.defined()) {
-                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
+                expr = Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
             } else {
                 internal_assert(call->image.defined());
-                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
+                expr = Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
             }
         } else {
-            return op;
+            expr = op;
         }
     }
 
-    Stmt visit(const Provide *op) override {
+    void visit(const Provide *op) {
         bool old_found = found;
 
         found = false;
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
 
         if (found) {
             stmt = common_subexpression_elimination(stmt);
         }
 
         found = old_found;
-        return stmt;
     }
 
 public:

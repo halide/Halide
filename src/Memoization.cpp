@@ -305,7 +305,7 @@ public:
 }
 
 // Inject caching structure around memoized realizations.
-class InjectMemoization : public IRMutator2 {
+class InjectMemoization : public IRMutator {
 public:
     const std::map<std::string, Function> &env;
     const std::string &top_level_name;
@@ -316,9 +316,9 @@ public:
     env(e), top_level_name(name), outputs(outputs) {}
 private:
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const Realize *op) override {
+    void visit(const Realize *op) {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -383,13 +383,13 @@ private:
                 Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
                                const_true(), generate_key);
 
-            return Realize::make(op->name, op->types, op->bounds, op->condition, cache_key_alloc);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, cache_key_alloc);
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const ProducerConsumer *op) override {
+    void visit(const ProducerConsumer *op) {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -404,7 +404,7 @@ private:
 
             if (op->is_producer) {
                 Stmt mutated_body = IfThenElse::make(cache_miss, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             } else {
                 const Function f(iter->second);
                 KeyInfo key_info(f, top_level_name);
@@ -416,10 +416,10 @@ private:
                     IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
 
                 Stmt mutated_body = Block::make(cache_store_back, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };
@@ -432,7 +432,7 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
     return injector.mutate(s);
 }
 
-class RewriteMemoizedAllocations : public IRMutator2 {
+class RewriteMemoizedAllocations : public IRMutator {
 public:
     RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
         : env(e) {}
@@ -457,22 +457,26 @@ private:
         return realization_name;
     }
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const Allocate *allocation) override {
+    void visit(const Allocate *allocation) {
         std::string realization_name = get_realization_name(allocation->name);
         std::map<std::string, Function>::const_iterator iter = env.find(realization_name);
 
         if (iter != env.end() && iter->second.schedule().memoized()) {
-            ScopedValue<std::string> old_innermost_realization_name(innermost_realization_name, realization_name);
+            std::string old_innermost_realization_name = innermost_realization_name;
+            innermost_realization_name = realization_name;
+
             pending_memoized_allocations[innermost_realization_name].push_back(allocation);
-            return mutate(allocation->body);
+            stmt = mutate(allocation->body);
+
+            innermost_realization_name = old_innermost_realization_name;
         } else {
-            return IRMutator2::visit(allocation);
+            IRMutator::visit(allocation);
         }
     }
 
-    Expr visit(const Call *call) override {
+    void visit(const Call *call) {
         if (!innermost_realization_name.empty() &&
             call->name == Call::buffer_init) {
             internal_assert(call->args.size() >= 3)
@@ -484,16 +488,17 @@ private:
                 // Rewrite _halide_buffer_init to use a nullptr handle for address.
                 std::vector<Expr> args = call->args;
                 args[2] = make_zero(Handle());
-                return Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
+                expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
                                   args, Call::Extern);
+                return;
             }
         }
 
         // If any part of the match failed, do default mutator action.
-        return IRMutator2::visit(call);
+        IRMutator::visit(call);
     }
 
-    Stmt visit(const LetStmt *let) override {
+    void visit(const LetStmt *let) {
         if (let->name == innermost_realization_name + ".cache_miss") {
             Expr value = mutate(let->value);
             Stmt body = mutate(let->body);
@@ -512,9 +517,9 @@ private:
 
             pending_memoized_allocations.erase(innermost_realization_name);
 
-            return LetStmt::make(let->name, value, body);
+            stmt = LetStmt::make(let->name, value, body);
         } else {
-            return IRMutator2::visit(let);
+            IRMutator::visit(let);
         }
     }
 };

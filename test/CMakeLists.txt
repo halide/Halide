@@ -9,9 +9,9 @@ option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
-  halide_project(test_internal internal internal.cpp)
-  add_test(test_internal
-           GROUPS run_tests)
+  halide_project(_test_internal internal internal.cpp)
+  add_to_group(build_internal _test_internal BUILD)
+  add_to_group(test_internal _test_internal EXECUTE)
 else()
   message(WARNING "Internal tests disabled")
 endif()
@@ -31,28 +31,23 @@ function(tests folder)
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
 
-    set(TARGET "${folder}_${name}")
-    list(APPEND TEST_NAMES "${TARGET}")
-
+    set(TARGET "build_${folder}_${name}")
     halide_project("${TARGET}" "${folder}" "${folder}/${file}")
+    list(APPEND TEST_NAMES "${TARGET}")
     target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
     target_compile_definitions("${TARGET}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 
-    set(GROUPS "test_${folder}")
-    if("${folder}" STREQUAL "performance" OR "${folder}" STREQUAL "auto_schedule")
-      # These shouldn't be part of run_tests, since they must be run with -j for timing purposes
-    else()
-      list(APPEND GROUPS run_tests)
-    endif()
+    add_to_group(build_tests "${TARGET}" BUILD)
     if("${folder}" STREQUAL "error")
-      add_test("${TARGET}"
-               GROUPS ${GROUPS}
-               EXPECT_FAILURE)
+      set(EXPECT_FAILURE "${CMAKE_CURRENT_SOURCE_DIR}/common/expect_failure.sh")
+      add_custom_target("${folder}_${name}"
+                        COMMAND "${EXPECT_FAILURE}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}"
+                        DEPENDS "${TARGET}")
+      add_dependencies("${folder}_${name}" "${TARGET}")
     else()
-      add_test("${TARGET}"
-               GROUPS ${GROUPS})
+      add_to_group(${folder}_${name} "${TARGET}" EXECUTE)
     endif()
-
+    add_to_group(test_${folder} "${folder}_${name}" EXECUTE)
   endforeach()
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
@@ -62,7 +57,7 @@ if (WITH_TEST_AUTO_SCHEDULE)
 endif()
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
-  halide_use_image_io(correctness_image_io)
+  halide_use_image_io(build_correctness_image_io)
   test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
@@ -95,7 +90,10 @@ if (WITH_TEST_GENERATORS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     set(TARGET "generator_aot_${NAME}")
+
     add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
+    add_to_group(build_tests "${TARGET}" BUILD)
+    add_to_group(test_generators "${TARGET}" EXECUTE)
     target_include_directories("${TARGET}" PRIVATE 
                                "${CMAKE_SOURCE_DIR}/tools" 
                                "${CMAKE_SOURCE_DIR}" 
@@ -111,9 +109,6 @@ if (WITH_TEST_GENERATORS)
                              FILTER_DEPS "${args_FILTER_DEPS}")
       target_link_libraries("${TARGET}" PUBLIC "${NAME}")
     endif()
-
-    add_test("${TARGET}"
-             GROUPS test_generator run_tests)
   endfunction(halide_define_aot_test)
 
   # Find all the files of form "foo_generator.cpp" in test/generator
@@ -176,11 +171,12 @@ if (WITH_TEST_GENERATORS)
   file(GLOB JITTEST_SRCS RELATIVE "${GEN_TEST_DIR}" "${GEN_TEST_DIR}/*_jittest.cpp")
   foreach(FILE ${JITTEST_SRCS})
     string(REPLACE "_jittest.cpp" "" NAME "${FILE}")
-    set(TARGET "generator_jit_${NAME}")
-    halide_project("${TARGET}" "generator" "${GEN_TEST_DIR}/${FILE}")
-    target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator")
-    add_test("${TARGET}"
-             GROUPS test_generator run_tests)
+    halide_project("generator_jit_${NAME}"
+                   "generator"
+                   "${GEN_TEST_DIR}/${FILE}")
+    target_link_libraries("generator_jit_${NAME}" PRIVATE "${NAME}.generator")
+    add_to_group(build_tests "generator_jit_${NAME}" BUILD)
+    add_to_group(test_generators "generator_jit_${NAME}" EXECUTE)
   endforeach()
 
   # ------ Generator tests for ahead-of-time mode: ------
@@ -294,6 +290,9 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
+  #
+  # Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
+  # that setting ScheduleParam via generator_args works properly.
   set(STUBTEST_GENERATOR_ARGS
       untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32

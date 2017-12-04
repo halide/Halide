@@ -4,15 +4,15 @@ BIN ?= bin
 
 all: $(BIN)/process
 
-$(BIN)/lens_blur.generator: lens_blur_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/lens_blur_exec: lens_blur_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-$(BIN)/lens_blur.a: $(BIN)/lens_blur.generator
+$(BIN)/lens_blur.a: $(BIN)/lens_blur_exec
 	@-mkdir -p $(BIN)
 	$^ -g lens_blur -o $(BIN) -f lens_blur target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/lens_blur_auto_schedule.a: $(BIN)/lens_blur.generator
+$(BIN)/lens_blur_auto_schedule.a: $(BIN)/lens_blur_exec
 	@-mkdir -p $(BIN)
 	$^ -g lens_blur -o $(BIN) -f lens_blur_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
@@ -26,5 +26,3 @@ $(BIN)/out.png: $(BIN)/process
 
 clean:
 	rm -rf $(BIN)
-
-test: $(BIN)/out.png

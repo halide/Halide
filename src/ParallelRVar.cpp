@@ -46,16 +46,16 @@ public:
 };
 
 /** Rename all free variables to unique new names. */
-class RenameFreeVars : public IRMutator2 {
-    using IRMutator2::visit;
+class RenameFreeVars : public IRMutator {
+    using IRMutator::visit;
 
     map<string, string> new_names;
 
-    Expr visit(const Variable *op) override {
+    void visit(const Variable *op) {
         if (!op->param.defined() && !op->image.defined()) {
-            return Variable::make(op->type, get_new_name(op->name));
+            expr = Variable::make(op->type, get_new_name(op->name));
         } else {
-            return op;
+            expr = op;
         }
     }
 
@@ -76,14 +76,14 @@ public:
 };
 
 /** Substitute in boolean expressions. */
-class SubstituteInBooleanLets : public IRMutator2 {
-    using IRMutator2::visit;
+class SubstituteInBooleanLets : public IRMutator {
+    using IRMutator::visit;
 
-    Expr visit(const Let *op) override {
+    void visit(const Let *op) {
         if (op->value.type() == Bool()) {
-            return substitute(op->name, mutate(op->value), mutate(op->body));
+            expr = substitute(op->name, mutate(op->value), mutate(op->body));
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };

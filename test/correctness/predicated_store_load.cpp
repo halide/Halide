@@ -41,15 +41,15 @@ protected:
     }
 };
 
-class CheckPredicatedStoreLoad : public IRMutator2 {
+class CheckPredicatedStoreLoad : public IRMutator {
     int has_store_count;
     int has_load_count;
 public:
     CheckPredicatedStoreLoad(bool store, bool load) :
         has_store_count(store), has_load_count(load) {}
-    using IRMutator2::mutate;
+    using IRMutator::mutate;
 
-    Stmt mutate(const Stmt &s) override {
+    Stmt mutate(Stmt s) {
         CountPredicatedStoreLoad c;
         s.accept(&c);
 

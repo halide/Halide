@@ -29,7 +29,6 @@ public:
     Output<Buffer<int32_t>> int32_buffer_output{"int32_buffer_output" };
 
     void generate() {
-        Var x{"x"}, y{"y"}, c{"c"};
 
         Buffer<uint8_t> constant_image = make_image<uint8_t>();
 
@@ -46,21 +45,28 @@ public:
 
         StubTest::GeneratorParams gp;
         gp.untyped_buffer_output_type = int32_buffer_output.type();
-        gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
-        gp.vectorize = true;
+
+        stub = StubTest(this, inputs, gp);
+
+        const float kOffset = 2.f;
+        calculated_output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
         // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
-        StubTest::Outputs out = StubTest::generate(this, inputs, gp);
-
-        float32_buffer_output = out.typed_buffer_output;
-        int32_buffer_output = out.untyped_buffer_output;
-
-        const float kOffset = 2.f;
-        calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);
+        float32_buffer_output = stub.typed_buffer_output;
+        int32_buffer_output = stub.untyped_buffer_output;
     }
+
+    void schedule() {
+        stub.vectorize.set(true);
+        stub.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
+    }
+
+private:
+    Var x{"x"}, y{"y"}, c{"c"};
+    StubTest stub;
 };
 
 }  // namespace

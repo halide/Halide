@@ -28,29 +28,31 @@ string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block
 string shared_mem_name = "__shared";
 }
 
-class InjectThreadBarriers : public IRMutator2 {
+class InjectThreadBarriers : public IRMutator {
     bool in_threads;
 
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
     Stmt barrier;
 
-    Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_threads(in_threads);
+    void visit(const For *op) {
+        bool old_in_threads = in_threads;
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             in_threads = true;
         }
 
-        return IRMutator2::visit(op);
+        IRMutator::visit(op);
+
+        in_threads = old_in_threads;
     }
 
-    Stmt visit(const Block *op) override {
+    void visit(const Block *op) {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             Stmt rest = mutate(op->rest);
-            return Block::make(Block::make(first, barrier), rest);
+            stmt = Block::make(Block::make(first, barrier), rest);
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
@@ -124,8 +126,8 @@ public:
     }
 };
 
-class NormalizeDimensionality : public IRMutator2 {
-    using IRMutator2::visit;
+class NormalizeDimensionality : public IRMutator {
+    using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
     const DeviceAPI device_api;
@@ -150,7 +152,7 @@ class NormalizeDimensionality : public IRMutator2 {
         return s;
     }
 
-    Stmt visit(const Block *op) override {
+    void visit(const Block *op) {
         Stmt first = wrap(op->first);
 
         Stmt rest;
@@ -160,23 +162,22 @@ class NormalizeDimensionality : public IRMutator2 {
 
         if (first.same_as(op->first) &&
             rest.same_as(op->rest)) {
-            return op;
+            stmt = op;
         } else {
-            return Block::make(first, rest);
+            stmt = Block::make(first, rest);
         }
     }
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             depth++;
             if (depth > max_depth) {
                 max_depth = depth;
             }
-            Stmt stmt = IRMutator2::visit(op);
+            IRMutator::visit(op);
             depth--;
-            return stmt;
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
@@ -185,12 +186,12 @@ public:
       : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
 };
 
-class ReplaceForWithIf : public IRMutator2 {
-    using IRMutator2::visit;
+class ReplaceForWithIf : public IRMutator {
+    using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             int dim;
             for (dim = 0; dim < 4; dim++) {
@@ -207,13 +208,13 @@ class ReplaceForWithIf : public IRMutator2 {
             body = substitute(op->name, var + op->min, body);
 
             if (equal(op->extent, block_size.extent(dim))) {
-                return body;
+                stmt = body;
             } else {
                 Expr cond = var < op->extent;
-                return IfThenElse::make(cond, body, Stmt());
+                stmt = IfThenElse::make(cond, body, Stmt());
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
@@ -221,8 +222,8 @@ public:
     ReplaceForWithIf(const ExtractBlockSize &e) : block_size(e) {}
 };
 
-class ExtractSharedAllocations : public IRMutator2 {
-    using IRMutator2::visit;
+class ExtractSharedAllocations : public IRMutator {
+    using IRMutator::visit;
 
     struct IntInterval {
         IntInterval() : IntInterval(0, 0) {}
@@ -271,13 +272,12 @@ class ExtractSharedAllocations : public IRMutator2 {
 
     const DeviceAPI device_api;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             bool old = in_threads;
             in_threads = true;
-            Stmt stmt = IRMutator2::visit(op);
+            IRMutator::visit(op);
             in_threads = old;
-            return stmt;
         } else {
             // Set aside the allocations we've found so far.
             vector<SharedAllocation> old;
@@ -305,11 +305,11 @@ class ExtractSharedAllocations : public IRMutator2 {
                 allocations.swap(old);
             }
 
-            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+            stmt = For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
         }
     }
 
-    Stmt visit(const Block *op) override {
+    void visit(const Block *op) {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             barrier_stage++;
@@ -317,25 +317,26 @@ class ExtractSharedAllocations : public IRMutator2 {
 
             if (first.same_as(op->first) &&
                 rest.same_as(op->rest)) {
-                return op;
+                stmt = op;
             } else {
-                return Block::make(first, rest);
+                stmt = Block::make(first, rest);
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const Allocate *op) override {
+    void visit(const Allocate *op) {
         user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
 
         if (in_threads) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         shared.emplace(op->name, IntInterval(barrier_stage, barrier_stage));
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
         op = stmt.as<Allocate>();
         internal_assert(op);
 
@@ -350,49 +351,50 @@ class ExtractSharedAllocations : public IRMutator2 {
         alloc.size = simplify(alloc.size);
         allocations.push_back(alloc);
         shared.erase(op->name);
-        return op->body;
+        stmt = op->body;
     }
 
-    Expr visit(const Load *op) override {
+    void visit(const Load *op) {
         if (shared.count(op->name)) {
             Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
-                return Load::make(op->type, shared_mem_name + "_" + op->name,
+                expr = Load::make(op->type, shared_mem_name + "_" + op->name,
                                   index, op->image, op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                return Load::make(op->type, shared_mem_name, base + index,
+                expr = Load::make(op->type, shared_mem_name, base + index,
                                   op->image, op->param, predicate);
             }
 
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const Store *op) override {
+    void visit(const Store *op) {
         if (shared.count(op->name)) {
             shared[op->name].max = barrier_stage;
             Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                return Store::make(shared_mem_name + "_" + op->name, value, index,
+                stmt = Store::make(shared_mem_name + "_" + op->name, value, index,
                                    op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                return Store::make(shared_mem_name, value, base + index, op->param, predicate);
+                stmt = Store::make(shared_mem_name, value, base + index, op->param, predicate);
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
+    void visit(const LetStmt *op) {
         if (in_threads) {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
+            return;
         }
 
         Expr value = mutate(op->value);
@@ -405,9 +407,9 @@ class ExtractSharedAllocations : public IRMutator2 {
         }
 
         if (op->body.same_as(body) && value.same_as(op->value)) {
-            return op;
+            stmt = op;
         } else {
-            return LetStmt::make(op->name, value, body);
+            stmt = LetStmt::make(op->name, value, body);
         }
     }
 
@@ -581,12 +583,12 @@ public:
     ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0), device_api(d) {}
 };
 
-class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
-    using IRMutator2::visit;
+class FuseGPUThreadLoopsSingleKernel : public IRMutator {
+    using IRMutator::visit;
     const ExtractBlockSize &block_size;
     ExtractSharedAllocations &shared_mem;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (ends_with(op->name, ".__block_id_x")) {
             Stmt body = op->body;
 
@@ -625,12 +627,12 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
             debug(3) << "Add back in shared allocations:\n" << body << "\n\n";
 
             if (body.same_as(op->body)) {
-                return op;
+                stmt = op;
             } else {
-                return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
 
     }
@@ -642,12 +644,13 @@ public:
 
 };
 
-class FuseGPUThreadLoops : public IRMutator2 {
-    using IRMutator2::visit;
+class FuseGPUThreadLoops : public IRMutator {
+    using IRMutator::visit;
 
-    Stmt visit(const For *op) override {
+    void visit(const For *op) {
         if (op->device_api == DeviceAPI::GLSL) {
-            return op;
+            stmt = op;
+            return;
         }
 
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
@@ -670,25 +673,25 @@ class FuseGPUThreadLoops : public IRMutator2 {
             debug(3) << "Pulled out shared allocations:\n" << loop << "\n\n";
 
             // Mutate the inside of the kernel
-            return FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
+            stmt = FuseGPUThreadLoopsSingleKernel(block_size, shared_mem).mutate(loop);
         } else {
-            return IRMutator2::visit(op);
+            IRMutator::visit(op);
         }
     }
 };
 
-class ZeroGPULoopMins : public IRMutator2 {
+class ZeroGPULoopMins : public IRMutator {
     bool in_non_glsl_gpu;
-    using IRMutator2::visit;
+    using IRMutator::visit;
 
-    Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
+    void visit(const For *op) {
+        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
           (op->device_api == DeviceAPI::Metal);
 
-        Stmt stmt = IRMutator2::visit(op);
+        IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
@@ -696,7 +699,8 @@ class ZeroGPULoopMins : public IRMutator2 {
             Stmt body = substitute(op->name, adjusted, op->body);
             stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
-        return stmt;
+
+        in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
 
 public:
@@ -710,10 +714,10 @@ class ValidateGPULoopNesting : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const For *op) {
-        ScopedValue<string> old_innermost_block_var(innermost_block_var);
-        ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
-        ScopedValue<int> old_gpu_block_depth(gpu_block_depth);
-        ScopedValue<int> old_gpu_thread_depth(gpu_thread_depth);
+        string old_innermost_block_var  = innermost_block_var;
+        string old_innermost_thread_var = innermost_thread_var;
+        int old_gpu_block_depth  = gpu_block_depth;
+        int old_gpu_thread_depth = gpu_thread_depth;
 
         for (int i = 1; i <= 4; i++) {
             if (ends_with(op->name, block_names[4-i])) {
@@ -738,6 +742,11 @@ class ValidateGPULoopNesting : public IRVisitor {
             }
         }
         IRVisitor::visit(op);
+
+        innermost_block_var  = old_innermost_block_var;
+        innermost_thread_var = old_innermost_thread_var;
+        gpu_block_depth  = old_gpu_block_depth;
+        gpu_thread_depth = old_gpu_thread_depth;
     }
 };
 
