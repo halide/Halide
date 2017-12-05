@@ -5,18 +5,19 @@ namespace {
 class StencilChain : public Halide::Generator<StencilChain> {
 public:
     GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
-    GeneratorParam<int>     stencils{"stencils", 4, 1, 100};
+    GeneratorParam<int>     stencils{"stencils", 8, 1, 100};
 
-    Input<Buffer<uint16_t>> input{"input", 3};
-    Output<Buffer<uint16_t>> output{"output", 3};
+    Input<Buffer<uint16_t>> input{"input", 2};
+    Output<Buffer<uint16_t>> output{"output", 2};
 
     void generate() {
 
         std::vector<Func> stages;
 
-        Var x, y, c;
+        Var x, y;
 
-        Func f = Halide::BoundaryConditions::repeat_edge(input);
+        Func f("input_wrap");
+        f(x, y) = input(x, y);
 
         stages.push_back(f);
 
@@ -25,33 +26,31 @@ public:
             Expr e = cast<uint16_t>(0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
-                    e += stages.back()(x+i, y+j, c);
+                    e += stages.back()(x+i, y+j);
                 }
             }
-            f(x, y, c) = e;
+            f(x, y) = e;
             stages.push_back(f);
         }
 
-        output(x, y, c) = stages.back()(x, y, c);
+        output(x, y) = stages.back()(x, y);
 
         if (auto_schedule) {
             // Provide estimates on the input image
             input.dim(0).set_bounds_estimate(0, 1536);
             input.dim(1).set_bounds_estimate(0, 2560);
-            input.dim(2).set_bounds_estimate(0, 3);
             // Provide estimates on the pipeline output
-            output.estimate(x, 0, 1536)
-                .estimate(y, 0, 2560)
-                .estimate(c, 0, 3);
+            output.estimate(x, 32, 1536 - 64)
+                .estimate(y, 32, 2560 - 64);
             // Auto schedule the pipeline: this calls auto_schedule() for
             // all of the Outputs in this Generator
             auto_schedule_outputs();
         } else {
             // cpu schedule. No fusion.
             for (auto s : stages) {
-                s.compute_root().reorder(s.args()[0], s.args()[2], s.args()[1]).parallel(s.args()[1]).vectorize(s.args()[0], 16);
+                s.compute_root().parallel(s.args()[1]).vectorize(s.args()[0], 16);
             }
-            output.compute_root().reorder(x, c, y).parallel(y).vectorize(x, 16);
+            output.compute_root().parallel(y).vectorize(x, 16);
         }
     }
 };
