@@ -1,16 +1,15 @@
 #include "Param.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include "add_operators.h"
+#include <boost/format.hpp>
 #include <boost/mpl/list.hpp>
 #include <boost/python.hpp>
-
-#include "Halide.h"
-#include "Type.h"
-
-#include <boost/format.hpp>
 #include <string>
 #include <vector>
+
+#include "Halide.h"
+
+#include "add_operators.h"
+#include "Type.h"
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -63,7 +62,7 @@ void image_param_set(h::ImageParam &param, const h::Buffer<T> &im) {
     param.set(im);
 }
 
-void defineImageParam() {
+void define_image_param() {
     using Halide::ImageParam;
 
     auto image_param_class =
@@ -141,11 +140,10 @@ void defineImageParam() {
 
     // "Using a param as the argument to an external stage treats it as an Expr"
     //p::implicitly_convertible<ImageParam, h::ExternFuncArgument>();
-
-    return;
 }
 
-void defineOutputImageParam() {
+// TODO: unimplemented?
+void define_output_image_param() {
 
     //"A handle on the output buffer of a pipeline. Used to make static
     // "promises about the output size and stride."
@@ -290,7 +288,7 @@ std::string param_repr(const h::Param<T> &param) {
 }
 
 template <typename T>
-void defineParam_impl(const std::string suffix, const h::Type type) {
+void define_param_impl(const std::string suffix, const h::Type type) {
     using Halide::Param;
 
     auto param_class =
@@ -389,8 +387,6 @@ void defineParam_impl(const std::string suffix, const h::Type type) {
 
     add_operators_with<pc_t, Param<float>>(param_class);
     add_operators_with<pc_t, Param<double>>(param_class);
-
-    return;
 }
 
 template <typename T, typename... Args>
@@ -425,78 +421,10 @@ p::object create_param0_impl<end_of_recursion_t>(h::Type type, std::string /*nam
     return p::object();
 }
 
-//template<>
-//struct h::type_of_helper<end_of_recursion_t> {
-//    operator h::Type() {
-//        return h::Type(); // call default constructor
-//    }
-//};
-
-//// C++ fun, variadic template recursive function !
-//template<bool UseExprs, typename T=end_of_recursion_t, typename ...Types>
-//p::object create_param1_impl(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max)
-//{
-//    if(std::is_same<T, end_of_recursion_t>::value)
-//    {
-//        // end of recursion, did not find a matching type
-//        printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
-//        throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
-//        return p::object();
-//    }
-
-//    if(h::type_of<T>() == type)
-//    {
-//        p::extract<T> val_extract(val);
-
-//        if(val_extract.check())
-//        {
-//            T true_val = val_extract();
-//            if(UseExprs == true)
-//            {
-//                if(name != "")
-//                {
-//                    return create_param_object<T>(name, true_val, min, max);
-//                }
-//                else
-//                {
-//                    return create_param_object<T>(true_val, min, max);
-//                }
-//            }
-//            else
-//            { // UseExprs == false
-//                if(name != "")
-//                {
-//                    return create_param_object<T>(name, true_val);
-//                }
-//                else
-//                {
-//                    return create_param_object<T>(true_val);
-//                }
-//            }
-//        }
-//        else
-//        {
-//            printf("create_param1_impl type == %s\n", type_repr(type).c_str());
-//            const std::string val_str = p::extract<std::string>(p::str(val));
-//            printf("create_param1_impl val == %s\n", val_str.c_str());
-//            throw std::invalid_argument("ParamFactory::create_param1_impl called with "
-//                                        "a value that could not be converted to the given type");
-//        }
-//    }
-//    else
-//    {
-//        return create_param1_impl<UseExprs, Types...>(type, name, val, min, max); // keep recursing
-//    }
-//}
-
 typedef boost::mpl::list<boost::uint8_t, boost::uint16_t, boost::uint32_t,
                          boost::int8_t, boost::int16_t, boost::int32_t,
                          float, double>
     pixel_types_t;
-
-// C++ fun, variadic template recursive function !
-// (if you wonder why struct::operator() and not a function,
-// see http://artofsoftware.org/2012/12/20/c-template-function-partial-specialization )
 
 template <typename PixelTypes, typename... Args>
 struct create_param1_impl_t {
@@ -539,13 +467,6 @@ struct create_param1_impl_t {
     p::object call_create_param_object(T true_val, h::Expr min, h::Expr max) {
         return create_param_object<T>(true_val, min, max);
     }
-
-    //    template<typename T, typename ...Args2>
-    //    p::object call_create_param_object(T true_val, Args2... args)
-    //    {
-    //        throw std::runtime_error("create_param1_impl_t was called with parameters types not yet handled");
-    //        return p::object();
-    //    }
 };
 
 template <typename... Args>
@@ -590,23 +511,21 @@ struct ParamFactory {
     }
 };
 
-void defineParam() {
-    // Might create linking problems, if Param.cpp is not included in the python library
+void define_param() {
+    define_param_impl<uint8_t>("_uint8", h::UInt(8));
+    define_param_impl<uint16_t>("_uint16", h::UInt(16));
+    define_param_impl<uint32_t>("_uint32", h::UInt(32));
+    define_param_impl<uint64_t>("_uint64", h::UInt(64));
 
-    defineParam_impl<uint8_t>("_uint8", h::UInt(8));
-    defineParam_impl<uint16_t>("_uint16", h::UInt(16));
-    defineParam_impl<uint32_t>("_uint32", h::UInt(32));
-    defineParam_impl<uint64_t>("_uint64", h::UInt(64));
+    define_param_impl<int8_t>("_int8", h::Int(8));
+    define_param_impl<int16_t>("_int16", h::Int(16));
+    define_param_impl<int32_t>("_int32", h::Int(32));
+    define_param_impl<int64_t>("_int64", h::Int(64));
 
-    defineParam_impl<int8_t>("_int8", h::Int(8));
-    defineParam_impl<int16_t>("_int16", h::Int(16));
-    defineParam_impl<int32_t>("_int32", h::Int(32));
-    defineParam_impl<int64_t>("_int64", h::Int(64));
+    define_param_impl<float>("_float32", h::Float(32));
+    define_param_impl<double>("_float64", h::Float(64));
 
-    defineParam_impl<float>("_float32", h::Float(32));
-    defineParam_impl<double>("_float64", h::Float(64));
-
-    // "Param" will look as a class, but instead it will be simply a factory method
+    // "Param" will look like a class, but instead it will be simply a factory method
     // Order of definitions matter, the last defined method is attempted first
     // Here it is important to try "type, name" before "type, val"
     p::def("Param", &ParamFactory::create_param5, p::args("type", "name", "val", "min", "max"),
@@ -626,14 +545,11 @@ void defineParam() {
     p::def("Param", &ParamFactory::create_param0, p::args("type"),
            "Construct a scalar parameter of type T with a unique auto-generated name");
 
-    ;
-
     p::def("user_context_value", &h::user_context_value,
            "Returns an Expr corresponding to the user context passed to "
            "the function (if any). It is rare that this function is necessary "
            "(e.g. to pass the user context to an extern function written in C).");
 
-    defineImageParam();
-    defineOutputImageParam();
-    return;
+    define_image_param();
+    define_output_image_param();
 }

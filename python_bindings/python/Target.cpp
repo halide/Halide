@@ -1,14 +1,12 @@
 #include "Target.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
+#include <string>
+#include <vector>
 
 #include "Halide.h"
 
 #include "Expr.h"
-
-#include <string>
-#include <vector>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -18,7 +16,7 @@ void target_set_features(h::Target &t, p::list features, bool value) {
     t.set_features(features_vec, value);
 }
 
-void defineTarget() {
+void define_target() {
     using Halide::Target;
 
     auto target_class =
@@ -26,7 +24,7 @@ void defineTarget() {
                           "A struct representing a target machine and os to generate code for.",
                           p::init<>())
 
-            // not all constructors (yet) exposed
+            // TODO: not all constructors (yet) exposed
             //Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
             .def(p::self == p::self)
             .def(p::self != p::self)
@@ -57,7 +55,7 @@ void defineTarget() {
             .def("set_features", &target_set_features,
                  (p::arg("self"), p::arg("features_to_set"), p::arg("value") = true))
 
-        // not all methods (yet) exposed
+        // TODO: not all methods (yet) exposed
 
         ;
 
@@ -133,6 +131,4 @@ void defineTarget() {
            "get_host_target. Throws an error if the architecture, bit width, "
            "and OS of the target do not match the host target, so this is only "
            "useful for controlling the feature set.");
-
-    return;
 }

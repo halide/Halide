@@ -1,6 +1,6 @@
-#ifndef FUNCTION_H
-#define FUNCTION_H
+#ifndef HALIDE_PYTHON_BINDINGS_FUNCTION_H
+#define HALIDE_PYTHON_BINDINGS_FUNCTION_H
 
-void defineExternFuncArgument();
+void define_extern_func_argument();
 
-#endif  // FUNCTION_H
+#endif  // HALIDE_PYTHON_BINDINGS_FUNCTION_H

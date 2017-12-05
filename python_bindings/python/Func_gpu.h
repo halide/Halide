@@ -1,13 +1,12 @@
-#ifndef FUNC_GPU_H
-#define FUNC_GPU_H
+#ifndef HALIDE_PYTHON_BINDINGS_FUNC_GPU_H
+#define HALIDE_PYTHON_BINDINGS_FUNC_GPU_H
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
 #include "Halide.h"
 
 /// Define all gpu related methods
-void defineFuncGpuMethods(boost::python::class_<Halide::Func> &func_class);
+void define_func_gpu_methods(boost::python::class_<Halide::Func> &func_class);
 
 namespace func_and_stage_implementation_details {
 // These are methods shared with Stage
@@ -126,7 +125,7 @@ FuncOrStage &func_gpu_tile7(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
 
 /// Define all gpu related methods
 template <typename FuncOrStage>
-void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
+void define_func_or_stage_gpu_methods(bp::class_<FuncOrStage> &func_or_stage_class) {
     func_or_stage_class
         .def("gpu_threads", &func_gpu_threads2<FuncOrStage>,
              (bp::arg("self"),
@@ -262,10 +261,8 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
               bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
              bp::return_internal_reference<1>());
-
-    return;
 }
 
-}  // end of namespace func_and_stage_implementation_details
+}  // namespace func_and_stage_implementation_details
 
-#endif  // FUNC_GPU_H
+#endif  // HALIDE_PYTHON_BINDINGS_FUNC_GPU_H
