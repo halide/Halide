@@ -435,7 +435,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     if (err != CL_SUCCESS) {
         debug(user_context) << get_opencl_error_name(err);
         error(user_context) << "CL: clCreateContext failed: "
-                            << get_opencl_error_name(err);
+                            << get_opencl_error_name(err)
+                            << ":" << (int)err;
         return err;
     } else {
         debug(user_context) << *ctx << "\n";
