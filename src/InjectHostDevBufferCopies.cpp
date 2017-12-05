@@ -220,6 +220,9 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
 
         DeviceAPI touching_device = DeviceAPI::None;
         for (DeviceAPI d : finder.devices_touched) {
+            // TODO: looks dubious, but removing causes crashes in correctness_debug_to_file
+            // with target=host-metal.
+            if (d == DeviceAPI::Host) continue;
             internal_assert(touching_device == DeviceAPI::None)
                 << "Buffer " << buffer << " was touched on multiple devices within a single leaf Stmt!\n";
             touching_device = d;
