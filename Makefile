@@ -1502,7 +1502,7 @@ test_python: distrib
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
-		HALIDE_DISTRIB_PATH=$(ROOT_DIR)/$(DISTRIB_DIR) \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python_bindings
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
