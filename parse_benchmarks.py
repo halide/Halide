@@ -90,7 +90,7 @@ def parse_pipeline(line, runtime_benchmark, ftime_benchmark, fpeak_benchmark, fa
 		favg_benchmark[fname][pipeline_name] = favg
 	return pipeline_name
 
-def parse_benchmark(filename):
+def parse_benchmark(benchmark_dir, filename):
 	f = open(benchmark_dir + filename, 'r')
 	lines = f.read().split('\n')
 	f.close()
@@ -117,34 +117,35 @@ def normalize_fbenchmarks(benchmarks):
 	#	print(benchmarks[fname])
 	return benchmarks
 
-def analyze_benchmarks(benchmark_files):
+def analyze_benchmarks(benchmark_dir, benchmark_files):
 	runtime_benchmarks, ftime_benchmarks, fpeak_benchmarks, favg_benchmarks = {}, {}, {}, {}
 	for filename in benchmark_files:
 		test_name = filename.split(".txt")[0]
-		runtime_benchmark, ftime_benchmark, fpeak_benchmark, favg_benchmark = parse_benchmark(filename)
+		runtime_benchmark, ftime_benchmark, fpeak_benchmark, favg_benchmark = parse_benchmark(benchmark_dir, filename)
 		runtime_benchmarks[test_name] = runtime_benchmark
 		ftime_benchmarks[test_name] = normalize_fbenchmarks(ftime_benchmark)
 		fpeak_benchmarks[test_name] = normalize_fbenchmarks(fpeak_benchmark)
 		favg_benchmarks[test_name] = normalize_fbenchmarks(favg_benchmark)
 	return runtime_benchmarks, ftime_benchmarks, fpeak_benchmarks, favg_benchmarks
 
-def plot_comparison(stats, ylabel, title, speedup=False):
+def plot_comparison(filename, stats, ylabel, title, speedup=False, show=False):
 	# stats = {'conv': {'autosched2': 12.727, 'autosched1': 12.841, 'manual': 32.748}, 'ReLU': {'autosched2': 0.337, 'autosched1': 0.293, 'manual': 0.342}}
 	labels = [key for key in stats.keys()]
 	manual = [x['manual'] for x in stats.values()]
 	autosched1 = [x['autosched1'] for x in stats.values()]
 	autosched2 = [x['autosched2'] for x in stats.values()]
+	# Compute the speedup between autosched and autosched2 to manual
 	if speedup:
-		# Compute the speedup between autosched and autosched2 to manual
-		autosched2 = [float(base)/float(val) if (val != 0) else 0.0 for base, val in zip(manual, autosched2)]
-		autosched1 = [float(base)/float(val) if (val != 0) else 0.0 for base, val in zip(manual, autosched1)]
-		manual = [float(base)/float(val) if (val != 0) else 0.0 for base, val in zip(manual, manual)]
+		autosched2 = [float(base)/float(val) for base, val in zip(manual, autosched2)]
+		autosched1 = [float(base)/float(val) for base, val in zip(manual, autosched1)]
+		manual = [float(base)/float(val) for base, val in zip(manual, manual)]
 	# Setting the positions and width for the bars
 	pos = list(range(len(manual)))
-	width = 0.25
+	width = 0.2
 	# Plotting the bars
 	xwidth = max(4, int(len(labels)))
-	ywidth = int(max(manual + autosched1 + autosched2) + 0.2*max([len(k) for k in labels]))
+	#ywidth = int(max(manual + autosched1 + autosched2) + 0.2*max([len(k) for k in labels]))
+	ywidth = 5
 	fig, ax = plt.subplots(figsize=(xwidth, ywidth))
 	#fig, ax = plt.subplots()
 	# Create a bar for manual data
@@ -173,7 +174,10 @@ def plot_comparison(stats, ylabel, title, speedup=False):
 	plt.tight_layout()
 	#plt.gcf().subplots_adjust(bottom=0.25)
 	plt.grid()
-	plt.show()
+	if show:
+		plt.show()
+	fig.savefig(filename, dpi = 100)   # save the figure to file
+	plt.close(fig)
 
 # Write per-pipeline per-func benchmark to file
 def convert_to_table(filename, title, stats, speedup=False):
@@ -200,23 +204,30 @@ def convert_to_table(filename, title, stats, speedup=False):
 		f.close()
 	return df
 
+benchmark_dir = "./apps/benchmark_data/"
+plot_dir = "./apps/benchmark_plot/"
+csv_dir = "./apps/benchmark_csv/"
+benchmark_files = [f for f in listdir(benchmark_dir) if isfile(join(benchmark_dir, f))]
+benchmark_files = [f for f in benchmark_files if ".txt" in f]
+runtime_benchmarks, ftime_benchmarks, fpeak_benchmarks, favg_benchmarks = analyze_benchmarks(benchmark_dir, benchmark_files)
+
 if __name__ == '__main__':
-	benchmark_dir = "./apps/benchmark_data/"
-	benchmark_files = [f for f in listdir(benchmark_dir) if isfile(join(benchmark_dir, f))]
-	runtime_benchmarks, ftime_benchmarks, fpeak_benchmarks, favg_benchmarks = analyze_benchmarks(benchmark_files)
 	# Generate the plot
-	plot_comparison(runtime_benchmarks, "speed-up", "Runtime Comparison", True)
-	convert_to_table(benchmark_dir + "runtime.csv", "Runtime Speed-up", runtime_benchmarks, True)
+	plot_comparison(plot_dir + "runtime.png", runtime_benchmarks, "speed-up", "Runtime", True)
+	convert_to_table(csv_dir + "runtime.csv", "Runtime Speed-up", runtime_benchmarks, True)
 	for test_name in ftime_benchmarks:
-		plot_comparison(ftime_benchmarks[test_name], "speed-up", "Runtime Comparison (" + test_name + ")")
-		convert_to_table(benchmark_dir + test_name + "_runtime.csv", "Runtime " + test_name + " (ms)", ftime_benchmarks[test_name])
+		plot_comparison(plot_dir + test_name + "_runtime.png", ftime_benchmarks[test_name], "speed-up", "Runtime (" + test_name + ")")
+		convert_to_table(csv_dir + test_name + "_runtime.csv", "Runtime " + test_name + " (ms)", ftime_benchmarks[test_name])
 	for test_name in fpeak_benchmarks:
-		plot_comparison(fpeak_benchmarks[test_name], "peak", "Peak Memory Comparison (" + test_name + ")")
-		convert_to_table(benchmark_dir + test_name + "_peak.csv", "Runtime " + test_name + " (bytes)", fpeak_benchmarks[test_name])
+		plot_comparison(plot_dir + test_name + "_peak.png", fpeak_benchmarks[test_name], "peak", "Peak Memory (" + test_name + ")")
+		convert_to_table(csv_dir + test_name + "_peak.csv", "Runtime " + test_name + " (bytes)", fpeak_benchmarks[test_name])
 	for test_name in favg_benchmarks:
-		plot_comparison(favg_benchmarks[test_name], "avg", "Avg Memory Comparison (" + test_name + ")")
-		convert_to_table(benchmark_dir + test_name + "_avg.csv", "Runtime " + test_name + " (bytes)", favg_benchmarks[test_name])
-	#plot_comparison(ftime_benchmarks['lens_blur'], "speed-up", "Runtime Comparison (" + 'lens_blur' + ")")
-	#convert_to_table(benchmark_dir + "lens_blur_runtime.csv", "Runtime " + "lens_blur" + " (ms)", ftime_benchmarks['lens_blur'])
+		plot_comparison(plot_dir + test_name + "_avg.png", favg_benchmarks[test_name], "avg", "Avg Memory (" + test_name + ")")
+		convert_to_table(csv_dir + test_name + "_avg.csv", "Runtime " + test_name + " (bytes)", favg_benchmarks[test_name])
+
+	#plot_comparison(plot_dir + "local_laplacian_runtime.png", ftime_benchmarks['local_laplacian'], "speed-up", "Runtime (" + 'local_laplacian' + ")")
+	#plot_comparison(plot_dir + "local_laplacian" + "_peak.png", fpeak_benchmarks['local_laplacian'], "peak", "Peak Memory (" + 'local_laplacian' + ")")
+	#plot_comparison(plot_dir + "local_laplacian" + "_avg.png", favg_benchmarks['local_laplacian'], "avg", "Avg Memory (" + 'local_laplacian' + ")")
+	#convert_to_table(csv_dir + "lens_blur_runtime.csv", "Runtime " + "lens_blur" + " (ms)", ftime_benchmarks['lens_blur'])
 
 
