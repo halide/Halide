@@ -173,6 +173,7 @@ Buffer<uint16_t> blur_fast2(const Buffer<uint16_t> &in) {
 }
 
 #include "halide_blur.h"
+#include "halide_blur_auto_schedule_old.h"
 #include "halide_blur_auto_schedule.h"
 
 Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
@@ -180,6 +181,27 @@ Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
 
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
+    // Copy-out result if it's device buffer and dirty.
+    out.copy_to_host();
+
+    t = benchmark(10, 1, [&]() {
+        // Compute the same region of the output as blur_fast (i.e., we're
+        // still being sloppy with boundary conditions)
+        halide_blur(in, out);
+        // Sync device execution if any.
+        out.device_sync();
+    });
+
+    out.copy_to_host();
+
+    return out;
+}
+
+Buffer<uint16_t> blur_halide_auto_schedule_old(Buffer<uint16_t> in) {
+    Buffer<uint16_t> out(in.width()-8, in.height()-2);
+
+    // Call it once to initialize the halide runtime stuff
+    halide_blur_auto_schedule_old(in, out);
     // Copy-out result if it's device buffer and dirty.
     out.copy_to_host();
 
@@ -239,19 +261,28 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> halide = blur_halide(input);
     double halide_time = t;
 
+    Buffer<uint16_t> halide_auto_schedule_old = blur_halide_auto_schedule_old(input);
+    double halide_auto_schedule_time_old = t;
+
     Buffer<uint16_t> halide_auto_schedule = blur_halide_auto_schedule(input);
     double halide_auto_schedule_time = t;
 
     // fast_time2 is always slower than fast_time, so skip printing it
-    printf("times: %f %f %f %f\n", slow_time, fast_time, halide_time, halide_auto_schedule_time);
+    /*printf("times: %f %f %f %f %f\n", slow_time, fast_time, halide_time,
+           halide_auto_schedule_time_old, halide_auto_schedule_time);*/
+
+    printf("Manually-tuned time: %gms\n", halide_time * 1e3);
+    printf("Old auto-scheduler time: %gms\n", halide_auto_schedule_time_old * 1e3);
+    printf("New auto-scheduler time: %gms\n", halide_auto_schedule_time * 1e3);
 
     for (int y = 64; y < input.height() - 64; y++) {
         for (int x = 64; x < input.width() - 64; x++) {
             if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y) ||
+                blurry(x, y) != halide_auto_schedule_old(x, y) ||
                 blurry(x, y) != halide_auto_schedule(x, y))
-                printf("difference at (%d,%d): %d %d %d %d\n", x, y,
+                printf("difference at (%d,%d): %d %d %d %d %d\n", x, y,
                         blurry(x, y), speedy(x, y), halide(x, y),
-                        halide_auto_schedule(x, y));
+                        halide_auto_schedule_old(x, y), halide_auto_schedule(x, y));
         }
     }
 

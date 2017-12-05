@@ -2,6 +2,7 @@
 #include <chrono>
 
 #include "nl_means.h"
+#include "nl_means_auto_schedule_old.h"
 #include "nl_means_auto_schedule.h"
 
 #include "halide_benchmark.h"
@@ -38,11 +39,17 @@ int main(int argc, char **argv) {
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
-    // Auto-scheduled version
-    double min_t_auto = benchmark(timing_iterations, 10, [&]() {
+    // Old auto-scheduler version
+    double min_t_auto_old = benchmark(timing_iterations, 10, [&]() {
+        nl_means_auto_schedule_old(input, patch_size, search_area, sigma, output);
+    });
+    printf("Old auto-scheduler time: %gms\n", min_t_auto_old * 1e3);
+
+    // New auto-scheduler version
+    double min_t_auto_new = benchmark(timing_iterations, 10, [&]() {
         nl_means_auto_schedule(input, patch_size, search_area, sigma, output);
     });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    printf("New auto-scheduler time: %gms\n", min_t_auto_new * 1e3);
 
     convert_and_save_image(output, argv[6]);
 

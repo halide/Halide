@@ -10,6 +10,10 @@ $(BIN)/halide_blur.a: $(BIN)/halide_blur_exec
 	@mkdir -p $(@D)
 	$^ -g halide_blur -o $(BIN) -f halide_blur target=$(HL_TARGET) auto_schedule=false
 
+$(BIN)/halide_blur_auto_schedule_old.a: $(BIN)/halide_blur_exec
+	@mkdir -p $(@D)
+	$^ -g halide_blur -o $(BIN) -f halide_blur_auto_schedule_old target=$(HL_TARGET)-auto_schedule_old auto_schedule=true
+
 $(BIN)/halide_blur_auto_schedule.a: $(BIN)/halide_blur_exec
 	@mkdir -p $(@D)
 	$^ -g halide_blur -o $(BIN) -f halide_blur_auto_schedule target=$(HL_TARGET) auto_schedule=true
@@ -24,9 +28,9 @@ OPENMP_FLAGS=
 endif
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
-$(BIN)/test: test.cpp $(BIN)/halide_blur.a $(BIN)/halide_blur_auto_schedule.a
+$(BIN)/test: test.cpp $(BIN)/halide_blur.a $(BIN)/halide_blur_auto_schedule_old.a $(BIN)/halide_blur_auto_schedule.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(OPENMP_FLAGS) -msse2 -Wall -O2 -I$(BIN) test.cpp $(BIN)/halide_blur.a $(BIN)/halide_blur_auto_schedule.a -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS)
+	$(CXX) $(CXXFLAGS) $(OPENMP_FLAGS) -msse2 -Wall -O2 -I$(BIN) test.cpp $(BIN)/halide_blur.a $(BIN)/halide_blur_auto_schedule_old.a $(BIN)/halide_blur_auto_schedule.a -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS)
 
 run: $(BIN)/test
 	@-mkdir -p $(BIN)

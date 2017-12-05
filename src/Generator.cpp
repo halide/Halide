@@ -1328,16 +1328,6 @@ void GeneratorBase::auto_schedule_outputs() {
     auto_schedule_result = get_pipeline().auto_schedule(get_target());
 }
 
-void GeneratorBase::auto_schedule_outputs_old(const MachineParams &arch_params) {
-    user_assert(auto_schedule_result.empty()) << "auto_schedule_outputs_old was called multiple times for " << generator_registered_name;
-    auto_schedule_result = get_pipeline().auto_schedule_old(get_target(), arch_params);
-}
-
-void GeneratorBase::auto_schedule_outputs_old() {
-    user_assert(auto_schedule_result.empty()) << "auto_schedule_outputs_old was called multiple times for " << generator_registered_name;
-    auto_schedule_result = get_pipeline().auto_schedule_old(get_target());
-}
-
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
     Pipeline pipeline = build_pipeline();

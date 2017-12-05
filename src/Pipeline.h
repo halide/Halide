@@ -83,11 +83,11 @@ public:
     /** Generate a schedule for the pipeline. */
     //@{
     EXPORT std::string auto_schedule(const Target &target,
+                                     const MachineParams &arch_params,
+                                     bool run_old_auto_scheduler);
+    EXPORT std::string auto_schedule(const Target &target,
                                      const MachineParams &arch_params);
     EXPORT std::string auto_schedule(const Target &target);
-    EXPORT std::string auto_schedule_old(const Target &target,
-                                         const MachineParams &arch_params);
-    EXPORT std::string auto_schedule_old(const Target &target);
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the

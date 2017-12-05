@@ -2532,8 +2532,6 @@ public:
     //@{
     EXPORT void auto_schedule_outputs(const MachineParams &arch_params);
     EXPORT void auto_schedule_outputs();
-    EXPORT void auto_schedule_outputs_old(const MachineParams &arch_params);
-    EXPORT void auto_schedule_outputs_old();
     //@}
 
 protected:

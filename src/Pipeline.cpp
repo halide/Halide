@@ -150,11 +150,23 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params, bool run_old_auto_scheduler) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "Automatic scheduling is currently supported only on these architectures.";
+    if (run_old_auto_scheduler) {
+        return generate_schedules_old(contents->outputs, target, arch_params);
+    } else {
+        return generate_schedules(contents->outputs, target, arch_params);
+    }
+}
+
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules(contents->outputs, target, arch_params);
+    bool run_old_auto_scheduler = target.has_feature(Target::AutoScheduleOld);
+    return auto_schedule(target, arch_params, run_old_auto_scheduler);
 }
 
 string Pipeline::auto_schedule(const Target &target) {
@@ -166,31 +178,9 @@ string Pipeline::auto_schedule(const Target &target) {
     if (params.empty()) {
         // Default machine parameters for generic CPU architecture.
         MachineParams arch_params(16, 16 * 1024 * 1024, 40);
-        return generate_schedules(contents->outputs, target, arch_params);
+        return auto_schedule(target, arch_params);
     } else {
-        return generate_schedules(contents->outputs, target, MachineParams(params));
-    }
-}
-
-string Pipeline::auto_schedule_old(const Target &target, const MachineParams &arch_params) {
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules_old(contents->outputs, target, arch_params);
-}
-
-string Pipeline::auto_schedule_old(const Target &target) {
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "Automatic scheduling is currently supported only on these architectures.";
-
-    string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
-    if (params.empty()) {
-        // Default machine parameters for generic CPU architecture.
-        MachineParams arch_params(16, 16 * 1024 * 1024, 40);
-        return generate_schedules_old(contents->outputs, target, arch_params);
-    } else {
-        return generate_schedules_old(contents->outputs, target, MachineParams(params));
+        return auto_schedule(target, MachineParams(params));
     }
 }
 

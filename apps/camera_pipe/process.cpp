@@ -4,6 +4,7 @@
 #include "halide_benchmark.h"
 
 #include "camera_pipe.h"
+#include "camera_pipe_auto_schedule_old.h"
 #include "camera_pipe_auto_schedule.h"
 
 #include "HalideBuffer.h"
@@ -71,20 +72,33 @@ int main(int argc, char **argv) {
                     color_temp, gamma, contrast, blackLevel, whiteLevel,
                     output);
     });
-    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+    printf("Manually-tuned time: %gms\n", best * 1e3);
+    //fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+
+    best = benchmark(timing_iterations, 1, [&]() {
+        camera_pipe_auto_schedule_old(input, matrix_3200, matrix_7000,
+            color_temp, gamma, contrast, blackLevel, whiteLevel,
+            output);
+    });
+    printf("Old auto-scheduler time: %gms\n", best * 1e3);
+    /*fprintf(stderr, "Halide (auto old):\t%gus\n", best * 1e6);
+    fprintf(stderr, "output: %s\n", argv[6]);
+    convert_and_save_image(output, argv[6]);
+    fprintf(stderr, "        %d %d\n", output.width(), output.height());*/
 
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
             color_temp, gamma, contrast, blackLevel, whiteLevel,
             output);
     });
-    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    printf("New auto-scheduler time: %gms\n", best * 1e3);
+    /*fprintf(stderr, "Halide (auto new):\t%gus\n", best * 1e6);
     fprintf(stderr, "output: %s\n", argv[6]);
     convert_and_save_image(output, argv[6]);
-    fprintf(stderr, "        %d %d\n", output.width(), output.height());
+    fprintf(stderr, "        %d %d\n", output.width(), output.height());*/
 
 
-    Buffer<uint8_t> output_c(output.width(), output.height(), output.channels());
+    /*Buffer<uint8_t> output_c(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {
         FCam::demosaic(input, output_c, color_temp, contrast, true, blackLevel, whiteLevel, gamma);
     });
@@ -104,7 +118,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "output_asm: %s\n", argv[8]);
         convert_and_save_image(output_asm, argv[8]);
     }
-    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
+    fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());*/
 
     // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms

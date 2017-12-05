@@ -4499,6 +4499,7 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
 // the schedules. The target architecture is specified by 'target'.
 string generate_schedules(const vector<Function> &outputs, const Target &target,
                           const MachineParams &arch_params) {
+    debug(0) << "Running NEW auto-scheduler...\n";
     // Make an environment map which is used throughout the auto scheduling process.
     map<string, Function> env;
     for (Function f : outputs) {
