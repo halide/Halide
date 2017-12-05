@@ -8,6 +8,8 @@ echo "Run apps auto-scheduler benchmarks"
 
 make -j4
 
+mkdir ./apps/benchmark_data
+
 # Bilateral grid
 echo "Run bilateral grid"
 cd ./apps/bilateral_grid
