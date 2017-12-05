@@ -1,0 +1,31 @@
+bilateral_grid_auto_schedule
+ total time: 412.176544 ms  samples: 386  runs: 100  time/run: 4.121766 ms
+ average threads used: 26.507772
+ heap allocations: 71100  peak heap usage: 10830624 bytes
+  blurx:                 0.690ms   (16%)   threads: 25.876 peak: 6021600  num: 100       avg: 6021600
+  histogram:             0.436ms   (10%)   threads: 34.000 peak: 1185152  num: 32500     avg: 25216
+  blurz:                 0.245ms   (5%)    threads: 38.869 peak: 605184   num: 32500     avg: 18912
+  bilateral_grid:        2.197ms   (53%)   threads: 23.375
+  blury:                 0.551ms   (13%)   threads: 28.269 peak: 4809024  num: 6000      avg: 104544
+bilateral_grid_auto_schedule_old
+ total time: 542.228027 ms  samples: 509  runs: 100  time/run: 5.422280 ms
+ average threads used: 26.609037
+ heap allocations: 24000  peak heap usage: 14062368 bytes
+  bilateral_grid:        2.349ms   (43%)   threads: 18.654
+  histogram:             1.659ms   (30%)   threads: 33.788 peak: 8411136  num: 6000      avg: 175232
+  blurz:                 0.699ms   (12%)   threads: 31.909 peak: 5651232  num: 6000      avg: 131424
+  blurx:                 0.383ms   (7%)    threads: 29.055 peak: 3985344  num: 6000      avg: 117216
+  blury:                 0.329ms   (6%)    threads: 32.806 peak: 4809024  num: 6000      avg: 104544
+bilateral_grid
+ total time: 637.464294 ms  samples: 600  runs: 101  time/run: 6.311528 ms
+ average threads used: 24.975000
+ heap allocations: 33128  peak heap usage: 12168000 bytes
+  overhead:              0.010ms   (0%)    threads: 1.000 
+  blurz:                 1.116ms   (17%)   threads: 27.570 peak: 6146400  num: 101       avg: 6146400
+  histogram:             0.921ms   (14%)   threads: 27.195 peak: 1210368  num: 32825     avg: 25216
+  blurx:                 0.830ms   (13%)   threads: 7.962  peak: 6021600  num: 101       avg: 6021600
+  blury:                 0.350ms   (5%)    threads: 5.757  peak: 5947488  num: 101       avg: 5947488
+  bilateral_grid:        3.080ms   (48%)   threads: 30.201
+Manually-tuned time: 5.51871ms
+Old auto-scheduler time: 5.1521ms
+New auto-scheduler time: 3.89238ms

@@ -1,0 +1,58 @@
+input: ../images/bayer_raw.png
+       2592 1968
+Manually-tuned time: 15.7435ms
+Old auto-scheduler time: 7.08415ms
+New auto-scheduler time: 48.8145ms
+camera_pipe_auto_schedule
+ total time: 250.850906 ms  samples: 234  runs: 5  time/run: 50.170181 ms
+ average threads used: 39.260685
+ heap allocations: 585625  peak heap usage: 24738596 bytes
+  denoised:              5.816ms   (11%)   threads: 36.370 peak: 9866272  num: 5         avg: 9866272
+  g_b:                   2.567ms   (5%)    threads: 20.166 peak: 2462082  num: 5         avg: 2462082
+  g_r:                   0.846ms   (1%)    threads: 10.000 peak: 2462082  num: 5         avg: 2462082
+  curve:                 0.422ms   (0%)    threads: 0.000  stack: 1024
+  f1:                    2.131ms   (4%)    threads: 24.000 peak: 4915200  num: 5         avg: 4915200
+  r_gr:                  0.215ms   (0%)    threads: 45.000 peak: 120320   num: 4800      avg: 2560
+  f6:                    2.134ms   (4%)    threads: 36.799 peak: 4915200  num: 5         avg: 4915200
+  b_gb:                  0.425ms   (0%)    threads: 37.500 peak: 117760   num: 4800      avg: 2560
+  matrix:                0.000ms   (0%)    threads: 0.000  stack: 24
+  processed:             27.049ms  (53%)   threads: 43.126
+  b_gr:                  2.563ms   (5%)    threads: 43.333 peak: 5504     num: 96000     avg: 128
+  b_r:                   1.920ms   (3%)    threads: 46.000 peak: 4992     num: 96000     avg: 128
+  f3:                    0.429ms   (0%)    threads: 40.500 peak: 9472     num: 96000     avg: 256
+  f4:                    0.428ms   (0%)    threads: 41.500 peak: 8704     num: 96000     avg: 256
+  r_b:                   2.348ms   (4%)    threads: 42.909 peak: 4224     num: 96000     avg: 128
+  r_gb:                  0.872ms   (1%)    threads: 47.750 peak: 4096     num: 96000     avg: 128
+camera_pipe_auto_schedule_old
+ total time: 64.061775 ms  samples: 60  runs: 5  time/run: 12.812355 ms
+ average threads used: 32.016666
+ heap allocations: 2600  peak heap usage: 36814262 bytes
+  curve:                 0.000ms   (0%)    threads: 0.000  stack: 1024
+  matrix:                0.000ms   (0%)    threads: 0.000  stack: 24
+  processed:             7.672ms   (59%)   threads: 30.083
+  denoised:              0.860ms   (6%)    threads: 27.750 peak: 10466560 num: 200       avg: 261664
+  g_b:                   0.211ms   (1%)    threads: 40.000 peak: 2537040  num: 200       avg: 63426
+  b_gr:                  0.000ms   (0%)    threads: 0.000  peak: 2457600  num: 200       avg: 61440
+  g_r:                   0.000ms   (0%)    threads: 0.000  peak: 2537040  num: 200       avg: 63426
+  b_r:                   0.212ms   (1%)    threads: 40.000 peak: 2457600  num: 200       avg: 61440
+  r_gr:                  0.855ms   (6%)    threads: 40.000 peak: 1966080  num: 200       avg: 61440
+  f1:                    0.211ms   (1%)    threads: 40.000 peak: 4915200  num: 200       avg: 122880
+  f3:                    0.213ms   (1%)    threads: 39.000 peak: 4915200  num: 200       avg: 122880
+  f4:                    0.000ms   (0%)    threads: 0.000  peak: 4915200  num: 200       avg: 122880
+  b_gb:                  0.641ms   (5%)    threads: 27.000 peak: 1228800  num: 200       avg: 61440
+  f6:                    0.856ms   (6%)    threads: 38.000 peak: 4915200  num: 200       avg: 122880
+  r_b:                   0.212ms   (1%)    threads: 36.000 peak: 2457600  num: 200       avg: 61440
+  r_gb:                  0.863ms   (6%)    threads: 34.750 peak: 2396160  num: 200       avg: 61440
+camera_pipe
+ total time: 86.396088 ms  samples: 76  runs: 5  time/run: 17.279217 ms
+ average threads used: 23.513159
+ heap allocations: 1200  peak heap usage: 4199872 bytes
+  matrix:                0.000ms   (0%)    threads: 0.000  stack: 24
+  curve:                 0.000ms   (0%)    threads: 0.000  stack: 1024
+  processed:             5.397ms   (31%)   threads: 21.807
+  denoised:              0.426ms   (2%)    threads: 12.000 peak: 2015232  num: 300       avg: 41984 stack: 4
+  deinterleaved:         0.217ms   (1%)    threads: 24.000 peak: 1932736  num: 300       avg: 42016 stack: 4
+  g_b:                   0.000ms   (0%)    threads: 0.000  peak: 188928   num: 300       avg: 5248 stack: 4
+  g_r:                   0.000ms   (0%)    threads: 0.000  peak: 188928   num: 300       avg: 5248 stack: 4
+  output:                4.711ms   (27%)   threads: 22.882 stack: 384
+  corrected:             6.525ms   (37%)   threads: 26.100 stack: 384

@@ -1,0 +1,21 @@
+conv_layer_auto_schedule
+ total time: 392.863922 ms  samples: 370  runs: 100  time/run: 3.928639 ms
+ average threads used: 18.240541
+ heap allocations: 100  peak heap usage: 2097152 bytes
+  conv:                  3.078ms   (78%)   threads: 23.131 peak: 2097152  num: 100       avg: 2097152
+  ReLU:                  0.849ms   (21%)   threads: 0.512 
+conv_layer_auto_schedule_old
+ total time: 454.079071 ms  samples: 423  runs: 100  time/run: 4.540791 ms
+ average threads used: 17.600473
+ heap allocations: 100  peak heap usage: 2097152 bytes
+  conv:                  3.540ms   (77%)   threads: 22.477 peak: 2097152  num: 100       avg: 2097152
+  ReLU:                  0.999ms   (22%)   threads: 0.531 
+conv_layer
+ total time: 4418.548340 ms  samples: 4103  runs: 101  time/run: 43.748005 ms
+ average threads used: 3.045820
+ heap allocations: 101  peak heap usage: 2097152 bytes
+  conv:                  43.155ms  (98%)   threads: 3.073  peak: 2097152  num: 101       avg: 2097152
+  ReLU:                  0.592ms   (1%)    threads: 1.071 
+Manually-tuned time: 35.8551ms
+Old auto-scheduler time: 3.81165ms
+New auto-scheduler time: 3.55057ms

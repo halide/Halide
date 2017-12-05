@@ -1,0 +1,21 @@
+halide_blur
+ total time: 136.136597 ms  samples: 117  runs: 31  time/run: 4.391503 ms
+ average threads used: 37.222221
+ heap allocations: 18600  peak heap usage: 2457600 bytes
+  blur_y:                2.204ms   (50%)   threads: 36.046
+  blur_x:                2.186ms   (49%)   threads: 38.692 peak: 2457600  num: 18600     avg: 51200
+halide_blur_auto_schedule
+ total time: 38.351143 ms  samples: 36  runs: 1  time/run: 38.351143 ms
+ average threads used: 43.305557
+ heap allocations: 100  peak heap usage: 29503488 bytes
+  blur_y:                33.063ms  (86%)   threads: 43.709
+  blur_x:                5.287ms   (13%)   threads: 40.799 peak: 29503488 num: 100       avg: 614656
+halide_blur_auto_schedule_old
+ total time: 39.405025 ms  samples: 37  runs: 1  time/run: 39.405025 ms
+ average threads used: 46.270271
+ heap allocations: 100  peak heap usage: 29503488 bytes
+  blur_y:                31.969ms  (81%)   threads: 45.866
+  blur_x:                7.435ms   (18%)   threads: 48.000 peak: 29503488 num: 100       avg: 614656
+Manually-tuned time: 3.63246ms
+Old auto-scheduler time: 2.96712ms
+New auto-scheduler time: 2.93405ms
