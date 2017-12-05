@@ -12,10 +12,18 @@ LDFLAGS=$(shell python3-config --ldflags) -lboost_python-py$(PYTHON_VER) -lz
 endif
 
 ifeq ($(UNAME), Darwin)
+
 # The /opt includes are in case this is a macports install of python and boost python
-# Disable some warnings that are pervasive in Boost
-CCFLAGS=$(shell python-config --cflags) -I $(HALIDE_DIR)/include -I /opt/local/include -I $(ROOT_DIR) -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
-LDFLAGS=$(shell python-config --ldflags) -L /opt/local/lib -lboost_python3-mt -lz
+ifneq ("$(wildcard /opt/local)","")
+MACPORTS_CCFLAGS = -I /opt/local/include
+MACPORTS_LDFLAGS = -L /opt/local/lib
+else
+MACPORTS_CCFLAGS = 
+MACPORTS_LDFLAGS = 
+endif
+
+CCFLAGS=$(shell python3-config --cflags) -I $(HALIDE_DIR)/include -I $(ROOT_DIR) $(MACPORTS_CCFLAGS) -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
+LDFLAGS=$(shell python3-config --ldflags) $(MACPORTS_LDFLAGS) -lboost_python3-mt -lz
 endif
 
 NUMPY_PATH=$(shell python3 -c "import numpy; print(numpy.__path__[0] + '/core/include')")
