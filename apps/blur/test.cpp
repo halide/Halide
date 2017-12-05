@@ -250,10 +250,10 @@ int main(int argc, char **argv) {
     }
 
     Buffer<uint16_t> blurry = blur(input);
-    double slow_time = t;
+    //double slow_time = t;
 
     Buffer<uint16_t> speedy = blur_fast(input);
-    double fast_time = t;
+    //double fast_time = t;
 
     //Buffer<uint16_t> speedy2 = blur_fast2(input);
     //float fast_time2 = t;

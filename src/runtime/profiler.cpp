@@ -299,7 +299,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         bool serial = p->active_threads_numerator == p->active_threads_denominator;
         float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
-        sstr << p->name << "\n"
+        sstr << "Pipeline: " << p->name << "\n"
              << " total time: " << t << " ms"
              << "  samples: " << p->samples
              << "  runs: " << p->runs
@@ -332,7 +332,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 // slot. Only report overhead time if it's non-zero
                 if (i == 0 && fs->time == 0) continue;
 
-                sstr << "  " << fs->name << ": ";
+                sstr << "  Func: " << fs->name << ": ";
                 cursor += 25;
                 while (sstr.size() < cursor) sstr << " ";
 
