@@ -1,14 +1,11 @@
 #!/bin/bash
 
-#set -x # print commands
-#PYTHON=echo
 PYTHON=python3
 
 # Operate in the build directory, so that output files don't pollute the top-level directory.
-cd build
+cd $1
 
-BUILDPATH="." # adjust as needed
-export PYTHONPATH="$BUILDPATH:$PYTHONPATH"
+export PYTHONPATH="$1:$PYTHONPATH"
 echo "PYTHONPATH ==" $PYTHONPATH
 
 FAILED=0
@@ -25,7 +22,7 @@ do
   echo $S $PYTHON $i $S
   $PYTHON $i
   if [[ "$?" -ne "0" ]]; then
-        echo "$Sa App failed $Sb"
+    echo "$Sa App failed $Sb"
 	let FAILED=1
 	break
   fi
