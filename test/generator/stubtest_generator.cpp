@@ -25,7 +25,8 @@ public:
                                       BagType::Paper,
                                       { { "paper", BagType::Paper },
                                         { "plastic", BagType::Plastic } } };
-    GeneratorParam<bool> vectorize{ "vectorize", true };
+
+    ScheduleParam<bool> vectorize{ "vectorize", true };
     GeneratorParam<LoopLevel> intermediate_level{ "intermediate_level", LoopLevel::root() };
 
     Input<Buffer<uint8_t>> typed_buffer_input{ "typed_buffer_input", 3 };

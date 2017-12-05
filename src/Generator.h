@@ -148,14 +148,15 @@
  *     };
  * \endcode
  *
- * A Generator can also be customized via compile-time parameters (GeneratorParams),
- * which affect code generation.
+ * A Generator can also be customized via compile-time parameters (GeneratorParams
+ * or ScheduleParams), which affect code generation.
  *
- * GeneratorParams, Inputs, and Outputs are (by convention) always
+ * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
  * public and always declared at the top of the Generator class, in the order
  *
  * \code
  *     GeneratorParam(s)
+ *     ScheduleParam(s)
  *     Input<Func>(s)
  *     Input<non-Func>(s)
  *     Output<Func>(s)
@@ -237,6 +238,7 @@
 #include "ImageParam.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
+#include "ScheduleParam.h"
 #include "Target.h"
 
 namespace Halide {
@@ -427,16 +429,6 @@ private:
     // appropriate for GeneratorParam<> to be declared outside of a Generator,
     // all reasonable non-testing code should expect this to be non-null.
     GeneratorBase *generator{nullptr};
-};
-
-// This is strictly some syntactic sugar to suppress certain compiler warnings.
-template<typename FROM, typename TO>
-struct Convert {
-    template <typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline static TO2 value(const FROM &from) { return static_cast<TO2>(from); }
-
-    template <typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline static TO2 value(const FROM &from) { return from != 0; }
 };
 
 template<typename T>
@@ -706,7 +698,7 @@ public:
 
     std::string call_to_string(const std::string &v) const override {
         std::ostringstream oss;
-        oss << "std::string((" << v << ") ? \"true\" : \"false\")";
+        oss << "(" << v << ") ? \"true\" : \"false\"";
         return oss.str();
     }
 
@@ -961,19 +953,15 @@ template <typename Other, typename T>
 decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) { return a && (T)b; }
 template <typename Other, typename T>
 decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) { return (T)a && b; }
-template <typename T>
-decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const  GeneratorParam<T> &b) { return (T)a && (T)b; }
 // @}
 
-/** Logical or between between GeneratorParam<T> and any type that supports operator|| with T.
+/** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator||. */
 // @{
 template <typename Other, typename T>
 decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) { return a || (T)b; }
 template <typename Other, typename T>
 decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) { return (T)a || b; }
-template <typename T>
-decltype((T)0 || (T)1) operator||(const GeneratorParam<T> &a, const  GeneratorParam<T> &b) { return (T)a || (T)b; }
 // @}
 
 /* min and max are tricky as the language support for these is in the std
@@ -2481,6 +2469,7 @@ protected:
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
+    template <typename T> using ScheduleParam = Halide::ScheduleParam<T>;
     template <typename T = void> using Buffer = Halide::Buffer<T>;
     template <typename T> using Param = Halide::Param<T>;
     static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
@@ -2543,7 +2532,13 @@ public:
 
     EXPORT virtual ~GeneratorBase();
 
-    EXPORT void set_generator_param_values(const GeneratorParamsMap &params);
+    EXPORT void set_generator_and_schedule_param_values(const GeneratorParamsMap &params);
+
+    template<typename T>
+    GeneratorBase &set_schedule_param(const std::string &name, const T &value) {
+        find_schedule_param_by_name(name).set(value);
+        return *this;
+    }
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -2633,6 +2628,9 @@ protected:
     template<typename T>
     using Output = GeneratorOutput<T>;
 
+    template<typename T>
+    using ScheduleParam = ScheduleParam<T>;
+
     // A Generator's creation and usage must go in a certain phase to ensure correctness;
     // the state machine here is advanced and checked at various points to ensure
     // this is the case.
@@ -2672,6 +2670,9 @@ private:
         // Ordered-list of non-null ptrs to GeneratorParam<> fields.
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
+        // Ordered-list of non-null ptrs to ScheduleParam<> fields.
+        std::vector<Internal::ScheduleParamBase *> schedule_params;
+
         // Ordered-list of non-null ptrs to Input<> fields.
         // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
@@ -2686,6 +2687,9 @@ private:
 
         // Convenience structure to look up GP by name.
         std::map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
+
+        // Convenience structure to look up SP by name.
+        std::map<std::string, Internal::ScheduleParamBase *> schedule_params_by_name;
 
     private:
         // list of synthetic GP's that we dynamically created; this list only exists to simplify
@@ -2709,6 +2713,7 @@ private:
     EXPORT ParamInfo &param_info();
 
     EXPORT Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name);
+    EXPORT Internal::ScheduleParamBase &find_schedule_param_by_name(const std::string &name);
 
     EXPORT void check_scheduled(const char* m) const;
 
@@ -3103,6 +3108,12 @@ public:
 
     Target get_target() const { return generator->get_target(); }
 
+   template<typename T>
+   GeneratorStub &set_schedule_param(const std::string &name, const T &value) {
+       generator->set_schedule_param(name, value);
+       return *this;
+   }
+
    GeneratorStub &schedule() {
        generator->call_schedule();
        return *this;
@@ -3145,6 +3156,10 @@ protected:
                   GeneratorFactory generator_factory,
                   const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
+
+    ScheduleParamBase &get_schedule_param(const std::string &n) const {
+        return generator->find_schedule_param_by_name(n);
+    }
 
     // Output(s)
     // TODO: identify vars used

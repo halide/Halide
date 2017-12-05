@@ -14,12 +14,14 @@
 namespace Halide {
 
 class Func;
+template <typename T> class ScheduleParam;
 struct VarOrRVar;
 
 namespace Internal {
 class Function;
 struct FunctionContents;
 struct LoopLevelContents;
+class ScheduleParamBase;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -136,6 +138,9 @@ enum class PrefetchBoundStrategy {
  \endcode
  */
 class LoopLevel {
+    template <typename T> friend class ScheduleParam;
+    friend class ::Halide::Internal::ScheduleParamBase;
+
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
