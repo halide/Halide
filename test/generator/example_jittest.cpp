@@ -20,6 +20,7 @@ int main(int argc, char **argv) {
     const float runtime_factor = 4.5f;
 
     // Demonstrate (and test) various ways to use a Stub to invoke a Generator with the JIT.
+
     {
         // The simplest way is to just use the Stub's static "generate" method.
         //
@@ -55,11 +56,16 @@ int main(int argc, char **argv) {
 
     {
         // generate() actually returns an Outputs struct, which contains all of the Generator's
-        // Output<> fields. If there is just a single Output<>,
+        // Output<> and ScheduleParam<> fields. If there is just a single Output<>,
         // you can assign a Func to it directly (as we did in previous examples).
         //
-        // In this case, we'll save it to a temporary to make the typing explicit.
+        // In this case, we'll save it to a temporary so we can set some of its ScheduleParams.
         example::Outputs result = example::generate(context, {runtime_factor});
+
+        // For purposes of this example, don't vectorize or parallelize. (Note that
+        // we can set ScheduleParams any time before we realize.)
+        result.vectorize.set(false);
+        result.parallelize.set(false);
 
         Buffer<int32_t> img = result.realize(kSize, kSize, 3);
         verify(img, 1.f, runtime_factor, 3);
@@ -87,6 +93,20 @@ int main(int argc, char **argv) {
         stub.schedule();
         Buffer<int32_t> img = stub.realize(kSize, kSize, 3);
         verify(img, gp.compiletime_factor, runtime_factor, 3);
+    }
+
+    {
+        // Same as previous (creating a Stub instance), but also setting ScheduleParams,
+        // which exist as members of the Stub:
+        auto stub = example(context, {runtime_factor});
+        // We must call schedule() before calling realize()
+        stub.schedule();
+        // For purposes of this example, don't vectorize or parallelize. (Note that
+        // we can set ScheduleParams before or after calling schedule(): really, any time before we realize.)
+        stub.vectorize.set(false);
+        stub.parallelize.set(false);
+        Buffer<int32_t> img = stub.realize(kSize, kSize, 3);
+        verify(img, 1.f, runtime_factor, 3);
     }
 
     printf("Success!\n");

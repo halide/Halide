@@ -113,7 +113,7 @@ if (WITH_TEST_GENERATORS)
     endif()
 
     add_test("${TARGET}"
-             GROUPS test_generator run_tests)
+             GROUPS test_generators run_tests)
   endfunction(halide_define_aot_test)
 
   # Find all the files of form "foo_generator.cpp" in test/generator
@@ -294,6 +294,9 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
+  #
+  # Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
+  # that setting ScheduleParam via generator_args works properly.
   set(STUBTEST_GENERATOR_ARGS
       untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32
