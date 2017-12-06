@@ -4,11 +4,13 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <dlfcn.h>
 #include <qurt.h>
 
 extern "C" {
 #include "HAP_farf.h"
+#include "HAP_debug.h"
 #include "HAP_power.h"
 }
 
@@ -25,6 +27,54 @@ typedef halide_hexagon_remote_buffer buffer;
 typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
+
+// halide_hexagon_print*
+//
+// These routines are callable function wrappers which use the
+// Hexagon FARF output macro to produce output directly from the
+// DSP visible via mini-dm.  Output from FARF is immediately
+// visible even if the DSP pipeline crashes or fails to complete
+// processing afterwards.
+//
+// These routines are callable from generated Halide code as well
+// as from libhalide_shared_runtime.so.
+//
+// Output from these routines is off by default.  To enable, the
+// Hexagon device libraries must be rebuilt with FAR_LOW=1:
+//#define FARF_LOW 1    // define to enable FARF debug output
+
+void halide_hexagon_print(void *user_context, const char *str) {
+    FARF(LOW, str);
+}
+
+void halide_hexagon_print1(void *user_context, const char *fmt, uint32_t arg1) {
+    FARF(LOW, fmt, arg1);
+}
+
+void halide_hexagon_print2(void *user_context, const char *fmt, uint32_t arg1, uint32_t arg2) {
+    FARF(LOW, fmt, arg1, arg2);
+}
+
+void halide_hexagon_printp(void *user_context, const char *fmt, void *ptr) {
+    FARF(LOW, fmt, ptr);
+}
+
+void halide_hexagon_printp1(void *user_context, const char *fmt, void *ptr, uint32_t arg1) {
+    FARF(LOW, fmt, ptr, arg1);
+}
+
+void halide_hexagon_printp2(void *user_context, const char *fmt, void *ptr, uint32_t arg1, uint32_t arg2) {
+    FARF(LOW, fmt, ptr, arg1, arg2);
+}
+
+void halide_hexagon_printf(void *user_context, const char *fmt, ...) {
+    char msgbuf[1024];
+    va_list vargs;
+    va_start(vargs, fmt);
+    vsnprintf(msgbuf, sizeof(msgbuf), fmt, vargs);
+    va_end(vargs);
+    HAP_debug(msgbuf, FARF_LOW, __FILE__, __LINE__);
+}
 
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
