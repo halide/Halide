@@ -13,7 +13,7 @@ scipy
 
 # io
 #python3-protobuf
-#pillow
+pillow
 #pystache
 
 # helpers
