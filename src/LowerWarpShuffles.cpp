@@ -238,9 +238,9 @@ class DetermineAllocStride : public IRVisitor {
             << "Access pattern for " << alloc << " does not meet the requirements for its store_at location. "
             << "All access to an allocation scheduled inside a loop over GPU "
             << "threads and outside a loop over GPU lanes must obey the following constraint:\n"
-            << "The index must be affine in the gpu_lane variable with a consistent linear "
+            << "The index must be affine in " << lane_var << " with a consistent linear "
             << "term across all stores, and a constant term which, when divided by the stride "
-            << "(rounding down), becomes a multiple of the warp size.\n";
+            << "(rounding down), becomes a multiple of the warp size (" << warp_size << ").\n";
         if (!stores.empty()) {
             message << alloc << " is stored to at the following indices by multiple lanes:\n";
             for (Expr e : stores) {
@@ -355,9 +355,7 @@ class LowerWarpShuffles : public IRMutator2 {
         ScopedBinding<Interval>
             bind_if(is_const(op->min) && is_const(op->extent),
                     bounds, op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
-        if (!this_lane.defined() &&
-            (op->for_type == ForType::GPULane ||
-             (op->for_type == ForType::GPUThread && !allocations.empty()))) {
+        if (!this_lane.defined() && op->for_type == ForType::GPULane) {
 
             bool should_mask = false;
             ScopedValue<Expr> old_warp_size(warp_size);
@@ -682,11 +680,29 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator2 {
         return visit_let<Stmt>(op);
     }
 
+    Stmt visit(const For *op) override {
+        Stmt body = mutate(op->body);
+        bool fail = false;
+        for (const auto &p : lifted_lets) {
+            fail |= expr_uses_var(p.second, op->name);
+        }
+        if (fail) {
+            // We can't hoist. We need to bail out here.
+            body = rewrap(body);
+            success = false;
+        } else {
+            debug(0) << "Successfully hoisted shuffle out of for loop\n";
+        }
+        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+    }
+
     Stmt visit(const Store *op) override {
         stored_to.push(op->name, 0);
         return IRMutator2::visit(op);
     }
 public:
+    bool success = true;
+
     Stmt rewrap(Stmt s) {
         while (!lifted_lets.empty()) {
             const pair<string, Expr> &p = lifted_lets.back();
@@ -695,6 +711,21 @@ public:
         }
         return s;
     }
+};
+
+// Push an if statement inwards until it doesn't contain any warp shuffles
+class MoveIfStatementInwards : public IRMutator2 {
+    using IRMutator2::visit;
+
+    Stmt visit(const Store *op) override {
+        // We've already hoisted warp shuffles out of stores
+        return IfThenElse::make(condition, op, Stmt());
+    }
+
+    Expr condition;
+
+public:
+    MoveIfStatementInwards(Expr c) : condition(c) {}
 };
 
 // The destination *and source* for warp shuffles must be active
@@ -713,7 +744,15 @@ class HoistWarpShuffles : public IRMutator2 {
         then_case = hoister.mutate(then_case);
         else_case = hoister.mutate(else_case);
         Stmt s = IfThenElse::make(op->condition, then_case, else_case);
-        return hoister.rewrap(s);
+        if (hoister.success) {
+            return hoister.rewrap(s);
+        } else {
+            // Need to move the ifstmt further inwards instead.
+            internal_assert(!else_case.defined()) << "Cannot hoist warp shuffle out of " << s << "\n";
+            string pred_name = unique_name('p');
+            s = MoveIfStatementInwards(Variable::make(op->condition.type(), pred_name)).mutate(then_case);
+            return LetStmt::make(pred_name, op->condition, s);
+        }
     }
 };
 
@@ -722,6 +761,11 @@ class HasLaneLoop : public IRVisitor {
 
     void visit(const For *op) {
         result = result || op->for_type == ForType::GPULane;
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Allocate *op) {
+        result = result || op->memory_type == MemoryType::Register;
         IRVisitor::visit(op);
     }
 public:
