@@ -6,6 +6,7 @@ namespace {
 using std::vector;
 
 using namespace Halide;
+using namespace Halide::ConciseCasts;
 
 // Shared variables
 Var x, y, c, yi, yo, yii, xi;
@@ -14,6 +15,10 @@ Var x, y, c, yi, yo, yii, xi;
 Expr avg(Expr a, Expr b) {
     Type wider = a.type().with_bits(a.type().bits() * 2);
     return cast(a.type(), (cast(wider, a) + b + 1)/2);
+}
+
+Expr blur121(Expr a, Expr b, Expr c) {
+    return avg(avg(a, c), b);
 }
 
 Func interleave_x(Func a, Func b) {
@@ -159,7 +164,7 @@ public:
                 f.compute_at(intermed_compute_at)
                     .store_at(intermed_store_at)
                     .vectorize(x, 2*vec, TailStrategy::RoundUp)
-                    .fold_storage(y, 2);
+                    .fold_storage(y, 4);
             }
             output.compute_at(output_compute_at)
                 .vectorize(x)
@@ -192,6 +197,7 @@ public:
     Input<float> color_temp{"color_temp"};
     Input<float> gamma{"gamma"};
     Input<float> contrast{"contrast"};
+    Input<float> sharpen_strength{"sharpen_strength"};
     Input<int> blackLevel{"blackLevel"};
     Input<int> whiteLevel{"whiteLevel"};
 
@@ -205,6 +211,7 @@ private:
     Func deinterleave(Func raw);
     Func apply_curve(Func input);
     Func color_correct(Func input);
+    Func sharpen(Func input);
 };
 
 Func CameraPipe::hot_pixel_suppression(Func input) {
@@ -324,6 +331,32 @@ Func CameraPipe::apply_curve(Func input) {
     return curved;
 }
 
+Func CameraPipe::sharpen(Func input) {
+    // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
+    Func sharpen_strength_x32("sharpen_strength_x32");
+    sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
+    if (!auto_schedule) {
+        sharpen_strength_x32.compute_root();
+    }
+
+    // Make an unsharp mask by blurring in y, then in x.
+    Func unsharp_y("unsharp_y");
+    unsharp_y(x, y, c) = blur121(input(x, y - 1, c), input(x, y, c), input(x, y + 1, c));
+
+    Func unsharp("unsharp");
+    unsharp(x, y, c) = blur121(unsharp_y(x - 1, y, c), unsharp_y(x, y, c), unsharp_y(x + 1, y, c));
+
+    Func mask("mask");
+    mask(x, y, c) = cast<int16_t>(input(x, y, c)) - cast<int16_t>(unsharp(x, y, c));
+
+    // Weight the mask with the sharpening strength, and add it to the
+    // input to get the sharpened result.
+    Func sharpened("sharpened");
+    sharpened(x, y, c) = u8_sat(input(x, y, c) + (mask(x, y, c) * sharpen_strength_x32()) / 32);
+
+    return sharpened;
+}
+
 void CameraPipe::generate() {
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
@@ -342,7 +375,9 @@ void CameraPipe::generate() {
 
     Func corrected = color_correct(demosaiced->output);
 
-    processed(x, y, c) = apply_curve(corrected)(x, y, c);
+    Func curved = apply_curve(corrected);
+
+    processed(x, y, c) = sharpen(curved)(x, y, c);
 
     // Schedule
     if (auto_schedule) {
@@ -382,34 +417,41 @@ void CameraPipe::generate() {
         } else if (get_target().has_feature(Target::HVX_128)) {
             vec = 64;
         }
-        denoised.compute_at(processed, yi).store_at(processed, yo)
-            .prefetch(input, y, 2)
-            .fold_storage(y, 8)
-            .tile(x, y, x, y, xi, yi, 2*vec, 2)
-            .vectorize(xi)
-            .unroll(yi);
-        deinterleaved.compute_at(processed, yi).store_at(processed, yo)
-            .fold_storage(y, 4)
-            .reorder(c, x, y)
-            .vectorize(x, 2*vec, TailStrategy::RoundUp)
-            .unroll(c);
-        corrected.compute_at(processed, x)
-            .reorder(c, x, y)
-            .vectorize(x)
-            .unroll(y)
-            .unroll(c);
         processed.compute_root()
             .reorder(c, x, y)
-            .split(y, yo, yi, strip_size)
-            .tile(x, yi, x, yi, xi, yii, 2*vec, 2, TailStrategy::RoundUp)
-            .vectorize(xi)
-            .unroll(yii)
+            .split(y, yi, yii, 2, TailStrategy::RoundUp)
+            .split(yi, yo, yi, strip_size / 2)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
             .unroll(c)
             .parallel(yo);
 
+        denoised.compute_at(processed, yi).store_at(processed, yo)
+            .prefetch(input, y, 2)
+            .fold_storage(y, 16)
+            .tile(x, y, x, y, xi, yi, 2*vec, 2)
+            .vectorize(xi)
+            .unroll(yi);
+
+        deinterleaved.compute_at(processed, yi).store_at(processed, yo)
+            .fold_storage(y, 8)
+            .reorder(c, x, y)
+            .vectorize(x, 2*vec, TailStrategy::RoundUp)
+            .unroll(c);
+
+        curved.compute_at(processed, yi).store_at(processed, yo)
+            .reorder(c, x, y)
+            .tile(x, y, x, y, xi, yi, 2*vec, 2, TailStrategy::RoundUp)
+            .vectorize(xi)
+            .unroll(yi)
+            .unroll(c);
+        corrected.compute_at(curved, x)
+            .reorder(c, x, y)
+            .vectorize(x)
+            .unroll(c);
+
         demosaiced->intermed_compute_at.set({processed, yi});
         demosaiced->intermed_store_at.set({processed, yo});
-        demosaiced->output_compute_at.set({processed, x});
+        demosaiced->output_compute_at.set({curved, x});
 
         if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
             processed.hexagon();
