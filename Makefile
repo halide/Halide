@@ -831,9 +831,9 @@ AUTO_SCHEDULE_TESTS = $(shell ls $(ROOT_DIR)/test/auto_schedule/*.cpp)
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
-test_errors: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
-test_warnings: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
-test_tutorials: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
+test_error: $(ERROR_TESTS:$(ROOT_DIR)/test/error/%.cpp=error_%)
+test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
+test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
 test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
@@ -914,12 +914,21 @@ test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
-# TODO: this is a temporary target added to allow existing buildbot to run without breaking;
+# TODO: these are temporary targets added to allow existing buildbot to run without breaking;
 # it will be removed after buildbot is updated.
+.PHONY: test_errors
+test_errors: test_error
+
 .PHONY: test_generators
 test_generators: test_generator
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generator
+.PHONY: test_tutorials
+test_tutorials: test_tutorial
+
+.PHONY: test_warnings
+test_warnings: test_warning
+
+ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
