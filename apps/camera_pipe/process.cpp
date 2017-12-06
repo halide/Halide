@@ -18,8 +18,8 @@ using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (argc < 7) {
-        printf("Usage: ./process raw.png color_temp gamma contrast timing_iterations output.png\n"
+    if (argc < 8) {
+        printf("Usage: ./process raw.png color_temp gamma contrast sharpen timing_iterations output.png\n"
                "e.g. ./process raw.png 3200 2 50 5 output.png");
         return 0;
     }
@@ -59,7 +59,8 @@ int main(int argc, char **argv) {
     float color_temp = (float) atof(argv[2]);
     float gamma = (float) atof(argv[3]);
     float contrast = (float) atof(argv[4]);
-    int timing_iterations = atoi(argv[5]);
+    float sharpen = (float) atof(argv[5]);
+    int timing_iterations = atoi(argv[6]);
     int blackLevel = 25;
     int whiteLevel = 1023;
 
@@ -67,7 +68,7 @@ int main(int argc, char **argv) {
 
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe(input, matrix_3200, matrix_7000,
-                    color_temp, gamma, contrast, blackLevel, whiteLevel,
+                    color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
                     output);
     });
     fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
@@ -75,14 +76,14 @@ int main(int argc, char **argv) {
     #ifndef NO_AUTO_SCHEDULE
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
-            color_temp, gamma, contrast, blackLevel, whiteLevel,
+                                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
             output);
     });
     fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
     #endif
 
-    fprintf(stderr, "output: %s\n", argv[6]);
-    convert_and_save_image(output, argv[6]);
+    fprintf(stderr, "output: %s\n", argv[7]);
+    convert_and_save_image(output, argv[7]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
     return 0;
