@@ -4,7 +4,7 @@ option(WITH_TEST_ERROR "Build error tests" ON)
 option(WITH_TEST_WARNING "Build warning tests" ON)
 option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
-option(WITH_TEST_GENERATORS "Build Generator tests" ON)
+option(WITH_TEST_GENERATOR "Build Generator tests" ON)
 option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
@@ -84,7 +84,7 @@ if (WITH_TEST_OPENGL)
   endif()
 endif()
 
-if (WITH_TEST_GENERATORS)
+if (WITH_TEST_GENERATOR)
 
   set(GEN_TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generator")
 
