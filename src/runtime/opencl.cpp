@@ -435,7 +435,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     if (err != CL_SUCCESS) {
         debug(user_context) << get_opencl_error_name(err);
         error(user_context) << "CL: clCreateContext failed: "
-                            << get_opencl_error_name(err);
+                            << get_opencl_error_name(err)
+                            << ":" << (int)err;
         return err;
     } else {
         debug(user_context) << *ctx << "\n";
@@ -1116,6 +1117,13 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     case CL_IMAGE_FORMAT_NOT_SUPPORTED: return "CL_IMAGE_FORMAT_NOT_SUPPORTED";
     case CL_BUILD_PROGRAM_FAILURE: return "CL_BUILD_PROGRAM_FAILURE";
     case CL_MAP_FAILURE: return "CL_MAP_FAILURE";
+    case CL_MISALIGNED_SUB_BUFFER_OFFSET: return "CL_MISALIGNED_SUB_BUFFER_OFFSET";
+    case CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST: return "CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST";
+    case CL_COMPILE_PROGRAM_FAILURE: return "CL_COMPILE_PROGRAM_FAILURE";
+    case CL_LINKER_NOT_AVAILABLE: return "CL_LINKER_NOT_AVAILABLE";
+    case CL_LINK_PROGRAM_FAILURE: return "CL_LINK_PROGRAM_FAILURE";
+    case CL_DEVICE_PARTITION_FAILED: return "CL_DEVICE_PARTITION_FAILED";
+    case CL_KERNEL_ARG_INFO_NOT_AVAILABLE: return "CL_KERNEL_ARG_INFO_NOT_AVAILABLE";
     case CL_INVALID_VALUE: return "CL_INVALID_VALUE";
     case CL_INVALID_DEVICE_TYPE: return "CL_INVALID_DEVICE_TYPE";
     case CL_INVALID_PLATFORM: return "CL_INVALID_PLATFORM";
@@ -1150,6 +1158,11 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     case CL_INVALID_BUFFER_SIZE: return "CL_INVALID_BUFFER_SIZE";
     case CL_INVALID_MIP_LEVEL: return "CL_INVALID_MIP_LEVEL";
     case CL_INVALID_GLOBAL_WORK_SIZE: return "CL_INVALID_GLOBAL_WORK_SIZE";
+    case CL_INVALID_PROPERTY: return "CL_INVALID_PROPERTY";
+    case CL_INVALID_IMAGE_DESCRIPTOR: return "CL_INVALID_IMAGE_DESCRIPTOR";
+    case CL_INVALID_COMPILER_OPTIONS: return "CL_INVALID_COMPILER_OPTIONS";
+    case CL_INVALID_LINKER_OPTIONS: return "CL_INVALID_LINKER_OPTIONS";
+    case CL_INVALID_DEVICE_PARTITION_COUNT: return "CL_INVALID_DEVICE_PARTITION_COUNT";
     default: return "<Unknown error>";
     }
 }
