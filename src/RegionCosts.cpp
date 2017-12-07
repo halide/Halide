@@ -344,11 +344,10 @@ RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
 Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bounds,
                                     const set<string> &inlines) {
     Function curr_f = get_element(env, func);
-    Definition def = get_stage_definition(curr_f, stage);
 
     Box stage_region;
 
-    const vector<Dim> &dims = def.schedule().dims();
+    const vector<Dim> &dims = get_stage_dims(curr_f, stage);
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         stage_region.push_back(get_element(bounds, dims[d].var));
     }
@@ -433,21 +432,27 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
                                        const set<string> &inlines) {
     map<string, Expr> load_costs;
     Function curr_f = get_element(env, func);
-    Definition def = get_stage_definition(curr_f, stage);
 
-    for (const auto &e : def.values()) {
-        Expr inlined_expr = perform_inline(e, env, inlines);
-        inlined_expr = simplify(inlined_expr);
+    if (curr_f.has_extern_definition()) {
+        // TODO(psuriana): We need a better cost for extern function
+        //load_costs.emplace(func, Int(64).max());
+        load_costs.emplace(func, Expr());
+    } else {
+        Definition def = get_stage_definition(curr_f, stage);
+        for (const auto &e : def.values()) {
+            Expr inlined_expr = perform_inline(e, env, inlines);
+            inlined_expr = simplify(inlined_expr);
 
-        map<string, Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
-        combine_load_costs(load_costs, expr_load_costs);
+            map<string, Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
+            combine_load_costs(load_costs, expr_load_costs);
 
-        auto iter = load_costs.find(func);
-        if (iter != load_costs.end()) {
-            internal_assert(iter->second.defined());
-            iter->second = simplify(iter->second + e.type().bytes());
-        } else {
-            load_costs.emplace(func, make_const(Int(64), e.type().bytes()));
+            auto iter = load_costs.find(func);
+            if (iter != load_costs.end()) {
+                internal_assert(iter->second.defined());
+                iter->second = simplify(iter->second + e.type().bytes());
+            } else {
+                load_costs.emplace(func, make_const(Int(64), e.type().bytes()));
+            }
         }
     }
 
@@ -459,11 +464,10 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
                                        DimBounds &bounds,
                                        const set<string> &inlines) {
     Function curr_f = get_element(env, func);
-    Definition def = get_stage_definition(curr_f, stage);
 
     Box stage_region;
 
-    const vector<Dim> &dims = def.schedule().dims();
+    const vector<Dim> &dims = get_stage_dims(curr_f, stage);
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         stage_region.push_back(get_element(bounds, dims[d].var));
     }
@@ -504,11 +508,9 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
     for (int s = 0; s < num_stages; s++) {
         map<string, Expr> stage_load_costs = stage_detailed_load_costs(func, s, inlines);
 
-        Definition def = get_stage_definition(curr_f, s);
-
         Box stage_region;
 
-        const vector<Dim> &dims = def.schedule().dims();
+        const vector<Dim> &dims = get_stage_dims(curr_f, s);
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             stage_region.push_back(get_element(stage_bounds[s], dims[d].var));
         }
@@ -705,9 +707,13 @@ void RegionCosts::disp_func_costs() {
     for (const auto &kv : env) {
         int stage = 0;
         for (const auto &cost : func_cost[kv.first]) {
-            Definition def = get_stage_definition(kv.second, stage);
-            for (const auto &e : def.values()) {
-                debug(0) << simplify(e) << '\n';
+            if (kv.second.has_extern_definition()) {
+                debug(0) << "Extern func\n";
+            } else {
+                Definition def = get_stage_definition(kv.second, stage);
+                for (const auto &e : def.values()) {
+                    debug(0) << simplify(e) << '\n';
+                }
             }
             debug(0) << "(" << kv.first << ", " << stage << ") -> ("
                      << cost.arith << ", " << cost.memory << ")" << '\n';

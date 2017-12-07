@@ -65,8 +65,15 @@ Expr box_size(const Box &b);
 /** Helper function to print the bounds of a region. */
 void disp_regions(const std::map<std::string, Box> &regions);
 
-/** Return the corresponding definition of a function given the stage. */
+/** Return the corresponding definition of a function given the stage. This
+ * will throw an assertion if the function is an extern function (Extern Func
+ * does not have definition). */
 Definition get_stage_definition(const Function &f, int stage_num);
+
+/** Return the corresponding loop dimensions of a function given the stage.
+ * For extern Func, this will return a list of size 1 containing the
+ * dummy __outermost loop dimension. */
+std::vector<Dim> &get_stage_dims(const Function &f, int stage_num);
 
 /** Add partial load costs to the corresponding function in the result costs. */
 void combine_load_costs(std::map<std::string, Expr> &result,
