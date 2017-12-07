@@ -1,13 +1,12 @@
 #include "InlineReductions.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
+#include <string>
 
 #include "Halide.h"
 
 #include "Expr.h"
 
-#include <string>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -60,7 +59,7 @@ p::object argmax1(h::RDom r, h::Expr e, const std::string name) {
     return expr_vector_to_python_tuple(h::argmax(r, e, name).as_vector());
 }
 
-void defineInlineReductions() {
+void define_inline_reductions() {
     // Defines some inline reductions: sum, product, minimum, maximum.
 
     p::def("sum", &sum0, (p::arg("e"), p::arg("name") = "sum"),
@@ -92,6 +91,4 @@ void defineInlineReductions() {
            "An inline reduction.");
     p::def("argmax", &argmax1, (p::arg("r"), p::arg("e"), p::arg("name") = "argmax"),
            "An inline reduction.");
-
-    return;
 }

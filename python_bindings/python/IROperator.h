@@ -1,6 +1,6 @@
-#ifndef IROPERATOR_H
-#define IROPERATOR_H
+#ifndef HALIDE_PYTHON_BINDINGS_IROPERATOR_H
+#define HALIDE_PYTHON_BINDINGS_IROPERATOR_H
 
-void defineOperators();
+void define_operators();
 
-#endif  // IROPERATOR_H
+#endif  // HALIDE_PYTHON_BINDINGS_IROPERATOR_H

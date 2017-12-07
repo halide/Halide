@@ -1,6 +1,6 @@
-#ifndef ERROR_H
-#define ERROR_H
+#ifndef HALIDE_PYTHON_BINDINGS_ERROR_H
+#define HALIDE_PYTHON_BINDINGS_ERROR_H
 
-void defineError();
+void define_error();
 
-#endif  // ERROR_H
+#endif  // HALIDE_PYTHON_BINDINGS_ERROR_H

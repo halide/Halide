@@ -718,8 +718,10 @@ uint64_t calc_pixels_out(const std::map<std::string, ArgData> &args) {
                 Shape shape = get_shape(arg.buffer_value);
                 if (shape.size() >= 2) {
                     pixels_out += shape[0].extent * shape[1].extent;
-                } else {
+                } else if (shape.size()) {
                     pixels_out += shape[0].extent;
+                } else {
+                    pixels_out += 1;
                 }
                 break;
             }
