@@ -6,7 +6,7 @@
         /* Best of 5 */                                      \
         elapsed = 1e6 * benchmark(5, iters, [&]() {code;});  \
         /* spend at least 5x20ms benchmarking */             \
-        if (elapsed * iters > 20000) {                       \
+        if (elapsed * iters > 200000) {                     \
             break;                                           \
         }                                                    \
     }
