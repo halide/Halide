@@ -161,6 +161,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_qurt_hvx_lock,
     (void *)&halide_qurt_hvx_unlock,
     (void *)&halide_qurt_hvx_unlock_as_destructor,
+    (void *)&halide_set_par_hvx_mode,
     (void *)&halide_release_jit_module,
     (void *)&halide_set_custom_can_use_target_features,
     (void *)&halide_set_custom_do_par_for,
