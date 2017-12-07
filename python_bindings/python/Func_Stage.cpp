@@ -1,20 +1,16 @@
 #include "Func_Stage.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-//#include "add_operators.h"
 
 #include "Halide.h"
+
 #include "Func.h"
 #include "Func_gpu.h"
-
-//#include <vector>
-//#include <string>
 
 namespace h = Halide;
 namespace p = boost::python;
 
-void defineStage() {
+void define_stage() {
     using Halide::Stage;
     using namespace func_and_stage_implementation_details;
 
@@ -22,12 +18,9 @@ void defineStage() {
     // not (yet) meant to be created or manipulated by the user
     auto stage_class =
         p::class_<Stage>("Stage", p::no_init)
-            //    Stage(Internal::Schedule s, const std::string &n) :
-
             .def("dump_argument_list", &Stage::dump_argument_list, p::arg("self"),
                  "Return a string describing the current var list taking into "
                  "account all the splits, reorders, and tiles.")
-
             .def("name", &Stage::name, p::arg("self"),
                  p::return_value_policy<p::copy_const_reference>(),
                  "Return the name of this stage, e.g. \"f.update(2)\"")
@@ -113,7 +106,5 @@ void defineStage() {
                     "conditions are those of the form param == value, and boolean "
                     "Params. See C++ documentation for more details.");
 
-    defineFuncOrStageGpuMethods<h::Stage>(stage_class);
-
-    return;
+    define_func_or_stage_gpu_methods<h::Stage>(stage_class);
 }

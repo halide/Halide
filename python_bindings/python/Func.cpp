@@ -1,22 +1,19 @@
 #include "Func.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include "add_operators.h"
 #include <boost/python.hpp>
+#include <boost/format.hpp>
+#include <string>
+#include <vector>
 
 #include "Halide.h"
+
+#include "add_operators.h"
 #include "Image.h"
-
-#include <boost/format.hpp>
-
 #include "Expr.h"
 #include "Func_Ref.h"
 #include "Func_Stage.h"
 #include "Func_VarOrRVar.h"
 #include "Func_gpu.h"
-
-#include <string>
-#include <vector>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -64,12 +61,10 @@ void func_realize_tuple(h::Func &f, p::tuple obj, Args... args) {
 
 void func_compile_jit0(h::Func &that) {
     that.compile_jit();
-    return;
 }
 
 void func_compile_jit1(h::Func &that, const h::Target &target = h::get_target_from_environment()) {
     that.compile_jit(target);
-    return;
 }
 
 void func_compile_to_bitcode0(h::Func &that, const std::string &filename,
@@ -205,7 +200,7 @@ p::tuple func_output_types(h::Func &func) {
     return p::tuple(elts);
 }
 
-void defineFunc() {
+void define_func() {
 
     using Halide::Func;
     using namespace func_and_stage_implementation_details;
@@ -672,9 +667,9 @@ void defineFunc() {
 
     func_class.def("__repr__", &func_repr, p::arg("self"));
 
-    defineFuncGpuMethods(func_class);
+    define_func_gpu_methods(func_class);
 
-    defineStage();
-    defineVarOrRVar();
-    defineFuncRef();
+    define_stage();
+    define_var_or_rvar();
+    define_func_ref();
 }

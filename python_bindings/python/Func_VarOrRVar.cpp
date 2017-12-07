@@ -1,15 +1,12 @@
 #include "Func_VarOrRVar.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-//#include "add_operators.h"
-
-#include "Halide.h"
-
 #include <string>
 #include <vector>
 
-void defineVarOrRVar() {
+#include "Halide.h"
+
+void define_var_or_rvar() {
     using Halide::VarOrRVar;
     namespace h = Halide;
     namespace p = boost::python;
@@ -29,6 +26,4 @@ void defineVarOrRVar() {
     p::implicitly_convertible<h::Var, VarOrRVar>();
     p::implicitly_convertible<h::RVar, VarOrRVar>();
     p::implicitly_convertible<h::RDom, VarOrRVar>();
-
-    return;
 }

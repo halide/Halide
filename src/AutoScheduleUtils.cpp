@@ -1,6 +1,7 @@
 #include "AutoScheduleUtils.h"
 #include "Inline.h"
 #include "Simplify.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -50,6 +51,7 @@ void combine_load_costs(map<string, Expr> &result, const map<string, Expr> &part
 }
 
 Definition get_stage_definition(const Function &f, int stage_num) {
+    internal_assert(!f.has_extern_definition());
     if (stage_num == 0) {
         return f.definition();
     }
@@ -57,10 +59,19 @@ Definition get_stage_definition(const Function &f, int stage_num) {
     return f.update(stage_num - 1);
 }
 
+vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
+    static vector<Dim> outermost_only =
+        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar}};
+    if (f.has_extern_definition()) {
+        return outermost_only;
+    }
+    Definition def = get_stage_definition(f, stage_num);
+    internal_assert(def.defined());
+    return def.schedule().dims();
+}
+
 DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_bounds) {
     DimBounds bounds;
-    Definition def = get_stage_definition(f, stage_num);
-
     // Assume that the domain of the pure vars across all the update
     // definitions is the same. This may not be true and can result in
     // over estimation of the extent.
@@ -68,10 +79,13 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
         bounds[b.first] = b.second;
     }
 
-    for (const auto &rvar : def.schedule().rvars()) {
-        Expr lower = SubstituteVarEstimates().mutate(rvar.min);
-        Expr upper = SubstituteVarEstimates().mutate(rvar.min + rvar.extent - 1);
-        bounds.emplace(rvar.var, Interval(simplify(lower),simplify(upper)));
+    if (!f.has_extern_definition()) {
+        Definition def = get_stage_definition(f, stage_num);
+        for (const auto &rvar : def.schedule().rvars()) {
+            Expr lower = SubstituteVarEstimates().mutate(rvar.min);
+            Expr upper = SubstituteVarEstimates().mutate(rvar.min + rvar.extent - 1);
+            bounds.emplace(rvar.var, Interval(simplify(lower),simplify(upper)));
+        }
     }
 
     return bounds;

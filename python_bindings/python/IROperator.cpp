@@ -1,11 +1,9 @@
 #include "IROperator.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
+#include <string>
 
 #include "Halide.h"
-
-#include <string>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -197,7 +195,7 @@ h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_value
     return h::memoize_tag(result, cache_key_values);
 }
 
-void defineOperators() {
+void define_operators() {
     // defined in IROperator.h
 
     h::Expr (*max_exprs)(h::Expr, h::Expr) = &h::max;
@@ -322,44 +320,6 @@ void defineOperators() {
                                    "c6", "v6",
                                    "c7", "v7",
                                    "default_val"));
-
-    /*
-    // Too many arguments for boost.python. Hopefully rare enough use case.
-    p::def("select", &select7,
-               (p::arg("c1"), "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "c5", "v5",
-               "c6", "v6",
-               "c7", "v7",
-               "c8", "v8",
-               "default_val"));
-
-    p::def("select", &select8, (p::arg(
-               "c1"), "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "c5", "v5",
-               "c6", "v6",
-               "c7", "v7",
-               "c8", "v8",
-               "c9", "v9",
-               "default_val"));
-
-    p::def("select", &select9, (p::arg(
-               "c1"), "v1",
-               "c2", "v2",
-               "c3", "v3",
-               "c4", "v4",
-               "c5", "v5",
-               "c6", "v6",
-               "c7", "v7",
-               "c8", "v8",
-               "c9", "v9",
-               "c10", "v10",
-               "default_val"));*/
 
     // sin, cos, tan @{
     p::def("sin", &h::sin, p::args("x"),
@@ -683,6 +643,4 @@ void defineOperators() {
            "You're unlikely to want to call this directly. You probably want to "
            "use the boundary condition helpers in the BoundaryConditions "
            "namespace instead. ");
-
-    return;
 }

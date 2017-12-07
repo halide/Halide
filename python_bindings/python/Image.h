@@ -1,11 +1,12 @@
-#ifndef IMAGE_H
-#define IMAGE_H
+#ifndef HALIDE_PYTHON_BINDINGS_IMAGE_H
+#define HALIDE_PYTHON_BINDINGS_IMAGE_H
 
-#include "Halide.h"
 #include <boost/python.hpp>
 
-void defineBuffer();
+#include "Halide.h"
+
+void define_buffer();
 boost::python::object buffer_to_python_object(const Halide::Buffer<> &);
 Halide::Buffer<> python_object_to_buffer(boost::python::object);
 
-#endif  // IMAGE_H
+#endif  // HALIDE_PYTHON_BINDINGS_IMAGE_H

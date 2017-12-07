@@ -420,24 +420,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                 DimBounds curr_bounds = iter->second;
                 visited.insert(StageBounds(s, curr_bounds));
 
-                Definition def = get_stage_definition(s.func, s.stage_num);
                 // Scope for containing all the estimates on parameters and intervals.
                 Scope<Interval> curr_scope;
                 curr_scope.set_containing_scope(input_estimates);
-
-                const vector<Dim> &dims = def.schedule().dims();
-
-                // Substitute parameter estimates into the bounds and add them to the
-                // current scope.
-                for (int d = 0; d < (int)dims.size() - 1; d++) {
-                    string var_name = dims[d].var;
-                    internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
-
-                    Expr lower = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).min);
-                    Expr upper = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).max);
-                    Interval simple_bounds = Interval(simplify(lower), simplify(upper));
-                    curr_scope.push(var_name, simple_bounds);
-                }
 
                 // If the function has an extern definition, there is no visibility into
                 // the expression defining the function. So the regions required will be
@@ -487,43 +472,59 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                             merge_regions(regions, buf_reg);
                         }
                     }
-                }
+                } else {
+                    Definition def = get_stage_definition(s.func, s.stage_num);
+                    const vector<Dim> &dims = def.schedule().dims();
 
-                // Find the regions required for each value of the current function stage,
-                // update the region map, and add them to the queue.
-                for (const auto &val : def.values()) {
-                    // Substitute the parameter estimates into the expression and get
-                    // the regions required for the expression.
-                    Expr subs_val = SubstituteVarEstimates().mutate(val);
-                    map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
+                    // Substitute parameter estimates into the bounds and add them to the
+                    // current scope.
+                    for (int d = 0; d < (int)dims.size() - 1; d++) {
+                        string var_name = dims[d].var;
+                        internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
 
-                    // Arguments to the definition may require regions of functions.
-                    // For example, update definitions in histograms where the bin is
-                    // based on the value of a function.
-                    Box left_reg;
-                    for (const Expr &arg : def.args()) {
-                        Expr subs_arg = SubstituteVarEstimates().mutate(arg);
-                        map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
-
-                        // Merge the regions with the regions found while looking at
-                        // the values.
-                        merge_regions(curr_regions, arg_regions);
-
-                        Interval arg_bounds = bounds_of_expr_in_scope(arg, curr_scope, func_val_bounds);
-                        left_reg.push_back(arg_bounds);
+                        Expr lower = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).min);
+                        Expr upper = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).max);
+                        Interval simple_bounds = Interval(simplify(lower), simplify(upper));
+                        curr_scope.push(var_name, simple_bounds);
                     }
 
-                    auto iter = curr_regions.find(s.func.name());
-                    if (iter == curr_regions.end()) {
-                        curr_regions.emplace(s.func.name(), left_reg);
-                    } else {
-                        merge_boxes(iter->second, left_reg);
-                    }
+                    // Find the regions required for each value of the current function stage,
+                    // update the region map, and add them to the queue.
+                    for (const auto &val : def.values()) {
+                        // Substitute the parameter estimates into the expression and get
+                        // the regions required for the expression.
+                        Expr subs_val = SubstituteVarEstimates().mutate(val);
+                        map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
 
-                    // Update the region map, and add 'curr_regions' to the queue.
-                    merge_and_queue_regions(fs_bounds, regions, curr_regions, prods, env,
-                                            only_regions_computed, s.func.name(), visited);
+                        // Arguments to the definition may require regions of functions.
+                        // For example, update definitions in histograms where the bin is
+                        // based on the value of a function.
+                        Box left_reg;
+                        for (const Expr &arg : def.args()) {
+                            Expr subs_arg = SubstituteVarEstimates().mutate(arg);
+                            map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+
+                            // Merge the regions with the regions found while looking at
+                            // the values.
+                            merge_regions(curr_regions, arg_regions);
+
+                            Interval arg_bounds = bounds_of_expr_in_scope(arg, curr_scope, func_val_bounds);
+                            left_reg.push_back(arg_bounds);
+                        }
+
+                        auto iter_curr = curr_regions.find(s.func.name());
+                        if (iter_curr == curr_regions.end()) {
+                            curr_regions.emplace(s.func.name(), left_reg);
+                        } else {
+                            merge_boxes(iter_curr->second, left_reg);
+                        }
+
+                        // Update the region map, and add 'curr_regions' to the queue.
+                        merge_and_queue_regions(fs_bounds, regions, curr_regions, prods, env,
+                                                only_regions_computed, s.func.name(), visited);
+                    }
                 }
+
                 // Remove processed region from the queue.
                 fs_bounds.erase(iter);
             }
@@ -655,8 +656,7 @@ DependenceAnalysis::overlap_regions(Function f, int stage_num,
                                     const Scope<Interval> *input_estimates) {
     vector<map<string, Box>> conc_overlaps;
 
-    Definition def = get_stage_definition(f, stage_num);
-    const vector<Dim> &dims = def.schedule().dims();
+    const vector<Dim> &dims = get_stage_dims(f, stage_num);
 
     // Get the redundant regions along each dimension of f.
     for (int d = 0; d < (int)dims.size() - 1; d++) {
@@ -1389,8 +1389,6 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
     map<string, Expr> reuse;
     Function f = stg.func;
 
-    Definition def = get_stage_definition(stg.func, stg.stage_num);
-
     // TODO: Check if tile size of 1 in each dimension gives a reasonable
     // answer or reuse should be evaluated at a much larger granularity or
     // symbolically. Using a symbolic version might be better if the objective
@@ -1399,7 +1397,7 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
     // Another option is sampling or using a larger granularity.
     map<string, Expr> tile_sizes;
 
-    const vector<Dim> &dims = def.schedule().dims();
+    const vector<Dim> &dims = get_stage_dims(stg.func, stg.stage_num);
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         tile_sizes[dims[d].var] = 1;
     }
@@ -1511,8 +1509,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
     // that are generated.
     int min_inner_dim_size = 64;
 
-    Definition def = get_stage_definition(stg.func, stg.stage_num);
-    const vector<Dim> &dims = def.schedule().dims();
+    const vector<Dim> &dims = get_stage_dims(stg.func, stg.stage_num);
 
     // Get the dimensions that are going to be tiled in this stage.
     // Skipping rvars for now.
@@ -1773,7 +1770,6 @@ void Partitioner::group(Partitioner::Level level) {
 }
 
 DimBounds Partitioner::get_bounds(const FStage &s) {
-    Definition def = get_stage_definition(s.func, s.stage_num);
     DimBounds bounds;
 
     const vector<string> &args = s.func.args();
@@ -1786,11 +1782,10 @@ DimBounds Partitioner::get_bounds(const FStage &s) {
 
 DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
                                                   const map<string, Expr> &tile_sizes) {
-    Definition def = get_stage_definition(s.func, s.stage_num);
     map<string, Interval> bounds;
 
     const map<string, Interval> &def_bounds = get_bounds(s);
-    const vector<Dim> &dims = def.schedule().dims();
+    const vector<Dim> &dims = get_stage_dims(s.func, s.stage_num);
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         string var = dims[d].var;
@@ -1819,9 +1814,6 @@ DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
 }
 
 Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_analysis) {
-    // Get the definition corresponding to the group output
-    Definition def = get_stage_definition(g.output.func, g.output.stage_num);
-
     set<string> group_inputs;
     set<string> group_members;
 
@@ -1846,26 +1838,30 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     Expr estimate_tiles = make_one(Int(64));
     Expr parallelism = make_one(Int(64));
 
-    const vector<Dim> &dims = def.schedule().dims();
+    if (!g.output.func.has_extern_definition()) {
+        // Get the definition corresponding to the group output
+        Definition def = get_stage_definition(g.output.func, g.output.stage_num);
+        const vector<Dim> &dims = def.schedule().dims();
 
-    DimBounds stg_bounds = get_bounds(g.output);
+        DimBounds stg_bounds = get_bounds(g.output);
 
-    for (int d = 0; d < (int)dims.size() - 1; d++) {
-        const string &var = dims[d].var;
-        const auto &iter = g.tile_sizes.find(var);
-        if (iter != g.tile_sizes.end()) {
-            const Expr &size = iter->second;
-            Expr extent = get_extent(get_element(stg_bounds, var));
-            if (!extent.defined()) {
-                return GroupAnalysis();
-            }
+        for (int d = 0; d < (int)dims.size() - 1; d++) {
+            const string &var = dims[d].var;
+            const auto &iter = g.tile_sizes.find(var);
+            if (iter != g.tile_sizes.end()) {
+                const Expr &size = iter->second;
+                Expr extent = get_extent(get_element(stg_bounds, var));
+                if (!extent.defined()) {
+                    return GroupAnalysis();
+                }
 
-            Expr dim_tiles = simplify((extent + size - 1) / size);
-            estimate_tiles *= dim_tiles;
-            // Since all Vars are inherently parallelizable by construct, we
-            // only need to take RVars into account for the analysis.
-            if (can_parallelize_rvar(var, g.output.func.name(), def)) {
-                parallelism *= dim_tiles;
+                Expr dim_tiles = simplify((extent + size - 1) / size);
+                estimate_tiles *= dim_tiles;
+                // Since all Vars are inherently parallelizable by construct, we
+                // only need to take RVars into account for the analysis.
+                if (can_parallelize_rvar(var, g.output.func.name(), def)) {
+                    parallelism *= dim_tiles;
+                }
             }
         }
     }
@@ -2136,9 +2132,8 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
         map<string, Expr> tile_sizes;
 
         const Function &cons_f = cons.output.func;
-        Definition def = get_stage_definition(cons_f, cons.output.stage_num);
 
-        const vector<Dim> &dims = def.schedule().dims();
+        const vector<Dim> &dims = get_stage_dims(cons_f, cons.output.stage_num);
         for (int d = 0; d < (int)dims.size() - 1; d++) {
             tile_sizes[dims[d].var] = 1;
         }
@@ -2678,8 +2673,12 @@ void Partitioner::generate_group_cpu_schedule(
     debug(3) << "================\n";
     debug(3) << g;
 
-    // Get the definition corresponding to the stage
-    Definition def = get_stage_definition(g_out, g.output.stage_num);
+    if (g.output.func.has_extern_definition()) {
+        internal_assert(g.members.size() == 1);
+        Func(g_out).compute_root();
+        sched.push_schedule(g_out.name(), g.output.stage_num, "compute_root()", {});
+        return;
+    }
 
     // Get the estimates for stage bounds
     DimBounds stg_bounds = get_bounds(g.output);
@@ -2696,14 +2695,12 @@ void Partitioner::generate_group_cpu_schedule(
         sched.push_schedule(f_handle.name(), g.output.stage_num, "compute_root()", {});
     }
 
-    if (g.output.func.has_extern_definition()) {
-        internal_assert(g.members.size() == 1);
-        return;
-    }
-
     // Realize tiling and update the dimension estimates
     vector<VarOrRVar> outer_dims;
     vector<VarOrRVar> inner_dims;
+
+    // Get the definition corresponding to the stage
+    Definition def = get_stage_definition(g_out, g.output.stage_num);
 
     // 'dims' will get modified since we are going to apply the schedules
     // (e.g. tiling, reordering, etc.)
@@ -3067,6 +3064,10 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 // Verify that function 'f' does not have partially specified schedules/bounds.
 // The current auto scheduler cannots handle such cases.
 void validate_no_partial_schedules(const Function &f) {
+    if (f.has_extern_definition()) {
+        return;
+    }
+
     // Verify no compute_root or bounds are specified
     user_assert(f.schedule().compute_level().is_inlined())
         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
@@ -3093,69 +3094,68 @@ void validate_no_partial_schedules(const Function &f) {
                 << "\" since stage " << stage << " is not serial at dim " << d.var << "\n";
         }
 
-        if (!f.has_extern_definition()) {
-            if (stage == 0) {
-                // Since we can only specialize on a Func, we only need to check for no
-                // specializations for the initial stage.
-                user_assert(def.specializations().empty())
+
+        if (stage == 0) {
+            // Since we can only specialize on a Func, we only need to check for no
+            // specializations for the initial stage.
+            user_assert(def.specializations().empty())
+                << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+                << "\" since it has specializations\n";
+
+            // Verify that there is no loop reordering on the initial definition
+            // (i.e. the Vars in the dim list should be in the same order as
+            // the args in the LHS of the definition).
+            internal_assert(schedule.dims().size() - 1 == def.args().size());
+            for (size_t i = 0; i < def.args().size(); ++i) {
+                const Variable *arg = def.args()[i].as<Variable>();
+                internal_assert(arg);
+                user_assert(arg->name == schedule.dims()[i].var)
                     << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                    << "\" since it has specializations\n";
+                    << "\" since dim \"" << arg->name << "\" at stage " << stage
+                    << " has been reordered\n";
+            }
+        } else {
+            // Verify that there is no loop reordering on the update definition
+            // (i.e. the Vars in the dim list should be in the same order as
+            // the args in the LHS of the definition, the RVars in the dim list
+            // should be in the same order as the RVars in the rvar list, and
+            // all RVars should come before all Vars).
 
-                // Verify that there is no loop reordering on the initial definition
-                // (i.e. the Vars in the dim list should be in the same order as
-                // the args in the LHS of the definition).
-                internal_assert(schedule.dims().size() - 1 == def.args().size());
-                for (size_t i = 0; i < def.args().size(); ++i) {
-                    const Variable *arg = def.args()[i].as<Variable>();
-                    internal_assert(arg);
-                    user_assert(arg->name == schedule.dims()[i].var)
-                        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                        << "\" since dim \"" << arg->name << "\" at stage " << stage
-                        << " has been reordered\n";
-                }
-            } else {
-                // Verify that there is no loop reordering on the update definition
-                // (i.e. the Vars in the dim list should be in the same order as
-                // the args in the LHS of the definition, the RVars in the dim list
-                // should be in the same order as the RVars in the rvar list, and
-                // all RVars should come before all Vars).
+            const vector<Dim> &dims = schedule.dims();
+            const vector<ReductionVariable> &rvars = schedule.rvars();
+            const vector<Expr> &args = f.definition().args();
+            internal_assert(dims.size() - 1 >= rvars.size());
 
-                const vector<Dim> &dims = schedule.dims();
-                const vector<ReductionVariable> &rvars = schedule.rvars();
-                const vector<Expr> &args = f.definition().args();
-                internal_assert(dims.size() - 1 >= rvars.size());
+            for (size_t i = 0; i < rvars.size(); ++i) {
+                const Dim &d = dims[i];
+                user_assert(d.is_rvar() && (d.var == rvars[i].var))
+                    << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+                    << "\" since dim \"" << i << "\" at stage " << stage
+                    << " has been reordered\n";
+            }
 
-                for (size_t i = 0; i < rvars.size(); ++i) {
-                    const Dim &d = dims[i];
-                    user_assert(d.is_rvar() && (d.var == rvars[i].var))
-                        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                        << "\" since dim \"" << i << "\" at stage " << stage
-                        << " has been reordered\n";
-                }
+            internal_assert(dims.size() - rvars.size() - 1 <= args.size());
+            int last_index = -1;
+            for (int i = rvars.size(); i < (int)dims.size() - 1; ++i) {
+                const Dim &d = dims[i];
+                user_assert(!d.is_rvar())
+                    << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+                    << "\" since dim \"" << i << "\" at stage " << stage
+                    << " has been reordered\n";
 
-                internal_assert(dims.size() - rvars.size() - 1 <= args.size());
-                int last_index = -1;
-                for (int i = rvars.size(); i < (int)dims.size() - 1; ++i) {
-                    const Dim &d = dims[i];
-                    user_assert(!d.is_rvar())
-                        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                        << "\" since dim \"" << i << "\" at stage " << stage
-                        << " has been reordered\n";
-
-                    const auto &iter =
-                        std::find_if(args.begin(), args.end(),
-                                    [&d](const Expr &arg) {
-                                        const Variable *v = arg.as<Variable>();
-                                        return (d.var == v->name);
-                                    });
-                    internal_assert(iter != args.end());
-                    int current_index = iter - args.begin();
-                    user_assert(current_index > last_index)
-                        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                        << "\" since dim \"" << i << "\" at stage " << stage
-                        << " has been reordered\n";
-                    last_index = current_index;
-                }
+                const auto &iter =
+                    std::find_if(args.begin(), args.end(),
+                                [&d](const Expr &arg) {
+                                    const Variable *v = arg.as<Variable>();
+                                    return (d.var == v->name);
+                                });
+                internal_assert(iter != args.end());
+                int current_index = iter - args.begin();
+                user_assert(current_index > last_index)
+                    << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+                    << "\" since dim \"" << i << "\" at stage " << stage
+                    << " has been reordered\n";
+                last_index = current_index;
             }
         }
     }
@@ -3212,7 +3212,7 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
 string is_func_called_element_wise(const vector<string> &order, size_t index,
                                    const map<string, Function> &env) {
     Function f1 = env.at(order[index]);
-    if (!f1.can_be_inlined()) {
+    if (f1.has_extern_definition() || !f1.can_be_inlined()) {
         return "";
     }
     internal_assert(index < order.size());
@@ -3220,6 +3220,9 @@ string is_func_called_element_wise(const vector<string> &order, size_t index,
     string caller = "";
     for (size_t i = index + 1; i < order.size(); ++i) {
         Function f2 = env.at(order[i]);
+        if (f2.has_extern_definition()) {
+            continue;
+        }
         int num_stages = f2.updates().size() + 1;
         for (int s = 0; s < num_stages; ++s) {
             Definition def = get_stage_definition(f2, s);
@@ -3332,17 +3335,18 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
+
+    // Finalize all the LoopLevels
+    for (auto &iter : env) {
+        iter.second.lock_loop_levels();
+    }
+
     // Compute the realization order, before any trivial inlining (i.e. before
     // we remove any functions from 'env'). We need the full realization
     // order to pass to get_func() when generating the string representation
     // of the schedule.
     debug(2) << "Computing full realization order...\n";
     vector<string> full_order = realization_order(outputs, env);
-
-    // Finalize all the LoopLevels
-    for (auto &iter : env) {
-        iter.second.lock_loop_levels();
-    }
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
