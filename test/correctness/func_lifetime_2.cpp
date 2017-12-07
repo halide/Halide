@@ -21,7 +21,7 @@ bool validate(const Buffer<int> &im, int add)
 
 int main(int argc, char **argv) {
 
-    Var x("x"), y("y");
+    Var x("x"), y("y"), xi("xi"), yi("yi");
 
     Func g("g");
 
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         f(x, y) = x*y + 1;
 
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 8, 8);
+            f.gpu_tile(x, y, xi, yi, 8, 8);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 32);
         }
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         g(x, y) = x*y + 2;
 
         if (target.has_gpu_feature()) {
-            g.gpu_tile(x, y, 8, 8);
+            g.gpu_tile(x, y, xi, yi, 8, 8);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             g.hexagon().vectorize(x, 32);
         }

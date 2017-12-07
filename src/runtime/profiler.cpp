@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, NULL, 1, 0, 0, 0, NULL, false};
+    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, false};
     return &s;
 }
 }
@@ -418,8 +418,7 @@ WEAK void halide_profiler_shutdown() {
     s->current_func = halide_profiler_please_stop;
     do {
         // Memory barrier.
-        __sync_synchronize(&s->started,
-                           &s->current_func);
+        __sync_synchronize();
     } while (s->started);
     s->current_func = halide_profiler_outside_of_halide;
 

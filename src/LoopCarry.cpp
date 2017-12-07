@@ -135,28 +135,28 @@ Expr scratch_index(int i, Type t) {
  * the next time step's version of some arbitrary Expr (which may be a
  * nasty graph). Variables that move non-linearly through time are
  * undefined Exprs in the scope. */
-class StepForwards : public IRGraphMutator {
+class StepForwards : public IRGraphMutator2 {
     const Scope<Expr> &linear;
 
-    using IRGraphMutator::visit;
+    using IRGraphMutator2::visit;
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (linear.contains(op->name)) {
             Expr step = linear.get(op->name);
             if (!step.defined()) {
                 // It's non-linear
                 success = false;
-                expr = op;
+                return op;
             } else if (is_zero(step)) {
                 // It's a known inner constant
-                expr = op;
+                return op;
             } else {
                 // It's linear
-                expr = Expr(op) + step;
+                return Expr(op) + step;
             }
         } else {
             // It's some external constant
-            expr = op;
+            return op;
         }
     }
 
@@ -182,28 +182,29 @@ Expr step_forwards(Expr e, const Scope<Expr> &linear) {
 }
 
 /** Carry loads over a single For loop body. */
-class LoopCarryOverLoop : public IRMutator {
+class LoopCarryOverLoop : public IRMutator2 {
     // Track vars that step linearly with loop iterations
     Scope<Expr> linear;
     vector<pair<string, Expr>> containing_lets;
 
     // Productions we're in a consume node for. They're fixed and safe
     // to lift out.
-    const Scope<int> &in_consume;
+    const Scope<> &in_consume;
 
     int max_carried_values;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         // Track containing LetStmts and their linearity w.r.t. the
         // loop variable.
         Expr value = mutate(op->value);
         Expr step = is_linear(value, linear);
-        linear.push(op->name, step);
+        ScopedBinding<Expr> bind(linear, op->name, step);
 
-        containing_lets.push_back(make_pair(op->name, value));
+        containing_lets.push_back({ op->name, value });
 
+        Stmt stmt;
         Stmt body = mutate(op->body);
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
@@ -213,14 +214,14 @@ class LoopCarryOverLoop : public IRMutator {
         }
 
         containing_lets.pop_back();
-        linear.pop(op->name);
+        return stmt;
     }
 
-    void visit(const Store *op) {
-        stmt = lift_carried_values_out_of_stmt(op);
+    Stmt visit(const Store *op) override {
+        return lift_carried_values_out_of_stmt(op);
     }
 
-    void visit(const Block *op) {
+    Stmt visit(const Block *op) override {
         vector<Stmt> v = block_to_vector(op);
 
         vector<Stmt> stores;
@@ -240,10 +241,10 @@ class LoopCarryOverLoop : public IRMutator {
             result.push_back(lift_carried_values_out_of_stmt(Block::make(stores)));
         }
 
-        stmt = Block::make(result);
+        return Block::make(result);
     }
 
-    Stmt lift_carried_values_out_of_stmt(Stmt orig_stmt) {
+    Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
         debug(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
 
         // The stmts, as graphs (lets subtituted in). We must only use
@@ -279,10 +280,12 @@ class LoopCarryOverLoop : public IRMutator {
         }
 
         // For each load, move the load index forwards by one loop iteration
-        vector<Expr> indices, next_indices;
+        vector<Expr> indices, next_indices, predicates, next_predicates;
         for (const vector<const Load *> &v: loads) {
             indices.push_back(v[0]->index);
             next_indices.push_back(step_forwards(v[0]->index, linear));
+            predicates.push_back(v[0]->predicate);
+            next_predicates.push_back(step_forwards(v[0]->predicate, linear));
         }
 
         // Find loads done on this loop iteration that will be
@@ -294,7 +297,9 @@ class LoopCarryOverLoop : public IRMutator {
                 if (i == j) continue;
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
-                    graph_equal(indices[i], next_indices[j])) {
+                    graph_equal(indices[i], next_indices[j]) &&
+                    next_predicates[j].defined() &&
+                    graph_equal(predicates[i], next_predicates[j])) {
                     chains.push_back({j, i});
                     debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
@@ -385,20 +390,23 @@ class LoopCarryOverLoop : public IRMutator {
             for (size_t i = 0; i < c.size(); i++) {
                 const Load *orig_load = loads[c[i]][0];
                 Expr scratch_idx = scratch_index(i, orig_load->type);
-                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, BufferPtr(), Parameter());
+                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx,
+                                                    Buffer<>(), Parameter(), const_true(orig_load->type.lanes()));
                 for (const Load *l : loads[c[i]]) {
                     core = graph_substitute(l, load_from_scratch, core);
                 }
 
                 if (i == c.size() - 1) {
-                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx, Parameter());
+                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx,
+                                                        Parameter(), const_true(orig_load->type.lanes()));
                     not_first_iteration_scratch_stores.push_back(store_to_scratch);
                 } else {
                     initial_scratch_values.push_back(orig_load);
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
-                                               scratch_index(i-1, orig_load->type), Parameter());
+                                               scratch_index(i-1, orig_load->type),
+                                               Parameter(), const_true(orig_load->type.lanes()));
                     scratch_shuffles.push_back(shuffle);
                 }
 
@@ -415,7 +423,7 @@ class LoopCarryOverLoop : public IRMutator {
             call = simplify(common_subexpression_elimination(call));
             // Peel off lets
             while (const Let *l = call.as<Let>()) {
-                initial_lets.push_back(make_pair(l->name, l->value));
+                initial_lets.push_back({ l->name, l->value });
                 call = l->body;
             }
             internal_assert(call.as<Call>());
@@ -425,7 +433,9 @@ class LoopCarryOverLoop : public IRMutator {
             vector<Stmt> initial_scratch_stores;
             for (size_t i = 0; i < c.size() - 1; i++) {
                 Expr scratch_idx = scratch_index(i, initial_scratch_values[i].type());
-                Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i], scratch_idx, Parameter());
+                Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i],
+                                                    scratch_idx, Parameter(),
+                                                    const_true(scratch_idx.type().lanes()));
                 initial_scratch_stores.push_back(store_to_scratch);
             }
 
@@ -458,20 +468,20 @@ class LoopCarryOverLoop : public IRMutator {
         return s;
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         // Don't lift loads out of code that might not run. Besides,
         // stashing things in registers while we run an inner loop
         // probably isn't a good use of registers.
-        stmt = op;
+        return op;
     }
 
-    void visit(const IfThenElse *op) {
+    Stmt visit(const IfThenElse *op) override {
         // Don't lift loads out of code that might not run.
-        stmt = op;
+        return op;
     }
 
 public:
-    LoopCarryOverLoop(const string &var, const Scope<int> &s, int max_carried_values)
+    LoopCarryOverLoop(const string &var, const Scope<> &s, int max_carried_values)
         : in_consume(s), max_carried_values(max_carried_values) {
         linear.push(var, 1);
     }
@@ -486,25 +496,25 @@ public:
     vector<ScratchAllocation> allocs;
 };
 
-class LoopCarry : public IRMutator {
-    using IRMutator::visit;
+class LoopCarry : public IRMutator2 {
+    using IRMutator2::visit;
 
     int max_carried_values;
-    Scope<int> in_consume;
+    Scope<> in_consume;
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         } else {
-            in_consume.push(op->name, 0);
+            ScopedBinding<> bind(in_consume, op->name);
             Stmt body = mutate(op->body);
-            in_consume.pop(op->name);
-            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->for_type == ForType::Serial && !is_one(op->extent)) {
+            Stmt stmt;
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
             body = carry.mutate(body);
@@ -522,9 +532,9 @@ class LoopCarry : public IRMutator {
             if (!carry.allocs.empty()) {
                 stmt = IfThenElse::make(op->extent > 0, stmt);
             }
-
+            return stmt;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 

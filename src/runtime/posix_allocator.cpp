@@ -1,17 +1,14 @@
 #include "HalideRuntime.h"
+#include "runtime_internal.h"
 
 extern "C" {
 
 extern void *malloc(size_t);
 extern void free(void *);
 
-}
-
-namespace Halide { namespace Runtime { namespace Internal {
-
-WEAK void *default_malloc(void *user_context, size_t x) {
+WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Allocate enough space for aligning the pointer we return.
-    const size_t alignment = 128;
+    const size_t alignment = halide_malloc_alignment();
     void *orig = malloc(x + alignment);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
@@ -23,12 +20,16 @@ WEAK void *default_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-WEAK void default_free(void *user_context, void *ptr) {
+WEAK void halide_default_free(void *user_context, void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
-WEAK halide_malloc_t custom_malloc = default_malloc;
-WEAK halide_free_t custom_free = default_free;
+}
+
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK halide_malloc_t custom_malloc = halide_default_malloc;
+WEAK halide_free_t custom_free = halide_default_free;
 
 }}} // namespace Halide::Runtime::Internal
 

@@ -18,10 +18,12 @@ using std::pair;
 namespace {
 
 // Some expressions are not worth lifting out into lets, even if they
-// occur redundantly many times. This list should mirror the list in
-// the simplifier for lets, otherwise they'll just fight with each
+// occur redundantly many times. They may also be illegal to lift out
+// (e.g. calls with side-effects).
+// This list should at least avoid lifting the same cases as that of the
+// simplifier for lets, otherwise CSE and the simplifier will fight each
 // other pointlessly.
-bool should_extract(Expr e) {
+bool should_extract(const Expr &e, bool lift_all) {
     if (is_const(e)) {
         return false;
     }
@@ -30,12 +32,27 @@ bool should_extract(Expr e) {
         return false;
     }
 
+    if (const Call *a = e.as<Call>()) {
+        if (!a->is_pure() && (a->call_type != Call::Halide)) {
+            // Impure calls may have side-effects, thus may not be re-ordered
+            // or reduced in number.
+            // Call to Halide function may give different value depending on
+            // where it is evaluated; however, the value is constant within
+            // an expr. Thus, it is okay to lift out.
+            return false;
+        }
+    }
+
+    if (lift_all) {
+        return true;
+    }
+
     if (const Broadcast *a = e.as<Broadcast>()) {
-        return should_extract(a->value);
+        return should_extract(a->value, false);
     }
 
     if (const Cast *a = e.as<Cast>()) {
-        return should_extract(a->value);
+        return should_extract(a->value, false);
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -59,12 +76,11 @@ bool should_extract(Expr e) {
     }
 
     return true;
-
 }
 
 // A global-value-numbering of expressions. Returns canonical form of
 // the Expr and writes out a global value numbering as a side-effect.
-class GVN : public IRMutator {
+class GVN : public IRMutator2 {
 public:
     struct Entry {
         Expr expr;
@@ -84,7 +100,7 @@ public:
 
     GVN() : number(0), cache(8) {}
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) override {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -93,7 +109,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) override {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -124,11 +140,11 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        e = IRMutator::mutate(e);
+        Expr new_e = IRMutator2::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
-        iter = numbering.find(with_cache(e));
+        iter = numbering.find(with_cache(new_e));
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[old_e] = number;
@@ -137,19 +153,19 @@ public:
         }
 
         // Add it to the numbering.
-        Entry entry = {e, 0};
+        Entry entry = {new_e, 0};
         number = (int)entries.size();
-        numbering[with_cache(e)] = number;
-        shallow_numbering[e] = number;
+        numbering[with_cache(new_e)] = number;
+        shallow_numbering[new_e] = number;
         entries.push_back(entry);
-        internal_assert(e.type() == old_e.type());
-        return e;
+        internal_assert(new_e.type() == old_e.type());
+        return new_e;
     }
 
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Let *let) {
+    Expr visit(const Let *let) override {
         // Visit the value and add it to the numbering.
         Expr value = mutate(let->value);
 
@@ -162,24 +178,54 @@ public:
         let_substitutions.pop(let->name);
 
         // Just return the body. We've removed the Let.
-        expr = body;
+        return body;
     }
 
+    Expr visit(const Load *op) override {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            return op;
+        }
+        return Load::make(op->type, op->name, index, op->image, op->param, predicate);
+    }
+
+    Stmt visit(const Store *op) override {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            return op;
+        } else {
+            return Store::make(op->name, value, index, op->param, predicate);
+        }
+    }
 };
 
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
+    bool lift_all;
 public:
-    ComputeUseCounts(GVN &g) : gvn(g) {}
+    ComputeUseCounts(GVN &g, bool l) : gvn(g), lift_all(l) {}
 
     using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
 
     void include(const Expr &e) {
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
-        if (!should_extract(e)) {
+        debug(4) << "Include: " << e << "; should extract: " << should_extract(e, lift_all) << "\n";
+        if (!should_extract(e, lift_all)) {
             e.accept(this);
             return;
         }
@@ -192,22 +238,19 @@ public:
         }
 
         // Visit the children if we haven't been here before.
-        if (!visited.count(e.get())) {
-            visited.insert(e.get());
-            e.accept(this);
-        }
+        IRGraphVisitor::include(e);
     }
 };
 
 /** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
-class Replacer : public IRMutator {
+class Replacer : public IRMutator2 {
 public:
     map<Expr, Expr, ExprCompare> replacements;
     Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -215,7 +258,7 @@ public:
         }
 
         // Rebuild it, replacing children.
-        Expr new_e = IRMutator::mutate(e);
+        Expr new_e = IRMutator2::mutate(e);
 
         // In case we encounter this expr again.
         replacements[e] = new_e;
@@ -224,9 +267,23 @@ public:
     }
 };
 
+class CSEEveryExprInStmt : public IRMutator2 {
+    bool lift_all;
+
+public:
+    using IRMutator2::mutate;
+
+    Expr mutate(const Expr &e) override {
+        return common_subexpression_elimination(e, lift_all);
+    }
+
+    CSEEveryExprInStmt(bool l) : lift_all(l) {}
+};
+
 } // namespace
 
-Expr common_subexpression_elimination(Expr e) {
+Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
+    Expr e = e_in;
 
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
@@ -236,7 +293,7 @@ Expr common_subexpression_elimination(Expr e) {
     GVN gvn;
     e = gvn.mutate(e);
 
-    ComputeUseCounts count_uses(gvn);
+    ComputeUseCounts count_uses(gvn, lift_all);
     count_uses.include(e);
 
     debug(4) << "Canonical form without lets " << e << "\n";
@@ -250,7 +307,7 @@ Expr common_subexpression_elimination(Expr e) {
         Expr old = e.expr;
         if (e.use_count > 1) {
             string name = unique_name('t');
-            lets.push_back(make_pair(name, e.expr));
+            lets.push_back({ name, e.expr });
             // Point references to this expr to the variable instead.
             replacements[e.expr] = Variable::make(e.expr.type(), name);
         }
@@ -278,21 +335,8 @@ Expr common_subexpression_elimination(Expr e) {
     return e;
 }
 
-namespace {
-
-class CSEEveryExprInStmt : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-    Expr mutate(Expr e) {
-        return common_subexpression_elimination(e);
-    }
-};
-
-} // namespace
-
-Stmt common_subexpression_elimination(Stmt s) {
-    return CSEEveryExprInStmt().mutate(s);
+Stmt common_subexpression_elimination(const Stmt &s, bool lift_all) {
+    return CSEEveryExprInStmt(lift_all).mutate(s);
 }
 
 
@@ -302,28 +346,28 @@ namespace {
 
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
-class NormalizeVarNames : public IRMutator {
+class NormalizeVarNames : public IRMutator2 {
     int counter;
 
     map<string, string> new_names;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Variable *var) {
+    Expr visit(const Variable *var) override {
         map<string, string>::iterator iter = new_names.find(var->name);
         if (iter == new_names.end()) {
-            expr = var;
+            return var;
         } else {
-            expr = Variable::make(var->type, iter->second);
+            return Variable::make(var->type, iter->second);
         }
     }
 
-    void visit(const Let *let) {
+    Expr visit(const Let *let) override {
         string new_name = "t" + std::to_string(counter++);
         new_names[let->name] = new_name;
         Expr value = mutate(let->value);
         Expr body = mutate(let->body);
-        expr = Let::make(new_name, value, body);
+        return Let::make(new_name, value, body);
     }
 
 public:
@@ -355,6 +399,8 @@ Expr ssa_block(vector<Expr> exprs) {
 
 void cse_test() {
     Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+
     Expr t[32], tf[32];
     for (int i = 0; i < 32; i++) {
         t[i] = Variable::make(Int(32), "t" + std::to_string(i));
@@ -417,6 +463,74 @@ void cse_test() {
         e = e*e - e * i;
     }
     Expr result = common_subexpression_elimination(e);
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             select(t2, t[1] + 2, t[1] + 10),
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + cse_load) + cse_pred_load});
+
+        check(e, correct);
+    }
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             cse_pred_load,
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + t[3]) + t[3]});
+
+        check(e, correct);
+    }
+
+    {
+        Expr handle_a = reinterpret(type_of<int *>(), make_zero(UInt(64)));
+        Expr handle_b = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        Expr handle_c = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        e = Call::make(Int(32), "dummy", {handle_a, handle_b, handle_c}, Call::Extern);
+
+        Expr t0 = Variable::make(handle_b.type(), "t0");
+        correct = Let::make("t0", handle_b,
+                            Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
+        check(e, correct);
+
+    }
+
+    {
+        Expr nonpure_call_1 = Call::make(Int(32), "dummy1", {1}, Call::Intrinsic);
+        Expr nonpure_call_2 = Call::make(Int(32), "dummy2", {1}, Call::Extern);
+        e = nonpure_call_1 + nonpure_call_2 + nonpure_call_1 + nonpure_call_2;
+        correct = e; // Impure calls shouldn't get CSE'd
+        check(e, correct);
+    }
+
+    {
+        Expr halide_func = Call::make(Int(32), "dummy", {0}, Call::Halide);
+        e = halide_func * halide_func;
+        Expr t0 = Variable::make(halide_func.type(), "t0");
+        // It's okay to CSE Halide call within an expr
+        correct = Let::make("t0", halide_func, t0 * t0);
+        check(e, correct);
+    }
 
     debug(0) << "common_subexpression_elimination test passed\n";
 }

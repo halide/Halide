@@ -12,19 +12,20 @@
 
 namespace Halide {
 
+namespace Internal {
+template<typename T2> class GeneratorInput_Buffer;
+}
+
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
+    template<typename T2> friend class ::Halide::Internal::GeneratorInput_Buffer;
 
-    /** Func representation of the ImageParam.
-     * All call to ImageParam is equivalent to call to its intrinsic Func
-     * representation. */
-    Func func;
+    // Only for use of Generator
+    ImageParam(const Internal::Parameter &p, Func f) : OutputImageParam(p, Argument::InputBuffer, f) {}
 
     /** Helper function to initialize the Func representation of this ImageParam. */
-    EXPORT void init_func();
+    EXPORT Func create_func() const;
 
-    EXPORT void set(Internal::BufferPtr b);
-    
 public:
 
     /** Construct a nullptr image parameter handle. */
@@ -40,21 +41,17 @@ public:
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    template<typename T, int D>
-    NO_INLINE void set(const Buffer<T, D> &im) {
-        set(Internal::BufferPtr(im));
-    }
+    EXPORT void set(Buffer<> im);
     // @}
 
-    /** Get the Image bound to this ImageParam. Only relevant for jitting */
+    /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
     // @{
-    EXPORT const Buffer<> &get() const;
-    EXPORT Buffer<> &get();
+    EXPORT Buffer<> get() const;
     // @}
 
-    /** Unbind any bound Image */
+    /** Unbind any bound Buffer */
     EXPORT void reset();
-    
+
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
      * variables to match the dimensionality of the image
@@ -113,13 +110,13 @@ public:
      \code
      ImageParam img(Int(32), 2);
      output(x, y) = img(y, x);
-     output.compute_root().gpu_tile(x, y, 8, 8);
-     img.in().compute_at(output, Var::gpu_blocks()).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
+     Var tx, ty;
+     output.compute_root().gpu_tile(x, y, tx, ty, 8, 8);
+     img.in().compute_at(output, x).unroll(_0, 2).unroll(_1, 2).gpu_threads(_0, _1);
      \endcode
      *
-     * Note that we use implicit vars to name the dimensions of the wrapper Func
-     * (See \ref ImageParam::in for more details). See \ref Func::in for more
-     * possible use cases of the 'in()' directive.
+     * Note that we use implicit vars to name the dimensions of the wrapper Func.
+     * See \ref Func::in for more possible use cases of the 'in()' directive.
      */
     // @{
     EXPORT Func in(const Func &f);

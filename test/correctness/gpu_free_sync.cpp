@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     // Make sure that freeing GPU buffers doesn't occur before the
     // computation that is filling them completes.
     Func f;
-    Var x, y;
+    Var x, y, xi, yi;
     RDom r(0, 100);
     f(x, y) = sum(sqrt(sqrt(sqrt(sqrt(x+y+r)))));
 
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
 
     if (t.has_feature(Target::OpenCL) ||
         t.has_feature(Target::CUDA)) {
-        f.gpu_tile(x, y, 16, 16);
+        f.gpu_tile(x, y, xi, yi, 16, 16);
 
         // This allocates a buffer, does gpu compute into it, and then
         // frees it (calling dev_free) possibly before the compute is

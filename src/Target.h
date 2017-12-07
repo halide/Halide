@@ -56,6 +56,7 @@ struct Target {
         CUDACapability32 = halide_target_feature_cuda_capability32,
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
+        CUDACapability61 = halide_target_feature_cuda_capability61,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         OpenGL = halide_target_feature_opengl,
@@ -71,13 +72,19 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_v65 = halide_target_feature_hvx_v65,
+        HVX_v66 = halide_target_feature_hvx_v66,
+        HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
         AVX512 = halide_target_feature_avx512,
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
-        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,        
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        TraceLoads = halide_target_feature_trace_loads,
+        TraceStores = halide_target_feature_trace_stores,
+        TraceRealizations = halide_target_feature_trace_realizations,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -169,12 +176,14 @@ struct Target {
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
     /** Does this target allow using a certain type. Generally all
      * types except 64-bit float and int/uint should be supported by
      * all backends.
+     *
+     * It is likely better to call the version below which takes a DeviceAPI.
      */
     bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
@@ -188,9 +197,14 @@ struct Target {
         return true;
     }
 
+    /** Does this target allow using a certain type on a certain device.
+     * This is the prefered version of this routine.
+     */
+    EXPORT bool supports_type(const Type &t, DeviceAPI device) const;
+
     /** Returns whether a particular device API can be used with this
      * Target. */
-    bool supports_device_api(DeviceAPI api) const;
+    EXPORT bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&
@@ -275,11 +289,16 @@ struct Target {
         return natural_vector_size(type_of<data_t>());
     }
 
+    /** Return true iff 64 bits and has_feature(LargeBuffers). */
+    bool has_large_buffers() const {
+        return bits == 64 && has_feature(LargeBuffers);
+    }
+
     /** Return the maximum buffer size in bytes supported on this
-     * Target. This is 2^31 - 1 except when the LargeBuffers feature
-     * is enabled, which expands the maximum to 2^63 - 1. */
+     * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
+     * feature is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        if (bits == 64 && has_feature(LargeBuffers)) {
+        if (has_large_buffers()) {
             return (((uint64_t)1) << 63) - 1;
         } else {
             return (((uint64_t)1) << 31) - 1;

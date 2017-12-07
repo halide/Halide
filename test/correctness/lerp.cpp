@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <limits>
 
+#ifdef _MSC_VER
+#pragma warning(disable:4800)  // forcing value to bool 'true' or 'false'
+#endif
+
 using namespace Halide;
 
 Var zero_val, one_val, weight;
@@ -190,27 +194,27 @@ int main(int argc, char **argv) {
                                     "<uint32_t, uint32_t> all zero starts");
   #endif
 
-    check_range<float, float>(0, 100, 0, .01,
-                              0, 100, 0, .01,
-                              0, 100, 0, .01,
+    check_range<float, float>(0, 100, 0, .01f,
+                              0, 100, 0, .01f,
+                              0, 100, 0, .01f,
                               "<float, float> float values 0 to 1 by 1/100ths");
 
-    check_range<float, float>(0, 100, -5, .1,
-                              0, 100, 0, .1,
-                              0, 100, 0, .1,
+    check_range<float, float>(0, 100, -5, .1f,
+                              0, 100, 0, .1f,
+                              0, 100, 0, .1f,
                               "<float, float> float values -5 to 5 by 1/100ths");
 
     // Verify float values with integer weights
-    check_range<float, uint8_t>(0, 100, -5, .1,
-                              0, 100, 0, .1,
+    check_range<float, uint8_t>(0, 100, -5, .1f,
+                              0, 100, 0, .1f,
                               0, 255, 0, 1,
                               "<float, uint8_t> float values -5 to 5 by 1/100ths");
-    check_range<float, uint16_t>(0, 100, -5, .1,
-                                 0, 100, 0, .1,
+    check_range<float, uint16_t>(0, 100, -5, .1f,
+                                 0, 100, 0, .1f,
                                  0, 255, 0, 257,
                                  "<float, uint16_t> float values -5 to 5 by 1/100ths");
-    check_range<float, uint32_t>(0, 100, -5, .1,
-                                 0, 100, 0, .1,
+    check_range<float, uint32_t>(0, 100, -5, .1f,
+                                 0, 100, 0, .1f,
                                  std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
                                  "<float, uint32_t> float values -5 to 5 by 1/100ths");
 
@@ -232,9 +236,9 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
-  	    input_a_img(i, j) = (i << 4) + j;
-	    input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
-	}
+            input_a_img(i, j) = (i << 4) + j;
+                  input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
+              }
     }
 
     ImageParam input_a(UInt(8), 2);
@@ -256,9 +260,9 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
-	    assert(input_a_img(i, j) == result_should_be_a(i, j));
-	    assert(input_b_img(i, j) == result_should_be_b(i, j));
-	}
+            assert(input_a_img(i, j) == result_should_be_a(i, j));
+            assert(input_b_img(i, j) == result_should_be_b(i, j));
+        }
     }
 
     std::cout << "Success!" << std::endl;

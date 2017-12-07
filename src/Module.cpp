@@ -2,16 +2,20 @@
 
 #include <array>
 #include <fstream>
+#include <future>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "HexagonOffload.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
+#include "WrapExternStages.h"
+#include "ThreadPool.h"
 
 using Halide::Internal::debug;
 
@@ -35,8 +39,21 @@ public:
                                      const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
-        const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-        std::string name = dir_path + "/" + split_string(base_path_name, "/").back() + suffix + ext;
+        const char* ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
+        size_t slash_idx = base_path_name.rfind('/');
+        size_t backslash_idx = base_path_name.rfind('\\');
+        if (slash_idx == std::string::npos) {
+            slash_idx = 0;
+        } else {
+            slash_idx++;
+        }
+        if (backslash_idx == std::string::npos) {
+            backslash_idx = 0;
+        } else {
+            backslash_idx++;
+        }
+        std::string base_name = base_path_name.substr(std::max(slash_idx, backslash_idx));
+        std::string name = dir_path + "/" + base_name + suffix + ext;
         debug(1) << "add_temp_object_file: " << name << "\n";
         if (in_front) {
             dir_files.insert(dir_files.begin(), name);
@@ -73,17 +90,32 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.c_source_name.empty()) out.c_source_name = add_suffix(in.c_source_name, suffix);
     if (!in.stmt_name.empty()) out.stmt_name = add_suffix(in.stmt_name, suffix);
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
+    if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
     return out;
+}
+
+uint64_t target_feature_mask(const Target &target) {
+    static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
+    uint64_t feature_mask = 0;
+    for (int i = 0; i < Target::FeatureEnd; ++i) {
+        if (target.has_feature((Target::Feature) i)) {
+            feature_mask |= ((uint64_t) 1) << i;
+        }
+    }
+    return feature_mask;
 }
 
 }  // namespace
 
 struct ModuleContents {
     mutable RefCount ref_count;
-    std::string name;
+    std::string name, auto_schedule;
     Target target;
-    std::vector<Internal::BufferPtr> buffers;
+    std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
+    std::vector<Module> submodules;
+    std::vector<ExternalCode> external_code;
+    std::map<std::string, std::string> metadata_name_map;
 };
 
 template<>
@@ -96,11 +128,19 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
     delete f;
 }
 
-LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
-    : name(name), args(args), body(body), linkage(linkage) {}
+LoweredFunc::LoweredFunc(const std::string &name,
+                         const std::vector<LoweredArgument> &args,
+                         Stmt body,
+                         LinkageType linkage,
+                         NameMangling name_mangling)
+    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {}
 
-LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
-    : name(name), body(body), linkage(linkage) {
+LoweredFunc::LoweredFunc(const std::string &name,
+                         const std::vector<Argument> &args,
+                         Stmt body,
+                         LinkageType linkage,
+                         NameMangling name_mangling)
+    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.push_back(i);
     }
@@ -116,6 +156,11 @@ Module::Module(const std::string &name, const Target &target) :
     contents->target = target;
 }
 
+void Module::set_auto_schedule(const std::string &auto_schedule) {
+    internal_assert(contents->auto_schedule.empty());
+    contents->auto_schedule = auto_schedule;
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
@@ -124,7 +169,11 @@ const std::string &Module::name() const {
     return contents->name;
 }
 
-const std::vector<Internal::BufferPtr> &Module::buffers() const {
+const std::string &Module::auto_schedule() const {
+    return contents->auto_schedule;
+}
+
+const std::vector<Buffer<>> &Module::buffers() const {
     return contents->buffers;
 }
 
@@ -132,12 +181,42 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
-void Module::append(const Internal::BufferPtr &buffer) {
+std::vector<Internal::LoweredFunc> &Module::functions() {
+    return contents->functions;
+}
+
+const std::vector<Module> &Module::submodules() const {
+    return contents->submodules;
+}
+
+const std::vector<ExternalCode> &Module::external_code() const {
+    return contents->external_code;
+}
+
+Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
+    for (const auto &f : functions()) {
+        if (f.name == name) {
+            return f;
+        }
+    }
+    user_error << "get_function_by_name: function " << name << " not found.\n";
+    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LoweredFunc::External);
+}
+
+void Module::append(const Buffer<> &buffer) {
     contents->buffers.push_back(buffer);
 }
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+}
+
+void Module::append(const Module &module) {
+    contents->submodules.push_back(module);
+}
+
+void Module::append(const ExternalCode &external_code) {
+    contents->external_code.push_back(external_code);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
@@ -166,38 +245,140 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
     return output;
 }
 
-void Module::compile(const Outputs &output_files) const {
+Buffer<uint8_t> Module::compile_to_buffer() const {
+    // TODO: This Hexagon specific code should be removed as soon as possible.
+    // This may involve adding more general support for post-processing and
+    // a way of specifying to use it.
+    if (target().arch == Target::Hexagon) {
+        return compile_module_to_hexagon_shared_object(*this);
+    }
+
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
+
+    llvm::SmallVector<char, 4096> object;
+    llvm::raw_svector_ostream object_stream(object);
+    compile_llvm_module_to_object(*llvm_module, object_stream);
+
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Submodule assembly for " << name() << ": " << "\n";
+        llvm::SmallString<4096> assembly;
+        llvm::raw_svector_ostream assembly_stream(assembly);
+        compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(2) << assembly.c_str() << "\n";
+    }
+
+    Buffer<uint8_t> result(object.size(), name());
+    memcpy(result.data(), reinterpret_cast<uint8_t*>(&object[0]), object.size());
+    return result;
+}
+
+Module Module::resolve_submodules() const {
+    if (submodules().empty()) {
+        return *this;
+    }
+
+    Module lowered_module(name(), target());
+
+    for (const auto &f : functions()) {
+        lowered_module.append(f);
+    }
+    for (const auto &buf : buffers()) {
+        lowered_module.append(buf);
+    }
+    for (const auto &ec : external_code()) {
+        lowered_module.append(ec);
+    }
+    for (const auto &m : submodules()) {
+        Module copy(m.resolve_submodules());
+
+        // Propagate external code blocks.
+        for (const auto &ec : external_code()) {
+            // TODO(zalman): Is this the right thing to do?
+            bool already_in_list = false;
+            for (const auto &ec_sub : copy.external_code()) {
+                if (ec_sub.name() == ec.name()) {
+                    already_in_list = true;
+                    break;
+                }
+            }
+            if (!already_in_list) {
+                copy.append(ec);
+            }
+        }
+
+        auto buf = copy.compile_to_buffer();
+        lowered_module.append(buf);
+    }
+
+    return lowered_module;
+}
+
+void Module::remap_metadata_name(const std::string &from, const std::string &to) const {
+    internal_assert(contents->metadata_name_map.find(from) == contents->metadata_name_map.end());
+    internal_assert(contents->metadata_name_map.find(to) == contents->metadata_name_map.end());
+    contents->metadata_name_map[from] = to;
+}
+
+std::map<std::string, std::string> Module::get_metadata_name_map() const {
+    return contents->metadata_name_map;
+}
+
+void Module::compile(const Outputs &output_files_arg) const {
+    Outputs output_files = output_files_arg;
+
+    // output stmt and html prior to resolving submodules. We need to
+    // clear the output after writing it, otherwise the output will
+    // be overwritten by recursive calls after submodules are resolved.
+    if (!output_files.stmt_name.empty()) {
+        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
+        std::ofstream file(output_files.stmt_name);
+        file << *this;
+        output_files.stmt_name.clear();
+    }
+    if (!output_files.stmt_html_name.empty()) {
+        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
+        Internal::print_to_html(output_files.stmt_html_name, *this);
+        output_files.stmt_html_name.clear();
+    }
+
+
+    // If there are submodules, recursively lower submodules to
+    // buffers on a copy of the module being compiled, then compile
+    // the copied module.
+    if (!submodules().empty()) {
+        resolve_submodules().compile(output_files);
+        return;
+    }
+
     if (!output_files.object_name.empty() || !output_files.assembly_name.empty() ||
         !output_files.bitcode_name.empty() || !output_files.llvm_assembly_name.empty() ||
         !output_files.static_library_name.empty()) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
-        if (!output_files.object_name.empty() || !output_files.static_library_name.empty()) {
-            // We must always generate the object files here, either because they are
-            // needed directly, or as temporary inputs to create a static library.
-            // If they are just temporary inputs, we delete them when we're done,
-            // to minimize the cruft left laying around in build products directory.
-            std::unique_ptr<TemporaryObjectFileDir> temp_dir;
-
-            std::string object_name = output_files.object_name;
-            if (object_name.empty()) {
-                temp_dir = std::unique_ptr<TemporaryObjectFileDir>(new TemporaryObjectFileDir());
-                object_name = temp_dir->add_temp_object_file(output_files.static_library_name, "", target());
-            }
-
+        if (!output_files.object_name.empty()) {
+            debug(1) << "Module.compile(): object_name " << output_files.object_name << "\n";
+            auto out = make_raw_fd_ostream(output_files.object_name);
+            compile_llvm_module_to_object(*llvm_module, *out);
+        }
+        if (!output_files.static_library_name.empty()) {
+            // To simplify the code, we always create a temporary object output
+            // here, even if output_files.object_name was also set: in practice,
+            // no real-world code ever sets both object_name and static_library_name
+            // at the same time, so there is no meaningful performance advantage
+            // to be had.
+            TemporaryObjectFileDir temp_dir;
             {
-                debug(1) << "Module.compile(): object_name " << object_name << "\n";
+                std::string object_name = temp_dir.add_temp_object_file(output_files.static_library_name, "", target());
+                debug(1) << "Module.compile(): temporary object_name " << object_name << "\n";
                 auto out = make_raw_fd_ostream(object_name);
                 compile_llvm_module_to_object(*llvm_module, *out);
-                out->flush();
+                out->flush();  // create_static_library() is happier if we do this
             }
-
-            if (!output_files.static_library_name.empty()) {
-                debug(1) << "Module.compile(): static_library_name " << output_files.static_library_name << "\n";
-                Target base_target(target().os, target().arch, target().bits);
-                create_static_library({object_name}, base_target, output_files.static_library_name);
-            }
+            debug(1) << "Module.compile(): static_library_name " << output_files.static_library_name << "\n";
+            Target base_target(target().os, target().arch, target().bits);
+            create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
         }
         if (!output_files.assembly_name.empty()) {
             debug(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
@@ -219,6 +400,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_header_name " << output_files.c_header_name << "\n";
         std::ofstream file(output_files.c_header_name);
         Internal::CodeGen_C cg(file,
+                               target(),
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
                                output_files.c_header_name);
@@ -228,18 +410,19 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
         std::ofstream file(output_files.c_source_name);
         Internal::CodeGen_C cg(file,
+                               target(),
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
-    if (!output_files.stmt_name.empty()) {
-        debug(1) << "Module.compile(): stmt_name " << output_files.stmt_name << "\n";
-        std::ofstream file(output_files.stmt_name);
-        file << *this;
-    }
-    if (!output_files.stmt_html_name.empty()) {
-        debug(1) << "Module.compile(): stmt_html_name " << output_files.stmt_html_name << "\n";
-        Internal::print_to_html(output_files.stmt_html_name, *this);
+    if (!output_files.schedule_name.empty()) {
+        debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
+        std::ofstream file(output_files.schedule_name);
+        if (contents->auto_schedule.empty()) {
+           file << "// auto_schedule_outputs() was not called for this Generator.\n";
+        } else {
+           file << contents->auto_schedule;
+        }
     }
 }
 
@@ -279,11 +462,29 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     // If only one target, don't bother with the runtime feature detection wrapping.
+    const bool needs_wrapper = (targets.size() > 1);
     if (targets.size() == 1) {
         debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
         module_producer(fn_name, base_target).compile(output_files);
         return;
     }
+
+    std::vector<std::future<void>> futures;
+    // If we are running with HL_DEBUG_CODEGEN=1, use threads=1 to enforce
+    // sequential execution, so that debug output won't be utterly incomprehensible
+    const size_t num_threads = (debug::debug_level() > 0) ? 1 : Internal::ThreadPool<void>::num_processors_online();
+    Internal::ThreadPool<void> pool(num_threads);
+
+    // For safety, the runtime must be built only with features common to all
+    // of the targets; given an unusual ordering like
+    //
+    //     x86-64-linux,x86-64-sse41
+    //
+    // we should still always be *correct*: this ordering would never select sse41
+    // (since x86-64-linux would be selected first due to ordering), but could
+    // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
+    // included). So we'll keep track of the common features as we walk thru the targets.
+    uint64_t runtime_features_mask = (uint64_t)-1LL;
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -319,35 +520,36 @@ void compile_multitarget(const std::string &fn_name,
           suffix = it->second;
         }
         suffix = "_" + suffix;
-        std::string sub_fn_name = fn_name + suffix;
+        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         // Matlab should be added to the wrapper pipeline below, instead of each sub-pipeline.
-        Target sub_fn_target = target
-            .with_feature(Target::NoRuntime)
-            .without_feature(Target::Matlab);
+        Target sub_fn_target = target.with_feature(Target::NoRuntime);
+        if (needs_wrapper) {
+            sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
+        }
 
-        Module module = module_producer(sub_fn_name, sub_fn_target);
+        Module sub_module = module_producer(sub_fn_name, sub_fn_target);
+        // Re-assign every time -- should be the same across all targets anyway,
+        // but base_target is always the last one we encounter.
+        base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
+
         Outputs sub_out = add_suffixes(output_files, suffix);
-        if (sub_out.object_name.empty()) {
-            sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
-        }
-        module.compile(sub_out);
+        internal_assert(sub_out.object_name.empty());
+        sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: compile_sub_target " << o.object_name << "\n";
+            m.compile(o);
+        }, std::move(sub_module), std::move(sub_out)));
 
-        static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
-        uint64_t feature_bits = 0;
-        for (int i = 0; i < Target::FeatureEnd; ++i) {
-            if (target.has_feature(static_cast<Target::Feature>(i))) {
-                feature_bits |= static_cast<uint64_t>(1) << i;
-            }
-        }
+        const uint64_t cur_target_mask = target_feature_mask(target);
+        Expr can_use = (target == base_target) ?
+                        IntImm::make(Int(32), 1) :
+                        Call::make(Int(32), "halide_can_use_target_features",
+                                   {UIntImm::make(UInt(64), cur_target_mask)},
+                                   Call::Extern);
 
-        Expr can_use = Call::make(Int(32), "halide_can_use_target_features", {UIntImm::make(UInt(64), feature_bits)}, Call::Extern);
-
-        if (target == base_target) {
-            can_use = IntImm::make(Int(32), 1);
-            base_target_args = module.functions().back().args;
-        }
+        runtime_features_mask &= cur_target_mask;
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -356,45 +558,83 @@ void compile_multitarget(const std::string &fn_name,
     // If we haven't specified "no runtime", build a runtime with the base target
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
-        const Target runtime_target = base_target.without_feature(Target::NoRuntime);
-        compile_standalone_runtime(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target)),
-            runtime_target);
+        // Start with a bare Target, set only the features we know are common to all.
+        Target runtime_target(base_target.os, base_target.arch, base_target.bits);
+        // We never want NoRuntime set here.
+        runtime_features_mask &= ~(((uint64_t)(1)) << Target::NoRuntime);
+        if (runtime_features_mask) {
+            for (int i = 0; i < Target::FeatureEnd; ++i) {
+                if (runtime_features_mask & (((uint64_t) 1) << i)) {
+                    runtime_target.set_feature((Target::Feature) i);
+                }
+            }
+        }
+        Outputs runtime_out = Outputs().object(
+            temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
+        futures.emplace_back(pool.async([](Target t, Outputs o) {
+            debug(1) << "compile_multitarget: compile_standalone_runtime " << o.static_library_name << "\n";
+            compile_standalone_runtime(o, t);
+        }, std::move(runtime_target), std::move(runtime_out)));
     }
 
-    Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
-    std::string private_result_name = unique_name(fn_name + "_result");
-    Expr private_result_var = Variable::make(Int(32), private_result_name);
-    Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
-    wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
+    if (needs_wrapper) {
+        Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
+        std::string private_result_name = unique_name(fn_name + "_result");
+        Expr private_result_var = Variable::make(Int(32), private_result_name);
+        Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
+        wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
 
-    // Always build with NoRuntime: that's handled as a separate module.
-    //
-    // Always build with NoBoundsQuery: underlying code will implement that (or not).
-    //
-    // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
-    // only way to propagate a nonzero result code to our caller. (Note that this
-    // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
-    // arguments; this is regrettable but fairly minor in terms of both code size and speed,
-    // at least for real-world code.)
-    Target wrapper_target = base_target
-        .with_feature(Target::NoRuntime)
-        .with_feature(Target::NoBoundsQuery)
-        .without_feature(Target::NoAsserts);
+        // Always build with NoRuntime: that's handled as a separate module.
+        //
+        // Always build with NoBoundsQuery: underlying code will implement that (or not).
+        //
+        // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
+        // only way to propagate a nonzero result code to our caller. (Note that this
+        // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
+        // arguments; this is regrettable but fairly minor in terms of both code size and speed,
+        // at least for real-world code.)
+        Target wrapper_target = base_target
+            .with_feature(Target::NoRuntime)
+            .with_feature(Target::NoBoundsQuery)
+            .without_feature(Target::NoAsserts);
 
-    // If the base target specified the Matlab target, we want the Matlab target
-    // on the wrapper instead.
-    if (base_target.has_feature(Target::Matlab)) {
-        wrapper_target = wrapper_target.with_feature(Target::Matlab);
+        // If the base target specified the Matlab target, we want the Matlab target
+        // on the wrapper instead.
+        if (base_target.has_feature(Target::Matlab)) {
+            wrapper_target = wrapper_target.with_feature(Target::Matlab);
+        }
+
+        Module wrapper_module(fn_name, wrapper_target);
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
+
+        // Add a wrapper to accept old buffer_ts
+        add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
+
+        Outputs wrapper_out = Outputs().object(
+            temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: wrapper " << o.object_name << "\n";
+            m.compile(o);
+        }, std::move(wrapper_module), std::move(wrapper_out)));
     }
-
-    Module wrapper_module(fn_name, wrapper_target);
-    wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
-    wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
     if (!output_files.c_header_name.empty()) {
-        debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
-        wrapper_module.compile(Outputs().c_header(output_files.c_header_name));
+        Module header_module(fn_name, base_target);
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::ExternalPlusMetadata));
+        // Add a wrapper to accept old buffer_ts
+        add_legacy_wrapper(header_module, header_module.functions().back());
+        Outputs header_out = Outputs().c_header(output_files.c_header_name);
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
+            m.compile(o);
+        }, std::move(header_module), std::move(header_out)));
     }
+
+    // Must wait for everything to finish before we create the static library
+    for (auto &f : futures) {
+        f.wait();
+    }
+
     if (!output_files.static_library_name.empty()) {
         debug(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
         create_static_library(temp_dir.files(), base_target, output_files.static_library_name);

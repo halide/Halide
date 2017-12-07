@@ -39,7 +39,7 @@ protected:
     }
 };
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event *e) {
+int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 

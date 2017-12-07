@@ -30,7 +30,7 @@ WEAK mtl_buffer *new_buffer(mtl_device *device, size_t length) {
     typedef mtl_buffer *(*new_buffer_method)(objc_id device, objc_sel sel, size_t length, size_t options);
     new_buffer_method method = (new_buffer_method)&objc_msgSend;
     return (*method)(device, sel_getUid("newBufferWithLength:options:"),
-                     length, 0  /* MTLResourceOptionCPUCacheModeDefault */);
+                     length, 0  /* MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared */);
 }
 
 WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
@@ -88,33 +88,40 @@ struct NSRange {
     size_t length;
 };
 
-WEAK void did_modify_range_if_supported(mtl_buffer *buffer, NSRange range) {
-  debug(NULL) << "did_modify_range_if_supported called.\n";
-    typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
-    responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
-    objc_sel did_modify_range_sel = sel_getUid("didModifyRange:");
-    if ((*method1)(buffer, sel_getUid("respondsToSelector:"), did_modify_range_sel)) {
-      debug(NULL) << "Sending didModifyRange method\n";
-        typedef void (*did_modify_range_method)(objc_id obj, objc_sel sel, NSRange range);
-        did_modify_range_method method2 = (did_modify_range_method)&objc_msgSend;
-        (*method2)(buffer, did_modify_range_sel, range);
-    }
+WEAK void did_modify_range(mtl_buffer *buffer, NSRange range) {
+    typedef void (*did_modify_range_method)(objc_id obj, objc_sel sel, NSRange range);
+    did_modify_range_method method = (did_modify_range_method)&objc_msgSend;
+    (*method)(buffer, sel_getUid("didModifyRange:"), range);
 }
 
-WEAK void synchronize_resource_if_supported(mtl_blit_command_encoder *encoder, mtl_buffer *buffer) {
+WEAK void synchronize_resource(mtl_blit_command_encoder *encoder, mtl_buffer *buffer) {
+    typedef void (*synchronize_resource_method)(objc_id obj, objc_sel sel, mtl_buffer *buffer);
+    synchronize_resource_method method = (synchronize_resource_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("synchronizeResource:"), buffer);
+}
+
+WEAK bool is_buffer_managed(mtl_buffer *buffer) {
     typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
     responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
-    objc_sel synchronize_resource_sel = sel_getUid("synchronizeResource:");
-    if ((*method1)(encoder, sel_getUid("respondsToSelector:"), synchronize_resource_sel)) {
-      debug(NULL) << "Sending synchronizeResource method\n";
-        typedef void (*synchronize_resource_method)(objc_id obj, objc_sel sel, mtl_buffer*buffer);
-        synchronize_resource_method method2 = (synchronize_resource_method)&objc_msgSend;
-        (*method2)(encoder, synchronize_resource_sel, buffer);
+    objc_sel storage_mode_sel = sel_getUid("storageMode");
+    if ((*method1)(buffer, sel_getUid("respondsToSelector:"), storage_mode_sel)) {
+        typedef int (*storage_mode_method)(objc_id obj, objc_sel sel);
+        storage_mode_method method = (storage_mode_method)&objc_msgSend;
+        int storage_mode = (*method)(buffer, storage_mode_sel);
+        return storage_mode == 1; // MTLStorageModeManaged
     }
+    return false;
 }
 
 WEAK void end_encoding(mtl_blit_command_encoder *encoder) {
     objc_msgSend(encoder, sel_getUid("endEncoding"));
+}
+
+WEAK bool buffer_supports_set_bytes(mtl_compute_command_encoder *encoder) {
+    typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
+    responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
+    objc_sel set_bytes_sel = sel_getUid("setBytes:length:atIndex:");
+    return (*method1)(encoder, sel_getUid("respondsToSelector:"), set_bytes_sel);
 }
 
 WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source, size_t source_len) {
@@ -159,6 +166,14 @@ WEAK void set_input_buffer(mtl_compute_command_encoder *encoder, mtl_buffer *inp
               input_buffer, 0, index);
 }
 
+WEAK void set_input_buffer_from_bytes(mtl_compute_command_encoder *encoder, uint8_t *input_buffer, uint32_t length, uint32_t index) {
+    typedef void (*set_bytes_method)(objc_id encoder, objc_sel sel,
+                                      void *input_buffer, size_t length, size_t index);
+    set_bytes_method method = (set_bytes_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("setBytes:length:atIndex:"),
+              input_buffer, length, index);
+}
+
 WEAK void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, uint32_t length, uint32_t index) {
     typedef void (*set_threadgroup_memory_length_method)(objc_id encoder, objc_sel sel,
                                                          size_t length, size_t index);
@@ -179,7 +194,7 @@ WEAK void *buffer_contents(mtl_buffer *buffer) {
     return objc_msgSend(buffer, sel_getUid("contents"));
 }
 
-extern WEAK halide_device_interface metal_device_interface;
+extern WEAK halide_device_interface_t metal_device_interface;
 
 volatile int WEAK thread_lock = 0;
 WEAK mtl_device *device;
@@ -194,6 +209,11 @@ struct module_state {
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
+
+// API Capabilities.  If more capabilities need to be checked,
+// this can be refactored to something more robust/general.
+WEAK bool metal_api_supports_set_bytes;
+WEAK mtl_device *metal_api_checked_device;
 
 }}}}
 
@@ -323,33 +343,25 @@ using namespace Halide::Runtime::Internal::Metal;
 
 extern "C" {
 
-WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
+
+WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
         << "halide_metal_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
-   size_t size = buf_size(buf);
+    size_t size = buf->size_in_bytes();
     halide_assert(user_context, size != 0);
-    if (buf->dev) {
+    if (buf->device) {
         // This buffer already has a device allocation
         return 0;
     }
 
-    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
-                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
+    // Check all strides positive
+    for (int i = 0; i < buf->dimensions; i++) {
+        halide_assert(user_context, buf->dim[i].stride > 0);
+    }
 
-    debug(user_context) << "    allocating buffer of " << (uint64_t)size << " bytes, "
-                        << "extents: "
-                        << buf->extent[0] << "x"
-                        << buf->extent[1] << "x"
-                        << buf->extent[2] << "x"
-                        << buf->extent[3] << " "
-                        << "strides: "
-                        << buf->stride[0] << "x"
-                        << buf->stride[1] << "x"
-                        << buf->stride[2] << "x"
-                        << buf->stride[3] << " "
-                        << "(" << buf->elem_size << " bytes per element)\n";
+    debug(user_context) << "    allocating " << *buf << "\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -366,12 +378,9 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
         return -1;
     }
 
-    buf->dev = halide_new_device_wrapper((uint64_t)metal_buf, &metal_device_interface);
-    if (buf->dev == 0) {
-        error(user_context) << "Metal: out of memory allocating device wrapper.\n";
-        release_ns_object(metal_buf);
-        return -1;
-    }
+    buf->device = (uint64_t)metal_buf;
+    buf->device_interface = &metal_device_interface;
+    buf->device_interface->impl->use_module();
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -381,10 +390,10 @@ WEAK int halide_metal_device_malloc(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-
-WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
-    debug(user_context) << "halide_metal_device_free called on buf " << buf << " dev is " << buf->dev << "\n";
-    if (buf->dev == 0) {
+WEAK int halide_metal_device_free(void *user_context, halide_buffer_t* buf) {
+    debug(user_context) << "halide_metal_device_free called on buf "
+                        << buf << " device is " << buf->device << "\n";
+    if (buf->device == 0) {
         return 0;
     }
 
@@ -392,10 +401,11 @@ WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    mtl_buffer *metal_buf = (mtl_buffer *)halide_get_device_handle(buf->dev);
+    mtl_buffer *metal_buf = (mtl_buffer *)buf->device;
     release_ns_object(metal_buf);
-    halide_delete_device_wrapper(buf->dev);
-    buf->dev = 0;
+    buf->device = 0;
+    buf->device_interface->impl->release_module();
+    buf->device_interface = NULL;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -455,13 +465,15 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 
 namespace {
 
-WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buffer_t *buffer) {
+inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct halide_buffer_t *buffer) {
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
     if (buffer != NULL) {
-        mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
-        mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(sync_command_buffer);
-        synchronize_resource_if_supported(blit_encoder, metal_buffer);
-        end_encoding(blit_encoder);
+        mtl_buffer *metal_buffer = (mtl_buffer *)buffer->device;
+        if (is_buffer_managed(metal_buffer)) {
+            mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(sync_command_buffer);
+            synchronize_resource(blit_encoder, metal_buffer);
+            end_encoding(blit_encoder);
+        }
     }
     commit_command_buffer(sync_command_buffer);
     wait_until_completed(sync_command_buffer);
@@ -469,7 +481,7 @@ WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buf
 
 }
 
-WEAK int halide_metal_device_sync(void *user_context, struct buffer_t *buffer) {
+WEAK int halide_metal_device_sync(void *user_context, struct halide_buffer_t *buffer) {
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
@@ -511,7 +523,7 @@ WEAK int halide_metal_device_release(void *user_context) {
         module_state *state = state_list;
         while (state) {
           if (state->library) {
-                debug(user_context) << "Metal - Releasing: new_library_with_source" << state->library << "\n";
+                debug(user_context) << "Metal - Releasing: new_library_with_source " << state->library << "\n";
                 release_ns_object(state->library);
                 state->library = NULL;
             }
@@ -535,7 +547,7 @@ WEAK int halide_metal_device_release(void *user_context) {
     return 0;
 }
 
-WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
+WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t* buffer) {
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
@@ -545,33 +557,38 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
         return metal_context.error;
     }
 
-    mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
-    size_t total_size = buf_size(buffer);
-    halide_assert(user_context, total_size != 0);
-    NSRange total_extent;
-    total_extent.location = 0;
-    total_extent.length = total_size;
-    did_modify_range_if_supported(metal_buffer, total_extent);
-    halide_metal_device_sync_internal(metal_context.queue, buffer);
-
-    halide_assert(user_context, buffer->host && buffer->dev);
-
-    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+    halide_assert(user_context, buffer->host && buffer->device);
 
     device_copy c = make_host_to_device_copy(buffer);
-    c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
+    mtl_buffer *metal_buffer = (mtl_buffer *)c.dst;
+    c.dst = (uint64_t)buffer_contents(metal_buffer);
 
-    c.copy_memory(user_context);
+    debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->device
+                        << " metal_buffer = " << metal_buffer
+                        << " host = " << buffer->host << "\n";
+
+    copy_memory(c, user_context);
+
+    if (is_buffer_managed(metal_buffer)) {
+        size_t total_size = buffer->size_in_bytes();
+        halide_assert(user_context, total_size != 0);
+        NSRange total_extent;
+        total_extent.location = 0;
+        total_extent.length = total_size;
+        did_modify_range(metal_buffer, total_extent);
+    }
+    halide_metal_device_sync_internal(metal_context.queue, buffer);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "Time for halide_metal_copy_to_device: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << "Time for halide_metal_copy_to_device: "
+                        << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
 }
 
-WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buffer) {
+WEAK int halide_metal_copy_to_host(void *user_context, halide_buffer_t* buffer) {
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
@@ -583,12 +600,16 @@ WEAK int halide_metal_copy_to_host(void *user_context, buffer_t* buffer) {
 
     halide_metal_device_sync_internal(metal_context.queue, buffer);
 
-    halide_assert(user_context, buffer->host && buffer->dev);
+    halide_assert(user_context, buffer->host && buffer->device);
+    halide_assert(user_context, buffer->dimensions <= MAX_COPY_DIMS);
+    if (buffer->dimensions > MAX_COPY_DIMS) {
+        return -1;
+    }
 
     device_copy c = make_device_to_host_copy(buffer);
     c.src = (uint64_t)buffer_contents((mtl_buffer *)c.src);
 
-    c.copy_memory(user_context);
+    copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -655,6 +676,10 @@ WEAK int halide_metal_run(void *user_context,
             // Metal requires natural alignment for all types in structures.
             // Assert arg_size is exactly a power of two and adjust size to start
             // on the next multiple of that power of two.
+            //
+            // TODO(zalman): This seems fishy - if the arguments are
+            // not already sorted in decreasing order of size, wrong
+            // results occur. To repro, remove the sorting code in CodeGen_GPU_Host
             halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
             total_args_size = (total_args_size + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
             total_args_size += arg_sizes[i];
@@ -663,14 +688,30 @@ WEAK int halide_metal_run(void *user_context,
 
     int32_t buffer_index = 0;
     if (total_args_size > 0) {
-        mtl_buffer *args_buffer = new_buffer(metal_context.device, total_args_size);
-        if (args_buffer == 0) {
-            error(user_context) << "Metal: Could not allocate arguments buffer.\n";
-            release_ns_object(pipeline_state);
-            release_ns_object(function);
-            return -1;
+        mtl_buffer *args_buffer = 0;        // used if the total arguments size large
+        uint8_t small_args_buffer[4096];    // used if the total arguments size is small
+        char *args_ptr;
+
+        if (metal_api_checked_device != metal_context.device) {
+            metal_api_supports_set_bytes = buffer_supports_set_bytes(encoder);
+            metal_api_checked_device = metal_context.device;
+            if (metal_api_supports_set_bytes) {
+                debug(user_context) << "Metal - supports setBytes\n";
+            }
         }
-        char *args_ptr = (char *)buffer_contents(args_buffer);
+
+        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
+            args_ptr = (char *)small_args_buffer;
+        } else {
+            args_buffer = new_buffer(metal_context.device, total_args_size);
+            if (args_buffer == 0) {
+                error(user_context) << "Metal: Could not allocate arguments buffer.\n";
+                release_ns_object(pipeline_state);
+                release_ns_object(function);
+                return -1;
+            }
+            args_ptr = (char *)buffer_contents(args_buffer);
+        }
         size_t offset = 0;
         for (size_t i = 0; arg_sizes[i] != 0; i++) {
             if (!arg_is_buffer[i]) {
@@ -680,19 +721,28 @@ WEAK int halide_metal_run(void *user_context,
             }
         }
         halide_assert(user_context, offset == total_args_size);
-        set_input_buffer(encoder, args_buffer, buffer_index);
-        release_ns_object(args_buffer);
+        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
+            set_input_buffer_from_bytes(encoder, small_args_buffer,
+                                        total_args_size, buffer_index);
+        } else {
+            set_input_buffer(encoder, args_buffer, buffer_index);
+            release_ns_object(args_buffer);
+        }
         buffer_index++;
     }
 
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(*(uint64_t *)args[i]);
+            uint64_t handle = ((halide_buffer_t *)args[i])->device;
+            mtl_buffer *metal_buffer = (mtl_buffer *)handle;
             set_input_buffer(encoder, metal_buffer, buffer_index);
             buffer_index++;
         }
     }
+
+    // Round shared memory size up to a multiple of 16, as required by setThreadgroupMemoryLength.
+    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
     debug(user_context) << "Setting shared memory length to " << shared_mem_bytes << "\n";
     set_threadgroup_memory_length(encoder, shared_mem_bytes, 0);
 
@@ -721,57 +771,61 @@ WEAK int halide_metal_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_metal_device_and_host_malloc(void *user_context, struct buffer_t *buffer) {
+WEAK int halide_metal_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
     debug(user_context) << "halide_metal_device_and_host_malloc called.\n";
     int result = halide_metal_device_malloc(user_context, buffer);
     if (result == 0) {
-        mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
+        mtl_buffer *metal_buffer = (mtl_buffer *)(buffer->device);
         buffer->host = (uint8_t *)buffer_contents(metal_buffer);
-        debug(user_context) << "halide_metal_device_and_host_malloc dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
+        debug(user_context) << "halide_metal_device_and_host_malloc"
+                            << " device = " << (void*)buffer->device
+                            << " metal_buffer = " << metal_buffer
+                            << " host = " << buffer->host << "\n";
     }
     return result;
 }
 
-WEAK int halide_metal_device_and_host_free(void *user_context, struct buffer_t *buffer) {
+WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
     debug(user_context) << "halide_metal_device_and_host_free called.\n";
     halide_metal_device_free(user_context, buffer);
     buffer->host = NULL;
     return 0;
 }
 
-WEAK int halide_metal_wrap_buffer(void *user_context, struct buffer_t *buf, uintptr_t buffer) {
-    halide_assert(user_context, buf->dev == 0);
-    if (buf->dev != 0) {
+WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer) {
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
         return -2;
     }
-    buf->dev = halide_new_device_wrapper(buffer, &metal_device_interface);
-    if (buf->dev == 0) {
+    buf->device = buffer;
+    buf->device_interface = &metal_device_interface;
+    buf->device_interface->impl->use_module();
+    if (buf->device == 0) {
         return -1;
     }
     return 0;
 }
 
-WEAK uintptr_t halide_metal_detach_buffer(void *user_context, struct buffer_t *buf) {
-    if (buf->dev == NULL) {
+WEAK int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
+    if (buf->device == 0) {
         return 0;
     }
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &metal_device_interface);
-    uint64_t buffer = halide_get_device_handle(buf->dev);
-    halide_delete_device_wrapper(buf->dev);
-    buf->dev = 0;
-    return (uintptr_t)buffer;
+    halide_assert(user_context, buf->device_interface == &metal_device_interface);
+    buf->device_interface->impl->release_module();
+    buf->device_interface = NULL;
+    buf->device = 0;
+    return 0;
 }
 
-WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct buffer_t *buf) {
-    if (buf->dev == NULL) {
+WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf) {
+    if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &metal_device_interface);
-    uint64_t buffer = halide_get_device_handle(buf->dev);
-    return (uintptr_t)buffer;
+    halide_assert(user_context, buf->device_interface == &metal_device_interface);
+    return (uintptr_t)(buf->device);
 }
 
-WEAK const struct halide_device_interface *halide_metal_device_interface() {
+WEAK const struct halide_device_interface_t *halide_metal_device_interface() {
     return &metal_device_interface;
 }
 
@@ -785,7 +839,8 @@ WEAK void halide_metal_cleanup() {
 } // extern "C" linkage
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
-WEAK halide_device_interface metal_device_interface = {
+
+WEAK halide_device_interface_impl_t metal_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_metal_device_malloc,
@@ -796,6 +851,28 @@ WEAK halide_device_interface metal_device_interface = {
     halide_metal_copy_to_device,
     halide_metal_device_and_host_malloc,
     halide_metal_device_and_host_free,
+    halide_default_buffer_copy,
+    halide_default_device_crop,
+    halide_default_device_release_crop,
+    halide_metal_wrap_buffer,
+    halide_metal_detach_buffer
+};
+
+WEAK halide_device_interface_t metal_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_release_crop,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    &metal_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal

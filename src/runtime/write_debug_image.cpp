@@ -1,30 +1,45 @@
 #include "HalideRuntime.h"
 
-extern "C" void *fopen(const char *, const char *);
-extern "C" int fclose(void *);
-extern "C" size_t fwrite(const void *, size_t, size_t, void *);
-
-// Use TIFF because it meets the following criteria:
-// - Supports uncompressed data
-// - Supports 3D images as well as 2D
-// - Supports floating-point samples
-// - Supports an arbitrary number of channels
-// - Can be written with a reasonable amount of code in the runtime.
-//   (E.g. this file instead of linking in another lib)
+// We support three formats, tiff, mat, and tmp.
+//
+// All formats support arbitrary types, and are easy to write in a
+// small amount of code.
+//
+// TIFF:
+// - 2/3-D only
+// - Readable by the most tools
+// mat:
+// - Abitrary dimensionality, type
+// - Readable by matlab, ImageStack, and many other tools
+// tmp:
+// - Dirt simple, easy to roll your own parser
+// - Readable by ImageStack only
+// - Will probably be deprecated in favor of .mat soon
 //
 // It would be nice to use a format that web browsers read and display
 // directly, but those formats don't tend to satisfy the above goals.
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-// See "type_code" in DebugToFile.cpp
+// Mappings from the type_code passed in to the type codes of the
+// formats. See "type_code" in DebugToFile.cpp
+
 // TIFF sample type values are:
 //     1 => Unsigned int
 //     2 => Signed int
 //     3 => Floating-point
-
 WEAK int16_t pixel_type_to_tiff_sample_type[] = {
-  3, 3, 1, 2, 1, 2, 1, 2, 1, 2
+    // float, double, uint8, int8, ... uint64, int64
+    3, 3, 1, 2, 1, 2, 1, 2, 1, 2
+};
+
+// See the .mat level 5 documentation for matlab class codes.
+WEAK uint8_t pixel_type_to_matlab_class_code[] = {
+    7, 6, 9, 8, 11, 10, 13, 12, 15, 14
+};
+
+WEAK uint8_t pixel_type_to_matlab_type_code[] = {
+    7, 9, 2, 1, 4, 3, 6, 5, 13, 12
 };
 
 #pragma pack(push)
@@ -75,72 +90,76 @@ struct halide_tiff_header {
 
 #pragma pack(pop)
 
-WEAK bool has_tiff_extension(const char *filename) {
-    const char *f = filename;
-
-    while (*f != '\0') f++;
-    while (f != filename && *f != '.') f--;
-
-    if (*f != '.') return false;
-    f++;
-
-    if (*f != 't' && *f != 'T') return false;
-    f++;
-
-    if (*f != 'i' && *f != 'I') return false;
-    f++;
-
-    if (*f != 'f' && *f != 'F') return false;
-    f++;
-
-    if (*f == '\0') return true;
-
-    if (*f != 'f' && *f != 'F') return false;
-    f++;
-
-    return *f == '\0';
+WEAK bool ends_with(const char *filename, const char *suffix) {
+    const char *f = filename, *s = suffix;
+    while (*f) f++;
+    while (*s) s++;
+    while (s != suffix && f != filename) {
+        if (*f != *s) return false;
+        f--;
+        s--;
+    }
+    return *f == *s;
 }
 
-// Get a pointer to the pixel data in a buffer, relative to the min
-// coordinate, not in absolute coordinates.
-WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
-                                  const struct buffer_t *buf) {
-    uint8_t *ptr = buf->host + buf->elem_size * (dim0 * buf->stride[0] +
-                                                 dim1 * buf->stride[1] +
-                                                 dim2 * buf->stride[2] +
-                                                 dim3 * buf->stride[3]);
-    return ptr;
-}
+struct ScopedFile {
+    void *f;
+    ScopedFile(const char *filename, const char *mode) {
+        f = fopen(filename, mode);
+    }
+    ~ScopedFile() {
+        fclose(f);
+    }
+    bool write(const void *ptr, size_t bytes) {
+        return fwrite(ptr, bytes, 1, f);
+    }
+    bool open() const {
+        return f;
+    }
+};
 
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                             int32_t type_code, struct buffer_t *buf) {
+                                             int32_t type_code, struct halide_buffer_t *buf) {
+
+    if (buf->dimensions > 4) {
+        halide_error(user_context, "Can't debug_to_file a Func with more than four dimensions\n");
+        return -1;
+    }
 
     halide_copy_to_host(user_context, buf);
 
-    void *f = fopen(filename, "wb");
-    if (!f) return -1;
+    ScopedFile f(filename, "wb");
+    if (!f.open()) return -2;
 
-    int32_t s0 = max(1, buf->extent[0]), s1 = max(1, buf->extent[1]);
-    int32_t s2 = max(1, buf->extent[2]), s3 = max(1, buf->extent[3]);
-    int32_t bytes_per_element = buf->elem_size;
+    size_t elts = 1;
+    halide_dimension_t shape[4];
+    for (int i = 0; i < buf->dimensions && i < 4; i++) {
+        shape[i] = buf->dim[i];
+        elts *= shape[i].extent;
+    }
+    for (int i = buf->dimensions; i < 4; i++) {
+        shape[i].min = 0;
+        shape[i].extent = 1;
+        shape[i].stride = 0;
+    }
+    int32_t bytes_per_element = buf->type.bytes();
 
-    size_t elts = s0;
-    elts *= s1*s2*s3;
+    uint32_t final_padding_bytes = 0;
 
-    if (has_tiff_extension(filename)) {
+    if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
         int32_t channels;
-        int32_t width = s0;
-        int32_t height = s1;
+        int32_t width = shape[0].extent;
+        int32_t height = shape[1].extent;
         int32_t depth;
 
-        if ((s3 == 0 || s3 == 1) && (s2 < 5)) {
-            channels = s2;
+        if ((shape[3].extent == 0 || shape[3].extent == 1) && (shape[2].extent < 5)) {
+            channels = shape[2].extent;
             depth = 1;
         } else {
-            channels = s3;
-            depth = s2;
+            channels = shape[3].extent;
+            depth = shape[2].extent;
         }
 
         struct halide_tiff_header header;
@@ -162,7 +181,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
         tag++->assign32(273, channels, sizeof(header));          // Rows per strip
         tag++->assign16(277, 1, int16_t(channels));              // Samples per pixel
-        tag++->assign32(278, 1, s1);                             // Rows per strip
+        tag++->assign32(278, 1, shape[1].extent);                // Rows per strip
         tag++->assign32(279, channels,
                         (channels == 1) ?
                             elts * bytes_per_element :
@@ -184,34 +203,110 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         header.height_resolution[0] = 1;
         header.height_resolution[1] = 1;
 
-        if (!fwrite((void *)(&header), sizeof(header), 1, f)) {
-            fclose(f);
-            return -2;
+        if (!f.write((void *)(&header), sizeof(header))) {
+            return -3;
         }
 
         if (channels > 1) {
-          int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
+            int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
-          for (int32_t i = 0; i < channels; i++) {
-              if (!fwrite((void*)(&offset), 4, 1, f)) {
-                  fclose(f);
-                  return -2;
-              }
-              offset += s0 * s1 * depth * bytes_per_element;
-          }
-          int32_t count = s0 * s1 * depth;
-          for (int32_t i = 0; i < channels; i++) {
-              if (!fwrite((void*)(&count), 4, 1, f)) {
-                  fclose(f);
-                  return -2;
-              }
-          }
+            for (int32_t i = 0; i < channels; i++) {
+                if (!f.write((void*)(&offset), 4)) {
+                    return -4;
+                }
+                offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
+            }
+            int32_t count = shape[0].extent * shape[1].extent * depth;
+            for (int32_t i = 0; i < channels; i++) {
+                if (!f.write((void*)(&count), 4)) {
+                    return -5;
+                }
+            }
+        }
+    } else if (ends_with(filename, ".mat")) {
+        // Construct a name for the array from the filename
+        const char *start, *end;
+        for (end = filename; *end; end++);
+        for (; *end != '.'; end--);
+        for (start = end; start != filename && start[-1] != '/'; start--);
+        uint32_t name_size = (uint32_t)(end - start);
+        char array_name[256];
+        char *dst = array_name;
+        while (start != end) {
+            *dst++ = *start++;
+        }
+        while (dst < array_name + sizeof(array_name)) {
+            *dst++ = 0;
+        }
+
+        uint32_t padded_name_size = (name_size + 7) & ~7;
+
+        char header[129] =
+            "MATLAB 5.0 MAT-file, produced by Halide                         "
+            "                                                            \000\001IM";
+
+        f.write(header, 128);
+
+        size_t payload_bytes = buf->size_in_bytes();
+
+        // level 5 .mat files have a size limit
+        if ((uint64_t)payload_bytes >> 32) {
+            halide_error(user_context, "Can't debug_to_file to a .mat file greater than 4GB\n");
+            return -6;
+        }
+
+        int dims = buf->dimensions;
+        // .mat files require at least two dimensions
+        if (dims < 2) {
+            dims = 2;
+        }
+
+        int padded_dimensions = (dims + 1) & ~1;
+
+        uint32_t tags[] = {
+            // This is a matrix
+            14, 40 + padded_dimensions * 4 + padded_name_size + (uint32_t)payload_bytes,
+            // The element type
+            6, 8, pixel_type_to_matlab_class_code[type_code], 1,
+            // The shape
+            5, dims * 4};
+
+        if (!f.write(&tags, sizeof(tags))) {
+            return -7;
+        }
+
+        int extents[] = {shape[0].extent, shape[1].extent, shape[2].extent, shape[3].extent};
+        if (!f.write(&extents, padded_dimensions * 4)) {
+            return -8;
+        }
+
+        // The name
+        uint32_t name_header[2] = {1, name_size};
+        if (!f.write(&name_header, sizeof(name_header))) {
+            return -9;
+        }
+
+        if (!f.write(array_name, padded_name_size)) {
+            return -10;
+        }
+
+        final_padding_bytes = 7 - ((payload_bytes - 1) & 7);
+
+        // Payload header
+        uint32_t payload_header[2] = {
+            pixel_type_to_matlab_type_code[type_code], payload_bytes
+        };
+        if (!f.write(payload_header, sizeof(payload_header))) {
+            return -11;
         }
     } else {
-        int32_t header[] = {s0, s1, s2, s3, type_code};
-        if (!fwrite((void *)(&header[0]), sizeof(header), 1, f)) {
-            fclose(f);
-            return -2;
+        int32_t header[] = {shape[0].extent,
+                            shape[1].extent,
+                            shape[2].extent,
+                            shape[3].extent,
+                            type_code};
+        if (!f.write((void *)(&header[0]), sizeof(header))) {
+            return -12;
         }
     }
 
@@ -221,20 +316,20 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     int max_elts = TEMP_SIZE/bytes_per_element;
     int counter = 0;
 
-    for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
-        for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
-            for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
-                for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
+    for (int32_t dim3 = shape[3].min; dim3 < shape[3].extent + shape[3].min; ++dim3) {
+        for (int32_t dim2 = shape[2].min; dim2 < shape[2].extent + shape[2].min; ++dim2) {
+            for (int32_t dim1 = shape[1].min; dim1 < shape[1].extent + shape[1].min; ++dim1) {
+                for (int32_t dim0 = shape[0].min; dim0 < shape[0].extent + shape[0].min; ++dim0) {
                     counter++;
-                    uint8_t *loc = get_pointer_to_data(dim0, dim1, dim2, dim3, buf);
+                    int idx[] = {dim0, dim1, dim2, dim3};
+                    uint8_t *loc = buf->address_of(idx);
                     void *dst = temp + (counter-1)*bytes_per_element;
                     memcpy(dst, loc, bytes_per_element);
 
                     if (counter == max_elts) {
                         counter = 0;
-                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
-                            fclose(f);
-                            return -1;
+                        if (!f.write((void *)temp, max_elts * bytes_per_element)) {
+                            return -13;
                         }
                     }
                 }
@@ -242,12 +337,21 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
     if (counter > 0) {
-        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
-            fclose(f);
-            return -1;
+        if (!f.write((void *)temp, counter * bytes_per_element)) {
+            return -14;
         }
     }
-    fclose(f);
+
+    const uint64_t zero = 0;
+    if (final_padding_bytes) {
+        if (final_padding_bytes > sizeof(zero)) {
+            halide_error(user_context, "Unexpectedly large final_padding_bytes");
+            return -15;
+        }
+        if (!f.write(&zero, final_padding_bytes)) {
+            return -16;
+        }
+    }
 
     return 0;
 }

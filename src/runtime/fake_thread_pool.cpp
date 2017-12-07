@@ -1,19 +1,14 @@
 #include "HalideRuntime.h"
 
 extern "C" {
-WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure);
-}
 
-namespace Halide { namespace Runtime { namespace Internal {
-
-WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure) {
+WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
+                                uint8_t *closure) {
     return f(user_context, idx, closure);
 }
 
-WEAK int default_do_par_for(void *user_context, halide_task_t f,
-                           int min, int size, uint8_t *closure) {
+WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
+                                   int min, int size, uint8_t *closure) {
     for (int x = min; x < min + size; x++) {
         int result = halide_do_task(user_context, f, x, closure);
         if (result) {
@@ -23,8 +18,12 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
-WEAK halide_do_task_t custom_do_task = default_do_task;
-WEAK halide_do_par_for_t custom_do_par_for = default_do_par_for;
+}
+
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK halide_do_task_t custom_do_task = halide_default_do_task;
+WEAK halide_do_par_for_t custom_do_par_for = halide_default_do_par_for;
 
 }}} // namespace Halide::Runtime::Internal
 

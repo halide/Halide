@@ -4,7 +4,7 @@
 #include "HalideBuffer.h"
 #include "nested_externs_root.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
     auto buf = Buffer<float>::make_interleaved(100, 200, 3);

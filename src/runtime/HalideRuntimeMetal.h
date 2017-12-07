@@ -11,7 +11,7 @@ extern "C" {
  *  Routines specific to the Halide Metal runtime.
  */
 
-extern const struct halide_device_interface *halide_metal_device_interface();
+extern const struct halide_device_interface_t *halide_metal_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide Metal runtime. Do not call them. */
@@ -34,31 +34,30 @@ extern int halide_metal_run(void *user_context,
                             int num_coords_dim1);
 // @}
 
-/** Set the underlying MTLBuffer for a buffer_t. This memory should be
+/** Set the underlying MTLBuffer for a halide_buffer_t. This memory should be
  * allocated using newBufferWithLength:options or similar and must
- * have an extent large enough to cover that specified by the buffer_t
- * extent fields. The dev field of the buffer_t must be NULL when this
+ * have an extent large enough to cover that specified by the halide_buffer_t
+ * extent fields. The dev field of the halide_buffer_t must be NULL when this
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid buffer. The device and host dirty bits
  * are left unmodified. */
-extern int halide_metal_wrap_buffer(void *user_context, struct buffer_t *buf, uintptr_t buffer);
+extern int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer);
 
-/** Disconnect a buffer_t from the memory it was previously wrapped
- * around. Should only be called for a buffer_t that
+/** Disconnect a halide_buffer_t from the memory it was previously
+ * wrapped around. Should only be called for a halide_buffer_t that
  * halide_metal_wrap_buffer was previously called on. Frees any
- * storage associated with the binding of the buffer_t and the buffer,
- * but does not free the MTLBuffer. The previously wrapped
- * buffer is returned. The dev field of the buffer_t will be NULL on
- * return.
+ * storage associated with the binding of the halide_buffer_t and the
+ * buffer, but does not free the MTLBuffer. The dev field of the
+ * halide_buffer_t will be NULL on return.
  */
-extern uintptr_t halide_metal_detach_buffer(void *user_context, struct buffer_t *buf);
+extern int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf);
 
-/** Return the underlying MTLBuffer for a buffer_t. This buffer must be
+/** Return the underlying MTLBuffer for a halide_buffer_t. This buffer must be
  * valid on an Metal device, or not have any associated device
  * memory. If there is no device memory (dev field is NULL), this
  * returns 0.
  */
-extern uintptr_t halide_metal_get_buffer(void *user_context, struct buffer_t *buf);
+extern uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf);
 
 struct halide_metal_device;
 struct halide_metal_command_queue;
@@ -72,8 +71,9 @@ struct halide_metal_command_queue;
  * - A balancing halide_metal_release_context has occurred for each
  *     halide_metal_acquire_context which returned the device/queue
  * - All Halide filters using the context information have completed
- * - All buffer_t objects on the device have had halide_device_free called or
- *     have been detached via halide_metal_detach_buffer.
+ * - All halide_buffer_t objects on the device have had
+ *     halide_device_free called or have been detached via
+ *     halide_metal_detach_buffer.
  * - halide_device_release has been called on the interface returned from
  *     halide_metal_device_interface(). (This releases the programs on the context.)
  */

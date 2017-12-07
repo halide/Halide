@@ -4,7 +4,7 @@
 #include "add_operators.h"
 #include <boost/python.hpp>
 
-#include "../../src/Func.h"
+#include "Halide.h"
 #include "Image.h"
 
 #include <boost/format.hpp>
@@ -26,8 +26,8 @@ p::object realization_to_python_object(const h::Realization &r) {
         return buffer_to_python_object(r[0]);
     } else {
         p::list elts;
-        for (const h::Buffer<> &im : r) {
-            elts.append(buffer_to_python_object(im));
+        for (size_t i = 0; i < r.size(); i++) {
+            elts.append(buffer_to_python_object(r[i]));
         }
         return p::tuple(elts);
     }

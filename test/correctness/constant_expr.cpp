@@ -2,6 +2,10 @@
 #include <limits>
 #include "Halide.h"
 
+#ifdef _MSC_VER
+#pragma warning(disable:4800)  // forcing value to bool 'true' or 'false'
+#endif
+
 using namespace Halide;
 using namespace Halide::Internal;
 
@@ -113,9 +117,9 @@ int main(int argc, char **argv) {
     test_expr<uint64_t>((uint64_t) 0x8000000000000000);
     test_expr<uint64_t>((uint64_t) 0x8000000000000001);
 
-    test_expr<float>(3.141592);
-    test_expr<float>(3.40282e+38);
-    test_expr<float>(3.40282e+38);
+    test_expr<float>(3.141592f);
+    test_expr<float>(3.40282e+38f);
+    test_expr<float>(3.40282e+38f);
 
     test_expr<double>(3.1415926535897932384626433832795);
     test_expr<double>(1.79769e+308);

@@ -1,7 +1,8 @@
 #include "Halide.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 /* Both 'build' and 'build_wrap' run the same stencil algorithm, albeit with different
  * schedules. 'build(true)' stages the input data (the compute_root() 'host' Func) into
@@ -52,16 +53,17 @@ Func build(bool use_shared) {
 
     Func final = f[stages-1];
 
-    final.compute_root().gpu_tile(x, y, 8, 8);
+    Var xo, yo, xi, yi;
+    final.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
     for (int i = 0; i < stages-1; i++) {
-        f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
+        f[i].compute_at(final, xo).gpu_threads(x, y);
     }
 
     if (use_shared) {
         // If we allow staged to use one thread per value loaded, then
         // it forces up the total number of threads used by the
         // kernel, because stencils. So we unroll.
-        staged.compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
+        staged.compute_at(final, xo).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
     }
 
     return final;
@@ -95,14 +97,15 @@ Func build_wrap() {
 
     Func final = f[stages-1];
 
-    final.compute_root().gpu_tile(x, y, 8, 8);
+    Var xo, yo, xi, yi;
+    final.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
     for (int i = 0; i < stages-1; i++) {
-        f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
+        f[i].compute_at(final, xo).gpu_threads(x, y);
     }
 
     // Create a global wrapper for the input data 'host' and schedule it to load
     // the data into the GPU shared memory as needed per GPU tile.
-    host.in().compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
+    host.in().compute_at(final, xo).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
 
     return final;
 }
@@ -126,20 +129,24 @@ int main(int argc, char **argv) {
     Buffer<int> out2(1000, 1000);
     Buffer<int> out3(1000, 1000);
 
-    double shared_time = benchmark(5, 5, [&]() {
+    double shared_time = benchmark([&]() {
             use_shared.realize(out1);
             out1.device_sync();
         });
 
-    double l1_time = benchmark(5, 5, [&]() {
+    double l1_time = benchmark([&]() {
             use_l1.realize(out2);
             out2.device_sync();
         });
 
-    double wrap_time = benchmark(5, 5, [&]() {
+    double wrap_time = benchmark([&]() {
             use_wrap_for_shared.realize(out3);
             out3.device_sync();
         });
+
+    out1.copy_to_host();
+    out2.copy_to_host();
+    out3.copy_to_host();
 
     // Check correctness of the wrapper version
     for (int y = 0; y < out3.height(); y++) {

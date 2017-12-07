@@ -4,10 +4,6 @@
 
 using namespace Halide;
 
-Expr min3(Expr a, Expr b, Expr c) {
-    return min(min(a, b), c);
-}
-
 int main(int argc, char **argv) {
     Var x, y;
 
@@ -30,9 +26,9 @@ int main(int argc, char **argv) {
     Expr xm = max(r.x - 1, 0), xp = min(r.x + 1, noise.width() - 1);
     energy(x, y) = 0.0f;
     energy(x, 0) = noise(x, 0); // The first row is just the first row of the input.
-    energy(r.x, r.y) = noise(r.x, r.y) + min3(energy(xm,  r.y - 1),
-                                              energy(r.x, r.y - 1),
-                                              energy(xp,  r.y - 1));
+    energy(r.x, r.y) = noise(r.x, r.y) + min(energy(xm, r.y - 1),
+                                             energy(r.x, r.y - 1),
+                                             energy(xp, r.y - 1));
 
     Buffer<float> im_energy = energy.realize(size,size);
     Buffer<float> ref_energy(size, size);

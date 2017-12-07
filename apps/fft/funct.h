@@ -38,12 +38,9 @@ public:
     explicit FuncT(Func f) : Func(f) {}
     explicit FuncT(Halide::Internal::Function f) : Func(f) {}
 
-    FuncRefT<T> operator()(Expr x) const { return Func::operator()(x); }
-    FuncRefT<T> operator()(Expr x, Expr y) const { return Func::operator()(x, y); }
-    FuncRefT<T> operator()(Expr x, Expr y, Expr z) const { return Func::operator()(x, y, z); }
-    FuncRefT<T> operator()(Expr x, Expr y, Expr z, Expr w) const { return Func::operator()(x, y, z, w); }
-    FuncRefT<T> operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const { return Func::operator()(x, y, z, w, u); }
-    FuncRefT<T> operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const { return Func::operator()(x, y, z, w, u, v); }
+    template <typename... Args>
+    FuncRefT<T> operator()(Args&&... args) const { return Func::operator()(std::forward<Args>(args)...); }
+
     FuncRefT<T> operator()(std::vector<Expr> vars) const { return Func::operator()(vars); }
     FuncRefT<T> operator()(std::vector<Var> vars) const { return Func::operator()(vars); }
 };

@@ -10,7 +10,7 @@
 #endif
 
 #include "gpu_only.h"
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)
@@ -32,11 +32,11 @@ int main(int argc, char **argv) {
 
     Buffer<int> output(W, H);
 
-    // Create buffer_ts without host pointers.
-    buffer_t input_no_host = *((buffer_t *)input);
+    // Create halide_buffer_ts without host pointers.
+    halide_buffer_t input_no_host = *((halide_buffer_t *)input);
     input_no_host.host = nullptr;
 
-    buffer_t output_no_host = *((buffer_t *)output);
+    halide_buffer_t output_no_host = *((halide_buffer_t *)output);
     // We need a fake pointer here to trick Halide into creating the
     // device buffer (and not do bounds inference instead of running
     // the pipeline). Halide will not dereference this pointer.

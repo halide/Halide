@@ -2,9 +2,10 @@
 #include <cstdio>
 #include <memory>
 #include <algorithm>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
     Var x, y, c;
@@ -13,9 +14,10 @@ double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
 
     for (int i = 0; i < 3; i++) {
         f.output_buffer()
-            .set_stride(i, dst.stride(i))
-            .set_extent(i, dst.extent(i))
-            .set_min(i, dst.min(i));
+            .dim(i)
+            .set_stride(dst.dim(i).stride())
+            .set_extent(dst.dim(i).extent())
+            .set_min(dst.dim(i).min());
     }
 
     if (dst.stride(0) == 1 && src.stride(0) == 1) {
@@ -35,7 +37,7 @@ double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
 
     f.realize(dst);
 
-    return benchmark(5, 10, [&]() { return f.realize(dst); });
+    return benchmark([&]() { return f.realize(dst); });
 }
 
 Buffer<uint8_t> make_packed(uint8_t *host, int W, int H) {

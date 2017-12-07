@@ -1,8 +1,9 @@
 #include "Halide.h"
 #include <cstdio>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 template<typename A>
 const char *string_of_type();
@@ -57,10 +58,10 @@ bool test(int vec_width) {
     Buffer<A> outputg = g.realize(W, H);
     Buffer<A> outputf = f.realize(W, H);
 
-    double t_g = benchmark(10, 10, [&]() {
+    double t_g = benchmark([&]() {
         g.realize(outputg);
     });
-    double t_f = benchmark(10, 10, [&]() {
+    double t_f = benchmark([&]() {
         f.realize(outputf);
     });
 

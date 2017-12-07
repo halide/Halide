@@ -1,12 +1,13 @@
 #include "Halide.h"
 #include <cstdio>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 const int W = 4000, H = 2400;
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
+using namespace Halide::Tools;
 
 Target target;
 
@@ -21,15 +22,15 @@ struct Test {
         Var x, y;
         g(x, y) = f(x - 1, y - 1) + f(x, y) + f(x + 1, y + 1);
         if (target.has_gpu_feature()) {
-            g.gpu_tile(x, y, 8, 8);
+            Var xo, yo, xi, yi;
+            g.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
         } else {
             g.vectorize(x, 4);
         }
 
         Buffer<float> out = g.realize(W, H);
 
-        // best of 10 x 5 runs.
-        time = benchmark(10, 5, [&]() {
+        time = benchmark([&]() {
                 g.realize(out);
                 out.device_sync();
         });
@@ -46,15 +47,15 @@ struct Test {
         RDom r(-blur_radius, 2*blur_radius+1, -blur_radius, 2*blur_radius+1);
         g(x, y) = sum(f(x + r.x, y + r.y));
         if (target.has_gpu_feature()) {
-            g.gpu_tile(x, y, 8, 8);
+            Var xo, yo, xi, yi;
+            g.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
         } else {
             g.tile(x, y, xi, yi, 8, 8).vectorize(xi, 4);
         }
 
         Buffer<float> out = g.realize(W, H);
 
-        // best of 3 x 3 runs.
-        time = benchmark(3, 3, [&]() {
+        time = benchmark([&]() {
                 g.realize(out);
                 out.device_sync();
         });

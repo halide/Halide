@@ -6,10 +6,12 @@ class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
     GeneratorParam<int>   s_sigma{"s_sigma", 8};
 
-    ImageParam            input{Float(32), 2, "input"};
-    Param<float>          r_sigma{"r_sigma"};
+    Input<Buffer<float>>  input{"input", 2};
+    Input<float>          r_sigma{"r_sigma"};
 
-    Func build() {
+    Output<Buffer<float>> bilateral_grid{"bilateral_grid", 2};
+
+    void generate() {
         Var x("x"), y("y"), z("z"), c("c");
 
         // Add a boundary condition
@@ -19,7 +21,7 @@ public:
         RDom r(0, s_sigma, 0, s_sigma);
         Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
         val = clamp(val, 0.0f, 1.0f);
-        
+
         Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
 
         Func histogram("histogram");
@@ -61,14 +63,27 @@ public:
                       lerp(blury(xi, yi+1, zi+1, c), blury(xi+1, yi+1, zi+1, c), xf), yf), zf);
 
         // Normalize
-        Func bilateral_grid("bilateral_grid");
         bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
-        if (get_target().has_gpu_feature()) {
+        if (auto_schedule) {
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 1536);
+            input.dim(1).set_bounds_estimate(0, 2560);
+            // Provide estimates on the parameters
+            r_sigma.set_estimate(0.1f);
+            // TODO: Compute estimates from the parameter values
+            histogram.estimate(z, -2, 16);
+            blurz.estimate(z, 0, 12);
+            blurx.estimate(z, 0, 12);
+            blury.estimate(z, 0, 12);
+            bilateral_grid.estimate(x, 0, 1536).estimate(y, 0, 2560);
+        } else if (get_target().has_gpu_feature()) {
+            Var xi("xi"), yi("yi"), zi("zi");
+
             // Schedule blurz in 8x8 tiles. This is a tile in
             // grid-space, which means it represents something like
             // 64x64 pixels in the input (if s_sigma is 8).
-            blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
+            blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
 
             // Schedule histogram to happen per-tile of blurz, with
             // intermediate results in shared memory. This means histogram
@@ -76,17 +91,20 @@ public:
             // 1) Zero out the 8x8 set of histograms
             // 2) Compute those histogram by iterating over lots of the input image
             // 3) Blur the set of histograms in z
-            histogram.reorder(c, z, x, y).compute_at(blurz, Var::gpu_blocks()).gpu_threads(x, y);
+            histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y);
             histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
 
-            // An alternative schedule for histogram that doesn't use shared memory:
-            // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
-            // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
-
             // Schedule the remaining blurs and the sampling at the end similarly.
-            blurx.compute_root().gpu_tile(x, y, z, 8, 8, 1);
-            blury.compute_root().gpu_tile(x, y, z, 8, 8, 1);
-            bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma);
+            blurx.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            blury.compute_root().reorder(c, x, y, z)
+                .reorder_storage(c, x, y, z).vectorize(c)
+                .unroll(y, 2, TailStrategy::RoundUp)
+                .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, TailStrategy::RoundUp);
+            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8);
+            interpolated.compute_at(bilateral_grid, xi).vectorize(c);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
@@ -96,11 +114,9 @@ public:
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
         }
-
-        return bilateral_grid;
     }
 };
 
-Halide::RegisterGenerator<BilateralGrid> register_me{"bilateral_grid"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(BilateralGrid, bilateral_grid)

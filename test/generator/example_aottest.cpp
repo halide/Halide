@@ -6,22 +6,16 @@
 
 #include "example.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int kSize = 32;
 
-void verify(const Buffer<int> &img, float compiletime_factor, float runtime_factor, int channels) {
-    for (int i = 0; i < kSize; i++) {
-        for (int j = 0; j < kSize; j++) {
-            for (int c = 0; c < channels; c++) {
-                int expected = (int32_t)(compiletime_factor * runtime_factor * c * (i > j ? i : j));
-                if (img(i, j, c) != expected) {
-                    printf("img[%d, %d, %d] = %d (expected %d)\n", i, j, c, img(i, j, c), expected);
-                    exit(-1);
-                }
-            }
-        }
-    }
+void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
+    img.for_each_element([=](int x, int y, int c) {
+        int expected = (int32_t)(compiletime_factor * runtime_factor * c * (x > y ? x : y));
+        int actual = img(x, y, c);
+        assert(expected == actual);
+    });
 }
 
 int main(int argc, char **argv) {

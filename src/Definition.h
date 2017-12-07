@@ -22,7 +22,7 @@ struct FunctionContents;
 namespace Internal {
 
 class IRVisitor;
-class IRMutator;
+class IRMutator2;
 struct Specialization;
 
 /** A Function definition which can either represent a init or an update
@@ -47,77 +47,80 @@ public:
     EXPORT Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                       const ReductionDomain &rdom, bool is_init);
 
-    /** Construct an empty Definition. By default, it is a init definition. */
+    /** Construct an undefined Definition object. */
     EXPORT Definition();
 
-    /** Return a deep copy of this Definition. It recursively deep copies all
-     * called functions, schedules, and reduction domains. This method
-     * takes a map of <old FunctionContents, deep-copied version> as input and
-     * would use the deep-copied FunctionContents from the map if exists instead
-     * of creating a new deep-copy to avoid creating deep-copies of the same
-     * FunctionContents multiple times.
-     */
-    EXPORT Definition deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
+    /** Return a copy of this Definition. */
+    EXPORT Definition get_copy() const;
 
     /** Equality of identity */
     bool same_as(const Definition &other) const {
         return contents.same_as(other.contents);
     }
 
+    /** Definition objects are nullable. Does this definition exist? */
+    EXPORT bool defined() const;
+
     /** Is this an init definition; otherwise it's an update definition */
-    bool is_init() const;
+    EXPORT bool is_init() const;
 
     /** Pass an IRVisitor through to all Exprs referenced in the
      * definition. */
-    void accept(IRVisitor *) const;
+    EXPORT void accept(IRVisitor *) const;
 
-    /** Pass an IRMutator through to all Exprs referenced in the
+    /** Pass an IRMutator2 through to all Exprs referenced in the
      * definition. */
-    void mutate(IRMutator *);
+    EXPORT void mutate(IRMutator2 *);
 
     /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
     // @{
-    const std::vector<Expr> &args() const;
-    std::vector<Expr> &args();
+    EXPORT const std::vector<Expr> &args() const;
+    EXPORT std::vector<Expr> &args();
     // @}
 
     /** Get the default (no-specialization) right-hand-side of the definition */
     // @{
-    const std::vector<Expr> &values() const;
-    std::vector<Expr> &values();
+    EXPORT const std::vector<Expr> &values() const;
+    EXPORT std::vector<Expr> &values();
     // @}
 
     /** Get the predicate on the definition */
     // @{
-    const Expr &predicate() const;
-    Expr &predicate();
+    EXPORT const Expr &predicate() const;
+    EXPORT Expr &predicate();
     // @}
 
     /** Split predicate into vector of ANDs. If there is no predicate (i.e. this
      * definition is always valid), this returns an empty vector. */
     EXPORT std::vector<Expr> split_predicate() const;
 
-    /** Get the default (no-specialization) schedule associated with this definition. */
+    /** Get the default (no-specialization) stage-specific schedule associated
+     * with this definition. */
     // @{
-    const Schedule &schedule() const;
-    Schedule &schedule();
+    EXPORT const StageSchedule &schedule() const;
+    EXPORT StageSchedule &schedule();
     // @}
 
     /** You may create several specialized versions of a func with
-     * different schedules. They trigger when the condition is
+     * different stage-specific schedules. They trigger when the condition is
      * true. See \ref Func::specialize */
     // @{
-    const std::vector<Specialization> &specializations() const;
-    std::vector<Specialization> &specializations();
-    const Specialization &add_specialization(Expr condition);
+    EXPORT const std::vector<Specialization> &specializations() const;
+    EXPORT std::vector<Specialization> &specializations();
+    EXPORT const Specialization &add_specialization(Expr condition);
     // @}
 
+    /** Attempt to get the source file and line where this definition
+     * was made using DWARF introspection. Returns an empty string if
+     * no debug symbols were found or the debug symbols were not
+     * understood. Works on OS X and Linux only. */
+    EXPORT std::string source_location() const;
 };
 
 struct Specialization {
     Expr condition;
     Definition definition;
+    std::string failure_message;  // If non-empty, this specialization always assert-fails with this message.
 };
 
 }}

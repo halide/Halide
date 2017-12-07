@@ -9,56 +9,73 @@ namespace Internal {
 using std::map;
 using std::string;
 
-class UnifyDuplicateLets : public IRMutator {
-    using IRMutator::visit;
+class UnifyDuplicateLets : public IRMutator2 {
+    using IRMutator2::visit;
 
     map<Expr, string, IRDeepCompare> scope;
     map<string, string> rewrites;
+    string producing;
 
 public:
-    using IRMutator::mutate;
+    using IRMutator2::mutate;
 
-    Expr mutate(Expr e) {
-
+    Expr mutate(const Expr &e) override {
         if (e.defined()) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(e);
             if (iter != scope.end()) {
-                expr = Variable::make(e.type(), iter->second);
+                return Variable::make(e.type(), iter->second);
             } else {
-                e.accept(this);
+                return IRMutator2::mutate(e);
             }
         } else {
-            expr = Expr();
+            return Expr();
         }
-        stmt = Stmt();
-        return expr;
     }
 
 protected:
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         map<string, string>::iterator iter = rewrites.find(op->name);
         if (iter != rewrites.end()) {
-            expr = Variable::make(op->type, iter->second);
+            return Variable::make(op->type, iter->second);
         } else {
-            expr = op;
+            return op;
         }
     }
 
     // Can't unify lets where the RHS might be not be pure
-    bool contains_calls;
-    void visit(const Call *op) {
-        contains_calls = true;
-        expr = op;
+    bool is_impure;
+    Expr visit(const Call *op) override {
+        is_impure |= !op->is_pure();
+        return IRMutator2::visit(op);
     }
 
-    void visit(const LetStmt *op) {
-        contains_calls = false;
+    Expr visit(const Load *op) override {
+        is_impure |= ((op->name == producing) ||
+                      starts_with(op->name + ".", producing));
+        return IRMutator2::visit(op);
+    }
+
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            string old_producing = producing;
+            producing = op->name;
+            Stmt stmt = IRMutator2::visit(op);
+            producing = old_producing;
+            return stmt;
+        } else {
+            return IRMutator2::visit(op);
+        }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        is_impure = false;
         Expr value = mutate(op->value);
         Stmt body = op->body;
 
         bool should_pop = false;
+        bool should_erase = false;
 
-        if (!contains_calls) {
+        if (!is_impure) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(value);
             if (iter == scope.end()) {
                 scope[value] = op->name;
@@ -66,6 +83,7 @@ protected:
             } else {
                 value = Variable::make(value.type(), iter->second);
                 rewrites[op->name] = iter->second;
+                should_erase = true;
             }
         }
 
@@ -73,14 +91,15 @@ protected:
 
         if (should_pop) {
             scope.erase(value);
-        } else if (!contains_calls) {
+        }
+        if (should_erase) {
             rewrites.erase(op->name);
         }
 
         if (value.same_as(op->value) && body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            return LetStmt::make(op->name, value, body);
         }
     }
 };

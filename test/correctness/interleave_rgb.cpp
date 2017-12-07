@@ -16,12 +16,19 @@ bool test_interleave() {
     Target target = get_jit_target_from_environment();
     input.compute_root();
     interleaved.reorder(c, x, y).bound(c, 0, 3);
-    interleaved.output_buffer().set_stride(0, 3).set_stride(2, 1).set_extent(2, 3);
+    interleaved.output_buffer()
+        .dim(0).set_stride(3)
+        .dim(2).set_stride(1).set_extent(3);
 
     if (target.has_gpu_feature()) {
-        interleaved.gpu_tile(x, y, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        interleaved.hexagon().vectorize(x, 128 / sizeof(T)).unroll(c);
+        Var xi("xi"), yi("yi");
+        interleaved.gpu_tile(x, y, xi, yi, 16, 16);
+    } else if (target.has_feature(Target::HVX_64)) {
+        const int vector_width = 64 / sizeof(T);
+        interleaved.hexagon().vectorize(x, vector_width).unroll(c);
+    } else if (target.has_feature(Target::HVX_128)) {
+        const int vector_width = 128 / sizeof(T);
+        interleaved.hexagon().vectorize(x, vector_width).unroll(c);
     } else {
         interleaved.vectorize(x, target.natural_vector_size<uint8_t>()).unroll(c);
     }
@@ -45,6 +52,7 @@ bool test_interleave() {
 int main(int argc, char **argv) {
     if (!test_interleave<uint8_t>()) return -1;
     if (!test_interleave<uint16_t>()) return -1;
+    if (!test_interleave<uint32_t>()) return -1;
 
     printf("Success!\n");
     return 0;

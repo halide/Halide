@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f and g will be stored from 0 to 7
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] < 7) {

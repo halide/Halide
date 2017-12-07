@@ -2,10 +2,8 @@
 
 using namespace Halide;
 
-const int CHANNELS = 4;
-
 void blur(std::string suffix, ImageParam input) {
-    input.set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
+    input.dim(2).set_bounds(0, 4).set_stride(1).dim(0).set_stride(4);
 
     Var x("x"), y("y"), c("c");
 
@@ -22,15 +20,16 @@ void blur(std::string suffix, ImageParam input) {
                        blur_x(x, y, c) +
                        blur_x(x, y + 1, c)) / 3;
 
-    result.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
+    result.output_buffer().dim(2).set_bounds(0, 4).set_stride(1).dim(0).set_stride(4);
 
     Target target = get_target_from_environment();
-    result.bound(c, 0, CHANNELS)
+    result.bound(c, 0, 4)
           .reorder_storage(c, x, y)
           .reorder(c, x, y);
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        result.vectorize(c, 4)
-              .gpu_tile(x, y, 64, 64);
+        Var xi("xi"), yi("yi");
+        result.unroll(c)
+              .gpu_tile(x, y, xi, yi, 64, 64);
     } else {
         Var yi("yi");
         result

@@ -11,75 +11,71 @@ using std::pair;
 
 Closure::Closure(Stmt s, const string &loop_variable) {
     if (!loop_variable.empty()) {
-        ignore.push(loop_variable, 0);
+        ignore.push(loop_variable);
     }
     s.accept(this);
 }
 
 void Closure::visit(const Let *op) {
     op->value.accept(this);
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::visit(const LetStmt *op) {
     op->value.accept(this);
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::visit(const For *op) {
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     op->min.accept(this);
     op->extent.accept(this);
     op->body.accept(this);
-    ignore.pop(op->name);
+}
+
+void Closure::found_buffer_ref(const string &name, Type type,
+                               bool read, bool written, Halide::Buffer<> image) {
+    if (!ignore.contains(name)) {
+        debug(3) << "Adding buffer " << name << " to closure\n";
+        Buffer &ref = buffers[name];
+        ref.type = type.element_of(); // TODO: Validate type is the same as existing refs?
+        ref.read = read;
+        ref.write = written;
+
+        // If reading an image/buffer, compute the size.
+        if (image.defined()) {
+            ref.size = image.size_in_bytes();
+            ref.dimensions = image.dimensions();
+        }
+    } else {
+        debug(3) << "Not adding " << name << " to closure\n";
+    }
 }
 
 void Closure::visit(const Load *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
-    if (!ignore.contains(op->name)) {
-        debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
-        ref.type = op->type.element_of(); // TODO: Validate type is the same as existing refs?
-        ref.read = true;
-
-        // If reading an image/buffer, compute the size.
-        if (op->image.defined()) {
-            ref.size = op->image.size_in_bytes();
-            ref.dimensions = op->image.dimensions();
-        }
-    } else {
-        debug(3) << "Not adding " << op->name << " to closure\n";
-    }
+    found_buffer_ref(op->name, op->type, true, false, op->image);
 }
 
 void Closure::visit(const Store *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
     op->value.accept(this);
-    if (!ignore.contains(op->name)) {
-        debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
-        ref.type = op->value.type().element_of(); // TODO: Validate type is the same as existing refs?
-        // TODO: do we need to set ref.dimensions?
-        ref.write = true;
-    } else {
-        debug(3) << "Not adding " << op->name << " to closure\n";
-    }
+    found_buffer_ref(op->name, op->value.type(), false, true, Halide::Buffer<>());
 }
 
 void Closure::visit(const Allocate *op) {
     if (op->new_expr.defined()) {
         op->new_expr.accept(this);
     }
-    ignore.push(op->name, 0);
+    ScopedBinding<> p(ignore, op->name);
     for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
     }
     op->body.accept(this);
-    ignore.pop(op->name);
 }
 
 void Closure::visit(const Variable *op) {
@@ -89,20 +85,6 @@ void Closure::visit(const Variable *op) {
         debug(3) << "Adding " << op->name << " to closure\n";
         vars[op->name] = op->type;
     }
-}
-
-vector<string> Closure::names() const {
-    vector<string> res;
-    for (const pair<string, Type> &i : vars) {
-        debug(2) << "vars:  " << i.first << "\n";
-        res.push_back(i.first);
-    }
-    for (const pair<string, BufferRef> &i : buffers) {
-        debug(2) << "buffers: " << i.first << "\n";
-        res.push_back(i.first + ".host");
-        res.push_back(i.first + ".buffer");
-    }
-    return res;
 }
 
 }

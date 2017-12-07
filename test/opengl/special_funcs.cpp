@@ -1,8 +1,8 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
-#include <stdlib.h>
 #include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
 
 using namespace Halide;
 
@@ -26,7 +26,6 @@ void test_function(Expr e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
     gpu.bound(c, 0, 3).glsl(x, y, c);
     gpu.realize(gpu_result, gpu_target);
     gpu_result.copy_to_host();
-
 }
 
 template <typename T>
@@ -39,8 +38,8 @@ bool test_exact(Expr r, Expr g, Expr b) {
     Buffer<T> gpu_result(W, H, 3);
     test_function(e, cpu_result, gpu_result);
 
-    for (int y=0; y<gpu_result.height(); y++) {
-        for (int x=0; x<gpu_result.width(); x++) {
+    for (int y = 0; y < gpu_result.height(); y++) {
+        for (int x = 0; x < gpu_result.width(); x++) {
             if (!(gpu_result(x, y, 0) == cpu_result(x, y, 0) &&
                   gpu_result(x, y, 1) == cpu_result(x, y, 1) &&
                   gpu_result(x, y, 2) == cpu_result(x, y, 2))) {
@@ -69,8 +68,8 @@ bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
     test_function(e, cpu_result, gpu_result);
 
     double err = 0.0;
-    for (int y=0; y<gpu_result.height(); y++) {
-        for (int x=0; x<gpu_result.width(); x++) {
+    for (int y = 0; y < gpu_result.height(); y++) {
+        for (int x = 0; x < gpu_result.width(); x++) {
             err += square(gpu_result(x, y, 0) - cpu_result(x, y, 0));
             err += square(gpu_result(x, y, 1) - cpu_result(x, y, 1));
             err += square(gpu_result(x, y, 2) - cpu_result(x, y, 2));
@@ -100,9 +99,9 @@ int main() {
     }
 
     if (!test_exact<uint8_t>(
-        max(x, y),
-        cast<int>(min(cast<float>(x), cast<float>(y))),
-        clamp(x, 0, 10))) {
+            max(x, y),
+            cast<int>(min(cast<float>(x), cast<float>(y))),
+            clamp(x, 0, 10))) {
         printf("Failed min/max test\n");
         errors++;
     }
@@ -114,7 +113,7 @@ int main() {
 
     // Trigonometric functions in GLSL are fast but not very accurate,
     // especially outside of 0..2pi.
-    // The GLSL ES 1.0 spec does not define the precision of these operations 
+    // The GLSL ES 1.0 spec does not define the precision of these operations
     // so a wide error bound is used in this test.
     Expr r = (256 * x + y) / ceilf(65536.f / (2 * 3.1415926536f));
     if (!test_approx<float>(sin(r), cos(r), 0, 5e-2)) {
@@ -127,18 +126,18 @@ int main() {
     // the operation is performed in float in the GLSL shader, and then
     // converted back to a normalized integer value.
     if (!test_approx<uint8_t>(
-        (x - 127) / 3 + 127,
-        (x - 127) % 3 + 127,
-        0,
-        1)) {
+            (x - 127) / 3 + 127,
+            (x - 127) % 3 + 127,
+            0,
+            1)) {
         printf("Failed integer operation test\n");
         errors++;
     }
 
     if (!test_exact<uint8_t>(
-        lerp(cast<uint8_t>(x), cast<uint8_t>(y), cast<uint8_t>(128)),
-        lerp(cast<uint8_t>(x), cast<uint8_t>(y), 0.5f),
-        cast<uint8_t>(lerp(cast<float>(x), cast<float>(y), 0.2f)))) {
+            lerp(cast<uint8_t>(x), cast<uint8_t>(y), cast<uint8_t>(128)),
+            lerp(cast<uint8_t>(x), cast<uint8_t>(y), 0.5f),
+            cast<uint8_t>(lerp(cast<float>(x), cast<float>(y), 0.2f)))) {
         printf("Failed lerp test\n");
         errors++;
     }
@@ -147,7 +146,7 @@ int main() {
         printf("Success!\n");
         return 0;
     } else {
-        printf("FAILED %d tests\n",errors);
+        printf("FAILED %d tests\n", errors);
         return 1;
     }
 }

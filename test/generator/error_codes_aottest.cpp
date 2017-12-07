@@ -21,21 +21,19 @@ int main(int argc, char **argv) {
 
     halide_set_error_handler(&my_halide_error);
 
-    buffer_t in = {0}, out = {0};
+    halide_buffer_t in = {0}, out = {0};
+    halide_dimension_t shape[] = {{0, 64, 1},
+                                  {0, 64, 64}};
 
     in.host = (uint8_t *)malloc(64*64*4);
-    in.elem_size = 4;
-    in.extent[0] = 64;
-    in.stride[0] = 1;
-    in.extent[1] = 64;
-    in.stride[1] = 64;
+    in.type = halide_type_of<int>();
+    in.dim = shape;
+    in.dimensions = 2;
 
     out.host = (uint8_t *)malloc(64*64*4);
-    out.elem_size = 4;
-    out.extent[0] = 64;
-    out.stride[0] = 1;
-    out.extent[1] = 64;
-    out.stride[1] = 64;
+    out.type = halide_type_of<int>();
+    out.dim = shape;
+    out.dimensions = 2;
 
     // First, a successful run.
     int result = error_codes(&in, 64, &out);
@@ -49,27 +47,44 @@ int main(int argc, char **argv) {
     check(result, correct);
 
     // Would read out of bounds on the input
-    in.extent[0] = 50;
+    halide_dimension_t smaller[] = {{0, 50, 1},
+                                    {0, 64, 64}};
+    in.dim = smaller;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_access_out_of_bounds;
     check(result, correct);
-    in.extent[0] = 64;
+    in.dim = shape;
+
+    // buffer extent negative, but in a way that doesn't trigger oob checks
+    {
+        halide_dimension_t bad_shape[] = {{0, 64, 1},
+                                          {0, -64, 64}};
+        halide_buffer_t i = in, o = out;
+        i.dim = bad_shape;
+        o.dim = bad_shape;
+
+        result = error_codes(&i, 0, &o);
+        correct = halide_error_code_buffer_extents_negative;
+        check(result, correct);
+    }
 
     // Input buffer larger than 2GB
-    in.extent[0] = 10000000;
-    in.extent[1] = 10000000;
+    halide_dimension_t huge[] = {{0, 10000000, 1},
+                                 {0, 10000000, 64}};
+    in.dim = huge;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_buffer_extents_too_large;
     check(result, correct);
-    in.extent[0] = 64;
-    in.extent[1] = 64;
+    in.dim = shape;
 
     // Input buffer requires addressing math that would overflow 32 bits.
-    in.stride[1] = 0x7fffffff;
+    halide_dimension_t huge_stride[] = {{0, 64, 1},
+                                        {0, 64, 0x7fffffff}};
+    in.dim = huge_stride;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_buffer_allocation_too_large;
     check(result, correct);
-    in.stride[1] = 64;
+    in.dim = shape;
 
     // strides and extents are 32-bit signed integers. It's
     // therefore impossible to make a buffer_t that can address
@@ -78,24 +93,24 @@ int main(int argc, char **argv) {
     // the above two error codes in 64-bit code.
 
     // stride[0] is constrained to be 1
-    in.stride[0] = 2;
+    halide_dimension_t wrong_stride[] = {{0, 64, 2},
+                                         {0, 64, 64}};
+    in.dim = wrong_stride;
     result = error_codes(&in, 64, &out);
     correct = halide_error_code_constraint_violated;
     check(result, correct);
-    in.stride[0] = 1;
+    in.dim = shape;
 
     // The second argument is supposed to be between 0 and 64.
     result = error_codes(&in, -23, &out);
     correct = halide_error_code_param_too_small;
     check(result, correct);
 
-    in.extent[0] = 108;
-    out.extent[0] = 108;
+    shape[0].extent = 108;
     result = error_codes(&in, 108, &out);
     correct = halide_error_code_param_too_large;
     check(result, correct);
-    in.extent[0] = 64;
-    out.extent[0] = 64;
+    shape[0].extent = 64;
 
     // You can't pass nullptr as a buffer_t argument.
     result = error_codes(nullptr, 64, &out);

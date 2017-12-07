@@ -1,6 +1,7 @@
-#include "Halide.h"
+// Don't include Halide.h: it is not necessary for this test.
+#include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
 void check_equal_shape(const Buffer<T1> &a, const Buffer<T2> &b) {
@@ -25,8 +26,6 @@ void check_equal(const Buffer<T1> &a, const Buffer<T2> &b) {
     });
 }
 
-
-
 int main(int argc, char **argv) {
     {
         // Check copying a buffer
@@ -36,8 +35,13 @@ int main(int argc, char **argv) {
         a.transpose(1, 2);
 
         a.fill(1.0f);
+
+        b.fill([&](int x, int y, int c) {
+            return x + 100.0f * y + 100000.0f * c;
+        });
+
         b.for_each_element([&](int x, int y, int c) {
-            b(x, y, c) = x + 100.0f * y + 100000.0f * c;
+            assert(b(x, y, c) == x + 100.0f * y + 100000.0f * c);
         });
 
         check_equal(a, a.copy());
@@ -67,7 +71,7 @@ int main(int argc, char **argv) {
         Buffer<float, 2> a(100, 80);
         Buffer<const float, 3> b(a); // statically safe
         Buffer<const void, 4> c(b);  // statically safe
-        Buffer<const float, 3> d(c); // does runtime checks of actual dimensionality and type.
+        Buffer<const float, 3> d(c); // does runtime check of actual type.
         Buffer<void, 3> e(a);        // statically safe
         Buffer<float, 2> f(e);       // runtime checks
     }
@@ -84,5 +88,44 @@ int main(int argc, char **argv) {
         check_equal(a, b);
     }
 
+    {
+        // Check lifting a function over scalars to a function over entire buffers.
+        const int W = 5, H = 4, C = 3;
+        Buffer<float> a(W, H, C);
+        Buffer<float> b = Buffer<float>::make_interleaved(W, H, C);
+        int counter = 0;
+        b.for_each_value([&](float &b) {
+            counter += 1;
+            b = counter;
+        });
+        a.for_each_value([&](float &a, float b) {
+            a = 2*b;
+        }, b);
+
+        if (counter != W * H * C) {
+            printf("for_each_value didn't hit every element\n");
+            return -1;
+        }
+
+        a.for_each_element([&](int x, int y, int c) {
+            // The original for_each_value iterated over b, which is
+            // interleaved, so we expect the counter to count up c
+            // fastest.
+            float correct_b = 1 + c + C * (x + W * y);
+            float correct_a = correct_b * 2;
+            if (b(x, y, c) != correct_b) {
+                printf("b(%d, %d, %d) = %f instead of %f\n",
+                       x, y, c, b(x, y, c), correct_b);
+                abort();
+            }
+            if (a(x, y, c) != correct_a) {
+                printf("a(%d, %d, %d) = %f instead of %f\n",
+                       x, y, c, a(x, y, c), correct_a);
+                abort();
+            }
+        });
+    }
+
+    printf("Success!\n");
     return 0;
 }

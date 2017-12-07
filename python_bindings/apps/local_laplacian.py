@@ -137,6 +137,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
     if target.has_gpu_feature():
         # GPU Schedule
         print ("Compiling for GPU")
+        xi, yi = Var("xi"), Var("yi")
         output.compute_root().gpu_tile(x, y, 32, 32, GPU_Default)
         for j in range(J):
             blockw = 32
@@ -145,10 +146,10 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
                 blockw = 2
                 blockh = 2
             if j > 0:
-                inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, GPU_Default)
+                inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh, GPU_Default)
             if j > 0:
-                gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh, GPU_Default)
-            outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, GPU_Default)
+                gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh, GPU_Default)
+            outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh, GPU_Default)
     else:
         # CPU schedule
         print ("Compiling for CPU")

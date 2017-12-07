@@ -6,7 +6,7 @@
 
 #include <vector>
 using std::vector;
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
     Buffer<float> input(1024, 1024);
@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     // Put some junk in the input. Keep it to small integers so the float averaging stays exact.
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            input(x, y) = ((x * 17 + y)/8) % 32;
+            input(x, y) = (float) (((x * 17 + y)/8) % 32);
         }
     }
 

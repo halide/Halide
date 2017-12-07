@@ -4,7 +4,10 @@ using namespace Halide;
 
 bool errored = false;
 void my_error(void *, const char *msg) {
-    printf("Expected error: %s\n", msg);
+    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
+    // test as a failure on Windows, regardless of error code returned,
+    // hence the abbreviation to "err".
+    printf("Expected err: %s\n", msg);
     errored = true;
 }
 
@@ -32,8 +35,9 @@ int main(int argc, char **argv) {
     Func g;
     g(c, x) = f(c, x) * 8;
 
-    g.gpu_tile(x, 8);
-    f.compute_at(g, Var::gpu_blocks()).gpu_threads(x);
+    Var xi;
+    g.gpu_tile(x, xi, 8);
+    f.compute_at(g, x).gpu_threads(x);
 
     g.set_error_handler(&my_error);
     g.set_custom_print(&my_print);

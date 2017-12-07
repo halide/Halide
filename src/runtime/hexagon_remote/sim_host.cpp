@@ -2,17 +2,26 @@
 #include <sstream>
 #include <cassert>
 #include <memory>
+#include <mutex>
 
 #include <HalideRuntime.h>
 #include <HexagonWrapper.h>
 
 #include "sim_protocol.h"
 
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 typedef unsigned int handle_t;
 
 std::unique_ptr<HexagonWrapper> sim;
 
 bool debug_mode = false;
+bool use_dlopenbuf = true;
+
 int init_sim() {
     if (sim) return 0;
 
@@ -59,18 +68,20 @@ int init_sim() {
         }
     }
 
-    // Configue tracing.
-    const char *T = getenv("HL_HEXAGON_SIM_MIN_TRACE");
-    if (T && T[0] != 0) {
-        status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
-        if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
-            return -1;
-        }
-    } else {
-        const char *T = getenv("HL_HEXAGON_SIM_TRACE");
-        if (T && T[0] != 0) {
-            status = sim->SetTracing(HEX_TRACE_PC, T);
+    // Configue various tracing capabilites.
+    struct Trace {
+        const char *env_var;
+        HEXAPI_TracingType hex_trace;
+    };
+    Trace traces[] = {
+        { "HL_HEXAGON_SIM_MIN_TRACE", HEX_TRACE_PC_MIN },
+        { "HL_HEXAGON_SIM_TRACE", HEX_TRACE_PC },
+        { "HL_HEXAGON_SIM_MEM_TRACE", HEX_TRACE_MEM },
+    };
+    for (auto i : traces) {
+        const char *trace = getenv(i.env_var);
+        if (trace && trace[0] != 0) {
+            status = sim->SetTracing(i.hex_trace, trace);
             if (status != HEX_STAT_SUCCESS) {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
@@ -80,7 +91,7 @@ int init_sim() {
 
     // Configure use of debugger
     int pnum = 0;
-    char *s = getenv("HL_HEXAGON_SIM_DBG_PORT");
+    const char *s = getenv("HL_HEXAGON_SIM_DBG_PORT");
     if (s && (pnum = atoi(s))) {
         printf("Debugger port: %d\n", pnum);
         status = sim->ConfigureRemoteDebug(pnum);
@@ -90,6 +101,24 @@ int init_sim() {
         } else {
             debug_mode = true;
         }
+    }
+
+    // Configure packet analysis for hexagon-prof.
+    const char *packet_analyze = getenv("HL_HEXAGON_PACKET_ANALYZE");
+    if (packet_analyze && packet_analyze[0]) {
+        status = sim->ConfigurePacketAnalysis(packet_analyze);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigurePacketAnalysis failed: %d\n", status);
+            return -1;
+        }
+    }
+
+    // Control use of dlopenbuf. This is to enable testing of the
+    // custom implementation of dlopen, which is not used whenever
+    // dlopenbuf is available.
+    const char *use = getenv("HL_HEXAGON_USE_DLOPENBUF");
+    if (use && !atoi(use)) {
+        use_dlopenbuf = false;
     }
 
     status = sim->EndOfConfiguration();
@@ -197,7 +226,6 @@ int send_message(int msg, const std::vector<int> &arguments) {
         printf("HexagonWrapper::ReadSymbolValue(rpc_ret) failed: %d\n", status);
         return -1;
     }
-
     // Get the remote address of the current func. There's a remote
     // pointer to it, so we need to walk through a few levels of
     // indirection.
@@ -305,19 +333,28 @@ public:
     remote_buffer &operator=(const remote_buffer &) = delete;
 };
 
+// We need to only allow one thread at a time to interact with the runtime.
+// This is done by simply locking this mutex at the entry of each exported
+// runtime function. This is not very efficient, but the simulator is slow
+// anyways.
+std::mutex mutex;
+
 extern "C" {
 
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
-                                             handle_t *module_ptr) {
+DLLEXPORT
+int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const unsigned char *code, int codeLen, handle_t *module_ptr) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     int ret = init_sim();
     if (ret != 0) return -1;
 
     // Copy the pointer arguments to the simulator.
+    remote_buffer remote_soname(soname, sonameLen);
     remote_buffer remote_code(code, codeLen);
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, remote_module_ptr.data});
+    ret = send_message(Message::LoadLibrary, {remote_soname.data, sonameLen, remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -326,22 +363,28 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     return ret;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
+DLLEXPORT
+int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t* sym) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     assert(sim);
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    handle_t ret = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen});
+    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_dlopenbuf});
 
-    return ret;
+    return *sym != 0 ? 0 : -1;
 }
 
+DLLEXPORT
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_buffersPtrs, int input_buffersLen,
                               host_buffer *output_buffersPtrs, int output_buffersLen,
                               const host_buffer *input_scalarsPtrs, int input_scalarsLen) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     assert(sim);
 
     std::vector<remote_buffer> remote_input_buffers;
@@ -392,7 +435,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return ret;
 }
 
-int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+DLLEXPORT
+int halide_hexagon_remote_release_library(handle_t module_ptr) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     if (!sim) {
         // Due to static destructor ordering issues, the simulator
         // might have been freed before this gets called.
@@ -409,15 +455,18 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), codeLen});
+    return send_message(Message::ReleaseLibrary, {static_cast<int>(module_ptr), use_dlopenbuf});
 }
 
+DLLEXPORT
 void halide_hexagon_host_malloc_init() {
 }
 
+DLLEXPORT
 void halide_hexagon_host_malloc_deinit() {
 }
 
+DLLEXPORT
 void *halide_hexagon_host_malloc(size_t x) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = 4096;
@@ -432,10 +481,12 @@ void *halide_hexagon_host_malloc(size_t x) {
     return ptr;
 }
 
+DLLEXPORT
 void halide_hexagon_host_free(void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
+DLLEXPORT
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     // The stepping code periodically grabs the remote value of
     // current_func for us.

@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cstdio>
 #include <algorithm>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 Buffer<uint16_t> input;
 Buffer<uint16_t> output;
@@ -31,7 +32,7 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    return benchmark(1, 10, [&]() { f.realize(output); });
+    return benchmark([&]() { f.realize(output); });
 }
 
 int main(int argc, char **argv) {

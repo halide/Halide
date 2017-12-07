@@ -6,6 +6,9 @@
 #ifndef CUDA_FN
 #define CUDA_FN(ret, fn, args)
 #endif
+#ifndef CUDA_FN_OPTIONAL
+#define CUDA_FN_OPTIONAL(ret, fn, args)
+#endif
 #ifndef CUDA_FN_3020
 #define CUDA_FN_3020(ret, fn, fn_3020, args) CUDA_FN(ret, fn, args)
 #endif
@@ -24,6 +27,7 @@ CUDA_FN_4000(CUresult, cuCtxDestroy, cuCtxDestroy_v2, (CUcontext pctx));
 CUDA_FN(CUresult, cuProfilerStop, ());
 CUDA_FN(CUresult, cuCtxGetApiVersion, (CUcontext ctx, unsigned int *version));
 CUDA_FN(CUresult, cuModuleLoadData, (CUmodule *module, const void *image));
+CUDA_FN(CUresult, cuModuleLoadDataEx, (CUmodule *module, const void *image, unsigned int numOptions, CUjit_option* options, void** optionValues));
 CUDA_FN(CUresult, cuModuleUnload, (CUmodule module));
 CUDA_FN(CUresult, cuModuleGetFunction, (CUfunction *hfunc, CUmodule hmod, const char *name));
 CUDA_FN(CUresult, cuModuleGetGlobal, (CUdeviceptr *dptr, size_t *bytes, CUmodule hmod, const char *name));
@@ -51,6 +55,9 @@ CUDA_FN_4000(CUresult, cuCtxPopCurrent, cuCtxPopCurrent_v2, (CUcontext *pctx));
 
 CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr ptr));
 
+CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, (CUstream hStream));
+
 #undef CUDA_FN
+#undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000

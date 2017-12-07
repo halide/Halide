@@ -20,36 +20,47 @@ LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 LDFLAGS-arm-64-profile-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
-all: process-host process-arm-64-android process-arm-32-android process-arm-64-profile-android process-arm-32-profile-android
+BIN ?= bin
 
-pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) pipeline.cpp -g $(LIB_HALIDE) -o pipeline \
-	$(LDFLAGS) $(LLVM_SHARED_LIBS)
+all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
-pipeline_cpu-%.o: pipeline
-	HL_TARGET=$* ./pipeline pipeline_cpu-$* pipeline_cpu
+$(BIN)/blur.generator: blur_generator.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
-pipeline_hvx64-%.o: pipeline
-	HL_TARGET=$*-hvx_64 ./pipeline pipeline_hvx64-$* pipeline_hvx64
+$(BIN)/%/blur_cpu.o: $(BIN)/blur.generator
+	@mkdir -p $(@D)
+	$^ -g blur -o $(BIN)/$* -e o,h -f blur_cpu target=$*
 
-pipeline_hvx128-%.o: pipeline
-	HL_TARGET=$*-hvx_128 ./pipeline pipeline_hvx128-$* pipeline_hvx128
+$(BIN)/%/blur_hvx64.o: $(BIN)/blur.generator
+	@mkdir -p $(@D)
+	$^ -g blur -o $(BIN)/$* -e o,h -f blur_hvx64 target=$*-hvx_64
 
-process-%: process.cpp pipeline_cpu-%.o pipeline_hvx64-%.o pipeline_hvx128-%.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline_cpu-$*.o pipeline_hvx64-$*.o pipeline_hvx128-$*.o -o process-$* $(LDFLAGS-$*)
+$(BIN)/%/blur_hvx128.o: $(BIN)/blur.generator
+	@mkdir -p $(@D)
+	$^ -g blur -o $(BIN)/$* -e o,h -f blur_hvx128 target=$*-hvx_128
 
-# This requires root: adb root && adb wait-for-device && adb remount
-run-%-android: process-%-android
-	adb push process-$*-android /data/
-	adb shell chmod +x /data/process-$*-android
-	adb shell /data/process-$*-android cpu 10
-	adb shell /data/process-$*-android hvx64 10
-	adb shell /data/process-$*-android hvx128 10
+$(BIN)/process-%: process.cpp $(BIN)/%/blur_cpu.o $(BIN)/%/blur_hvx64.o $(BIN)/%/blur_hvx128.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/blur_cpu.o $(BIN)/$*/blur_hvx64.o $(BIN)/$*/blur_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
-run-host: process-host
-	./process-host cpu 10
-	./process-host hvx64 1
-	./process-host hvx128 1
+DEVICE_PATH ?= /data/local/tmp/HelloHexagon
+DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""
+HEXAGON_RUNTIME_PATH = $(HALIDE_SRC_PATH)/src/runtime/hexagon_remote
+run-%-android: $(BIN)/process-%-android
+	adb shell mkdir -p $(DEVICE_PATH)
+	adb push $(BIN)/process-$*-android $(DEVICE_PATH)
+	adb push $(HEXAGON_RUNTIME_PATH)/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_PATH)
+	adb push $(HEXAGON_RUNTIME_PATH)/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_PATH)
+	adb shell cp /system/lib/rfsa/adsp/testsig* $(DEVICE_PATH) > /dev/null || true
+	adb shell chmod +x $(DEVICE_PATH)/process-$*-android
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android cpu 10
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android hvx64 10
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android hvx128 10
+
+run-host: $(BIN)/process-host
+	$(BIN)/process-host cpu 10
+	$(BIN)/process-host hvx64 1
+	$(BIN)/process-host hvx128 1
 
 clean:
-	rm -f process-* pipeline-*.o pipeline pipeline.h
+	rm -rf $(BIN)

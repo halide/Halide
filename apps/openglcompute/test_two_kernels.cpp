@@ -2,38 +2,39 @@
 
 using namespace Halide;
 
-const int CHANNELS = 4;
 int main(int argc, char** argv) {
     ImageParam input(UInt(32), 3, "input");
-    input.set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
+    input.dim(2).set_bounds(0, 4).set_stride(1).dim(0).set_stride(4);
 
-    Var x, y, c;
+    Var x, y, c, xi, yi;
     Func f("f");
     f(x, y, c) = input(x, y, c) + 1;
-    f.bound(c, 0, CHANNELS)
-     .reorder_storage(c, x, y)
-     .reorder(c, x, y);
+    f.bound(c, 0, 4)
+        .reorder_storage(c, x, y)
+        .reorder(c, x, y);
 
     f.compute_root();
-    f.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
+    f.output_buffer().dim(2).set_bounds(0, 4).set_stride(1).dim(0).set_stride(4);
 
     Target target = get_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        f.vectorize(c, 4)
-         .gpu_tile(x, y, 64, 64);
+        f.unroll(c)
+            .gpu_tile(x, y, xi, yi, 64, 64);
     }
 
     Func g("g");
     g(x, y, c) = f(x, y, c) - 1;
-    g.bound(c, 0, CHANNELS)
-     .reorder_storage(c, x, y)
-     .reorder(c, x, y);
+    g.bound(c, 0, 4)
+        .reorder_storage(c, x, y)
+        .reorder(c, x, y);
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        g.vectorize(c, 4)
-         .gpu_tile(x, y, 64, 64);
+        g.unroll(c)
+            .gpu_tile(x, y, xi, yi, 64, 64);
     }
-    g.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
+    g.output_buffer().dim(2).set_bounds(0, 4).set_stride(1).dim(0).set_stride(4);
 
     std::string fn_name = std::string("two_kernels_filter") + (argc > 1 ? argv[1] : "");
     g.compile_to_file(fn_name, {input}, fn_name);
+
+    return 0;
 }

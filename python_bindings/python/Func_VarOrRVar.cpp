@@ -4,7 +4,7 @@
 #include <boost/python.hpp>
 //#include "add_operators.h"
 
-#include "../../src/Func.h"
+#include "Halide.h"
 
 #include <string>
 #include <vector>

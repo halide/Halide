@@ -16,65 +16,46 @@ using namespace Halide;
 
 int call_count = 0;
 
-extern "C" DLLEXPORT int count_calls(buffer_t *out) {
-    if (out->host) {
+extern "C" DLLEXPORT int count_calls(halide_buffer_t *out) {
+    if (!out->is_bounds_query()) {
         call_count++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = 42;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t>(*out).fill(42);
     }
     return 0;
 }
 
 int call_count_with_arg = 0;
 
-extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, buffer_t *out) {
-    if (out->host) {
+extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, halide_buffer_t *out) {
+    if (!out->is_bounds_query()) {
         call_count_with_arg++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = val;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
     }
     return 0;
 }
 
 int call_count_with_arg_parallel[8];
 
-extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *out) {
-    if (out->host) {
-        call_count_with_arg_parallel[out->min[2]]++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = val;
-            }
-        }
+extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, halide_buffer_t *out) {
+    if (!out->is_bounds_query()) {
+        call_count_with_arg_parallel[out->dim[2].min]++;
+        Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
     }
     return 0;
 }
 
 int call_count_staged[4];
 
-extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t *in, buffer_t *out) {
-    if (in->host == nullptr) {
-        for (int i = 0; i < 4; i++) {
-            in->min[i] = out->min[i];
-            in->extent[i] = out->extent[i];
-            in->stride[i] = out->stride[i];
+extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_buffer_t *in, halide_buffer_t *out) {
+    if (in->is_bounds_query()) {
+        for (int i = 0; i < out->dimensions; i++) {
+            in->dim[i] = out->dim[i];
         }
-        in->elem_size = out->elem_size;
-    } else if (out->host) {
+    } else if (!out->is_bounds_query()) {
         assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] =
-                  in->host[i * in->stride[0] + j * in->stride[1]] + val;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
+        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
     }
     return 0;
 }

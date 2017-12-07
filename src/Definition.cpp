@@ -3,6 +3,7 @@
 #include "IR.h"
 #include "IROperator.h"
 #include "IRMutator.h"
+#include "Introspection.h"
 #include "Definition.h"
 #include "Var.h"
 
@@ -18,8 +19,9 @@ struct DefinitionContents {
     bool is_init;
     Expr predicate;
     std::vector<Expr> values, args;
-    Schedule schedule;
+    StageSchedule stage_schedule;
     std::vector<Specialization> specializations;
+    std::string source_location;
 
     DefinitionContents() : is_init(true), predicate(const_true()) {}
 
@@ -35,7 +37,7 @@ struct DefinitionContents {
             arg.accept(visitor);
         }
 
-        schedule.accept(visitor);
+        stage_schedule.accept(visitor);
 
         for (const Specialization &s : specializations) {
             if (s.condition.defined()) {
@@ -45,7 +47,7 @@ struct DefinitionContents {
         }
     }
 
-    void mutate(IRMutator *mutator) {
+    void mutate(IRMutator2 *mutator) {
         if (predicate.defined()) {
             predicate = mutator->mutate(predicate);
         }
@@ -57,7 +59,7 @@ struct DefinitionContents {
             args[i] = mutator->mutate(args[i]);
         }
 
-        schedule.mutate(mutator);
+        stage_schedule.mutate(mutator);
 
         for (Specialization &s : specializations) {
             if (s.condition.defined()) {
@@ -78,7 +80,7 @@ EXPORT void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 
-Definition::Definition() : contents(new DefinitionContents) {}
+Definition::Definition() : contents(nullptr) {}
 
 Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(ptr) {
     internal_assert(ptr.defined())
@@ -91,34 +93,39 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     contents->is_init = is_init;
     contents->values = values;
     contents->args = args;
+    contents->source_location = Introspection::get_source_location();
     if (rdom.defined()) {
         contents->predicate = rdom.predicate();
         for (size_t i = 0; i < rdom.domain().size(); i++) {
-            contents->schedule.rvars().push_back(rdom.domain()[i]);
+            contents->stage_schedule.rvars().push_back(rdom.domain()[i]);
         }
     }
 }
 
-// Return deep-copy of Definition
-Definition Definition::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
-    internal_assert(contents.defined()) << "Cannot deep-copy undefined Definition\n";
+Definition Definition::get_copy() const {
+    internal_assert(contents.defined()) << "Cannot copy undefined Definition\n";
 
-    Definition copy;
+    Definition copy(new DefinitionContents);
     copy.contents->is_init = contents->is_init;
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
-    copy.contents->schedule = contents->schedule.deep_copy(copied_map);
+    copy.contents->stage_schedule = contents->stage_schedule.get_copy();
+    copy.contents->source_location = contents->source_location;
 
     // Deep-copy specializations
     for (const Specialization &s : contents->specializations) {
         Specialization s_copy;
         s_copy.condition = s.condition;
-        s_copy.definition = s.definition.deep_copy(copied_map);
+        s_copy.definition = s.definition.get_copy();
+        s_copy.failure_message = s.failure_message;
         copy.contents->specializations.push_back(std::move(s_copy));
     }
     return copy;
+}
+
+bool Definition::defined() const {
+    return contents.defined();
 }
 
 bool Definition::is_init() const {
@@ -129,7 +136,7 @@ void Definition::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
 }
 
-void Definition::mutate(IRMutator *mutator) {
+void Definition::mutate(IRMutator2 *mutator) {
     contents->mutate(mutator);
 }
 
@@ -163,12 +170,12 @@ std::vector<Expr> Definition::split_predicate() const {
     return predicates;
 }
 
-Schedule &Definition::schedule() {
-    return contents->schedule;
+StageSchedule &Definition::schedule() {
+    return contents->stage_schedule;
 }
 
-const Schedule &Definition::schedule() const {
-    return contents->schedule;
+const StageSchedule &Definition::schedule() const {
+    return contents->stage_schedule;
 }
 
 std::vector<Specialization> &Definition::specializations() {
@@ -179,25 +186,22 @@ const std::vector<Specialization> &Definition::specializations() const {
     return contents->specializations;
 }
 
+std::string Definition::source_location() const {
+    return contents->source_location;
+}
+
 const Specialization &Definition::add_specialization(Expr condition) {
     Specialization s;
     s.condition = condition;
+    s.definition.contents = new DefinitionContents;
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
     s.definition.contents->args   = contents->args;
+    s.definition.contents->source_location = contents->source_location;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
-    s.definition.contents->schedule.store_level()      = contents->schedule.store_level();
-    s.definition.contents->schedule.compute_level()    = contents->schedule.compute_level();
-    s.definition.contents->schedule.rvars()            = contents->schedule.rvars();
-    s.definition.contents->schedule.splits()           = contents->schedule.splits();
-    s.definition.contents->schedule.dims()             = contents->schedule.dims();
-    s.definition.contents->schedule.storage_dims()     = contents->schedule.storage_dims();
-    s.definition.contents->schedule.bounds()           = contents->schedule.bounds();
-    s.definition.contents->schedule.memoized()         = contents->schedule.memoized();
-    s.definition.contents->schedule.touched()          = contents->schedule.touched();
-    s.definition.contents->schedule.allow_race_conditions() = contents->schedule.allow_race_conditions();
+    s.definition.contents->stage_schedule = contents->stage_schedule.get_copy();
 
     contents->specializations.push_back(s);
     return contents->specializations.back();

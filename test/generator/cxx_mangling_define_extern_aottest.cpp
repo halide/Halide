@@ -8,28 +8,16 @@
 
 #include "cxx_mangling_define_extern.h"
 
-using namespace Halide;
-
-int32_t extract_value_global(int32_t *arg) {
-    return *arg;
-}
-
-namespace HalideTest {
-
-int32_t extract_value_ns(const int32_t *arg) {
-    return *arg;
-}
-
-}
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input(100);
+    Buffer<uint8_t> input(10);
 
-    for (int32_t i = 0; i < 100; i++) {
+    for (int32_t i = 0; i < 10; i++) {
         input(i) = i;
     }
 
-    Buffer<double> result(100);
+    Buffer<double> result_1(10), result_2(10), result_3(10);
 
     const void *user_context = nullptr;
     int ptr_arg = 42;
@@ -39,11 +27,19 @@ int main(int argc, char **argv) {
     const void *const_void_ptr = nullptr;
     std::string *string_ptr = nullptr;
     const std::string *const_string_ptr = nullptr;
-    int r = HalideTest::cxx_mangling_define_extern(user_context, input, int_ptr, const_int_ptr, 
-        void_ptr, const_void_ptr, string_ptr, const_string_ptr, result);
+    int r = HalideTest::cxx_mangling_define_extern(user_context, input, int_ptr, const_int_ptr,
+                                                   void_ptr, const_void_ptr, string_ptr, const_string_ptr,
+                                                   result_1, result_2, result_3);
     if (r != 0) {
         fprintf(stderr, "Failure!\n");
         exit(1);
+    }
+
+    for (int i = 0; i < 10; ++i) {
+        if (result_1(i) != i + 12.0 || result_2(i) != i + 12.0 || result_3(i) != i + 12.0) {
+            fprintf(stderr, "Failure!\n");
+            exit(1);
+        }
     }
 
     printf("Success!\n");

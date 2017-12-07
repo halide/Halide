@@ -4,7 +4,9 @@ namespace {
 
 class CleanupOnError : public Halide::Generator<CleanupOnError> {
 public:
-    Func build() {
+    Output<Buffer<int32_t>> output{"output", 1};
+
+    void generate() {
         Var x;
 
         // This allocation is going to succeed
@@ -14,8 +16,11 @@ public:
         f.compute_root();
 
         Target target = get_target();
-        if (target.has_gpu_feature()) {
-            f.gpu_tile(x, 16);
+        if (target.has_gpu_feature() && !target.has_feature(Target::Metal)) {
+            // Skip Metal, because it uses zero-copy, which breaks the
+            // assumptions of the test.
+            Var xo, xi;
+            f.gpu_tile(x, xo, xi, 16);
         }
 
         // This one is going to fail (because we'll override
@@ -26,13 +31,10 @@ public:
 
         g.compute_root();
 
-        Func h;
-        h(x) = g(x) + 1;
-
-        return h;
+        output(x) = g(x) + 1;
     }
 };
 
-Halide::RegisterGenerator<CleanupOnError> register_my_gen{"cleanup_on_error"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(CleanupOnError, cleanup_on_error)

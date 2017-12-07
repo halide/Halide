@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     Func f1, f2, f3, f4, f5;
     Func g1, g2, g3, g4, g5;
 
-    Var x;
+    Var x, xi;
     Expr v = x*1.34f + 1.0142f;
 
     Param<float> p;
@@ -74,8 +74,8 @@ int main(int argc, char **argv) {
 
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
-        f5.gpu_tile(x, 16);
-        g5.gpu_tile(x, 16);
+        f5.gpu_tile(x, xi, 16);
+        g5.gpu_tile(x, xi, 16);
     }
 
     Buffer<float> imf1 = f1.realize(10000);

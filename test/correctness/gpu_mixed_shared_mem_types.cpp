@@ -30,9 +30,9 @@ int main(int argc, char **argv) {
                     Float(32)};
     Func funcs[n_types];
 
-    Var x;
+    Var x("x"), xi("xi");
 
-    Func out;
+    Func out("out");
 
     Type result_type;
     if (t.has_feature(Target::Metal)) {
@@ -59,12 +59,12 @@ int main(int argc, char **argv) {
 
         funcs[i](x) = cast(types[i], x/16 + off);
         e += cast(result_type, funcs[i](x));
-        funcs[i].compute_at(out, Var::gpu_blocks()).gpu_threads(x);
+        funcs[i].compute_at(out, x).gpu_threads(x);
     }
 
 
     out(x) = e;
-    out.gpu_tile(x, 23);
+    out.gpu_tile(x, xi, 23);
 
     Buffer<> output = out.realize(23*5);
 

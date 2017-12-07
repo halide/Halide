@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<int> in(10, 10);
+    Buffer<int> in(10, 10);
 
     Func f("f");
     RDom r(0, in.width(), 0, in.height());

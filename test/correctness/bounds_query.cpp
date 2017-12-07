@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     // Now fill the intermediate using the first pipeline, and then
     // run the second pipeline.
-    first.realize(tmp.get());
+    first.realize(b);
     second.realize(out);
 
     // Make another version of the same thing that isn't split into two to compare.

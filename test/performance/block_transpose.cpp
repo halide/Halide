@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include <memory>
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 enum {
     scalar_trans,
@@ -53,7 +54,7 @@ Buffer<uint16_t> test_transpose(int mode) {
 
     output.realize(result);
 
-    double t = benchmark(1, 10, [&]() {
+    double t = benchmark([&]() {
         output.realize(result);
     });
 
@@ -103,7 +104,7 @@ Buffer<uint16_t> test_transpose_wrap(int mode) {
 
     output.realize(result);
 
-    double t = benchmark(1, 10, [&]() {
+    double t = benchmark([&]() {
         output.realize(result);
     });
 

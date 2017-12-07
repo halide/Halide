@@ -20,25 +20,10 @@ class Type;
 
 namespace Halide {
 
+struct ExternCFunction;
+struct JITExtern;
 struct Target;
 class Module;
-
-// TODO: Consider moving these two types elsewhere and seeing if they
-// can be combined with other types used for argument handling, or used
-// elsewhere.
-struct ScalarOrBufferT {
-    bool is_buffer;
-    Type scalar_type; // Only meaningful if is_buffer is false.
-    ScalarOrBufferT() : is_buffer(false) { }
-};
-
-struct ExternSignature {
-    bool is_void_return;
-    Type ret_type;
-    std::vector<ScalarOrBufferT> arg_types;
-
-    ExternSignature() : is_void_return(false) { }
-};
 
 namespace Internal {
 
@@ -71,9 +56,9 @@ struct JITModule {
 
     /** A pointer to the raw halide function. Its true type depends
      * on the Argument vector passed to CodeGen_LLVM::compile. Image
-     * parameters become (buffer_t *), and scalar parameters become
+     * parameters become (halide_buffer_t *), and scalar parameters become
      * pointers to the appropriate values. The final argument is a
-     * pointer to the buffer_t defining the output. This will be nullptr for
+     * pointer to the halide_buffer_t defining the output. This will be nullptr for
      * a JITModule which has not yet been compiled or one that is not
      * a Halide Func compilation at all. */
     EXPORT void *main_function() const;
@@ -116,7 +101,7 @@ struct JITModule {
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
     EXPORT void add_extern_for_export(const std::string &name,
-                                      const ExternSignature &signature, void *address);
+                                      const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     EXPORT Symbol find_symbol_by_name(const std::string &) const;
@@ -129,9 +114,6 @@ struct JITModule {
                                const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
     /** Encapsulate device (GPU) and buffer interactions. */
-    EXPORT int copy_to_device(struct buffer_t *buf) const;
-    EXPORT int copy_to_host(struct buffer_t *buf) const;
-    EXPORT int device_free(struct buffer_t *buf) const;
     EXPORT void memoization_cache_set_size(int64_t size) const;
 
     /** Return true if compile_module has been called on this module. */
@@ -141,17 +123,16 @@ struct JITModule {
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
 struct JITHandlers {
-    void (*custom_print)(void *, const char *);
-    void *(*custom_malloc)(void *, size_t);
-    void (*custom_free)(void *, void *);
-    int (*custom_do_task)(void *, halide_task, int, uint8_t *);
-    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
-    void (*custom_error)(void *, const char *);
-    int32_t (*custom_trace)(void *, const halide_trace_event *);
-    JITHandlers() : custom_print(nullptr), custom_malloc(nullptr), custom_free(nullptr),
-                    custom_do_task(nullptr), custom_do_par_for(nullptr),
-                    custom_error(nullptr), custom_trace(nullptr) {
-    }
+    void (*custom_print)(void *, const char *){nullptr};
+    void *(*custom_malloc)(void *, size_t){nullptr};
+    void (*custom_free)(void *, void *){nullptr};
+    int (*custom_do_task)(void *, halide_task, int, uint8_t *){nullptr};
+    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *){nullptr};
+    void (*custom_error)(void *, const char *){nullptr};
+    int32_t (*custom_trace)(void *, const halide_trace_event_t *){nullptr};
+    void *(*custom_get_symbol)(const char *name){nullptr};
+    void *(*custom_load_library)(const char *name){nullptr};
+    void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
 };
 
 struct JITUserContext {

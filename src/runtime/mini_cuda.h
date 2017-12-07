@@ -22,6 +22,21 @@ typedef struct CUfunc_st *CUfunction;                     /**< CUDA function */
 typedef struct CUstream_st *CUstream;                     /**< CUDA stream */
 typedef struct CUevent_st *CUevent;                       /**< CUDA event */
 typedef struct CUarray_st* CUarray;
+
+typedef enum CUjit_option_enum {
+    CU_JIT_MAX_REGISTERS = 0,
+    CU_JIT_THREADS_PER_BLOCK = 1,
+    CU_JIT_WALL_TIME = 2,
+    CU_JIT_INFO_LOG_BUFFER = 3,
+    CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES = 4,
+    CU_JIT_ERROR_LOG_BUFFER = 5,
+    CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES = 6,
+    CU_JIT_OPTIMIZATION_LEVEL = 7,
+    CU_JIT_TARGET_FROM_CUCONTEXT = 8,
+    CU_JIT_TARGET = 9,
+    CU_JIT_FALLBACK_STRATEGY = 10
+} CUjit_option;
+
 typedef enum {
     CUDA_SUCCESS                              = 0,
     CUDA_ERROR_INVALID_VALUE                  = 1,
@@ -49,6 +64,11 @@ typedef enum {
     CUDA_ERROR_ECC_UNCORRECTABLE              = 214,
     CUDA_ERROR_UNSUPPORTED_LIMIT              = 215,
     CUDA_ERROR_CONTEXT_ALREADY_IN_USE         = 216,
+    CUDA_ERROR_PEER_ACCESS_UNSUPPORTED        = 217,
+    CUDA_ERROR_INVALID_PTX                    = 218,
+    CUDA_ERROR_INVALID_GRAPHICS_CONTEXT       = 219,
+    CUDA_ERROR_NVLINK_UNCORRECTABLE           = 220,
+    CUDA_ERROR_JIT_COMPILER_NOT_FOUND         = 221,
     CUDA_ERROR_INVALID_SOURCE                 = 300,
     CUDA_ERROR_FILE_NOT_FOUND                 = 301,
     CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND = 302,
@@ -57,15 +77,21 @@ typedef enum {
     CUDA_ERROR_INVALID_HANDLE                 = 400,
     CUDA_ERROR_NOT_FOUND                      = 500,
     CUDA_ERROR_NOT_READY                      = 600,
-    CUDA_ERROR_LAUNCH_FAILED                  = 700,
+    CUDA_ERROR_ILLEGAL_ADDRESS                = 700,
     CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES        = 701,
     CUDA_ERROR_LAUNCH_TIMEOUT                 = 702,
     CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING  = 703,
-    CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED = 704,
-    CUDA_ERROR_PEER_ACCESS_NOT_ENABLED    = 705,
+    CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED    = 704,
+    CUDA_ERROR_PEER_ACCESS_NOT_ENABLED        = 705,
     CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE         = 708,
     CUDA_ERROR_CONTEXT_IS_DESTROYED           = 709,
     CUDA_ERROR_ILLEGAL_INSTRUCTION            = 715,
+    CUDA_ERROR_MISALIGNED_ADDRESS             = 716,
+    CUDA_ERROR_INVALID_ADDRESS_SPACE          = 717,
+    CUDA_ERROR_INVALID_PC                     = 718,
+    CUDA_ERROR_LAUNCH_FAILED                  = 719,
+    CUDA_ERROR_NOT_PERMITTED                  = 800,
+    CUDA_ERROR_NOT_SUPPORTED                  = 801,
     CUDA_ERROR_UNKNOWN                        = 999
 } CUresult;
 
@@ -91,7 +117,7 @@ typedef enum {
     CU_DEVICE_ATTRIBUTE_KERNEL_EXEC_TIMEOUT = 17,               /**< Specifies whether there is a run time limit on kernels */
     CU_DEVICE_ATTRIBUTE_INTEGRATED = 18,                        /**< Device is integrated with host memory */
     CU_DEVICE_ATTRIBUTE_CAN_MAP_HOST_MEMORY = 19,               /**< Device can map host memory into CUDA address space */
-    CU_DEVICE_ATTRIBUTE_COMPUTE_MODE = 20,                      /**< Compute mode (See ::CUcomputemode for details) */
+    CU_DEVICE_ATTRIBUTE_COMPUTE_MODE = 20,                      /**< Compute mode (See CUcomputemode for details) */
     CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE1D_WIDTH = 21,           /**< Maximum 1D texture width */
     CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_WIDTH = 22,           /**< Maximum 2D texture width */
     CU_DEVICE_ATTRIBUTE_MAXIMUM_TEXTURE2D_HEIGHT = 23,          /**< Maximum 2D texture height */

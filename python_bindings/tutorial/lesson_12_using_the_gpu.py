@@ -33,7 +33,7 @@ from datetime import datetime
 
 
 # Define some Vars to use.
-x, y, c, i = Var("x"), Var("y"), Var("c"), Var("i")
+x, y, c, i, ii, xi, yi = Var("x"), Var("y"), Var("c"), Var("i"), Var("ii"), Var("xi"), Var("yi")
 
 # We're going to want to schedule a pipeline in several ways, so we
 # define the pipeline in a class so that we can recreate it several
@@ -98,7 +98,7 @@ class MyPipeline:
         # previous values computed within the same strip of 16
         # scanlines.
         self.sharpen.store_at(self.curved, yo) \
-               .compute_at(self.curved, yi)
+                    .compute_at(self.curved, yi)
 
         # Vectorize the sharpen. It's 16-bit so we'll vectorize it 8-wide.
         self.sharpen.vectorize(x, 8)
@@ -107,7 +107,7 @@ class MyPipeline:
         # sharpen. We'll leave the cast to 16-bit inlined into
         # sharpen.
         self.padded.store_at(self.curved, yo) \
-              .compute_at(self.curved, yi)
+            .compute_at(self.curved, yi)
 
         # Also vectorize the padding. It's 8-bit, so we'll vectorize
         # 16-wide.
@@ -142,12 +142,12 @@ class MyPipeline:
         # correspond to CUDA's notions of blocks and threads, or
         # OpenCL's notions of thread groups and threads.
         self.lut.gpu_blocks(block) \
-           .gpu_threads(thread)
+                .gpu_threads(thread)
 
         # This is a very common scheduling pattern on the GPU, so
         # there's a shorthand for it:
 
-        # lut.gpu_tile(i, 16)
+        # lut.gpu_tile(i, ii, 16)
 
         # Func::gpu_tile method is similar to Func::tile, except that
         # it also specifies that the tile coordinates correspond to
@@ -157,11 +157,11 @@ class MyPipeline:
         # Compute color channels innermost. Promise that there will
         # be three of them and unroll across them.
         self.curved.reorder(c, x, y) \
-              .bound(c, 0, 3) \
-              .unroll(c)
+                   .bound(c, 0, 3) \
+                   .unroll(c)
 
         # Compute curved in 2D 8x8 tiles using the GPU.
-        self.curved.gpu_tile(x, y, 8, 8)
+        self.curved.gpu_tile(x, y, xi, yi, 8, 8)
 
         # This is equivalent to:
         # curved.tile(x, y, xo, yo, xi, yi, 8, 8)
@@ -174,7 +174,7 @@ class MyPipeline:
         # intermediate result in shared memory. Var::gpu_blocks, and
         # Var::gpu_threads exist to help you schedule producers within
         # GPU threads and blocks.
-        self.padded.compute_at(self.curved, Var.gpu_blocks())
+        self.padded.compute_at(self.curved, x)
 
         # Use the GPU threads for the x and y coordinates of the
         # padded input.
@@ -219,9 +219,9 @@ class MyPipeline:
         # Test the performance of the scheduled MyPipeline.
 
         output = Buffer(UInt(8),
-                       self.input.width(),
-                       self.input.height(),
-                       self.input.channels())
+                        self.input.width(),
+                        self.input.height(),
+                        self.input.channels())
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)

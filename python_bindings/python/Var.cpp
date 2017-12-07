@@ -4,8 +4,7 @@
 #include "add_operators.h"
 #include <boost/python.hpp>
 
-#include "../../src/IROperator.h"
-#include "../../src/Var.h"
+#include "Halide.h"
 
 #include <boost/format.hpp>
 #include <string>
@@ -105,13 +104,6 @@ void defineVar() {
 
                          .def("expr", &var_as_expr, p::arg("self"),  //operator Expr() const
                               "A Var can be treated as an Expr of type Int(32)")
-
-                         .def("gpu_blocks", &Var::gpu_blocks,  // no args
-                              "Vars to use for scheduling producer/consumer pairs on the gpu.")
-                         .staticmethod("gpu_blocks")
-                         .def("gpu_threads", &Var::gpu_threads,  // no args
-                              "Vars to use for scheduling producer/consumer pairs on the gpu.")
-                         .staticmethod("gpu_threads")
 
                          .def("outermost", &Var::outermost,  // no args
                               "A Var that represents the location outside the outermost loop.")

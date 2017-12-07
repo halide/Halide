@@ -7,10 +7,10 @@ int main() {
 }
 #else
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <stddef.h>
 
 #include "Halide.h"
 #include "HalideRuntimeOpenGL.h"
@@ -43,8 +43,7 @@ int main() {
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
 
-
-    g.realize(out1, target); // run once to initialize OpenGL
+    g.realize(out1, target);  // run once to initialize OpenGL
 
     GLuint texture_id;
     glGenTextures(1, &texture_id);
@@ -56,14 +55,14 @@ int main() {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     // wrapping a texture should work
-    halide_opengl_wrap_texture(nullptr, out2.raw_buffer(), texture_id);
+    out2.device_wrap_native(DeviceAPI::GLSL, texture_id, target);
     g.realize(out2, target);
-    halide_opengl_detach_texture(nullptr, out2.raw_buffer());
+    out2.device_detach_native();
 
     // re-wrapping the texture should not abort
-    halide_opengl_wrap_texture(nullptr, out3.raw_buffer(), texture_id);
+    out3.device_wrap_native(DeviceAPI::GLSL, texture_id, target);
     g.realize(out3, target);
-    halide_opengl_detach_texture(nullptr, out3.raw_buffer());
+    out3.device_detach_native();
 
     printf("Success!\n");
     return 0;

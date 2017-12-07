@@ -20,7 +20,7 @@ float float_from_bits(uint32_t bits) {
     return out.asFloat;
 }
 
-float double_from_bits(uint64_t bits) {
+double double_from_bits(uint64_t bits) {
     union {
         double asDouble;
         uint64_t asUInt;
@@ -55,7 +55,7 @@ int main() {
         0.0f,
         -0.0f,
         std::numeric_limits<float>::infinity(),
-	-std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
         std::numeric_limits<float>::quiet_NaN(),
         65504.0f,
         -65504.0f,
@@ -74,7 +74,7 @@ int main() {
         0.0,
         -0.0,
         std::numeric_limits<double>::infinity(),
-	-std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity(),
         std::numeric_limits<double>::quiet_NaN(),
         65504.0,
         -65504.0,

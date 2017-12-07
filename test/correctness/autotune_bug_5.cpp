@@ -24,6 +24,7 @@ int main(int argc, char **argv) {
         .split(y, y, yi, 8)
         .reorder(yi, y, x)
         .compute_root();
+
     upsampledx.compute_at(upsampled, yi);
 
     upsampled.realize(100, 100);

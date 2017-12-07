@@ -26,14 +26,14 @@ int main(int argc, char **argv) {
         ImageParam in(Int(32), 1);
 
         Func f, g, out;
-        Var x;
+        Var x, xi;
         f(x) = in(x) + 1;
         g(x) = f(x) * 2;
         out(x) = g(x) + 3;
 
         f.compute_root();
         if (target.has_gpu_feature()) {
-            g.compute_root().gpu_tile(x, 16);
+            g.compute_root().gpu_tile(x, xi, 16);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             g.compute_root().hexagon();
         }
@@ -61,13 +61,13 @@ int main(int argc, char **argv) {
         // Pipeline 2 will do input -> dev -> dev -> output
         ImageParam in(Int(32), 1);
         Func f, out;
-        Var x;
+        Var x, xi;
         f(x) = in(x) + 1;
         out(x) = f(x) * 2;
 
         if (target.has_gpu_feature()) {
-            f.compute_root().gpu_tile(x, 16);
-            out.compute_root().gpu_tile(x, 16);
+            f.compute_root().gpu_tile(x, xi, 16);
+            out.compute_root().gpu_tile(x, xi, 16);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.compute_root().hexagon();
             out.compute_root().hexagon();

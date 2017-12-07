@@ -1,8 +1,9 @@
 #include "Halide.h"
 #include <cstdio>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 #define W 1024
 #define H 160
@@ -20,13 +21,13 @@ int main(int argc, char **argv) {
 
     Buffer<float> imf = f.realize(W, H);
 
-    double parallelTime = benchmark(1, 1, [&]() { f.realize(imf); });
+    double parallelTime = benchmark([&]() { f.realize(imf); });
 
     printf("Realizing g\n");
     Buffer<float> img = g.realize(W, H);
     printf("Done realizing g\n");
 
-    double serialTime = benchmark(1, 1, [&]() { g.realize(img); });
+    double serialTime = benchmark([&]() { g.realize(img); });
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {

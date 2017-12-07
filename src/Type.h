@@ -34,6 +34,9 @@
  * r-value references.  These features cannot be used in extern
  * function calls from Halide or in the generated function from
  * Halide, but their applicability seems limited anyway.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it.
  */
 struct halide_cplusplus_type_name {
     /// An enum to indicate whether a C++ type is non-composite, a struct, class, or union
@@ -73,6 +76,9 @@ struct halide_cplusplus_type_name {
  * This is intended to be a constexpr usable type, but we don't depend
  * on C++11 yet. In C++14, it is possible this will be replaced with
  * introspection/reflection facilities.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it.
  */
 struct halide_handle_cplusplus_type {
     halide_cplusplus_type_name inner_name;
@@ -108,42 +114,73 @@ struct halide_handle_cplusplus_type {
                                  const std::vector<halide_cplusplus_type_name> &enclosing_types = { },
                                  const std::vector<uint8_t> &modifiers = { },
                                  ReferenceType reference_type = NotReference)
-    : inner_name(inner_name), namespaces(namespaces), enclosing_types(enclosing_types), cpp_type_modifiers(modifiers), reference_type(reference_type) {
-    }
+    : inner_name(inner_name),
+      namespaces(namespaces),
+      enclosing_types(enclosing_types),
+      cpp_type_modifiers(modifiers),
+      reference_type(reference_type) {}
+
+    template<typename T>
+    static const halide_handle_cplusplus_type make();
 };
 //@}
 
+/** halide_c_type_to_name is a utility class used to provide a user-extensible
+ * way of naming Handle types.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it
+ * directly (use the HALIDE_DECLARE_EXTERN_xxx macros instead).
+ */
 template<typename T>
 struct halide_c_type_to_name {
-  static const bool known_type = false;
+    static constexpr bool known_type = false;
+    static halide_cplusplus_type_name name() {
+        return {halide_cplusplus_type_name::Simple, "void"};
+    }
 };
 
-template<> struct halide_c_type_to_name<bool> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple, "bool"}; } };
-template<> struct halide_c_type_to_name<int8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int8_t"}; } };
-template<> struct halide_c_type_to_name<uint8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint8_t"}; } };
-template<> struct halide_c_type_to_name<int16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int16_t"}; } };
-template<> struct halide_c_type_to_name<uint16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint16_t"}; } };
-template<> struct halide_c_type_to_name<int32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int32_t"}; } };
-template<> struct halide_c_type_to_name<uint32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint32_t"}; } };
-template<> struct halide_c_type_to_name<float> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
-template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
-template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
+#define HALIDE_DECLARE_EXTERN_TYPE(TypeType, Type)                      \
+    template<> struct halide_c_type_to_name<Type> {                     \
+        static constexpr bool known_type = true;                            \
+        static halide_cplusplus_type_name name() {                      \
+            return { halide_cplusplus_type_name::TypeType, #Type};      \
+        }                                                               \
+    }
 
-// You can make arbitrary user-defined types be "Known" by adding your own specialization of 
-// halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators
-// type safe. e.g.,
+#define HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(T)     HALIDE_DECLARE_EXTERN_TYPE(Simple, T)
+#define HALIDE_DECLARE_EXTERN_STRUCT_TYPE(T)     HALIDE_DECLARE_EXTERN_TYPE(Struct, T)
+#define HALIDE_DECLARE_EXTERN_CLASS_TYPE(T)      HALIDE_DECLARE_EXTERN_TYPE(Class, T)
+#define HALIDE_DECLARE_EXTERN_UNION_TYPE(T)      HALIDE_DECLARE_EXTERN_TYPE(Union, T)
+
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(char);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(bool);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int8_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint8_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int32_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint32_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int64_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint64_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::float16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(buffer_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
+
+// You can make arbitrary user-defined types be "Known" using the
+// macro above. This is useful for making Param<> arguments for
+// Generators type safe. e.g.,
 //
 //    struct MyFunStruct { ... };
 //
 //    ...
 //
-//    template<> 
-//    struct halide_c_type_to_name<struct MyFunStruct> { 
-//      static const bool known_type = true; 
-//      static halide_cplusplus_type_name name() { 
-//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"}; 
-//      } 
-//    };
+//    HALIDE_DECLARE_EXTERN_STRUCT_TYPE(MyFunStruct);
 //
 //    ...
 //
@@ -152,49 +189,42 @@ template<> struct halide_c_type_to_name<struct buffer_t> { static const bool kno
 //       ...
 //    };
 
-// Default case (should be only Unknown types, since we specialize for Known types below).
-// We require that all unknown types be pointers, and translate them all to void*
-// (preserving const-ness and volatile-ness).
-template<typename T, bool KnownType>
-struct halide_internal_handle_traits {
-    static const halide_handle_cplusplus_type *type_info(bool is_ptr, 
-            halide_handle_cplusplus_type::ReferenceType ref_type) { 
-        static_assert(!KnownType, "Only unknown types handled here");
-        internal_assert(is_ptr) << "Unknown types must be pointers";
-        internal_assert(ref_type == halide_handle_cplusplus_type::NotReference) << "Unknown types must not be references";
-        static const halide_handle_cplusplus_type the_info{
-            {halide_cplusplus_type_name::Simple, "void"},
-            {}, 
-            {},
-            { 
-                (uint8_t)(halide_handle_cplusplus_type::Pointer |
-                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
-                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
-            },
-            halide_handle_cplusplus_type::NotReference
-        };
-        return &the_info;
-    }
-};
 
-// Known types
 template<typename T>
-struct halide_internal_handle_traits<T, true> {
-    static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) {
-        static const halide_handle_cplusplus_type the_info{
-            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), 
-            {}, 
-            {},
-            { 
-                (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
-                    (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
-                    (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
-            },
-            ref_type
-        };
-        return &the_info;
-    }
-};
+/*static*/ const halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
+    constexpr bool is_ptr = std::is_pointer<T>::value;
+    constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
+    constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;
+
+    using TBase = typename std::remove_pointer<typename std::remove_reference<T>::type>::type;
+    constexpr bool is_const = std::is_const<TBase>::value;
+    constexpr bool is_volatile = std::is_volatile<TBase>::value;
+
+    constexpr uint8_t modifiers = static_cast<uint8_t>(
+        (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
+        (is_const ? halide_handle_cplusplus_type::Const : 0) |
+        (is_volatile ? halide_handle_cplusplus_type::Volatile : 0)
+    );
+    constexpr halide_handle_cplusplus_type::ReferenceType ref_type =
+        is_lvalue_reference ? halide_handle_cplusplus_type::LValueReference
+                            : (is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference
+                                                   : halide_handle_cplusplus_type::NotReference);
+
+    using TNonCVBase = typename std::remove_cv<TBase>::type;
+    constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;
+    static_assert(!(!known_type && !is_ptr), "Unknown types must be pointers");
+
+    halide_handle_cplusplus_type info = {
+        halide_c_type_to_name<TNonCVBase>::name(),
+        {},
+        {},
+        {modifiers},
+        ref_type
+    };
+    // Pull off any namespaces
+    info.inner_name.name = Halide::Internal::extract_namespaces(info.inner_name.name, info.namespaces);
+    return info;
+}
 
 /** A type traits template to provide a halide_handle_cplusplus_type
  * value from a C++ type.
@@ -204,45 +234,25 @@ struct halide_internal_handle_traits<T, true> {
  * A NULL pointer of type halide_handle_traits represents "void *".
  * This is chosen for compactness or representation as Type is a very
  * widely used data structure.
+ *
+ * Although this is in the global namespace, it should be considered "Halide Internal"
+ * and subject to change; code outside Halide should avoid referencing it directly.
  */
 template<typename T>
 struct halide_handle_traits {
-    // NULL here means "void *". This trait must return a pointer to a
-    // global structure. I.e. it should never be freed.
-    static const halide_handle_cplusplus_type *type_info() { return nullptr; }
-};
-
-template<typename T>
-struct halide_handle_traits<T *> {
-    static const halide_handle_cplusplus_type *type_info() {
-        return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(true, halide_handle_cplusplus_type::NotReference);
-     }
-};
-
-template<typename T>
-struct halide_handle_traits<T &> {
-    static const halide_handle_cplusplus_type *type_info() {
-        return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(false, halide_handle_cplusplus_type::LValueReference);
+    // This trait must return a pointer to a global structure. I.e. it should never be freed.
+    // A return value of nullptr here means "void *".
+    HALIDE_ALWAYS_INLINE static const halide_handle_cplusplus_type *type_info() {
+        if (std::is_pointer<T>::value ||
+            std::is_lvalue_reference<T>::value ||
+            std::is_rvalue_reference<T>::value) {
+            static const halide_handle_cplusplus_type the_info = halide_handle_cplusplus_type::make<T>();
+            return &the_info;
+        }
+        return nullptr;
     }
 };
 
-template<typename T>
-struct halide_handle_traits<T &&> {
-    static const halide_handle_cplusplus_type *type_info() {
-        return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(false, halide_handle_cplusplus_type::RValueReference);
-    }
-};
-
-template<>
-struct halide_handle_traits<const char *> {
-    static const halide_handle_cplusplus_type *type_info() {
-        static const halide_handle_cplusplus_type the_info{
-            halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "char"),
-              {}, {}, { halide_handle_cplusplus_type::Pointer |
-                        halide_handle_cplusplus_type::Const}};
-        return &the_info;
-    }
-};
 
 namespace Halide {
 
@@ -278,7 +288,7 @@ struct Type {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    Type(halide_type_code_t code, uint8_t bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
+    Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
     }
 
@@ -306,18 +316,20 @@ struct Type {
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes());
+        return Type(new_code, bits(), lanes(),
+                    (new_code == code()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
-    Type with_bits(uint8_t new_bits) const {
-        return Type(code(), new_bits, lanes());
+    Type with_bits(int new_bits) const {
+        return Type(code(), new_bits, lanes(),
+                    (new_bits == bits()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
-    Type with_lanes(uint16_t new_lanes) const {
-        return Type(code(), bits(), new_lanes);
+    Type with_lanes(int new_lanes) const {
+        return Type(code(), bits(), new_lanes, handle_type);
     }
 
     /** Type to be printed when declaring handles of this type. */
@@ -361,9 +373,17 @@ struct Type {
             (code() == Handle && !same_handle_type(other));
     }
 
+    /** Compare ordering of two types so they can be used in certain containers and algorithms */
+    bool operator<(const Type &other) const {
+        return code() < other.code() || (code() == other.code() &&
+              (bits() < other.bits() || (bits() == other.bits() &&
+              (lanes() < other.lanes() || (lanes() == other.lanes() &&
+              (code() == Handle && handle_type < other.handle_type))))));
+    }
+
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
-        return Type(code(), bits(), 1);
+        return with_lanes(1);
     }
 
     /** Can this type represent all values of another type? */
@@ -385,10 +405,12 @@ struct Type {
     EXPORT bool is_min(int64_t) const;
     // @}
 
-    /** Return an expression which is the maximum value of this type */
+    /** Return an expression which is the maximum value of this type.
+     * Returns infinity for types which can represent it. */
     EXPORT Expr max() const;
 
-    /** Return an expression which is the minimum value of this type */
+    /** Return an expression which is the minimum value of this type.
+     * Returns -infinity for types which can represent it. */
     EXPORT Expr min() const;
 };
 
@@ -418,7 +440,7 @@ inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_typ
 }
 
 /** Construct the halide equivalent of a C type */
-template<typename T> 
+template<typename T>
 inline Type type_of() {
     return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }

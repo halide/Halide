@@ -191,7 +191,8 @@ int main(int argc, char **argv) {
         RDom r(0, 100, 0, 100);
         f(r.x, r.y) += select((r.x < r.y) && (r.x == 10), 3, undef<int>());
 
-        f.update(0).gpu_tile(r.x, r.y, 4, 4);
+        RVar rxi, ryi;
+        f.update(0).gpu_tile(r.x, r.y, rxi, ryi, 4, 4);
 
         Buffer<int> im = f.realize(200, 200);
 

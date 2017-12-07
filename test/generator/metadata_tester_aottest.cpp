@@ -10,7 +10,7 @@
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int kSize = 32;
 
@@ -126,12 +126,13 @@ Buffer<Type> make_image() {
 }
 
 template <typename InputType, typename OutputType>
-void verify(const Buffer<InputType> &input, 
-            const Buffer<OutputType> &output0, 
-            const Buffer<OutputType> &output1, 
-            const Buffer<OutputType> &output_scalar, 
-            const Buffer<OutputType> &output_array0, 
-            const Buffer<OutputType> &output_array1) {
+void verify(const Buffer<InputType> &input,
+            const Buffer<OutputType> &output0,
+            const Buffer<OutputType> &output1,
+            const Buffer<OutputType> &output_scalar,
+            const Buffer<OutputType> &output_array0,
+            const Buffer<OutputType> &output_array1,
+            const Buffer<OutputType> &untyped_output_buffer) {
     if (output_scalar.dimensions() != 0) {
         fprintf(stderr, "output_scalar should be zero-dimensional\n");
         exit(-1);
@@ -161,6 +162,10 @@ void verify(const Buffer<InputType> &input,
                 }
                 if (output_array1(x, y, c) != 3.0f) {
                     fprintf(stderr, "output_array1[%d, %d, %d] = %f, expected %f\n", x, y, c, output_array1(x, y, c), 3.0f);
+                    exit(-1);
+                }
+                if (untyped_output_buffer(x, y, c) != expected1) {
+                    fprintf(stderr, "untyped_output_buffer[%d, %d, %d] = %f, expected %f\n", x, y, c, untyped_output_buffer(x, y, c), expected1);
                     exit(-1);
                 }
             }
@@ -278,6 +283,42 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
         },
         {
           "input",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "typed_input_buffer",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "type_only_input_buffer",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "dim_only_input_buffer",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "untyped_input_buffer",
           halide_argument_kind_input_buffer,
           3,
           halide_type_t(halide_type_uint, 8),
@@ -601,6 +642,42 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "typed_output_buffer",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "type_only_output_buffer",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "dim_only_output_buffer",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "untyped_output_buffer",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "output_scalar",
           halide_argument_kind_output_buffer,
           0,
@@ -628,7 +705,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "array_outputs2_0",
+          "array_outputs2_0.0",
           halide_argument_kind_output_buffer,
           3,
           halide_type_t(halide_type_float, 32),
@@ -637,7 +714,25 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "array_outputs2_1",
+          "array_outputs2_0.1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs2_1.0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs2_1.1",
           halide_argument_kind_output_buffer,
           3,
           halide_type_t(halide_type_float, 32),
@@ -670,7 +765,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
 
     const halide_filter_argument_t* expected = &kExpectedArguments[expect_ucon_at_0 ? 0 : 1];
     for (int i = 0; i < md.num_arguments; ++i) {
-        fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
+        // fprintf(stdout, "checking arg %d %s\n", i, md.arguments[i].name);
         match_argument(expected[i], md.arguments[i]);
     }
 
@@ -690,13 +785,21 @@ int main(int argc, char **argv) {
 
     Buffer<float> output0(kSize, kSize, 3);
     Buffer<float> output1(kSize, kSize, 3);
+    Buffer<float> typed_output_buffer(kSize, kSize, 3);
+    Buffer<float> type_only_output_buffer(kSize, kSize, 3);
+    Buffer<float> dim_only_output_buffer(kSize, kSize, 3);
+    Buffer<float> untyped_output_buffer(kSize, kSize, 3);
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {{1}, {1}};
+    Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array3[2] = {Buffer<float>{1}, Buffer<float>{1}};
 
     result = metadata_tester(
         input,             // Input<Func>
+        input,             // Input<Buffer<uint8_t>>
+        input,             // Input<Buffer<>>(uint8)
+        input,             // Input<Buffer<>>(3)
+        input,             // Input<Buffer<>>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>
@@ -709,9 +812,9 @@ int main(int argc, char **argv) {
         0.f,               // Input<float>
         0.0,               // Input<double>
         nullptr,           // Input<void*>
-        input,             // Input<Func> 
-        input,             // Input<Func> 
-        input,             // Input<Func> 
+        input,             // Input<Func>
+        input,             // Input<Func>
+        input,             // Input<Func>
         input, input,      // Input<Func[]>
         input, input,      // Input<Func[2]>
         0, 0,              // Input<int8_t[]>
@@ -722,49 +825,61 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
         output0, output1,  // Output<Tuple(Func, Func)>
+        typed_output_buffer,    // Output<Buffer<float>>(3)
+        type_only_output_buffer,    // Output<Buffer<float>>
+        dim_only_output_buffer,    // Output<Buffer<>>(3)
+        untyped_output_buffer,  // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],   // Output<Func[]>
-        output_array2[0], output_array2[1], // Output<Func[2]>
-        output_array3[0], output_array3[1]  // Output<float[2]>
-    );  
-    EXPECT_EQ(0, result);
-
-    result = metadata_tester_ucon(
-        user_context, 
-        input,             // Input<Func>
-        false,             // Input<bool>
-        0,                 // Input<i8>
-        0,                 // Input<i16>
-        0,                 // Input<i32>
-        0,                 // Input<i64>
-        0,                 // Input<u8>
-        0,                 // Input<u16>
-        0,                 // Input<u32>
-        0,                 // Input<u64>
-        0.f,               // Input<float>
-        0.0,               // Input<double>
-        nullptr,           // Input<void*>
-        input,             // Input<Func> 
-        input,             // Input<Func> 
-        input,             // Input<Func> 
-        input, input,      // Input<Func[]>
-        input, input,      // Input<Func[2]>
-        0, 0,              // Input<int8_t[]>
-        0, 0,              // Input<int8_t[2]>
-        0, 0,              // Input<int16_t[]>
-        0, 0,              // Input<int16_t[2]>
-        0, 0,              // Input<int32_t[]>
-        0, 0,              // Input<int32_t[2]>
-        nullptr, nullptr,  // Input<void*[]>
-        output0, output1,  // Output<Tuple(Func, Func)>
-        output_scalar,     // Output<float>
-        output_array[0], output_array[1],    // Output<Func[]>
-        output_array2[0], output_array2[1], // Output<Func[2]>
+        output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
         output_array3[0], output_array3[1]  // Output<float[2]>
     );
     EXPECT_EQ(0, result);
 
-    verify(input, output0, output1, output_scalar, output_array[0], output_array[1]);
+    result = metadata_tester_ucon(
+        user_context,
+        input,             // Input<Func>
+        input,             // Input<Buffer<uint8_t>>
+        input,             // Input<Buffer<>>(uint8)
+        input,             // Input<Buffer<>>(3)
+        input,             // Input<Buffer<>>
+        false,             // Input<bool>
+        0,                 // Input<i8>
+        0,                 // Input<i16>
+        0,                 // Input<i32>
+        0,                 // Input<i64>
+        0,                 // Input<u8>
+        0,                 // Input<u16>
+        0,                 // Input<u32>
+        0,                 // Input<u64>
+        0.f,               // Input<float>
+        0.0,               // Input<double>
+        nullptr,           // Input<void*>
+        input,             // Input<Func>
+        input,             // Input<Func>
+        input,             // Input<Func>
+        input, input,      // Input<Func[]>
+        input, input,      // Input<Func[2]>
+        0, 0,              // Input<int8_t[]>
+        0, 0,              // Input<int8_t[2]>
+        0, 0,              // Input<int16_t[]>
+        0, 0,              // Input<int16_t[2]>
+        0, 0,              // Input<int32_t[]>
+        0, 0,              // Input<int32_t[2]>
+        nullptr, nullptr,  // Input<void*[]>
+        output0, output1,  // Output<Tuple(Func, Func)>
+        typed_output_buffer,    // Output<Buffer<float>>(3)
+        type_only_output_buffer,    // Output<Buffer<float>>
+        dim_only_output_buffer,    // Output<Buffer<>>(3)
+        untyped_output_buffer,  // Output<Buffer<>>
+        output_scalar,     // Output<float>
+        output_array[0], output_array[1],    // Output<Func[]>
+        output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
+        output_array3[0], output_array3[1]  // Output<float[2]>
+    );
+    EXPECT_EQ(0, result);
+
+    verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer);
 
     check_metadata(*metadata_tester_metadata(), false);
     if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {

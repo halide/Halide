@@ -17,7 +17,7 @@ using std::sort;
 static ostringstream nil;
 
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
-    metal_c(src_stream), target(t) {
+    metal_c(src_stream, t) {
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {
@@ -124,6 +124,25 @@ string simt_intrinsic(const string &name) {
 }
 }
 
+string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name));
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    ostringstream rhs;
+    rhs << op->name << "(" << with_commas(args) << ")";
+    return rhs.str();
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Max *op) {
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Min *op) {
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
@@ -152,7 +171,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
+        internal_assert((loop->for_type == ForType::GPUBlock) ||
+                        (loop->for_type == ForType::GPUThread))
+            << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();
@@ -214,6 +235,8 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
+
     // If we're loading a contiguous ramp, load from a vector type pointer.
     Expr ramp_base = is_ramp_one(op->index);
     if (ramp_base.defined()) {
@@ -280,6 +303,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
+
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 
