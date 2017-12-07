@@ -70,6 +70,7 @@ public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
           const Internal::FuncSchedule &func_s)
             : definition(d), stage_name(n), dim_vars(args), func_schedule(func_s) {
+        user_assert(definition.defined()) << "Func " << n << " is not defined.";
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
@@ -77,6 +78,7 @@ public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
           const Internal::FuncSchedule &func_s)
             : definition(d), stage_name(n), func_schedule(func_s) {
+        user_assert(definition.defined()) << "Func " << n << " is not defined.";
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
