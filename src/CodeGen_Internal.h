@@ -67,7 +67,8 @@ Expr lower_euclidean_mod(Expr a, Expr b);
 Stmt unpredicate_loads_stores(Stmt s);
 
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options,
+                        std::string &mcpu, std::string &mattrs);
 
 /** Given two llvm::Modules, clone target options from one to the other */
 void clone_target_options(const llvm::Module &from, llvm::Module &to);

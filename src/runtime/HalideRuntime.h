@@ -1071,7 +1071,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability61 = 46,  ///< Enable CUDA compute capability 6.1 (Pascal)
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
-    halide_target_feature_end = 49, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_allow_strict_float = 49, ///< Allow fine grained control of floating-point strictness. DEfault is fast, but strict_float may be used to guarantee IEEE semantics.
+    halide_target_feature_force_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_end = 51, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
