@@ -1,6 +1,6 @@
-#ifndef VAR_H
-#define VAR_H
+#ifndef HALIDE_PYTHON_BINDINGS_VAR_H
+#define HALIDE_PYTHON_BINDINGS_VAR_H
 
-void defineVar();
+void define_var();
 
-#endif  // VAR_H
+#endif  // HALIDE_PYTHON_BINDINGS_VAR_H

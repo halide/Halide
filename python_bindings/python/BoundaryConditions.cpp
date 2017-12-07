@@ -1,14 +1,12 @@
 #include "BoundaryConditions.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
+#include <algorithm>
 #include <boost/python.hpp>
 #include <boost/python/stl_iterator.hpp>
-
-#include "Halide.h"
-
-#include <algorithm>
 #include <string>
 #include <vector>
+
+#include "Halide.h"
 
 namespace h = Halide;
 namespace hb = Halide::BoundaryConditions;
@@ -42,20 +40,18 @@ h::Func constant_exterior_bounds(h::Func func, h::Expr value, p::object bounds_)
     return hb::constant_exterior(func, value, pyobject_to_bounds(bounds_));
 }
 
-// C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_constant_exterior_for_image() {
     p::def("constant_exterior", &constant_exterior0<h::Buffer<T>>, p::args("source", "value"));
     def_constant_exterior_for_image<Types...>();  // recursive call
-    return;
 }
 
 template <>
 void def_constant_exterior_for_image<void>() {  // end of recursion
-    return;
+    // empty
 }
 
-}  // end of anonymous namespace
+}  // namespace
 
 namespace {
 
@@ -68,20 +64,18 @@ h::Func repeat_edge_bounds(h::Func func, p::object bounds_) {
     return hb::repeat_edge(func, pyobject_to_bounds(bounds_));
 }
 
-// C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_repeat_edge_for_image() {
     p::def("repeat_edge", &repeat_edge0<h::Buffer<T>>, p::args("source"));
     def_repeat_edge_for_image<Types...>();  // recursive call
-    return;
 }
 
 template <>
 void def_repeat_edge_for_image<void>() {  // end of recursion
-    return;
+    // empty
 }
 
-}  // end of anonymous namespace
+}  // namespace
 
 namespace {
 
@@ -94,20 +88,18 @@ h::Func repeat_image_bounds(h::Func func, p::object bounds_) {
     return hb::repeat_image(func, pyobject_to_bounds(bounds_));
 }
 
-// C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_repeat_image_for_image() {
     p::def("repeat_image", &repeat_image0<h::Buffer<T>>, p::args("source"));
     def_repeat_image_for_image<Types...>();  // recursive call
-    return;
 }
 
 template <>
 void def_repeat_image_for_image<void>() {  // end of recursion
-    return;
+    // empty
 }
 
-}  // end of anonymous namespace
+}  // namespace
 
 namespace {
 
@@ -120,20 +112,18 @@ h::Func mirror_image_bounds(h::Func func, p::object bounds_) {
     return hb::mirror_image(func, pyobject_to_bounds(bounds_));
 }
 
-// C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_mirror_image_for_image() {
     p::def("mirror_image", &mirror_image0<h::Buffer<T>>, p::args("source"));
     def_mirror_image_for_image<Types...>();  // recursive call
-    return;
 }
 
 template <>
 void def_mirror_image_for_image<void>() {  // end of recursion
-    return;
+    // empty
 }
 
-}  // end of anonymous namespace
+}  // namespace
 
 namespace {
 
@@ -146,22 +136,20 @@ h::Func mirror_interior_bounds(h::Func func, p::object bounds_) {
     return hb::mirror_interior(func, pyobject_to_bounds(bounds_));
 }
 
-// C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_mirror_interior_for_image() {
     p::def("mirror_interior", &mirror_interior0<h::Buffer<T>>, p::args("source"));
     def_mirror_interior_for_image<Types...>();  // recursive call
-    return;
 }
 
 template <>
 void def_mirror_interior_for_image<void>() {  // end of recursion
-    return;
+    // empty
 }
 
-}  // end of anonymous namespace
+}  // namespace
 
-void defineBoundaryConditions() {
+void define_boundary_conditions() {
     // constant_exterior
 
     p::def("constant_exterior", &constant_exterior0<h::ImageParam>, p::args("source", "value"),
@@ -252,6 +240,4 @@ void defineBoundaryConditions() {
         float, double>();
 
     p::def("mirror_interior", &mirror_interior_bounds, p::args("source", "bounds"));
-
-    return;
 }

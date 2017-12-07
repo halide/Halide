@@ -1,6 +1,6 @@
-#ifndef LAMBDA_H
-#define LAMBDA_H
+#ifndef HALIDE_PYTHON_BINDINGS_LAMBDA_H
+#define HALIDE_PYTHON_BINDINGS_LAMBDA_H
 
-void defineLambda();
+void define_lambda();
 
-#endif  // LAMBDA_H
+#endif  // HALIDE_PYTHON_BINDINGS_LAMBDA_H
