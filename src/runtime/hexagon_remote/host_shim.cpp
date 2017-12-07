@@ -40,7 +40,7 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
     // previously opened library.
     static int unique_id = 0;
     char soname[256];
-    sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
+    sprintf(soname, "./libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
 
     return halide_hexagon_remote_load_library(soname, strlen(soname) + 1, code, codeLen, module_ptr);
 }
