@@ -690,65 +690,56 @@ void CodeGen_ARM::visit(const Store *op) {
             args[i] = codegen(shuffle->vectors[i]);
         }
 
-        // Declare the function
-        std::ostringstream instr;
-        vector<llvm::Type *> arg_types;
-        if (target.bits == 32) {
-            instr << "llvm.arm.neon.vst"
-                  << num_vecs
-                  << ".p0i8"
-                  << ".v"
-                  << intrin_type.lanes()
-                  << (t.is_float() ? 'f' : 'i')
-                  << t.bits();
-            arg_types = vector<llvm::Type *>(num_vecs + 2, llvm_type_of(intrin_type));
-            arg_types.front() = i8_t->getPointerTo();
-            arg_types.back() = i32_t;
+        Value *shuffle_part1, *shuffle_part2;
+        if (num_vecs > 2) {
+            unsigned maskSize = 2 * t.lanes();
+            SmallVector<Constant*, 256> constants;
+            for(unsigned j = 0; j < maskSize; j++) {
+                Constant *constant = ConstantInt::get(i32_t, j);
+                constants.push_back(constant);
+            }
+            Constant* constantsV = ConstantVector::get(constants);
+
+            shuffle_part1 = builder->CreateShuffleVector(args[0], args[1], constantsV);
+
+            Value *args3;
+            if(num_vecs == 3) {
+                llvm::Type *store_type = llvm_type_of(t);
+                Value *undef = UndefValue::get(store_type);
+                args3 = undef;
+            } else {
+                args3 = args[3];
+            }
+
+            shuffle_part2 = builder->CreateShuffleVector(args[2], args3, constantsV);
         } else {
-            instr << "llvm.aarch64.neon.st"
-                  << num_vecs
-                  << ".v"
-                  << intrin_type.lanes()
-                  << (t.is_float() ? 'f' : 'i')
-                  << t.bits()
-                  << ".p0"
-                  << (t.is_float() ? 'f' : 'i')
-                  << t.bits();
-            arg_types = vector<llvm::Type *>(num_vecs + 1, llvm_type_of(intrin_type));
-            arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
+            shuffle_part1 = args[0];
+            shuffle_part2 = args[1];
         }
-        llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
-        llvm::Function *fn = dyn_cast_or_null<llvm::Function>(module->getOrInsertFunction(instr.str(), fn_type));
-        internal_assert(fn);
+        llvm::Type *store_return_type = llvm_type_of(t.with_lanes(intrin_type.lanes() * num_vecs));
+        llvm::Type *store_return_pointer_type = store_return_type->getPointerTo();
 
-        // How many vst instructions do we need to generate?
+        // How many stores/vst instructions do we need to generate?
+        // LLVM > 39 turns each shuffle + vector store pattern below into a vst.
         int slices = t.lanes() / intrin_type.lanes();
-
         internal_assert(slices >= 1);
+
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
             Value *ptr = codegen_buffer_pointer(op->name, shuffle->vectors[0].type().element_of(), slice_base);
-
-            vector<Value *> slice_args = args;
-            // Take a slice of each arg
-            for (int j = 0; j < num_vecs ; j++) {
-                slice_args[j] = slice_vector(slice_args[j], i, intrin_type.lanes());
+            SmallVector<Constant*, 256> constants;
+            for (int j = 0; j < intrin_type.lanes(); j++) {
+                for (int k = 0; k < num_vecs; k++) {
+                    Constant *constant = ConstantInt::get(i32_t, i + j + k*t.lanes());
+                    constants.push_back(constant);
+                }
             }
-
-            if (target.bits == 32) {
-                // The arm32 versions take an i8*, regardless of the type stored.
-                ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
-                // Set the pointer argument
-                slice_args.insert(slice_args.begin(), ptr);
-                // Set the alignment argument
-                slice_args.push_back(ConstantInt::get(i32_t, alignment));
-            } else {
-                // Set the pointer argument
-                slice_args.push_back(ptr);
-            }
-
-            CallInst *store = builder->CreateCall(fn, slice_args);
+            Constant* constantsV = ConstantVector::get(constants);
+            Value* all_shuffle = builder->CreateShuffleVector(shuffle_part1, shuffle_part2, constantsV);
+            Value *bitcast = builder->CreateBitOrPointerCast(ptr, store_return_pointer_type);
+            StoreInst *store = cast<StoreInst>(builder->CreateStore(all_shuffle, bitcast));
+            store->setAlignment(alignment);
             add_tbaa_metadata(store, op->name, slice_ramp);
         }
 

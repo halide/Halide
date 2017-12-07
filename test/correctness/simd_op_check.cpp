@@ -2093,6 +2093,11 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 int main(int argc, char **argv) {
     Test test;
 
+    if (const char *filter = getenv("HL_SIMD_OP_CHECK_FILTER")) {
+        test.filter = filter;
+        num_threads = 1;
+    }
+
     if (argc > 1) {
         test.filter = argv[1];
         num_threads = 1;
