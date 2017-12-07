@@ -2446,6 +2446,8 @@ Stage Func::update(int idx) {
 }
 
 Func::operator Stage() const {
+    user_assert(!func.has_extern_definition())
+        << "Extern func \"" << name() << "\" cannot be converted into Stage\n";
     return Stage(func.definition(), name(), args(), func.schedule());
 }
 
