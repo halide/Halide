@@ -137,18 +137,31 @@ bool has_par_for(Stmt s) {
     s.accept(&h);
     return h.has_par_for;
 }
-// Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
-// as a destructor if successful.
-Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
-    // Modify the stmt to add a call to halide_qurt_hvx_lock, and
-    // register a destructor to call halide_qurt_hvx_unlock.
+Stmt call_halide_qurt_hvx_lock(const Target &target) {
     Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
     string hvx_lock_result_name = unique_name("hvx_lock_result");
     Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
     Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
                                         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
+    return check_hvx_lock;
+}
 
+Stmt call_halide_qurt_hvx_unlock(const Target &target) {
+    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
+    Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
+    string hvx_unlock_result_name = unique_name("hvx_unlock_result");
+    Expr hvx_unlock_result_var = Variable::make(Int(32), hvx_unlock_result_name);
+    Stmt check_hvx_unlock = LetStmt::make(hvx_unlock_result_name, hvx_unlock,
+                                        AssertStmt::make(EQ::make(hvx_unlock_result_var, 0), hvx_unlock_result_var));
+    return check_hvx_unlock;
+}
+// Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
+// as a destructor if successful.
+Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
+    // Modify the stmt to add a call to halide_qurt_hvx_lock, and
+    // register a destructor to call halide_qurt_hvx_unlock.
+    Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
     Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
     Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
                                  {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
@@ -208,6 +221,31 @@ Stmt sloppy_unpredicate_loads(Stmt s) {
     return SloppyUnpredicateLoads().mutate(s);
 }
 
+class InsertHVXLocksInParLoop : public IRMutator2 {
+public:
+    InsertHVXLocksInParLoop(const Target &t) : target(t) {}
+private:
+    using IRMutator2::visit;
+
+    Stmt visit(const For *op) {
+        if (op->for_type == ForType::Parallel) {
+            Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
+            Stmt check_hvx_unlock = call_halide_qurt_hvx_unlock(target);
+            Stmt s = Block::make(op->body, check_hvx_unlock);
+            Stmt body =  Block::make(check_hvx_lock, s);
+            return For::make(op->name, op->min, op->extent, op->for_type,
+                             op->device_api, body);
+        }
+        return IRMutator2::visit(op);
+     }
+    Target target;
+};
+
+Stmt par_call_halide_lock_unlock(Stmt body, const Target &target) {
+    body = InsertHVXLocksInParLoop(target).mutate(body);
+    return body;
+}
+
 }// namespace
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
@@ -260,16 +298,18 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
 
-    if (uses_hvx(body)) {
+    has_hvx_use = uses_hvx(body);
+    if (has_hvx_use) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
         body = acquire_hvx_context(body, target);
         // We need to let the parallel runtime library that we use to implement
         // thread pools on QuRT about the mode that the master thread is
         // going to lock in.
-        if (target.os == Target::QuRT && has_par_for(body)) {
-            debug (1) << "Adding a call to set_par_hvx mode...\n";
-            body = set_par_hvx_mode(body, target);
-        }
+        body = par_call_halide_lock_unlock(body, target);
+        // if (target.os == Target::QuRT && has_par_for(body)) {
+        //     debug (1) << "Adding a call to set_par_hvx mode...\n";
+        //     body = set_par_hvx_mode(body, target);
+        // }
     }
 
     debug(1) << "Hexagon function body:\n";
@@ -1674,6 +1714,19 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_Hexagon::visit(const For *op) {
+    CodeGen_Posix::visit(op);
+    if (op->for_type == ForType::Parallel && has_hvx_use) {
+        Value *user_context = get_user_context();
+        int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+        Value *size = codegen(vector_size);
+
+        llvm::Function *fn = module->getFunction("halide_qurt_hvx_lock");
+        internal_assert(fn);
+        value = builder->CreateCall(fn, {user_context, size});
+        return;
+    }
+}
 void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
