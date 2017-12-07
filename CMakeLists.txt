@@ -307,7 +307,7 @@ define_test_group(test_error)
 define_test_group(test_generator)
 define_test_group(test_opengl)
 define_test_group(test_performance)
-define_test_group(test_tutorials)
+define_test_group(test_tutorial)
 define_test_group(test_warning)
 
 add_subdirectory(src)

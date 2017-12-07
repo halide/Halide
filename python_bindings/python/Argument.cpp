@@ -1,15 +1,13 @@
 #include "Argument.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
+#include <string>
 
 #include "Halide.h"
 
-#include <string>
-
 namespace h = Halide;
 
-void defineArgument() {
+void define_argument() {
     using Halide::Argument;
     namespace p = boost::python;
 
@@ -31,10 +29,6 @@ void defineArgument() {
 
     argument_class
         .def_readonly("name", &Argument::name, "The name of the argument.");
-    //.property("name", &Argument::name, "The name of the argument.")
-    //.def("name",
-    //     &argument_name, // getter instead of property to be consistent with other parts of the API
-    //     "The name of the argument.");
 
     p::enum_<Argument::Kind>("ArgumentKind")
         .value("InputScalar", Argument::Kind::InputScalar)
@@ -43,10 +37,7 @@ void defineArgument() {
         .export_values();
 
     argument_class
-        //.def("kind", &argument_kind,
         .def_readonly("kind", &Argument::kind,
-                      //.def("kind", [](Argument &that) -> Argument::Kind { return that.kind; },
-                      //.def("kind", std::function<Argument::Kind(Argument &)>( [](Argument &that) { return that.kind; } ),
                       "An argument is either a primitive type (for parameters), or a buffer pointer.\n"
                       "If kind == InputScalar, then type fully encodes the expected type of the scalar argument."
                       "If kind == InputBuffer|OutputBuffer, then type.bytes() should be used "
@@ -79,6 +70,4 @@ void defineArgument() {
         .def("is_scalar", &Argument::is_scalar, p::arg("self"))
         .def("is_input", &Argument::is_input, p::arg("self"))
         .def("is_output", &Argument::is_output, p::arg("self"));
-
-    return;
 }

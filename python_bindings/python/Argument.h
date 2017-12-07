@@ -1,6 +1,6 @@
-#ifndef ARGUMENT_H
-#define ARGUMENT_H
+#ifndef HALIDE_PYTHON_BINDINGS_ARGUMENT_H
+#define HALIDE_PYTHON_BINDINGS_ARGUMENT_H
 
-void defineArgument();
+void define_argument();
 
-#endif  // ARGUMENT_H
+#endif  // HALIDE_PYTHON_BINDINGS_ARGUMENT_H

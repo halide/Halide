@@ -1,16 +1,13 @@
 #include "Expr.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
+#include <boost/format.hpp>
 #include <boost/python.hpp>
-
-#include "add_operators.h"
+#include <string>
 
 #include "Halide.h"
 
 #include "Type.h"
-
-#include <boost/format.hpp>
-#include <string>
+#include "add_operators.h"
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -49,7 +46,7 @@ h::Expr *expr_from_var_constructor(h::Var &var) {
     return new h::Expr(var);
 }
 
-void defineExpr() {
+void define_expr() {
     using Halide::Expr;
 
     auto expr_class = p::class_<Expr>("Expr",
@@ -108,6 +105,4 @@ void defineExpr() {
         .value("OpenCL", h::DeviceAPI::OpenCL)
         .value("GLSL", h::DeviceAPI::GLSL)
         .export_values();
-
-    return;
 }

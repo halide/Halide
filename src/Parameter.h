@@ -48,7 +48,7 @@ public:
      * ObjectInstanceRegistry. */
     EXPORT Parameter(Type t, bool is_buffer, int dimensions,
                      const std::string &name, bool is_explicit_name = false,
-                     bool register_instance = true, bool is_bound_before_lowering = false);
+                     bool register_instance = true);
 
     /** Copy ctor, operator=, and dtor, needed for ObjectRegistry accounting. */
     EXPORT Parameter(const Parameter&);
@@ -66,11 +66,6 @@ public:
 
     /** Return true iff the name was explicitly specified */
     EXPORT bool is_explicit_name() const;
-
-    /** Return true iff this Parameter is expected to be replaced with a
-     * constant at the start of lowering, and thus should not be used to
-     * infer arguments */
-    EXPORT bool is_bound_before_lowering() const;
 
     /** Does this parameter refer to a buffer/image? */
     EXPORT bool is_buffer() const;

@@ -22,7 +22,7 @@ function(add_tutorial source_file)
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
   add_test("${name}"
-           GROUPS test_tutorials
+           GROUPS test_tutorial
            WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
   target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
