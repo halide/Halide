@@ -11,7 +11,7 @@ if(USE_PYTHON EQUAL 2)
 	if (NOT USE_EXTERNAL_BOOST)
 		find_package(Boost COMPONENTS python REQUIRED)
 	endif()
-	find_package(Halide REQUIRED)
+    find_package(Halide REQUIRED)
 else()
 	find_package(PythonInterp 3.4 REQUIRED)
 	find_package(PythonLibs 3.4 REQUIRED)
@@ -23,7 +23,7 @@ else()
 			find_package(Boost COMPONENTS python3 REQUIRED)
 		endif()
 	endif()
-	find_package(Halide REQUIRED)
+    find_package(Halide REQUIRED)
 endif()
 
 option(USE_BOOST_NUMPY "Use Boost.Numpy dependency instead of Halide.Numpy" OFF)
@@ -38,16 +38,16 @@ else()
 #(NOT USE_BOOST_NUMPY) is true
 
 file(GLOB MicroNumpyCpp
-numpy/*.cpp
-numpy/*.hpp
+halide_numpy/*.cpp
+halide_numpy/*.hpp
 )
 
 add_library(halide_numpy STATIC ${MicroNumpyCpp})
 target_link_libraries(halide_numpy ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${NumPy_LIBRARIES})
 set_property(TARGET halide_numpy PROPERTY POSITION_INDEPENDENT_CODE TRUE)
 
-set(BoostNumpy_INCLUDE_DIRS ./numpy)
-set(BoostNumpy_LIBRARY_DIR ./numpy)
+set(BoostNumpy_INCLUDE_DIRS ./halide_numpy)
+set(BoostNumpy_LIBRARY_DIR ./halide_numpy)
 set(BoostNumpy_LIBRARIES halide_numpy)
 endif()
 

@@ -1,13 +1,12 @@
 #include "Var.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include "add_operators.h"
+#include <boost/format.hpp>
 #include <boost/python.hpp>
+#include <string>
 
 #include "Halide.h"
 
-#include <boost/format.hpp>
-#include <string>
+#include "add_operators.h"
 
 namespace h = Halide;
 
@@ -46,7 +45,7 @@ std::string var_repr(const h::Var &var) {
     return repr;
 }
 
-void defineVar() {
+void define_var() {
     using Halide::Var;
 
     namespace p = boost::python;
@@ -105,13 +104,6 @@ void defineVar() {
                          .def("expr", &var_as_expr, p::arg("self"),  //operator Expr() const
                               "A Var can be treated as an Expr of type Int(32)")
 
-                         .def("gpu_blocks", &Var::gpu_blocks,  // no args
-                              "Vars to use for scheduling producer/consumer pairs on the gpu.")
-                         .staticmethod("gpu_blocks")
-                         .def("gpu_threads", &Var::gpu_threads,  // no args
-                              "Vars to use for scheduling producer/consumer pairs on the gpu.")
-                         .staticmethod("gpu_threads")
-
                          .def("outermost", &Var::outermost,  // no args
                               "A Var that represents the location outside the outermost loop.")
                          .staticmethod("outermost")
@@ -123,6 +115,4 @@ void defineVar() {
     add_operators_with<decltype(var_class), h::Expr>(var_class);
 
     p::implicitly_convertible<Var, h::Expr>();
-
-    return;
 }

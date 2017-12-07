@@ -17,7 +17,10 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
   LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\.//' | cut -b1,2 )"
   mkdir -p build/ && cd build/
-  cmake -DLLVM_DIR="/usr/local/llvm/share/llvm/cmake/" \
+  # Require a specific version of LLVM, just in case the Travis instance has
+  # an older clang/llvm version present
+  cmake -DHALIDE_REQUIRE_LLVM_VERSION="${LLVM_VERSION_NO_DOT}" \
+        -DLLVM_DIR="/usr/local/llvm/lib/cmake/llvm/" \
         -DHALIDE_SHARED_LIBRARY="${HALIDE_SHARED_LIBRARY}" \
         -DWITH_APPS=OFF \
         -DWITH_TESTS=ON \
@@ -35,7 +38,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   # Build the docs and run the tests
   make doc 
   make ${MAKEFLAGS} test_correctness 
-  make ${MAKEFLAGS} test_generators
+  make ${MAKEFLAGS} test_generator
 
 elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   export LLVM_CONFIG=/usr/local/llvm/bin/llvm-config
@@ -48,7 +51,7 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
   # Build the docs and run the tests
   make doc 
   make ${MAKEFLAGS} test_correctness 
-  make ${MAKEFLAGS} test_generators
+  make ${MAKEFLAGS} test_generator
 
   # Build the distrib folder (needed for the Bazel build test)
   make distrib

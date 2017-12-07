@@ -1,17 +1,16 @@
 #include "RDom.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include "add_operators.h"
 #include <boost/python.hpp>
+#include <string>
 
 #include "Halide.h"
 
-#include <string>
+#include "add_operators.h"
 
 namespace h = Halide;
 namespace p = boost::python;
 
-void defineRVar() {
+void define_rvar() {
     using Halide::RVar;
 
     auto rvar_class = p::class_<RVar>("RVar",
@@ -45,8 +44,6 @@ void defineRVar() {
 
     add_operators(rvar_class);  // define operators with int, rvars, and exprs
     add_operators_with<decltype(rvar_class), h::Expr>(rvar_class);
-
-    return;
 }
 
 h::RDom *RDom_constructor0(p::tuple args, std::string name = "") {
@@ -122,10 +119,10 @@ h::RDom *RDom_constructor4(h::Expr min0, h::Expr extent0,
     return new h::RDom(ranges, name);
 }
 
-void defineRDom() {
+void define_rdom() {
     using Halide::RDom;
 
-    defineRVar();
+    define_rvar();
 
     // only defined so that python knows what to do with it, not meant to be used by user
     p::class_<h::Internal::ReductionDomain>("_ReductionDomain", p::no_init);
@@ -148,7 +145,7 @@ void defineRDom() {
                                                    "Construct a reduction domain that iterates over all points in "
                                                    "a given Buffer, Image, or ImageParam. "
                                                    "Has the same dimensionality as the argument."))
-                          .def(p::init<h::ImageParam>(p::args("self", "image_param"),
+                          .def(p::init<h::OutputImageParam>(p::args("self", "image_param"),
                                                       "Construct a reduction domain that iterates over all points in "
                                                       "a given Buffer, Image, or ImageParam. "
                                                       "Has the same dimensionality as the argument."))
@@ -229,6 +226,4 @@ void defineRDom() {
 
     add_operators(rdom_class);  // define operators with int, rdom and exprs
     add_operators_with<decltype(rdom_class), h::Expr>(rdom_class);
-
-    return;
 }

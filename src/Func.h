@@ -70,6 +70,7 @@ public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
           const Internal::FuncSchedule &func_s)
             : definition(d), stage_name(n), dim_vars(args), func_schedule(func_s) {
+        user_assert(definition.defined()) << "Func " << n << " is not defined.";
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
@@ -77,6 +78,7 @@ public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
           const Internal::FuncSchedule &func_s)
             : definition(d), stage_name(n), func_schedule(func_s) {
+        user_assert(definition.defined()) << "Func " << n << " is not defined.";
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -298,6 +300,12 @@ public:
         return prefetch(image.parameter(), var, offset, strategy);
     }
     // @}
+
+    /** Attempt to get the source file and line where this stage was
+     * defined by parsing the process's own debug symbols. Returns an
+     * empty string if no debug symbols were found or the debug
+     * symbols were not understood. Works on OS X and Linux only. */
+    EXPORT std::string source_location() const;
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -2056,6 +2064,10 @@ public:
      \endcode
      */
     EXPORT std::vector<Argument> infer_arguments() const;
+
+    /** Get the source location of the pure definition of this
+     * Func. See Stage::source_location() */
+    EXPORT std::string source_location() const;
 };
 
 namespace Internal {

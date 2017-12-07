@@ -12,6 +12,7 @@ find_path(CBLAS_INCLUDE_DIR
     /usr/local/include
     /usr/include/atlas
     /usr/local/include/atlas
+    /usr/local/opt/openblas/include # enables openblas-via-homebrew-on-mac
 )
 set(CBLAS_FOUND false)
 if (NOT CBLAS_INCLUDE_DIR MATCHES "-NOTFOUND")

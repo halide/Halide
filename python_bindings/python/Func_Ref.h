@@ -1,6 +1,6 @@
-#ifndef FUNC_REF_H
-#define FUNC_REF_H
+#ifndef HALIDE_PYTHON_BINDINGS_FUNC_REF_H
+#define HALIDE_PYTHON_BINDINGS_FUNC_REF_H
 
-void defineFuncRef();
+void define_func_ref();
 
-#endif  // FUNC_REF_H
+#endif  // HALIDE_PYTHON_BINDINGS_FUNC_REF_H

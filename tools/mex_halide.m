@@ -19,7 +19,7 @@ function mex_halide( generator_filename, varargin )
 %
 % This script uses two environment variables that can optionally be
 % set or changed:
-%  - HALIDE_PATH: The path to the root directory of Halide. If
+%  - HALIDE_SRC_PATH: The path to the root directory of Halide. If
 %    unspecified, this defaults to '..' relative to mex_halide.m.
 %  - HALIDE_CXX: The C++ compiler to use to build generators. The
 %    default is 'c++'.
@@ -50,15 +50,15 @@ function mex_halide( generator_filename, varargin )
     generator_args = strjoin(varargin);
     target = 'host-matlab';
 
-    if isempty(getenv('HALIDE_PATH'))
+    if isempty(getenv('HALIDE_SRC_PATH'))
         % If the user has not set the halide path, get the path of
-        % this file (presumably in $HALIDE_PATH/tools/) and use
+        % this file (presumably in $HALIDE_SRC_PATH/tools/) and use
         % that.
         [path, ~] = fileparts(mfilename('fullpath'));
         halide_path = fullfile(path, '..');
-        setenv('HALIDE_PATH', halide_path);
+        setenv('HALIDE_SRC_PATH', halide_path);
     end
-    halide_path = getenv('HALIDE_PATH');
+    halide_path = getenv('HALIDE_SRC_PATH');
 
     libhalide = fullfile(halide_path, 'bin', 'libHalide.so');
     halide_include = fullfile(halide_path, 'include');

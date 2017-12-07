@@ -385,6 +385,10 @@ public:
         return Halide::Runtime::Buffer<T>::can_convert_from(*other.get());
     }
 
+    // Note that since Runtime::Buffer stores halide_type_t rather than Halide::Type,
+    // there is no handle-specific type information, so all handle types are
+    // considered equivalent to void* here. (This only matters if you are making
+    // a Buffer-of-handles, which is not really a real use case...)
     Type type() const {
         return contents->buf.type();
     }

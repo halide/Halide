@@ -1,31 +1,28 @@
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include <boost/format.hpp>
-#include <boost/python.hpp>
-
 #include "Image.h"
 
-#define USE_NUMPY
-
-#ifdef USE_NUMPY
-#ifdef USE_BOOST_NUMPY
-#include <boost/numpy.hpp>
-#else
-// we use Halide::numpy
-#include "../numpy/numpy.hpp"
-#endif
-#endif  // USE_NUMPY
-
 #include <boost/cstdint.hpp>
+#include <boost/format.hpp>
 #include <boost/functional/hash/hash.hpp>
 #include <boost/mpl/list.hpp>
-
-#include "Func.h"
-#include "Type.h"
-
+#include <boost/python.hpp>
 #include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "Halide.h"
+
+#include "Func.h"
+#include "Type.h"
+
+#define USE_NUMPY
+#ifdef USE_NUMPY
+#ifdef USE_BOOST_NUMPY
+#include <boost/numpy.hpp>
+#else
+#include "halide_numpy/numpy.hpp"
+#endif
+#endif  // USE_NUMPY
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -240,7 +237,7 @@ int buffer_extent(h::Buffer<T> &im, int d) {
 
 
 template <typename T>
-void defineBuffer_impl(const std::string suffix, const h::Type type) {
+void define_buffer_impl(const std::string suffix, const h::Type type) {
     using h::Buffer;
     using h::Expr;
 
@@ -407,8 +404,6 @@ void defineBuffer_impl(const std::string suffix, const h::Type type) {
              "set the value of the element at position indicated by tuple (x, y, z, w)");
 
     p::implicitly_convertible<Buffer<T>, h::Argument>();
-
-    return;
 }
 
 p::object buffer_to_python_object(const h::Buffer<> &im) {
@@ -422,6 +417,9 @@ p::object buffer_to_python_object(const h::Buffer<> &im) {
     } else if (im.type() == h::UInt(32)) {
         p::manage_new_object::apply<h::Buffer<uint32_t> *>::type converter;
         obj = converter(new h::Buffer<uint32_t>(im));
+    } else if (im.type() == h::UInt(64)) {
+        p::manage_new_object::apply<h::Buffer<uint64_t> *>::type converter;
+        obj = converter(new h::Buffer<uint64_t>(im));
     } else if (im.type() == h::Int(8)) {
         p::manage_new_object::apply<h::Buffer<int8_t> *>::type converter;
         obj = converter(new h::Buffer<int8_t>(im));
@@ -431,6 +429,9 @@ p::object buffer_to_python_object(const h::Buffer<> &im) {
     } else if (im.type() == h::Int(32)) {
         p::manage_new_object::apply<h::Buffer<int32_t> *>::type converter;
         obj = converter(new h::Buffer<int32_t>(im));
+    } else if (im.type() == h::Int(64)) {
+        p::manage_new_object::apply<h::Buffer<int64_t> *>::type converter;
+        obj = converter(new h::Buffer<int64_t>(im));
     } else if (im.type() == h::Float(32)) {
         p::manage_new_object::apply<h::Buffer<float> *>::type converter;
         obj = converter(new h::Buffer<float>(im));
@@ -482,9 +483,11 @@ bn::dtype type_to_dtype(const h::Type &t) {
     if (t == h::UInt(8)) return bn::dtype::get_builtin<uint8_t>();
     if (t == h::UInt(16)) return bn::dtype::get_builtin<uint16_t>();
     if (t == h::UInt(32)) return bn::dtype::get_builtin<uint32_t>();
+    if (t == h::UInt(64)) return bn::dtype::get_builtin<uint64_t>();
     if (t == h::Int(8)) return bn::dtype::get_builtin<int8_t>();
     if (t == h::Int(16)) return bn::dtype::get_builtin<int16_t>();
     if (t == h::Int(32)) return bn::dtype::get_builtin<int32_t>();
+    if (t == h::Int(64)) return bn::dtype::get_builtin<int64_t>();
     if (t == h::Float(32)) return bn::dtype::get_builtin<float>();
     if (t == h::Float(64)) return bn::dtype::get_builtin<double>();
     throw std::runtime_error("type_to_dtype received a Halide::Type with no known numpy dtype equivalent");
@@ -495,9 +498,11 @@ h::Type dtype_to_type(const bn::dtype &t) {
     if (t == bn::dtype::get_builtin<uint8_t>()) return h::UInt(8);
     if (t == bn::dtype::get_builtin<uint16_t>()) return h::UInt(16);
     if (t == bn::dtype::get_builtin<uint32_t>()) return h::UInt(32);
+    if (t == bn::dtype::get_builtin<uint64_t>()) return h::UInt(64);
     if (t == bn::dtype::get_builtin<int8_t>()) return h::Int(8);
     if (t == bn::dtype::get_builtin<int16_t>()) return h::Int(16);
     if (t == bn::dtype::get_builtin<int32_t>()) return h::Int(32);
+    if (t == bn::dtype::get_builtin<int64_t>()) return h::Int(64);
     if (t == bn::dtype::get_builtin<float>()) return h::Float(32);
     if (t == bn::dtype::get_builtin<double>()) return h::Float(64);
     throw std::runtime_error("dtype_to_type received a numpy type with no known Halide type equivalent");
@@ -541,10 +546,9 @@ bn::ndarray buffer_to_ndarray(p::object buffer_object) {
         buffer_object);
 }
 
-#endif
+#endif  // USE_NUMPY
 
 struct BufferFactory {
-
     template <typename T, typename... Args>
     static p::object create_buffer_object(Args... args) {
         typedef h::Buffer<T> BufferType;
@@ -559,9 +563,11 @@ struct BufferFactory {
         if (t == h::UInt(8)) return create_buffer_object<uint8_t>(args...);
         if (t == h::UInt(16)) return create_buffer_object<uint16_t>(args...);
         if (t == h::UInt(32)) return create_buffer_object<uint32_t>(args...);
+        if (t == h::UInt(64)) return create_buffer_object<uint64_t>(args...);
         if (t == h::Int(8)) return create_buffer_object<int8_t>(args...);
         if (t == h::Int(16)) return create_buffer_object<int16_t>(args...);
         if (t == h::Int(32)) return create_buffer_object<int32_t>(args...);
+        if (t == h::Int(64)) return create_buffer_object<int64_t>(args...);
         if (t == h::Float(32)) return create_buffer_object<float>(args...);
         if (t == h::Float(64)) return create_buffer_object<double>(args...);
         throw std::invalid_argument("BufferFactory::create_buffer_impl received type not handled");
@@ -597,19 +603,21 @@ struct BufferFactory {
     }
 };
 
-void defineBuffer() {
-    defineBuffer_impl<uint8_t>("_uint8", h::UInt(8));
-    defineBuffer_impl<uint16_t>("_uint16", h::UInt(16));
-    defineBuffer_impl<uint32_t>("_uint32", h::UInt(32));
+void define_buffer() {
+    define_buffer_impl<uint8_t>("_uint8", h::UInt(8));
+    define_buffer_impl<uint16_t>("_uint16", h::UInt(16));
+    define_buffer_impl<uint32_t>("_uint32", h::UInt(32));
+    define_buffer_impl<uint64_t>("_uint64", h::UInt(64));
 
-    defineBuffer_impl<int8_t>("_int8", h::Int(8));
-    defineBuffer_impl<int16_t>("_int16", h::Int(16));
-    defineBuffer_impl<int32_t>("_int32", h::Int(32));
+    define_buffer_impl<int8_t>("_int8", h::Int(8));
+    define_buffer_impl<int16_t>("_int16", h::Int(16));
+    define_buffer_impl<int32_t>("_int32", h::Int(32));
+    define_buffer_impl<int64_t>("_int64", h::Int(64));
 
-    defineBuffer_impl<float>("_float32", h::Float(32));
-    defineBuffer_impl<double>("_float64", h::Float(64));
+    define_buffer_impl<float>("_float32", h::Float(32));
+    define_buffer_impl<double>("_float64", h::Float(64));
 
-    // "Buffer" will look as a class, but instead it will be simply a factory method
+    // "Buffer" will look like a class, but instead it will be simply a factory method
     p::def("Buffer", &BufferFactory::create_buffer0,
            p::args("type"),
            "Construct a zero-dimensional buffer of type T");
@@ -659,7 +667,5 @@ void defineBuffer() {
            "Creates a numpy array from a Halide::Buffer."
            "Will take into account the Buffer size, dimensions, and type."
            "Created ndarray refers to the Buffer data (no copy).");
-#endif
-
-    return;
+#endif  // USE_NUMPY
 }

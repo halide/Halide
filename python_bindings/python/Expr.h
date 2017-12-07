@@ -1,11 +1,12 @@
-#ifndef EXPR_H
-#define EXPR_H
+#ifndef HALIDE_PYTHON_BINDINGS_EXPR_H
+#define HALIDE_PYTHON_BINDINGS_EXPR_H
 
 #include <boost/python.hpp>
-#include "Halide.h"
 #include <vector>
 
-void defineExpr();
+#include "Halide.h"
+
+void define_expr();
 
 boost::python::object expr_vector_to_python_tuple(const std::vector<Halide::Expr> &t);
 std::vector<Halide::Expr> python_tuple_to_expr_vector(const boost::python::object &obj);
@@ -19,4 +20,4 @@ std::vector<T> python_collection_to_vector(const boost::python::object &obj) {
     return result;
 }
 
-#endif  // EXPR_H
+#endif  // HALIDE_PYTHON_BINDINGS_EXPR_H

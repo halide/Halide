@@ -1,6 +1,5 @@
 #include "Lambda.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
 #include "Halide.h"
@@ -34,7 +33,7 @@ h::Func lambda5D(h::Var x, h::Var y, h::Var z, h::Var w, h::Var v, h::Expr e) {
 /// Convenience functions for creating small anonymous Halide functions.
 /// See test/lambda.cpp for example usage.
 /// lambda is a python keyword so we used lambda0D, lambda1D, ... lambda5D instead.
-void defineLambda() {
+void define_lambda() {
     namespace p = boost::python;
 
     p::def("lambda0D", &lambda0D, p::arg("e"),
@@ -71,6 +70,4 @@ void defineLambda() {
            "returns the last argument. The function may have more dimensions if "
            "the expression contains implicit arguments and the list of Var "
            "arguments contains a placeholder (\"_\").");
-
-    return;
 }
