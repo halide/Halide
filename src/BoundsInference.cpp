@@ -6,6 +6,7 @@
 #include "Inline.h"
 #include "Simplify.h"
 #include "IREquality.h"
+#include "Qualify.h"
 
 namespace Halide {
 namespace Internal {
@@ -240,6 +241,12 @@ public:
             internal_assert(result.size() == 2);
             exprs = result[0];
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
+
+            string prefix = name + ".s" + std::to_string(stage) + ".";
+            for (auto &cval : exprs) {
+                cval.cond = qualify(prefix, cval.cond);
+                cval.value = qualify(prefix, cval.value);
+            }
         }
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
@@ -462,9 +469,10 @@ public:
 
             if (stage > 0) {
                 for (const ReductionVariable &rvar : rvars) {
-                    string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
-                    s = LetStmt::make(arg + ".min", rvar.min, s);
-                    s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
+                    string prefix = name + ".s" + std::to_string(stage) + ".";
+                    string arg = prefix + rvar.var;
+                    s = LetStmt::make(arg + ".min", qualify(prefix, rvar.min), s);
+                    s = LetStmt::make(arg + ".max", qualify(prefix, rvar.extent + rvar.min - 1), s);
                 }
             }
 
@@ -597,16 +605,19 @@ public:
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
             for (const string farg : func.args()) {
-                string arg = name + ".s" + std::to_string(stage) + "." + farg;
-                result.push(farg,
+                string prefix = name + ".s" + std::to_string(stage) + ".";
+                string arg = prefix + farg;
+                result.push(arg,
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
                 for (const ReductionVariable &rv : rvars) {
+                    //TODO(psuriana): substituting the value directly (not using symbolic vars) does
+                    //not work; it breaks the compute_at_split_rvar test
                     string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
-                    result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                   Variable::make(Int(32), arg + ".max")));
+                    result.push(arg, Interval(Variable::make(Int(32), arg + ".min"),
+                                              Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -738,8 +749,25 @@ public:
 
             } else {
                 for (const auto &cval : consumer.exprs) {
+                    /*debug(0) << "Consumer Expr -- val: " << cval.value << ", cond: " << cval.cond << "\n";
+                    debug(0) << "Scope:\n";
+                    for (auto iter = scope.begin(); iter != scope.end(); ++iter) {
+                        debug(0) << "...var: " << iter.name() << ", min: " << iter.value().min << ", max: " << iter.value().max << "\n";
+                    }*/
+
                     map<string, Box> new_boxes;
                     new_boxes = boxes_required(cval.value, scope, func_bounds);
+
+                    /*debug(0) << "\nBoxes required:\n";
+                    for (auto &i : new_boxes) {
+                        debug(0) << "..Box " << i.first << ":\n";
+                        const auto &b = i.second;
+                        for (size_t k = 0; k < b.size(); k++) {
+                            debug(0) << "\t" << b[k].min << " ... " << b[k].max << "\n";
+                        }
+                    }
+                    debug(0) << "\n";*/
+
                     for (auto &i : new_boxes) {
                         // Add the condition on which this value is evaluated to the box before merging
                         Box &box = i.second;

@@ -123,6 +123,32 @@ Stmt build_provide_loop_nest_helper(string func_name,
         nest.push_back(c);
     }
 
+    // Define the loop mins and extents for the reduction domain (if there is any)
+    // in terms of the mins and maxs produced by bounds inference
+    for (int i = (int)s.rvars().size() - 1; i >= 0; i--) {
+        const ReductionVariable &rv = s.rvars()[i];
+        string p = prefix + rv.var;
+        Container cextent = {Container::Let, 0, p + ".loop_extent", qualify(prefix, rv.extent)};
+        nest.push_back(cextent);
+        Container cmax = {Container::Let, 0, p + ".loop_max", qualify(prefix, rv.extent + rv.min - 1)};
+        nest.push_back(cmax);
+        Container cmin = {Container::Let, 0, p + ".loop_min", qualify(prefix, rv.min)};
+        nest.push_back(cmin);
+    }
+
+    // Define the bounds on the split dimensions using the bounds
+    // on the function args. If it is a purify, we should use the bounds
+    // from the dims instead.
+    for (size_t i = 0; i < splits.size(); i++) {
+        const Split &split = splits[i];
+
+        vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
+        for (int j = (int)let_stmts.size() - 1; j >= 0; j--) {
+            Container c = {Container::Let, 0, let_stmts[j].first, let_stmts[j].second};
+            nest.push_back(c);
+        }
+    }
+
     // Strip off the lets into the containers vector.
     while (const LetStmt *let = stmt.as<LetStmt>()) {
         Container c = {Container::Let, 0, let->name, let->value};
@@ -195,18 +221,6 @@ Stmt build_provide_loop_nest_helper(string func_name,
         }
     }
 
-    // Define the bounds on the split dimensions using the bounds
-    // on the function args. If it is a purify, we should use the bounds
-    // from the dims instead.
-    for (size_t i = splits.size(); i > 0; i--) {
-        const Split &split = splits[i-1];
-
-        vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
-        for (size_t j = 0; j < let_stmts.size(); j++) {
-            stmt = LetStmt::make(let_stmts[j].first, let_stmts[j].second, stmt);
-        }
-    }
-
     // Define the bounds on the outermost dummy dimension.
     {
         string o = prefix + Var::outermost().name();
@@ -225,17 +239,6 @@ Stmt build_provide_loop_nest_helper(string func_name,
                              stmt);
         stmt = LetStmt::make(var + ".loop_min", min, stmt);
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
-    }
-
-    // Define the loop mins and extents for the reduction domain (if there is any)
-    // in terms of the mins and maxs produced by bounds inference
-    for (const ReductionVariable &rv : s.rvars()) {
-        string p = prefix + rv.var;
-        Expr rmin = Variable::make(Int(32), p + ".min");
-        Expr rmax = Variable::make(Int(32), p + ".max");
-        stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
-        stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
-        stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
     }
 
     return stmt;

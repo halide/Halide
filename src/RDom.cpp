@@ -115,13 +115,13 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
             << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
             << "These depend on a call to the Func " << checker.offending_func << ".\n"
             << "The bounds of an RDom may not depend on a call to a Func.\n";
-        user_assert(checker.offending_free_var.empty())
+        /*user_assert(checker.offending_free_var.empty())
             << "The bounds of the RDom " << name
             << " in dimension " << i
             << " are:\n"
             << "  " << ranges[i].first << " ... " << ranges[i].second << "\n"
             << "These depend on the variable " << checker.offending_free_var << ".\n"
-            << "The bounds of an RDom may not depend on a free variable.\n";
+            << "The bounds of an RDom may not depend on a free variable.\n";*/
 
         std::string rvar_uniquifier;
         switch (i) {
