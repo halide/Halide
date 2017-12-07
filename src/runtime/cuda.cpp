@@ -778,6 +778,29 @@ WEAK int halide_cuda_run(void *user_context,
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
             dev_handles[i] = halide_get_device_handle(*(uint64_t *)args[i]);
+
+            // We might be passing an argument to a constant
+            // buffer. If so, we should copy the argument to the
+            // constant buffer, and pass that to the kernel instead.
+            char constant_name_buf[1024];
+            stringstream constant_name(user_context, constant_name_buf);
+            constant_name << entry_name << "_const_arg" << (int)i;
+            CUdeviceptr constant_ptr = NULL;
+            size_t constant_size = 0;
+            debug(user_context) << "cuModuleGetGlobal(" << constant_name.str() << ") -> ";
+            err = cuModuleGetGlobal(&constant_ptr, &constant_size, mod, constant_name.str());
+            debug(user_context) << "err=" << err << ", ptr=" << constant_ptr << ", size=" << (int)constant_size;
+            if (err == CUDA_SUCCESS) {
+                debug(user_context) << "    halide_cuda_run found constant for argument " << (int)i
+                                    << " (" << constant_name.str() << " of size " << (int)constant_size << " bytes...";
+                err = cuMemcpyDtoD(constant_ptr, dev_handles[i], constant_size);
+                if (err != CUDA_SUCCESS) {
+                    error(user_context) << "CUDA: cuMemcpyDtoD failed: "
+                                        << get_error_name(err);
+                    return err;
+                }
+                dev_handles[i] = constant_ptr;
+            }
             translated_args[i] = &(dev_handles[i]);
             debug(user_context) << "    halide_cuda_run translated arg" << (int)i
                                 << " [" << (*((void **)translated_args[i])) << " ...]\n";

@@ -26,10 +26,12 @@ CUDA_FN(CUresult, cuCtxGetApiVersion, (CUcontext ctx, unsigned int *version));
 CUDA_FN(CUresult, cuModuleLoadData, (CUmodule *module, const void *image));
 CUDA_FN(CUresult, cuModuleUnload, (CUmodule module));
 CUDA_FN(CUresult, cuModuleGetFunction, (CUfunction *hfunc, CUmodule hmod, const char *name));
+CUDA_FN(CUresult, cuModuleGetGlobal, (CUdeviceptr *dptr, size_t *bytes, CUmodule hmod, const char *name));
 CUDA_FN_3020(CUresult, cuMemAlloc, cuMemAlloc_v2, (CUdeviceptr *dptr, size_t bytesize));
 CUDA_FN_3020(CUresult, cuMemFree, cuMemFree_v2, (CUdeviceptr dptr));
 CUDA_FN_3020(CUresult, cuMemcpyHtoD, cuMemcpyHtoD_v2, (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpyDtoH, cuMemcpyDtoH_v2, (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount));
+CUDA_FN_3020(CUresult, cuMemcpyDtoD, cuMemcpyDtoD_v2, (CUdeviceptr dstDevice, CUdeviceptr srcDevice, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpy3D, cuMemcpy3D_v2, (const CUDA_MEMCPY3D *pCopy));
 CUDA_FN(CUresult, cuLaunchKernel, (CUfunction f,
                                    unsigned int gridDimX,
