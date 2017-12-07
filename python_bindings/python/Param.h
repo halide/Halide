@@ -1,6 +1,6 @@
-#ifndef PARAM_H
-#define PARAM_H
+#ifndef HALIDE_PYTHON_BINDINGS_PARAM_H
+#define HALIDE_PYTHON_BINDINGS_PARAM_H
 
-void defineParam();
+void define_param();
 
-#endif  // PARAM_H
+#endif  // HALIDE_PYTHON_BINDINGS_PARAM_H

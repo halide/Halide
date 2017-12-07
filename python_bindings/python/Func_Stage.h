@@ -1,6 +1,6 @@
-#ifndef FUNC_STAGE_H
-#define FUNC_STAGE_H
+#ifndef HALIDE_PYTHON_BINDINGS_FUNC_STAGE_H
+#define HALIDE_PYTHON_BINDINGS_FUNC_STAGE_H
 
-void defineStage();
+void define_stage();
 
-#endif  // FUNC_STAGE_H
+#endif  // HALIDE_PYTHON_BINDINGS_FUNC_STAGE_H

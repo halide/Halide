@@ -1,6 +1,6 @@
-#ifndef TARGET_H
-#define TARGET_H
+#ifndef HALIDE_PYTHON_BINDINGS_TARGET_H
+#define HALIDE_PYTHON_BINDINGS_TARGET_H
 
-void defineTarget();
+void define_target();
 
-#endif  // TARGET_H
+#endif  // HALIDE_PYTHON_BINDINGS_TARGET_H
