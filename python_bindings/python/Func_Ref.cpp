@@ -1,13 +1,12 @@
 #include "Func_Ref.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include "add_operators.h"
 #include <boost/python.hpp>
+#include <string>
+#include <vector>
 
 #include "Halide.h"
 
-#include <string>
-#include <vector>
+#include "add_operators.h"
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -39,7 +38,7 @@ A &idiv_func(A a, B b) {
     return a;
 }
 
-void defineFuncTupleElementRef() {
+void define_func_tuple_element_ref() {
     using Halide::FuncTupleElementRef;
 
     auto func_tuple_element_ref_class =
@@ -49,12 +48,6 @@ void defineFuncTupleElementRef() {
                                        "definition, or it could be a call to a function. We don't know "
                                        "until we see how this object gets used.",
                                        p::no_init)
-            //FuncTupleElementRef(const FuncRef &ref, const std::vector<Expr>& args, int idx);
-
-            //    .def("__??__", FuncTupleElementRef::operator=(Expr);
-            //         "Use this as the left-hand-side of an update definition of Tuple "
-            //         "component 'idx' of a Func (see \ref RDom). The function must "
-            //         "already have an initial definition.")
 
             .def("__iadd__", &iadd_func<FuncTupleElementRef &, h::Expr>, p::args("self", "expr"),
                  p::return_internal_reference<1>(),
@@ -83,16 +76,6 @@ void defineFuncTupleElementRef() {
                  "If the expression refers to some RDom, this performs a product "
                  "reduction of the inverse of the expression over the domain. The function "
                  "must already have an initial definition.")
-
-            //"Override the usual assignment operator, so that "
-            //"f(x, y)[index] = g(x, y) defines f."
-            //Stage operator=(const FuncRef &);
-            //FIXME  implement __setitem__
-
-            //    .def("to_Expr", &FuncTupleElementRef::operator Expr,
-            //         "Use this as a call to Tuple component 'idx' of a Func, and not the "
-            //         "left-hand-side of a definition.")
-
             .def("function", &FuncTupleElementRef::function,
                  "What function is this calling?")
             .def("index", &FuncTupleElementRef::index,
@@ -108,11 +91,9 @@ void defineFuncTupleElementRef() {
     add_operators_with<fterc_t, h::Expr>(func_tuple_element_ref_class);
 
     p::implicitly_convertible<FuncTupleElementRef, h::Expr>();
-
-    return;
 }
 
-void defineFuncRefExprClass() {
+void define_func_ref_expr_class() {
     using Halide::FuncRef;
 
     auto func_ref_expr_class =
@@ -122,17 +103,6 @@ void defineFuncRefExprClass() {
                            "update definition, or it could be a call to a function. We don't know "
                            "until we see how this object gets used. ",
                            p::no_init)
-            //            FuncRef(Internal::Function, const std::vector<Expr> &,
-            //                        int placeholder_pos = -1);
-            //            FuncRef(Internal::Function, const std::vector<Var> &,
-            //                        int placeholder_pos = -1);
-
-            //            .def("__??__", FuncRef::operator=(Expr);
-            //                 "Use this as the left-hand-side of a definition or an update "
-            //                 "definition (see \\ref RDom).")
-            //            .def("__??__", FuncRef::operator(const Tuple &),
-            //                 "Use this as the left-hand-side of a definition or an update "
-            //                 "definition for a Func with multiple outputs.")
             .def("__iadd__", &iadd_func<FuncRef &, h::Expr>, p::args("self", "expr"),
                  p::return_internal_reference<1>(),
                  "Define a stage that adds the given expression to this Func. If the "
@@ -157,16 +127,6 @@ void defineFuncRefExprClass() {
                  "If the expression refers to some RDom, this performs a product "
                  "reduction of the inverse of the expression over the domain. If the "
                  "function does not already have a pure definition, this sets it to 1.")
-
-            //"Override the usual assignment operator, so that "
-            //"f(x, y) = g(x, y) defines f."
-            //Stage operator=(const FuncRef &);
-            //FIXME  implement __setitem__
-
-            //            .def("to_Expr", &FuncRef::operator Expr,
-            //                 "Use this as a call to the function, and not the left-hand-side"
-            //                 "of a definition. Only works for single-output Funcs.")
-
             .def("__getitem__", &FuncRef::operator[],
                  "When a FuncRef refers to a function that provides multiple "
                  "outputs, you can access each output as an Expr using "
@@ -189,16 +149,13 @@ void defineFuncRefExprClass() {
     add_operators_with<frec_t, h::Expr>(func_ref_expr_class);
 
     p::implicitly_convertible<FuncRef, h::Expr>();
-
-    return;
 }
 
-void defineFuncRef() {
+void define_func_ref() {
     // only defined so that boost::python knows about these class,
     // not (yet) meant to be created or manipulated by the user
     p::class_<h::Internal::Function>("InternalFunction", p::no_init);
 
-    defineFuncTupleElementRef();
-    defineFuncRefExprClass();
-    return;
+    define_func_tuple_element_ref();
+    define_func_ref_expr_class();
 }

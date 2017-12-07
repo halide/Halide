@@ -1,13 +1,12 @@
 #include "Var.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include "add_operators.h"
+#include <boost/format.hpp>
 #include <boost/python.hpp>
+#include <string>
 
 #include "Halide.h"
 
-#include <boost/format.hpp>
-#include <string>
+#include "add_operators.h"
 
 namespace h = Halide;
 
@@ -46,7 +45,7 @@ std::string var_repr(const h::Var &var) {
     return repr;
 }
 
-void defineVar() {
+void define_var() {
     using Halide::Var;
 
     namespace p = boost::python;
@@ -116,6 +115,4 @@ void defineVar() {
     add_operators_with<decltype(var_class), h::Expr>(var_class);
 
     p::implicitly_convertible<Var, h::Expr>();
-
-    return;
 }

@@ -1,21 +1,19 @@
-#ifndef FUNC_H
-#define FUNC_H
+#ifndef HALIDE_PYTHON_BINDINGS_FUNC_H
+#define HALIDE_PYTHON_BINDINGS_FUNC_H
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
-
 #include <boost/python/tuple.hpp>
 #include <string>
 #include <vector>
 
 #include "Halide.h"
 
-void defineFunc();
+void define_func();
 
 namespace func_and_stage_implementation_details {
 // These are methods shared with Stage
 
-// we use hh and bp to avoid colisions with h, b used in the rest of the code
+// we use hh and bp to avoid collisions with h, b used in the rest of the code
 namespace hh = Halide;
 namespace bp = boost::python;
 
@@ -144,6 +142,6 @@ FuncOrStage &func_reorder_storage1(FuncOrStage &that, bp::object v0,
     return func_reorder_storage0<FuncOrStage, bp::list>(that, args_list);
 }
 
-}  // end of namespace func_and_stage_implementation_details
+}  // namespace func_and_stage_implementation_details
 
-#endif  // FUNC_H
+#endif  // HALIDE_PYTHON_BINDINGS_FUNC_H
