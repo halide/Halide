@@ -26,7 +26,7 @@ public:
             Expr e = cast<uint16_t>(0);
             for (int i = -2; i <= 2; i++) {
                 for (int j = -2; j <= 2; j++) {
-                    e += stages.back()(x+i, y+j);
+                    e += ((i+3)*(j+3))*stages.back()(x+i, y+j);
                 }
             }
             f(x, y) = e;
@@ -47,11 +47,12 @@ public:
             auto_schedule_outputs();
         } else {
             // cpu schedule. No fusion.
-            Var yi, yo;
-            for (auto s : stages) {
-                s.store_at(output, yo).compute_at(output, yi).vectorize(s.args()[0], 16);
+            Var yi, yo, xo, xi, t;
+            for (size_t i = 1; i < stages.size() - 1; i++) {
+                Func s = stages[i];
+                s.store_at(output, t).compute_at(output, yi).vectorize(s.args()[0], 16);
             }
-            output.compute_root().split(y, yo, yi, 512).parallel(yo).vectorize(x, 16);
+            output.compute_root().tile(x, y, xo, yo, xi, yi, 512, 512).fuse(xo, yo, t).parallel(t).vectorize(xi, 16);
         }
     }
 };
