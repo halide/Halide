@@ -1525,9 +1525,12 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	bazel build --verbose_failures :all
 
 .PHONY: test_python
-test_python: $(LIB_DIR)/libHalide.a $(INCLUDE_DIR)/Halide.h
-	mkdir -p python_bindings
-	make -C python_bindings -f $(ROOT_DIR)/python_bindings/Makefile test
+test_python: distrib
+	make -C $(ROOT_DIR)/python_bindings \
+		-f $(ROOT_DIR)/python_bindings/Makefile \
+		test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN=$(CURDIR)/$(BIN_DIR)/python_bindings
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
