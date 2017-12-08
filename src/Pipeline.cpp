@@ -165,7 +165,7 @@ Func Pipeline::get_func(size_t index) {
         env.insert(more_funcs.begin(), more_funcs.end());
     }
     // Compute a realization order
-    vector<string> order = realization_order(contents->outputs, env);
+    vector<string> order = realization_order(contents->outputs, env).first;
 
     user_assert(index < order.size())
         << "Index value passed is " << index << "; however, there are only "
