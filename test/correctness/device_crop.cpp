@@ -18,8 +18,13 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer() {
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    if (target.has_feature(Target::Metal)) {
+        printf("Metal doesn't currently support device cropping. Skipping test.\n");
+        return 0;
+    }
+
     if (!target.has_gpu_feature()) {
-        printf("This is a gpu-specific test. Skipping it\n");
+        printf("This is a gpu-specific test. Skipping it.\n");
         return 0;
     }
 
@@ -100,6 +105,8 @@ int main(int argc, char **argv) {
             }
         }
     }
+
+    printf("Success!\n");
 
     return 0;
 }
