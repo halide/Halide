@@ -130,15 +130,20 @@ def analyze_benchmarks(benchmark_dir, benchmark_files):
 
 def plot_comparison(filename, stats, ylabel, title, speedup=False, show=False):
 	# stats = {'conv': {'autosched2': 12.727, 'autosched1': 12.841, 'manual': 32.748}, 'ReLU': {'autosched2': 0.337, 'autosched1': 0.293, 'manual': 0.342}}
+        # Detect failed tests
+        for k, v in stats.items():
+                if len(v) < 3:
+                        print "Error: No data collected for", k
 	labels = [key for key in stats.keys()]
 	manual = [x['manual'] for x in stats.values()]
 	autosched1 = [x['autosched1'] for x in stats.values()]
 	autosched2 = [x['autosched2'] for x in stats.values()]
-	# Compute the speedup between autosched and autosched2 to manual
+	# Compute the speedup of each relative to the best of autosched or manual
 	if speedup:
-		autosched2 = [float(base)/float(val) for base, val in zip(manual, autosched2)]
-		autosched1 = [float(base)/float(val) for base, val in zip(manual, autosched1)]
-		manual = [float(base)/float(val) for base, val in zip(manual, manual)]
+                baseline = [min(m, a) for m, a in zip(manual, autosched1)]
+		autosched2 = [float(base)/float(val) for base, val in zip(baseline, autosched2)]
+		autosched1 = [float(base)/float(val) for base, val in zip(baseline, autosched1)]
+		manual = [float(base)/float(val) for base, val in zip(baseline, manual)]
 	# Setting the positions and width for the bars
 	pos = list(range(len(manual)))
 	width = 0.2
@@ -165,8 +170,8 @@ def plot_comparison(filename, stats, ylabel, title, speedup=False, show=False):
 	# Set the labels for the x ticks
 	ax.set_xticklabels(labels)
 	# Setting the x-axis and y-axis limits
-	plt.xlim(min(pos)-width, max(pos)+width*4)
-	plt.ylim([0, max(manual + autosched1 + autosched2)] )
+	plt.xlim(min(pos)-width, max(pos)+width*4)        
+	plt.ylim([0, max(manual + autosched1 + autosched2) * 1.5] )
 	plt.xlabel("...", labelpad=20)
 	# Adding the legend and showing the plot
 	plt.legend(['manual', 'autosched1', 'autosched2'], loc='upper left')
@@ -211,9 +216,13 @@ benchmark_files = [f for f in listdir(benchmark_dir) if isfile(join(benchmark_di
 benchmark_files = [f for f in benchmark_files if ".txt" in f]
 runtime_benchmarks, ftime_benchmarks, fpeak_benchmarks, favg_benchmarks = analyze_benchmarks(benchmark_dir, benchmark_files)
 
+import os, os.path
+for d in [benchmark_dir, plot_dir, csv_dir]:
+        if not os.path.isdir(d): os.mkdir(d)
+
 if __name__ == '__main__':
 	# Generate the plot
-	plot_comparison(plot_dir + "runtime.png", runtime_benchmarks, "speed-up", "Runtime", True)
+	plot_comparison(plot_dir + "runtime.png", runtime_benchmarks, "speed-up", "Speed-up", True)
 	convert_to_table(csv_dir + "runtime.csv", "Runtime Speed-up", runtime_benchmarks, True)
 	for test_name in ftime_benchmarks:
 		plot_comparison(plot_dir + test_name + "_runtime.png", ftime_benchmarks[test_name], "speed-up", "Runtime (" + test_name + ")")
