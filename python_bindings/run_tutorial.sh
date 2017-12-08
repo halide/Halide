@@ -1,14 +1,11 @@
 #!/bin/bash
+# Usage: run_apps.sh /path/to/build/directory
 
-#set -x # print commands
-#PYTHON=echo
 PYTHON=python3
 
-# Operate in the build directory, so that output files don't pollute the top-level directory.
-cd build
+cd $1
 
-BUILDPATH="." # Relative to the build dir. Adjust as needed.
-export PYTHONPATH="$BUILDPATH:$PYTHONPATH"
+export PYTHONPATH="$1:$PYTHONPATH"
 echo "PYTHONPATH ==" $PYTHONPATH
 
 FAILED=0
