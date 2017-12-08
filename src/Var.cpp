@@ -18,4 +18,16 @@ bool Var::is_implicit(const std::string &name) {
         name.find_first_not_of("0123456789", 1) == std::string::npos;
 }
 
+namespace Internal {
+
+std::vector<Var> make_argument_list(int dimensionality) {
+    std::vector<Var> args(dimensionality);
+    for (int i = 0; i < dimensionality; i++) {
+        args[i] = Var::implicit(i);
+    }
+    return args;
+}
+
+}
+
 }
