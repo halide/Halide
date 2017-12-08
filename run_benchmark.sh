@@ -8,7 +8,7 @@ echo "Run apps auto-scheduler benchmarks"
 
 make -j4
 
-mkdir ./apps/benchmark_data
+mkdir -p ./apps/benchmark_data
 
 # Bilateral grid
 echo "Run bilateral grid"
@@ -66,3 +66,10 @@ HL_TARGET=host-profile make -j4 all
 $BIN/process $IMAGES/rgb.png 7 7 0.12 10 $BIN/out.png &> $BENCHMARK_DATA/nl_means.txt
 cd ../..
 
+# Stencil chain
+echo "Run stencil chain"
+cd ./apps/stencil_chain
+make clean
+HL_TARGET=host-profile make -j4 all
+$BIN/process $IMAGES/rgb.png 10 $BIN/out.png &> $BENCHMARK_DATA/stencil_chain.txt
+cd ../../

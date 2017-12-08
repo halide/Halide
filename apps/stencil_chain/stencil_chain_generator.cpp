@@ -47,10 +47,11 @@ public:
             auto_schedule_outputs();
         } else {
             // cpu schedule. No fusion.
+            Var yi, yo;
             for (auto s : stages) {
-                s.compute_root().parallel(s.args()[1]).vectorize(s.args()[0], 16);
+                s.store_at(output, yo).compute_at(output, yi).vectorize(s.args()[0], 16);
             }
-            output.compute_root().parallel(y).vectorize(x, 16);
+            output.compute_root().split(y, yo, yi, 512).parallel(yo).vectorize(x, 16);
         }
     }
 };
