@@ -188,8 +188,11 @@ struct IntImm : public ExprNode<IntImm> {
         internal_assert(t.bits() == 8 || t.bits() == 16 || t.bits() == 32 || t.bits() == 64)
             << "IntImm must be 8, 16, 32, or 64-bit\n";
 
-        // Normalize the value by dropping the high bits
-        value <<= (64 - t.bits());
+        // Normalize the value by dropping the high bits.
+        // Since left-shift of negative value is UB in C++, cast to uint64 first;
+        // it's unlikely any compilers we care about will misbehave, but UBSan will complain.
+        value = (int64_t) (((uint64_t) value) << (64 - t.bits()));
+
         // Then sign-extending to get them back
         value >>= (64 - t.bits());
 
