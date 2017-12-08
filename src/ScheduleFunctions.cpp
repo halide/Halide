@@ -1010,7 +1010,7 @@ std::ostream& operator<<(std::ostream& out, const std::vector<Function>& v) {
     return out;
 }
 
-class InjectStmt : public IRMutator {
+class InjectStmt : public IRMutator2 {
 public:
     Stmt injected_stmt;
     bool found_level;
@@ -1020,9 +1020,9 @@ public:
         : injected_stmt(s), found_level(false), level(level) {}
 
 private:
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *for_loop) {
+    Stmt visit(const For *for_loop) override {
         Stmt body = mutate(for_loop->body);
 
         if (level.match(for_loop->name)) {
@@ -1031,9 +1031,9 @@ private:
         }
 
         if (body.same_as(for_loop->body)) {
-            stmt = for_loop;
+            return for_loop;
         } else {
-            stmt = For::make(for_loop->name,
+            return For::make(for_loop->name,
                              for_loop->min,
                              for_loop->extent,
                              for_loop->for_type,
@@ -1078,15 +1078,15 @@ private:
     }
 };
 
-class SubstituteFusedBounds : public IRMutator {
+class SubstituteFusedBounds : public IRMutator2 {
 public:
     const map<string, Expr> &replacements;
     SubstituteFusedBounds(const map<string, Expr> &r) : replacements(r) {}
 
 private:
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         const Variable *min_var = op->min.as<Variable>();
         const Variable *extent_var = op->extent.as<Variable>();
         if (min_var && extent_var) {
@@ -1103,10 +1103,8 @@ private:
                     extent_val = it->second;
                 }
             }
-
             if (!min_val.defined()|| !extent_val.defined()) {
-                IRMutator::visit(op);
-                return;
+                return IRMutator2::visit(op);
             }
 
             Stmt body = mutate(op->body);
@@ -1115,19 +1113,21 @@ private:
             internal_assert(last_dot != string::npos);
             string new_var = op->name.substr(0, last_dot) + ".fused." + op->name.substr(last_dot + 1);
 
-            // If this is the child fused loop, might as well clear the for-loop
-            // scheduling flag (parallel, vectorize, or unrolled) since its
-            // loop extent is one anyway.
             ForType for_type = op->for_type;
             DeviceAPI device_api = op->device_api;
             if (is_one(extent_val)) {
+                // This is the child loop of a fused group. The real loop of the
+                // fused group is the loop of the parent function of the fused
+                // group. This child loop is just a scheduling point, and should
+                // never be a device transition, so we rewrite it to be a simple
+                // serial loop of extent 1."
                 for_type = ForType::Serial;
                 device_api = DeviceAPI::None;
             }
 
-            stmt = For::make(new_var, Variable::make(Int(32), new_var + ".loop_min"),
-                             Variable::make(Int(32), new_var + ".loop_extent"),
-                             for_type, device_api, body);
+            Stmt stmt = For::make(new_var, Variable::make(Int(32), new_var + ".loop_min"),
+                                  Variable::make(Int(32), new_var + ".loop_extent"),
+                                  for_type, device_api, body);
 
             // Add let stmts defining the bound of the renamed for-loop.
             stmt = LetStmt::make(new_var + ".loop_min", min_val, stmt);
@@ -1135,8 +1135,9 @@ private:
             stmt = LetStmt::make(new_var + ".loop_extent", extent_val, stmt);
             // Replace any reference to the old loop name with the new one.
             stmt = substitute(op->name, Variable::make(Int(32), new_var), stmt);
+            return stmt;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 };
@@ -1153,13 +1154,13 @@ Stmt substitute_fused_bounds(Stmt s, const map<string, Expr> &replacements) {
 }
 
 // Shift the iteration domain of a loop nest by some factor.
-class ShiftLoopNest : public IRMutator {
+class ShiftLoopNest : public IRMutator2 {
     const map<string, Expr> &shifts; // Add the shift factor to the old var
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *op) {
-        IRMutator::visit(op);
+    Stmt visit(const For *op) override {
+        Stmt stmt = IRMutator2::visit(op);
         const auto &iter = shifts.find(op->name);
         if (iter != shifts.end()) {
             debug(5) << "...Shifting for loop \"" << op->name << "\" by " << iter->second << "\n";
@@ -1169,6 +1170,7 @@ class ShiftLoopNest : public IRMutator {
             Stmt body = substitute(op->name, adjusted, op->body);
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }
+        return stmt;
     }
 
 public:
@@ -1177,7 +1179,7 @@ public:
 
 // Inject the allocation and realization of a group of functions which are
 // to be fused into an existing loop nest using its schedule.
-class InjectGroupRealization : public IRMutator {
+class InjectGroupRealization : public IRMutator2 {
 public:
     // Member of the fused loop starting from the first to be realized to the last.
     const vector<Function> &group;
@@ -1221,8 +1223,8 @@ private:
         }
 
         user_assert(!skip[group[group.size()-1].name()])
-            << "Invalid compute_with: the 'parent' function " << group[group.size()-1].name()
-            << " in fused group " << group << " is not used at the compute_at level "
+            << "Invalid compute_with: the 'parent' function \"" << group[group.size()-1].name()
+            << "\" in fused group " << group << " is not used at the compute_at level "
             << compute_level.to_string() << ".\n";
 
         // Add the consumer nodes.
@@ -1255,7 +1257,7 @@ private:
             produce = LetStmt::make(b.first, b.second, produce);
         }
 
-        // The original bounds of the loopness (without any loop-fusion)
+        // The original bounds of the loop nests (without any loop-fusion)
         CollectBounds subs;
         produce.accept(&subs);
 
@@ -1281,7 +1283,7 @@ private:
         // extent should be one).
         produce = substitute_fused_bounds(produce, replacements);
 
-        // Replace the bounds of parent fused loops with union of bounds of
+        // Replace the bounds of parent fused loop with union of bounds of
         // the fused loops.
         produce = replace_parent_bound_with_union_bound(skip, group[parent_index], produce, subs.bounds);
 
@@ -1393,7 +1395,7 @@ private:
         }
 
         // The bounds of the child fused loops should be replaced to refer to the
-        // parent fused loops. Here, we are only collecting the ones we should
+        // parent fused loop. Here, we are only collecting the ones we should
         // replace. The actual replacement is done later.
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
             if (skip.find(pair.func_2)->second) {
@@ -1428,7 +1430,7 @@ private:
         Stmt produce = build_provide_loop_nest(f.name(), prefix, start_fuse, f_args,
                                                f.schedule(), def, is_update);
 
-        // Strip off the containing lets. The bounds of the parent fused loops
+        // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
         // to the topmost position.
         while (const LetStmt *let = produce.as<LetStmt>()) {
@@ -1585,10 +1587,10 @@ private:
         }
     }
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const For *for_loop) {
-        debug(3) << "InjectGroupRealization of " << group << " entering for loop over "
+    Stmt visit(const For *for_loop) override {
+        debug(3) << "InjectGroupRealization of " << group << " entering for-loop over "
                  << for_loop->name << "\n";
 
         Stmt body = for_loop->body;
@@ -1622,9 +1624,9 @@ private:
         }
 
         if (body.same_as(for_loop->body)) {
-            stmt = for_loop;
+            return for_loop;
         } else {
-            stmt = For::make(for_loop->name,
+            return For::make(for_loop->name,
                              for_loop->min,
                              for_loop->extent,
                              for_loop->for_type,
