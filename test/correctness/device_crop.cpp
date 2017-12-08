@@ -4,6 +4,7 @@
 using namespace Halide;
 
 Halide::Runtime::Buffer<int32_t> make_gpu_buffer() {
+  Target target = get_jit_target_from_environment().with_feature(Target::Debug);
   Var x, y;
   Func f;
   f(x, y) = x + y * 256;
@@ -11,7 +12,7 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer() {
   Var xi, yi;
   f.gpu_tile(x, y, xi, yi, 8, 8);
 
-  Buffer<int32_t>  result = f.realize(128, 128);
+  Buffer<int32_t>  result = f.realize(128, 128, target);
   return *result.get();
 }
 
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    printf("Test in-place cropping.\n");
     // Test in-place cropping.
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer();
@@ -44,6 +46,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test nondestructive cropping.\n");
     // Test nondestructive cropping.
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer();
@@ -60,6 +63,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test crop of a crop\n");
     // Test crop of a crop
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer();
@@ -85,7 +89,8 @@ int main(int argc, char **argv) {
             }
         }
     }
-
+    
+    printf("Test parent going out of scope before crop.\n");
     // Test parent going out of scope before crop.
     {
         Halide::Runtime::Buffer<int32_t> cropped;
