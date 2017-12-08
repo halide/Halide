@@ -743,11 +743,25 @@ bool is_func_trivial_to_inline(const Function &func) {
     return can_prove(is_trivial);
 }
 
+Expr fold_constant_additions(Expr e) {
+    while (1) {
+        const Add *add = e.as<Add>();
+        const Add *add_a = add ? add->a.as<Add>() : nullptr;
+        if (add_a && is_const(add->b) && is_const(add_a->b)) {
+            e = add_a->a + simplify(add_a->b + add->b);
+        } else {
+            return e;
+        }
+    }
+}
+
 void Cost::simplify() {
     if (arith.defined()) {
+        arith = fold_constant_additions(arith);
         arith = Internal::simplify(arith);
     }
     if (memory.defined()) {
+        memory = fold_constant_additions(memory);
         memory = Internal::simplify(memory);
     }
 }
