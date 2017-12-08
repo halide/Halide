@@ -1,4 +1,5 @@
 #!/bin/bash
+# Usage: run_apps.sh /path/to/build/directory
 
 PYTHON=python3
 
