@@ -1,8 +1,5 @@
 #!/usr/bin/python3
 
-# to be called via nose, for example
-# nosetests-3.4 -v path_to/tests/test_basics.py
-
 from halide import *
 
 def test_types():
