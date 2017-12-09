@@ -168,11 +168,7 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
 void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pairs_graph) {
     for (const auto &iter : fused_pairs_graph) {
         for (const auto &pair : iter.second) {
-            if (pair.func_1 == pair.func_2) {
-                // compute_with among stages of a function is okay,
-                // e.g. f.update(0).compute_with(f, x)
-                continue;
-            }
+            internal_assert(pair.func_1 != pair.func_2);
             const auto &o_iter = fused_pairs_graph.find(pair.func_2);
             if (o_iter == fused_pairs_graph.end()) {
                 continue;

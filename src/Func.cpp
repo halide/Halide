@@ -1733,7 +1733,7 @@ Stage &Stage::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr off
     return *this;
 }
 
-Stage &Stage::compute_with(LoopLevel loop_level, const map<string, AlignStrategy> &align) {
+Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStrategy> &align) {
     loop_level.lock();
     user_assert(!loop_level.is_inlined() && !loop_level.is_root())
         << "Undefined loop level to compute with\n";
@@ -1760,24 +1760,24 @@ Stage &Stage::compute_with(LoopLevel loop_level, const map<string, AlignStrategy
     return *this;
 }
 
-Stage &Stage::compute_with(LoopLevel loop_level, const vector<pair<VarOrRVar, AlignStrategy>> &align) {
-    map<string, AlignStrategy> align_str;
+Stage &Stage::compute_with(LoopLevel loop_level, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
+    map<string, LoopAlignStrategy> align_str;
     for (const auto &iter: align) {
         align_str.emplace(iter.first.name(), iter.second);
     }
     return compute_with(loop_level, align_str);
 }
 
-Stage &Stage::compute_with(LoopLevel loop_level, AlignStrategy align) {
-    map<string, AlignStrategy> align_str = {{loop_level.lock().var().name(), align}};
+Stage &Stage::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
+    map<string, LoopAlignStrategy> align_str = {{loop_level.lock().var().name(), align}};
     return compute_with(loop_level, align_str);
 }
 
-Stage &Stage::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, AlignStrategy>> &align) {
+Stage &Stage::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
-Stage &Stage::compute_with(Stage s, VarOrRVar var, AlignStrategy align) {
+Stage &Stage::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
@@ -2429,13 +2429,13 @@ Func &Func::compute_at(Func f, Var var) {
     return compute_at(LoopLevel(f, var));
 }
 
-Func &Func::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, AlignStrategy>> &align) {
+Func &Func::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).compute_with(s, var, align);
     return *this;
 }
 
-Func &Func::compute_with(Stage s, VarOrRVar var, AlignStrategy align) {
+Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).compute_with(s, var, align);
     return *this;

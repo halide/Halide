@@ -95,7 +95,7 @@ int split_test() {
         Var xo("xo"), xi("xi");
         f.split(x, xo, xi, 7);
         g.split(x, xo, xi, 7);
-        g.compute_with(f, xo, AlignStrategy::AlignEnd);
+        g.compute_with(f, xo, LoopAlignStrategy::AlignEnd);
 
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
@@ -149,7 +149,7 @@ int fuse_test() {
 
         f.fuse(x, y, t).parallel(t);
         g.fuse(x, y, t).parallel(t);
-        g.compute_with(f, t, AlignStrategy::AlignEnd);
+        g.compute_with(f, t, LoopAlignStrategy::AlignEnd);
 
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
@@ -223,7 +223,7 @@ int multiple_fuse_group_test() {
         h.fuse(x, y, t).parallel(t);
         h.compute_with(p, t);
 
-        f.update(0).compute_with(g, y, AlignStrategy::AlignEnd);
+        f.update(0).compute_with(g, y, LoopAlignStrategy::AlignEnd);
         f.compute_with(g, x);
 
         f.trace_loads().trace_stores();
@@ -285,7 +285,7 @@ int multiple_outputs_test() {
         g(x, y) = x + input(x, y);
 
         input.compute_at(f, y);
-        g.compute_with(f, y, AlignStrategy::AlignStart);
+        g.compute_with(f, y, LoopAlignStrategy::AlignStart);
 
         input.trace_loads().trace_stores();
         f.trace_loads().trace_stores();
@@ -354,12 +354,12 @@ int fuse_compute_at_test() {
         h.compute_at(p, y);
         p.compute_root();
         q.compute_root();
-        q.compute_with(p, x, AlignStrategy::AlignEnd);
+        q.compute_with(p, x, LoopAlignStrategy::AlignEnd);
 
         Var xo("xo"), xi("xi");
         f.split(x, xo, xi, 8);
         g.split(x, xo, xi, 8);
-        g.compute_with(f, xo, AlignStrategy::AlignStart);
+        g.compute_with(f, xo, LoopAlignStrategy::AlignStart);
 
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
@@ -425,7 +425,7 @@ int double_split_fuse_test() {
         g.fuse(xoi, xi, t);
         f.compute_at(h, y);
         g.compute_at(h, y);
-        g.compute_with(f, t, AlignStrategy::AlignEnd);
+        g.compute_with(f, t, LoopAlignStrategy::AlignEnd);
 
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
@@ -507,8 +507,8 @@ int rgb_yuv420_test() {
         u_part.vectorize(xi);
         v_part.vectorize(xi);
 
-        u_part.compute_with(y_part, x, AlignStrategy::AlignEnd);
-        v_part.compute_with(u_part, x, AlignStrategy::AlignEnd);
+        u_part.compute_with(y_part, x, LoopAlignStrategy::AlignEnd);
+        v_part.compute_with(u_part, x, LoopAlignStrategy::AlignEnd);
 
         Expr width = v_part.output_buffer().width();
         Expr height = v_part.output_buffer().height();
@@ -600,7 +600,7 @@ int vectorize_test() {
         g.split(x, xo, xi, 8);
         f.vectorize(xi);
         g.vectorize(xi);
-        g.compute_with(f, xi, AlignStrategy::AlignEnd);
+        g.compute_with(f, xi, LoopAlignStrategy::AlignEnd);
 
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
@@ -726,7 +726,7 @@ int multiple_outputs_on_gpu_test() {
         f.compute_root().gpu_tile(x, y, xi, yi, 8, 8);
         g.compute_root().gpu_tile(x, y, xi, yi, 8, 8);
 
-        g.compute_with(f, x, AlignStrategy::AlignEnd);
+        g.compute_with(f, x, LoopAlignStrategy::AlignEnd);
 
         Realization r(f_im, g_im);
         Pipeline({f, g}).realize(r);
@@ -792,8 +792,8 @@ int mixed_tile_factor_test() {
         g.tile(x, y, xi, yi, 7, 9, TailStrategy::GuardWithIf);
         h.tile(x, y, xi, yi, 4, 16, TailStrategy::RoundUp);
 
-        g.compute_with(f, yi, AlignStrategy::AlignEnd);
-        h.compute_with(g, yi, AlignStrategy::AlignStart);
+        g.compute_with(f, yi, LoopAlignStrategy::AlignEnd);
+        h.compute_with(g, yi, LoopAlignStrategy::AlignStart);
 
         input.store_root();
         input.compute_at(f, y).vectorize(x, 8);
@@ -890,8 +890,8 @@ int multi_tile_mixed_tile_factor_test() {
         g.tile(xi, yi, xii, yii, 16, 8, TailStrategy::GuardWithIf);
         h.tile(xi, yi, xii, yii, 4, 16, TailStrategy::GuardWithIf);
 
-        g.compute_with(f, yii, AlignStrategy::AlignStart);
-        h.compute_with(g, yii, AlignStrategy::AlignEnd);
+        g.compute_with(f, yii, LoopAlignStrategy::AlignStart);
+        h.compute_with(g, yii, LoopAlignStrategy::AlignEnd);
 
         input.store_root();
         input.compute_at(f, y).vectorize(x, 8);
@@ -981,7 +981,7 @@ int only_some_are_tiled_test() {
         Var xi("xi"), yi("yi");
         f.tile(x, y, xi, yi, 32, 16, TailStrategy::ShiftInwards);
 
-        g.compute_with(f, y, AlignStrategy::AlignEnd);
+        g.compute_with(f, y, LoopAlignStrategy::AlignEnd);
         h.compute_with(g, y);
 
         input.store_root();
@@ -1060,7 +1060,7 @@ int with_specialization_test() {
         Var xo("xo"), xi("xi");
         f.specialize(tile).split(x, xo, xi, 7);
 
-        g.compute_with(f, y, AlignStrategy::AlignEnd);
+        g.compute_with(f, y, LoopAlignStrategy::AlignEnd);
 
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
@@ -1119,10 +1119,10 @@ int nested_compute_with_test() {
         g2(x, y) = f1(x, y)*f2(x, y);
 
         input.compute_at(f1, y);
-        f2.compute_with(f1, y, AlignStrategy::AlignEnd);
+        f2.compute_with(f1, y, LoopAlignStrategy::AlignEnd);
         f1.compute_at(g1, y);
         f2.compute_at(g1, y);
-        g2.compute_with(g1, x, AlignStrategy::AlignStart);
+        g2.compute_with(g1, x, LoopAlignStrategy::AlignStart);
 
         f1.trace_loads().trace_stores();
         f2.trace_loads().trace_stores();

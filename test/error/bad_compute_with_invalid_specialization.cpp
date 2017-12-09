@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     Param<bool> tile;
     Var xo("xo"), xi("xi");
     g.specialize(tile).split(x, xo, xi, 8);
-    g.compute_with(f.specialize(tile), y, AlignStrategy::AlignEnd);
+    g.compute_with(f.specialize(tile), y, LoopAlignStrategy::AlignEnd);
 
     tile.set(true);
     h.realize(200, 200);

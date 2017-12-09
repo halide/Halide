@@ -1305,7 +1305,7 @@ private:
                               map<string, Expr> &shifts) {
         const vector<Dim> &dims = def.schedule().dims(); // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
-        const map<string, AlignStrategy> &align_strategy = def.schedule().fuse_level().align;
+        const map<string, LoopAlignStrategy> &align_strategy = def.schedule().fuse_level().align;
 
         int start_fuse = (int)dims.size();
         if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
@@ -1328,8 +1328,8 @@ private:
                     }
 
                     if ((iter == align_strategy.end()) ||
-                        (iter->second == AlignStrategy::NoAlign) ||
-                        (iter->second == AlignStrategy::Auto)) {
+                        (iter->second == LoopAlignStrategy::NoAlign) ||
+                        (iter->second == LoopAlignStrategy::Auto)) {
                         continue;
                     }
 
@@ -1339,7 +1339,7 @@ private:
                     auto it_max = bounds.find(prefix + var + ".loop_max");
                     internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
 
-                    if (iter->second == AlignStrategy::AlignStart) {
+                    if (iter->second == LoopAlignStrategy::AlignStart) {
                         const auto &parent_min = bounds.find(parent_prefix + var + ".loop_min");
                         internal_assert(parent_min != bounds.end());
                         shift_val = parent_min->second - it_min->second;
@@ -2024,9 +2024,7 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
             << " has extern definition.\n";
 
         // Verify that they are computed at the same loop level.
-        user_assert((p.func_1 == p.func_2) ||
-                    (func_1.schedule().compute_level() ==
-                     func_2.schedule().compute_level()))
+        user_assert(func_1.schedule().compute_level() == func_2.schedule().compute_level())
             << "Invalid compute_with: the compute levels of " << p.func_1 << ".s" << p.stage_1
             << " (computed at " << func_1.schedule().compute_level().to_string()
             << ") and " << p.func_2 << ".s" << p.stage_2 << " ("
@@ -2068,112 +2066,6 @@ void validate_fused_group_schedule_helper(const string &fn, size_t stage_index,
                 user_error << "Invalid compute_with: dims " << i << " of " << p.func_1 << ".s"
                            << p.stage_1 << "(" << dims_1[start_fuse_1 + i].var << ") and " << p.func_2
                            << ".s" << p.stage_2 << "(" << dims_2[start_fuse_2 + i].var << ") do not match.\n";
-            }
-        }
-
-        // If both stages computed with are from the same Func, verify that the dims
-        // computed with are the results of the same application of splits/renames/etc.
-        // Also, if it is a split dimension, verify that it doesn't use ShiftInwards
-        // as tail strategy since this may affect correctness.
-        if (p.func_1 == p.func_2) { // Update and its preceding stage are fused
-            vector<string> pure_dims_1 = func_1.args();
-            const vector<ReductionVariable> &rvars_1 = def_1.schedule().rvars();
-            const vector<Split> &splits_1 = def_1.schedule().splits();
-            const vector<Split> &splits_2 = def_2.schedule().splits();
-
-            for (int i = 0; i < n_fused; ++i) {
-                const string &var = dims_1[start_fuse_1 + i].var;
-                if (std::any_of(pure_dims_1.begin(), pure_dims_1.end(),
-                                [&var](const string &d) { return (d == var); })) {
-                    // It is a pure var, no need to check the schedule.
-                    continue;
-                }
-                if (std::any_of(rvars_1.begin(), rvars_1.end(),
-                                [&var](const ReductionVariable &rv) { return (rv.var == var); })) {
-                    // It is an rvar, no need to check the schedule.
-                    continue;
-                }
-
-                // Relevant splits that produce this dim if there is any
-                vector<Split> s_1, s_2;
-                {
-                    vector<string> relevant_dims = {var};
-                    for (size_t j = splits_1.size(); j > 0; --j) {
-                        const Split &s = splits_1[j-1];
-                        bool relevant = std::any_of(relevant_dims.begin(), relevant_dims.end(),
-                                                    [&s](const string &d) { return (d == s.old_var); });
-                        relevant = relevant || std::any_of(relevant_dims.begin(), relevant_dims.end(),
-                                                           [&s](const string &d) { return (d == s.outer); });
-
-                        if (s.is_split() || s.is_fuse()) {
-                            relevant = relevant || std::any_of(relevant_dims.begin(), relevant_dims.end(),
-                                                               [&s](const string &d) { return (d == s.inner); });
-                        }
-                        if (relevant) {
-                            relevant_dims.push_back(s.old_var);
-                            relevant_dims.push_back(s.outer);
-                            if (s.is_split() || s.is_fuse()) {
-                                relevant_dims.push_back(s.inner);
-                            }
-                            s_1.push_back(s);
-                        }
-                    }
-                }
-                {
-                    vector<string> relevant_dims = {var};
-                    for (size_t j = splits_2.size(); j > 0; --j) {
-                        const Split &s = splits_2[j-1];
-                        bool relevant = std::any_of(relevant_dims.begin(), relevant_dims.end(),
-                                                    [&s](const string &d) { return (d == s.old_var); });
-                        relevant = relevant || std::any_of(relevant_dims.begin(), relevant_dims.end(),
-                                                           [&s](const string &d) { return (d == s.outer); });
-
-                        if (s.is_split() || s.is_fuse()) {
-                            relevant = relevant || std::any_of(relevant_dims.begin(), relevant_dims.end(),
-                                                               [&s](const string &d) { return (d == s.inner); });
-                        }
-                        if (relevant) {
-                            relevant_dims.push_back(s.old_var);
-                            relevant_dims.push_back(s.outer);
-                            if (s.is_split() || s.is_fuse()) {
-                                relevant_dims.push_back(s.inner);
-                            }
-                            s_2.push_back(s);
-                        }
-                    }
-                }
-
-                user_assert(s_1.size() == s_2.size())
-                    << "Invalid compute_with: dim " << var << " in " << p.func_1 << ".s"
-                    << p.stage_1 << " and " << p.func_2 << ".s" << p.stage_2
-                    << " results from different schedules: " << s_1.size() << " vs. "
-                    << s_2.size() << " schedules.\n";
-
-                for (size_t k = 0; k < s_1.size(); ++k) {
-                    const Split &s1 = s_1[k];
-                    const Split &s2 = s_2[k];
-                    bool match = (s1.split_type == s2.split_type) &&
-                                 (s1.old_var == s2.old_var) &&
-                                 (s1.outer == s2.outer) &&
-                                 equal(s1.factor, s2.factor) &&
-                                 (s1.exact == s2.exact);
-
-                    if (s1.is_split() || s1.is_fuse()) {
-                        match = match && (s1.inner == s2.inner);
-                    }
-
-                    user_assert(match)
-                        << "Invalid compute_with: dim " << var << " in " << p.func_1 << ".s"
-                        << p.stage_1 << ") and " << p.func_2 << ".s" << p.stage_2
-                        << " results from different schedules.\n";
-
-                    if (s1.is_split()) {
-                        user_assert(s1.tail != TailStrategy::ShiftInwards)
-                            << "When splitting Var " << s1.old_var
-                            << " ShiftInwards is not a legal tail strategy since its inner/outer is fused, as"
-                            << " it may change the meaning of the algorithm\n";
-                    }
-                }
             }
         }
     }

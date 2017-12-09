@@ -71,7 +71,7 @@ class Stage {
         return function.schedule().storage_dims();
     }
 
-    Stage &compute_with(LoopLevel loop_level, const std::map<std::string, AlignStrategy> &align);
+    Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
 
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
@@ -241,7 +241,7 @@ public:
      *
      * 'align' specifies how the loop iteration of each dimension of the
      * two stages being fused should be aligned in the fused loop nests
-     * (see AlignStrategy for options). Consider the following loop nests:
+     * (see LoopAlignStrategy for options). Consider the following loop nests:
      \code
      for z = f_min_z to f_max_z:
        for y = f_min_y to f_max_y:
@@ -270,7 +270,7 @@ public:
      *
      * Instead, these alignment strategies:
      \code
-     g.compute_with(f, y, {{z, AlignStrategy::AlignStart}, {y, AlignStrategy::AlignEnd}});
+     g.compute_with(f, y, {{z, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignEnd}});
      \endcode
      * will produce the following loop nest:
      \code
@@ -292,16 +292,16 @@ public:
                g(x, y + g_shift_y, z + g_shift_z) = x - (y + g_shift_y) - (z + g_shift_z)
      \endcode
      *
-     * AlignStrategy::AlignStart on dimension z will shift the loop iteration
+     * LoopAlignStrategy::AlignStart on dimension z will shift the loop iteration
      * of 'g' at dimension z so that its starting value matches that of 'f'.
-     * Likewise, AlignStrategy::AlignEnd on dimension y will shift the loop
+     * Likewise, LoopAlignStrategy::AlignEnd on dimension y will shift the loop
      * iteration of 'g' at dimension y so that its end value matches that of 'f'.
      */
     // @{
-    EXPORT Stage &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, AlignStrategy>> &align);
-    EXPORT Stage &compute_with(LoopLevel loop_level, AlignStrategy align = AlignStrategy::Auto);
-    EXPORT Stage &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, AlignStrategy>> &align);
-    EXPORT Stage &compute_with(Stage s, VarOrRVar var, AlignStrategy align = AlignStrategy::Auto);
+    EXPORT Stage &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Stage &compute_with(LoopLevel loop_level, LoopAlignStrategy align = LoopAlignStrategy::Auto);
+    EXPORT Stage &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Stage &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
     // @}
 
     /** Scheduling calls that control how the domain of this stage is
@@ -2014,8 +2014,8 @@ public:
      *  to be fused with another stage 's' from outermost loop to a
      * given LoopLevel. See \ref Stage::compute_with */
     // @{
-    EXPORT Func &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, AlignStrategy>> &align);
-    EXPORT Func &compute_with(Stage s, VarOrRVar var, AlignStrategy align = AlignStrategy::Auto);
+    EXPORT Func &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Func &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
 
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :

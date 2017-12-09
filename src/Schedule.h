@@ -69,7 +69,7 @@ enum class TailStrategy {
 
 /** Different ways to handle the case when the start/end of the loops of stages
  * computed with (fused) are not aligned. */
-enum class AlignStrategy {
+enum class LoopAlignStrategy {
     /** Shift the start of the fused loops to align. */
     AlignStart,
 
@@ -80,7 +80,7 @@ enum class AlignStrategy {
      * fused loops. */
     NoAlign,
 
-    /** By default, AlignStrategy is set to NoAlign. */
+    /** By default, LoopAlignStrategy is set to NoAlign. */
     Auto
 };
 
@@ -239,12 +239,12 @@ struct FuseLoopLevel {
     LoopLevel level;
     /** Contains alignment strategies for the fused dimensions (indexed by the
      * dimension name). If not in the map, use the default alignment strategy
-     * to align the fused dimension (see \ref AlignStrategy::Auto).
+     * to align the fused dimension (see \ref LoopAlignStrategy::Auto).
      */
-    std::map<std::string, AlignStrategy> align;
+    std::map<std::string, LoopAlignStrategy> align;
 
     FuseLoopLevel() : level(LoopLevel::inlined()) {}
-    FuseLoopLevel(const LoopLevel &level, const std::map<std::string, AlignStrategy> &align)
+    FuseLoopLevel(const LoopLevel &level, const std::map<std::string, LoopAlignStrategy> &align)
         : level(level), align(align) {}
 };
 
