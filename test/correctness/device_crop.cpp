@@ -4,7 +4,6 @@
 using namespace Halide;
 
 Halide::Runtime::Buffer<int32_t> make_gpu_buffer() {
-  Target target = get_jit_target_from_environment().with_feature(Target::Debug);
   Var x, y;
   Func f;
   f(x, y) = x + y * 256;
@@ -12,17 +11,12 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer() {
   Var xi, yi;
   f.gpu_tile(x, y, xi, yi, 8, 8);
 
-  Buffer<int32_t>  result = f.realize(128, 128, target);
+  Buffer<int32_t>  result = f.realize(128, 128);
   return *result.get();
 }
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-
-    if (target.has_feature(Target::Metal)) {
-        printf("Metal doesn't currently support device cropping. Skipping test.\n");
-        return 0;
-    }
 
     if (!target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it.\n");
@@ -30,7 +24,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Test in-place cropping.\n");
-    // Test in-place cropping.
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer();
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
@@ -47,7 +40,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Test nondestructive cropping.\n");
-    // Test nondestructive cropping.
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer();
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
@@ -64,7 +56,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Test crop of a crop\n");
-    // Test crop of a crop
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer();
         assert(gpu_buf.raw_buffer()->device_interface != nullptr);
@@ -91,7 +82,6 @@ int main(int argc, char **argv) {
     }
     
     printf("Test parent going out of scope before crop.\n");
-    // Test parent going out of scope before crop.
     {
         Halide::Runtime::Buffer<int32_t> cropped;
 
@@ -112,7 +102,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Test realizing to/from crop.\n");
-    // Test parent going out of scope before crop.
     {
         Halide::Buffer<int32_t> gpu_buf1 = make_gpu_buffer();
         Halide::Buffer<int32_t> gpu_buf2 = make_gpu_buffer();
