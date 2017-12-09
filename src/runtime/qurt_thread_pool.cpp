@@ -1,4 +1,4 @@
-#include "HalideRuntime.h"
+#include "HalideRuntimeQurt.h"
 #include "mini_qurt.h"
 
 using namespace Halide::Runtime::Internal::Qurt;
@@ -6,7 +6,6 @@ using namespace Halide::Runtime::Internal::Qurt;
 
 extern "C" {
 extern void *memalign(size_t, size_t);
-
 
 } // extern C
 struct halide_thread {
@@ -95,23 +94,8 @@ struct wrapped_closure {
     int hvx_mode;
 };
 }
-qurt_hvx_mode_t master_thread_mode = QURT_HVX_MODE_UNKNOWN;
 
 extern "C" {
-
-WEAK int halide_set_par_hvx_mode(void *user_context, int vlen) {
-    if (vlen == 128) {
-        master_thread_mode = QURT_HVX_MODE_128B;
-    } else if (vlen == 64) {
-        master_thread_mode = QURT_HVX_MODE_64B;
-    } else {
-      error(user_context) << "halide_set_par_hvx_mode passed bad value: "
-                          << vlen << "\n";
-      return -1;
-    }
-    return 0;
-}
-
 // There are two locks at play: the thread pool lock and the hvx
 // context lock. To ensure there's no way anything could ever
 // deadlock, we never attempt to acquire one while holding the
@@ -131,25 +115,19 @@ WEAK int halide_do_par_for(void *user_context,
         qurt_mutex_init(mutex);
     }
 
-    // wrapped_closure c = {closure, master_thread_mode};
 
     // Set the desired number of threads based on the current HVX
     // mode.
-    int old_num_threads =
-        halide_set_num_threads(// (c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 
-                               4);
+    // For now, set it to 2, so that this works in both HVX64B and HVX128B
+    // modes.
+    int old_num_threads = halide_set_num_threads(2);
+
     // We're about to acquire the thread-pool lock, so we must drop
     // the hvx context lock, even though we'll likely reacquire it
     // immediately to do some work on this thread.
-    // Do this only if we locked in an HVX mode in the first place.
-    // if (c.hvx_mode != QURT_HVX_MODE_UNKNOWN) {
     qurt_hvx_unlock();
-    // }
-    int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)&closure);
 
-    // if (c.hvx_mode != -1) {
-    //     qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
-    // }
+    int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
 
     // Set the desired number of threads back to what it was, in case
     // we're a 128 job and we were sharing the machine with a 64 job.
@@ -159,19 +137,7 @@ WEAK int halide_do_par_for(void *user_context,
 
 WEAK int halide_do_task(void *user_context, halide_task_t f,
                         int idx, uint8_t *closure) {
-    // Dig the appropriate hvx mode out of the wrapped closure and lock it.
-    // wrapped_closure *c = (wrapped_closure *)closure;
-    // We don't own the thread-pool lock here, so we can safely
-    // acquire the hvx context lock (if needed) to run some code.
-
-    // if (c->hvx_mode != QURT_HVX_MODE_UNKNOWN) {
-    //     qurt_hvx_lock((qurt_hvx_mode_t)c->hvx_mode);
-    //     int ret = f(user_context, idx, c->closure);
-    //     qurt_hvx_unlock();
-    //     return ret;
-    // } else {
     return f(user_context, idx, closure);
-    // }
 }
 namespace {
 __attribute__((destructor))

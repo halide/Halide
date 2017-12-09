@@ -116,27 +116,7 @@ bool uses_hvx(Stmt s) {
     s.accept(&uses);
     return uses.uses_hvx;
 }
-// Check if the IR has a parallel for loop in it.
-class HasParFor : public IRVisitor {
-private:
-    using IRVisitor::visit;
-    void visit(const For *op) {
-        if (op->for_type == ForType::Parallel) {
-            has_par_for = true;
-            return;
-        }
-        IRVisitor::visit(op);
-    }
-public:
-    bool has_par_for = false;
-};
 
-// Return true if s has a parallel for loop in it.
-bool has_par_for(Stmt s) {
-    HasParFor h;
-    s.accept(&h);
-    return h.has_par_for;
-}
 Stmt call_halide_qurt_hvx_lock(const Target &target) {
     Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
@@ -170,20 +150,7 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     stmt = Block::make(check_hvx_lock, stmt);
     return stmt;
 }
-// Wrap the stmt with a call to set_par_hvx_mode, which is a way of telling the thread
-// pool code what HVX modes to set for the threads in the thread pool as they work
-// on the parallel workload.
-Stmt set_par_hvx_mode(Stmt stmt, const Target &target) {
-    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
-    Expr call_expr = Call::make(Int(32), "halide_set_par_hvx_mode", {hvx_mode}, Call::Extern);
-    string call_result_name = unique_name("set_par_hvx_mode_result");
-    Expr call_result_var = Variable::make(Int(32), call_result_name);
-    Stmt call_set_par_hvx_mode = LetStmt::make(call_result_name, call_expr,
-                                               AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
 
-    stmt = Block::make(call_set_par_hvx_mode, stmt);
-    return stmt;
-}
 bool is_dense_ramp(Expr x) {
     const Ramp *r = x.as<Ramp>();
     if (!r) return false;
@@ -302,14 +269,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     if (has_hvx_use) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
         body = acquire_hvx_context(body, target);
-        // We need to let the parallel runtime library that we use to implement
-        // thread pools on QuRT about the mode that the master thread is
-        // going to lock in.
+        debug(1) << "Adding calls to qurt_hvx_lock inside parallel loops, if any...\n";
         body = par_call_halide_lock_unlock(body, target);
-        // if (target.os == Target::QuRT && has_par_for(body)) {
-        //     debug (1) << "Adding a call to set_par_hvx mode...\n";
-        //     body = set_par_hvx_mode(body, target);
-        // }
     }
 
     debug(1) << "Hexagon function body:\n";

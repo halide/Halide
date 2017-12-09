@@ -226,7 +226,6 @@ extern void qurt_cond_broadcast(qurt_cond_t *cond);
 extern void qurt_cond_wait(qurt_cond_t *cond, qurt_mutex_t *mutex);
 
 typedef enum {
-    QURT_HVX_MODE_UNKNOWN = -1,
     QURT_HVX_MODE_64B = 0,      /**< HVX mode of 64 bytes */
     QURT_HVX_MODE_128B = 1      /**< HVX mode of 128 bytes */
 } qurt_hvx_mode_t;
