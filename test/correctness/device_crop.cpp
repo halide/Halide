@@ -111,6 +111,34 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test realizing to/from crop.\n");
+    // Test parent going out of scope before crop.
+    {
+        Halide::Buffer<int32_t> gpu_buf1 = make_gpu_buffer();
+        Halide::Buffer<int32_t> gpu_buf2 = make_gpu_buffer();
+
+        ImageParam in(Int(32), 2);
+        Var x, y;
+        Func f;
+        f(x, y) = in(x, y) + 42;
+
+        Var xi, yi;
+        f.gpu_tile(x, y, xi, yi, 8, 8);
+
+        gpu_buf2.get()->crop({ { 64, 64 }, { 64, 64 } });
+
+        in.set(gpu_buf1);
+
+        f.realize(gpu_buf2, target);
+        
+        gpu_buf2.copy_to_host();
+        for (int i = 0; i < 64; i++) {
+            for (int j = 0; j < 64; j++) {
+                assert(gpu_buf2(64 + i, 64 + j) == (i + 64) + 256 * (j + 64) + 42);
+            }
+        }
+    }
+
     printf("Success!\n");
 
     return 0;

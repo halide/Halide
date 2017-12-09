@@ -371,8 +371,11 @@ private:
 
     /** Crop a single dimension without handling device allocation. */
     void crop_host_side(int d, int min, int extent) {
-        // assert(dim(d).min() <= min);
-        // assert(dim(d).max() >= min + extent - 1);
+        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug 
+        // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
+        // Should either fix that or kill the asserts and document the routine accordingly.
+        //        assert(dim(d).min() <= min);
+        //        assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
         if (buf.host != nullptr) {
             buf.host += shift * dim(d).stride() * type().bytes();
