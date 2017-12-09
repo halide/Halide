@@ -35,7 +35,7 @@ PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/python/%.cpp=$(BIN)/py_%.o)
 NUMPY_SRCS=$(shell ls $(ROOT_DIR)/halide_numpy/*.cpp)
 NUMPY_OBJS=$(NUMPY_SRCS:$(ROOT_DIR)/halide_numpy/%.cpp=$(BIN)/numpy_%.o)
 
-$(BIN)/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)
+$(BIN)/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)  $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 	@mkdir -p $(@D)
 	$(CXX) $(PY_OBJS) $(NUMPY_OBJS) $(LDFLAGS) $(HALIDE_DISTRIB_PATH)/lib/libHalide.a -shared -o $@
 
