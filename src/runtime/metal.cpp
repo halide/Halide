@@ -903,7 +903,7 @@ WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_
     return (uintptr_t)(((device_handle *)buf->device)->buf);
 }
 
-WEAK uint64_t halide_metal_get_offset(void *user_context, struct halide_buffer_t *buf) {
+WEAK uint64_t halide_metal_get_crop_offset(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == NULL) {
         return 0;
     }
