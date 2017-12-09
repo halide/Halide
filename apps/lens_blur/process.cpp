@@ -2,6 +2,7 @@
 #include <chrono>
 
 #include "lens_blur.h"
+#include "lens_blur_auto_schedule_old.h"
 #include "lens_blur_auto_schedule.h"
 
 #include "halide_benchmark.h"
@@ -39,12 +40,19 @@ int main(int argc, char **argv) {
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
-    // Auto-scheduled version
+    // Old auto-scheduler version
+    double min_t_auto_old = benchmark(timing_iterations, 10, [&]() {
+        lens_blur_auto_schedule_old(left_im, right_im, slices, focus_depth,
+                                    blur_radius_scale, aperture_samples, output);
+    });
+    printf("Old auto-scheduler time: %gms\n", min_t_auto_old * 1e3);
+
+    // New auto-scheduler version
     double min_t_auto = benchmark(timing_iterations, 10, [&]() {
         lens_blur_auto_schedule(left_im, right_im, slices, focus_depth,
                                 blur_radius_scale, aperture_samples, output);
     });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    printf("New auto-scheduler time: %gms\n", min_t_auto * 1e3);
 
     convert_and_save_image(output, argv[7]);
 

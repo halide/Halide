@@ -2,6 +2,7 @@
 
 #include "camera_pipe.h"
 #ifndef NO_AUTO_SCHEDULE
+#include "camera_pipe_auto_schedule_old.h"
 #include "camera_pipe_auto_schedule.h"
 #endif
 
@@ -71,15 +72,21 @@ int main(int argc, char **argv) {
                     color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
                     output);
     });
-    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+    printf("Manually-tuned time: %gms\n", best * 1e3);
 
     #ifndef NO_AUTO_SCHEDULE
     best = benchmark(timing_iterations, 1, [&]() {
+        camera_pipe_auto_schedule_old(input, matrix_3200, matrix_7000,
+                                      color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
+                                      output);
+    });
+    printf("Old auto-scheduler time: %gms\n", best * 1e3);
+    best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
                                   color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-            output);
+                                  output);
     });
-    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
+    printf("New auto-scheduler time: %gms\n", best * 1e3);
     #endif
 
     fprintf(stderr, "output: %s\n", argv[7]);

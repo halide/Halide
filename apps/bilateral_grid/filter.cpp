@@ -4,6 +4,7 @@
 
 #include "bilateral_grid.h"
 #ifndef NO_AUTO_SCHEDULE
+#include "bilateral_grid_auto_schedule_old.h"
 #include "bilateral_grid_auto_schedule.h"
 #endif
 
@@ -39,11 +40,17 @@ int main(int argc, char **argv) {
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
     #ifndef NO_AUTO_SCHEDULE
-    // Auto-scheduled version
+    // Old auto-scheduler version
+    double min_t_auto_old = benchmark(timing_iterations, 10, [&]() {
+        bilateral_grid_auto_schedule_old(input, r_sigma, output);
+    });
+    printf("Old auto-scheduler time: %gms\n", min_t_auto_old * 1e3);
+
+    // New auto-scheduler version
     double min_t_auto = benchmark(timing_iterations, 10, [&]() {
         bilateral_grid_auto_schedule(input, r_sigma, output);
     });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    printf("New auto-scheduler time: %gms\n", min_t_auto * 1e3);
     #endif
 
     convert_and_save_image(output, argv[2]);

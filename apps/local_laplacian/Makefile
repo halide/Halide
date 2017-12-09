@@ -12,11 +12,15 @@ $(BIN)/local_laplacian.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -o $(BIN) -f local_laplacian target=$(HL_TARGET) auto_schedule=false
 
+$(BIN)/local_laplacian_auto_schedule_old.a: $(BIN)/local_laplacian.generator
+	@mkdir -p $(@D)
+	$^ -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule_old target=$(HL_TARGET)-no_runtime-auto_schedule_old auto_schedule=true
+
 $(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
 	$^ -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
-$(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_auto_schedule.a
+$(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_auto_schedule_old.a $(BIN)/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 

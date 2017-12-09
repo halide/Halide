@@ -283,6 +283,7 @@ SOURCE_FILES = \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AutoSchedule.cpp \
+  AutoScheduleOld.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -417,6 +418,7 @@ HEADER_FILES = \
   AssociativeOpsTable.h \
   Associativity.h \
   AutoSchedule.h \
+  AutoScheduleOld.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
   Bounds.h \
@@ -995,7 +997,7 @@ $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_in
 	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(ROOT_DIR)/src/runtime -o $@
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
-# this test should be usable without either. 
+# this test should be usable without either.
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -o $@
 
@@ -1363,8 +1365,8 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # The values in MachineParams are:
-# - the maximum level of parallelism available, 
-# - the size of the last-level cache (in KB), 
+# - the maximum level of parallelism available,
+# - the size of the last-level cache (in KB),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.

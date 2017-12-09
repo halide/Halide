@@ -150,11 +150,29 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params, bool run_old_auto_scheduler) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "Automatic scheduling is currently supported only on these architectures.";
+    if (run_old_auto_scheduler) {
+        return generate_schedules_old(contents->outputs, target, arch_params);
+    } else {
+        return generate_schedules(contents->outputs, target, arch_params);
+    }
+}
+
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules(contents->outputs, target, arch_params);
+
+    bool run_old_auto_scheduler = target.has_feature(Target::AutoScheduleOld);
+    string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (params.empty()) {
+        return auto_schedule(target, arch_params, run_old_auto_scheduler);
+    } else {
+        return auto_schedule(target, MachineParams(params), run_old_auto_scheduler);
+    }
 }
 
 Func Pipeline::get_func(size_t index) {

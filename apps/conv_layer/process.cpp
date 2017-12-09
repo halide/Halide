@@ -2,6 +2,7 @@
 #include <chrono>
 
 #include "conv_layer.h"
+#include "conv_layer_auto_schedule_new.h"
 #include "conv_layer_auto_schedule.h"
 
 #include "halide_benchmark.h"
@@ -51,11 +52,17 @@ int main(int argc, char **argv) {
     });
     printf("Manually-tuned time: %gms\n", min_t_manual * 1e3);
 
-    // Auto-scheduled version
+    // Old auto-scheduler version
+    double min_t_auto_old = benchmark(10, 10, [&]() {
+        conv_layer_auto_schedule_old(input, filter, bias, output);
+    });
+    printf("Old auto-scheduler time: %gms\n", min_t_auto_old * 1e3);
+
+    // New auto-scheduler version
     double min_t_auto = benchmark(10, 10, [&]() {
         conv_layer_auto_schedule(input, filter, bias, output);
     });
-    printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
+    printf("New auto-scheduler time: %gms\n", min_t_auto * 1e3);
 
     return 0;
 }

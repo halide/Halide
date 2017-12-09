@@ -3,6 +3,7 @@
 
 #include "local_laplacian.h"
 #ifndef NO_AUTO_SCHEDULE
+#include "local_laplacian_auto_schedule_old.h"
 #include "local_laplacian_auto_schedule.h"
 #endif
 
@@ -39,11 +40,17 @@ int main(int argc, char **argv) {
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
     #ifndef NO_AUTO_SCHEDULE
-    // Auto-scheduled version
+    // Old auto-scheduler version
+    double best_auto_old = benchmark(timing, 1, [&]() {
+        local_laplacian_auto_schedule_old(input, levels, alpha/(levels-1), beta, output);
+    });
+    printf("Old auto-scheduler time: %gms\n", best_auto_old * 1e3);
+
+    // New auto-scheduler version
     double best_auto = benchmark(timing, 1, [&]() {
         local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output);
     });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    printf("New auto-scheduler time: %gms\n", best_auto * 1e3);
     #endif
 
     convert_and_save_image(output, argv[6]);

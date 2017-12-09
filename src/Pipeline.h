@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "AutoSchedule.h"
+#include "AutoScheduleOld.h"
 #include "ExternalCode.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
@@ -81,6 +82,9 @@ public:
 
     /** Generate a schedule for the pipeline. */
     //@{
+    EXPORT std::string auto_schedule(const Target &target,
+                                     const MachineParams &arch_params,
+                                     bool run_old_auto_scheduler);
     EXPORT std::string auto_schedule(const Target &target,
                                      const MachineParams &arch_params = MachineParams::generic());
     //@}

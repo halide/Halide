@@ -239,7 +239,7 @@ foreach (i ${RUNTIME_HEADER_FILES})
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
 
-# The externally-visible header files that go into making Halide.h. 
+# The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 set(HEADER_FILES
   AddImageChecks.h
@@ -251,6 +251,7 @@ set(HEADER_FILES
   AssociativeOpsTable.h
   Associativity.h
   AutoSchedule.h
+  AutoScheduleOld.h
   AutoScheduleUtils.h
   BoundaryConditions.h
   Bounds.h
@@ -409,6 +410,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AssociativeOpsTable.cpp
   Associativity.cpp
   AutoSchedule.cpp
+  AutoScheduleOld.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
   Bounds.cpp

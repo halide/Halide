@@ -21,6 +21,7 @@ std::map<std::string, BlurGPUSchedule> blurGPUScheduleEnumMap() {
 
 class HalideBlur : public Halide::Generator<HalideBlur> {
 public:
+    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
     GeneratorParam<BlurGPUSchedule> schedule{
         "schedule",
         BlurGPUSchedule::SlideVectorize,
@@ -41,7 +42,17 @@ public:
         blur_y(x, y) = (blur_x(x, y) + blur_x(x, y+1) + blur_x(x, y+2))/3;
 
         // How to schedule it
-        if (get_target().has_gpu_feature()) {
+        if (auto_schedule) {
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 6408);
+            input.dim(1).set_bounds_estimate(0, 4802);
+            // Provide estimates on the pipeline output
+            blur_y.estimate(x, 0, 6408)
+                  .estimate(y, 0, 4802);
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
+        } else if (get_target().has_gpu_feature()) {
             // GPU schedule.
             switch (schedule) {
             case BlurGPUSchedule::Inline:
