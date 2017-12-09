@@ -114,6 +114,7 @@ int main(int argc, char **argv) {
         Var xi, yi;
         f.gpu_tile(x, y, xi, yi, 8, 8);
 
+        // TODO(steven-johnson|abadams): Why doesn't the forward forward?
         gpu_buf2.get()->crop({ { 64, 64 }, { 64, 64 } });
 
         in.set(gpu_buf1);
