@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <regex>
+#include <fstream>
 
 #include "AutoSchedule.h"
 #include "AutoScheduleUtils.h"
@@ -1072,7 +1073,7 @@ struct Partitioner {
     map<FStage, Group> groups;
     // The child stages of each stage (i.e. stages that depend on or use the values
     // computed by a particular stage) in the pipeline.
-    map<FStage, set<FStage>> children;
+    map<FStage, set<FStage>> children, initial_children;
     // Map from the output stage of the group to the analysis of the group. The mapping
     // needs to be updated whenever the grouping changes.
     map<FStage, GroupAnalysis> group_costs;
@@ -1264,12 +1265,123 @@ struct Partitioner {
     void disp_pipeline_bounds();
     void disp_pipeline_graph();
     void disp_grouping();
+    void disp_graphviz();
 
     vector<pair<string, string>> get_grouping_candidate(
         const map<FStage, Group> &groups,
         const vector<Function> &outputs,
         Partitioner::Level level);
 };
+
+namespace {
+void print_cost_expr_for_graphviz(std::ostream &s, Expr c) {
+    if (const int64_t *ptr = as_const_int(c)) {
+        int64_t i = *ptr;
+        string si = std::to_string(i);
+        int n = si.size();
+        for (size_t j = 0; j < si.size(); j++) {
+            s << si[j];
+            n--;
+            if (n % 3 == 0 && n != 0) s << ',';
+        }
+    } else {
+        std::ostringstream ss;
+        ss << c;
+        string cost_str = ss.str();
+        if (cost_str.size() < 16) {
+            s << cost_str;
+        } else {
+            s << cost_str.substr(0, 13) << "...";
+        }
+
+    }
+}
+
+void print_fstage_for_graphviz(std::ostream &s, const FStage &f) {
+    s << get_sanitized_name(f.func.name());
+    if (f.stage_num) {
+        s << "." << f.stage_num;
+    }
+}
+}
+
+void Partitioner::disp_graphviz() {
+    string filename = get_env_variable("HL_AUTOSCHEDULE_GRAPHVIZ");
+    std::ofstream of;
+    of.open(filename);
+    of << "digraph G {\n"
+       << " node [style=filled,color=oldlace,shape=box]\n";
+    int i = 0;
+    int group_index = 0;
+    // The groups and subgroups
+    for (const auto &p : groups) {
+        group_index++;
+        const Group &g = p.second;
+        of << " subgraph cluster_" << std::to_string(i++) << " {\n"
+           << "  style=filled\n"
+           << "  color=lightskyblue\n"
+           << "  labeljust=l\n";
+        std::ostringstream label;
+        label << "Group " << group_index << "\\l";
+        for (const string &a : g.output.func.args()) {
+            const auto &it = g.tile_sizes.find(a);
+            if (it == g.tile_sizes.end()) {
+                label << "* ";
+            } else {
+                label << it->second << " ";
+            }
+        }
+        {
+            GroupAnalysis a = analyze_group(g, false);
+            label << "\\lA: ";
+            print_cost_expr_for_graphviz(label, a.cost.arith);
+            label << "\\lM: ";
+            print_cost_expr_for_graphviz(label, a.cost.memory);
+            label << "\\lP: ";
+            print_cost_expr_for_graphviz(label, a.parallelism);
+            label << "\\l";
+        }
+        of << "  \"" << label.str() << "\"\n";
+        of << "  ";
+        print_fstage_for_graphviz(of, g.output);
+        for (const Group &sg : g.subgroups) {
+            of << "  subgraph cluster_" << std::to_string(i++) << " {\n"
+               << "   style=filled\n"
+               << "   color=peachpuff\n"
+               << "   labeljust=l\n";
+            std::ostringstream label;
+            for (const string &a : sg.output.func.args()) {
+                const auto &it = sg.tile_sizes.find(a);
+                if (it == sg.tile_sizes.end()) {
+                    label << "* ";
+                } else {
+                    label << it->second << " ";
+                }
+            }
+            of << "   label=\"" << label.str() << "\"\n";
+            of << "   ";
+            print_fstage_for_graphviz(of, sg.output);
+            for (const FStage &f : sg.members) {
+                of << "   ";
+                print_fstage_for_graphviz(of, f);
+            }
+            of << "  }\n";
+        }
+        of << " }\n";
+    }
+    // The edges
+    for (const auto &f1 : initial_children) {
+        for (const auto &f2 : f1.second) {
+            of << " ";
+            print_fstage_for_graphviz(of, f1.first);
+            of << " -> ";
+            print_fstage_for_graphviz(of, f2);
+            of << "\n";
+        }
+    }
+    of << "}\n";
+    of.close();
+}
 
 void Partitioner::disp_grouping() {
     debug(0) << "\n=========" << '\n';
@@ -1421,6 +1533,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
             }
         }
     }
+    initial_children = children;
 
     // Add the inlined unbounded functions into the consumer groups.
     for (const auto &f : unbounded) {
@@ -4646,6 +4759,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     part.grouping_cache.clear();
     //part.group(Partitioner::Level::FastMem, {});
     part.group_recurse();
+
+    if (!get_env_variable("HL_AUTOSCHEDULE_GRAPHVIZ").empty()) {
+        part.disp_graphviz();
+    }
 
     if (debug::debug_level() >= 3) {
         debug(0) << "\n\n*************************************************\n";
