@@ -396,11 +396,6 @@ private:
 
     void complete_device_crop(Buffer<T, D> &result_host_cropped) const {
         if (buf.device_interface != nullptr) {
-            // TODO: If we get it so this can be an assert that there is no device,
-            // then the code will do fewer ref count operations, but will need an
-            // else clause to copy the device allocation back in if no actual crop.
-            result_host_cropped.device_deallocate();
-            // TODO: plumb through user context
             if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
                 const Buffer<T, D> *cropped_from = this;
                 // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
@@ -1116,6 +1111,12 @@ public:
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
+
+        // This guarantees the prexisting device ref is dropped if the
+        // device_crop call fails and maintains the buffer in a consistent
+        // state.
+        im.device_deallocate();
+
         im.crop_host_side(d, min, extent);
         if (buf.device_interface != nullptr) {
             complete_device_crop(im);
@@ -1143,6 +1144,12 @@ public:
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
+
+        // This guarantees the prexisting device ref is dropped if the
+        // device_crop call fails and maintains the buffer in a consistent
+        // state.
+        im.device_deallocate();
+
         im.crop_host_side(rect);
         if (buf.device_interface != nullptr) {
             complete_device_crop(im);
