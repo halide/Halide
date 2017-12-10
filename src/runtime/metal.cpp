@@ -791,7 +791,7 @@ WEAK int halide_metal_device_and_host_malloc(void *user_context, struct halide_b
     debug(user_context) << "halide_metal_device_and_host_malloc called.\n";
     int result = halide_metal_device_malloc(user_context, buffer);
     if (result == 0) {
-      mtl_buffer *metal_buffer = ((device_handle *)(buffer->device))->buf;
+        mtl_buffer *metal_buffer = ((device_handle *)(buffer->device))->buf;
         buffer->host = (uint8_t *)buffer_contents(metal_buffer);
         debug(user_context) << "halide_metal_device_and_host_malloc"
                             << " device = " << (void*)buffer->device
@@ -825,7 +825,7 @@ WEAK int halide_metal_device_crop(void *user_context,
 
     device_handle *new_handle = (device_handle *)malloc(sizeof(device_handle));
     if (new_handle == NULL) {
-        error(user_context) << "halide_metal_device_crop: malloc failed making device handle for crop.\n";
+        error(user_context) << "halide_metal_device_crop: malloc failed making device handle.\n";
         return halide_error_code_out_of_memory;
     }
 
@@ -872,6 +872,7 @@ WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *bu
     }
     device_handle *handle = (device_handle *)malloc(sizeof(device_handle));
     if (handle == NULL) {
+        error(user_context) << "halide_metal_wrap_buffer: malloc failed making device handle.\n";
         return halide_error_code_out_of_memory;
     }
     handle->buf = (mtl_buffer *)buffer;
