@@ -17,8 +17,7 @@ def test_rdom():
 
     diagonal[r.x, r.y] = 2
     output = diagonal.realize(domain_width, domain_height)
-    output = h.Image(h.Int(32), output)
-
+    
     for iy in range(domain_height):
         for ix in range(domain_width):
             if ix <= iy:

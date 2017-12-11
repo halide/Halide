@@ -5,6 +5,8 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 # These are set by Halide's Makefile when built via that path.
 HALIDE_DISTRIB_PATH ?= $(ROOT_DIR)/../distrib
 BIN ?= $(ROOT_DIR)/bin
+PYTHON ?= python3
+TEST_TMP ?= $(BIN)/tmp
 
 ifeq ($(UNAME), Linux)
 	# Disable some warnings that are pervasive in Boost
@@ -33,7 +35,7 @@ PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/python/%.cpp=$(BIN)/py_%.o)
 NUMPY_SRCS=$(shell ls $(ROOT_DIR)/halide_numpy/*.cpp)
 NUMPY_OBJS=$(NUMPY_SRCS:$(ROOT_DIR)/halide_numpy/%.cpp=$(BIN)/numpy_%.o)
 
-$(BIN)/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)
+$(BIN)/halide.so: $(PY_SRCS) $(PY_OBJS) $(NUMPY_SRCS) $(NUMPY_OBJS)  $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 	@mkdir -p $(@D)
 	$(CXX) $(PY_OBJS) $(NUMPY_OBJS) $(LDFLAGS) $(HALIDE_DISTRIB_PATH)/lib/libHalide.a -shared -o $@
 
@@ -45,9 +47,35 @@ $(BIN)/numpy_%.o: $(ROOT_DIR)/halide_numpy/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) -I $(NUMPY_PATH) -c $< -o $@
 
+APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
+CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)
+TUTORIAL = $(shell ls $(ROOT_DIR)/tutorial/*.py)
+
+.PHONY: test_apps
+test_apps: $(APPS:$(ROOT_DIR)/apps/%.py=test_apps_%)
+
+test_apps_%: $(ROOT_DIR)/apps/%.py $(BIN)/halide.so
+	@echo Testing $* $<...
+	@mkdir -p $(TEST_TMP)
+	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
+
+.PHONY: test_correctness
+test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
+
+test_correctness_%: $(ROOT_DIR)/correctness/%.py $(BIN)/halide.so
+	@echo Testing $* $<...
+	@mkdir -p $(TEST_TMP)
+	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
+
+.PHONY: test_tutorial
+test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)
+
+test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(BIN)/halide.so
+	@echo Testing $*...
+	@mkdir -p $(TEST_TMP)
+	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
+
 clean:
 	rm -rf $(BIN)
 
-test: $(BIN)/halide.so
-	$(ROOT_DIR)/run_apps.sh $(BIN)
-	$(ROOT_DIR)/run_tutorial.sh $(BIN)
+test: test_correctness test_apps test_tutorial

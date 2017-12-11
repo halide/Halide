@@ -16,6 +16,9 @@ import ctypes
 import platform
 
 def main():
+    print("TODO: lesson_10_aot_compilation_run not yet implemented in Python; skipping...")
+    return 0
+
     # Have a look in the header file above (it won't exist until you've run
     # lesson_10_generate).
 
