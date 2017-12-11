@@ -269,7 +269,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             // The element type
             6, 8, pixel_type_to_matlab_class_code[type_code], 1,
             // The shape
-            5, dims * 4};
+            5, (uint32_t)(dims * 4)};
 
         if (!f.write(&tags, sizeof(tags))) {
             return -7;
