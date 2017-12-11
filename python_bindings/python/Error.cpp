@@ -8,34 +8,43 @@
 namespace h = Halide;
 namespace p = boost::python;
 
+namespace {
+
+void halide_python_error(void *, const char *msg) {
+    throw h::Error(msg);
+}
+
+void halide_python_print(void *, const char *msg) {
+    PySys_WriteStdout("%s", msg);
+}
+
+class HalidePythonCompileTimeErrorReporter : public h::CompileTimeErrorReporter {
+public:
+    void warning(const char* msg) {
+        PySys_WriteStdout("%s", msg);
+    }
+
+    void error(const char* msg) {
+        throw h::Error(msg);
+        // This method must not return!
+    }
+};
+
 void translate_error(h::Error const &e) {
-    // Use the Python 'C' API to set up an exception object
-    PyErr_SetString(PyExc_RuntimeError,
-                    (std::string("Halide Error: ") + e.what()).c_str());
+    PyErr_SetString(PyExc_RuntimeError, e.what());
 }
 
-void translate_runtime_error(h::RuntimeError const &e) {
-    // Use the Python 'C' API to set up an exception object
-    PyErr_SetString(PyExc_RuntimeError,
-                    (std::string("Halide RuntimeError: ") + e.what()).c_str());
-}
-
-void translate_compile_error(h::CompileError const &e) {
-    // Use the Python 'C' API to set up an exception object
-    PyErr_SetString(PyExc_RuntimeError,
-                    (std::string("Halide CompileError: ") + e.what()).c_str());
-}
-
-void translate_internal_error(h::InternalError const &e) {
-    // Use the Python 'C' API to set up an exception object
-    PyErr_SetString(PyExc_RuntimeError,
-                    (std::string("Halide InternalError: ") + e.what()).c_str());
-}
+}  // namespace
 
 void define_error() {
-    // Might create linking problems, if Param.cpp is not included in the python library
     p::register_exception_translator<h::Error>(&translate_error);
-    p::register_exception_translator<h::RuntimeError>(&translate_runtime_error);
-    p::register_exception_translator<h::CompileError>(&translate_compile_error);
-    p::register_exception_translator<h::InternalError>(&translate_internal_error);
+
+    static HalidePythonCompileTimeErrorReporter reporter;
+    set_custom_compile_time_error_reporter(&reporter);
+
+    Halide::Internal::JITHandlers handlers;
+    handlers.custom_error = halide_python_error;
+    handlers.custom_print = halide_python_print;
+    Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 }
+
