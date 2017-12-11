@@ -963,6 +963,8 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     }
 
     // Write intermediate bitcode to disk if requested.
+    // TODO: We really need something better than this. This won't
+    // work in non-trivial JIT or AOT programs.
     std::string bitcode_dump_path = get_env_variable("HL_HEXAGON_DUMP_BITCODE");
     if (!bitcode_dump_path.empty()) {
         auto fd_ostream = make_raw_fd_ostream(bitcode_dump_path);
