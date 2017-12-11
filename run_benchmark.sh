@@ -16,7 +16,7 @@ mkdir -p ./apps/benchmark_plot
 echo "Run bilateral grid"
 cd ./apps/bilateral_grid
 make clean
-HL_TARGET=host-profile make -j4 all
+HL_AUTOSCHEDULE_GRAPHVIZ=$BENCHMARK_PLOT/bilateral_grid.dot HL_TARGET=host-profile make -j4 all
 $BIN/filter $IMAGES/gray.png $BIN/out.png 0.1 10 &> $BENCHMARK_DATA/bilateral_grid.txt
 cd ../..
 
@@ -24,7 +24,7 @@ cd ../..
 echo "Run blur"
 cd ./apps/blur
 make clean
-HL_TARGET=host-profile make -j4 all
+HL_AUTOSCHEDULE_GRAPHVIZ=$BENCHMARK_PLOT/blur.dot HL_TARGET=host-profile make -j4 all
 $BIN/test &> $BENCHMARK_DATA/blur.txt
 cd ../..
 
