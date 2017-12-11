@@ -11,7 +11,7 @@ def main():
 
     f[x] = 100 * x
 
-    args = h.ArgumentsVector()
+    args = []
 
     f.compile_to_bitcode("f.bc", args, "f")
     assert os.path.isfile("f.bc")
@@ -25,8 +25,8 @@ def main():
     f.compile_to_header("f.h", args, "f")
     assert os.path.isfile("f.h")
 
-    f.compile_to_assembly("f.S", args, "f")
-    assert os.path.isfile("f.S")
+    f.compile_to_assembly("f.s", args, "f")
+    assert os.path.isfile("f.s")
 
     f.compile_to_lowered_stmt("f.txt", args)
     assert os.path.isfile("f.txt")
