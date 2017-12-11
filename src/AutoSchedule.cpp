@@ -1300,7 +1300,7 @@ void print_cost_expr_for_graphviz(std::ostream &s, Expr c) {
 void print_fstage_for_graphviz(std::ostream &s, const FStage &f) {
     s << get_sanitized_name(f.func.name());
     if (f.stage_num) {
-        s << "." << f.stage_num;
+        s << "_" << f.stage_num;
     }
 }
 }
