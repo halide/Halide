@@ -838,7 +838,7 @@ WEAK int halide_metal_device_crop(void *user_context,
 }
 
 WEAK int halide_metal_device_release_crop(void *user_context,
-                                            struct halide_buffer_t *buf) {
+                                          struct halide_buffer_t *buf) {
     // Basically the same code as in halide_metal_device_free, but with
     // enough differences to require separate code.
 

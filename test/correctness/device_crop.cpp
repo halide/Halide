@@ -103,9 +103,6 @@ int main(int argc, char **argv) {
 
     printf("Test realizing to/from crop.\n");
     {
-        Halide::Buffer<int32_t> gpu_buf1 = make_gpu_buffer();
-        Halide::Buffer<int32_t> gpu_buf2 = make_gpu_buffer();
-
         ImageParam in(Int(32), 2);
         Var x, y;
         Func f;
@@ -114,17 +111,21 @@ int main(int argc, char **argv) {
         Var xi, yi;
         f.gpu_tile(x, y, xi, yi, 8, 8);
 
+        Halide::Buffer<int32_t> gpu_input = make_gpu_buffer();
+        Halide::Buffer<int32_t> gpu_output = make_gpu_buffer();
+
         // TODO(steven-johnson|abadams): Why doesn't the forward forward?
-        gpu_buf2.get()->crop({ { 64, 64 }, { 64, 64 } });
+        gpu_input.get()->crop({ { 64, 64 }, { 64, 64 } });
+        gpu_output.get()->crop({ { 64, 64 }, { 64, 64 } });
 
-        in.set(gpu_buf1);
+        in.set(gpu_input);
 
-        f.realize(gpu_buf2, target);
+        f.realize(gpu_output, target);
         
-        gpu_buf2.copy_to_host();
+        gpu_output.copy_to_host();
         for (int i = 0; i < 64; i++) {
             for (int j = 0; j < 64; j++) {
-                assert(gpu_buf2(64 + i, 64 + j) == (i + 64) + 256 * (j + 64) + 42);
+                assert(gpu_output(64 + i, 64 + j) == (i + 64) + 256 * (j + 64) + 42);
             }
         }
     }

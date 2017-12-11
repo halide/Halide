@@ -245,7 +245,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
                         << ", actual allocated " << (uint64_t)real_size << "\n";
 
     if (size) {
-      halide_assert(user_context, real_size >= (size + offset) && "Validating pointer with insufficient size");
+        halide_assert(user_context, real_size >= (size + offset) && "Validating pointer with insufficient size");
     }
     return true;
 }
@@ -990,23 +990,16 @@ WEAK int halide_opencl_run(void *user_context,
             cl_mem mem = ((device_handle *)((halide_buffer_t *)this_arg)->device)->mem;
             uint64_t offset = ((device_handle *)((halide_buffer_t *)this_arg)->device)->offset;
 
-            uint64_t opencl_handle;
-            if (offset == 0) {
-                opencl_handle = (uint64_t)mem;
-            } else {
+            if (offset != 0) {
                 cl_buffer_region region = {offset, ((halide_buffer_t *)this_arg)->size_in_bytes()};
                 // The sub-buffer encompasses the linear range of addresses that
                 // span the crop.
                 mem = clCreateSubBuffer(mem, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
                 sub_buffers[sub_buffers_saved++] = mem;
-                opencl_handle = (uint64_t)mem;
             }
             if (err == CL_SUCCESS) {
-                debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
-                // In 32-bit mode, opencl only wants the bottom 32 bits of
-                // the handle, so use sizeof(void *) instead of
-                // arg_sizes[i] below.
-                err = clSetKernelArg(f, i, sizeof(void *), &opencl_handle);
+                debug(user_context) << "Mapped dev handle is: " << (void *)mem << "\n";
+                err = clSetKernelArg(f, i, sizeof(mem), &mem);
             }
         } else {
             err = clSetKernelArg(f, i, arg_sizes[i], this_arg);

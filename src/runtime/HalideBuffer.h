@@ -370,7 +370,7 @@ private:
     }
 
     /** Crop a single dimension without handling device allocation. */
-    void crop_host_side(int d, int min, int extent) {
+    void crop_host(int d, int min, int extent) {
         // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug 
         // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
         // Should either fix that or kill the asserts and document the routine accordingly.
@@ -385,28 +385,27 @@ private:
     }
 
     /** Crop as many dimensions as are in rect, without handling device allocation. */
-    void crop_host_side(const std::vector<std::pair<int, int>> &rect) {
+    void crop_host(const std::vector<std::pair<int, int>> &rect) {
         assert(rect.size() <= std::numeric_limits<int>::max());
         int limit = (int)rect.size();
         assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
-            crop_host_side(i, rect[i].first, rect[i].second);
+            crop_host(i, rect[i].first, rect[i].second);
         }
     }
 
     void complete_device_crop(Buffer<T, D> &result_host_cropped) const {
-        if (buf.device_interface != nullptr) {
-            if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
-                const Buffer<T, D> *cropped_from = this;
-                // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
-                // is it possible to get to this point without incref having run at least once since
-                // the device field was set? (I.e. in the internal logic of crop. incref might have been
-                // called.)
-                if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                    cropped_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
-                }
-                result_host_cropped.crop_from(*cropped_from);
+        assert(buf.device_interface != nullptr);
+        if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
+            const Buffer<T, D> *cropped_from = this;
+            // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
+            // is it possible to get to this point without incref having run at least once since
+            // the device field was set? (I.e. in the internal logic of crop. incref might have been
+            // called.)
+            if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                cropped_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
             }
+            result_host_cropped.crop_from(*cropped_from);
         }
     }
 
@@ -1117,7 +1116,7 @@ public:
         // state.
         im.device_deallocate();
 
-        im.crop_host_side(d, min, extent);
+        im.crop_host(d, min, extent);
         if (buf.device_interface != nullptr) {
             complete_device_crop(im);
         }
@@ -1133,7 +1132,7 @@ public:
         if (buf.device_interface != nullptr) {
             *this = cropped(d, min, extent);
         } else {
-            crop_host_side(d, min, extent);
+            crop_host(d, min, extent);
         }
     }
 
@@ -1150,7 +1149,7 @@ public:
         // state.
         im.device_deallocate();
 
-        im.crop_host_side(rect);
+        im.crop_host(rect);
         if (buf.device_interface != nullptr) {
             complete_device_crop(im);
         }
@@ -1166,7 +1165,7 @@ public:
         if (buf.device_interface != nullptr) {
             *this = cropped(rect);
         } else {
-            crop_host_side(rect);
+            crop_host(rect);
         }
     }
 
