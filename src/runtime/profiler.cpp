@@ -299,16 +299,16 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         bool serial = p->active_threads_numerator == p->active_threads_denominator;
         float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
-        sstr << p->name << "\n"
-             << " total time: " << t << " ms"
-             << "  samples: " << p->samples
-             << "  runs: " << p->runs
-             << "  time/run: " << t / p->runs << " ms\n";
+        sstr << "pipeline: " << p->name
+             << "; total time: " << t //ms
+             << "; samples: " << p->samples
+             << "; runs: " << p->runs
+             << "; time/run: " << t / p->runs; //ms
         if (!serial) {
-            sstr << " average threads used: " << threads << "\n";
+            sstr << "; average threads used: " << threads;
         }
-        sstr << " heap allocations: " << p->num_allocs
-             << "  peak heap usage: " << p->memory_peak << " bytes\n";
+        sstr << "; heap allocations: " << p->num_allocs
+             << "; peak heap usage: " << p->memory_peak; //bytes
         halide_print(user_context, sstr.str());
 
         bool print_f_states = p->time || p->memory_total;
@@ -324,7 +324,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
         if (print_f_states) {
             for (int i = 0; i < p->num_funcs; i++) {
-                size_t cursor = 0;
                 sstr.clear();
                 halide_profiler_func_stats *fs = p->funcs + i;
 
@@ -332,32 +331,23 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 // slot. Only report overhead time if it's non-zero
                 if (i == 0 && fs->time == 0) continue;
 
-                sstr << "  " << fs->name << ": ";
-                cursor += 25;
-                while (sstr.size() < cursor) sstr << " ";
-
+                sstr << "; {func: " << fs->name << ", time: ";
                 float ft = fs->time / (p->runs * 1000000.0f);
                 sstr << ft;
                 // We don't need 6 sig. figs.
                 sstr.erase(3);
-                sstr << "ms";
-                cursor += 10;
-                while (sstr.size() < cursor) sstr << " ";
+                //sstr << "ms";
 
                 int percent = 0;
                 if (p->time != 0) {
                     percent = (100*fs->time) / p->time;
                 }
-                sstr << "(" << percent << "%)";
-                cursor += 8;
-                while (sstr.size() < cursor) sstr << " ";
+                sstr << ", percent: " << percent;
 
                 if (!serial) {
                     float threads = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10);
-                    sstr << "threads: " << threads;
+                    sstr << ", threads: " << threads;
                     sstr.erase(3);
-                    cursor += 15;
-                    while (sstr.size() < cursor) sstr << " ";
                 }
 
                 int alloc_avg = 0;
@@ -366,22 +356,19 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
 
                 if (fs->memory_peak) {
-                    cursor += 15;
-                    sstr << " peak: " << fs->memory_peak;
-                    while (sstr.size() < cursor) sstr << " ";
-                    sstr << " num: " << fs->num_allocs;
-                    cursor += 15;
-                    while (sstr.size() < cursor) sstr << " ";
-                    sstr << " avg: " << alloc_avg;
+                    sstr << ", peak: " << fs->memory_peak;
+                    sstr << ", num: " << fs->num_allocs;
+                    sstr << ", avg: " << alloc_avg;
                 }
                 if (fs->stack_peak > 0) {
-                    sstr << " stack: " << fs->stack_peak;
+                    sstr << ", stack: " << fs->stack_peak;
                 }
-                sstr << "\n";
+                sstr << "}";
 
                 halide_print(user_context, sstr.str());
             }
         }
+        halide_print(user_context, "\n");
     }
 }
 
