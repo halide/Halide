@@ -1,6 +1,6 @@
-#ifndef FUNC_VARORRVAR_H
-#define FUNC_VARORRVAR_H
+#ifndef HALIDE_PYTHON_BINDINGS_FUNC_VARORRVAR_H
+#define HALIDE_PYTHON_BINDINGS_FUNC_VARORRVAR_H
 
-void defineVarOrRVar();
+void define_var_or_rvar();
 
-#endif  // FUNC_VARORRVAR_H
+#endif  // HALIDE_PYTHON_BINDINGS_FUNC_VARORRVAR_H

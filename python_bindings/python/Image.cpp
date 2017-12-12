@@ -1,11 +1,21 @@
-// to avoid compiler confusion, python.hpp must be include before Halide headers
-#include <boost/format.hpp>
-#include <boost/python.hpp>
-
 #include "Image.h"
 
-#define USE_NUMPY
+#include <boost/cstdint.hpp>
+#include <boost/format.hpp>
+#include <boost/functional/hash/hash.hpp>
+#include <boost/mpl/list.hpp>
+#include <boost/python.hpp>
+#include <functional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
+#include "Halide.h"
+
+#include "Func.h"
+#include "Type.h"
+
+#define USE_NUMPY
 #ifdef USE_NUMPY
 #ifdef USE_BOOST_NUMPY
 #include <boost/numpy.hpp>
@@ -13,18 +23,6 @@
 #include "halide_numpy/numpy.hpp"
 #endif
 #endif  // USE_NUMPY
-
-#include <boost/cstdint.hpp>
-#include <boost/functional/hash/hash.hpp>
-#include <boost/mpl/list.hpp>
-
-#include "Func.h"
-#include "Type.h"
-
-#include <functional>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -239,7 +237,7 @@ int buffer_extent(h::Buffer<T> &im, int d) {
 
 
 template <typename T>
-void defineBuffer_impl(const std::string suffix, const h::Type type) {
+void define_buffer_impl(const std::string suffix, const h::Type type) {
     using h::Buffer;
     using h::Expr;
 
@@ -406,8 +404,6 @@ void defineBuffer_impl(const std::string suffix, const h::Type type) {
              "set the value of the element at position indicated by tuple (x, y, z, w)");
 
     p::implicitly_convertible<Buffer<T>, h::Argument>();
-
-    return;
 }
 
 p::object buffer_to_python_object(const h::Buffer<> &im) {
@@ -550,10 +546,9 @@ bn::ndarray buffer_to_ndarray(p::object buffer_object) {
         buffer_object);
 }
 
-#endif
+#endif  // USE_NUMPY
 
 struct BufferFactory {
-
     template <typename T, typename... Args>
     static p::object create_buffer_object(Args... args) {
         typedef h::Buffer<T> BufferType;
@@ -608,21 +603,21 @@ struct BufferFactory {
     }
 };
 
-void defineBuffer() {
-    defineBuffer_impl<uint8_t>("_uint8", h::UInt(8));
-    defineBuffer_impl<uint16_t>("_uint16", h::UInt(16));
-    defineBuffer_impl<uint32_t>("_uint32", h::UInt(32));
-    defineBuffer_impl<uint64_t>("_uint64", h::UInt(64));
+void define_buffer() {
+    define_buffer_impl<uint8_t>("_uint8", h::UInt(8));
+    define_buffer_impl<uint16_t>("_uint16", h::UInt(16));
+    define_buffer_impl<uint32_t>("_uint32", h::UInt(32));
+    define_buffer_impl<uint64_t>("_uint64", h::UInt(64));
 
-    defineBuffer_impl<int8_t>("_int8", h::Int(8));
-    defineBuffer_impl<int16_t>("_int16", h::Int(16));
-    defineBuffer_impl<int32_t>("_int32", h::Int(32));
-    defineBuffer_impl<int64_t>("_int64", h::Int(64));
+    define_buffer_impl<int8_t>("_int8", h::Int(8));
+    define_buffer_impl<int16_t>("_int16", h::Int(16));
+    define_buffer_impl<int32_t>("_int32", h::Int(32));
+    define_buffer_impl<int64_t>("_int64", h::Int(64));
 
-    defineBuffer_impl<float>("_float32", h::Float(32));
-    defineBuffer_impl<double>("_float64", h::Float(64));
+    define_buffer_impl<float>("_float32", h::Float(32));
+    define_buffer_impl<double>("_float64", h::Float(64));
 
-    // "Buffer" will look as a class, but instead it will be simply a factory method
+    // "Buffer" will look like a class, but instead it will be simply a factory method
     p::def("Buffer", &BufferFactory::create_buffer0,
            p::args("type"),
            "Construct a zero-dimensional buffer of type T");
@@ -672,7 +667,5 @@ void defineBuffer() {
            "Creates a numpy array from a Halide::Buffer."
            "Will take into account the Buffer size, dimensions, and type."
            "Created ndarray refers to the Buffer data (no copy).");
-#endif
-
-    return;
+#endif  // USE_NUMPY
 }

@@ -1,13 +1,11 @@
 #include "Type.h"
 
-// to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/format.hpp>
 #include <boost/python.hpp>
-
-#include "Halide.h"
-
 #include <string>
 #include <vector>
+
+#include "Halide.h"
 
 namespace h = Halide;
 
@@ -47,7 +45,7 @@ std::string type_repr(const h::Type &t) {
     return boost::str(message_format % type_code_to_string(t) % t.bits() % t.lanes());
 }
 
-void defineType() {
+void define_type() {
 
     using Halide::Type;
     namespace p = boost::python;
@@ -116,6 +114,4 @@ void defineType() {
     p::def("Handle", make_handle,
            (p::arg("lanes") = 1),
            "Construct a handle type");
-
-    return;
 }
