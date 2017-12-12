@@ -58,10 +58,18 @@ public:
         // Hexagon.
         RDom rk(0, k_extent / kDotProductUnrollFactor, "k");
 
-        int vector_size_u8 = NaturalVectorSize<uint8_t>(get_target());
-        bool use_hexagon =
-            get_target().features_any_of({Target::HVX_64, Target::HVX_128});
-        int vector_size_u32 = vector_size_u8 / 4;
+        int vector_size_u8 = natural_vector_size<uint8_t>();
+        int vector_size_u32 = natural_vector_size<uint32_t>();
+        bool use_hexagon = false;
+        if (get_target().has_feature(Halide::Target::HVX_64)) {
+            vector_size_u8 = 64;
+            vector_size_u32 = 16;
+            use_hexagon = true;
+        } else if (get_target().has_feature(Halide::Target::HVX_128)) {
+            vector_size_u8 = 128;
+            vector_size_u32 = 32;
+            use_hexagon = true;
+        }
 
         // Define the reordering of mat_b_ as a separate stage so we can lift
         // the interleaving required by vrmpy out of the inner loop.

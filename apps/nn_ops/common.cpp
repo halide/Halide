@@ -21,8 +21,6 @@ Expr SaturatingRoundingDoublingHighMultiply(Expr a, Expr b) {
     Expr a_wide = cast(wider, a);
     Expr b_wide = cast(wider, b);
     Expr ab_wide = a_wide * b_wide;
-    // In Halide, integer division rounds to negative infinity, so division by a
-    // power of two is the same as a shift (unlike C).
     Expr nudge = 1 << (t.bits() - 2);
     Expr result = (ab_wide + nudge) >> (t.bits() - 1);
     return cast(t, clamp(result, t.min(), t.max()));

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <malloc.h>
 
+#include <inttypes.h>
 #include "halide_benchmark.h"
 
 #include "MatrixMultiply_cpu.h"
@@ -13,11 +14,27 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 
-template <typename T, typename U>
-T clamp(T x, U min, U max) {
-    if (x < min) x = min;
-    if (x > max) x = max;
-    return x;
+int32_t SaturatingRoundingDoublingHighMultiply(int32_t a, int32_t b) {
+    int64_t a_wide = a;
+    int64_t b_wide = b;
+    int64_t ab_wide = a_wide * b_wide;
+    int64_t nudge = 1 << 30;
+    int64_t result = (ab_wide + nudge) >> 31;
+    result = std::max(result, (int64_t)std::numeric_limits<int32_t>::min());
+    result = std::min(result, (int64_t)std::numeric_limits<int32_t>::max());
+    return (int32_t)result;
+}
+
+int32_t RoundingShiftRight(int32_t x, int32_t shift) {
+    // Shift must satisfy 0 <= shift <= 31
+    int32_t mask = ((1ll << shift) - 1);
+    int32_t remainder = x & mask;
+    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
+    return (x >> shift) + (remainder > threshold ? 1 : 0);
+}
+
+int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t q, int32_t shift) {
+    return RoundingShiftRight(SaturatingRoundingDoublingHighMultiply(x, q), shift);
 }
 
 int main(int argc, char **argv) {
@@ -28,15 +45,19 @@ int main(int argc, char **argv) {
 
     int (*pipeline)(halide_buffer_t *, halide_buffer_t*, halide_buffer_t*, int16_t, int16_t,
                     int, int, int, uint8_t, uint8_t, halide_buffer_t*);
+    int k_alignment = 1;
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = MatrixMultiply_cpu;
         printf("Using CPU schedule\n");
+        k_alignment = 32;
     } else if (strcmp(argv[1], "hvx64") == 0) {
         pipeline = MatrixMultiply_hvx64;
         printf("Using HVX 64 schedule\n");
+        k_alignment = 64;
     } else if (strcmp(argv[1], "hvx128") == 0) {
         pipeline = MatrixMultiply_hvx128;
         printf("Using HVX 128 schedule\n");
+        k_alignment = 128;
     } else {
         printf("Unknown schedule, valid schedules are cpu, hvx64, or hvx128\n");
         return -1;
@@ -44,9 +65,16 @@ int main(int argc, char **argv) {
 
     int iterations = atoi(argv[2]);
 
-    const int M = atoi(argv[3]);
-    const int N = atoi(argv[4]);
-    const int K = atoi(argv[5]);
+    int M = atoi(argv[3]);
+    int N = atoi(argv[4]);
+    int K = atoi(argv[5]);
+
+    // Align the dimensions as required.
+    M = (M + 3) & ~3;
+    N = (N + 3) & ~3;
+    K = (K + 3) & ~3;
+
+    K = (K + k_alignment - 1) & ~(k_alignment - 1);
 
     // Hexagon's device_malloc implementation will also set the host
     // pointer if it is null, giving a zero copy buffer.
@@ -114,21 +142,17 @@ int main(int argc, char **argv) {
 
     // Validate that the algorithm did what we expect.
     mat_ab.for_each_element([&](int x, int y) {
-        // This reference implementation is very slow, so only check a subset of the result.
-        if ((y * N + x) % 100 != 0) {
-            return;
-        }
-        int64_t ab_xy = bias(x);
-        for (int k = 0; k < K; k++) {
-            int32_t a_ky = static_cast<int32_t>(mat_a(k, y)) + mat_a_offset;
-            int32_t b_xk = static_cast<int32_t>(mat_b(x, k)) + mat_b_offset;
+        int32_t ab_xy = bias(x);
+        for (int k = 0; k < N; k++) {
+            int32_t a_ky = (int32_t)mat_a(k, y) + mat_a_offset;
+            int32_t b_xk = (int32_t)mat_b(x, k) + mat_b_offset;
             ab_xy += a_ky * b_xk;
         }
 
-        int32_t multiplied = clamp((static_cast<int64_t>(ab_xy) * output_multiplier + (1 << 30)) >> 31,
-                                   std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max());
-        int64_t round = output_shift <= 0 ? 0 : 1 << (output_shift - 1);
-        uint8_t output = clamp(((multiplied + round) >> output_shift) + output_offset, output_min, output_max);
+        int32_t output = MultiplyByQuantizedMultiplier(ab_xy, output_multiplier, output_shift);
+        output += output_offset;
+        output = std::max(output, (int32_t)output_min);
+        output = std::min(output, (int32_t)output_max);
         if (output != mat_ab(x, y)) {
             printf("Mismatch at %d %d: %d != %d\n", x, y, output, mat_ab(x, y));
             abort();

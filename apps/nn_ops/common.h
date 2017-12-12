@@ -25,13 +25,6 @@ Halide::Expr MultiplyByQuantizedMultiplier(
 // uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t
 template <typename T>
 int NaturalVectorSize(const Halide::Target& target) {
-    int vector_size = target.natural_vector_size<T>();
-    if (target.has_feature(Halide::Target::HVX_64)) {
-        vector_size = 64 / sizeof(T);
-    } else if (target.has_feature(Halide::Target::HVX_128)) {
-        vector_size = 128 / sizeof(T);
-    }
-    return vector_size;
 }
 
 #endif
