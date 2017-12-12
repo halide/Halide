@@ -1610,7 +1610,7 @@ public:
     }
     // @}
 
-    bool all(not_void_T val) {
+    bool all_equal(not_void_T val) {
         bool all_equal = true;
         for_each_value([&](T v) {all_equal &= v == val;});
         return all_equal;

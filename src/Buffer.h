@@ -363,7 +363,7 @@ public:
     HALIDE_BUFFER_FORWARD(deallocate)
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
-    HALIDE_BUFFER_FORWARD(all)
+    HALIDE_BUFFER_FORWARD(all_equal)
     HALIDE_BUFFER_FORWARD(fill)
     HALIDE_BUFFER_FORWARD_CONST(for_each_element)
 
