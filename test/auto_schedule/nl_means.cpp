@@ -166,11 +166,11 @@ double run_test(bool auto_schedule) {
     p.realize(out);
     out.copy_to_host();
 
-    return 0;
+    return t;
 }
 
 int main(int argc, char **argv) {
-    run_test(false);
+    double manual_time = run_test(false);
     double auto_time = run_test(true);
 
     std::cout << "======================" << std::endl;
