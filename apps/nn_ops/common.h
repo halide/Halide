@@ -5,19 +5,16 @@
 
 #include <Halide.h>
 
-// Align the buffer to be to multiples of the vector size.
-void RequireAligned(const int alignment, Halide::OutputImageParam* param);
-
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
 // instruction.
-Halide::Expr SaturatingRoundingDoublingHighMultiply(Halide::Expr a, Halide::Expr b);
+Halide::Expr saturating_rounding_doubling_high_multiply(Halide::Expr a, Halide::Expr b);
 
 // Correctly-rounded-to-nearest division by a power-of-two. Also known as
 // rounding arithmetic right shift.
-Halide::Expr RoundingShiftRight(Halide::Expr x, Halide::Expr shift);
+Halide::Expr rounding_shift_right(Halide::Expr x, Halide::Expr shift);
 
 // Performs right shift and multiply by a multiplier.
-Halide::Expr MultiplyByQuantizedMultiplier(
+Halide::Expr multiply_quantized_multiplier(
     Halide::Expr x, Halide::Expr quantized_multiplier, Halide::Expr shift);
 
 // Returns the natural vector size for the given data type T and hardware

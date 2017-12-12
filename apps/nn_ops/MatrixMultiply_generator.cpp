@@ -138,7 +138,7 @@ public:
         // Scale the output.
         Func scaled_plus_offset("scaled_plus_offset");
         scaled_plus_offset(x, y) =
-            MultiplyByQuantizedMultiplier(multiplied(x, y) + bias_(x),
+            multiply_quantized_multiplier(multiplied(x, y) + bias_(x),
                                           output_multiplier_, output_shift_) +
             output_offset_;
 

@@ -14,7 +14,7 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 
-int32_t SaturatingRoundingDoublingHighMultiply(int32_t a, int32_t b) {
+int32_t saturating_rounding_doubling_high_multiply(int32_t a, int32_t b) {
     int64_t a_wide = a;
     int64_t b_wide = b;
     int64_t ab_wide = a_wide * b_wide;
@@ -25,7 +25,7 @@ int32_t SaturatingRoundingDoublingHighMultiply(int32_t a, int32_t b) {
     return (int32_t)result;
 }
 
-int32_t RoundingShiftRight(int32_t x, int32_t shift) {
+int32_t rounding_shift_right(int32_t x, int32_t shift) {
     // Shift must satisfy 0 <= shift <= 31
     int32_t mask = ((1ll << shift) - 1);
     int32_t remainder = x & mask;
@@ -33,8 +33,8 @@ int32_t RoundingShiftRight(int32_t x, int32_t shift) {
     return (x >> shift) + (remainder > threshold ? 1 : 0);
 }
 
-int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t q, int32_t shift) {
-    return RoundingShiftRight(SaturatingRoundingDoublingHighMultiply(x, q), shift);
+int32_t multiply_quantized_multiplier(int32_t x, int32_t q, int32_t shift) {
+    return rounding_shift_right(saturating_rounding_doubling_high_multiply(x, q), shift);
 }
 
 int main(int argc, char **argv) {
@@ -73,7 +73,6 @@ int main(int argc, char **argv) {
     M = (M + 3) & ~3;
     N = (N + 3) & ~3;
     K = (K + 3) & ~3;
-
     K = (K + k_alignment - 1) & ~(k_alignment - 1);
 
     // Hexagon's device_malloc implementation will also set the host
@@ -149,7 +148,7 @@ int main(int argc, char **argv) {
             ab_xy += a_ky * b_xk;
         }
 
-        int32_t output = MultiplyByQuantizedMultiplier(ab_xy, output_multiplier, output_shift);
+        int32_t output = multiply_quantized_multiplier(ab_xy, output_multiplier, output_shift);
         output += output_offset;
         output = std::max(output, (int32_t)output_min);
         output = std::min(output, (int32_t)output_max);

@@ -2,20 +2,7 @@
 
 using namespace Halide;
 
-void RequireAligned(const int alignment, OutputImageParam* param) {
-    // The first dimension should have a min/extent aligned to the required
-    // alignment, we assume the stride is 1.
-    param->dim(0).set_min((param->dim(0).min() / alignment) * alignment);
-    param->dim(0).set_extent((param->dim(0).extent() / alignment) * alignment);
-
-    // The rest of the dimensions should have a stride aligned to the required
-    // alignment.
-    for (int i = 1; i < param->dimensions(); i++) {
-        param->dim(i).set_stride((param->dim(i).stride() / alignment) * alignment);
-    }
-}
-
-Expr SaturatingRoundingDoublingHighMultiply(Expr a, Expr b) {
+Expr saturating_rounding_doubling_high_multiply(Expr a, Expr b) {
     Type t = a.type();
     Type wider = t.with_bits(t.bits() * 2);
     Expr a_wide = cast(wider, a);
@@ -26,7 +13,7 @@ Expr SaturatingRoundingDoublingHighMultiply(Expr a, Expr b) {
     return cast(t, clamp(result, t.min(), t.max()));
 }
 
-Expr RoundingShiftRight(Expr x, Expr shift) {
+Expr rounding_shift_right(Expr x, Expr shift) {
     // Shift must satisfy 0 <= shift <= 31
     Expr mask = ((1ll << shift) - 1);
     Expr remainder = x & mask;
@@ -34,6 +21,6 @@ Expr RoundingShiftRight(Expr x, Expr shift) {
     return (x >> shift) + select(remainder > threshold, 1, 0);
 }
 
-Expr MultiplyByQuantizedMultiplier(Expr x, Expr q, Expr shift) {
-    return RoundingShiftRight(SaturatingRoundingDoublingHighMultiply(x, q), shift);
+Expr multiply_quantized_multiplier(Expr x, Expr q, Expr shift) {
+    return rounding_shift_right(saturating_rounding_doubling_high_multiply(x, q), shift);
 }
