@@ -17,11 +17,4 @@ Halide::Expr rounding_shift_right(Halide::Expr x, Halide::Expr shift);
 Halide::Expr multiply_quantized_multiplier(
     Halide::Expr x, Halide::Expr quantized_multiplier, Halide::Expr shift);
 
-// Returns the natural vector size for the given data type T and hardware
-// target. Only the following types are currently verified to work:
-// uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t
-template <typename T>
-int NaturalVectorSize(const Halide::Target& target) {
-}
-
 #endif
