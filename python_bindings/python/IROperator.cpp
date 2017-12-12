@@ -147,40 +147,28 @@ h::Expr select9(h::Expr c1, h::Expr v1,
                      c10, v10, default_val);
 }
 
-std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
-    const size_t c = p::len(t);
-    std::vector<h::Expr> exprs;
-    exprs.reserve(c);
+h::Expr print_when0(h::Expr condition, p::tuple values_passed) {
+    const size_t num_values = p::len(values_passed);
+    std::vector<h::Expr> values;
+    values.reserve(num_values);
 
-    for (size_t i = 0; i < c; i += 1) {
-        p::object o = t[i];
-        h::Expr e;
-        p::extract<h::Expr> expr_extract(o);
+    for (size_t i = 0; i < num_values; i += 1) {
+        p::object o = values_passed[i];
+        p::extract<h::Expr &> expr_extract(o);
+
         if (expr_extract.check()) {
-            e = expr_extract();
+            values.push_back(expr_extract());
         } else {
-            // Python 'str' is not implicitly convertible to Expr,
-            // but in this context we want to explicitly check and convert.
-            p::extract<std::string> string_extract(o);
-            if (string_extract.check()) {
-                e = h::Expr(string_extract());
-            } else {
-              const std::string o_str = p::extract<std::string>(p::str(o));
-              throw std::invalid_argument("The value '" + o_str + "' is not convertible to Expr.");
+            for (size_t j = 0; j < num_values; j += 1) {
+                p::object o = values_passed[j];
+                const std::string o_str = p::extract<std::string>(p::str(o));
+                printf("print_when values[%lu] == %s\n", j, o_str.c_str());
             }
+            throw std::invalid_argument("print_when only handles a list/tuple of (convertible to) Expr.");
         }
-        exprs.push_back(e);
     }
-    return exprs;
-}
 
-p::object print_expr(p::tuple args, p::dict kwargs) {
-    return p::object(h::print(tuple_to_exprs(args)));
-}
-
-p::object print_when(p::tuple args, p::dict kwargs) {
-    h::Expr condition = p::extract<h::Expr>(args[0]);
-    return p::object(h::print_when(condition, tuple_to_exprs(p::extract<p::tuple>(args.slice(1, p::_)))));
+    return h::print_when(condition, values);
 }
 
 h::Expr random_float0() {
@@ -502,18 +490,8 @@ void define_operators() {
     p::def("cast", &cast0, p::args("t", "e"),
            "Cast an expression to a new type.");
 
-    p::def("print_when", p::raw_function(&print_when, 2));
-           // TODO(srj): apparently you cannot specify a docstring with raw_function().
-           // "Create an Expr that prints whenever it is evaluated, provided that the condition is true.");
-
-    // We call this "print_expr" rather than "print" to avoid
-    // conflicts with Python's build-in "print()" function, in
-    // case users import all of the Halide bindings.
-    p::def("print_expr", p::raw_function(&print_expr, 1));
-           // TODO(srj): apparently you cannot specify a docstring with raw_function().
-           // "Create an Expr that prints out its value whenever it is "
-           // "evaluated. It also prints out everything else in the arguments "
-           // "list, separated by spaces. This can include string literals.");
+    p::def("print_when", &print_when0, (p::arg("condition"), p::arg("values")),
+           "Create an Expr that prints whenever it is evaluated, provided that the condition is true.");
 
     p::def("lerp", &h::lerp, p::args("zero_val", "one_val", "weight"),
            "Linear interpolate between the two values according to a weight.\n"
