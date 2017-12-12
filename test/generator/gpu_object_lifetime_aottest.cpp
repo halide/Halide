@@ -112,19 +112,30 @@ int main(int argc, char **argv) {
             // we don't test anything here.
             // This gets some minimal test coverage for code paths in Halide::Runtime::Buffer.
             bool can_rewrap = false;
+            uintptr_t native_handle = 0;
+
 #if defined(TEST_CUDA)
-            can_rewrap = can_rewrap ||  (output.raw_buffer()->device_interface == halide_cuda_device_interface());
+            if (output.raw_buffer()->device_interface == halide_cuda_device_interface()) {
+                native_handle = output.raw_buffer()->device;
+                can_rewrap = true;
+            }
 #endif
 #if defined(TEST_OPENCL)
-            can_rewrap = can_rewrap || (output.raw_buffer()->device_interface == halide_opencl_device_interface());
+            if (output.raw_buffer()->device_interface == halide_opencl_device_interface()) {
+                native_handle = halide_opencl_get_cl_mem(nullptr, output.raw_buffer());
+                can_rewrap = true;
+            }
 #endif
 #if defined(TEST_METAL)
-            can_rewrap = can_rewrap || (output.raw_buffer()->device_interface == halide_metal_device_interface());
+            if (output.raw_buffer()->device_interface == halide_metal_device_interface()) {
+                native_handle = halide_metal_get_buffer(nullptr, output.raw_buffer());
+                can_rewrap = true;
+            }
 #endif
 
             if (can_rewrap) {
                 Buffer<int> wrap_test(80);
-                wrap_test.device_wrap_native(output.raw_buffer()->device_interface, output.raw_buffer()->device);
+                wrap_test.device_wrap_native(output.raw_buffer()->device_interface, native_handle);
                 wrap_test.set_device_dirty();
                 wrap_test.copy_to_host();
                 output.copy_to_host();
