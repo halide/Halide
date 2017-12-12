@@ -1,6 +1,69 @@
 #!/usr/bin/python3
 
 from halide import *
+from contextlib import redirect_stdout
+import io, sys
+
+def test_compiletime_error():
+
+    x = Var('x')
+    y = Var('y')
+    f = Func('f')
+    f[x, y] = cast(UInt(16), x + y)
+    # Deliberate type-mismatch error
+    buf = Buffer(UInt(8), 2, 2)
+    try:
+        f.realize(buf)
+    except RuntimeError as e:
+        print('Saw expected exception (%s)' % str(e))
+    else:
+        assert False, 'Did not see expected exception!'
+
+def test_runtime_error():
+
+    x = Var('x')
+    f = Func('f')
+    f[x] = cast(UInt(8), x)
+    f.bound(x, 0, 1)
+    # Deliberate runtime error
+    buf = Buffer(UInt(8), 10)
+    try:
+        f.realize(buf)
+    except RuntimeError as e:
+        print('Saw expected exception (%s)' % str(e))
+    else:
+        assert False, 'Did not see expected exception!'
+
+    return
+
+def test_print_expr():
+    x = Var('x')
+    f = Func('f')
+    f[x] = print_expr(cast(UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
+    buf = Buffer(UInt(8), 1)
+    output = io.StringIO()
+    with redirect_stdout(output):
+        f.realize(buf)
+        expected = '0 is what the 1 and 3.141500 saw\n'
+        actual = output.getvalue()
+        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
+
+    return
+
+def test_print_when():
+
+    x = Var('x')
+    f = Func('f')
+    f[x] = print_when(x == 3, cast(UInt(8), x*x), 'is result at', x)
+    buf = Buffer(UInt(8), 10)
+    output = io.StringIO()
+    with redirect_stdout(output):
+        f.realize(buf)
+        expected = '9 is result at 3\n'
+        actual = output.getvalue()
+        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
+
+    return
 
 def test_types():
 
@@ -289,6 +352,10 @@ def test_imageparam_bug():
 
 if __name__ == "__main__":
 
+    test_compiletime_error()
+    test_runtime_error()
+    test_print_expr()
+    test_print_when()
     test_imageparam_bug()
     test_param_bug()
     test_float_or_int()
