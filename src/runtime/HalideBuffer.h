@@ -1610,6 +1610,12 @@ public:
     }
     // @}
 
+    bool all(not_void_T val) {
+        bool all_equal = true;
+        for_each_value([&](T v) {all_equal &= v == val;});
+        return all_equal;
+    }    
+    
     void fill(not_void_T val) {
         set_host_dirty();
         for_each_value([=](T &v) {v = val;});
