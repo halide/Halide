@@ -54,7 +54,7 @@ run-%-android: $(BIN)/MatrixMultiply-%-android
 	adb shell cp /system/lib/rfsa/adsp/testsig* $(DEVICE_PATH) > /dev/null || true
 	adb shell chmod +x $(DEVICE_PATH)/MatrixMultiply-$*-android
 	adb push MatrixMultiply.sh $(DEVICE_PATH)
-	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply.sh MatrixMultiply-arm-64-android
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply.sh $(DEVICE_PATH)/MatrixMultiply-arm-64-android
 
 run-host: $(BIN)/MatrixMultiply-host
 	./MatrixMultiply.sh $(BIN)/MatrixMultiply-host

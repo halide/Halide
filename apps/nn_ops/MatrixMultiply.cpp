@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <malloc.h>
 
-#include <inttypes.h>
 #include "halide_benchmark.h"
 
 #include "MatrixMultiply_cpu.h"
@@ -39,9 +38,15 @@ int32_t multiply_quantized_multiplier(int32_t x, int32_t q, int32_t shift) {
 
 int main(int argc, char **argv) {
     if (argc < 6) {
-        printf("Usage: %s (cpu|hvx64) timing_iterations M N K [mat_a_offset mat_b_offset output_multiplier output_shift output_offset output_min output_max]\n", argv[0]);
+        printf("Usage: %s (cpu|hvx64) M N K [mat_a_offset mat_b_offset output_multiplier output_shift output_offset output_min output_max]\n", argv[0]);
         return 0;
     }
+
+    int M = atoi(argv[2]);
+    int N = atoi(argv[3]);
+    int K = atoi(argv[4]);
+
+    printf("Benchmarking %dx%d * %dx%d\n", M, N, N, K);
 
     int (*pipeline)(halide_buffer_t *, halide_buffer_t*, halide_buffer_t*, int16_t, int16_t,
                     int, int, int, uint8_t, uint8_t, halide_buffer_t*);
@@ -63,17 +68,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    int iterations = atoi(argv[2]);
-
-    int M = atoi(argv[3]);
-    int N = atoi(argv[4]);
-    int K = atoi(argv[5]);
-
     // Align the dimensions as required.
     M = (M + 3) & ~3;
     N = (N + 3) & ~3;
     K = (K + 3) & ~3;
     K = (K + k_alignment - 1) & ~(k_alignment - 1);
+
+    printf("Aligned to %dx%d * %dx%d\n", M, N, N, K);
 
     // Hexagon's device_malloc implementation will also set the host
     // pointer if it is null, giving a zero copy buffer.
@@ -88,13 +89,13 @@ int main(int argc, char **argv) {
     int output_offset = 0;
     uint8_t output_min = 0;
     uint8_t output_max = 255;
-    if (argc > 6) mat_a_offset = atoi(argv[6]);
-    if (argc > 7) mat_b_offset = atoi(argv[7]);
-    if (argc > 8) output_multiplier = atoi(argv[8]);
-    if (argc > 9) output_shift = atoi(argv[9]);
-    if (argc > 10) output_offset = atoi(argv[10]);
-    if (argc > 11) output_min = atoi(argv[11]);
-    if (argc > 12) output_max = atoi(argv[12]);
+    if (argc > 6) mat_a_offset = atoi(argv[5]);
+    if (argc > 7) mat_b_offset = atoi(argv[6]);
+    if (argc > 8) output_multiplier = atoi(argv[7]);
+    if (argc > 9) output_shift = atoi(argv[8]);
+    if (argc > 10) output_offset = atoi(argv[9]);
+    if (argc > 11) output_min = atoi(argv[10]);
+    if (argc > 12) output_max = atoi(argv[11]);
 
     Halide::Runtime::Buffer<uint8_t> mat_ab(nullptr, K, M);
 
@@ -119,7 +120,7 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_on(nullptr);
 
     printf("Running pipeline...\n");
-    double time = Halide::Tools::benchmark(iterations, 1, [&]() {
+    double time = Halide::Tools::benchmark([&]() {
         int result = pipeline(mat_a, mat_b, bias, mat_a_offset, mat_b_offset,
                               output_multiplier, output_shift, output_offset,
                               output_min, output_max, mat_ab);
