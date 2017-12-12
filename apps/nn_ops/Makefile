@@ -53,14 +53,11 @@ run-%-android: $(BIN)/MatrixMultiply-%-android
 	adb push $(HEXAGON_RUNTIME_PATH)/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_PATH)
 	adb shell cp /system/lib/rfsa/adsp/testsig* $(DEVICE_PATH) > /dev/null || true
 	adb shell chmod +x $(DEVICE_PATH)/MatrixMultiply-$*-android
-	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply-$*-android cpu 10 1024 1024 1024
-	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply-$*-android hvx64 10 1024 1024 1024
-	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply-$*-android hvx128 10 1024 1024 1024
+	adb push MatrixMultiply.sh $(DEVICE_PATH)
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply.sh MatrixMultiply-arm-64-android
 
 run-host: $(BIN)/MatrixMultiply-host
-	$(BIN)/MatrixMultiply-host cpu 10 256 256 256
-	$(BIN)/MatrixMultiply-host hvx64 1 256 256 256
-	$(BIN)/MatrixMultiply-host hvx128 1 256 256 256
+	./MatrixMultiply.sh $(BIN)/MatrixMultiply-host
 
 clean:
 	rm -rf $(BIN)
