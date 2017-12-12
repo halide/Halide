@@ -109,8 +109,8 @@ std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
             if (string_extract.check()) {
                 e = h::Expr(string_extract());
             } else {
-              const std::string o_str = p::extract<std::string>(p::str(o));
-              throw std::invalid_argument("The value '" + o_str + "' is not convertible to Expr.");
+                const std::string o_str = p::extract<std::string>(p::str(o));
+                throw std::invalid_argument("The value '" + o_str + "' is not convertible to Expr.");
             }
         }
         exprs.push_back(e);
@@ -158,11 +158,11 @@ h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_value
 // probably augment docstrings that use this appropriately.
 template <class F>
 p::object def_raw(const char *name, F f, size_t min_args, const char *docstring) {
-  p::object o = p::raw_function(f, min_args);
-  p::def(name, o);
-  // Must call setattr *after* def
-  p::setattr(o, "__doc__", p::str(docstring));
-  return o;
+    p::object o = p::raw_function(f, min_args);
+    p::def(name, o);
+    // Must call setattr *after* def
+    p::setattr(o, "__doc__", p::str(docstring));
+    return o;
 }
 
 }  // namespace
