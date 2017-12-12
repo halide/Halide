@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 
 from halide import *
+from contextlib import redirect_stdout
+import io, sys
 
 def test_compiletime_error():
 
@@ -39,7 +41,12 @@ def test_print_expr():
     f = Func('f')
     f[x] = print_expr(cast(UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
     buf = Buffer(UInt(8), 1)
-    f.realize(buf)
+    output = io.StringIO()
+    with redirect_stdout(output):
+        f.realize(buf)
+        expected = '0 is what the 1 and 3.141500 saw\n'
+        actual = output.getvalue()
+        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
 
     return
 
@@ -49,7 +56,12 @@ def test_print_when():
     f = Func('f')
     f[x] = print_when(x == 3, cast(UInt(8), x*x), 'is result at', x)
     buf = Buffer(UInt(8), 10)
-    f.realize(buf)
+    output = io.StringIO()
+    with redirect_stdout(output):
+        f.realize(buf)
+        expected = '9 is result at 3\n'
+        actual = output.getvalue()
+        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
 
     return
 

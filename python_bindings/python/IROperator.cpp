@@ -1,12 +1,16 @@
 #include "IROperator.h"
 
 #include <boost/python.hpp>
+// Some versions of Boost don't include raw_function in python.hpp
+#include <boost/python/raw_function.hpp>
 #include <string>
 
 #include "Halide.h"
 
 namespace h = Halide;
 namespace p = boost::python;
+
+namespace {
 
 h::Expr reinterpret0(h::Type t, h::Expr e) {
     return h::reinterpret(t, e);
@@ -86,66 +90,6 @@ h::Expr select6(h::Expr c1, h::Expr v1,
                      c6, v6,
                      c7, v7, default_val);
 }
-h::Expr select7(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr c5, h::Expr v5,
-                h::Expr c6, h::Expr v6,
-                h::Expr c7, h::Expr v7,
-                h::Expr c8, h::Expr v8,
-                h::Expr default_val) {
-    return h::select(c1, v1,
-                     c2, v2,
-                     c3, v3,
-                     c4, v4,
-                     c5, v5,
-                     c6, v6,
-                     c7, v7,
-                     c8, v8, default_val);
-}
-h::Expr select8(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr c5, h::Expr v5,
-                h::Expr c6, h::Expr v6,
-                h::Expr c7, h::Expr v7,
-                h::Expr c8, h::Expr v8,
-                h::Expr c9, h::Expr v9,
-                h::Expr default_val) {
-    return h::select(c1, v1,
-                     c2, v2,
-                     c3, v3,
-                     c4, v4,
-                     c5, v5,
-                     c6, v6,
-                     c7, v7,
-                     c8, v8,
-                     c9, v9, default_val);
-}
-h::Expr select9(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr c5, h::Expr v5,
-                h::Expr c6, h::Expr v6,
-                h::Expr c7, h::Expr v7,
-                h::Expr c8, h::Expr v8,
-                h::Expr c9, h::Expr v9,
-                h::Expr c10, h::Expr v10,
-                h::Expr default_val) {
-    return h::select(c1, v1,
-                     c2, v2,
-                     c3, v3,
-                     c4, v4,
-                     c5, v5,
-                     c6, v6,
-                     c7, v7,
-                     c8, v8,
-                     c9, v9,
-                     c10, v10, default_val);
-}
 
 std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
     const size_t c = p::len(t);
@@ -165,8 +109,8 @@ std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
             if (string_extract.check()) {
                 e = h::Expr(string_extract());
             } else {
-              const std::string o_str = p::extract<std::string>(p::str(o));
-              throw std::invalid_argument("The value '" + o_str + "' is not convertible to Expr.");
+                const std::string o_str = p::extract<std::string>(p::str(o));
+                throw std::invalid_argument("The value '" + o_str + "' is not convertible to Expr.");
             }
         }
         exprs.push_back(e);
@@ -206,6 +150,22 @@ h::Expr undef0(h::Type type) {
 h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_values) {
     return h::memoize_tag(result, cache_key_values);
 }
+
+// p::def() doesn't allow specifying a docstring with raw_function();
+// this is some simple sugar to allow for it.
+// TODO: unfortunately, using raw_function() means that we don't get
+// any free type info about the Python prototype look; we should
+// probably augment docstrings that use this appropriately.
+template <class F>
+p::object def_raw(const char *name, F f, size_t min_args, const char *docstring) {
+    p::object o = p::raw_function(f, min_args);
+    p::def(name, o);
+    // Must call setattr *after* def
+    p::setattr(o, "__doc__", p::str(docstring));
+    return o;
+}
+
+}  // namespace
 
 void define_operators() {
     // defined in IROperator.h
@@ -502,18 +462,17 @@ void define_operators() {
     p::def("cast", &cast0, p::args("t", "e"),
            "Cast an expression to a new type.");
 
-    p::def("print_when", p::raw_function(&print_when, 2));
-           // TODO(srj): apparently you cannot specify a docstring with raw_function().
-           // "Create an Expr that prints whenever it is evaluated, provided that the condition is true.");
+    def_raw("print_when", print_when, 2,
+           "Create an Expr that prints whenever it is evaluated, "
+           "provided that the condition is true.");
 
     // We call this "print_expr" rather than "print" to avoid
     // conflicts with Python's build-in "print()" function, in
     // case users import all of the Halide bindings.
-    p::def("print_expr", p::raw_function(&print_expr, 1));
-           // TODO(srj): apparently you cannot specify a docstring with raw_function().
-           // "Create an Expr that prints out its value whenever it is "
-           // "evaluated. It also prints out everything else in the arguments "
-           // "list, separated by spaces. This can include string literals.");
+    def_raw("print_expr", print_expr, 1,
+           "Create an Expr that prints out its value whenever it is "
+           "evaluated. It also prints out everything else in the arguments "
+           "list, separated by spaces. This can include string literals.");
 
     p::def("lerp", &h::lerp, p::args("zero_val", "one_val", "weight"),
            "Linear interpolate between the two values according to a weight.\n"
