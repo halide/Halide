@@ -1,6 +1,8 @@
 MATRIXMULTIPLY=$1
 SCHEDULES="cpu hvx64 hvx128"
 for i in $SCHEDULES; do
+  # Columns are: schedule M N K offset_a offset_b output_multiplier output_shift output_offset output_min output_max
+  # where M, N, K describe a matrix multiply of size MxN * NxK
   $MATRIXMULTIPLY $i 12544 27 16 -128 -140 1925040845 9 128 128 205
   $MATRIXMULTIPLY $i 12544 16 16 -128 -112 1227615533 4 128 128 205
   $MATRIXMULTIPLY $i 3136 16 32 -128 -138 1076261394 5 128 128 205
