@@ -294,7 +294,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
         // Payload header
         uint32_t payload_header[2] = {
-            pixel_type_to_matlab_type_code[type_code], payload_bytes
+            pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes
         };
         if (!f.write(payload_header, sizeof(payload_header))) {
             return -11;
