@@ -769,6 +769,10 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
 
 WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_t *src,
                                  struct halide_buffer_t *dst) {
+    debug(user_context)
+        << "CUDA: halide_cuda_device_crop (user_context: " << user_context
+        << ", src: " << src << ", dst: " << dst << ")\n";
+
     // Pointer arithmetic works fine.
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++) {
@@ -782,6 +786,9 @@ WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_
 }
 
 WEAK int halide_cuda_device_release_crop(void *user_context, struct halide_buffer_t *dst) {
+    debug(user_context)
+        << "CUDA: halide_cuda_release_crop (user_context: " << user_context
+        << ", dst: " << dst << ")\n";
     return 0;
 }
 
