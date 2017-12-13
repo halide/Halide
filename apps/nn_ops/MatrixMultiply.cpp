@@ -82,11 +82,11 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> mat_b(nullptr, K, N);
     Halide::Runtime::Buffer<int32_t> bias(nullptr, K);
 
-    int16_t mat_a_offset = 0;
-    int16_t mat_b_offset = 0;
+    int16_t mat_a_offset = -128;
+    int16_t mat_b_offset = -128;
     int output_multiplier = 1 << 30;
-    int output_shift = 14;
-    int output_offset = 0;
+    int output_shift = 8;
+    int output_offset = 128;
     uint8_t output_min = 0;
     uint8_t output_max = 255;
     if (argc > 6) mat_a_offset = atoi(argv[5]);
