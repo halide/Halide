@@ -1,4 +1,4 @@
-#include "Target.h"
+#include "PyTarget.h"
 
 #include <boost/python.hpp>
 #include <string>
@@ -6,7 +6,7 @@
 
 #include "Halide.h"
 
-#include "Expr.h"
+#include "PyExpr.h"
 
 namespace h = Halide;
 namespace p = boost::python;

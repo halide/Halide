@@ -1,4 +1,4 @@
-#include "BoundaryConditions.h"
+#include "PyBoundaryConditions.h"
 
 #include <algorithm>
 #include <boost/python.hpp>

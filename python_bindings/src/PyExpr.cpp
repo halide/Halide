@@ -1,4 +1,4 @@
-#include "Expr.h"
+#include "PyExpr.h"
 
 #include <boost/format.hpp>
 #include <boost/python.hpp>
@@ -6,8 +6,8 @@
 
 #include "Halide.h"
 
-#include "Type.h"
-#include "add_operators.h"
+#include "PyType.h"
+#include "PyOperators.h"
 
 namespace h = Halide;
 namespace p = boost::python;

@@ -1,4 +1,4 @@
-#include "Error.h"
+#include "PyError.h"
 
 #include <boost/python.hpp>
 #include <string>

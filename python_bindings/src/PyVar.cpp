@@ -1,4 +1,4 @@
-#include "Var.h"
+#include "PyVar.h"
 
 #include <boost/format.hpp>
 #include <boost/python.hpp>
@@ -6,7 +6,7 @@
 
 #include "Halide.h"
 
-#include "add_operators.h"
+#include "PyOperators.h"
 
 namespace h = Halide;
 

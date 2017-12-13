@@ -1,4 +1,4 @@
-#include "Func.h"
+#include "PyFunc.h"
 
 #include <boost/python.hpp>
 #include <boost/format.hpp>
@@ -7,13 +7,13 @@
 
 #include "Halide.h"
 
-#include "add_operators.h"
-#include "Image.h"
-#include "Expr.h"
-#include "Func_Ref.h"
-#include "Func_Stage.h"
-#include "Func_VarOrRVar.h"
-#include "Func_gpu.h"
+#include "PyOperators.h"
+#include "PyBuffer.h"
+#include "PyExpr.h"
+#include "PyFunc_Ref.h"
+#include "PyFunc_Stage.h"
+#include "PyFunc_VarOrRVar.h"
+#include "PyFunc_gpu.h"
 
 namespace h = Halide;
 namespace p = boost::python;

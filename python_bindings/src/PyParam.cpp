@@ -1,4 +1,4 @@
-#include "Param.h"
+#include "PyParam.h"
 
 #include <boost/format.hpp>
 #include <boost/mpl/list.hpp>
@@ -8,8 +8,8 @@
 
 #include "Halide.h"
 
-#include "add_operators.h"
-#include "Type.h"
+#include "PyOperators.h"
+#include "PyType.h"
 
 namespace h = Halide;
 namespace p = boost::python;

@@ -53,7 +53,7 @@ public:
     /**
    *  @brief Enum to represent (some) of Numpy's internal flags.
    *
-   *  These don't match the actual Numpy flag values; we can't get those without including 
+   *  These don't match the actual Numpy flag values; we can't get those without including
    *  numpy/arrayobject.h or copying them directly.  That's very unfortunate.
    *
    *  @todo I'm torn about whether this should be an enum.  It's very convenient to not

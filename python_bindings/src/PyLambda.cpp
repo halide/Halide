@@ -1,4 +1,4 @@
-#include "Lambda.h"
+#include "PyLambda.h"
 
 #include <boost/python.hpp>
 

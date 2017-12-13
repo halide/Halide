@@ -1,11 +1,11 @@
-#include "Func_Stage.h"
+#include "PyFunc_Stage.h"
 
 #include <boost/python.hpp>
 
 #include "Halide.h"
 
-#include "Func.h"
-#include "Func_gpu.h"
+#include "PyFunc.h"
+#include "PyFunc_gpu.h"
 
 namespace h = Halide;
 namespace p = boost::python;

@@ -1,4 +1,4 @@
-#include "Func_gpu.h"
+#include "PyFunc_gpu.h"
 
 #include <boost/python.hpp>
 

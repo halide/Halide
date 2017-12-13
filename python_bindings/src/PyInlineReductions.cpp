@@ -1,11 +1,11 @@
-#include "InlineReductions.h"
+#include "PyInlineReductions.h"
 
 #include <boost/python.hpp>
 #include <string>
 
 #include "Halide.h"
 
-#include "Expr.h"
+#include "PyExpr.h"
 
 
 namespace h = Halide;

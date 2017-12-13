@@ -1,4 +1,4 @@
-#include "Type.h"
+#include "PyType.h"
 
 #include <boost/format.hpp>
 #include <boost/python.hpp>

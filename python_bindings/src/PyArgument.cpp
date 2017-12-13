@@ -1,4 +1,4 @@
-#include "Argument.h"
+#include "PyArgument.h"
 
 #include <boost/python.hpp>
 #include <string>

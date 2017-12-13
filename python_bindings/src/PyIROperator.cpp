@@ -1,4 +1,4 @@
-#include "IROperator.h"
+#include "PyIROperator.h"
 
 #include <boost/python.hpp>
 // Some versions of Boost don't include raw_function in python.hpp

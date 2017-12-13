@@ -1,4 +1,4 @@
-#include "Function.h"
+#include "PyFunction.h"
 
 #include <boost/python.hpp>
 #include <vector>

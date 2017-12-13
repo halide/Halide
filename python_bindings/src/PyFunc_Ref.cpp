@@ -1,4 +1,4 @@
-#include "Func_Ref.h"
+#include "PyFunc_Ref.h"
 
 #include <boost/python.hpp>
 #include <string>
@@ -6,7 +6,7 @@
 
 #include "Halide.h"
 
-#include "add_operators.h"
+#include "PyOperators.h"
 
 namespace h = Halide;
 namespace p = boost::python;

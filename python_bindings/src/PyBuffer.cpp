@@ -1,4 +1,4 @@
-#include "Image.h"
+#include "PyBuffer.h"
 
 #include <boost/cstdint.hpp>
 #include <boost/format.hpp>
@@ -12,8 +12,8 @@
 
 #include "Halide.h"
 
-#include "Func.h"
-#include "Type.h"
+#include "PyFunc.h"
+#include "PyType.h"
 
 #define USE_NUMPY
 #ifdef USE_NUMPY
