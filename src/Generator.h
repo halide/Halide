@@ -2514,6 +2514,7 @@ struct StringOrLoopLevel {
     LoopLevel loop_level;
 
     StringOrLoopLevel() = default;
+    /*not-explicit*/ StringOrLoopLevel(const char *s) : string_value(s) {}
     /*not-explicit*/ StringOrLoopLevel(const std::string &s) : string_value(s) {}
     /*not-explicit*/ StringOrLoopLevel(const LoopLevel &loop_level) : loop_level(loop_level) {}
 };
@@ -3263,5 +3264,38 @@ namespace halide_register_generator {
 
 #define HALIDE_REGISTER_GENERATOR(...) \
     _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__))
+
+// HALIDE_REGISTER_GENERATOR_ALIAS() can be used to create an an alias-with-a-particular-set-of-param-values
+// for a given Generator in the build system. Normally, you wouldn't want to do this;
+// however, some existing Halide clients have build systems that make it challenging to
+// specify GeneratorParams inside the build system, and this allows a somewhat simpler
+// customization route for them. It's highly recommended you don't use this for new code.
+//
+// The final argument is really an initializer-list of GeneratorParams, in the form
+// of an initializer-list for map<string, string>:
+//
+//    { { "gp-name", "gp-value"} [, { "gp2-name", "gp2-value" }] }
+//
+// It is specified as a variadic template argument to allow for the fact that the embedded commas
+// would otherwise confuse the preprocessor; since (in this case) all we're going to do is
+// pass it thru as-is, this is fine (and even MSVC's 'broken' __VA_ARGS__ should be OK here).
+#define HALIDE_REGISTER_GENERATOR_ALIAS(GEN_REGISTRY_NAME, ORIGINAL_REGISTRY_NAME, ...) \
+    namespace halide_register_generator { \
+        struct halide_global_ns; \
+        namespace ORIGINAL_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context); \
+        } \
+        namespace GEN_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context); \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context) { \
+                auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context); \
+                g->set_generator_param_values(__VA_ARGS__); \
+                return g; \
+            } \
+        } \
+        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
+    } \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
+                 "HALIDE_REGISTER_GENERATOR_ALIAS must be used at global scope");
 
 #endif  // HALIDE_GENERATOR_H_

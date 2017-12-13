@@ -316,6 +316,23 @@ public:
         return get()->method(std::forward<Args>(args)...);                                 \
     }
 
+// This is a weird-looking but effective workaround for a deficiency in "perfect forwarding":
+// namely, it can't really handle initializer-lists. The idea here is that we declare
+// the expected type to be passed on, and that allows the compiler to handle it.
+// The weirdness comes in with the variadic macro: the problem is that the type
+// we want to forward might be something like `std::vector<std::pair<int, int>>`,
+// which contains a comma, which throws a big wrench in C++ macro system.
+// However... since all we really need to do is capture the remainder of the macro,
+// and forward it as is, we can just use ... to allow an arbitrary number of commas,
+// then use __VA_ARGS__ to forward the mess as-is, and while it looks horrible, it
+// works.
+#define HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(method, ...)      \
+    inline auto method(const __VA_ARGS__ &a) ->                  \
+        decltype(std::declval<Runtime::Buffer<T>>().method(a)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n"; \
+        return get()->method(a);                                 \
+    }
+
     /** Does the same thing as the equivalent Halide::Runtime::Buffer method */
     // @{
     HALIDE_BUFFER_FORWARD(raw_buffer)
@@ -340,12 +357,14 @@ public:
     HALIDE_BUFFER_FORWARD_CONST(data)
     HALIDE_BUFFER_FORWARD_CONST(contains)
     HALIDE_BUFFER_FORWARD(crop)
+    HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(crop, std::vector<std::pair<int, int>>)
     HALIDE_BUFFER_FORWARD(slice)
     HALIDE_BUFFER_FORWARD_CONST(sliced)
     HALIDE_BUFFER_FORWARD(embed)
     HALIDE_BUFFER_FORWARD_CONST(embedded)
     HALIDE_BUFFER_FORWARD(set_min)
     HALIDE_BUFFER_FORWARD(translate)
+    HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
