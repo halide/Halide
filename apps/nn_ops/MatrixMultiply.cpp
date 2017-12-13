@@ -37,7 +37,7 @@ int32_t multiply_quantized_multiplier(int32_t x, int32_t q, int32_t shift) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 6) {
+    if (argc < 5) {
         printf("Usage: %s (cpu|hvx64) M N K [mat_a_offset mat_b_offset output_multiplier output_shift output_offset output_min output_max]\n", argv[0]);
         return 0;
     }
