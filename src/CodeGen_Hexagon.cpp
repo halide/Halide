@@ -117,6 +117,28 @@ bool uses_hvx(Stmt s) {
     return uses.uses_hvx;
 }
 
+// Check if the IR has a parallel for loop in it.
+class HasParFor : public IRVisitor {
+private:
+    using IRVisitor::visit;
+    void visit(const For *op) {
+        if (op->for_type == ForType::Parallel) {
+            has_par_for = true;
+            return;
+        }
+        IRVisitor::visit(op);
+    }
+public:
+    bool has_par_for = false;
+};
+
+// Return true if s has a parallel for loop in it.
+bool has_par_for(Stmt s) {
+    HasParFor h;
+    s.accept(&h);
+    return h.has_par_for;
+}
+
 Stmt call_halide_qurt_hvx_lock(const Target &target) {
     Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
@@ -128,13 +150,21 @@ Stmt call_halide_qurt_hvx_lock(const Target &target) {
 }
 
 Stmt call_halide_qurt_hvx_unlock(const Target &target) {
-    Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
     string hvx_unlock_result_name = unique_name("hvx_unlock_result");
     Expr hvx_unlock_result_var = Variable::make(Int(32), hvx_unlock_result_name);
     Stmt check_hvx_unlock = LetStmt::make(hvx_unlock_result_name, hvx_unlock,
                                         AssertStmt::make(EQ::make(hvx_unlock_result_var, 0), hvx_unlock_result_var));
     return check_hvx_unlock;
+}
+Stmt call_halide_set_num_threads(Stmt stmt, const Target &target,
+                                     string &old_num_threads_name) {
+    Expr num_threads = target.has_feature(Target::HVX_128) ? 2 : 4;
+    Expr num_threads_call = Call::make(Int(32), "halide_set_num_threads", {num_threads}, Call::Extern);
+    old_num_threads_name = unique_name("old_num_threads");
+    Stmt set_up_old_num_threads = LetStmt::make(old_num_threads_name, num_threads_call,
+                                                stmt);
+    return set_up_old_num_threads;
 }
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
@@ -150,7 +180,6 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     stmt = Block::make(check_hvx_lock, stmt);
     return stmt;
 }
-
 bool is_dense_ramp(Expr x) {
     const Ramp *r = x.as<Ramp>();
     if (!r) return false;
@@ -269,8 +298,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     if (has_hvx_use) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
         body = acquire_hvx_context(body, target);
-        debug(1) << "Adding calls to qurt_hvx_lock inside parallel loops, if any...\n";
-        body = par_call_halide_lock_unlock(body, target);
+        if (has_par_for(body)) {
+            body = call_halide_set_num_threads(body, target, old_num_threads_name);
+            debug(1) << "Adding calls to qurt_hvx_lock inside parallel loops, if any...\n";
+            body = par_call_halide_lock_unlock(body, target);
+        }
     }
 
     debug(1) << "Hexagon function body:\n";
@@ -1684,7 +1716,11 @@ void CodeGen_Hexagon::visit(const For *op) {
 
         llvm::Function *fn = module->getFunction("halide_qurt_hvx_lock");
         internal_assert(fn);
-        value = builder->CreateCall(fn, {user_context, size});
+        builder->CreateCall(fn, {user_context, size});
+        Value *old_num_threads = sym_get(old_num_threads_name);
+        llvm::Function *set_num_threads =
+            module->getFunction("halide_set_num_threads");
+        value = builder->CreateCall(set_num_threads, {old_num_threads});
         return;
     }
 }

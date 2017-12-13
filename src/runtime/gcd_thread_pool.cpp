@@ -122,14 +122,21 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     dispatch_apply_f(size, dispatch_get_global_queue(0, 0), &job, &halide_do_gcd_task);
     return job.exit_status;
 }
-
+WEAK int halide_default_set_num_threads(int n) {
+    if (n < 0) {
+        halide_error(NULL, "halide_default_set_num_threads: must be >= 0.");
+    }
+    int old_custom_num_threads = custom_num_threads;
+    custom_num_threads = n;
+    return old_custom_num_threads;
+}
 }  // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK halide_do_task_t custom_do_task = halide_default_do_task;
 WEAK halide_do_par_for_t custom_do_par_for = halide_default_do_par_for;
-
+WEAK halide_set_num_threads_t custom_set_num_threads = halide_default_set_num_threads;
 }}}  // namespace Halide::Runtime::Internal
 
 extern "C" {
@@ -174,6 +181,12 @@ WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
 WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
     halide_do_par_for_t result = custom_do_par_for;
     custom_do_par_for = f;
+    return result;
+}
+
+WEAK halide_set_num_threads_t halide_set_custom_set_num_threads(halide_set_num_threads_t f) {
+    halide_set_num_threads_t result = custom_set_num_threads;
+    custom_set_num_threads = f;
     return result;
 }
 

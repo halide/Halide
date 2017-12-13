@@ -253,7 +253,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     return job.exit_status;
 }
 
-WEAK int halide_set_num_threads(int n) {
+WEAK int halide_default_set_num_threads(int n) {
     if (n < 0) {
         halide_error(NULL, "halide_set_num_threads: must be >= 0.");
     }

@@ -96,14 +96,8 @@ struct wrapped_closure {
 }
 
 extern "C" {
-// There are two locks at play: the thread pool lock and the hvx
-// context lock. To ensure there's no way anything could ever
-// deadlock, we never attempt to acquire one while holding the
-// other.
-WEAK int halide_do_par_for(void *user_context,
-                           halide_task_t task,
-                           int min, int size, uint8_t *closure) {
-    // Get the work queue mutex. We need to do a handful of hexagon-specific things.
+
+WEAK int halide_set_num_threads(int n){
     qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
     if (!work_queue.initialized) {
         // The thread pool asssumes that a zero-initialized mutex can
@@ -114,31 +108,28 @@ WEAK int halide_do_par_for(void *user_context,
         // initializing this mutex.
         qurt_mutex_init(mutex);
     }
-
-
-    // Set the desired number of threads based on the current HVX
-    // mode.
-    // For now, set it to 2, so that this works in both HVX64B and HVX128B
-    // modes.
-    int old_num_threads = halide_set_num_threads(2);
-
+    return halide_default_set_num_threads(n);
+}
+// There are two locks at play: the thread pool lock and the hvx
+// context lock. To ensure there's no way anything could ever
+// deadlock, we never attempt to acquire one while holding the
+// other.
+WEAK int halide_do_par_for(void *user_context,
+                           halide_task_t task,
+                           int min, int size, uint8_t *closure) {
     // We're about to acquire the thread-pool lock, so we must drop
     // the hvx context lock, even though we'll likely reacquire it
     // immediately to do some work on this thread.
     qurt_hvx_unlock();
 
-    int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
-
-    // Set the desired number of threads back to what it was, in case
-    // we're a 128 job and we were sharing the machine with a 64 job.
-    halide_set_num_threads(old_num_threads);
-    return ret;
+    return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
 }
 
 WEAK int halide_do_task(void *user_context, halide_task_t f,
                         int idx, uint8_t *closure) {
     return f(user_context, idx, closure);
 }
+
 namespace {
 __attribute__((destructor))
 WEAK void halide_thread_pool_cleanup() {

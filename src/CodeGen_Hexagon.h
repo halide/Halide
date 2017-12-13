@@ -114,6 +114,7 @@ protected:
     llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
  private:
     bool has_hvx_use = false;
+    std::string old_num_threads_name;
 };
 
 }}
