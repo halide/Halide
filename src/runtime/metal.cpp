@@ -686,6 +686,7 @@ WEAK int halide_metal_run(void *user_context,
         }
     }
 
+
     int32_t buffer_index = 0;
     if (total_args_size > 0) {
         mtl_buffer *args_buffer = 0;        // used if the total arguments size large
@@ -700,10 +701,26 @@ WEAK int halide_metal_run(void *user_context,
             }
         }
 
-        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
+        // The Metal compiler introduces padding of some unknown size to the end
+        // of the struct in some (apparently undocumented) circumstances.  We
+        // replicate the logic of this gist:
+        // https://gist.github.com/btipling/fa0ab7bd514d8a319c886def0980ccfc
+        // and pad to a multiple of the largest argument size
+        //
+        // Alternatively, we could use reflection when creating the pipeline state object
+        // and then check the first MTLArgument to determine the size.
+        //
+        // TODO(shoaibkamil): Follow up with Apple to find a specification for when
+        // and how much padding is needed
+        size_t padded_args_size = (total_args_size + arg_sizes[0] - 1) & -arg_sizes[0];
+        debug(user_context) << "Total args size is " << (uint64_t)total_args_size <<
+          " and with padding, size is " << (uint64_t)padded_args_size << "\n";
+        halide_assert(user_context, padded_args_size >= total_args_size);
+
+        if (padded_args_size < 4096 && metal_api_supports_set_bytes) {
             args_ptr = (char *)small_args_buffer;
         } else {
-            args_buffer = new_buffer(metal_context.device, total_args_size);
+            args_buffer = new_buffer(metal_context.device, padded_args_size);
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
                 release_ns_object(pipeline_state);
@@ -723,7 +740,7 @@ WEAK int halide_metal_run(void *user_context,
         halide_assert(user_context, offset == total_args_size);
         if (total_args_size < 4096 && metal_api_supports_set_bytes) {
             set_input_buffer_from_bytes(encoder, small_args_buffer,
-                                        total_args_size, buffer_index);
+                                        padded_args_size, buffer_index);
         } else {
             set_input_buffer(encoder, args_buffer, buffer_index);
             release_ns_object(args_buffer);
