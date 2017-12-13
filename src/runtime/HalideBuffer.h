@@ -68,7 +68,8 @@ enum struct BufferDeviceOwnership : int {
     Allocated,     ///> halide_device_free will be called when device ref count goes to zero
     WrappedNative, ///> halide_device_detach_native will be called when device ref count goes to zero
     Unmanaged,     ///> No free routine will be called when device ref count goes to zero
-    AllocatedDeviceAndHost, ///> Call device_and_host_free when DeveRefCount goes to zero.
+    AllocatedDeviceAndHost, ///> Call device_and_host_free when DevRefCount goes to zero.
+    Cropped,       ///> Call halide_device_release_crop when DevRefCount goes to zero.
 };
 
 /** A similar struct for managing device allocations. */
@@ -169,6 +170,19 @@ private:
         }
     }
 
+    struct DevRefCountCropped : DeviceRefCount {
+        Buffer<T, D> cropped_from;
+        DevRefCountCropped(const Buffer<T, D> &cropped_from) : cropped_from(cropped_from) {
+            ownership = BufferDeviceOwnership::Cropped; 
+        }
+    };
+
+    /** Setup the device ref count for a buffer to indicate it is a crop of cropped_from */
+    void crop_from(const Buffer<T, D> &cropped_from) {
+        assert(dev_ref_count == nullptr);
+        dev_ref_count = new DevRefCountCropped(cropped_from);
+    }
+
     /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
     void decref() {
@@ -201,12 +215,18 @@ private:
                     buf.device_interface->detach_native(nullptr, &buf);
                 } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
                     buf.device_interface->device_and_host_free(nullptr, &buf);
+                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                    buf.device_interface->device_release_crop(nullptr, &buf);
                 } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
                     buf.device_interface->device_free(nullptr, &buf);
                 }
             }
             if (dev_ref_count) {
-                delete dev_ref_count;
+                if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                    delete (DevRefCountCropped *)dev_ref_count;
+                } else {
+                    delete dev_ref_count;
+                }
             }
         }
         buf.device = 0;
@@ -347,6 +367,46 @@ private:
             if (i == 0) return true;
         }
         return false;
+    }
+
+    /** Crop a single dimension without handling device allocation. */
+    void crop_host(int d, int min, int extent) {
+        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug 
+        // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
+        // Should either fix that or kill the asserts and document the routine accordingly.
+        //        assert(dim(d).min() <= min);
+        //        assert(dim(d).max() >= min + extent - 1);
+        int shift = min - dim(d).min();
+        if (buf.host != nullptr) {
+            buf.host += shift * dim(d).stride() * type().bytes();
+        }
+        buf.dim[d].min = min;
+        buf.dim[d].extent = extent;
+    }
+
+    /** Crop as many dimensions as are in rect, without handling device allocation. */
+    void crop_host(const std::vector<std::pair<int, int>> &rect) {
+        assert(rect.size() <= std::numeric_limits<int>::max());
+        int limit = (int)rect.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
+            crop_host(i, rect[i].first, rect[i].second);
+        }
+    }
+
+    void complete_device_crop(Buffer<T, D> &result_host_cropped) const {
+        assert(buf.device_interface != nullptr);
+        if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
+            const Buffer<T, D> *cropped_from = this;
+            // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
+            // is it possible to get to this point without incref having run at least once since
+            // the device field was set? (I.e. in the internal logic of crop. incref might have been
+            // called.)
+            if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                cropped_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
+            }
+            result_host_cropped.crop_from(*cropped_from);
+        }
     }
 
 public:
@@ -1045,29 +1105,35 @@ public:
 
     /** Make an image that refers to a sub-range of this image along
      * the given dimension. Does not assert the crop region is within
-     * the existing bounds. The cropped image drops any device
-     * handle. */
+     * the existing bounds. */
     Buffer<T, D> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
-        im.crop(d, min, extent);
+
+        // This guarantees the prexisting device ref is dropped if the
+        // device_crop call fails and maintains the buffer in a consistent
+        // state.
+        im.device_deallocate();
+
+        im.crop_host(d, min, extent);
+        if (buf.device_interface != nullptr) {
+            complete_device_crop(im);
+        }
         return im;
     }
 
     /** Crop an image in-place along the given dimension. */
     void crop(int d, int min, int extent) {
-        // assert(dim(d).min() <= min);
-        // assert(dim(d).max() >= min + extent - 1);
-        int shift = min - dim(d).min();
-        if (shift) {
-            device_deallocate();
+        // An optimization for non-device buffers. For the device case,
+        // a temp buffer is required, so reuse the not-in-place version.
+        // TODO(zalman|abadams): Are nop crops common enough to special
+        // case the device part of the if to do nothing?
+        if (buf.device_interface != nullptr) {
+            *this = cropped(d, min, extent);
+        } else {
+            crop_host(d, min, extent);
         }
-        if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
-        }
-        buf.dim[d].min = min;
-        buf.dim[d].extent = extent;
     }
 
     /** Make an image that refers to a sub-rectangle of this image along
@@ -1077,17 +1143,29 @@ public:
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
-        im.crop(rect);
+
+        // This guarantees the prexisting device ref is dropped if the
+        // device_crop call fails and maintains the buffer in a consistent
+        // state.
+        im.device_deallocate();
+
+        im.crop_host(rect);
+        if (buf.device_interface != nullptr) {
+            complete_device_crop(im);
+        }
         return im;
     }
 
     /** Crop an image in-place along the first N dimensions. */
     void crop(const std::vector<std::pair<int, int>> &rect) {
-        assert(rect.size() <= std::numeric_limits<int>::max());
-        int limit = (int)rect.size();
-        assert(limit <= dimensions());
-        for (int i = 0; i < limit; i++) {
-            crop(i, rect[i].first, rect[i].second);
+        // An optimization for non-device buffers. For the device case,
+        // a temp buffer is required, so reuse the not-in-place version.
+        // TODO(zalman|abadams): Are nop crops common enough to special
+        // case the device part of the if to do nothing?
+        if (buf.device_interface != nullptr) {
+            *this = cropped(rect);
+        } else {
+            crop_host(rect);
         }
     }
 
