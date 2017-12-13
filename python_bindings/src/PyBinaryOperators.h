@@ -1,5 +1,5 @@
-#ifndef HALIDE_PYTHON_BINDINGS_BINARYOPERATORS_H
-#define HALIDE_PYTHON_BINDINGS_BINARYOPERATORS_H
+#ifndef HALIDE_PYTHON_BINDINGS_add_binary_operators_H
+#define HALIDE_PYTHON_BINDINGS_add_binary_operators_H
 
 #include <boost/python/operators.hpp>
 #include <boost/python/self.hpp>
@@ -96,4 +96,4 @@ void add_binary_operators(PythonClass &class_instance) {
         ;
 }
 
-#endif  // HALIDE_PYTHON_BINDINGS_BINARYOPERATORS_H
+#endif  // HALIDE_PYTHON_BINDINGS_add_binary_operators_H

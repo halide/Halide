@@ -1,5 +1,5 @@
-#ifndef HALIDE_PYTHON_BINDINGS_EXPR_H
-#define HALIDE_PYTHON_BINDINGS_EXPR_H
+#ifndef HALIDE_PYTHON_BINDINGS_PYEXPR_H
+#define HALIDE_PYTHON_BINDINGS_PYEXPR_H
 
 #include <boost/python.hpp>
 #include <vector>
@@ -20,4 +20,4 @@ std::vector<T> python_collection_to_vector(const boost::python::object &obj) {
     return result;
 }
 
-#endif  // HALIDE_PYTHON_BINDINGS_EXPR_H
+#endif  // HALIDE_PYTHON_BINDINGS_PYEXPR_H

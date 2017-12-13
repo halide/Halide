@@ -5,7 +5,7 @@
 
 #include "Halide.h"
 
-#include "PyOperators.h"
+#include "PyBinaryOperators.h"
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -42,8 +42,8 @@ void define_rvar() {
 
     p::implicitly_convertible<RVar, h::Expr>();
 
-    add_operators(rvar_class);  // define operators with int, rvars, and exprs
-    add_operators_with<decltype(rvar_class), h::Expr>(rvar_class);
+    add_binary_operators(rvar_class);  // define operators with int, rvars, and exprs
+    add_binary_operators_with<decltype(rvar_class), h::Expr>(rvar_class);
 }
 
 h::RDom *RDom_constructor0(p::tuple args, std::string name = "") {
@@ -224,6 +224,6 @@ void define_rdom() {
     p::implicitly_convertible<RDom, h::Expr>();
     p::implicitly_convertible<RDom, h::RVar>();
 
-    add_operators(rdom_class);  // define operators with int, rdom and exprs
-    add_operators_with<decltype(rdom_class), h::Expr>(rdom_class);
+    add_binary_operators(rdom_class);  // define operators with int, rdom and exprs
+    add_binary_operators_with<decltype(rdom_class), h::Expr>(rdom_class);
 }

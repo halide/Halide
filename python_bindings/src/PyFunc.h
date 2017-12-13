@@ -1,5 +1,5 @@
-#ifndef HALIDE_PYTHON_BINDINGS_FUNC_H
-#define HALIDE_PYTHON_BINDINGS_FUNC_H
+#ifndef HALIDE_PYTHON_BINDINGS_PYFUNC_H
+#define HALIDE_PYTHON_BINDINGS_PYFUNC_H
 
 #include <boost/python.hpp>
 #include <boost/python/tuple.hpp>
@@ -144,4 +144,4 @@ FuncOrStage &func_reorder_storage1(FuncOrStage &that, bp::object v0,
 
 }  // namespace func_and_stage_implementation_details
 
-#endif  // HALIDE_PYTHON_BINDINGS_FUNC_H
+#endif  // HALIDE_PYTHON_BINDINGS_PYFUNC_H

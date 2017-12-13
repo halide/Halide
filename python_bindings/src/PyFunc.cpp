@@ -7,7 +7,7 @@
 
 #include "Halide.h"
 
-#include "PyOperators.h"
+#include "PyBinaryOperators.h"
 #include "PyBuffer.h"
 #include "PyExpr.h"
 #include "PyFunc_Ref.h"

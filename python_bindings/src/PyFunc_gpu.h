@@ -1,5 +1,5 @@
-#ifndef HALIDE_PYTHON_BINDINGS_FUNC_GPU_H
-#define HALIDE_PYTHON_BINDINGS_FUNC_GPU_H
+#ifndef HALIDE_PYTHON_BINDINGS_PYFUNC_GPU_H
+#define HALIDE_PYTHON_BINDINGS_PYFUNC_GPU_H
 
 #include <boost/python.hpp>
 
@@ -265,4 +265,4 @@ void define_func_or_stage_gpu_methods(bp::class_<FuncOrStage> &func_or_stage_cla
 
 }  // namespace func_and_stage_implementation_details
 
-#endif  // HALIDE_PYTHON_BINDINGS_FUNC_GPU_H
+#endif  // HALIDE_PYTHON_BINDINGS_PYFUNC_GPU_H

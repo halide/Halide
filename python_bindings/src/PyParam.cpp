@@ -8,7 +8,7 @@
 
 #include "Halide.h"
 
-#include "PyOperators.h"
+#include "PyBinaryOperators.h"
 #include "PyType.h"
 
 namespace h = Halide;
@@ -373,20 +373,20 @@ void define_param_impl(const std::string suffix, const h::Type type) {
     p::implicitly_convertible<Param<T>, h::Expr>();
 
     typedef decltype(param_class) pc_t;
-    add_operators_with<pc_t, int>(param_class);
-    add_operators_with<pc_t, float>(param_class);
-    add_operators_with<pc_t, h::Expr>(param_class);
+    add_binary_operators_with<pc_t, int>(param_class);
+    add_binary_operators_with<pc_t, float>(param_class);
+    add_binary_operators_with<pc_t, h::Expr>(param_class);
 
-    add_operators_with<pc_t, Param<uint8_t>>(param_class);
-    add_operators_with<pc_t, Param<uint16_t>>(param_class);
-    add_operators_with<pc_t, Param<uint32_t>>(param_class);
+    add_binary_operators_with<pc_t, Param<uint8_t>>(param_class);
+    add_binary_operators_with<pc_t, Param<uint16_t>>(param_class);
+    add_binary_operators_with<pc_t, Param<uint32_t>>(param_class);
 
-    add_operators_with<pc_t, Param<int8_t>>(param_class);
-    add_operators_with<pc_t, Param<int16_t>>(param_class);
-    add_operators_with<pc_t, Param<int32_t>>(param_class);
+    add_binary_operators_with<pc_t, Param<int8_t>>(param_class);
+    add_binary_operators_with<pc_t, Param<int16_t>>(param_class);
+    add_binary_operators_with<pc_t, Param<int32_t>>(param_class);
 
-    add_operators_with<pc_t, Param<float>>(param_class);
-    add_operators_with<pc_t, Param<double>>(param_class);
+    add_binary_operators_with<pc_t, Param<float>>(param_class);
+    add_binary_operators_with<pc_t, Param<double>>(param_class);
 }
 
 template <typename T, typename... Args>

@@ -7,7 +7,7 @@
 #include "Halide.h"
 
 #include "PyType.h"
-#include "PyOperators.h"
+#include "PyBinaryOperators.h"
 
 namespace h = Halide;
 namespace p = boost::python;
@@ -86,7 +86,7 @@ void define_expr() {
                           .def("__repr__", &expr_repr, p::arg("self"));
     ;
 
-    add_operators(expr_class);
+    add_binary_operators(expr_class);
 
     // implicitly_convertible declaration order matters,
     // int should be tried before float convertion
