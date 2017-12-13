@@ -82,6 +82,10 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> mat_b(nullptr, K, N);
     Halide::Runtime::Buffer<int32_t> bias(nullptr, K);
 
+    // These parameters (-128 matrix offsets, +128 output offset,
+    // output shift of 8) lead to reasonable values for testing in
+    // most cases (expected value of the input matrices is ~0,
+    // expected value of the product is ~0).
     int16_t mat_a_offset = -128;
     int16_t mat_b_offset = -128;
     int output_multiplier = 1 << 30;
