@@ -331,6 +331,13 @@ if (WITH_TEST_GENERATOR)
                                 EXTRA_OUTPUTS stmt assembly)
   target_link_libraries(generator_aot_metadata_tester PUBLIC metadata_tester_ucon)
 
+  # Needs an extra library from this Generator
+  halide_define_aot_test(alias)
+  halide_library(alias_with_offset_42
+                 SRCS ${GEN_TEST_DIR}/alias_generator.cpp
+                 GENERATOR_NAME alias_with_offset_42)
+  target_link_libraries(generator_aot_alias PUBLIC alias_with_offset_42)
+
   halide_define_aot_test(tiled_blur)
   halide_library_from_generator(blur2x2)
   target_link_libraries(generator_aot_tiled_blur PUBLIC blur2x2)
