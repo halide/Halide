@@ -1,13 +1,11 @@
-#!/usr/bin/python3
-
 import os.path
 
-import halide as h
+import halide
 
 def main():
-    x = h.Var("x")
+    x = halide.Var("x")
 
-    f = h.Func("f")
+    f = halide.Func("f")
 
     f[x] = 100 * x
 

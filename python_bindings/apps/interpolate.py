@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 Fast image interpolation using a pyramid.
 """

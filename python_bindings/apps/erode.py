@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 Erode application using Python Halide bindings
 """

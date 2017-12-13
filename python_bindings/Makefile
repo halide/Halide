@@ -5,7 +5,7 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 # These are set by Halide's Makefile when built via that path.
 HALIDE_DISTRIB_PATH ?= $(ROOT_DIR)/../distrib
 BIN ?= $(ROOT_DIR)/bin
-PYTHON ?= python3
+PYTHON ?= python
 TEST_TMP ?= $(BIN)/tmp
 
 ifeq ($(UNAME), Linux)
@@ -22,13 +22,13 @@ else ifeq ($(UNAME), Darwin)
 		MACPORTS_CCFLAGS = 
 		MACPORTS_LDFLAGS = 
 	endif
-	CCFLAGS=$(shell python3-config --cflags) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) $(MACPORTS_CCFLAGS) -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
-	LDFLAGS=$(shell python3-config --ldflags) $(MACPORTS_LDFLAGS) -lboost_python3-mt -lz
+	CCFLAGS=$(shell python-config --cflags) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) $(MACPORTS_CCFLAGS) -std=c++11 -Wno-unused-local-typedef -Wno-shorten-64-to-32
+	LDFLAGS=$(shell python-config --ldflags) $(MACPORTS_LDFLAGS) -lboost_python-mt -lz
 else
 	CCFLAGS = $(error Unsupported platform $(UNAME))
 endif
 
-NUMPY_PATH=$(shell python3 -c "import numpy; print(numpy.__path__[0] + '/core/include')")
+NUMPY_PATH=$(shell python -c "import numpy; print(numpy.__path__[0] + '/core/include')")
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/python/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/python/%.cpp=$(BIN)/py_%.o)

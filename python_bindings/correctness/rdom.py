@@ -1,18 +1,16 @@
-#!/usr/bin/python3
-
-import halide as h
+import halide
 
 def test_rdom():
-    x = h.Var("x")
-    y = h.Var("y")
+    x = halide.Var("x")
+    y = halide.Var("y")
 
-    diagonal = h.Func("diagonal")
+    diagonal = halide.Func("diagonal")
     diagonal[x, y] = 1
 
     domain_width = 10
     domain_height = 10
 
-    r = h.RDom(0, domain_width, 0, domain_height)
+    r = halide.RDom(0, domain_width, 0, domain_height)
     r.where(r.x <= r.y)
 
     diagonal[r.x, r.y] = 2

@@ -1,8 +1,25 @@
-#!/usr/bin/python3
-
 from halide import *
-from contextlib import redirect_stdout
-import io, sys
+
+import sys
+
+try:
+    from StringIO import StringIO  # Python2
+except ImportError:
+    try:
+        from io import StringIO    # Python3
+    except ImportError:
+        print("StringIO not found")
+
+from contextlib import contextmanager
+
+@contextmanager
+def _redirect_stdout(out):
+    old_out = sys.stdout
+    sys.stdout = out
+    try:
+        yield out
+    finally:
+        sys.stdout = old_out
 
 def test_compiletime_error():
 
@@ -41,8 +58,8 @@ def test_print_expr():
     f = Func('f')
     f[x] = print_expr(cast(UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
     buf = Buffer(UInt(8), 1)
-    output = io.StringIO()
-    with redirect_stdout(output):
+    output = StringIO()
+    with _redirect_stdout(output):
         f.realize(buf)
         expected = '0 is what the 1 and 3.141500 saw\n'
         actual = output.getvalue()
@@ -56,8 +73,8 @@ def test_print_when():
     f = Func('f')
     f[x] = print_when(x == 3, cast(UInt(8), x*x), 'is result at', x)
     buf = Buffer(UInt(8), 10)
-    output = io.StringIO()
-    with redirect_stdout(output):
+    output = StringIO()
+    with _redirect_stdout(output):
         f.realize(buf)
         expected = '9 is result at 3\n'
         actual = output.getvalue()
@@ -171,9 +188,11 @@ def test_basics2():
     assert (x * 8).type() == Int(32)
     assert (x * 8 * 4).type() == Int(32) # yes this did fail at some point
     assert ((x * 8) / 4).type() == Int(32)
-    assert (x * (8 / 4)).type() == Float(32) # under python3 division rules
+    if sys.version_info[0] < 3:
+        assert (x * (8 / 4)).type() == Int(32) # under python2 division rules
+    else:
+        assert (x * (8 / 4)).type() == Float(32) # under python3 division rules
     assert (x * (8 // 4)).type() == Int(32)
-    #assert (x * 8 // 4).type() == Int(32) # not yet implemented
 
 
     # Construct the bilateral grid

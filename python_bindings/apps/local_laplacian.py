@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image Processing".
 """
