@@ -114,9 +114,8 @@ int main(int argc, char **argv) {
         Halide::Buffer<int32_t> gpu_input = make_gpu_buffer();
         Halide::Buffer<int32_t> gpu_output = make_gpu_buffer();
 
-        // TODO(steven-johnson|abadams): Why doesn't the forward forward?
-        gpu_input.get()->crop({ { 64, 64 }, { 64, 64 } });
-        gpu_output.get()->crop({ { 64, 64 }, { 64, 64 } });
+        gpu_input.crop({ { 64, 64 }, { 64, 64 } });
+        gpu_output.crop({ { 64, 64 }, { 64, 64 } });
 
         in.set(gpu_input);
 
