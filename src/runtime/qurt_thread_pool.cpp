@@ -31,7 +31,6 @@ void spawn_thread_helper(void *arg) {
 }
 
 #define STACK_SIZE 256*1024
-#define HEXAGON_DEFAULT_NUM_THREADS 4
 
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
@@ -101,7 +100,8 @@ extern "C" {
 // There are two locks at play: the thread pool lock and the hvx
 // context lock. To ensure there's no way anything could ever
 // deadlock, we never attempt to acquire one while holding the
-// other.
+// other. CodeGen_Hexagon makes sure this is true by calling
+// halide_qurt_hvx_unlock before calling halide_do_par_for.
 WEAK int halide_do_par_for(void *user_context,
                            halide_task_t task,
                            int min, int size, uint8_t *closure) {
@@ -115,16 +115,7 @@ WEAK int halide_do_par_for(void *user_context,
         // initializing this mutex.
         qurt_mutex_init(mutex);
     }
-    int old_num_threads = halide_set_num_threads(HEXAGON_DEFAULT_NUM_THREADS);
-    // We're about to acquire the thread-pool lock, so we must drop
-    // the hvx context lock, even though we'll likely reacquire it
-    // immediately to do some work on this thread.
-    qurt_hvx_unlock();
-
-    int ret =  halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
-
-    halide_set_num_threads(old_num_threads);
-    return ret;
+    return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
 }
 
 WEAK int halide_do_task(void *user_context, halide_task_t f,

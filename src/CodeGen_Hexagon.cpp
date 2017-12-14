@@ -98,7 +98,14 @@ Stmt call_halide_qurt_hvx_lock(const Target &target) {
                                         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
     return check_hvx_lock;
 }
-
+Stmt call_halide_qurt_hvx_unlock(const Target &target) {
+    Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
+    string hvx_unlock_result_name = unique_name("hvx_unlock_result");
+    Expr hvx_unlock_result_var = Variable::make(Int(32), hvx_unlock_result_name);
+    Stmt check_hvx_unlock = LetStmt::make(hvx_unlock_result_name, hvx_unlock,
+                                          AssertStmt::make(EQ::make(hvx_unlock_result_var, 0), hvx_unlock_result_var));
+    return check_hvx_unlock;
+}
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
@@ -169,14 +176,21 @@ private:
             Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
                              op->device_api, body);
             if (old_uses_hvx) {
+                // If there is use of HVX outside the parallel for loop, then we will
+                // unlock before the for loop and lock after it.
+                // The reason we lock is that inside halide_do_par_for we acquire a lock
+                // on the work queue mutex and we could risk deadlock if we hold more than
+                // one lock/resource at one time.
                 Stmt call_hvx_lock = call_halide_qurt_hvx_lock(target);
-                return Block::make(call_hvx_lock, new_for);
+                Stmt call_hvx_unlock = call_halide_qurt_hvx_unlock(target);
+                new_for = Block::make(call_hvx_unlock, new_for);
+                return Block::make(new_for, call_hvx_lock);
             } else {
                 return new_for;
             }
         }
         return IRMutator2::visit(op);
-     }
+    }
     Expr visit(const Variable *op) {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
