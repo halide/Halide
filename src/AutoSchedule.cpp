@@ -1183,7 +1183,8 @@ struct Partitioner {
 
     // Partition the pipeline by iteratively merging groups until a fixpoint is
     // reached.
-    void group(Partitioner::Level level, const map<string, Expr> &tile_bounds);
+    void group(Partitioner::Level level, const map<string, Expr> &tile_bounds,
+               const set<string> &inlined);
     void group_recurse();
 
     // Given a grouping choice, return a configuration for the group that gives
@@ -1192,13 +1193,18 @@ struct Partitioner {
                                 const map<string, Expr> &tile_bounds);
     pair<GroupConfig, vector<Group>> evaluate_choice_recurse(const GroupingChoice &group);
 
+    pair<GroupConfig, vector<Group>> evaluate_subgroup(
+        const Group &group, const map<string, Expr> &tile_config,
+        GroupAnalysis group_analysis);
+
     // Pick the best choice among all the grouping options currently available. Uses
     // the cost model to estimate the benefit of each choice. This returns a vector of
     // choice and configuration pairs which describe the best grouping choice.
     vector<pair<GroupingChoice, GroupConfig>>
     choose_candidate_grouping(const vector<pair<string, string>> &cands,
                               Partitioner::Level level,
-                              const map<string, Expr> &tile_bounds);
+                              const map<string, Expr> &tile_bounds,
+                              const set<string> &inlined);
 
     pair<vector<pair<GroupingChoice, GroupConfig>>, vector<vector<Group>>>
     choose_candidate_grouping_recurse(const vector<pair<string, string>> &cands);
@@ -1230,6 +1236,9 @@ struct Partitioner {
 
     pair<map<string, Expr>, GroupAnalysis> find_best_tile_config_sliding_window(
         const Group &g, const map<string, Expr> &tile_bounds);
+
+    pair<Partitioner::GroupConfig, vector<Partitioner::Group>>
+    find_best_tile_config_optimized(const Group &g);
 
     // Estimate the benefit (arithmetic + memory) of 'new_grouping' over 'old_grouping'.
     // Positive values indicates that 'new_grouping' may be preferrable over 'old_grouping'.
@@ -1604,23 +1613,19 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
             internal_assert(o.name() != f) << "Output \"" << f << "\" should have been bounded\n";
         }
         const Function &func = get_element(dep_analysis.env, f);
-        int num_stages = func.updates().size() + 1;
+        internal_assert(func.updates().empty());
         for (auto &iter : groups) {
             bool use_f = false;
-            for (int s = 0; s < num_stages; s++) {
-                FStage prod_stage(func, s);
-                for (const auto &m : iter.second.members) {
-                    const auto &c_iter = children.find(prod_stage);
-                    if ((c_iter != children.end()) && (c_iter->second.find(m) != c_iter->second.end())) {
-                        use_f = true;
-                        break;
-                    }
+            FStage prod_stage(func, 0);
+            for (const auto &m : iter.second.members) {
+                const auto &c_iter = children.find(prod_stage);
+                if ((c_iter != children.end()) && (c_iter->second.find(m) != c_iter->second.end())) {
+                    use_f = true;
+                    break;
                 }
             }
             if (use_f) {
-                for (int s = 0; s < num_stages; s++) {
-                    iter.second.members.push_back(FStage(func, s));
-                }
+                iter.second.members.push_back(prod_stage);
                 iter.second.inlined.insert(f);
             }
         }
@@ -1686,7 +1691,8 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
 vector<pair<Partitioner::GroupingChoice, Partitioner::GroupConfig>>
 Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands,
                                        Partitioner::Level level,
-                                       const map<string, Expr> &tile_bounds) {
+                                       const map<string, Expr> &tile_bounds,
+                                       const set<string> &inlined) {
     vector<pair<GroupingChoice, GroupConfig>> best_grouping;
     Expr best_benefit = make_zero(Int(64));
     for (const auto &p : cands) {
@@ -1724,7 +1730,13 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         debug(3) << "Candidate benefit: " << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
-        if (overall_benefit.defined() && can_prove(best_benefit < overall_benefit)) {
+        if (inlined.count(prod_f.name())) {
+            //debug(0) << "...Force inlining: " << prod_f.name() << "\n";
+            internal_assert(prod_f.is_pure());
+            best_grouping = grouping;
+            best_benefit = overall_benefit;
+            break;
+        } else if (overall_benefit.defined() && can_prove(best_benefit < overall_benefit)) {
             best_grouping = grouping;
             best_benefit = overall_benefit;
         }
@@ -1836,21 +1848,23 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs_sliding_window(
             }
         }
     }
-    if (var.empty() || !tile_bounds.count(var)) {
+    if (var.empty()) {
         return tile_configs;
     }
 
-    const int64_t *bound_size = as_const_int(tile_bounds.at(var));
-    internal_assert(bound_size);
+    const int64_t *bound_size = nullptr;
+    // If the tile size for 'var' is not specified, it means tile by the
+    // whole image size at that dimension.
+    if (tile_bounds.count(var)) {
+        bound_size = as_const_int(tile_bounds.at(var));
+    }
 
     for (const auto &dim_size : size_variants) {
-        if (dim_size >= *bound_size) {
+        if (bound_size && (dim_size >= *bound_size)) {
             break;
         }
         map<string, Expr> tiling = tile_bounds;
-        auto iter = tiling.find(var);
-        internal_assert(iter != tiling.end());
-        iter->second = dim_size;
+        tiling[var] = dim_size;
         tile_configs.push_back(tiling);
     }
 
@@ -2236,7 +2250,8 @@ vector<pair<string, string>> Partitioner::get_grouping_candidate(
     return cand;
 }
 
-void Partitioner::group(Partitioner::Level level, const map<string, Expr> &tile_bounds) {
+void Partitioner::group(Partitioner::Level level, const map<string, Expr> &tile_bounds,
+                        const set<string> &inlined) {
     bool fixpoint = false;
     while (!fixpoint) {
         fixpoint = true;
@@ -2249,7 +2264,8 @@ void Partitioner::group(Partitioner::Level level, const map<string, Expr> &tile_
             debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}" << '\n';
         }
 
-        vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level, tile_bounds);
+        vector<pair<GroupingChoice, GroupConfig>> best =
+            choose_candidate_grouping(cand, level, tile_bounds, inlined);
         if (best.empty()) {
             continue;
         } else {
@@ -2287,6 +2303,9 @@ void Partitioner::group(Partitioner::Level level, const map<string, Expr> &tile_
 
         for (size_t s = 0; s < num_stages; s++) {
             FStage prod_group(prod_f, s);
+            /*if (level != Partitioner::Level::Inline) {
+                debug(0) << ".....erasing " << prod_group << "\n";
+            }*/
             groups.erase(prod_group);
             group_costs.erase(prod_group);
 
@@ -2857,31 +2876,60 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
 }
 
 pair<Partitioner::GroupConfig, vector<Partitioner::Group>>
-Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
-    // Create a group that reflects the grouping choice and evaluate the cost
-    // of the group.
-    const Function &prod_f = get_element(dep_analysis.env, choice.prod);
-    int num_prod_stages = prod_f.updates().size() + 1;
-    vector<Group> prod_groups;
+Partitioner::find_best_tile_config_optimized(const Group &g) {
+    // Initialize to no tiling
+    map<string, Expr> no_tile_config;
+    Group no_tile = g;
+    no_tile.tile_sizes = no_tile_config;
 
-    for (int s = 0; s < num_prod_stages; s++) {
-        FStage prod_s(prod_f, s);
-        prod_groups.push_back(get_element(groups, prod_s));
+    bool show_analysis = false;
+    GroupAnalysis no_tile_analysis = analyze_group(no_tile, show_analysis);
+
+    GroupAnalysis best_analysis = no_tile_analysis;
+    map<string, Expr> best_config = no_tile_config;
+    vector<Group> best_subgroups;
+    if (!best_analysis.cost.defined()) {
+        return {GroupConfig(best_config, best_analysis), best_subgroups};
     }
 
-    Group cons = get_element(groups, choice.cons);
-    Group group = cons;
-    for (const auto &prod_g : prod_groups) {
-        group = merge_groups(prod_g, group);
+    // Generate tiling configurations
+    vector<map<string, Expr>> configs = generate_tile_configs(g.output);
+
+    for (auto config : configs) {
+        Group new_group = g;
+        new_group.tile_sizes = config;
+
+        GroupAnalysis new_analysis = analyze_group(new_group, show_analysis);
+        auto result = evaluate_subgroup(g, config, new_analysis);
+        new_analysis = result.first.analysis;
+        config = result.first.tile_sizes;
+
+        bool no_redundant_work = false;
+        Expr benefit = estimate_benefit(best_analysis, new_analysis,
+                                        no_redundant_work, true);
+
+        if (show_analysis) {
+            debug(0) << "Benefit relative to not tiling:" << benefit << '\n';
+            debug(0) << "Current analysis:" << new_analysis;
+            debug(0) << "No tile analysis:" << no_tile_analysis;
+            debug(0)
+                << "arith cost:" << simplify(cast<float>(new_analysis.cost.arith / no_tile_analysis.cost.arith))
+                << ", mem cost:" << simplify(cast<float>(new_analysis.cost.memory / no_tile_analysis.cost.memory)) << '\n';
+        }
+
+        if (benefit.defined() && can_prove(benefit > 0)) {
+            best_config = config;
+            best_analysis = new_analysis;
+            best_subgroups = result.second;
+        }
     }
 
-    GroupAnalysis group_analysis;
-    map<string, Expr> best_tile_config;
+    return {GroupConfig(best_config, best_analysis), best_subgroups};
+}
 
-    pair<map<string, Expr>, GroupAnalysis> config = find_best_tile_config(group);
-    best_tile_config = config.first;
-    group_analysis = config.second;
-
+pair<Partitioner::GroupConfig, vector<Partitioner::Group>>
+Partitioner::evaluate_subgroup(const Group &group, const map<string, Expr> &tile_config,
+                               GroupAnalysis group_analysis) {
     vector<Group> subgroups;
 
     // TODO(psuriana): The subgrouping probably should use the tile size
@@ -2889,7 +2937,7 @@ Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
     // TODO(psuriana): Should we recurse if the cost is undefined?
     if (group_analysis.cost.defined()) {
         vector<Function> sub_outputs = {group.output.func};
-        set<string> sub_inlined = group.inlined;
+        set<string> sub_inlined;// = group.inlined;
 
         map<string, Function> sub_env = dep_analysis.env;
         vector<string> sub_order = dep_analysis.order;
@@ -2903,7 +2951,7 @@ Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
         RegionCosts sub_costs(sub_env);
         DependenceAnalysis sub_dep_analysis(sub_env, sub_order, sub_func_val_bounds);
         map<string, Box> sub_pipeline_bounds =
-            get_sub_pipeline_bounds(sub_dep_analysis, sub_outputs, best_tile_config,
+            get_sub_pipeline_bounds(sub_dep_analysis, sub_outputs, tile_config,
                                     pipeline_bounds, &sub_costs.input_estimates);
 
         Partitioner part(sub_pipeline_bounds, arch_params, sub_dep_analysis,
@@ -2912,136 +2960,21 @@ Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
             part.disp_pipeline_graph();
             part.disp_grouping();
         }
-        part.initialize_groups();
-        part.group(Partitioner::Level::FastMem, best_tile_config);
-
-
-        /*Partitioner part = *this;
-        // Add the group output to the 'outputs' list.
-        part.outputs = {group.output.func};
-
-        part.groups.clear();
-        vector<FStage> inlined_stages;
-
-        for (const FStage &stg : group.members) {
-            if (group.inlined.count(stg.func.name())) {
-                inlined_stages.push_back(stg);
-            }
-        }
-
-        // TODO(psuriana): THE INLINED DOESN'T SEEM TO MAKE ANY DIFFERENCE TO THE COST
-        // TODO(psuriana): should probably put updates of a func within the same
-        // group right away  (currently this will trigger error with evaluate_choice)
-        for (const FStage &stg : group.members) {
-            if (group.inlined.count(stg.func.name())) {
-                // TODO(psuriana): add the inlined function to the consumer group
-                continue;
-            }
-
-            vector<FStage> group_members = inlined_stages;
-            // vector<FStage> group_members;
-            // set<string> parents = get_parents(stg.func, stg.stage_num);
-            // for (const FStage &s : inlined_stages) {
-            //     if (parents.count(s.func.name())) {
-            //         group_members.push_back(s);
-            //     }
-            // }
-
-            group_members.push_back(stg);
-            Group g(stg, group_members, group.inlined);
-
-            part.groups.insert(make_pair(stg, g));
-        }
-
-        {
-
-            // Update the children map
-            part.children.clear();
-            for (const auto &iter : part.groups) {
-                Function f = iter.first.func;
-                size_t s = iter.first.stage_num;
-                set<string> parents = get_parents(f, s);
-
-                for (const string &c : parents) {
-                    // Filter out the calls to pipeline inputs. 'env' only contains
-                    // the functions computed and not the inputs.
-                    auto iter = dep_analysis.env.find(c);
-                    if ((c != f.name()) && (iter != dep_analysis.env.end())) {
-                        // Consumer depends only on the last stage of a producer
-                        // with multiple stages.
-                        const Function &prod_func = iter->second;
-                        int final_stage = prod_func.updates().size();
-
-                        FStage prod_stage(prod_func, final_stage);
-                        FStage cons_stage(f, s);
-
-                        part.children[prod_stage].insert(cons_stage);
-                    }
-                }
-
-                if (s > 0) {
-                    // Update the children map to reflect the dependencies between
-                    // different stages of the same function.
-                    FStage prod_stage(f, s - 1);
-                    FStage cons_stage(f, s);
-
-                    part.children[prod_stage].insert(cons_stage);
-                }
-            }
-        }
-
-        // TODO(psuriana): need to use the tile size to recompute the bounds.
-        // This is not really efficient.
-
-        // Find the regions required for each of the outputs and merge them
-        // to compute the full pipeline_bounds.
-        {
-            part.pipeline_bounds.clear();
-
-            Function out = group.output.func;
-            Definition def = get_stage_definition(out, 0);
-            const vector<Dim> &dims = def.schedule().dims();
-            const Box &old_bound = pipeline_bounds.at(out.name());
-
-            Box out_box;
-            DimBounds pure_bounds;
-
-            for (int d = 0; d < (int)dims.size() - 1; d++) {
-                internal_assert(!dims[d].is_rvar());
-                const Interval &old_interval = old_bound[d];
-
-                const auto &iter = best_tile_config.find(dims[d].var);
-                // TODO(psuriana): if tile size is not specified, what should be the value?
-                Expr tile_min = old_interval.min;
-                Expr tile_max = old_interval.max;
-                if (iter != best_tile_config.end()) {
-                    tile_min = make_zero(iter->second.type());
-                    tile_max = simplify(iter->second - 1);
-                }
-
-                Interval I = Interval(tile_min, tile_max);
-                I.min = simplify(max(I.min, old_interval.min));
-                I.max = simplify(min(I.max, old_interval.max));
-                pure_bounds.emplace(dims[d].var, I);
-                out_box.push_back(I);
-            }
-
-            set<string> prods;
-            for (const FStage &stg : group.members) {
-                prods.insert(stg.func.name());
-            }
-
-            map<string, Box> regions = dep_analysis.regions_required(out, pure_bounds, prods,
-                                                                     false, &costs.input_estimates);
-            // Add the output region to the pipeline bounds as well.
-            regions.emplace(out.name(), out_box);
-
-            merge_regions(part.pipeline_bounds, regions);
-        }
 
         part.initialize_groups();
-        part.group(Partitioner::Level::FastMem, best_tile_config);*/
+        /*debug(0) << "\n\nCurrent group:\n" << group << "\n";
+        debug(0) << "\nINITIAL SUBGROUPS:\n";
+        part.disp_grouping();
+        part.disp_pipeline_graph();*/
 
+        // TODO(psuriana): Technically, this should give the same inlining
+        // decision, so might as well put the information into 'part' and
+        // skip the inlining step.
+        part.group(Partitioner::Level::Inline, {}, group.inlined);
+        part.grouping_cache.clear();
+        part.group(Partitioner::Level::FastMem, tile_config, {});
+        /*debug(0) << "\nAFTER SUBGROUPS:\n";
+        part.disp_grouping();*/
 
         // The computation size depends on the tile, however, the memory cost
         // depends on the subtile size.
@@ -3061,8 +2994,8 @@ Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
         memory_cost = simplify(memory_cost);
 
         /*debug(0) << "TOTAL memory cost: " << memory_cost << "\n";
-        debug(0) << "NO SUBGROUP COST: " << group_analysis << "\n";
-        debug(0) << "**********************\n\n";*/
+        debug(0) << "NO SUBGROUP COST: " << group_analysis << "\n";*/
+        //debug(0) << "**********************\n\n";
         group_analysis.cost.memory = memory_cost;
 
         for (const auto &iter : part.groups) {
@@ -3077,7 +3010,32 @@ Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
     }
     debug(0) << "\n";*/
 
-    return {GroupConfig(best_tile_config, group_analysis), subgroups};
+    return {GroupConfig(tile_config, group_analysis), subgroups};
+}
+
+pair<Partitioner::GroupConfig, vector<Partitioner::Group>>
+Partitioner::evaluate_choice_recurse(const GroupingChoice &choice) {
+    // Create a group that reflects the grouping choice and evaluate the cost
+    // of the group.
+    const Function &prod_f = get_element(dep_analysis.env, choice.prod);
+    int num_prod_stages = prod_f.updates().size() + 1;
+    vector<Group> prod_groups;
+
+    for (int s = 0; s < num_prod_stages; s++) {
+        FStage prod_s(prod_f, s);
+        prod_groups.push_back(get_element(groups, prod_s));
+    }
+
+    Group cons = get_element(groups, choice.cons);
+    Group group = cons;
+    for (const auto &prod_g : prod_groups) {
+        group = merge_groups(prod_g, group);
+    }
+
+    //pair<map<string, Expr>, GroupAnalysis> config = find_best_tile_config(group);
+    //return evaluate_subgroup(group, config.first, config.second);
+
+    return find_best_tile_config_optimized(group);
 }
 
 
@@ -3734,8 +3692,6 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     // Realize tiling and update the dimension estimates
-    vector<VarOrRVar> outer_dims;
-    vector<VarOrRVar> inner_dims;
 
     // 'dims' will get modified since we are going to apply the schedules
     // (e.g. tiling, reordering, etc.)
@@ -3752,8 +3708,6 @@ void Partitioner::generate_group_cpu_schedule(
     // Reorder the dimensions for better spatial locality (i.e. smallest stride
     // is innermost). If we only have one dimension (excluding __outermost),
     // there is nothing to reorder.
-    // TODO(psuriana): this need to take into account tiling? how about
-    // subgroup? do we need to treat it as it is a *group* output?
     if (dims.size() > 2) {
         map<string, Expr> strides =
             analyze_spatial_locality(g.output, group_storage_bounds, inlines);
@@ -3769,193 +3723,146 @@ void Partitioner::generate_group_cpu_schedule(
         dim_vars[d] = get_base_name(dims[d].var);
     }
 
-
-    map<string, vector<Expr>> out_tiles;
-    for (const auto &iter : g.tile_sizes) {
-        out_tiles[iter.first].push_back(iter.second);
+    /*debug(0) << "\n\nOutput group: " << g_out.name() << "\n";
+    debug(0) << "***DIMS: {";
+    for (const auto &s : dim_vars) {
+        debug(0) << s << ", ";
     }
-    for (const Group &sub : g.subgroups) {
-        if (sub.output == g.output) {
-            for (const auto &iter : sub.tile_sizes) {
-                internal_assert(out_tiles.count(iter.first));
-                out_tiles[iter.first].push_back(iter.second);
-            }
-        }
-    }
+    debug(0) << "}\n";*/
 
-    // Apply tiling (and subtiling if there is any) to output of the group
+    // Apply tiling to output of the group
+    vector<VarOrRVar> outer_dims;
+    vector<VarOrRVar> inner_dims;
+    {
+        map<string, Expr> tile_sizes = g.tile_sizes;
 
-    // Find the level at which group members will be computed.
-    VarOrRVar tile_inner_var("", false);
+        for (const auto &var : dim_vars) {
+            bool is_rvar = (rvars.find(var) != rvars.end());
+            VarOrRVar v(var, is_rvar);
 
-    for (const auto &var : dim_vars) {
-        bool is_rvar = (rvars.find(var) != rvars.end());
-        VarOrRVar v(var, is_rvar);
+            const auto &iter = tile_sizes.find(var);
+            if ((iter != tile_sizes.end()) &&
+                get_element(stg_estimates, var).defined() &&
+                can_prove(get_element(stg_estimates, var) > iter->second)) {
 
-        const auto &iter = out_tiles.find(var);
-        internal_assert((iter == out_tiles.end()) || !iter->second.empty());
+                const Expr &tile_size = iter->second;
+                // TODO(psuriana): If tile size is one, the inner tile is essentially
+                // loop of extent one. We don't really need to explicitly call
+                // split_dim() in this case.
+                if (can_prove(tile_size == 1)) {
+                    // If tile size is one, the inner tile is essentially
+                    // loop of extent one.
+                    inner_dims.push_back(VarOrRVar("", false));
+                    outer_dims.push_back(v);
+                } else {
+                    pair<VarOrRVar, VarOrRVar> tile_vars =
+                        split_dim(g, f_handle, g.output.stage_num, def, true, v,
+                                  tile_size, "_i", "_o", stg_estimates, sched);
 
-        // TODO(psuriana): We should probably do the check whether the
-        // dimension size is bigger than the tile size when we compute
-        // candidate for tiling instead of doing it here.
-        if ((iter != out_tiles.end()) &&
-            get_element(stg_estimates, var).defined() &&
-            can_prove(get_element(stg_estimates, var) > iter->second[0])) {
-
-            // TODO(psuriana): As for now, this only handles two-level tiling
-            // at most.
-            internal_assert(iter->second.size() <= 2);
-
-            // The outermost group tile size
-            const Expr &tile_size = iter->second[0];
-            if (can_prove(tile_size == 1)) {
-                // If tile size is one, the inner tile is essentially loop
-                // of extent one.
-                outer_dims.push_back(v);
-                if (tile_inner_var.name() == "") {
-                    tile_inner_var = v;
-                }
-            } else {
-                pair<VarOrRVar, VarOrRVar> tile_vars =
-                    split_dim(g, f_handle, g.output.stage_num, def, true, v,
-                              tile_size, "_i", "_o", stg_estimates, sched);
-
-                bool split_subtile = false;
-                if (iter->second.size() > 1) {
-                    const Expr &subtile_size = iter->second[1];
-
-                    VarOrRVar v_sub(v.name() + "_i", v.is_rvar);
-
-                    // If subtile size is one, the inner subtile is essentially
-                    // loop of extent one. On the other hand, if the subtile
-                    // size is equal to the tile size, the outer subtile is
-                    // essentially loop of extent one.
-
-                    if (!can_prove(subtile_size == 1)) {
-                        pair<VarOrRVar, VarOrRVar> subtile_vars =
-                            split_dim(g, f_handle, g.output.stage_num, def, true, v_sub,
-                                      subtile_size, "_i", "_o", stg_estimates, sched);
-                        split_subtile = true;
-
-                        // TODO(psuriana): what is the order of tile and subtile vars?
-                        inner_dims.push_back(subtile_vars.first);
-                        outer_dims.push_back(subtile_vars.second);
-                        outer_dims.push_back(tile_vars.second);
-
-                        if (is_rvar) {
-                            rvars.erase(var);
-                            rvars.insert(subtile_vars.first.name());
-                            rvars.insert(subtile_vars.second.name());
-                            rvars.insert(tile_vars.second.name());
-                        }
-
-                        if (tile_inner_var.name() == "") {
-                            tile_inner_var = subtile_vars.second;
-                        }
-                    }
-
-                    /*if (can_prove(tile_size == subtile_size)) {
-                        // If the subtile size is equal to the tile size, the
-                        // outer subtile is essentially loop of extent one.
-                        inner_dims.push_back(tile_vars.first);
-                        outer_dims.push_back(tile_vars.second);
-
-                        if (is_rvar) {
-                            rvars.erase(var);
-                            rvars.insert(tile_vars.first.name());
-                            rvars.insert(tile_vars.second.name());
-                        }
-
-                        if (tile_inner_var.name() == "") {
-                            tile_inner_var = tile_vars.second;
-                        }
-                    } else if (can_prove(subtile_size == 1)) {
-                        // If subtile size is one, the inner subtile is essentially
-                        // loop of extent one.
-                        outer_dims.push_back(tile_vars.first);
-                        outer_dims.push_back(tile_vars.second);
-
-                        if (is_rvar) {
-                            rvars.erase(var);
-                            rvars.insert(tile_vars.first.name());
-                            rvars.insert(tile_vars.second.name());
-                        }
-
-                        if (tile_inner_var.name() == "") {
-                            tile_inner_var = tile_vars.first;
-                        }
-                    } else {
-                        pair<VarOrRVar, VarOrRVar> subtile_vars =
-                            split_dim(g, f_handle, g.output.stage_num, def, true, v_sub,
-                                      subtile_size, "_i", "_o", stg_estimates, sched);
-
-                        inner_dims.push_back(subtile_vars.first);
-                        outer_dims.push_back(subtile_vars.second);
-                        outer_dims.push_back(tile_vars.second);
-
-                        if (is_rvar) {
-                            rvars.erase(var);
-                            rvars.insert(subtile_vars.first.name());
-                            rvars.insert(subtile_vars.second.name());
-                            rvars.insert(tile_vars.second.name());
-                        }
-
-                        if (tile_inner_var.name() == "") {
-                            tile_inner_var = subtile_vars.second;
-                        }
-                    }*/
-                }
-
-                if (!split_subtile) {
                     inner_dims.push_back(tile_vars.first);
                     outer_dims.push_back(tile_vars.second);
 
-                    if (is_rvar) {
-                        rvars.erase(var);
+                    if (v.is_rvar) {
+                        rvars.erase(v.name());
                         rvars.insert(tile_vars.first.name());
                         rvars.insert(tile_vars.second.name());
                     }
+                }
+            } else {
+                // Tile by the whole image size at that dimension
+                inner_dims.push_back(v);
+            }
+        }
+        internal_assert(inner_dims.size() == dim_vars.size());
+    }
 
-                    if (tile_inner_var.name() == "") {
-                        tile_inner_var = tile_vars.second;
+    /*debug(0) << "***INNER DIMS: {";
+    for (const auto &s : inner_dims) {
+        debug(0) << s.name() << ", ";
+    }
+    debug(0) << "}\n";
+
+    debug(0) << "***OUTER DIMS: {";
+    for (const auto &s : outer_dims) {
+        debug(0) << s.name() << ", ";
+    }
+    debug(0) << "}\n";*/
+
+    // Apply subtiling to output of the group
+    vector<VarOrRVar> outer_dims_subtile;
+    vector<VarOrRVar> inner_dims_subtile;
+    {
+        map<string, Expr> subtile_sizes;
+        for (const Group &sub : g.subgroups) {
+            if (sub.output == g.output) {
+                subtile_sizes = sub.tile_sizes;
+                break;
+            }
+        }
+
+        for (size_t i = 0; i < inner_dims.size(); ++i) {
+            VarOrRVar v = inner_dims[i];
+            const auto &iter = subtile_sizes.find(dim_vars[i]);
+
+            if (v.name().empty()) {
+                internal_assert((iter == subtile_sizes.end()) || can_prove(iter->second == 1))
+                    << "Subtile size: " << iter->second << ", var: " << dim_vars[i] << "\n";
+                continue;
+            }
+
+            if ((iter != subtile_sizes.end()) &&
+                get_element(stg_estimates, v.name()).defined() &&
+                can_prove(get_element(stg_estimates, v.name()) > iter->second)) {
+                const Expr &subtile_size = iter->second;
+                if (can_prove(subtile_size == 1)) {
+                    // If subtile size is one, the inner subtile is essentially
+                    // loop of extent one.
+                    outer_dims_subtile.push_back(v);
+                } else {
+                    pair<VarOrRVar, VarOrRVar> subtile_vars =
+                        split_dim(g, f_handle, g.output.stage_num, def, true, v,
+                                  subtile_size, "_i", "_o", stg_estimates, sched);
+
+                    inner_dims_subtile.push_back(subtile_vars.first);
+                    outer_dims_subtile.push_back(subtile_vars.second);
+
+                    if (v.is_rvar) {
+                        rvars.erase(v.name());
+                        rvars.insert(subtile_vars.first.name());
+                        rvars.insert(subtile_vars.second.name());
                     }
                 }
+            } else {
+                // Tile by the whole image size at that dimension
+                inner_dims_subtile.push_back(v);
             }
-        } else {
-            // THis dimension is not tiled.
-            // TODO(psuriana): how do you decide which one is the
-            // inner dimension and which one is the outer dim?
-            inner_dims.push_back(v);
         }
     }
+
+    /*debug(0) << "***INNER DIMS SUBTILE: {";
+    for (const auto &s : inner_dims_subtile) {
+        debug(0) << s.name() << ", ";
+    }
+    debug(0) << "}\n";
+
+    debug(0) << "***OUTER DIMS SUBTILE: {";
+    for (const auto &s : outer_dims_subtile) {
+        debug(0) << s.name() << ", ";
+    }
+    debug(0) << "}\n";*/
 
     // Reorder the tile dimensions
     if (!outer_dims.empty()) {
         vector<VarOrRVar> ordering;
-        for (const auto &v : inner_dims) {
+        for (const auto &v : inner_dims_subtile) {
+            ordering.push_back(v);
+        }
+        for (const auto &v : outer_dims_subtile) {
             ordering.push_back(v);
         }
         for (const auto &v : outer_dims) {
             ordering.push_back(v);
         }
-
-        debug(0) << "\n\n***INNER DIMS: {";
-        for (const auto &s : inner_dims) {
-            debug(0) << s.name() << ", ";
-        }
-        debug(0) << "}\n";
-
-        debug(0) << "***OLD DIMS: {";
-        for (const auto &s : outer_dims) {
-            debug(0) << s.name() << ", ";
-        }
-        debug(0) << "}\n";
-
-        debug(0) << "***ORDERING: {";
-        for (const auto &s : ordering) {
-            debug(0) << s.name() << ", ";
-        }
-        debug(0) << "}\n";
 
         set<string> var_list;
         string var_order = ordering[0].name();
@@ -3969,6 +3876,15 @@ void Partitioner::generate_group_cpu_schedule(
             sched.push_schedule(f_handle.name(), g.output.stage_num,
                                 "reorder(" + var_order + ")", var_list);
         }
+    }
+
+    // Find the level at which group members will be computed.
+    int tile_inner_index = dims.size() - outer_dims.size() - 1;
+    VarOrRVar tile_inner_var("", false);
+    if (!outer_dims.empty()) {
+        string var_name = get_base_name(dims[tile_inner_index].var);
+        bool is_rvar = (rvars.find(var_name) != rvars.end());
+        tile_inner_var = VarOrRVar(var_name, is_rvar);
     }
 
     vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
@@ -4067,10 +3983,8 @@ void Partitioner::generate_group_cpu_schedule(
             }
 
             // Perform subtiling on the subroup output
-
             vector<VarOrRVar> sub_outer_dims;
             vector<VarOrRVar> sub_inner_dims;
-
             for (const auto &var : sub_dim_vars) {
                 bool is_rvar = (sub_rvars.find(var) != sub_rvars.end());
                 VarOrRVar v(var, is_rvar);
@@ -4112,9 +4026,8 @@ void Partitioner::generate_group_cpu_schedule(
                         }
                     }
                 } else {
-                    // THis dimension is not tiled.
-                    // TODO(psuriana): how do you decide which one is the
-                    // inner dimension and which one is the outer dim?
+                    // Subtile by the whole size (in this case, this is equal
+                    // to the tile size)
                     sub_inner_dims.push_back(v);
                 }
             }
@@ -4170,16 +4083,19 @@ void Partitioner::generate_group_cpu_schedule(
                             false, t, sub_rvars, sub_estimates, sched);
 
         } else {
-            int tile_inner_index = dims.size() - outer_dims.size() - 1;
-            if (!outer_dims.empty()) {
+            int tile_inner_index = dims.size() - outer_dims.size() - outer_dims_subtile.size() - 1;
+            if (!outer_dims.empty() || !outer_dims_subtile.size()) {
                 string var_name = get_base_name(dims[tile_inner_index].var);
                 bool is_rvar = (rvars.find(var_name) != rvars.end());
                 subtile_inner_var = VarOrRVar(var_name, is_rvar);
             }
         }
 
+        //debug(0) << "Output group: " << g_out.name() << "\n";
+        //debug(0) << ".......Subtile: " << sub.output.func.name() << ", subtile inner var: " << subtile_inner_var.name() << ", tile inner var: " << tile_inner_var.name() << "\n";
+
         for (const FStage &mem : sub.members) {
-            // Skip member stages that have been inlined or stage that is the
+             // Skip member stages that have been inlined or stage that is the
             // output stage of the group
             if ((g.inlined.find(mem.func.name()) != g.inlined.end()) ||
                 (mem.func.name() == g_out.name()) ||
@@ -4840,14 +4756,14 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     debug(2) << "Partitioner computing inline group...\n";
-    part.group(Partitioner::Level::Inline, {});
+    part.group(Partitioner::Level::Inline, {}, {});
     if (debug::debug_level() >= 3) {
         part.disp_grouping();
     }
 
     debug(2) << "Partitioner computing fast-mem group...\n";
     part.grouping_cache.clear();
-    //part.group(Partitioner::Level::FastMem, {});
+    //part.group(Partitioner::Level::FastMem, {}, {});
     part.group_recurse();
 
     if (!get_env_variable("HL_AUTOSCHEDULE_GRAPHVIZ").empty()) {
@@ -4858,9 +4774,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         debug(0) << "\n\n*************************************************\n";
         debug(0) << "FINAL RESULT:\n";
         debug(0) << "*************************************************\n";
-        part.disp_pipeline_costs();
+        //part.disp_pipeline_costs();
         part.disp_grouping();
-        part.disp_pipeline_graph();
+        //part.disp_pipeline_graph();
     //}
 
     debug(2) << "Initializing AutoSchedule...\n";
@@ -4875,7 +4791,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     oss << sched;
     string sched_string = oss.str();
 
-    debug(0) << "\n\n*******************************\nSchedule:\n"
+    debug(3) << "\n\n*******************************\nSchedule:\n"
              << "*******************************\n" << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem

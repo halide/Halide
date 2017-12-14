@@ -7,10 +7,13 @@ BENCHMARK_PLOT="../benchmark_plot"
 
 echo "Run apps auto-scheduler benchmarks"
 
-make -j4
+rm -rf ./apps/benchmark_data
+rm -rf ./apps/benchmark_plot
+rm -rf ./apps/benchmark_csv
 
 mkdir -p ./apps/benchmark_data
 mkdir -p ./apps/benchmark_plot
+mkdir -p ./apps/benchmark_csv
 
 # Bilateral grid
 echo "Run bilateral grid"
