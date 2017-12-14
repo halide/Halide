@@ -19,9 +19,6 @@ extern int halide_qurt_hvx_lock(void *user_context, int size);
 extern int halide_qurt_hvx_unlock(void *user_context);
 extern void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/);
 // @}
-/** Let the parallel runtime know the HVX mode to use for
- *  the thread pool. */
-extern int halide_set_par_hvx_mode(void *user_context, int vlen);
 
 #ifdef __cplusplus
 } // End extern "C"

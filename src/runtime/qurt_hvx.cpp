@@ -4,9 +4,9 @@
 #include "mini_qurt.h"
 
 using namespace Halide::Runtime::Internal::Qurt;
-#define QURT_print 1
+
 extern "C" {
-extern void hap_printf(const char *fmt, ...);
+
 WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
     qurt_hvx_mode_t mode;
     switch (size) {
@@ -18,9 +18,7 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
     }
 
     debug(user_context) << "QuRT: qurt_hvx_lock(" << mode << ") ->\n";
-
     int result = qurt_hvx_lock(mode);
-
     debug(user_context) << "        " << result << "\n";
     if (result != QURT_EOK) {
         error(user_context) << "qurt_hvx_lock failed\n";
@@ -31,9 +29,7 @@ WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
 
 WEAK int halide_qurt_hvx_unlock(void *user_context) {
     debug(user_context) << "QuRT: qurt_hvx_unlock ->\n";
-
     int result = qurt_hvx_unlock();
-
     debug(user_context) << "        " << result << "\n";
     if (result != QURT_EOK) {
         error(user_context) << "qurt_hvx_unlock failed\n";

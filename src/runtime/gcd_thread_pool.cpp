@@ -122,6 +122,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     dispatch_apply_f(size, dispatch_get_global_queue(0, 0), &job, &halide_do_gcd_task);
     return job.exit_status;
 }
+
 }  // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {

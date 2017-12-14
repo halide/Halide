@@ -1,4 +1,4 @@
-#include "HalideRuntimeQurt.h"
+#include "HalideRuntime.h"
 #include "mini_qurt.h"
 
 using namespace Halide::Runtime::Internal::Qurt;

@@ -17,6 +17,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     }
     return 0;
 }
+
 }
 
 namespace Halide { namespace Runtime { namespace Internal {
@@ -44,6 +45,13 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 }
 
 WEAK void halide_shutdown_thread_pool() {
+}
+
+WEAK int halide_set_num_threads(int n) {
+    if (n < 0) {
+        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+    }
+    return 1;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
