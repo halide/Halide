@@ -549,3 +549,340 @@ Members: {sample_weight, sample_locations}
 Inlined: {sample_locations}
 Tile sizes: {(x, 1), (y, 1), (z, 1)}
 
+
+=========
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "argmin.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "sum.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "sum$1.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "maximum$1.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "output.update(0)"
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -I./bin -Wall -O3 process.cpp bin/lens_blur.a bin/lens_blur_auto_schedule_old.a bin/lens_blur_auto_schedule.a -o bin/process  -ldl -lpthread -lz -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..
+Run local laplacian
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti local_laplacian_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/local_laplacian_exec  -ldl -lpthread -lz -lrt -ldl -lpthread -lz -lm
+bin/local_laplacian_exec -g local_laplacian -o ./bin -f local_laplacian target=host-profile auto_schedule=false
+bin/local_laplacian_exec -g local_laplacian -o ./bin -f local_laplacian_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/local_laplacian_exec -g local_laplacian -o ./bin -f local_laplacian_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: f0
+Members: {f0, downx, gPyramid[0]}
+Inlined: {gPyramid[0]}
+Tile sizes: {(_0, 1), (x, 64)}
+
+Subgroup 0:
+Output FStage: f0
+Members: {f0, downx, gPyramid[0]}
+Inlined: {gPyramid[0]}
+Tile sizes: {(_0, 1), (x, 64), (y, 1)}
+
+
+Output FStage: f1
+Members: {f1, downx$1}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 64)}
+
+Subgroup 0:
+Output FStage: f1
+Members: {f1, downx$1}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 64), (y, 1)}
+
+
+Output FStage: f14
+Members: {f14, downx$7}
+Inlined: {}
+Tile sizes: {(x, 64)}
+
+Subgroup 0:
+Output FStage: f14
+Members: {f14, downx$7}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+Output FStage: f15
+Members: {f15, downx$8}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 64)}
+
+Subgroup 0:
+Output FStage: f15
+Members: {f15, downx$8}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+Output FStage: f16
+Members: {f16, downx$9}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 32)}
+
+Subgroup 0:
+Output FStage: f16
+Members: {f16, downx$9}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+Output FStage: f17
+Members: {f17, downx$10}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 8)}
+
+Subgroup 0:
+Output FStage: downx$10
+Members: {downx$10}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: f17
+Members: {f17}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f18
+Members: {f18, downx$11}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 4)}
+
+Subgroup 0:
+Output FStage: downx$11
+Members: {downx$11}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: f18
+Members: {f18}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f19
+Members: {f19, downx$12}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+Subgroup 0:
+Output FStage: f19
+Members: {f19, downx$12}
+Inlined: {downx$12}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: f2
+Members: {f2, downx$2}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 64)}
+
+Subgroup 0:
+Output FStage: f2
+Members: {f2, downx$2}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 64), (y, 1)}
+
+
+Output FStage: f3
+Members: {f3, downx$3}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 16)}
+
+Subgroup 0:
+Output FStage: f3
+Members: {f3, downx$3}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 1)}
+
+
+Output FStage: f4
+Members: {f4, downx$4}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 8)}
+
+Subgroup 0:
+Output FStage: downx$4
+Members: {downx$4}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: f4
+Members: {f4}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f5
+Members: {f5, downx$5}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 4)}
+
+Subgroup 0:
+Output FStage: downx$5
+Members: {downx$5}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: f5
+Members: {f5}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f6
+Members: {f6, downx$6}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 8)}
+
+Subgroup 0:
+Output FStage: downx$6
+Members: {downx$6}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: f6
+Members: {f6}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: gray
+Members: {gray, repeat_edge}
+Inlined: {repeat_edge}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outGPyramid[3]
+Members: {outGPyramid[3], lPyramid[3], upx$3, upx$10}
+Inlined: {lPyramid[3], upx$3}
+Tile sizes: {(x, 256), (y, 16)}
+
+Subgroup 0:
+Output FStage: outGPyramid[3]
+Members: {outGPyramid[3], lPyramid[3], upx$3, upx$10}
+Inlined: {lPyramid[3], upx$3}
+Tile sizes: {(x, 256), (y, 1)}
+
+
+Output FStage: outGPyramid[4]
+Members: {outGPyramid[4], lPyramid[4], upx$2, upx$9}
+Inlined: {lPyramid[4], upx$2}
+Tile sizes: {(x, 256), (y, 4)}
+
+Subgroup 0:
+Output FStage: outGPyramid[4]
+Members: {outGPyramid[4], lPyramid[4], upx$2, upx$9}
+Inlined: {lPyramid[4], upx$2, upx$9}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outGPyramid[5]
+Members: {outGPyramid[5], lPyramid[5], upx$1, upx$8}
+Inlined: {lPyramid[5], upx$1}
+Tile sizes: {(x, 256), (y, 4)}
+
+Subgroup 0:
+Output FStage: outGPyramid[5]
+Members: {outGPyramid[5], lPyramid[5], upx$1, upx$8}
+Inlined: {lPyramid[5], upx$1, upx$8}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outGPyramid[6]
+Members: {outGPyramid[6], lPyramid[6], upx, upx$7}
+Inlined: {lPyramid[6], upx}
+Tile sizes: {(x, 64), (y, 1)}
+
+Subgroup 0:
+Output FStage: outGPyramid[6]
+Members: {outGPyramid[6], lPyramid[6], upx, upx$7}
+Inlined: {lPyramid[6], upx, upx$7}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outLPyramid[7]
+Members: {outLPyramid[7], f20, downx$13}
+Inlined: {f20}
+Tile sizes: {(y, 1)}
+
+Subgroup 0:
+Output FStage: outLPyramid[7]
+Members: {outLPyramid[7], f20, downx$13}
+Inlined: {downx$13, f20}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: output
+Members: {output, repeat_edge, outGPyramid[0], lPyramid[0], gPyramid[0], upx$6, upx$13, outGPyramid[1], lPyramid[1], upx$5, upx$12, outGPyramid[2], lPyramid[2], upx$4, upx$11}
+Inlined: {gPyramid[0], lPyramid[0], lPyramid[1], lPyramid[2], repeat_edge, upx$11, upx$12, upx$13, upx$4, upx$5, upx$6}
+Tile sizes: {(c, 4), (x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: outGPyramid[1]
+Members: {outGPyramid[1], lPyramid[1], upx$12, upx$5, outGPyramid[2], lPyramid[2], upx$11, upx$4}
+Inlined: {lPyramid[1], lPyramid[2], upx$11, upx$12, upx$4, upx$5}
+Tile sizes: {(c, 4), (x, 256), (y, 1)}
+
+Subgroup 1:
+Output FStage: output
+Members: {output, repeat_edge, outGPyramid[0], lPyramid[0], gPyramid[0], upx$13, upx$6}
+Inlined: {gPyramid[0], lPyramid[0], repeat_edge, upx$13, upx$6}
+Tile sizes: {(c, 4), (x, 256), (y, 1)}
+
+
+Output FStage: remap
+Members: {remap}
+Inlined: {}
+Tile sizes: {}
+
+
+=========
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -I./bin -Wall -O3 process.cpp bin/local_laplacian.a bin/local_laplacian_auto_schedule_old.a bin/local_laplacian_auto_schedule.a -o bin/process  -ldl -lpthread -lz -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..
+Run nl means
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti nl_means_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/nl_means_exec  -ldl -lpthread -lz
+bin/nl_means_exec -g nl_means -o ./bin -f nl_means target=host-profile auto_schedule=false
+bin/nl_means_exec -g nl_means -o ./bin -f nl_means_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/nl_means_exec -g nl_means -o ./bin -f nl_means_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+Warning at ./nl_means_generator.cpp:92:
+Outer dim vectorization of var "x" in function "sum$2.update(0)"
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: non_local_means
+Members: {non_local_means, non_local_means_sum, non_local_means_sum.update(0), w, sum$2, sum$2.update(0), sum$1, sum$1.update(0), sum, sum.update(0), d, clamped_with_alpha, repeat_edge}
+Inlined: {d, w}
+Tile sizes: {(c, 128), (x, 128), (y, 128)}
+
+Subgroup 0:
+Output FStage: non_local_means
+Members: {non_local_means, non_local_means_sum, non_local_means_sum.update(0), w, sum$2, sum$2.update(0), sum$1, sum$1.update(0), sum, sum.update(0), d, clamped_with_alpha, repeat_edge}
+Inlined: {d, w}
+Tile sizes: {(c, 128), (x, 128), (y, 1)}
