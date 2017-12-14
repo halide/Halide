@@ -40,24 +40,25 @@ $(BIN)/%/MatrixMultiply_hvx128.o: $(BIN)/MatrixMultiply.generator
 	@mkdir -p $(@D)
 	$^ -g MatrixMultiply -o $(BIN)/$* -e o,h -f MatrixMultiply_hvx128 target=$*-hvx_128
 
-$(BIN)/MatrixMultiply-%: MatrixMultiply.cpp $(BIN)/%/MatrixMultiply_cpu.o $(BIN)/%/MatrixMultiply_hvx64.o $(BIN)/%/MatrixMultiply_hvx128.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MatrixMultiply.cpp $(BIN)/$*/MatrixMultiply_cpu.o $(BIN)/$*/MatrixMultiply_hvx64.o $(BIN)/$*/MatrixMultiply_hvx128.o -o $(BIN)/MatrixMultiply-$* $(LDFLAGS-$*)
+$(BIN)/%/MatrixMultiply: MatrixMultiply.cpp $(BIN)/%/MatrixMultiply_cpu.o $(BIN)/%/MatrixMultiply_hvx64.o $(BIN)/%/MatrixMultiply_hvx128.o
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MatrixMultiply.cpp $(BIN)/$*/MatrixMultiply_cpu.o $(BIN)/$*/MatrixMultiply_hvx64.o $(BIN)/$*/MatrixMultiply_hvx128.o -o $(BIN)/$*/MatrixMultiply $(LDFLAGS-$*)
 
 DEVICE_PATH ?= /data/local/tmp/nn_ops
 DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""
 HEXAGON_RUNTIME_PATH = $(HALIDE_SRC_PATH)/src/runtime/hexagon_remote
-run-%-android: $(BIN)/MatrixMultiply-%-android
+run-%-android: $(BIN)/%-android/MatrixMultiply
 	adb shell mkdir -p $(DEVICE_PATH)
-	adb push $(BIN)/MatrixMultiply-$*-android $(DEVICE_PATH)
+	adb push $(BIN)/$*-android/MatrixMultiply $(DEVICE_PATH)
 	adb push $(HEXAGON_RUNTIME_PATH)/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_PATH)
 	adb push $(HEXAGON_RUNTIME_PATH)/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_PATH)
 	adb shell cp /system/lib/rfsa/adsp/testsig* $(DEVICE_PATH) > /dev/null || true
-	adb shell chmod +x $(DEVICE_PATH)/MatrixMultiply-$*-android
+	adb shell chmod +x $(DEVICE_PATH)/MatrixMultiply
 	adb push MatrixMultiply.sh $(DEVICE_PATH)
-	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply.sh $(DEVICE_PATH)/MatrixMultiply-arm-64-android
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/MatrixMultiply.sh $(DEVICE_PATH)/MatrixMultiply
 
-run-host: $(BIN)/MatrixMultiply-host
-	./MatrixMultiply.sh $(BIN)/MatrixMultiply-host
+run-host: $(BIN)/host/MatrixMultiply
+	./MatrixMultiply.sh $(BIN)/host/MatrixMultiply
 
 clean:
 	rm -rf $(BIN)
