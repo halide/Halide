@@ -118,7 +118,7 @@ std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
     return exprs;
 }
 
-p::object print_expr(p::tuple args, p::dict kwargs) {
+p::object print(p::tuple args, p::dict kwargs) {
     return p::object(h::print(tuple_to_exprs(args)));
 }
 
@@ -466,10 +466,7 @@ void define_operators() {
            "Create an Expr that prints whenever it is evaluated, "
            "provided that the condition is true.");
 
-    // We call this "print_expr" rather than "print" to avoid
-    // conflicts with Python's build-in "print()" function, in
-    // case users import all of the Halide bindings.
-    def_raw("print_expr", print_expr, 1,
+    def_raw("print", print, 1,
            "Create an Expr that prints out its value whenever it is "
            "evaluated. It also prints out everything else in the arguments "
            "list, separated by spaces. This can include string literals.");

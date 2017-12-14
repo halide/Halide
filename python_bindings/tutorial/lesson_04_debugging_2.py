@@ -19,12 +19,12 @@
 #include "Halide.h"
 #include <stdio.h>
 #using namespace Halide
-from halide import *
+import halide as hl
 
 def main():
 
-    gradient = Func("gradient")
-    x, y = Var("x"), Var("y")
+    gradient = hl.Func("gradient")
+    x, y = hl.Var("x"), hl.Var("y")
 
     # We'll define our gradient function as before.
     gradient[x, y] = x + y
@@ -43,7 +43,7 @@ def main():
     # Now that we can snoop on what Halide is doing, let's try our
     # first scheduling primitive. We'll make a new version of
     # gradient that processes each scanline in parallel.
-    parallel_gradient = Func("parallel_gradient")
+    parallel_gradient = hl.Func("parallel_gradient")
     parallel_gradient[x, y] = x + y
 
     # We'll also trace this function.
