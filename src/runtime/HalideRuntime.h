@@ -152,14 +152,6 @@ extern int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                   uint8_t *closure);
 // @}
 
-/** Set a custom method for setting the number of threads to use when
- *  executing a loop in parallel. */
-typedef int (*halide_set_num_threads_t)(int);
-extern halide_set_num_threads_t halide_set_custom_set_num_threads(halide_set_num_threads_t set_num_threads);
-
-/** The default version of halide_set_num_threads. */
-extern int halide_default_set_num_threads(int n);
-
 struct halide_thread;
 
 /** Spawn a thread. Returns a handle to the thread for the purposes of

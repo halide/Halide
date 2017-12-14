@@ -157,15 +157,6 @@ Stmt call_halide_qurt_hvx_unlock(const Target &target) {
                                         AssertStmt::make(EQ::make(hvx_unlock_result_var, 0), hvx_unlock_result_var));
     return check_hvx_unlock;
 }
-Stmt call_halide_set_num_threads(Stmt stmt, const Target &target,
-                                     string &old_num_threads_name) {
-    Expr num_threads = target.has_feature(Target::HVX_128) ? 2 : 4;
-    Expr num_threads_call = Call::make(Int(32), "halide_set_num_threads", {num_threads}, Call::Extern);
-    old_num_threads_name = unique_name("old_num_threads");
-    Stmt set_up_old_num_threads = LetStmt::make(old_num_threads_name, num_threads_call,
-                                                stmt);
-    return set_up_old_num_threads;
-}
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
@@ -217,28 +208,59 @@ Stmt sloppy_unpredicate_loads(Stmt s) {
     return SloppyUnpredicateLoads().mutate(s);
 }
 
-class InsertHVXLocksInParLoop : public IRMutator2 {
+class InjectHVXLocks : public IRMutator2 {
 public:
-    InsertHVXLocksInParLoop(const Target &t) : target(t) {}
+    InjectHVXLocks(const Target &t) : target(t) {}
+    bool uses_hvx = false;
 private:
     using IRMutator2::visit;
 
     Stmt visit(const For *op) {
         if (op->for_type == ForType::Parallel) {
-            Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
-            Stmt check_hvx_unlock = call_halide_qurt_hvx_unlock(target);
-            Stmt s = Block::make(op->body, check_hvx_unlock);
-            Stmt body =  Block::make(check_hvx_lock, s);
-            return For::make(op->name, op->min, op->extent, op->for_type,
+            bool old_uses_hvx = uses_hvx;
+            uses_hvx = false;
+            Stmt body = mutate(op->body);
+            if (uses_hvx) {
+                body = acquire_hvx_context(body, target);
+            }
+            uses_hvx = old_uses_hvx;
+            Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
                              op->device_api, body);
+            if (old_uses_hvx) {
+                Stmt call_hvx_lock = call_halide_qurt_hvx_lock(target);
+                return Block::make(call_hvx_lock, new_for);
+            } else {
+                return new_for;
+            }
         }
         return IRMutator2::visit(op);
      }
+    Expr visit(const Variable *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+        return op;
+    }
+    Expr visit(const Ramp *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+        return op;
+    }
+    Expr visit(const Broadcast *op) {
+        uses_hvx = uses_hvx || op->lanes > 1;
+        return op;
+    }
+    Expr visit(const Call *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+        return op;
+    }
+
     Target target;
 };
 
-Stmt par_call_halide_lock_unlock(Stmt body, const Target &target) {
-    body = InsertHVXLocksInParLoop(target).mutate(body);
+Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
+    InjectHVXLocks i(target);
+    body = i.mutate(body);
+    if (i.uses_hvx) {
+        body = acquire_hvx_context(body, target);
+    }
     return body;
 }
 
@@ -294,16 +316,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
 
-    has_hvx_use = uses_hvx(body);
-    if (has_hvx_use) {
-        debug(1) << "Adding calls to qurt_hvx_lock...\n";
-        body = acquire_hvx_context(body, target);
-        if (has_par_for(body)) {
-            body = call_halide_set_num_threads(body, target, old_num_threads_name);
-            debug(1) << "Adding calls to qurt_hvx_lock inside parallel loops, if any...\n";
-            body = par_call_halide_lock_unlock(body, target);
-        }
-    }
+    debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
+    body = inject_hvx_lock_unlock(body, target);
 
     debug(1) << "Hexagon function body:\n";
     debug(1) << body << "\n";
@@ -1707,23 +1721,6 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_Hexagon::visit(const For *op) {
-    CodeGen_Posix::visit(op);
-    if (op->for_type == ForType::Parallel && has_hvx_use) {
-        Value *user_context = get_user_context();
-        int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
-        Value *size = codegen(vector_size);
-
-        llvm::Function *fn = module->getFunction("halide_qurt_hvx_lock");
-        internal_assert(fn);
-        builder->CreateCall(fn, {user_context, size});
-        Value *old_num_threads = sym_get(old_num_threads_name);
-        llvm::Function *set_num_threads =
-            module->getFunction("halide_set_num_threads");
-        value = builder->CreateCall(set_num_threads, {old_num_threads});
-        return;
-    }
-}
 void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";

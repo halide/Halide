@@ -1,9 +1,7 @@
 #include "Halide.h"
 
 using namespace Halide;
-using namespace Halide::Internal;
 
-IRPrinter irp(std::cerr);
 // Define a 1D Gaussian blur (a [1 4 6 4 1] filter) of 5 elements.
 Expr blur5(Expr x0, Expr x1, Expr x2, Expr x3, Expr x4) {
     // Widen to 16 bits, so we don't overflow while computing the stencil.

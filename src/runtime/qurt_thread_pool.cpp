@@ -31,6 +31,7 @@ void spawn_thread_helper(void *arg) {
 }
 
 #define STACK_SIZE 256*1024
+#define HEXAGON_DEFAULT_NUM_THREADS 4
 
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
@@ -97,7 +98,13 @@ struct wrapped_closure {
 
 extern "C" {
 
-WEAK int halide_set_num_threads(int n){
+// There are two locks at play: the thread pool lock and the hvx
+// context lock. To ensure there's no way anything could ever
+// deadlock, we never attempt to acquire one while holding the
+// other.
+WEAK int halide_do_par_for(void *user_context,
+                           halide_task_t task,
+                           int min, int size, uint8_t *closure) {
     qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
     if (!work_queue.initialized) {
         // The thread pool asssumes that a zero-initialized mutex can
@@ -108,21 +115,16 @@ WEAK int halide_set_num_threads(int n){
         // initializing this mutex.
         qurt_mutex_init(mutex);
     }
-    return halide_default_set_num_threads(n);
-}
-// There are two locks at play: the thread pool lock and the hvx
-// context lock. To ensure there's no way anything could ever
-// deadlock, we never attempt to acquire one while holding the
-// other.
-WEAK int halide_do_par_for(void *user_context,
-                           halide_task_t task,
-                           int min, int size, uint8_t *closure) {
+    int old_num_threads = halide_set_num_threads(HEXAGON_DEFAULT_NUM_THREADS);
     // We're about to acquire the thread-pool lock, so we must drop
     // the hvx context lock, even though we'll likely reacquire it
     // immediately to do some work on this thread.
     qurt_hvx_unlock();
 
-    return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
+    int ret =  halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
+
+    halide_set_num_threads(old_num_threads);
+    return ret;
 }
 
 WEAK int halide_do_task(void *user_context, halide_task_t f,

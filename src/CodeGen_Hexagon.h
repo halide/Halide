@@ -61,7 +61,6 @@ protected:
     void visit(const GT *);
     void visit(const EQ *);
     void visit(const Select *);
-    void visit(const For *);
     ///@}
 
     /** We ask for an extra vector on each allocation to enable fast
@@ -112,9 +111,6 @@ protected:
      * to manipulate the IR. This function avoids generating redundant
      * bitcasts. */
     llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
- private:
-    bool has_hvx_use = false;
-    std::string old_num_threads_name;
 };
 
 }}
