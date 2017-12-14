@@ -89,56 +89,6 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
 
 namespace {
 
-// A piece of IR uses HVX if it contains any vector type producing IR
-// nodes.
-class UsesHvx : public IRVisitor {
-private:
-    using IRVisitor::visit;
-    void visit(const Variable *op) {
-        uses_hvx = uses_hvx || op->type.is_vector();
-    }
-    void visit(const Ramp *op) {
-        uses_hvx = uses_hvx || op->type.is_vector();
-    }
-    void visit(const Broadcast *op) {
-        uses_hvx = uses_hvx || op->lanes > 1;
-    }
-    void visit(const Call *op) {
-        uses_hvx = uses_hvx || op->type.is_vector();
-    }
-
-public:
-    bool uses_hvx = false;
-};
-
-bool uses_hvx(Stmt s) {
-    UsesHvx uses;
-    s.accept(&uses);
-    return uses.uses_hvx;
-}
-
-// Check if the IR has a parallel for loop in it.
-class HasParFor : public IRVisitor {
-private:
-    using IRVisitor::visit;
-    void visit(const For *op) {
-        if (op->for_type == ForType::Parallel) {
-            has_par_for = true;
-            return;
-        }
-        IRVisitor::visit(op);
-    }
-public:
-    bool has_par_for = false;
-};
-
-// Return true if s has a parallel for loop in it.
-bool has_par_for(Stmt s) {
-    HasParFor h;
-    s.accept(&h);
-    return h.has_par_for;
-}
-
 Stmt call_halide_qurt_hvx_lock(const Target &target) {
     Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
@@ -149,14 +99,6 @@ Stmt call_halide_qurt_hvx_lock(const Target &target) {
     return check_hvx_lock;
 }
 
-Stmt call_halide_qurt_hvx_unlock(const Target &target) {
-    Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
-    string hvx_unlock_result_name = unique_name("hvx_unlock_result");
-    Expr hvx_unlock_result_var = Variable::make(Int(32), hvx_unlock_result_name);
-    Stmt check_hvx_unlock = LetStmt::make(hvx_unlock_result_name, hvx_unlock,
-                                        AssertStmt::make(EQ::make(hvx_unlock_result_var, 0), hvx_unlock_result_var));
-    return check_hvx_unlock;
-}
 // Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
 // as a destructor if successful.
 Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
