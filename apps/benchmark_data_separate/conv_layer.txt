@@ -1,0 +1,6 @@
+pipeline: conv_layer_auto_schedule; total time: 472.316803; samples: 444; runs: 100; time/run: 4.723168; average threads used: 16.315315; heap allocations: 100; peak heap usage: 2097152; {func: conv, time: 3.658, percent: 77, threads: 20.915, peak: 2097152, num: 100, avg: 2097152}; {func: ReLU, time: 1.064, percent: 22, threads: 0.490}
+pipeline: conv_layer_auto_schedule_old; total time: 456.087585; samples: 422; runs: 100; time/run: 4.560876; average threads used: 16.964455; heap allocations: 100; peak heap usage: 2097152; {func: conv, time: 3.603, percent: 79, threads: 21.412, peak: 2097152, num: 100, avg: 2097152}; {func: ReLU, time: 0.957, percent: 20, threads: 0.555}
+pipeline: conv_layer; total time: 4760.611328; samples: 4350; runs: 101; time/run: 47.134766; average threads used: 3.105057; heap allocations: 101; peak heap usage: 2097152; {func: conv, time: 46.617, percent: 98, threads: 3.133, peak: 2097152, num: 101, avg: 2097152}; {func: ReLU, time: 0.517, percent: 1, threads: 0.520}
+Manually-tuned time: 38.4269ms
+Old auto-scheduler time: 4.14442ms
+New auto-scheduler time: 4.23433ms

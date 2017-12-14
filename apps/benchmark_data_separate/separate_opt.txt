@@ -1,0 +1,928 @@
+Run bilateral grid
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti bilateral_grid_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/bilateral_grid_exec  -ldl -lpthread -lz -lrt -ldl -lpthread -lz -lm
+bin/bilateral_grid_exec -g bilateral_grid -o ./bin -f bilateral_grid target=host-profile auto_schedule=false
+bin/bilateral_grid_exec -g bilateral_grid -o ./bin -f bilateral_grid_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/bilateral_grid_exec -g bilateral_grid -o ./bin -f bilateral_grid_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: bilateral_grid
+Members: {bilateral_grid, interpolated, blury}
+Inlined: {interpolated}
+Tile sizes: {(x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: bilateral_grid
+Members: {bilateral_grid, interpolated, blury}
+Inlined: {interpolated}
+Tile sizes: {(x, 256), (y, 1)}
+
+
+Output FStage: blurx
+Members: {blurx, blurz, histogram, histogram.update(0), repeat_edge}
+Inlined: {repeat_edge}
+Tile sizes: {(y, 1)}
+
+Subgroup 0:
+Output FStage: blurx
+Members: {blurx}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: blurz
+Members: {blurz}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 2:
+Output FStage: histogram
+Members: {histogram}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 3:
+Output FStage: histogram.update(0)
+Members: {histogram.update(0), repeat_edge}
+Inlined: {repeat_edge}
+Tile sizes: {(c, 1), (r$x, 1), (r$y, 1), (x, 1), (y, 1)}
+
+
+=========
+Warning at ./bilateral_grid_generator.cpp:83:
+Outer dim vectorization of var "x" in function "histogram.update(0)"
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -O3 -ffast-math -Wall -Werror -I./bin filter.cpp ./bin/bilateral_grid.a ./bin/bilateral_grid_auto_schedule_old.a ./bin/bilateral_grid_auto_schedule.a -o bin/filter -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..  -ldl -lpthread -lz
+Run blur
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti halide_blur_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/halide_blur_exec  -ldl -lpthread -lz -lrt -ldl -lpthread -lz -lm
+bin/halide_blur_exec -g halide_blur -o ./bin -f halide_blur target=host-profile auto_schedule=false
+bin/halide_blur_exec -g halide_blur -o ./bin -f halide_blur_auto_schedule_old target=host-profile-auto_schedule_old auto_schedule=true
+bin/halide_blur_exec -g halide_blur -o ./bin -f halide_blur_auto_schedule target=host-profile auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: blur_y
+Members: {blur_y, blur_x}
+Inlined: {}
+Tile sizes: {(x, 64)}
+
+Subgroup 0:
+Output FStage: blur_y
+Members: {blur_y, blur_x}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+=========
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -fopenmp -msse2 -Wall -O2 -I./bin test.cpp ./bin/halide_blur.a ./bin/halide_blur_auto_schedule_old.a ./bin/halide_blur_auto_schedule.a -o bin/test  -ldl -lpthread -lz -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..
+Run camera pipe
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -c -Wall -O3 fcam/Demosaic.cpp -o bin/Demosaic.o
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti camera_pipe_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/camera_pipe_exec  -ldl -lpthread -lz -lrt -ldl -lpthread -lz -lm
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -c -Wall -O3 fcam/Demosaic_ARM.cpp -o bin/Demosaic_ARM.o
+bin/camera_pipe_exec -g camera_pipe -o ./bin -f camera_pipe target=host-profile auto_schedule=false
+bin/camera_pipe_exec -g camera_pipe -o ./bin -f camera_pipe_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/camera_pipe_exec -g camera_pipe -o ./bin -f camera_pipe_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running NEW auto-scheduler...
+Running OLD auto-scheduler...
+Warning at ./camera_pipe_generator.cpp:372:
+Insufficient parallelism for matrix
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: curve
+Members: {curve}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: denoised
+Members: {denoised, shifted}
+Inlined: {shifted}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+
+Output FStage: f1
+Members: {f1, deinterleaved, r_gr, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::y, 1)}
+
+Subgroup 0:
+Output FStage: f1
+Members: {f1, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+Subgroup 1:
+Output FStage: r_gr
+Members: {r_gr, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+
+Output FStage: f6
+Members: {f6, deinterleaved, b_gb, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::y, 1)}
+
+Subgroup 0:
+Output FStage: b_gb
+Members: {b_gb, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+Subgroup 1:
+Output FStage: f6
+Members: {f6, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+
+Output FStage: g_b
+Members: {g_b, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+
+Output FStage: g_r
+Members: {g_r, deinterleaved}
+Inlined: {deinterleaved}
+Tile sizes: {({anonymous}::x, 1), ({anonymous}::y, 1)}
+
+
+Output FStage: processed
+Members: {processed, output, f2, f5, f8, f0, f7, b_r, deinterleaved, r_b, deinterleaved, b_gr, deinterleaved, r_gb, deinterleaved, f4, deinterleaved, f3, deinterleaved, matrix}
+Inlined: {deinterleaved, f0, f2, f5, f7, f8, output}
+Tile sizes: {({anonymous}::x, 64)}
+
+Subgroup 0:
+Output FStage: matrix
+Members: {matrix}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: processed
+Members: {processed, output, f2, f0, f5, f8, f7, b_r, deinterleaved, r_b, deinterleaved, r_gb, deinterleaved, b_gr, deinterleaved, f3, deinterleaved, f4, deinterleaved}
+Inlined: {deinterleaved, f0, f2, f5, f7, f8, output}
+Tile sizes: {({anonymous}::x, 64), ({anonymous}::y, 1)}
+
+
+=========
+Warning at ./camera_pipe_generator.cpp:372:
+Outer dim vectorization of var "{anonymous}::x" in function "r_gr"
+Warning at ./camera_pipe_generator.cpp:372:
+Outer dim vectorization of var "{anonymous}::x" in function "b_gb"
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -Wall -O3 -I./bin process.cpp bin/camera_pipe.a bin/camera_pipe_auto_schedule_old.a bin/camera_pipe_auto_schedule.a bin/Demosaic.o bin/Demosaic_ARM.o -o bin/process -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..  -ldl -lpthread -lz
+Run conv layer
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti conv_layer_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/conv_layer_exec  -ldl -lpthread -lz
+bin/conv_layer_exec -g conv_layer -o ./bin -f conv_layer target=host-profile auto_schedule=false
+bin/conv_layer_exec -g conv_layer -o ./bin -f conv_layer_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/conv_layer_exec -g conv_layer -o ./bin -f conv_layer_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running NEW auto-scheduler...
+Running OLD auto-scheduler...
+Warning at ./conv_layer_generator.cpp:57:
+Outer dim vectorization of var "x" in function "conv.update(0)"
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: ReLU
+Members: {ReLU}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: conv
+Members: {conv}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: conv.update(0)
+Members: {conv.update(0)}
+Inlined: {}
+Tile sizes: {}
+
+
+=========
+Warning at ./conv_layer_generator.cpp:57:
+Outer dim vectorization of var "x" in function "conv.update(0)"
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -I./bin -Wall -O3 process.cpp bin/conv_layer.a bin/conv_layer_auto_schedule_old.a bin/conv_layer_auto_schedule.a -o bin/process  -ldl -lpthread -lz
+Run lens blur
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti lens_blur_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/lens_blur_exec  -ldl -lpthread -lz
+bin/lens_blur_exec -g lens_blur -o ./bin -f lens_blur target=host-profile auto_schedule=false
+bin/lens_blur_exec -g lens_blur -o ./bin -f lens_blur_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/lens_blur_exec -g lens_blur -o ./bin -f lens_blur_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+Warning: Vectorized for loop over sample_locations.s0.x has extent one. Not vectorizing.
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "argmin.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "y" in function "cost_pyramid_pull[5]"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "y" in function "upx$1"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "output.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "maximum$1.update(0)"
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: argmin
+Members: {argmin}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: argmin.update(0)
+Members: {argmin.update(0)}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: bokeh_radius
+Members: {bokeh_radius}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: bokeh_radius_squared
+Members: {bokeh_radius_squared}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: cost_confidence
+Members: {cost_confidence, sum, sum.update(0), cost, sum$1, sum$1.update(0), cost}
+Inlined: {cost}
+Tile sizes: {(y, 1)}
+
+Subgroup 0:
+Output FStage: cost_confidence
+Members: {cost_confidence}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: sum
+Members: {sum}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 2:
+Output FStage: sum.update(0)
+Members: {sum.update(0), cost}
+Inlined: {cost}
+Tile sizes: {(r$x, 1), (x, 1), (y, 1)}
+
+Subgroup 3:
+Output FStage: sum$1
+Members: {sum$1}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 4:
+Output FStage: sum$1.update(0)
+Members: {sum$1.update(0), cost}
+Inlined: {cost}
+Tile sizes: {(r$x, 1), (x, 1), (y, 1)}
+
+
+Output FStage: cost_pyramid_pull[1]
+Members: {cost_pyramid_pull[1], repeat_edge$2, upx$5}
+Inlined: {repeat_edge$2}
+Tile sizes: {(x, 64), (z, 1)}
+
+Subgroup 0:
+Output FStage: cost_pyramid_pull[1]
+Members: {cost_pyramid_pull[1], repeat_edge$2, upx$5}
+Inlined: {repeat_edge$2}
+Tile sizes: {(x, 64), (y, 1), (z, 1)}
+
+
+Output FStage: cost_pyramid_pull[2]
+Members: {cost_pyramid_pull[2], repeat_edge$3, upx$4, cost_pyramid_pull[3], repeat_edge$4, upx$3, cost_pyramid_pull[4], repeat_edge$5, upx$2}
+Inlined: {repeat_edge$3, repeat_edge$4, repeat_edge$5, upx$2, upx$3}
+Tile sizes: {(c, 1), (z, 1)}
+
+Subgroup 0:
+Output FStage: cost_pyramid_pull[2]
+Members: {cost_pyramid_pull[2], repeat_edge$3, upx$4}
+Inlined: {repeat_edge$3}
+Tile sizes: {(c, 1), (y, 1), (z, 1)}
+
+Subgroup 1:
+Output FStage: cost_pyramid_pull[3]
+Members: {cost_pyramid_pull[3], repeat_edge$4, upx$3, cost_pyramid_pull[4], repeat_edge$5, upx$2}
+Inlined: {repeat_edge$4, repeat_edge$5, upx$2, upx$3}
+Tile sizes: {(c, 1), (y, 1), (z, 1)}
+
+
+Output FStage: cost_pyramid_pull[5]
+Members: {cost_pyramid_pull[5], repeat_edge$6, upx$1, cost_pyramid_pull[6], repeat_edge$7, upx, repeat_edge$8, f6, downx$6, repeat_edge$7}
+Inlined: {repeat_edge$6, repeat_edge$7}
+Tile sizes: {(c, 1), (x, 256), (y, 128), (z, 1)}
+
+Subgroup 0:
+Output FStage: cost_pyramid_pull[5]
+Members: {cost_pyramid_pull[5], repeat_edge$6, upx$1}
+Inlined: {repeat_edge$6}
+Tile sizes: {(c, 1), (x, 256), (y, 1), (z, 1)}
+
+Subgroup 1:
+Output FStage: cost_pyramid_pull[6]
+Members: {cost_pyramid_pull[6], repeat_edge$7, upx}
+Inlined: {repeat_edge$7}
+Tile sizes: {(c, 1), (x, 256), (y, 1), (z, 1)}
+
+Subgroup 2:
+Output FStage: repeat_edge$8
+Members: {repeat_edge$8, f6, downx$6, repeat_edge$7}
+Inlined: {repeat_edge$7}
+Tile sizes: {(c, 1), (x, 256), (y, 1), (z, 1)}
+
+
+Output FStage: diff
+Members: {diff, repeat_edge$1}
+Inlined: {}
+Tile sizes: {(y, 1)}
+
+Subgroup 0:
+Output FStage: diff
+Members: {diff}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: repeat_edge$1
+Members: {repeat_edge$1}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f0
+Members: {f0, downx, cost_pyramid_push[0], cost}
+Inlined: {cost, cost_pyramid_push[0]}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 128)}
+
+Subgroup 0:
+Output FStage: f0
+Members: {f0, downx, cost_pyramid_push[0], cost}
+Inlined: {cost, cost_pyramid_push[0]}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 1)}
+
+
+Output FStage: f1
+Members: {f1, downx$1, repeat_edge$2}
+Inlined: {repeat_edge$2}
+Tile sizes: {(_0, 1), (_1, 1), (x, 64)}
+
+Subgroup 0:
+Output FStage: f1
+Members: {f1, downx$1, repeat_edge$2}
+Inlined: {repeat_edge$2}
+Tile sizes: {(_0, 1), (_1, 1), (x, 64), (y, 1)}
+
+
+Output FStage: f2
+Members: {f2, downx$2, repeat_edge$3}
+Inlined: {repeat_edge$3}
+Tile sizes: {(_0, 1), (x, 64)}
+
+Subgroup 0:
+Output FStage: f2
+Members: {f2, downx$2, repeat_edge$3}
+Inlined: {repeat_edge$3}
+Tile sizes: {(_0, 1), (x, 64), (y, 1)}
+
+
+Output FStage: f3
+Members: {f3, downx$3, repeat_edge$4}
+Inlined: {repeat_edge$4}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: f3
+Members: {f3, downx$3, repeat_edge$4}
+Inlined: {repeat_edge$4}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 1)}
+
+
+Output FStage: f4
+Members: {f4, downx$4, repeat_edge$5}
+Inlined: {repeat_edge$5}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 128)}
+
+Subgroup 0:
+Output FStage: f4
+Members: {f4, downx$4, repeat_edge$5}
+Inlined: {repeat_edge$5}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 1)}
+
+
+Output FStage: f5
+Members: {f5, downx$5, repeat_edge$6}
+Inlined: {repeat_edge$6}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 64)}
+
+Subgroup 0:
+Output FStage: f5
+Members: {f5, downx$5, repeat_edge$6}
+Inlined: {repeat_edge$6}
+Tile sizes: {(_0, 1), (_1, 1), (x, 256), (y, 1)}
+
+
+Output FStage: filtered_cost
+Members: {filtered_cost, cost_pyramid_pull[0], cost_pyramid_push[0], cost, upx$6}
+Inlined: {cost, cost_pyramid_pull[0], cost_pyramid_push[0]}
+Tile sizes: {(x, 64), (z, 1)}
+
+Subgroup 0:
+Output FStage: filtered_cost
+Members: {filtered_cost, cost_pyramid_pull[0], cost_pyramid_push[0], cost, upx$6}
+Inlined: {cost, cost_pyramid_pull[0], cost_pyramid_push[0]}
+Tile sizes: {(x, 64), (y, 1), (z, 1)}
+
+
+Output FStage: final
+Members: {final}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: input_with_alpha
+Members: {input_with_alpha}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: maximum$1
+Members: {maximum$1}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: maximum$1.update(0)
+Members: {maximum$1.update(0), maximum, maximum.update(0)}
+Inlined: {}
+Tile sizes: {(y, 1)}
+
+Subgroup 0:
+Output FStage: maximum
+Members: {maximum}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: maximum.update(0)
+Members: {maximum.update(0)}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 2:
+Output FStage: maximum$1
+Members: {maximum$1}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 3:
+Output FStage: maximum$1.update(0)
+Members: {maximum$1.update(0)}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: output
+Members: {output}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: output.update(0)
+Members: {output.update(0), sample_locations}
+Inlined: {sample_locations}
+Tile sizes: {(c, 1), (s$2$x, 1), (x, 1), (y, 1)}
+
+
+Output FStage: repeat_edge
+Members: {repeat_edge}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: sample_weight
+Members: {sample_weight, sample_locations}
+Inlined: {sample_locations}
+Tile sizes: {(x, 1), (y, 1), (z, 1)}
+
+
+=========
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "argmin.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "sum.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "sum$1.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "maximum$1.update(0)"
+Warning at ./lens_blur_generator.cpp:176:
+Outer dim vectorization of var "x" in function "output.update(0)"
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -I./bin -Wall -O3 process.cpp bin/lens_blur.a bin/lens_blur_auto_schedule_old.a bin/lens_blur_auto_schedule.a -o bin/process  -ldl -lpthread -lz -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..
+Run local laplacian
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti local_laplacian_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/local_laplacian_exec  -ldl -lpthread -lz -lrt -ldl -lpthread -lz -lm
+bin/local_laplacian_exec -g local_laplacian -o ./bin -f local_laplacian target=host-profile auto_schedule=false
+bin/local_laplacian_exec -g local_laplacian -o ./bin -f local_laplacian_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/local_laplacian_exec -g local_laplacian -o ./bin -f local_laplacian_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: downx$10
+Members: {downx$10}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: downx$11
+Members: {downx$11}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: downx$12
+Members: {downx$12}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: downx$13
+Members: {downx$13}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: downx$5
+Members: {downx$5}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: downx$6
+Members: {downx$6}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f0
+Members: {f0, downx, gPyramid[0]}
+Inlined: {gPyramid[0]}
+Tile sizes: {(_0, 64), (x, 64), (y, 64)}
+
+Subgroup 0:
+Output FStage: f0
+Members: {f0, downx, gPyramid[0]}
+Inlined: {gPyramid[0]}
+Tile sizes: {(_0, 64), (x, 64), (y, 1)}
+
+
+Output FStage: f1
+Members: {f1, downx$1}
+Inlined: {}
+Tile sizes: {(_0, 64), (x, 64), (y, 64)}
+
+Subgroup 0:
+Output FStage: f1
+Members: {f1, downx$1}
+Inlined: {}
+Tile sizes: {(_0, 64), (x, 64), (y, 1)}
+
+
+Output FStage: f14
+Members: {f14, downx$7}
+Inlined: {}
+Tile sizes: {(x, 128), (y, 128)}
+
+Subgroup 0:
+Output FStage: f14
+Members: {f14, downx$7}
+Inlined: {}
+Tile sizes: {(x, 128), (y, 1)}
+
+
+Output FStage: f15
+Members: {f15, downx$8}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 64)}
+
+Subgroup 0:
+Output FStage: f15
+Members: {f15, downx$8}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+Output FStage: f16
+Members: {f16, downx$9}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 32)}
+
+Subgroup 0:
+Output FStage: f16
+Members: {f16, downx$9}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+Output FStage: f17
+Members: {f17}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f18
+Members: {f18}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f19
+Members: {f19}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f2
+Members: {f2, downx$2}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 64)}
+
+Subgroup 0:
+Output FStage: f2
+Members: {f2, downx$2}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 64), (y, 1)}
+
+
+Output FStage: f3
+Members: {f3, downx$3}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 16)}
+
+Subgroup 0:
+Output FStage: f3
+Members: {f3, downx$3}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 1)}
+
+
+Output FStage: f4
+Members: {f4, downx$4}
+Inlined: {}
+Tile sizes: {(_0, 1), (x, 256), (y, 8)}
+
+Subgroup 0:
+Output FStage: downx$4
+Members: {downx$4}
+Inlined: {}
+Tile sizes: {}
+
+Subgroup 1:
+Output FStage: f4
+Members: {f4}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f5
+Members: {f5}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: f6
+Members: {f6}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: gray
+Members: {gray, repeat_edge}
+Inlined: {repeat_edge}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outGPyramid[5]
+Members: {outGPyramid[5], lPyramid[5], upx$1}
+Inlined: {lPyramid[5], upx$1}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outGPyramid[6]
+Members: {outGPyramid[6], lPyramid[6], upx}
+Inlined: {lPyramid[6], upx}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: outLPyramid[7]
+Members: {outLPyramid[7], f20}
+Inlined: {f20}
+Tile sizes: {(x, 1), (y, 1)}
+
+
+Output FStage: output
+Members: {output, repeat_edge, outGPyramid[0], lPyramid[0], gPyramid[0], upx$6, upx$13, outGPyramid[1], lPyramid[1], upx$5, upx$12, outGPyramid[2], lPyramid[2], upx$4, upx$11, outGPyramid[3], lPyramid[3], upx$3, upx$10, outGPyramid[4], lPyramid[4], upx$2, upx$9}
+Inlined: {gPyramid[0], lPyramid[0], lPyramid[1], lPyramid[2], lPyramid[3], lPyramid[4], repeat_edge, upx$11, upx$12, upx$13, upx$2, upx$3, upx$4, upx$5, upx$6}
+Tile sizes: {(c, 4), (x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: outGPyramid[1]
+Members: {outGPyramid[1], lPyramid[1], upx$12, upx$5, outGPyramid[2], lPyramid[2], upx$11, upx$4}
+Inlined: {lPyramid[1], lPyramid[2], upx$11, upx$12, upx$4, upx$5}
+Tile sizes: {(c, 4), (x, 256), (y, 1)}
+
+Subgroup 1:
+Output FStage: outGPyramid[3]
+Members: {outGPyramid[3], lPyramid[3], upx$3, upx$10}
+Inlined: {lPyramid[3], upx$3}
+Tile sizes: {(c, 4), (x, 256), (y, 1)}
+
+Subgroup 2:
+Output FStage: outGPyramid[4]
+Members: {outGPyramid[4], lPyramid[4], upx$2, upx$9}
+Inlined: {lPyramid[4], upx$2}
+Tile sizes: {(c, 4), (x, 256), (y, 1)}
+
+Subgroup 3:
+Output FStage: output
+Members: {output, repeat_edge, outGPyramid[0], lPyramid[0], gPyramid[0], upx$13, upx$6}
+Inlined: {gPyramid[0], lPyramid[0], repeat_edge, upx$13, upx$6}
+Tile sizes: {(c, 4), (x, 256), (y, 1)}
+
+
+Output FStage: remap
+Members: {remap}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: upx$7
+Members: {upx$7}
+Inlined: {}
+Tile sizes: {}
+
+
+Output FStage: upx$8
+Members: {upx$8}
+Inlined: {}
+Tile sizes: {}
+
+
+=========
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -I./bin -Wall -O3 process.cpp bin/local_laplacian.a bin/local_laplacian_auto_schedule_old.a bin/local_laplacian_auto_schedule.a -o bin/process  -ldl -lpthread -lz -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..
+Run nl means
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti nl_means_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/nl_means_exec  -ldl -lpthread -lz
+bin/nl_means_exec -g nl_means -o ./bin -f nl_means target=host-profile auto_schedule=false
+bin/nl_means_exec -g nl_means -o ./bin -f nl_means_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/nl_means_exec -g nl_means -o ./bin -f nl_means_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running NEW auto-scheduler...
+Running OLD auto-scheduler...
+Warning at ./nl_means_generator.cpp:92:
+Outer dim vectorization of var "x" in function "sum$2.update(0)"
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: non_local_means
+Members: {non_local_means, non_local_means_sum, non_local_means_sum.update(0), w, sum$2, sum$2.update(0), sum$1, sum$1.update(0), sum, sum.update(0), d, clamped_with_alpha, repeat_edge}
+Inlined: {d, w}
+Tile sizes: {(c, 16), (x, 64), (y, 16)}
+
+Subgroup 0:
+Output FStage: non_local_means
+Members: {non_local_means, non_local_means_sum, non_local_means_sum.update(0), w, sum$2, sum$2.update(0), sum$1, sum$1.update(0), sum, sum.update(0), d, clamped_with_alpha, repeat_edge}
+Inlined: {d, w}
+Tile sizes: {(c, 16), (x, 64), (y, 1)}
+
+
+=========
+Warning at ./nl_means_generator.cpp:92:
+Outer dim vectorization of var "x" in function "sum$2.update(0)"
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -I./bin -Wall -O3 process.cpp bin/nl_means.a bin/nl_means_auto_schedule_old.a bin/nl_means_auto_schedule.a -o bin/process  -ldl -lpthread -lz -L/usr/lib/x86_64-linux-gnu -lpng12  -ljpeg -I/usr/include/libpng12 -I/usr/include/libpng12/..
+Run stencil chain
+rm -rf ./bin
+g++ -std=c++11 -I ../../include/ -I ../../tools/ -I ../../apps/support/ -g -fno-rtti stencil_chain_generator.cpp ../../lib/libHalide.a ../../tools/GenGen.cpp -o bin/stencil_chain_exec  -ldl -lpthread -lz -lrt -ldl -lpthread -lz -lm
+bin/stencil_chain_exec -g stencil_chain -o ./bin -f stencil_chain target=host-profile auto_schedule=false
+bin/stencil_chain_exec -g stencil_chain -o ./bin -f stencil_chain_auto_schedule_old target=host-profile-auto_schedule_old-no_runtime auto_schedule=true
+bin/stencil_chain_exec -g stencil_chain -o ./bin -f stencil_chain_auto_schedule target=host-profile-no_runtime auto_schedule=true
+Running OLD auto-scheduler...
+Running NEW auto-scheduler...
+
+
+*************************************************
+FINAL RESULT:
+*************************************************
+
+=========
+Grouping:
+=========
+Output FStage: output
+Members: {output, stage_6}
+Inlined: {}
+Tile sizes: {(x, 64)}
+
+Subgroup 0:
+Output FStage: output
+Members: {output, stage_6}
+Inlined: {}
+Tile sizes: {(x, 64), (y, 1)}
+
+
+Output FStage: stage_1
+Members: {stage_1, stage_0}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: stage_1
+Members: {stage_1, stage_0}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 1)}
+
+
+Output FStage: stage_3
+Members: {stage_3, stage_2}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: stage_3
+Members: {stage_3, stage_2}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 1)}
+
+
+Output FStage: stage_5
+Members: {stage_5, stage_4}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 256)}
+
+Subgroup 0:
+Output FStage: stage_5
+Members: {stage_5, stage_4}
+Inlined: {}
+Tile sizes: {(x, 256), (y, 1)}
+
+
+=========

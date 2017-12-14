@@ -1,0 +1,6 @@
+pipeline: halide_blur; total time: 110.512840; samples: 100; runs: 31; time/run: 3.564930; average threads used: 36.110001; heap allocations: 18600; peak heap usage: 2457600; {func: blur_y, time: 1.854, percent: 52, threads: 37.075}; {func: blur_x, time: 1.710, percent: 47, threads: 35.021, peak: 2457600, num: 18600, avg: 51200}
+pipeline: halide_blur_auto_schedule; total time: 51.164127; samples: 47; runs: 1; time/run: 51.164127; average threads used: 43.829788; heap allocations: 0; peak heap usage: 0; {func: blur_y, time: 35.927, percent: 70, threads: 42.151}; {func: blur_x, time: 15.236, percent: 29, threads: 47.785, stack: 512}
+pipeline: halide_blur_auto_schedule_old; total time: 33.752281; samples: 31; runs: 1; time/run: 33.752281; average threads used: 46.741936; heap allocations: 100; peak heap usage: 29503488; {func: blur_y, time: 28.410, percent: 84, threads: 48.000}; {func: blur_x, time: 5.341, percent: 15, threads: 40.200, peak: 29503488, num: 100, avg: 614656}
+Manually-tuned time: 3.02682ms
+Old auto-scheduler time: 2.98951ms
+New auto-scheduler time: 3.06798ms
