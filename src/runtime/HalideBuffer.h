@@ -1610,12 +1610,13 @@ public:
     }
     // @}
 
+    /** Tests that all values in this buffer are equal to val. */
     bool all_equal(not_void_T val) {
         bool all_equal = true;
         for_each_value([&](T v) {all_equal &= v == val;});
         return all_equal;
     }    
-    
+
     void fill(not_void_T val) {
         set_host_dirty();
         for_each_value([=](T &v) {v = val;});
