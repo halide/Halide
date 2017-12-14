@@ -168,7 +168,7 @@ public:
             }
             intermediates[1].compute_with(
                 intermediates[0], x,
-                {{x, AlignStrategy::AlignStart}, {y, AlignStrategy::AlignStart}});
+                {{x, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignStart}});
             output.compute_at(output_compute_at)
                 .vectorize(x)
                 .unroll(y)
