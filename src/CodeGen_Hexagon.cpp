@@ -20,6 +20,7 @@
 #include "CSE.h"
 #include "LoopCarry.h"
 #include "Substitute.h"
+#include "LICM.h"
 
 namespace Halide {
 namespace Internal {
@@ -246,6 +247,7 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
         body = acquire_hvx_context(body, target);
     }
     body = substitute("uses_hvx", i.uses_hvx, body);
+    body = simplify(body);
     return body;
 }
 
