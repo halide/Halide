@@ -19,6 +19,7 @@
 #include "AlignLoads.h"
 #include "CSE.h"
 #include "LoopCarry.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -98,7 +99,7 @@ Stmt call_halide_qurt_hvx_lock(const Target &target) {
                                         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
     return check_hvx_lock;
 }
-Stmt call_halide_qurt_hvx_unlock(const Target &target) {
+Stmt call_halide_qurt_hvx_unlock() {
     Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
     string hvx_unlock_result_name = unique_name("hvx_unlock_result");
     Expr hvx_unlock_result_var = Variable::make(Int(32), hvx_unlock_result_name);
@@ -159,35 +160,61 @@ Stmt sloppy_unpredicate_loads(Stmt s) {
 
 class InjectHVXLocks : public IRMutator2 {
 public:
-    InjectHVXLocks(const Target &t) : target(t) {}
+    InjectHVXLocks(const Target &t) : target(t) {
+        uses_hvx_var = Variable::make(Bool(), "uses_hvx");
+    }
     bool uses_hvx = false;
 private:
+    Expr uses_hvx_var;
     using IRMutator2::visit;
-
+    // Primarily, we do two things when we encounter a parallel for loop.
+    // First, we check if the paralell for loop uses_hvx and accordingly
+    // acqure_hvx_context i.e. acquire and release HVX locks.
+    // Then we insert a conditional unlock before the for loop, let's call
+    // this the prolog, and a conditional lock after the for loop which
+    // we shall call the epilog. So the code for a parallel loop that uses
+    // hvx should look like so.
+    //
+    // if (uses_hvx_var) {
+    //     halide_qurt_hvx_unlock();
+    // }
+    // parallel_for {
+    //     halide_qurt_hvx_lock();
+    //     ...
+    //     ...
+    //     halide_qurt_hvx_unlock();
+    // }
+    // if (uses_hvx_var) {
+    //     halide_qurt_hvx_lock();
+    // }
+    //
+    // When we move up to the enclosing scope we substitute the value of uses_hvx
+    // into the IR that should convert the conditionals to constants.
     Stmt visit(const For *op) {
         if (op->for_type == ForType::Parallel) {
             bool old_uses_hvx = uses_hvx;
             uses_hvx = false;
+
             Stmt body = mutate(op->body);
+
             if (uses_hvx) {
                 body = acquire_hvx_context(body, target);
+
+                Stmt new_for = For::make(op->name, op->min, op->extent,
+                                         op->for_type, op->device_api, body);
+                Stmt prolog = IfThenElse::make(uses_hvx_var,
+                                               call_halide_qurt_hvx_unlock());
+                Stmt epilog = IfThenElse::make(uses_hvx_var,
+                                               call_halide_qurt_hvx_lock(target));
+                Stmt s = Block::make(prolog, new_for);
+                s = Block::make(s, epilog);
+                debug(4) << "Wrapping prolog & epilog around par loop\n" << s << "\n";
+                return s;
             }
+
             uses_hvx = old_uses_hvx;
-            Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
-                             op->device_api, body);
-            if (old_uses_hvx) {
-                // If there is use of HVX outside the parallel for loop, then we will
-                // unlock before the for loop and lock after it.
-                // The reason we lock is that inside halide_do_par_for we acquire a lock
-                // on the work queue mutex and we could risk deadlock if we hold more than
-                // one lock/resource at one time.
-                Stmt call_hvx_lock = call_halide_qurt_hvx_lock(target);
-                Stmt call_hvx_unlock = call_halide_qurt_hvx_unlock(target);
-                new_for = Block::make(call_hvx_unlock, new_for);
-                return Block::make(new_for, call_hvx_lock);
-            } else {
-                return new_for;
-            }
+            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+
         }
         return IRMutator2::visit(op);
     }
@@ -217,6 +244,7 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     if (i.uses_hvx) {
         body = acquire_hvx_context(body, target);
     }
+    body = substitute("uses_hvx", i.uses_hvx, body);
     return body;
 }
 
