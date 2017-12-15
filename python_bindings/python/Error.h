@@ -1,6 +1,0 @@
-#ifndef HALIDE_PYTHON_BINDINGS_ERROR_H
-#define HALIDE_PYTHON_BINDINGS_ERROR_H
-
-void define_error();
-
-#endif  // HALIDE_PYTHON_BINDINGS_ERROR_H
