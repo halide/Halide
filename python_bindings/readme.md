@@ -20,9 +20,6 @@ and across platforms.
 
 Build using:
 ```bash
-  mkdir build
-  cd build
-  ccmake ..
   make 
 ```
 

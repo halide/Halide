@@ -121,16 +121,24 @@ $(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3.generator
 $(BIN)/%/filters.a : $(OBJS)
 	ar q $(BIN)/$*/filters.a $^
 
-$(BIN)/process-%: process.cpp $(BIN)/%/filters.a process.h
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$*  $(DASH_D_DEFINES) -Wall -O0 -g process.cpp $(BIN)/$*/filters.a -o $(BIN)/process-$* $(LDFLAGS-$*)
+$(BIN)/%/process: process.cpp $(BIN)/%/filters.a process.h
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$*  $(DASH_D_DEFINES) -Wall -O0 -g process.cpp $(BIN)/$*/filters.a -o $(BIN)/$*/process $(LDFLAGS-$*)
 
-run-%-android: $(BIN)/process-%-android
-	adb push $(BIN)/process-$*-android /data/
-	adb shell chmod +x /data/process-$*-android
-	adb shell /data/process-$*-android -n $(ITERATIONS)
+DEVICE_PATH ?= /data/local/tmp/hexagon_benchmarks
+DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""
+HEXAGON_RUNTIME_PATH = $(HALIDE_SRC_PATH)/src/runtime/hexagon_remote
+run-%-android: $(BIN)/%-android/process
+	adb shell mkdir -p $(DEVICE_PATH)
+	adb push $(BIN)/$*-android/process $(DEVICE_PATH)
+	adb push $(HEXAGON_RUNTIME_PATH)/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_PATH)
+	adb push $(HEXAGON_RUNTIME_PATH)/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_PATH)
+	adb shell cp /system/lib/rfsa/adsp/testsig* $(DEVICE_PATH) > /dev/null || true
+	adb shell chmod +x $(DEVICE_PATH)/process
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process -n $(ITERATIONS)
 
-run-host: $(BIN)/process-host
-	$(BIN)/process-host -n $(ITERATIONS)
+run-host: $(BIN)/host/process
+	$(BIN)/host/process -n $(ITERATIONS)
 
 clean:
 	rm -rf $(BIN)
