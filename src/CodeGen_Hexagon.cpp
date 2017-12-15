@@ -196,7 +196,7 @@ private:
             uses_hvx = false;
 
             Stmt body = mutate(op->body);
-
+            Stmt s;
             if (uses_hvx) {
                 body = acquire_hvx_context(body, target);
 
@@ -206,14 +206,15 @@ private:
                                                call_halide_qurt_hvx_unlock());
                 Stmt epilog = IfThenElse::make(uses_hvx_var,
                                                call_halide_qurt_hvx_lock(target));
-                Stmt s = Block::make(prolog, new_for);
+                s = Block::make(prolog, new_for);
                 s = Block::make(s, epilog);
                 debug(4) << "Wrapping prolog & epilog around par loop\n" << s << "\n";
-                return s;
+            } else {
+                s = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
 
             uses_hvx = old_uses_hvx;
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            return s;
 
         }
         return IRMutator2::visit(op);
