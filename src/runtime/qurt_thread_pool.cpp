@@ -86,15 +86,6 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
 
 #include "thread_pool_common.h"
 
-namespace {
-// We wrap the closure passed to jobs with extra info we
-// need. Currently just the hvx mode to use.
-struct wrapped_closure {
-    uint8_t *closure;
-    int hvx_mode;
-};
-}
-
 extern "C" {
 
 // There are two locks at play: the thread pool lock and the hvx
