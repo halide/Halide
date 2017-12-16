@@ -1,10 +1,15 @@
 from __future__ import print_function
+
 from contextlib import contextmanager
-from io import StringIO
 import halide as hl
 import sys
 
-# redirect_stdout() requires Python3
+try:
+    from StringIO import StringIO  # Python2
+except ImportError:
+    from io import StringIO        # Python3
+
+# redirect_stdout() requires Python3, alas
 @contextmanager
 def _redirect_stdout(out):
     old_out = sys.stdout
@@ -141,7 +146,6 @@ def test_basics():
 
     return
 
-
 def test_basics2():
 
     input = hl.ImageParam(hl.Float(32), 3, 'input')
@@ -157,34 +161,6 @@ def test_basics2():
     clamped = hl.Func('clamped')
     clamped[x, y] = input[hl.clamp(x, 0, input.width()-1),
                           hl.clamp(y, 0, input.height()-1),0]
-
-    if True:
-        print("s_sigma", s_sigma)
-        print("s_sigma/2", s_sigma/2)
-        print("s_sigma//2", s_sigma//2)
-        print()
-        print("x * s_sigma", x * s_sigma)
-        print("x * 8", x * 8)
-        print("x * 8 + 4", x * 8 + 4)
-        print("x * 8 * 4", x * 8  * 4)
-        print()
-        print("x", x)
-        print("(x * s_sigma).type()", )
-        print("(x * 8).type()", (x * 8).type())
-        print("(x * 8 + 4).type()", (x * 8 + 4).type())
-        print("(x * 8 * 4).type()", (x * 8 * 4).type())
-        print("(x * 8 / 4).type()", (x * 8 / 4).type())
-        print("((x * 8) * 4).type()", ((x * 8) * 4).type())
-        print("(x * (8 * 4)).type()", (x * (8 * 4)).type())
-
-
-    assert (x * 8).type() == hl.Int(32)
-    assert (x * 8 * 4).type() == hl.Int(32) # yes this did fail at some point
-    assert ((x * 8) / 4).type() == hl.Int(32)
-    assert (x * (8 / 4)).type() == hl.Float(32) # under python3 division rules
-    assert (x * (8 // 4)).type() == hl.Int(32)
-    #assert (x * 8 // 4).type() == hl.Int(32) # not yet implemented
-
 
     # Construct the bilateral grid
     r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')

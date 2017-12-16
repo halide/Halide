@@ -330,9 +330,6 @@ void define_param_impl(const std::string suffix, const h::Type type) {
              "Get the current value of this parameter. Only meaningful when jitting.")
         .def("set", &Param<T>::set, p::args("self", "val"),
              "Set the current value of this parameter. Only meaningful when jitting")
-        //            .def("address", &Param<T>::address, p::arg("self"),
-        //                 "Get a pointer to the location that stores the current value of
-        //                 "this parameter. Only meaningful for jitting.")
 
         .def("type", &Param<T>::type, p::arg("self"),
              "Get the halide type of T")
@@ -353,10 +350,6 @@ void define_param_impl(const std::string suffix, const h::Type type) {
              "You can use this parameter as an expression in a halide "
              "function definition")
 
-        //            "You can use this parameter as an expression in a halide
-        //            "function definition"
-        //            operator Expr() const
-
         //            "Using a param as the argument to an external stage treats it
         //            "as an Expr"
         //            operator ExternFuncArgument() const
@@ -372,21 +365,20 @@ void define_param_impl(const std::string suffix, const h::Type type) {
     //p::implicitly_convertible<Param<T>, h::ExternFuncArgument>();
     p::implicitly_convertible<Param<T>, h::Expr>();
 
-    typedef decltype(param_class) pc_t;
-    add_binary_operators_with<pc_t, int>(param_class);
-    add_binary_operators_with<pc_t, float>(param_class);
-    add_binary_operators_with<pc_t, h::Expr>(param_class);
+    add_binary_operators_with<int>(param_class);
+    add_binary_operators_with<float>(param_class);
+    add_binary_operators_with<h::Expr>(param_class);
 
-    add_binary_operators_with<pc_t, Param<uint8_t>>(param_class);
-    add_binary_operators_with<pc_t, Param<uint16_t>>(param_class);
-    add_binary_operators_with<pc_t, Param<uint32_t>>(param_class);
+    add_binary_operators_with<Param<uint8_t>>(param_class);
+    add_binary_operators_with<Param<uint16_t>>(param_class);
+    add_binary_operators_with<Param<uint32_t>>(param_class);
 
-    add_binary_operators_with<pc_t, Param<int8_t>>(param_class);
-    add_binary_operators_with<pc_t, Param<int16_t>>(param_class);
-    add_binary_operators_with<pc_t, Param<int32_t>>(param_class);
+    add_binary_operators_with<Param<int8_t>>(param_class);
+    add_binary_operators_with<Param<int16_t>>(param_class);
+    add_binary_operators_with<Param<int32_t>>(param_class);
 
-    add_binary_operators_with<pc_t, Param<float>>(param_class);
-    add_binary_operators_with<pc_t, Param<double>>(param_class);
+    add_binary_operators_with<Param<float>>(param_class);
+    add_binary_operators_with<Param<double>>(param_class);
 }
 
 template <typename T, typename... Args>

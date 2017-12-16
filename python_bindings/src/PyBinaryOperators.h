@@ -4,18 +4,30 @@
 #include <boost/python/operators.hpp>
 #include <boost/python/self.hpp>
 
-template <typename A, typename B, typename WrappedType>
+// Note that we deliberately produce different semantics for division in Python3:
+// to match Halide C++ division semantics, a signed-integer division is always
+// a floordiv rather than a truediv.
+template <typename A, typename B>
 auto floordiv(A a, B b) -> decltype(a / b) {
-    // Halide does floordiv by default over Expr and similar.
-    // see https://lists.csail.mit.edu/pipermail/halide-dev/2015-June/001679.html
-    return a / b;
+    static_assert(std::is_same<decltype(a / b), Halide::Expr>::value,
+                  "We expect all operator// overloads to produce Halide::Expr");
+    Halide::Expr e = a / b;
+    if (e.type().is_float()) {
+        e = Halide::floor(e);
+    }
+    return e;
 }
 
-template <typename PythonClass, typename T>
+// template <typename A, typename B>
+// auto truediv(A a, B b) -> decltype(a / b) {
+//     return a / b;
+// }
+
+template <typename T, typename PythonClass>
 void add_binary_operators_with(PythonClass &class_instance) {
     using namespace boost::python;
 
-    typedef typename PythonClass::wrapped_type wrapped_t;
+    using wrapped_t = typename PythonClass::wrapped_type;
 
     // <boost/python/operators.hpp> lists all operators
     class_instance
@@ -67,8 +79,11 @@ void add_binary_operators_with(PythonClass &class_instance) {
         .def(self << other<T>())
         .def(other<T>() << self)
 
-        .def("__floordiv__", &floordiv<wrapped_t, T, wrapped_t>)
-        .def("__floordiv__", &floordiv<T, wrapped_t, wrapped_t>)
+        // .def("__div__", &truediv<wrapped_t, T>)
+        // .def("__div__", &truediv<T, wrapped_t>)
+
+        .def("__floordiv__", &floordiv<wrapped_t, T>)
+        .def("__floordiv__", &floordiv<T, wrapped_t>)
 
         ;
 }
@@ -77,13 +92,13 @@ template <typename PythonClass>
 void add_binary_operators(PythonClass &class_instance) {
     using namespace boost::python;
 
-    typedef typename PythonClass::wrapped_type wrapped_t;
+    using wrapped_t = typename PythonClass::wrapped_type;
 
     // The order of definitions matters.
     // Python first will try input value as int, then float, then wrapped_t
-    add_binary_operators_with<PythonClass, wrapped_t>(class_instance);
-    add_binary_operators_with<PythonClass, float>(class_instance);
-    add_binary_operators_with<PythonClass, int>(class_instance);
+    add_binary_operators_with<wrapped_t>(class_instance);
+    add_binary_operators_with<float>(class_instance);
+    add_binary_operators_with<int>(class_instance);
 
     // Define unary operators
     // <boost/python/operators.hpp> lists all operators
