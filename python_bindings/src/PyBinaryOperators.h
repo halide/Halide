@@ -18,11 +18,6 @@ auto floordiv(A a, B b) -> decltype(a / b) {
     return e;
 }
 
-// template <typename A, typename B>
-// auto truediv(A a, B b) -> decltype(a / b) {
-//     return a / b;
-// }
-
 template <typename T, typename PythonClass>
 void add_binary_operators_with(PythonClass &class_instance) {
     using namespace boost::python;
@@ -78,9 +73,6 @@ void add_binary_operators_with(PythonClass &class_instance) {
 
         .def(self << other<T>())
         .def(other<T>() << self)
-
-        // .def("__div__", &truediv<wrapped_t, T>)
-        // .def("__div__", &truediv<T, wrapped_t>)
 
         .def("__floordiv__", &floordiv<wrapped_t, T>)
         .def("__floordiv__", &floordiv<T, wrapped_t>)
