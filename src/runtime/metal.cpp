@@ -720,7 +720,7 @@ WEAK int halide_metal_run(void *user_context,
 
         // The Metal compiler introduces padding up to a multiple of 4 bytes
         // in the struct, per email communication from Apple
-        size_t padded_args_size = (total_args_size + 4 - 1) & ~(4 - 1);
+        size_t padded_args_size = (total_args_size + 4 - 1) & ~((size_t)(4 - 1));
         debug(user_context) << "Total args size is " << (uint64_t)total_args_size <<
           " and with padding, size is " << (uint64_t)padded_args_size << "\n";
         halide_assert(user_context, padded_args_size >= total_args_size);
