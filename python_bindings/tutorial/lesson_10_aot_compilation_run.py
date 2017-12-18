@@ -10,7 +10,7 @@
 
 #include <stdio.h>
 
-from halide import *
+import halide as hl
 import numpy as np
 import ctypes
 import platform
@@ -29,7 +29,7 @@ def main():
     #     uint8_t* host
     #     int32_t extent[4]
     #     int32_t stride[4]
-    #     int32_t min[4]
+    #     int32_t hl.min[4]
     #     int32_t elem_size
     #     bool host_dirty
     #     bool dev_dirty
@@ -80,7 +80,7 @@ def main():
         # To access pixel (x, y) in a two-dimensional buffer_t, Halide
         # looks at memory address:
 
-        # host + elem_size * ((x - min[0])*stride[0] + (y - min[1])*stride[1])
+        # host + elem_size * ((x - hl.min[0])*stride[0] + (y - hl.min[1])*stride[1])
 
         # The stride in a dimension represents the number of elements in
         # memory between adjacent entries in that dimension. We have a
@@ -99,7 +99,7 @@ def main():
         input_buf.extent[1] = output_buf.extent[1] = 480
 
         # We'll leave the mins as zero. This is what they typically
-        # are. The host pointer points to the memory location of the min
+        # are. The host pointer points to the memory location of the hl.min
         # coordinate (not the origin!).  See lesson 6 for more detail
         # about the mins.
 
@@ -107,8 +107,8 @@ def main():
         # uses. For the 8-bit image we use in this test it's one.
         input_buf.elem_size = output_buf.elem_size = 1
     else:
-        input_buf = Buffer(input).buffer()
-        output_buf = Buffer(output).buffer()
+        input_buf = hl.Buffer(input).buffer()
+        output_buf = hl.Buffer(output).buffer()
 
 
     # To avoid repeating all the boilerplate above, We recommend you
@@ -157,10 +157,10 @@ def main():
             #transpose, and even flip buffers without modifying the data.
             ("stride", ctypes.c_int32 * 4),
 
-            #Buffers often represent evaluation of a Func over some
-            #domain. The min field encodes the top left corner of the
+            #Buffers often represent evaluation of a hl.Func over some
+            #domain. The hl.min field encodes the top left corner of the
             #domain.
-            ("min", ctypes.c_int32 * 4),
+            ("hl.min", ctypes.c_int32 * 4),
 
             #How many bytes does each buffer element take. This may be
             #replaced with a more general type code in the future. */
@@ -179,16 +179,16 @@ def main():
 
 
     def buffer_t_to_buffer_struct(buffer):
-        assert type(buffer) == Buffer
+        assert type(buffer) == hl.Buffer
         b = buffer.raw_buffer()
         bb = BufferStruct()
 
         uint8_p_t = ctypes.POINTER(ctypes.c_ubyte)
         # host_p0 is the complicated way...
-        #host_p0 = buffer_to_ndarray(Buffer(UInt(8), b)).ctypes.data
+        #host_p0 = hl.buffer_to_ndarray(hl.Buffer(hl.UInt(8), b)).ctypes.data
         # host_ptr_as_int is the easy way
         host_p = buffer.host_ptr_as_int()
-        bb.host = ctypes.cast(host_p, uint8_p_t)
+        bb.host = ctypes.hl.cast(host_p, uint8_p_t)
         #print("host_p", host_p0, host_p, bb.host)
         bb.dev = b.dev
         bb.elem_size = b.elem_size
@@ -197,7 +197,7 @@ def main():
         for i in range(4):
             bb.extent[i] = b.extent[i]
             bb.stride[i] = b.stride[i]
-            bb.min[i] = b.min[i]
+            bb.hl.min[i] = b.hl.min[i]
         return bb
 
     input_buf_struct = buffer_t_to_buffer_struct(input_buf)

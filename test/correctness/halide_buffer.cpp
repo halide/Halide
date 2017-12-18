@@ -36,6 +36,8 @@ int main(int argc, char **argv) {
 
         a.fill(1.0f);
 
+        assert(a.all_equal(1.0f));
+
         b.fill([&](int x, int y, int c) {
             return x + 100.0f * y + 100000.0f * c;
         });

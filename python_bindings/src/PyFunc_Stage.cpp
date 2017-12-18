@@ -22,7 +22,6 @@ void define_stage() {
                  "Return a string describing the current var list taking into "
                  "account all the splits, reorders, and tiles.")
             .def("name", &Stage::name, p::arg("self"),
-                 p::return_value_policy<p::copy_const_reference>(),
                  "Return the name of this stage, e.g. \"f.update(2)\"")
             .def("allow_race_conditions", &Stage::allow_race_conditions, p::arg("self"),
                  p::return_internal_reference<1>());
