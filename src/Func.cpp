@@ -974,7 +974,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
                     descends_from_shiftinwards_outer[s.outer] = s.factor;
                 } else if (s.is_split() && it != descends_from_shiftinwards_outer.end()) {
                     descends_from_shiftinwards_outer[s.inner] = it->second;
-                    descends_from_shiftinwards_outer[s.inner] = it->second;
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 } else if ((s.is_rename() || s.is_purify()) &&
                            it != descends_from_shiftinwards_outer.end()) {
                     descends_from_shiftinwards_outer[s.outer] = it->second;
