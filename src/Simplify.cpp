@@ -2297,6 +2297,7 @@ private:
                    const_int(b, &ib) &&
                    ib &&
                    const_int(mul_a->b, &ia) &&
+                   ia > 0 &&
                    (ib % ia == 0)) {
             // (x * a) % (a * b) -> (x % b) * a
             Expr ratio = make_const(a.type(), div_imp(ib, ia));
