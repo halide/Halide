@@ -40,7 +40,7 @@ struct Cost {
  * region of a function or one of its stages. */
 struct RegionCosts {
     /** An environment map which contains all functions in the pipeline. */
-    const std::map<std::string, Function> &env;
+    std::map<std::string, Function> env;
     /** A map containing the cost of computing a value in each stage of a
      * function. The number of entries in the vector is equal to the number of
      * stages in the function. */

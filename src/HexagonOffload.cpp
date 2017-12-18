@@ -949,6 +949,16 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
+    // Write intermediate bitcode to disk if requested.
+    // TODO: We really need something better than this. This won't
+    // work in non-trivial JIT or AOT programs.
+    std::string bitcode_dump_path = get_env_variable("HL_HEXAGON_DUMP_BITCODE");
+    if (!bitcode_dump_path.empty()) {
+        auto fd_ostream = make_raw_fd_ostream(bitcode_dump_path);
+        compile_llvm_module_to_llvm_bitcode(*llvm_module, *fd_ostream);
+        debug(0) << "Wrote Hexagon device bitcode to " << bitcode_dump_path;
+    }
+
     llvm::SmallVector<char, 4096> object;
     llvm::raw_svector_ostream object_stream(object);
     compile_llvm_module_to_object(*llvm_module, object_stream);
@@ -960,16 +970,6 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
         debug(0) << assembly.c_str() << "\n";
-    }
-
-    // Write intermediate bitcode to disk if requested.
-    // TODO: We really need something better than this. This won't
-    // work in non-trivial JIT or AOT programs.
-    std::string bitcode_dump_path = get_env_variable("HL_HEXAGON_DUMP_BITCODE");
-    if (!bitcode_dump_path.empty()) {
-        auto fd_ostream = make_raw_fd_ostream(bitcode_dump_path);
-        compile_llvm_module_to_llvm_bitcode(*llvm_module, *fd_ostream);
-        debug(0) << "Wrote Hexagon device bitcode to " << bitcode_dump_path;
     }
 
     auto obj = Elf::Object::parse_object(object.data(), object.size());
