@@ -1575,7 +1575,7 @@ private:
                 bounds.push_back(Range(min, extent));
             }
 
-            s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
         // This is also the point at which we inject explicit bounds

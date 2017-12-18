@@ -2167,7 +2167,7 @@ Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI devi
 
 Func &Func::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule()).gpu_lanes(tx, device_api);
+    Stage(func, func.definition(), 0, args()).gpu_lanes(tx, device_api);
     return *this;
 }
 
