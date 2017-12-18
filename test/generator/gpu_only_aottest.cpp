@@ -15,22 +15,22 @@ using namespace Halide::Runtime;
 #if defined(TEST_OPENCL)
 
 #if !defined(HALIDE_TARGET_FEATURE_OPENCL)
-#error "TEST_OPENCL defined but HALIDE_TARGET_FEATURE_OPENCL was not defined"
+#error "TEST_OPENCL defined but HALIDE_TARGET_FEATURE_OPENCL not defined"
 #endif
 
 #elif defined(TEST_CUDA)
 
 #if !defined(HALIDE_TARGET_FEATURE_CUDA)
-#error "TEST_CUDA defined but HALIDE_TARGET_FEATURE_CUDA was not defined"
+#error "TEST_CUDA defined but HALIDE_TARGET_FEATURE_CUDA not defined"
 #endif
 
 #else
 
 #if defined(HALIDE_TARGET_FEATURE_OPENCL)
-#error "TEST_OPENCL defined but HALIDE_TARGET_FEATURE_OPENCL was not defined"
+#error "TEST_OPENCL not defined but HALIDE_TARGET_FEATURE_OPENCL defined"
 #endif
 #if defined(HALIDE_TARGET_FEATURE_CUDA)
-#error "TEST_CUDA defined but HALIDE_TARGET_FEATURE_CUDA was not defined"
+#error "TEST_CUDA not defined but HALIDE_TARGET_FEATURE_CUDA defined"
 #endif
 
 #endif
