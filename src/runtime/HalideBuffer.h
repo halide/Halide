@@ -1688,6 +1688,13 @@ public:
     }
     // @}
 
+    /** Tests that all values in this buffer are equal to val. */
+    bool all_equal(not_void_T val) const{
+        bool all_equal = true;
+        for_each_element([&](const int *pos) {all_equal &= (*this)(pos) == val;});
+        return all_equal;
+    }    
+
     void fill(not_void_T val) {
         set_host_dirty();
         for_each_value([=](T &v) {v = val;});

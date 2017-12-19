@@ -43,7 +43,7 @@ void define_rvar() {
     p::implicitly_convertible<RVar, h::Expr>();
 
     add_binary_operators(rvar_class);  // define operators with int, rvars, and exprs
-    add_binary_operators_with<decltype(rvar_class), h::Expr>(rvar_class);
+    add_binary_operators_with<h::Expr>(rvar_class);
 }
 
 h::RDom *RDom_constructor0(p::tuple args, std::string name = "") {
@@ -125,7 +125,7 @@ void define_rdom() {
     define_rvar();
 
     // only defined so that python knows what to do with it, not meant to be used by user
-    p::class_<h::Internal::ReductionDomain>("_ReductionDomain", p::no_init);
+    p::class_<h::Internal::ReductionDomain> dummy("_ReductionDomain", p::no_init);
 
     auto rdom_class = p::class_<RDom>("RDom",
                                       "A multi-dimensional domain over which to iterate. "
@@ -225,5 +225,5 @@ void define_rdom() {
     p::implicitly_convertible<RDom, h::RVar>();
 
     add_binary_operators(rdom_class);  // define operators with int, rdom and exprs
-    add_binary_operators_with<decltype(rdom_class), h::Expr>(rdom_class);
+    add_binary_operators_with<h::Expr>(rdom_class);
 }

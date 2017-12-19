@@ -20,8 +20,11 @@ namespace Internal {
 struct LoopLevelContents {
     mutable RefCount ref_count;
 
-    // Note: func_ is empty for inline or root.
+    // Note: func_name is empty for inline or root.
     std::string func_name;
+    // If set to -1, this loop level does not refer to a particular stage of the
+    // function. 0 refers to initial stage, 1 refers to the 1st update stage, etc.
+    int stage_index;
     // TODO: these two fields should really be VarOrRVar,
     // but cyclical include dependencies make this challenging.
     std::string var_name;
@@ -31,8 +34,10 @@ struct LoopLevelContents {
     LoopLevelContents(const std::string &func_name,
                       const std::string &var_name,
                       bool is_rvar,
+                      int stage_index,
                       bool locked)
-    : func_name(func_name), var_name(var_name), is_rvar(is_rvar), locked(locked) {}
+    : func_name(func_name), stage_index(stage_index), var_name(var_name),
+      is_rvar(is_rvar), locked(locked) {}
 };
 
 template<>
@@ -47,17 +52,20 @@ EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
 
 }  // namespace Internal
 
-LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar, bool locked)
-    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, locked)) {}
+LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name,
+                     bool is_rvar, int stage_index, bool locked)
+    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {}
 
-LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar, false) {}
+LoopLevel::LoopLevel(const Internal::Function &f, VarOrRVar v, int stage_index)
+    : LoopLevel(f.name(), v.name(), v.is_rvar, stage_index, false) {}
 
-LoopLevel::LoopLevel(const Func &f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar, false) {}
+LoopLevel::LoopLevel(const Func &f, VarOrRVar v, int stage_index)
+    : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage_index, false) {}
 
 // Note that even 'undefined' LoopLevels get a LoopLevelContents; this is deliberate,
 // as we want to be able to create an undefined LoopLevel, pass it to another function
 // to use, then mutate it afterwards via 'set()'.
-LoopLevel::LoopLevel() : LoopLevel("", undefined_looplevel_name, false, false) {}
+LoopLevel::LoopLevel() : LoopLevel("", undefined_looplevel_name, false, -1, false) {}
 
 void LoopLevel::check_defined() const {
     internal_assert(defined());
@@ -89,6 +97,7 @@ void LoopLevel::set(const LoopLevel &other) {
         << contents->func_name << "." << contents->var_name
         << "\n";
     contents->func_name = other.contents->func_name;
+    contents->stage_index = other.contents->stage_index;
     contents->var_name = other.contents->var_name;
     contents->is_rvar = other.contents->is_rvar;
 }
@@ -116,6 +125,12 @@ std::string LoopLevel::func() const {
     return contents->func_name;
 }
 
+int LoopLevel::stage_index() const {
+    check_defined_and_locked();
+    internal_assert(contents->stage_index >= 0);
+    return contents->stage_index;
+}
+
 VarOrRVar LoopLevel::var() const {
     check_defined_and_locked();
     internal_assert(!is_inlined() && !is_root());
@@ -124,7 +139,7 @@ VarOrRVar LoopLevel::var() const {
 
 /*static*/
 LoopLevel LoopLevel::inlined() {
-    return LoopLevel("", inline_looplevel_name, false);
+    return LoopLevel("", inline_looplevel_name, false, -1);
 }
 
 bool LoopLevel::is_inlined() const {
@@ -135,7 +150,7 @@ bool LoopLevel::is_inlined() const {
 
 /*static*/
 LoopLevel LoopLevel::root() {
-    return LoopLevel("", root_looplevel_name, false);
+    return LoopLevel("", root_looplevel_name, false, -1);
 }
 
 bool LoopLevel::is_root() const {
@@ -146,13 +161,23 @@ bool LoopLevel::is_root() const {
 
 std::string LoopLevel::to_string() const {
     check_defined_and_locked();
-    return contents->func_name + "." + contents->var_name;
+    if (contents->stage_index == -1) {
+        return contents->func_name + "." + contents->var_name;
+    } else {
+        return contents->func_name + ".s" + std::to_string(contents->stage_index) + "." + contents->var_name;
+    }
 }
 
 bool LoopLevel::match(const std::string &loop) const {
     check_defined_and_locked();
-    return Internal::starts_with(loop, contents->func_name + ".") &&
-           Internal::ends_with(loop, "." + contents->var_name);
+    if (contents->stage_index == -1) {
+        return Internal::starts_with(loop, contents->func_name + ".") &&
+               Internal::ends_with(loop, "." + contents->var_name);
+    } else {
+        std::string prefix = contents->func_name + ".s" + std::to_string(contents->stage_index) + ".";
+        return Internal::starts_with(loop, prefix) &&
+               Internal::ends_with(loop, "." + contents->var_name);
+    }
 }
 
 bool LoopLevel::match(const LoopLevel &other) const {
@@ -161,14 +186,16 @@ bool LoopLevel::match(const LoopLevel &other) const {
     return (contents->func_name == other.contents->func_name &&
             (contents->var_name == other.contents->var_name ||
              Internal::ends_with(contents->var_name, "." + other.contents->var_name) ||
-             Internal::ends_with(other.contents->var_name, "." + contents->var_name)));
+             Internal::ends_with(other.contents->var_name, "." + contents->var_name)) &&
+            (contents->stage_index == other.contents->stage_index));
 }
 
 bool LoopLevel::operator==(const LoopLevel &other) const {
     check_defined_and_locked();
     other.check_defined_and_locked();
-    return contents->func_name == other.contents->func_name &&
-           contents->var_name == other.contents->var_name;
+    return (contents->func_name == other.contents->func_name) &&
+           (contents->stage_index == other.contents->stage_index) &&
+           (contents->var_name == other.contents->var_name);
 }
 
 namespace Internal {
@@ -235,7 +262,7 @@ EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
 }
 
 
-/** A schedule for a sigle halide stage, which defines where, when, and
+/** A schedule for a sigle halide stage_index, which defines where, when, and
  * how it should be evaluated. */
 struct StageScheduleContents {
     mutable RefCount ref_count;
@@ -244,10 +271,13 @@ struct StageScheduleContents {
     std::vector<Split> splits;
     std::vector<Dim> dims;
     std::vector<PrefetchDirective> prefetches;
+    FuseLoopLevel fuse_level;
+    std::vector<FusedPair> fused_pairs;
     bool touched;
     bool allow_race_conditions;
 
-    StageScheduleContents() : touched(false), allow_race_conditions(false) {};
+    StageScheduleContents() : fuse_level(FuseLoopLevel()), touched(false),
+                              allow_race_conditions(false) {};
 
     // Pass an IRMutator2 through to all Exprs referenced in the StageScheduleContents
     void mutate(IRMutator2 *mutator) {
@@ -423,6 +453,8 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->splits = contents->splits;
     copy.contents->dims = contents->dims;
     copy.contents->prefetches = contents->prefetches;
+    copy.contents->fuse_level = contents->fuse_level;
+    copy.contents->fused_pairs = contents->fused_pairs;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
     return copy;
@@ -466,6 +498,22 @@ std::vector<PrefetchDirective> &StageSchedule::prefetches() {
 
 const std::vector<PrefetchDirective> &StageSchedule::prefetches() const {
     return contents->prefetches;
+}
+
+FuseLoopLevel &StageSchedule::fuse_level() {
+    return contents->fuse_level;
+}
+
+const FuseLoopLevel &StageSchedule::fuse_level() const {
+    return contents->fuse_level;
+}
+
+std::vector<FusedPair> &StageSchedule::fused_pairs() {
+    return contents->fused_pairs;
+}
+
+const std::vector<FusedPair> &StageSchedule::fused_pairs() const {
+    return contents->fused_pairs;
 }
 
 bool &StageSchedule::allow_race_conditions() {

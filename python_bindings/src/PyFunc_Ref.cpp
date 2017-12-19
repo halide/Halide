@@ -81,14 +81,11 @@ void define_func_tuple_element_ref() {
             .def("index", &FuncTupleElementRef::index,
                  "Return index to the function outputs.");
 
-    typedef decltype(func_tuple_element_ref_class) func_tuple_element_ref_class_t;
-    typedef func_tuple_element_ref_class_t fterc_t;
-
-    add_binary_operators_with<fterc_t, FuncTupleElementRef>(func_tuple_element_ref_class);
+    add_binary_operators_with<FuncTupleElementRef>(func_tuple_element_ref_class);
 
     // h::Expr has empty constructor, thus self does the job
     // h::Expr will "eat" int and float arguments via implicit conversion
-    add_binary_operators_with<fterc_t, h::Expr>(func_tuple_element_ref_class);
+    add_binary_operators_with<h::Expr>(func_tuple_element_ref_class);
 
     p::implicitly_convertible<FuncTupleElementRef, h::Expr>();
 }
@@ -139,14 +136,11 @@ void define_func_ref_expr_class() {
             .def("function", &FuncRef::function,
                  "What function is this calling?");
 
-    typedef decltype(func_ref_expr_class) func_ref_expr_class_t;
-    typedef func_ref_expr_class_t frec_t;
-
-    add_binary_operators_with<frec_t, FuncRef>(func_ref_expr_class);
+    add_binary_operators_with<FuncRef>(func_ref_expr_class);
 
     // h::Expr has empty constructor, thus self does the job
     // h::Expr will "eat" int and float arguments via implicit conversion
-    add_binary_operators_with<frec_t, h::Expr>(func_ref_expr_class);
+    add_binary_operators_with<h::Expr>(func_ref_expr_class);
 
     p::implicitly_convertible<FuncRef, h::Expr>();
 }
@@ -154,7 +148,7 @@ void define_func_ref_expr_class() {
 void define_func_ref() {
     // only defined so that boost::python knows about these class,
     // not (yet) meant to be created or manipulated by the user
-    p::class_<h::Internal::Function>("InternalFunction", p::no_init);
+    p::class_<h::Internal::Function> dummy("InternalFunction", p::no_init);
 
     define_func_tuple_element_ref();
     define_func_ref_expr_class();

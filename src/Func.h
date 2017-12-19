@@ -51,13 +51,14 @@ struct StorageDim;
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
+    /** Reference to the Function this stage (or definition) belongs to. */
+    Internal::Function function;
     Internal::Definition definition;
-    std::string stage_name;
+    /** Indicate which stage the definition belongs to (0 for initial
+     * definition, 1 for first update, etc.). */
+    size_t stage_index;
     /** Pure Vars of the Function (from the init definition). */
     std::vector<Var> dim_vars;
-    /** This is just a reference to the FuncSchedule owned by the Function
-     * associated with this Stage. */
-    Internal::FuncSchedule func_schedule;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
@@ -66,19 +67,23 @@ class Stage {
     void remove(const std::string &var);
     Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
 
+    const std::vector<Internal::StorageDim> &storage_dims() const {
+        return function.schedule().storage_dims();
+    }
+
+    Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
+
 public:
-    Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
-          const Internal::FuncSchedule &func_s)
-            : definition(d), stage_name(n), dim_vars(args), func_schedule(func_s) {
-        user_assert(definition.defined()) << "Func " << n << " is not defined.";
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
+          const std::vector<Var> &args)
+            : function(f), definition(d), stage_index(stage_index), dim_vars(args) {
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
 
-    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
-          const Internal::FuncSchedule &func_s)
-            : definition(d), stage_name(n), func_schedule(func_s) {
-        user_assert(definition.defined()) << "Func " << n << " is not defined.";
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
+          const std::vector<std::string> &args)
+            : function(f), definition(d), stage_index(stage_index) {
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -97,7 +102,7 @@ public:
     EXPORT std::string dump_argument_list() const;
 
     /** Return the name of this stage, e.g. "f.update(2)" */
-    EXPORT const std::string &name() const;
+    EXPORT std::string name() const;
 
     /** Calling rfactor() on an associative update definition a Func will split
      * the update into an intermediate which computes the partial results and
@@ -171,6 +176,132 @@ public:
     // @{
     EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
     EXPORT Func rfactor(RVar r, Var v);
+    // @}
+
+    /** Schedule the iteration over this stage to be fused with another
+     * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
+     * be computed AFTER 's' in the innermost fused dimension. There should not
+     * be any dependencies between those two fused stages. If either of the
+     * stages being fused is a stage of an extern Func, this will throw an error.
+     *
+     * Note that the two stages that are fused together should have the same
+     * exact schedule from the outermost to the innermost fused dimension, and
+     * the stage we are calling compute_with on should not have specializations,
+     * e.g. f2.compute_with(f1, x) is allowed only if f2 has no specializations.
+     *
+     * Given the constraints, this has a variety of uses. Consider the
+     * following code:
+     \code
+     f(x, y) = x + y;
+     g(x, y) = x - y;
+     h(x, y) = f(x, y) + g(x, y);
+     f.compute_root();
+     g.compute_root();
+     f.split(x, xo, xi, 8);
+     g.split(x, xo, xi, 8);
+     g.compute_with(f, xo);
+     \endcode
+     *
+     * This is equivalent to:
+     \code
+     for y:
+       for xo:
+         for xi:
+           f(8*xo + xi) = (8*xo + xi) + y
+         for xi:
+           g(8*xo + xi) = (8*xo + xi) - y
+     for y:
+       for x:
+         h(x, y) = f(x, y) + g(x, y)
+     \endcode
+     *
+     * The size of the dimensions of the stages computed_with do not have
+     * to match. Consider the following code where 'g' is half the size of 'f':
+     \code
+     Image<int> f_im(size, size), g_im(size/2, size/2);
+     input(x, y) = x + y;
+     f(x, y) = input(x, y);
+     g(x, y) = input(2*x, 2*y);
+     g.compute_with(f, y);
+     input.compute_at(f, y);
+     Pipeline({f, g}).realize({f_im, g_im});
+     \endcode
+     *
+     * This is equivalent to:
+     \code
+     for y = 0 to size-1:
+       for x = 0 to size-1:
+         input(x, y) = x + y;
+       for x = 0 to size-1:
+         f(x, y) = input(x, y)
+       for x = 0 to size/2-1:
+         if (y < size/2-1):
+           g(x, y) = input(2*x, 2*y)
+     \endcode
+     *
+     * 'align' specifies how the loop iteration of each dimension of the
+     * two stages being fused should be aligned in the fused loop nests
+     * (see LoopAlignStrategy for options). Consider the following loop nests:
+     \code
+     for z = f_min_z to f_max_z:
+       for y = f_min_y to f_max_y:
+         for x = f_min_x to f_max_x:
+           f(x, y, z) = x + y + z
+     for z = g_min_z to g_max_z:
+       for y = g_min_y to g_max_y:
+         for x = g_min_x to g_max_x:
+           g(x, y, z) = x - y - z
+     \endcode
+     *
+     * If no alignment strategy is specified, the following loop nest will be
+     * generated:
+     \code
+     for z = min(f_min_z, g_min_z) to max(f_max_z, g_max_z):
+       for y = min(f_min_y, g_min_y) to max(f_max_y, g_max_y):
+         for x = f_min_x to f_max_x:
+           if (f_min_z <= z <= f_max_z):
+             if (f_min_y <= y <= f_max_y):
+               f(x, y, z) = x + y + z
+         for x = g_min_x to g_max_x:
+           if (g_min_z <= z <= g_max_z):
+             if (g_min_y <= y <= g_max_y):
+               g(x, y, z) = x - y - z
+     \endcode
+     *
+     * Instead, these alignment strategies:
+     \code
+     g.compute_with(f, y, {{z, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignEnd}});
+     \endcode
+     * will produce the following loop nest:
+     \code
+     f_loop_min_z = f_min_z
+     f_loop_max_z = max(f_max_z, (f_min_z - g_min_z) + g_max_z)
+     for z = f_min_z to f_loop_max_z:
+       f_loop_min_y = min(f_min_y, (f_max_y - g_max_y) + g_min_y)
+       f_loop_max_y = f_max_y
+       for y = f_loop_min_y to f_loop_max_y:
+         for x = f_min_x to f_max_x:
+           if (f_loop_min_z <= z <= f_loop_max_z):
+             if (f_loop_min_y <= y <= f_loop_max_y):
+               f(x, y, z) = x + y + z
+         for x = g_min_x to g_max_x:
+           g_shift_z = g_min_z - f_loop_min_z
+           g_shift_y = g_max_y - f_loop_max_y
+           if (g_min_z <= (z + g_shift_z) <= g_max_z):
+             if (g_min_y <= (y + g_shift_y) <= g_max_y):
+               g(x, y + g_shift_y, z + g_shift_z) = x - (y + g_shift_y) - (z + g_shift_z)
+     \endcode
+     *
+     * LoopAlignStrategy::AlignStart on dimension z will shift the loop iteration
+     * of 'g' at dimension z so that its starting value matches that of 'f'.
+     * Likewise, LoopAlignStrategy::AlignEnd on dimension y will shift the loop
+     * iteration of 'g' at dimension y so that its end value matches that of 'f'.
+     */
+    // @{
+    EXPORT Stage &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Stage &compute_with(LoopLevel loop_level, LoopAlignStrategy align = LoopAlignStrategy::Auto);
+    EXPORT Stage &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Stage &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
     // @}
 
     /** Scheduling calls that control how the domain of this stage is
@@ -1878,6 +2009,13 @@ public:
     /** Schedule a function to be computed within the iteration over
      * a given LoopLevel. */
     EXPORT Func &compute_at(LoopLevel loop_level);
+
+    /** Schedule the iteration over the initial definition of this function
+     *  to be fused with another stage 's' from outermost loop to a
+     * given LoopLevel. See \ref Stage::compute_with */
+    // @{
+    EXPORT Func &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Func &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
 
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :

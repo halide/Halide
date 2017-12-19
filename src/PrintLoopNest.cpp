@@ -177,8 +177,11 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
 
-    // Compute a realization order
-    vector<string> order = realization_order(outputs, env);
+    // Compute a realization order and determine group of functions which loops
+    // are to be fused together
+    vector<string> order;
+    vector<vector<string>> fused_groups;
+    std::tie(order, fused_groups) = realization_order(outputs, env);
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
@@ -193,7 +196,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
 
     bool any_memoized = false;
     // Schedule the functions.
-    Stmt s = schedule_functions(outputs, order, env, target, any_memoized);
+    Stmt s = schedule_functions(outputs, fused_groups, env, target, any_memoized);
 
     // Now convert that to pseudocode
     std::ostringstream sstr;
