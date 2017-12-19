@@ -19,6 +19,7 @@ using std::endl;
 using std::string;
 using std::vector;
 using std::ostringstream;
+using std::istringstream;
 using std::map;
 
 extern "C" unsigned char halide_internal_initmod_inlined_c[];
@@ -32,6 +33,13 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 
 namespace {
+
+string toupper(string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return std::toupper(c);
+    });
+    return s;
+}
 
 const string headers =
     "#include <iostream>\n"
@@ -227,6 +235,28 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
         forward_declared.insert(type_of<buffer_t *>().handle_type);
+
+        // Add a #define for each target feature we have.
+        istringstream target_ss(target.to_string());
+        vector<string> target_tokens;
+        string token;
+        while (std::getline(target_ss, token, '-')) {
+            target_tokens.push_back(token);
+        }
+        internal_assert(target_tokens.size() >= 3);
+        // Modify the target tokens to be a bit more descriptive.
+        target_tokens[0] = "ARCH_" + toupper(target_tokens[0]);
+        target_tokens[1] = "BITS_" + target_tokens[1];
+        target_tokens[2] = "OS_" + toupper(target_tokens[2]);
+        for (size_t i = 3; i < target_tokens.size(); i++) {
+            target_tokens[i] = "FEATURE_" + toupper(target_tokens[i]);
+        }
+        for (const string& i : target_tokens) {
+            string def = "HALIDE_TARGET_" + i;
+            stream << "#ifndef " << def << "\n";
+            stream << "#define " << def << " 1\n";
+            stream << "#endif\n";
+        }
     } else {
         // Include declarations of everything generated C source might want
         stream
