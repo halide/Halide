@@ -209,8 +209,11 @@ public:
 // crop behavior, we store a cl_mem and an offset and then create
 // sub-buffers as needed.
 struct device_handle {
-    cl_mem mem;
+    // Important: order these to avoid any padding between fields;
+    // some Win32 compiler optimizer configurations can inconsistently
+    // insert padding otherwise.
     uint64_t offset;
+    cl_mem mem;
 };
 
 // Structure to hold the state of a module attached to the context.
@@ -752,7 +755,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
         free(dev_handle);
         return err;
     } else {
-        debug(user_context) << (void *)dev_ptr << "device_handle: " << dev_handle << "\n";
+        debug(user_context) << (void *)dev_ptr << " device_handle: " << dev_handle << "\n";
     }
 
     dev_handle->mem = dev_ptr;
@@ -764,6 +767,8 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
         << "    Allocated device buffer " << (void *)buf->device
         << " for buffer " << buf << "\n";
+
+    halide_assert(user_context, validate_device_pointer(user_context, buf, size));
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
