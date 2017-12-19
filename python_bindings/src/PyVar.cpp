@@ -112,7 +112,7 @@ void define_var() {
     ;
 
     add_binary_operators(var_class);
-    add_binary_operators_with<decltype(var_class), h::Expr>(var_class);
+    add_binary_operators_with<h::Expr>(var_class);
 
     p::implicitly_convertible<Var, h::Expr>();
 }

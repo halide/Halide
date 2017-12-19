@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import halide as hl
 
 def test_rdom():
