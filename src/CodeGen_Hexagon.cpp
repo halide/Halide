@@ -210,7 +210,41 @@ private:
                 s = Block::make({prolog, new_for, epilog});
                 debug(4) << "Wrapping prolog & epilog around par loop\n" << s << "\n";
             } else {
-                body = substitute("uses_hvx", false, body);
+                // We do not substitute false for "uses_hvx" into the body as we do in the true
+                // case because we want to defer that to an enclosing scope. The logic is that
+                // in case this scope doesn't use_hvx (we are here in the else because of that)
+                // then an enclosing scope might. However, substituting false for "uses_hvx"
+                // at this stage will remove the prolog and epilog checks that will be needed
+                // as the enclosing scope uses hvx. This is exhibited by the following code
+                // structure
+                //
+                // for_par(z..) {//uses hvx
+                //   for_par(y..) {  // doesn't use hvx
+                //     for_par(x..) { // uses hvx
+                //        vector code
+                //     }
+                //   }
+                //   vector code
+                // }
+                // If we substitute false in the else here, we'll get
+                // for_par(z.) {
+                //   halide_qurt_hvx_lock();
+                //   for_par(y..) {
+                //     if (false) {
+                //        halide_qurt_hvx_unlock(); // will get optimized away.
+                //     }
+                //     for_par(x..) {
+                //        halide_qurt_hvx_lock();  // double lock. Not good.
+                //        vector code
+                //        halide_qurt_hvx_unlock();
+                //     }
+                //     if (false) {
+                //        halide_qurt_hvx_lock();
+                //     }
+                //   }
+                //   vector code
+                //   halide_qurt_unlock
+                // }
                 s = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
 
