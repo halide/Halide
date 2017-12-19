@@ -148,7 +148,7 @@ void define_func_ref_expr_class() {
 void define_func_ref() {
     // only defined so that boost::python knows about these class,
     // not (yet) meant to be created or manipulated by the user
-    p::class_<h::Internal::Function>("InternalFunction", p::no_init);
+    p::class_<h::Internal::Function> dummy("InternalFunction", p::no_init);
 
     define_func_tuple_element_ref();
     define_func_ref_expr_class();

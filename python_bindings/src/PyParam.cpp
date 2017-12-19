@@ -268,8 +268,6 @@ void define_output_image_param() {
     //     "as an Expr"
     //    EXPORT operator ExternFuncArgument() const;
     //};
-
-    return;
 }
 
 template <typename T>
@@ -396,7 +394,7 @@ struct end_of_recursion_t {};  // dummy helper type
 template <typename T = end_of_recursion_t, typename... Types>
 p::object create_param0_impl(h::Type type, std::string name) {
     if (h::type_of<T>() == type) {
-        if (name != "") {
+        if (!name.empty()) {
             return create_param_object<T>(name);
         } else {
             return create_param_object<T>();

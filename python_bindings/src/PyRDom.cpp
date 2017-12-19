@@ -125,7 +125,7 @@ void define_rdom() {
     define_rvar();
 
     // only defined so that python knows what to do with it, not meant to be used by user
-    p::class_<h::Internal::ReductionDomain>("_ReductionDomain", p::no_init);
+    p::class_<h::Internal::ReductionDomain> dummy("_ReductionDomain", p::no_init);
 
     auto rdom_class = p::class_<RDom>("RDom",
                                       "A multi-dimensional domain over which to iterate. "
