@@ -4,6 +4,8 @@
 #include <boost/python/operators.hpp>
 #include <boost/python/self.hpp>
 
+#include "Halide.h"
+
 // Note that we deliberately produce different semantics for division in Python3:
 // to match Halide C++ division semantics, a signed-integer division is always
 // a floordiv rather than a truediv.
