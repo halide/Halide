@@ -1,134 +1,184 @@
 #include "PyTarget.h"
 
+#include <boost/format.hpp>
 #include <boost/python.hpp>
+
 #include <string>
 #include <vector>
 
 #include "Halide.h"
 
-#include "PyExpr.h"
+using Halide::DeviceAPI;
+using Halide::Target;
+using Halide::Type;
 
-namespace h = Halide;
-namespace p = boost::python;
+namespace {
 
-void target_set_features(h::Target &t, p::list features, bool value) {
-    auto features_vec = python_collection_to_vector<h::Target::Feature>(features);
-    t.set_features(features_vec, value);
+// Helper class that registers a converter that can auto-convert
+// a python [List] into a std::vector<T>, greatly simplifying
+// many API bindings. (Conversions that cannot be done will throw a ValueError.)
+// TODO: move into a general helper header; other files will want to use this
+template<typename T>
+struct PythonListToVectorConverter {
+    static void *convertible(PyObject *obj) {
+        return PyList_Check(obj) ? obj : nullptr;
+    }
+
+    static void construct(PyObject *obj, boost::python::converter::rvalue_from_python_stage1_data* data) {
+        // The contents of this method are unspeakably evil, but apparently this is how
+        // this sort of thing is done in Boost.Python. *shrug*
+        boost::python::list list(boost::python::handle<>(boost::python::borrowed(obj)));
+
+        void* storage = ((boost::python::converter::rvalue_from_python_storage<std::vector<T>>*)data)->storage.bytes;
+        auto *v = new (storage) std::vector<T>();
+
+        const size_t c = boost::python::len(list);
+        v->reserve(c);
+        for (size_t i = 0; i < c; i++) {
+            boost::python::extract<T> extract(list[i]);
+            if (!extract.check()) {
+                const std::string o_str = boost::python::extract<std::string>(boost::python::str(list[i]));
+                throw std::invalid_argument("The value '" + o_str + "' is not convertible to the type " + boost::typeindex::type_id<T>().pretty_name());
+            }
+            v->push_back(extract);
+        }
+        data->convertible = storage;
+    }
+
+    PythonListToVectorConverter() {
+        boost::python::converter::registry::push_back(
+            &convertible,
+            &construct,
+            boost::python::type_id<std::vector<T>>());
+    }
+};
+
+std::string target_repr(const Target &t) {
+    return boost::str(boost::format("<halide.Target %s>") % t.to_string());
 }
 
+}  // namespace
+
 void define_target() {
-    using Halide::Target;
+    // Register a converter that auto-converts from a python list to a vector<Feature>
+    PythonListToVectorConverter<Target::Feature> converter;
+
+    // Disambiguate some ambigious methods
+    int (Target::*natural_vector_size_method)(Type) const = &Target::natural_vector_size;
+    bool (Target::*supports_type1_method)(const Type &t) const = &Target::supports_type;
+    bool (Target::*supports_type2_method)(const Type &t, DeviceAPI device) const = &Target::supports_type;
 
     auto target_class =
-        p::class_<Target>("Target",
-                          "A struct representing a target machine and os to generate code for.",
-                          p::init<>())
+        boost::python::class_<Target>("Target", boost::python::init<>())
+            .def(boost::python::init<std::string>(boost::python::args("self", "name")))
+            .def(boost::python::init<Target::OS, Target::Arch, int>(boost::python::args("self", "os", "arch", "bits")))
+            .def(boost::python::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>(boost::python::args("self", "os", "arch", "bits", "features")))
 
-            // TODO: not all constructors (yet) exposed
-            //Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
-            .def(p::self == p::self)
-            .def(p::self != p::self)
+            .def(boost::python::self == boost::python::self)
+            .def(boost::python::self != boost::python::self)
 
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)
-            .def_readwrite("bits", &Target::bits,
-                           "The bit-width of the target machine. Must be 0 for unknown, or 32 or 64.")
+            .def_readwrite("bits", &Target::bits)
 
-            .def("has_gpu_feature", &Target::has_gpu_feature, p::arg("self"),
-                 "Is OpenCL or CUDA enabled in this target? "
-                 "I.e. is Func::gpu_tile and similar going to work? "
-                 "We do not include OpenGL, because it is not capable of gpgpu, "
-                 "and is not scheduled via Func::gpu_tile.")
+            .def("__repr__", &target_repr, boost::python::arg("self"))
+            .def("__str__", &Target::to_string, boost::python::arg("self"))
+            .def("to_string", &Target::to_string, boost::python::arg("self"))
 
-            .def("to_string", &Target::to_string, p::arg("self"),
-                 "Convert the Target into a string form that can be reconstituted "
-                 "by merge_string(), which will always be of the form\n"
-                 "  arch-bits-os-feature1-feature2...featureN.\n"
-                 "Note that is guaranteed that t2.from_string(t1.to_string()) == t1, "
-                 "but not that from_string(s).to_string() == s (since there can be "
-                 "multiple strings that parse to the same Target)... "
-                 "*unless* t1 contains 'unknown' fields (in which case you'll get a string "
-                 "that can't be parsed, which is intentional).")
+            .def("has_feature", &Target::has_feature, boost::python::arg("self"))
+            .def("features_any_of", &Target::features_any_of, (boost::python::arg("self"), boost::python::arg("features")))
+            .def("features_all_of", &Target::features_all_of, (boost::python::arg("self"), boost::python::arg("features")))
 
-            .def("set_feature", &Target::set_feature,
-                 (p::arg("self"), p::arg("f"), p::arg("value") = true))
-            .def("set_features", &target_set_features,
-                 (p::arg("self"), p::arg("features_to_set"), p::arg("value") = true))
-
-        // TODO: not all methods (yet) exposed
-
+            .def("set_feature", &Target::set_feature, (boost::python::arg("self"), boost::python::arg("f"), boost::python::arg("value") = true))
+            .def("set_features", &Target::set_features, (boost::python::arg("self"), boost::python::arg("features"), boost::python::arg("value") = true))
+            .def("with_feature", &Target::with_feature, (boost::python::arg("self"), boost::python::arg("f")))
+            .def("without_feature", &Target::without_feature, (boost::python::arg("self"), boost::python::arg("f")))
+            .def("has_gpu_feature", &Target::has_gpu_feature, boost::python::arg("self"))
+            .def("supports_type", supports_type1_method, (boost::python::arg("self"), boost::python::arg("type")))
+            .def("supports_type", supports_type2_method, (boost::python::arg("self"), boost::python::arg("type"), boost::python::arg("device")))
+            .def("supports_device_api", &Target::supports_device_api, (boost::python::arg("self"), boost::python::arg("device")))
+            .def("natural_vector_size", natural_vector_size_method, (boost::python::arg("self"), boost::python::arg("type")))
+            .def("has_large_buffers", &Target::has_large_buffers, boost::python::arg("self"))
+            .def("maximum_buffer_size", &Target::maximum_buffer_size, boost::python::arg("self"))
+            .def("supported", &Target::supported, boost::python::arg("self"))
         ;
 
-    p::enum_<Target::OS>("TargetOS",
-                         "The operating system used by the target. Determines which "
-                         "system calls to generate.")
+    boost::python::enum_<Target::OS>("TargetOS")
         .value("OSUnknown", Target::OS::OSUnknown)
         .value("Linux", Target::OS::Linux)
         .value("Windows", Target::OS::Windows)
         .value("OSX", Target::OS::OSX)
         .value("Android", Target::OS::Android)
         .value("IOS", Target::OS::IOS)
+        .value("QuRT", Target::OS::QuRT)
+        .value("NoOS", Target::OS::NoOS)
         .export_values();
 
-    p::enum_<Target::Arch>("TargetArch",
-                           "The architecture used by the target. Determines the "
-                           "instruction set to use.")
+    boost::python::enum_<Target::Arch>("TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
         .value("MIPS", Target::Arch::MIPS)
+        .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
         .export_values();
 
-    p::enum_<Target::Feature>("TargetFeature",
-                              "Optional features a target can have.")
+    boost::python::enum_<Target::Feature>("TargetFeature")
         .value("JIT", Target::Feature::JIT)
         .value("Debug", Target::Feature::Debug)
         .value("NoAsserts", Target::Feature::NoAsserts)
         .value("NoBoundsQuery", Target::Feature::NoBoundsQuery)
-        .value("Profile", Target::Feature::Profile)
-
         .value("SSE41", Target::Feature::SSE41)
         .value("AVX", Target::Feature::AVX)
         .value("AVX2", Target::Feature::AVX2)
         .value("FMA", Target::Feature::FMA)
         .value("FMA4", Target::Feature::FMA4)
         .value("F16C", Target::Feature::F16C)
-
         .value("ARMv7s", Target::Feature::ARMv7s)
         .value("NoNEON", Target::Feature::NoNEON)
-
         .value("VSX", Target::Feature::VSX)
         .value("POWER_ARCH_2_07", Target::Feature::POWER_ARCH_2_07)
-
         .value("CUDA", Target::Feature::CUDA)
         .value("CUDACapability30", Target::Feature::CUDACapability30)
         .value("CUDACapability32", Target::Feature::CUDACapability32)
         .value("CUDACapability35", Target::Feature::CUDACapability35)
         .value("CUDACapability50", Target::Feature::CUDACapability50)
-
+        .value("CUDACapability61", Target::Feature::CUDACapability61)
         .value("OpenCL", Target::Feature::OpenCL)
         .value("CLDoubles", Target::Feature::CLDoubles)
-
         .value("OpenGL", Target::Feature::OpenGL)
+        .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("UserContext", Target::Feature::UserContext)
         .value("Matlab", Target::Feature::Matlab)
+        .value("Profile", Target::Feature::Profile)
+        .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
+        .value("MinGW", Target::Feature::MinGW)
+        .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
+        .value("LargeBuffers", Target::Feature::LargeBuffers)
+        .value("HVX_64", Target::Feature::HVX_64)
+        .value("HVX_128", Target::Feature::HVX_128)
+        .value("HVX_v62", Target::Feature::HVX_v62)
+        .value("HVX_v65", Target::Feature::HVX_v65)
+        .value("HVX_v66", Target::Feature::HVX_v66)
+        .value("HVX_shared_object", Target::Feature::HVX_shared_object)
+        .value("FuzzFloatStores", Target::Feature::FuzzFloatStores)
+        .value("SoftFloatABI", Target::Feature::SoftFloatABI)
+        .value("MSAN", Target::Feature::MSAN)
+        .value("AVX512", Target::Feature::AVX512)
+        .value("AVX512_KNL", Target::Feature::AVX512_KNL)
+        .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
+        .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
+        .value("TraceLoads", Target::Feature::TraceLoads)
+        .value("TraceStores", Target::Feature::TraceStores)
+        .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("FeatureEnd", Target::Feature::FeatureEnd)
-
         .export_values();
 
-    p::def("get_host_target", &h::get_host_target,
-           "Return the target corresponding to the host machine.");
+    boost::python::def("validate_target_string", &Target::validate_target_string);
 
-    p::def("get_target_from_environment", &h::get_target_from_environment,
-           "Return the target that Halide will use. If HL_TARGET is set it "
-           "uses that. Otherwise calls \ref get_host_target");
-
-    p::def("get_jit_target_from_environment", &h::get_jit_target_from_environment,
-           "Return the target that Halide will use for jit-compilation. If "
-           "HL_JIT_TARGET is set it uses that. Otherwise calls \\ref "
-           "get_host_target. Throws an error if the architecture, bit width, "
-           "and OS of the target do not match the host target, so this is only "
-           "useful for controlling the feature set.");
+    boost::python::def("get_host_target", &Halide::get_host_target);
+    boost::python::def("get_target_from_environment", &Halide::get_target_from_environment);
+    boost::python::def("get_jit_target_from_environment", &Halide::get_jit_target_from_environment);
+    boost::python::def("target_feature_for_device_api", &Halide::target_feature_for_device_api);
 }
