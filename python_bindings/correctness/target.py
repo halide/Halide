@@ -1,11 +1,6 @@
-from __future__ import print_function
-
 import halide as hl
 
 def test_target():
-    # Target t1, t2
-    # std::string ts
-
     # Target("") should be exactly like get_host_target().
     t1 = hl.get_host_target()
     t2 = hl.Target("")
