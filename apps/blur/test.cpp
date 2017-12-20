@@ -3,7 +3,7 @@
 #include <cstdio>
 #ifdef __SSE2__
 #include <emmintrin.h>
-#elif __ARM_NEON__
+#elif __ARM_NEON
 #include <arm_neon.h>
 #endif
 
@@ -71,48 +71,46 @@ Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
                 }
             }
         }
-#elif __ARM_NEON__
-        uint16x4_t one_third = vdup_n_s16(21846);
+#elif __ARM_NEON
+        uint16x4_t one_third = vdup_n_u16(21846);
 #pragma omp parallel for
         for (int yTile = 0; yTile < out.height(); yTile += 32) {
             uint16x8_t tmp[(128/8) * (32 + 2)];
             for (int xTile = 0; xTile < out.width(); xTile += 128) {
-                uint16x8_t *tmpPtr = tmp;
+                uint16_t *tmpPtr = (uint16_t*)tmp;
                 for (int y = 0; y < 32+2; y++) {
                     const uint16_t *inPtr = &(in(xTile, yTile+y));
                     for (int x = 0; x < 128; x += 8) {
-                        uint16_t a = vld1q_u16(inPtr);
-                        uint16_t b = vld1q_u16(inPtr+1);
-                        uint16_t c = vld1q_u16(inPtr+2);
+                        uint16x8_t a = vld1q_u16(inPtr);
+                        uint16x8_t b = vld1q_u16(inPtr+1);
+                        uint16x8_t c = vld1q_u16(inPtr+2);
                         uint16x8_t sum = vaddq_u16(vaddq_u16(a, b), c);
                         uint16x4_t sumlo = vget_low_u16(sum);
                         uint16x4_t sumhi = vget_high_u16(sum);
-                        uint32x4_t avglo_q16 = vmull_u16(sumlo, one_third);
-                        uint32x4_t avghi_q16 = vmull_u16(sumhi, one_third);
-                        uint16x4_t avglo = vshrn_n_u32(avglo_q16, 16);
-                        uint16x4_t avghi = vshrn_n_u32(avghi_q16, 16);
-                        uint16x8_t avg = vcombine_u16(avghi, avglo);
-                        vst1q_u16(tmpPtr++, avg);
-                        _mm_store_si128(tmpPtr++, avg);
+                        uint16x4_t avglo = vshrn_n_u32(vmull_u16(sumlo, one_third), 16);
+                        uint16x4_t avghi = vshrn_n_u32(vmull_u16(sumhi, one_third), 16);
+                        uint16x8_t avg = vcombine_u16(avglo, avghi);
+                        vst1q_u16(tmpPtr, avg);
+                        tmpPtr+=8;
                         inPtr+=8;
                     }
                 }
-                tmpPtr = tmp;
+                tmpPtr = (uint16_t*)tmp;
                 for (int y = 0; y < 32; y++) {
-                    int16x8_t *outPtr = (int16x8_t *)(&(out(xTile, yTile+y)));
+                    uint16_t *outPtr = &(out(xTile, yTile+y));
                     for (int x = 0; x < 128; x += 8) {
-                        uint16_t a = vld1q_u16(tmpPtr+(2*128)/8);
-                        uint16_t b = vld1q_u16(tmpPtr+128/8);
-                        uint16_t c = vld1q_u16(tmpPtr++);
+                        uint16x8_t a = vld1q_u16(tmpPtr+(2*128));
+                        uint16x8_t b = vld1q_u16(tmpPtr+128);
+                        uint16x8_t c = vld1q_u16(tmpPtr);
                         uint16x8_t sum = vaddq_u16(vaddq_u16(a, b), c);
                         uint16x4_t sumlo = vget_low_u16(sum);
                         uint16x4_t sumhi = vget_high_u16(sum);
-                        uint32x4_t avglo_q16 = vmull_u16(sumlo, one_third);
-                        uint32x4_t avghi_q16 = vmull_u16(sumhi, one_third);
-                        uint16x4_t avglo = vshrn_n_u32(avglo_q16, 16);
-                        uint16x4_t avghi = vshrn_n_u32(avghi_q16, 16);
-                        uint16x8_t avg = vcombine_u16(avghi, avglo);
-                        _mm_store_si128(outPtr++, avg);
+                        uint16x4_t avglo = vshrn_n_u32(vmull_u16(sumlo, one_third), 16);
+                        uint16x4_t avghi = vshrn_n_u32(vmull_u16(sumhi, one_third), 16);
+                        uint16x8_t avg = vcombine_u16(avglo, avghi);
+                        vst1q_u16(outPtr, avg);
+                        tmpPtr+=8;
+                        outPtr+=8;
                     }
                 }
             }
@@ -189,8 +187,11 @@ int main(int argc, char **argv) {
 
     for (int y = 64; y < input.height() - 64; y++) {
         for (int x = 64; x < input.width() - 64; x++) {
-            if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y))
+            if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y)) {
                 printf("difference at (%d,%d): %d %d %d\n", x, y, blurry(x, y), speedy(x, y), halide(x, y));
+                break;
+                //return -1;
+            }
         }
     }
 
