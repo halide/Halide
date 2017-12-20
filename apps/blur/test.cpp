@@ -9,12 +9,6 @@
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
-//#define cimg_display 0
-//#include "CImg.h"
-//using namespace cimg_library;
-
-// typedef CImg<uint16_t> Image;
-
 double t;
 
 
@@ -78,100 +72,6 @@ Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
     return out;
 }
 
-/*
-  Image blur_fast(const Image &in) {
-  Image out(in.width(), in.height());
-
-  __m128i one_third = _mm_set1_epi16(21846);
-  #pragma omp parallel for
-  for (int yTile = 0; yTile < in.height(); yTile += 64) {
-  __m128i tmp[(64/8)*(64+2)];
-  for (int xTile = 0; xTile < in.width(); xTile += 64) {
-  __m128i *tmpPtr = tmp;
-  for (int y = -1; y < 64+1; y++) {
-  const uint16_t *inPtr = &(in(xTile, yTile+y));
-  for (int x = 0; x < 64; x += 8) {
-  __m128i val = _mm_loadu_si128((__m128i *)(inPtr-1));
-  val = _mm_add_epi16(val, _mm_load_si128((__m128i *)inPtr));
-  val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
-  val = _mm_mulhi_epi16(val, one_third);
-  _mm_store_si128(tmpPtr++, val);
-  inPtr += 8;
-  }
-  }
-  tmpPtr = tmp;
-  for (int y = 0; y < 64; y++) {
-  __m128i *outPtr = (__m128i *)(&(out(xTile, yTile+y)));
-  for (int x = 0; x < 64; x += 8) {
-  __m128i val = _mm_load_si128(tmpPtr);
-  val = _mm_add_epi16(val, _mm_load_si128(tmpPtr+64/8));
-  val = _mm_add_epi16(val, _mm_load_si128(tmpPtr+(2*64)/8));
-  val = _mm_mulhi_epi16(val, one_third);
-  _mm_store_si128(outPtr++, val);
-  tmpPtr++;
-  }
-  }
-  }
-  }
-
-  return out;
-  }
-*/
-
-
-Buffer<uint16_t> blur_fast2(const Buffer<uint16_t> &in) {
-    Buffer<uint16_t> out(in.width()-8, in.height()-2);
-
-    int vw = in.width()/8;
-    if (vw > 1024) {
-        printf("Image too large for constant-sized stack allocation\n");
-        return out;
-    }
-
-    t = benchmark(10, 1, [&]() {
-        // multiplying by 21846 then taking the top 16 bits is equivalent to
-        // dividing by three
-        __m128i one_third = _mm_set1_epi16(21846);
-
-#pragma omp parallel for
-        for (int yTile = 0; yTile < in.height(); yTile += 128) {
-            __m128i tmp[1024*4]; // four scanlines
-            for (int y = -2; y < 128; y++) {
-                // to produce this scanline of the output
-                __m128i *outPtr = (__m128i *)(&(out(0, yTile + y)));
-                // we use this scanline of the input
-                const uint16_t *inPtr = &(in(0, yTile + y + 2));
-                // and these scanlines of the intermediate result
-                // We start y at negative 2 to fill the tmp buffer
-                __m128i *tmpPtr0 = tmp + ((y+4) & 3) * vw;
-                __m128i *tmpPtr1 = tmp + ((y+3) & 3) * vw;
-                __m128i *tmpPtr2 = tmp + ((y+2) & 3) * vw;
-                for (int x = 0; x < vw; x++) {
-                    // blur horizontally to produce next scanline of tmp
-                    __m128i val = _mm_load_si128((const __m128i *)(inPtr));
-                    val = _mm_add_epi16(val, _mm_loadu_si128((const __m128i *)(inPtr+1)));
-                    val = _mm_add_epi16(val, _mm_loadu_si128((const __m128i *)(inPtr+2)));
-                    val = _mm_mulhi_epi16(val, one_third);
-                    _mm_store_si128(tmpPtr0++, val);
-
-                    // blur vertically using previous scanlines of tmp to produce output
-                    if (y >= 0) {
-                        val = _mm_add_epi16(val, _mm_load_si128(tmpPtr1++));
-                        val = _mm_add_epi16(val, _mm_load_si128(tmpPtr2++));
-                        val = _mm_mulhi_epi16(val, one_third);
-                        _mm_store_si128(outPtr++, val);
-                    }
-
-                    inPtr += 8;
-                }
-            }
-        }
-
-    });
-
-    return out;
-}
-
 #include "halide_blur.h"
 
 Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
@@ -210,9 +110,6 @@ int main(int argc, char **argv) {
 
     Buffer<uint16_t> speedy = blur_fast(input);
     double fast_time = t;
-
-    //Buffer<uint16_t> speedy2 = blur_fast2(input);
-    //float fast_time2 = t;
 
     Buffer<uint16_t> halide = blur_halide(input);
     double halide_time = t;
