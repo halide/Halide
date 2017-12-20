@@ -111,8 +111,7 @@ void define_target() {
         .value("Android", Target::OS::Android)
         .value("IOS", Target::OS::IOS)
         .value("QuRT", Target::OS::QuRT)
-        .value("NoOS", Target::OS::NoOS)
-        .export_values();
+        .value("NoOS", Target::OS::NoOS);
 
     boost::python::enum_<Target::Arch>("TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
@@ -120,8 +119,7 @@ void define_target() {
         .value("ARM", Target::Arch::ARM)
         .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
-        .value("POWERPC", Target::Arch::POWERPC)
-        .export_values();
+        .value("POWERPC", Target::Arch::POWERPC);
 
     boost::python::enum_<Target::Feature>("TargetFeature")
         .value("JIT", Target::Feature::JIT)
@@ -172,8 +170,7 @@ void define_target() {
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
-        .value("FeatureEnd", Target::Feature::FeatureEnd)
-        .export_values();
+        .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     boost::python::def("validate_target_string", &Target::validate_target_string);
 

@@ -103,6 +103,5 @@ void define_expr() {
         .value("GLSL", h::DeviceAPI::GLSL)
         .value("OpenGLCompute", h::DeviceAPI::OpenGLCompute)
         .value("Metal", h::DeviceAPI::Metal)
-        .value("Hexagon", h::DeviceAPI::Hexagon)
-        .export_values();
+        .value("Hexagon", h::DeviceAPI::Hexagon);
 }
