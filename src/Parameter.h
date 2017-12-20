@@ -143,6 +143,12 @@ public:
     EXPORT void set_estimate(Expr e);
     EXPORT Expr estimate() const;
     // @}
+
+    /** Order Parameters by their IntrusivePtr so they can be used
+     * to index maps. */
+    bool operator<(const Parameter &other) const {
+        return contents < other.contents;
+    }
 };
 
 /** Validate arguments to a call to a func, image or imageparam. */

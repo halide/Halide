@@ -339,8 +339,9 @@ set(HEADER_FILES
   Outputs.h
   OutputImageParam.h
   ParallelRVar.h
-  Parameter.h
   Param.h
+  ParamMap.h
+  Parameter.h
   PartitionLoops.h
   Pipeline.h
   Prefetch.h
@@ -488,6 +489,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ObjectInstanceRegistry.cpp
   OutputImageParam.cpp
   ParallelRVar.cpp
+  ParamMap.cpp
   Parameter.cpp
   PartitionLoops.cpp
   Pipeline.cpp

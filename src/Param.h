@@ -165,6 +165,14 @@ public:
         return Argument(name(), Argument::InputScalar, type(), 0,
             param.scalar_expr(), param.min_value(), param.max_value());
     }
+
+    const Internal::Parameter &parameter() const {
+        return param;
+    }
+
+    Internal::Parameter &parameter() {
+        return param;
+    }
 };
 
 /** Returns an Expr corresponding to the user context passed to

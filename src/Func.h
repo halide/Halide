@@ -23,6 +23,7 @@
 namespace Halide {
 
 class OutputImageParam;
+class ParamMap;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -585,16 +586,16 @@ public:
      *
      */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size,
-                               const Target &target = Target());
-    EXPORT Realization realize(const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    EXPORT Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -603,7 +604,7 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    EXPORT void realize(Realization dst, const Target &target = Target());
+    EXPORT void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -611,8 +612,8 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(Realization dst);
+    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
+    EXPORT void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the

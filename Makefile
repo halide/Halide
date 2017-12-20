@@ -362,6 +362,7 @@ SOURCE_FILES = \
   ObjectInstanceRegistry.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
+  ParamMap.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
@@ -505,8 +506,9 @@ HEADER_FILES = \
   Outputs.h \
   OutputImageParam.h \
   ParallelRVar.h \
-  Parameter.h \
   Param.h \
+  ParamMap.h \
+  Parameter.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
