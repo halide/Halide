@@ -228,7 +228,7 @@ def test_float_or_int():
     assert ((x//2) - 1 + 2*(x%2)).type() == i
 
     assert type(x) == hl.Var
-    assert (x.expr()).type() == i
+    assert (x.as_expr()).type() == i
     assert (hl.Expr(2.0)).type() == f
     assert (hl.Expr(2)).type() == i
     assert (x + 2).type() == i
@@ -237,8 +237,8 @@ def test_float_or_int():
     assert (hl.Expr(2.0) + hl.Expr(3)).type() == f
     assert (hl.Expr(2) + 3.0).type() == f
     assert (hl.Expr(2) + 3).type() == i
-    assert (x.expr() + 2).type() == i # yes this failed at some point
-    assert (2 + x.expr()).type() == i
+    assert (x.as_expr() + 2).type() == i # yes this failed at some point
+    assert (2 + x.as_expr()).type() == i
     assert (2 * (x + 2)).type() == i # yes this failed at some point
     assert (x + 0).type() == i
     assert (x % 2).type() == i
