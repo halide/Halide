@@ -64,9 +64,6 @@ WEAK mtl_compute_pipeline_state *new_compute_pipeline_state_with_function(mtl_de
     typedef mtl_compute_pipeline_state *(*new_compute_pipeline_state_method)(objc_id device, objc_sel sel,
                                                                              objc_id function, objc_id *error_return);
     new_compute_pipeline_state_method method = (new_compute_pipeline_state_method)&objc_msgSend;
-    if (function == 0) {
-        return 0;
-    }
     mtl_compute_pipeline_state *result = (*method)(device, sel_getUid("newComputePipelineStateWithFunction:error:"),
                                                    function, &error_return);
     if (result == NULL) {
