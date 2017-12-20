@@ -34,12 +34,8 @@ std::vector<h::Expr> python_tuple_to_expr_vector(const p::object &obj) {
 }
 
 std::string expr_repr(const h::Expr &expr) {
-    std::string repr;
-    boost::format f("<halide.Expr of type '%s(%i)'>");
-
-    const h::Type &t = expr.type();
-    repr = boost::str(f % type_code_to_string(t) % t.bits());
-    return repr;
+    boost::format f("<halide.Expr of type %s>");
+    return boost::str(f % halide_type_to_string(expr.type()));
 }
 
 h::Expr *expr_from_var_constructor(h::Var &var) {
