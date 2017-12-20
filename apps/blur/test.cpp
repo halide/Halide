@@ -1,7 +1,11 @@
-#include <emmintrin.h>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#ifdef __SSE2__
+#include <emmintrin.h>
+#elif __ARM_NEON__
+#include <arm_neon.h>
+#endif
 
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
@@ -34,21 +38,21 @@ Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
     Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     t = benchmark(10, 1, [&]() {
+#ifdef __SSE2__
         __m128i one_third = _mm_set1_epi16(21846);
 #pragma omp parallel for
         for (int yTile = 0; yTile < out.height(); yTile += 32) {
-            __m128i a, b, c, sum, avg;
             __m128i tmp[(128/8) * (32 + 2)];
             for (int xTile = 0; xTile < out.width(); xTile += 128) {
                 __m128i *tmpPtr = tmp;
                 for (int y = 0; y < 32+2; y++) {
                     const uint16_t *inPtr = &(in(xTile, yTile+y));
                     for (int x = 0; x < 128; x += 8) {
-                        a = _mm_load_si128((const __m128i*)(inPtr));
-                        b = _mm_loadu_si128((const __m128i*)(inPtr+1));
-                        c = _mm_loadu_si128((const __m128i*)(inPtr+2));
-                        sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
-                        avg = _mm_mulhi_epi16(sum, one_third);
+                        __m128i a = _mm_load_si128((const __m128i*)(inPtr));
+                        __m128i b = _mm_loadu_si128((const __m128i*)(inPtr+1));
+                        __m128i c = _mm_loadu_si128((const __m128i*)(inPtr+2));
+                        __m128i sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
+                        __m128i avg = _mm_mulhi_epi16(sum, one_third);
                         _mm_store_si128(tmpPtr++, avg);
                         inPtr+=8;
                     }
@@ -57,16 +61,75 @@ Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
                 for (int y = 0; y < 32; y++) {
                     __m128i *outPtr = (__m128i *)(&(out(xTile, yTile+y)));
                     for (int x = 0; x < 128; x += 8) {
-                        a = _mm_load_si128(tmpPtr+(2*128)/8);
-                        b = _mm_load_si128(tmpPtr+128/8);
-                        c = _mm_load_si128(tmpPtr++);
-                        sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
-                        avg = _mm_mulhi_epi16(sum, one_third);
+                        __m128i a = _mm_load_si128(tmpPtr+(2*128)/8);
+                        __m128i b = _mm_load_si128(tmpPtr+128/8);
+                        __m128i c = _mm_load_si128(tmpPtr++);
+                        __m128i sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
+                        __m128i avg = _mm_mulhi_epi16(sum, one_third);
                         _mm_store_si128(outPtr++, avg);
                     }
                 }
             }
         }
+#elif __ARM_NEON__
+        uint16x4_t one_third = vdup_n_s16(21846);
+#pragma omp parallel for
+        for (int yTile = 0; yTile < out.height(); yTile += 32) {
+            uint16x8_t tmp[(128/8) * (32 + 2)];
+            for (int xTile = 0; xTile < out.width(); xTile += 128) {
+                uint16x8_t *tmpPtr = tmp;
+                for (int y = 0; y < 32+2; y++) {
+                    const uint16_t *inPtr = &(in(xTile, yTile+y));
+                    for (int x = 0; x < 128; x += 8) {
+                        uint16_t a = vld1q_u16(inPtr);
+                        uint16_t b = vld1q_u16(inPtr+1);
+                        uint16_t c = vld1q_u16(inPtr+2);
+                        uint16x8_t sum = vaddq_u16(vaddq_u16(a, b), c);
+                        uint16x4_t sumlo = vget_low_u16(sum);
+                        uint16x4_t sumhi = vget_high_u16(sum);
+                        uint32x4_t avglo_q16 = vmull_u16(sumlo, one_third);
+                        uint32x4_t avghi_q16 = vmull_u16(sumhi, one_third);
+                        uint16x4_t avglo = vshrn_n_u32(avglo_q16, 16);
+                        uint16x4_t avghi = vshrn_n_u32(avghi_q16, 16);
+                        uint16x8_t avg = vcombine_u16(avghi, avglo);
+                        vst1q_u16(tmpPtr++, avg);
+                        _mm_store_si128(tmpPtr++, avg);
+                        inPtr+=8;
+                    }
+                }
+                tmpPtr = tmp;
+                for (int y = 0; y < 32; y++) {
+                    int16x8_t *outPtr = (int16x8_t *)(&(out(xTile, yTile+y)));
+                    for (int x = 0; x < 128; x += 8) {
+                        uint16_t a = vld1q_u16(tmpPtr+(2*128)/8);
+                        uint16_t b = vld1q_u16(tmpPtr+128/8);
+                        uint16_t c = vld1q_u16(tmpPtr++);
+                        uint16x8_t sum = vaddq_u16(vaddq_u16(a, b), c);
+                        uint16x4_t sumlo = vget_low_u16(sum);
+                        uint16x4_t sumhi = vget_high_u16(sum);
+                        uint32x4_t avglo_q16 = vmull_u16(sumlo, one_third);
+                        uint32x4_t avghi_q16 = vmull_u16(sumhi, one_third);
+                        uint16x4_t avglo = vshrn_n_u32(avglo_q16, 16);
+                        uint16x4_t avghi = vshrn_n_u32(avghi_q16, 16);
+                        uint16x8_t avg = vcombine_u16(avghi, avglo);
+                        _mm_store_si128(outPtr++, avg);
+                    }
+                }
+            }
+        }
+#else
+        // No intrinsics enabled, do a naive thing.
+        for (int y = 0; y < out.height(); y++) {
+            for (int x = 0; x < out.width(); x++) {
+                int tmp[3] = {
+                    (in(x, y) + in(x+1, y) + in(x+2, y))/3,
+                    (in(x, y+1) + in(x+1, y+1) + in(x+2, y+1))/3,
+                    (in(x, y+2) + in(x+1, y+2) + in(x+2, y+2))/3,
+                };
+                out(x, y) = (tmp[0] + tmp[1] + tmp[2])/3;
+            }
+        }
+#endif
     });
 
     return out;
