@@ -3094,7 +3094,6 @@ void validate_no_partial_schedules(const Function &f) {
                 << "\" since stage " << stage << " is not serial at dim " << d.var << "\n";
         }
 
-
         if (stage == 0) {
             // Since we can only specialize on a Func, we only need to check for no
             // specializations for the initial stage.
@@ -3346,7 +3345,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // order to pass to get_func() when generating the string representation
     // of the schedule.
     debug(2) << "Computing full realization order...\n";
-    vector<string> full_order = realization_order(outputs, env);
+    vector<string> full_order = realization_order(outputs, env).first;
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
@@ -3386,7 +3385,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     // Compute the realization order of the functions within the pipeline.
-    vector<string> order = realization_order(outputs, env);
+    vector<string> order = realization_order(outputs, env).first;
 
     // Run a pre-pass that inline all Funcs which values are accessed by
     // another single Func in element-wise manner. We need to do this
@@ -3409,7 +3408,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
             map<string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
-        order = realization_order(outputs, env);
+        order = realization_order(outputs, env).first;
     }
 
     // Compute the bounds of function values which are used for dependence analysis.

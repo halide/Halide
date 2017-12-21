@@ -1689,9 +1689,9 @@ public:
     // @}
 
     /** Tests that all values in this buffer are equal to val. */
-    bool all_equal(not_void_T val) {
+    bool all_equal(not_void_T val) const{
         bool all_equal = true;
-        for_each_value([&](T v) {all_equal &= v == val;});
+        for_each_element([&](const int *pos) {all_equal &= (*this)(pos) == val;});
         return all_equal;
     }    
 

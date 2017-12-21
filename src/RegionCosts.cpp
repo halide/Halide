@@ -638,7 +638,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
     }
 
     // Realization order
-    vector<string> order = realization_order(outs, env);
+    vector<string> order = realization_order(outs, env).first;
 
     Expr working_set_size = make_zero(Int(64));
     Expr curr_size = make_zero(Int(64));

@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 import halide as hl
 
 import numpy as np

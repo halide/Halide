@@ -703,6 +703,7 @@ WEAK int halide_metal_run(void *user_context,
         }
     }
 
+
     int32_t buffer_index = 0;
     if (total_args_size > 0) {
         mtl_buffer *args_buffer = 0;        // used if the total arguments size large
@@ -717,10 +718,17 @@ WEAK int halide_metal_run(void *user_context,
             }
         }
 
-        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
+        // The Metal compiler introduces padding up to a multiple of 4 bytes
+        // in the struct, per email communication from Apple
+        size_t padded_args_size = (total_args_size + 4 - 1) & ~((size_t)(4 - 1));
+        debug(user_context) << "Total args size is " << (uint64_t)total_args_size <<
+          " and with padding, size is " << (uint64_t)padded_args_size << "\n";
+        halide_assert(user_context, padded_args_size >= total_args_size);
+
+        if (padded_args_size < 4096 && metal_api_supports_set_bytes) {
             args_ptr = (char *)small_args_buffer;
         } else {
-            args_buffer = new_buffer(metal_context.device, total_args_size);
+            args_buffer = new_buffer(metal_context.device, padded_args_size);
             if (args_buffer == 0) {
                 error(user_context) << "Metal: Could not allocate arguments buffer.\n";
                 release_ns_object(pipeline_state);
@@ -740,7 +748,7 @@ WEAK int halide_metal_run(void *user_context,
         halide_assert(user_context, offset == total_args_size);
         if (total_args_size < 4096 && metal_api_supports_set_bytes) {
             set_input_buffer_from_bytes(encoder, small_args_buffer,
-                                        total_args_size, buffer_index);
+                                        padded_args_size, buffer_index);
         } else {
             set_input_buffer(encoder, args_buffer, 0, buffer_index);
             release_ns_object(args_buffer);
