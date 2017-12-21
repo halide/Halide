@@ -11,6 +11,8 @@
 using Halide::Expr;
 using Halide::Var;
 
+namespace py = boost::python;
+
 namespace {
 
 std::string var_repr(const Var &var) {
@@ -30,9 +32,9 @@ void define_var() {
     Expr (Var::*as_expr_method)() const = &Var::operator Expr;
 
     auto var_class =
-        boost::python::class_<Var>("Var", boost::python::init<>())
-            .def(boost::python::init<std::string>())
-            .def("name", &Var::name, boost::python::return_value_policy<boost::python::copy_const_reference>())
+        py::class_<Var>("Var", py::init<>())
+            .def(py::init<std::string>())
+            .def("name", &Var::name, py::return_value_policy<py::copy_const_reference>())
             .def("same_as", &Var::same_as)
             .def("implicit", &Var::implicit)
             .def("is_implicit", is_implicit_var)
@@ -43,7 +45,7 @@ void define_var() {
             .def("is_placeholder", is_placeholder_string)
             .def("outermost", &Var::outermost)
             .def("__repr__", &var_repr)
-            .def("__str__", &Var::name, boost::python::return_value_policy<boost::python::copy_const_reference>())
+            .def("__str__", &Var::name, py::return_value_policy<py::copy_const_reference>())
             // TODO: Python doesn't have explicit type-conversion casting;
             // providing an explicit convert-to-Expr method here seems potentially
             // useful. Overthinking it? Is the best name 'as_expr()', 'expr()', or something else?
@@ -53,17 +55,17 @@ void define_var() {
     add_binary_operators(var_class);
     add_binary_operators_with<Expr>(var_class);
 
-    boost::python::implicitly_convertible<Var, Expr>();
+    py::implicitly_convertible<Var, Expr>();
 
-    boost::python::scope().attr("_") = boost::python::object(Halide::_);
-    boost::python::scope().attr("_0") = boost::python::object(Halide::_0);
-    boost::python::scope().attr("_1") = boost::python::object(Halide::_1);
-    boost::python::scope().attr("_2") = boost::python::object(Halide::_2);
-    boost::python::scope().attr("_3") = boost::python::object(Halide::_3);
-    boost::python::scope().attr("_4") = boost::python::object(Halide::_4);
-    boost::python::scope().attr("_5") = boost::python::object(Halide::_5);
-    boost::python::scope().attr("_6") = boost::python::object(Halide::_6);
-    boost::python::scope().attr("_7") = boost::python::object(Halide::_7);
-    boost::python::scope().attr("_8") = boost::python::object(Halide::_8);
-    boost::python::scope().attr("_9") = boost::python::object(Halide::_9);
+    py::scope().attr("_") = py::object(Halide::_);
+    py::scope().attr("_0") = py::object(Halide::_0);
+    py::scope().attr("_1") = py::object(Halide::_1);
+    py::scope().attr("_2") = py::object(Halide::_2);
+    py::scope().attr("_3") = py::object(Halide::_3);
+    py::scope().attr("_4") = py::object(Halide::_4);
+    py::scope().attr("_5") = py::object(Halide::_5);
+    py::scope().attr("_6") = py::object(Halide::_6);
+    py::scope().attr("_7") = py::object(Halide::_7);
+    py::scope().attr("_8") = py::object(Halide::_8);
+    py::scope().attr("_9") = py::object(Halide::_9);
 }
