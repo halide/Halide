@@ -24,26 +24,31 @@ std::string var_repr(const Var &var) {
 
 void define_var() {
     bool (Var::*is_implicit_var)() const = &Var::is_implicit;
-    bool (*is_implicit_string)(const std::string &) = &Var::is_implicit;
     int (Var::*implicit_index_var)() const = &Var::implicit_index;
-    int (*implicit_index_string)(const std::string &) = &Var::implicit_index;
     bool (Var::*is_placeholder_var)() const = &Var::is_placeholder;
-    bool (*is_placeholder_string)(const std::string &) = &Var::is_placeholder;
     Expr (Var::*as_expr_method)() const = &Var::operator Expr;
+
+    // TODO: see below
+    // bool (*is_implicit_string)(const std::string &) = &Var::is_implicit;
+    // int (*implicit_index_string)(const std::string &) = &Var::implicit_index;
+    // bool (*is_placeholder_string)(const std::string &) = &Var::is_placeholder;
 
     auto var_class =
         py::class_<Var>("Var", py::init<>())
             .def(py::init<std::string>())
             .def("name", &Var::name, py::return_value_policy<py::copy_const_reference>())
             .def("same_as", &Var::same_as)
-            .def("implicit", &Var::implicit)
+            .def("implicit", &Var::implicit).staticmethod("implicit")
             .def("is_implicit", is_implicit_var)
-            .def("is_implicit", is_implicit_string)
             .def("implicit_index", implicit_index_var)
-            .def("implicit_index", implicit_index_string)
             .def("is_placeholder", is_placeholder_var)
-            .def("is_placeholder", is_placeholder_string)
-            .def("outermost", &Var::outermost)
+            // TODO: Boost.Python doesn't let you (reliably) provide a static method and member
+            // method with the same name in Python 2.7 (though it does in Python3). Disable
+            // these bindings for now.
+            // .def("is_implicit", is_implicit_string).staticmethod("is_implicit")
+            // .def("implicit_index", implicit_index_string).staticmethod("implicit_index")
+            // .def("is_placeholder", is_placeholder_string).staticmethod("is_placeholder")
+            .def("outermost", &Var::outermost).staticmethod("outermost")
             .def("__repr__", &var_repr)
             .def("__str__", &Var::name, py::return_value_policy<py::copy_const_reference>())
             // TODO: Python doesn't have explicit type-conversion casting;
