@@ -96,6 +96,15 @@ public:
         *((T *)(scalar_address())) = val;
     }
 
+    /** If the parameter is a scalar parameter, set its current
+     * value. Only relevant when jitting */
+    NO_INLINE void set_scalar(const Type &val_type, halide_scalar_value_t val) {
+        user_assert(type() == val_type || (type().is_handle() && val_type == UInt(64)))
+            << "Can't set Param<" << type()
+            << "> to scalar of type " << val_type << "\n";
+        memcpy(scalar_address(), &val, val_type.bytes());
+    }
+
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
     EXPORT Buffer<> buffer() const;

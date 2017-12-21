@@ -540,7 +540,7 @@ Realization Pipeline::realize(vector<int32_t> sizes,
         }
     }
     Realization r(bufs);
-    realize(r, target);
+    realize(r, target, param_map);
     for (size_t i = 0; i < r.size(); i++) {
         r[i].copy_to_host();
     }

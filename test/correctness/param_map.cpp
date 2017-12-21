@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; i++) {
       for (int j = 0; j < 10; j++) {
             in1(i, j) = i + j * 10;
-            in2(j, i) = in1(i, j);
+            in2(i, j) = i * 10 + j;
         }
     }
 
@@ -32,15 +32,18 @@ int main(int argc, char **argv) {
     ParamMap params;
     params.set(p_int, 22);
     params.set(p_float, 2.0f);
-    Buffer<> temp = in2;
-    params.set(p_img, temp);
+    params.set(p_img, in2);
 
     Buffer<uint8_t> result2 = f.realize(10, 10, t, params);
+    Buffer<uint8_t> result3 = f.realize(10, 10, t, { { p_int, 12} } );
+    Buffer<uint8_t> result4 = f.realize(10, 10, t, { { p_int, 16}, {p_img, in2} } );
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
-            assert(result1(i, j) = i + j * 10 + 42);
-            assert(result2(j, i) = i * 10 + j + 11);
+            assert(result1(i, j) == i + j * 10 + 42);
+            assert(result2(i, j) == i * 10 + j + 11);
+            assert(result3(i, j) == i + j * 10 + 12);
+            assert(result4(i, j) == i * 10 + j + 16);
         }
     }
 
