@@ -7,111 +7,106 @@
 
 #include "Halide.h"
 
-namespace h = Halide;
+using Halide::Bool;
+using Halide::Float;
+using Halide::Handle;
+using Halide::Int;
+using Halide::Type;
+using Halide::UInt;
 
-std::string type_code_to_string(const h::Type &t) {
-    std::string code_string = "unknown";
-    switch (t.code()) {
-    case h::Type::UInt:
-        code_string = "UInt";
-        break;
+namespace py = boost::python;
 
-    case h::Type::Int:
-        code_string = "Int";
-        break;
-
-    case h::Type::Float:
-        code_string = "Float";
-        break;
-
-    case h::Type::Handle:
-        code_string = "Handle";
-        break;
-
-    default:
-        code_string = "unknown";
-    }
-
-    return code_string;
-}
+namespace {
 
 Halide::Type make_handle(int lanes) {
-    return Halide::Handle(lanes, nullptr);
+    return Handle(lanes, nullptr);
 }
 
-std::string type_repr(const h::Type &t) {
-    auto message_format = boost::format("<halide.Type code '%s' with %i bits and %i lanes>");
+std::string type_repr(const Type &t) {
+    return boost::str(boost::format("<halide.Type %s>") % halide_type_to_string(t));
+}
 
-    return boost::str(message_format % type_code_to_string(t) % t.bits() % t.lanes());
+}  // namespace
+
+std::string halide_type_to_string(const Halide::Type &type) {
+    std::ostringstream stream;
+    if (type.code() == halide_type_uint && type.bits() == 1) {
+        stream << "bool";
+    } else {
+        switch (type.code()) {
+        case halide_type_int:
+            stream << "int";
+            break;
+        case halide_type_uint:
+            stream << "uint";
+            break;
+        case halide_type_float:
+            stream << "float";
+            break;
+        case halide_type_handle:
+            stream << "handle";
+            break;
+        default:
+            stream << "#unknown";
+            break;
+        }
+        stream << std::to_string(type.bits());
+    }
+    if (type.lanes() > 1) {
+        stream << "x" + std::to_string(type.lanes());
+    }
+    return stream.str();
 }
 
 void define_type() {
+    bool (Type::*can_represent_method)(Type) const = &Type::can_represent;
+    // Python doesn't have unsigned integers -- all integers are signed --
+    // so we'll never see anything that can usefully be routed to the uint64_t
+    // overloads of these methods.
+    bool (Type::*is_max_i)(int64_t) const = &Type::is_max;
+    bool (Type::*is_min_i)(int64_t) const = &Type::is_min;
 
-    using Halide::Type;
-    namespace p = boost::python;
+    py::class_<Type>("Type")
+        .def(py::init<halide_type_code_t, int, int>())
+        .def("bytes", &Type::bytes)
+        .def("code", &Type::code)
+        .def("bits", &Type::bits)
+        .def("lanes", &Type::lanes)
+        .def("with_code", &Type::with_code)
+        .def("with_bits", &Type::with_bits)
+        .def("with_lanes", &Type::with_lanes)
 
-    bool (Type::*can_represent_other_type)(Type) const = &Type::can_represent;
+        .def("is_bool", &Type::is_bool)
+        .def("is_vector", &Type::is_vector)
+        .def("is_scalar", &Type::is_scalar)
+        .def("is_float", &Type::is_float)
+        .def("is_int", &Type::is_int)
+        .def("is_uint", &Type::is_uint)
+        .def("is_handle", &Type::is_handle)
+        .def("same_handle_type", &Type::same_handle_type)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def("element_of", &Type::element_of)
+        .def("can_represent", can_represent_method)
+        .def("is_max", is_max_i)
+        .def("is_min", is_min_i)
+        .def("max", &Type::max)
+        .def("min", &Type::min)
+        .def("__repr__", &type_repr)
+        .def("__str__", &halide_type_to_string)
+    ;
 
-    p::class_<Type>("Type",
-                    "Default constructor initializes everything to predictable-but-unlikely values",
-                    p::no_init)
-        .def(p::init<halide_type_code_t, int, int>(p::args("code", "bits", "lanes")))
-        .def(p::init<h::Type>(p::args("that"), "Copy constructor"))
+    py::def("Int", Int, (py::arg("bits"), py::arg("lanes") = 1));
+    py::def("UInt", UInt, (py::arg("bits"), py::arg("lanes") = 1));
+    py::def("Float", Float, (py::arg("bits"), py::arg("lanes") = 1));
+    py::def("Bool", Bool, (py::arg("lanes") = 1));
+    py::def("Handle", make_handle, (py::arg("lanes") = 1));
 
-        .def("bits", &Type::bits,
-             "The number of bits of precision of a single scalar value of this type.")
-        .def("bytes", &Type::bytes,
-             "The number of bytes required to store a single scalar value of this type. Ignores vector lanes.")
-        .def("lanes", &Type::lanes,
-             "How many elements (if a vector type). Should be 1 for scalar types.")
-        .def("is_bool", &Type::is_bool, p::arg("self"),
-             "Is this type boolean (represented as UInt(1))?")
-        .def("is_vector", &Type::is_vector, p::arg("self"),
-             "Is this type a vector type? (lanes > 1)")
-        .def("is_scalar", &Type::is_scalar, p::arg("self"),
-             "Is this type a scalar type? (lanes == 1)")
-        .def("is_float", &Type::is_float, p::arg("self"),
-             "Is this type a floating point type (float or double).")
-        .def("is_int", &Type::is_int, p::arg("self"),
-             "Is this type a signed integer type?")
-        .def("is_uint", &Type::is_uint, p::arg("self"),
-             "Is this type an unsigned integer type?")
-        .def("is_handle", &Type::is_handle, p::arg("self"),
-             "Is this type an opaque handle type (void *)")
-        .def(p::self == p::self)
-        .def(p::self != p::self)
-        .def("with_lanes", &Type::with_lanes, p::args("self", "w"),
-             "Produce a copy of this type, with 'lanes' vector lanes")
-        .def("with_bits", &Type::with_bits, p::args("self", "w"),
-             "Produce a copy of this type, with 'bits' bits")
-        .def("element_of", &Type::element_of, p::arg("self"),
-             "Produce the type of a single element of this vector type")
-        .def("can_represent", can_represent_other_type, p::arg("other"),
-             "Can this type represent all values of another type?")
-        .def("max", &Type::max, p::arg("self"),
-             "Return an expression which is the maximum value of this type")
-        .def("min", &Type::min, p::arg("self"),
-             "Return an expression which is the minimum value of this type")
-        .def("__repr__", &type_repr, p::arg("self"),
-             "Return a string containing a printable representation of a Type object.");
-
-    p::def("Int", h::Int,
-           (p::arg("bits"), p::arg("lanes") = 1),
-           "Constructing an signed integer type");
-
-    p::def("UInt", h::UInt,
-           (p::arg("bits"), p::arg("lanes") = 1),
-           "Constructing an unsigned integer type");
-
-    p::def("Float", h::Float,
-           (p::arg("bits"), p::arg("lanes") = 1),
-           "Constructing a floating-point type");
-
-    p::def("Bool", h::Bool,
-           (p::arg("lanes") = 1),
-           "Construct a boolean type");
-
-    p::def("Handle", make_handle,
-           (p::arg("lanes") = 1),
-           "Construct a handle type");
+    py::enum_<halide_type_code_t>("TypeCode")
+        .value("Int", Type::Int)
+        .value("UInt", Type::UInt)
+        .value("Float", Type::Float)
+        .value("Handle", Type::Handle);
+        // don't export_values(): we don't want the enums in the halide module
 }

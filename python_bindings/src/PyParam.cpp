@@ -37,14 +37,13 @@ h::Expr imageparam_to_expr_operator1(h::ImageParam &that, h::Expr an_expr) {
 std::string imageparam_repr(h::ImageParam &param)  // non-const due to a Halide bug in master (to be fixed)
 {
     std::string repr;
-    const h::Type &t = param.type();
     if (param.defined()) {
         boost::format f("<halide.ImageParam named '%s' (not yet defined) >");
         repr = boost::str(f % param.name());
     } else {
-        boost::format f("<halide.ImageParam named '%s' of type '%s(%i)' and dimensions %i %i %i %i>");
+        boost::format f("<halide.ImageParam named '%s' of type %s and dimensions %i %i %i %i>");
         repr = boost::str(f % param.name() %
-                          type_code_to_string(t) % t.bits() %
+                          halide_type_to_string(param.type()) %
                           param.dim(0).extent() %
                           param.dim(1).extent() %
                           param.dim(2).extent() %
@@ -277,12 +276,8 @@ h::Expr param_as_expr(h::Param<T> &that) {
 
 template <typename T>
 std::string param_repr(const h::Param<T> &param) {
-    std::string repr;
-    const h::Type &t = param.type();
-    boost::format f("<halide.Param named '%s' of type '%s(%i)'>");
-    repr = boost::str(f % param.name() % type_code_to_string(t) % t.bits());
-
-    return repr;
+    boost::format f("<halide.Param named '%s' of type %s>");
+    return boost::str(f % param.name() % halide_type_to_string(param.type()));
 }
 
 template <typename T>
@@ -406,7 +401,6 @@ p::object create_param0_impl(h::Type type, std::string name) {
 
 template <>
 p::object create_param0_impl<end_of_recursion_t>(h::Type type, std::string /*name*/) {  // end of recursion, did not find a matching type
-    printf("create_param0_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
     throw std::invalid_argument("ParamFactory::create_param0_impl received type not handled");
     return p::object();
 }
@@ -426,9 +420,7 @@ struct create_param1_impl_t {
                 pixel_t true_val = val_extract();
                 return call_create_param_object<pixel_t>(true_val, args...);
             } else {
-                printf("create_param1_impl type == %s\n", type_repr(type).c_str());
                 const std::string val_str = p::extract<std::string>(p::str(val));
-                printf("create_param1_impl val == %s\n", val_str.c_str());
                 throw std::invalid_argument("ParamFactory::create_param1_impl called with "
                                             "a value that could not be converted to the given type");
             }
@@ -463,7 +455,6 @@ template <typename... Args>
 struct create_param1_impl_t<boost::mpl::l_end::type, Args...> {
     p::object operator()(h::Type type, p::object val, Args... args) {
         // end of recursion, did not find a matching type
-        printf("create_param1_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
         throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
         return p::object();
     }
