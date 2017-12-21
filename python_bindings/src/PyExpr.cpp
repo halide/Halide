@@ -94,15 +94,14 @@ void define_expr() {
     p::implicitly_convertible<float, h::Expr>();
     p::implicitly_convertible<double, h::Expr>();
 
-    p::enum_<h::DeviceAPI>("DeviceAPI",
-                           "An enum describing a type of device API. "
-                           "Used by schedules, and in the For loop IR node.")
-        /// Used to denote for loops that inherit their device from where they are used, generally the default
+    p::enum_<h::DeviceAPI>("DeviceAPI")
         .value("None", h::DeviceAPI::None)
         .value("Host", h::DeviceAPI::Host)
         .value("Default_GPU", h::DeviceAPI::Default_GPU)
         .value("CUDA", h::DeviceAPI::CUDA)
         .value("OpenCL", h::DeviceAPI::OpenCL)
         .value("GLSL", h::DeviceAPI::GLSL)
-        .export_values();
+        .value("OpenGLCompute", h::DeviceAPI::OpenGLCompute)
+        .value("Metal", h::DeviceAPI::Metal)
+        .value("Hexagon", h::DeviceAPI::Hexagon);
 }
