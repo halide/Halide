@@ -12,6 +12,8 @@ using Halide::DeviceAPI;
 using Halide::Target;
 using Halide::Type;
 
+namespace py = boost::python;
+
 namespace {
 
 // Helper class that registers a converter that can auto-convert
@@ -24,32 +26,27 @@ struct PythonListToVectorConverter {
         return PyList_Check(obj) ? obj : nullptr;
     }
 
-    static void construct(PyObject *obj, boost::python::converter::rvalue_from_python_stage1_data* data) {
+    static void construct(PyObject *obj, py::converter::rvalue_from_python_stage1_data* data) {
         // The contents of this method are unspeakably evil, but apparently this is how
         // this sort of thing is done in Boost.Python. *shrug*
-        boost::python::list list(boost::python::handle<>(boost::python::borrowed(obj)));
+        py::list list(py::handle<>(py::borrowed(obj)));
 
-        void* storage = ((boost::python::converter::rvalue_from_python_storage<std::vector<T>>*)data)->storage.bytes;
+        void* storage = ((py::converter::rvalue_from_python_storage<std::vector<T>>*)data)->storage.bytes;
         auto *v = new (storage) std::vector<T>();
 
-        const size_t c = boost::python::len(list);
+        const size_t c = py::len(list);
         v->reserve(c);
         for (size_t i = 0; i < c; i++) {
-            boost::python::extract<T> extract(list[i]);
-            if (!extract.check()) {
-                const std::string o_str = boost::python::extract<std::string>(boost::python::str(list[i]));
-                throw std::invalid_argument("The value '" + o_str + "' is not convertible to the type " + boost::typeindex::type_id<T>().pretty_name());
-            }
-            v->push_back(extract);
+            v->push_back(py::extract<T>(list[i]));
         }
         data->convertible = storage;
     }
 
     PythonListToVectorConverter() {
-        boost::python::converter::registry::push_back(
+        py::converter::registry::push_back(
             &convertible,
             &construct,
-            boost::python::type_id<std::vector<T>>());
+            py::type_id<std::vector<T>>());
     }
 };
 
@@ -69,41 +66,41 @@ void define_target() {
     bool (Target::*supports_type2_method)(const Type &t, DeviceAPI device) const = &Target::supports_type;
 
     auto target_class =
-        boost::python::class_<Target>("Target", boost::python::init<>())
-            .def(boost::python::init<std::string>(boost::python::args("self", "name")))
-            .def(boost::python::init<Target::OS, Target::Arch, int>(boost::python::args("self", "os", "arch", "bits")))
-            .def(boost::python::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>(boost::python::args("self", "os", "arch", "bits", "features")))
+        py::class_<Target>("Target", py::init<>())
+            .def(py::init<std::string>(py::args("self", "name")))
+            .def(py::init<Target::OS, Target::Arch, int>(py::args("self", "os", "arch", "bits")))
+            .def(py::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>(py::args("self", "os", "arch", "bits", "features")))
 
-            .def(boost::python::self == boost::python::self)
-            .def(boost::python::self != boost::python::self)
+            .def(py::self == py::self)
+            .def(py::self != py::self)
 
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)
             .def_readwrite("bits", &Target::bits)
 
-            .def("__repr__", &target_repr, boost::python::arg("self"))
-            .def("__str__", &Target::to_string, boost::python::arg("self"))
-            .def("to_string", &Target::to_string, boost::python::arg("self"))
+            .def("__repr__", &target_repr, py::arg("self"))
+            .def("__str__", &Target::to_string, py::arg("self"))
+            .def("to_string", &Target::to_string, py::arg("self"))
 
-            .def("has_feature", &Target::has_feature, boost::python::arg("self"))
-            .def("features_any_of", &Target::features_any_of, (boost::python::arg("self"), boost::python::arg("features")))
-            .def("features_all_of", &Target::features_all_of, (boost::python::arg("self"), boost::python::arg("features")))
+            .def("has_feature", &Target::has_feature, py::arg("self"))
+            .def("features_any_of", &Target::features_any_of, (py::arg("self"), py::arg("features")))
+            .def("features_all_of", &Target::features_all_of, (py::arg("self"), py::arg("features")))
 
-            .def("set_feature", &Target::set_feature, (boost::python::arg("self"), boost::python::arg("f"), boost::python::arg("value") = true))
-            .def("set_features", &Target::set_features, (boost::python::arg("self"), boost::python::arg("features"), boost::python::arg("value") = true))
-            .def("with_feature", &Target::with_feature, (boost::python::arg("self"), boost::python::arg("f")))
-            .def("without_feature", &Target::without_feature, (boost::python::arg("self"), boost::python::arg("f")))
-            .def("has_gpu_feature", &Target::has_gpu_feature, boost::python::arg("self"))
-            .def("supports_type", supports_type1_method, (boost::python::arg("self"), boost::python::arg("type")))
-            .def("supports_type", supports_type2_method, (boost::python::arg("self"), boost::python::arg("type"), boost::python::arg("device")))
-            .def("supports_device_api", &Target::supports_device_api, (boost::python::arg("self"), boost::python::arg("device")))
-            .def("natural_vector_size", natural_vector_size_method, (boost::python::arg("self"), boost::python::arg("type")))
-            .def("has_large_buffers", &Target::has_large_buffers, boost::python::arg("self"))
-            .def("maximum_buffer_size", &Target::maximum_buffer_size, boost::python::arg("self"))
-            .def("supported", &Target::supported, boost::python::arg("self"))
+            .def("set_feature", &Target::set_feature, (py::arg("self"), py::arg("f"), py::arg("value") = true))
+            .def("set_features", &Target::set_features, (py::arg("self"), py::arg("features"), py::arg("value") = true))
+            .def("with_feature", &Target::with_feature, (py::arg("self"), py::arg("f")))
+            .def("without_feature", &Target::without_feature, (py::arg("self"), py::arg("f")))
+            .def("has_gpu_feature", &Target::has_gpu_feature, py::arg("self"))
+            .def("supports_type", supports_type1_method, (py::arg("self"), py::arg("type")))
+            .def("supports_type", supports_type2_method, (py::arg("self"), py::arg("type"), py::arg("device")))
+            .def("supports_device_api", &Target::supports_device_api, (py::arg("self"), py::arg("device")))
+            .def("natural_vector_size", natural_vector_size_method, (py::arg("self"), py::arg("type")))
+            .def("has_large_buffers", &Target::has_large_buffers, py::arg("self"))
+            .def("maximum_buffer_size", &Target::maximum_buffer_size, py::arg("self"))
+            .def("supported", &Target::supported, py::arg("self"))
         ;
 
-    boost::python::enum_<Target::OS>("TargetOS")
+    py::enum_<Target::OS>("TargetOS")
         .value("OSUnknown", Target::OS::OSUnknown)
         .value("Linux", Target::OS::Linux)
         .value("Windows", Target::OS::Windows)
@@ -113,7 +110,7 @@ void define_target() {
         .value("QuRT", Target::OS::QuRT)
         .value("NoOS", Target::OS::NoOS);
 
-    boost::python::enum_<Target::Arch>("TargetArch")
+    py::enum_<Target::Arch>("TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
@@ -121,7 +118,7 @@ void define_target() {
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC);
 
-    boost::python::enum_<Target::Feature>("TargetFeature")
+    py::enum_<Target::Feature>("TargetFeature")
         .value("JIT", Target::Feature::JIT)
         .value("Debug", Target::Feature::Debug)
         .value("NoAsserts", Target::Feature::NoAsserts)
@@ -172,10 +169,10 @@ void define_target() {
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
-    boost::python::def("validate_target_string", &Target::validate_target_string);
+    py::def("validate_target_string", &Target::validate_target_string);
 
-    boost::python::def("get_host_target", &Halide::get_host_target);
-    boost::python::def("get_target_from_environment", &Halide::get_target_from_environment);
-    boost::python::def("get_jit_target_from_environment", &Halide::get_jit_target_from_environment);
-    boost::python::def("target_feature_for_device_api", &Halide::target_feature_for_device_api);
+    py::def("get_host_target", &Halide::get_host_target);
+    py::def("get_target_from_environment", &Halide::get_target_from_environment);
+    py::def("get_jit_target_from_environment", &Halide::get_jit_target_from_environment);
+    py::def("target_feature_for_device_api", &Halide::target_feature_for_device_api);
 }

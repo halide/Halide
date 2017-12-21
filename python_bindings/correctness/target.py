@@ -143,8 +143,8 @@ def test_target():
     # with_feature with non-convertible lists
     try:
         t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [ "this is a string" ])
-    except ValueError as e:
-        assert str(e) == "The value 'this is a string' is not convertible to the type Halide::Target::Feature"
+    except TypeError as e:
+        assert str(e) == "No registered converter was able to produce a C++ rvalue of type Halide::Target::Feature from this Python object of type str"
     else:
         assert False, 'Did not see expected exception!'
 
