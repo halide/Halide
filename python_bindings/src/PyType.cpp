@@ -14,6 +14,8 @@ using Halide::Int;
 using Halide::Type;
 using Halide::UInt;
 
+namespace py = boost::python;
+
 namespace {
 
 Halide::Type make_handle(int lanes) {
@@ -57,9 +59,6 @@ std::string halide_type_to_string(const Halide::Type &type) {
 }
 
 void define_type() {
-    using Halide::Type;
-    namespace p = boost::python;
-
     bool (Type::*can_represent_method)(Type) const = &Type::can_represent;
     // Python doesn't have unsigned integers -- all integers are signed --
     // so we'll never see anything that can usefully be routed to the uint64_t
@@ -67,8 +66,8 @@ void define_type() {
     bool (Type::*is_max_i)(int64_t) const = &Type::is_max;
     bool (Type::*is_min_i)(int64_t) const = &Type::is_min;
 
-    boost::python::class_<Type>("Type")
-        .def(boost::python::init<halide_type_code_t, int, int>())
+    py::class_<Type>("Type")
+        .def(py::init<halide_type_code_t, int, int>())
         .def("bytes", &Type::bytes)
         .def("code", &Type::code)
         .def("bits", &Type::bits)
@@ -85,9 +84,9 @@ void define_type() {
         .def("is_uint", &Type::is_uint)
         .def("is_handle", &Type::is_handle)
         .def("same_handle_type", &Type::same_handle_type)
-        .def(boost::python::self == boost::python::self)
-        .def(boost::python::self != boost::python::self)
-        .def(boost::python::self < boost::python::self)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
         .def("element_of", &Type::element_of)
         .def("can_represent", can_represent_method)
         .def("is_max", is_max_i)
@@ -98,13 +97,13 @@ void define_type() {
         .def("__str__", &halide_type_to_string)
     ;
 
-    boost::python::def("Int", Int, (boost::python::arg("bits"), boost::python::arg("lanes") = 1));
-    boost::python::def("UInt", UInt, (boost::python::arg("bits"), boost::python::arg("lanes") = 1));
-    boost::python::def("Float", Float, (boost::python::arg("bits"), boost::python::arg("lanes") = 1));
-    boost::python::def("Bool", Bool, (boost::python::arg("lanes") = 1));
-    boost::python::def("Handle", make_handle, (boost::python::arg("lanes") = 1));
+    py::def("Int", Int, (py::arg("bits"), py::arg("lanes") = 1));
+    py::def("UInt", UInt, (py::arg("bits"), py::arg("lanes") = 1));
+    py::def("Float", Float, (py::arg("bits"), py::arg("lanes") = 1));
+    py::def("Bool", Bool, (py::arg("lanes") = 1));
+    py::def("Handle", make_handle, (py::arg("lanes") = 1));
 
-    boost::python::enum_<halide_type_code_t>("TypeCode")
+    py::enum_<halide_type_code_t>("TypeCode")
         .value("Int", Type::Int)
         .value("UInt", Type::UInt)
         .value("Float", Type::Float)
