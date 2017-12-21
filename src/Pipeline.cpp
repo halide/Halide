@@ -680,7 +680,8 @@ struct JITFuncCallContext {
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map) {
+vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
+                                                          const ParamMap &param_map, bool is_bounds_inference) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     compile_jit(target);
@@ -737,7 +738,11 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
 
     for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined()) {
-            const Parameter &p = param_map.map(arg.param);
+            Buffer<> *buf_out_param;
+            const Parameter &p = param_map.map(arg.param, buf_out_param);
+            if (!is_bounds_inference) {
+                user_assert(buf_out_param == nullptr) << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
+            }
 
             if (p.is_buffer()) {
                 // ImageParam arg
@@ -844,7 +849,7 @@ void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_m
         }
     }
 
-    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map);
+    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map, false);
 
     // We need to make a context for calling the jitted function to
     // carry the the set of custom handlers. Here's how handlers get
@@ -934,7 +939,7 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
 
     Target target = get_jit_target_from_environment();
 
-    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map);
+    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map, true);
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
@@ -1009,14 +1014,24 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
-        internal_assert(!ia.param.buffer().defined());
+        Buffer<> *buf_out_param;
+        Parameter &p = param_map.map(ia.param, buf_out_param);
+
+        if (&p != &ia.param) {
+            user_assert(buf_out_param != nullptr) << "Output Buffer<> arguments to infer_input_bounds in parameters map must be passed as pointers.\n";
+        }
+        internal_assert(!p.buffer().defined());
 
         // Allocate enough memory with the right type and dimensionality.
         tracked_buffers[i].query.allocate();
 
-        // Bind this parameter to this buffer, giving away the
-        // buffer. The user retrieves it via ImageParam::get.
-        ia.param.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
+        if (buf_out_param != nullptr) {
+            *buf_out_param = Buffer<>(*tracked_buffers[i].query.raw_buffer());
+        } else {
+            // Bind this parameter to this buffer, giving away the
+            // buffer. The user retrieves it via ImageParam::get.
+            p.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
+        }
     }
 }
 

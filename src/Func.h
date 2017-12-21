@@ -715,6 +715,44 @@ public:
      Buffer<float> im1 = r[1];
      \endcode
      *
+     * In Halide formal arguments of a computation sre specified using
+     * Param<T> and ImageParam objects in the expressions defining
+     * those computations. The param_map argument to realize allows
+     * specifying a set of per-call paramters to be used for a
+     * specific computation. In particular, this method is thread
+     * safe. One can do this either by constructing a ParamMap and
+     * using its set method to insert Parameter to scalar or Buffer
+     * value mappings.
+     * Alternatively, an initializer list can be used
+     * directly in the realize call to pass this information:
+     *
+     \code
+     Param<int32> p(42);
+     ImageParam img(Int(32), 1);
+     f(x) = img(x) + p;
+
+     Buffer<int32_t) arg_img(10, 10);
+     <fill in arg_img...>
+     ParamMap params;
+     params.set(p, 17);
+     params.set(img, arg_img);
+
+     Target t = get_jit_target_from_environment();
+     Buffer<int32_t> result = f.realize(10, 10, t, params);
+     \endcode
+     *
+     \code
+     Param<int32> p(42);
+     ImageParam img(Int(32), 1);
+     f(x) = img(x) + p;
+
+     Buffer<int32_t) arg_img(10, 10);
+     <fill in arg_img...>
+
+     Target t = get_jit_target_from_environment();
+     Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
+     \endcode
+     *
      */
     // @{
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
@@ -741,7 +779,25 @@ public:
      * determine the bounds required of all unbound ImageParams
      * referenced. Communicates the result by allocating new buffers
      * of the appropriate size and binding them to the unbound
-     * ImageParams. */
+     * ImageParams.
+     *
+     * Set the documentation for Func::realize regarding the
+     * ParamMap. There is one difference in that input Buffer<>
+     * arguments that are being inferred are specified as a pointer to
+     * the Buffer<> in the ParamMap. E.g.
+     *
+     \code
+     Param<int32> p(42);
+     ImageParam img(Int(32), 1);
+     f(x) = img(x) + p;
+
+     Target t = get_jit_target_from_environment();
+     Buffer<> in;
+     f.infer_input_bounds(10, 10, t, { { img, &in } });
+     \endcode
+     * On return, in will be an allocated buffer of the correct size
+     * to evaulate f over a 10x10 region.
+     */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
     EXPORT void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());

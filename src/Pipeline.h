@@ -60,7 +60,7 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map);
+    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map, bool is_bounds_inference);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);

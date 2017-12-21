@@ -14,40 +14,65 @@ namespace Halide {
 class ImageParam;
 
 class ParamMap {
-    std::map<const Internal::Parameter, Internal::Parameter> mapping;
-
 public:
     struct ParamMapping {
         const Internal::Parameter *parameter{nullptr};
         const ImageParam *image_param{nullptr};
         halide_scalar_value_t value;
         Buffer<> buf;
+        Buffer<> *buf_out_param;
 
         template <typename T>
         ParamMapping(const Param<T> &p, const T &val) : parameter(&p.parameter()) {
             *((T *)&value) = val;
         }
 
-        ParamMapping(const ImageParam &p, Buffer<> &buf) : image_param(&p), buf(buf) {
+        ParamMapping(const ImageParam &p, Buffer<> &buf) : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
-
         
         template <typename T>
-        ParamMapping(const ImageParam &p, Buffer<T> &buf) : image_param(&p), buf(buf) {
+        ParamMapping(const ImageParam &p, Buffer<T> &buf) : image_param(&p), buf(buf), buf_out_param(nullptr) {
+        }
+
+        ParamMapping(const ImageParam &p, Buffer<> *buf_ptr) : image_param(&p), buf_out_param(buf_ptr) {
+        }
+
+        template <typename T>
+        ParamMapping(const ImageParam &p, Buffer<T> *buf_ptr) : image_param(&p), buf_out_param((Buffer<> *)buf_ptr) {
         }
     };
 
+private:
+    struct ParamArg {
+        Internal::Parameter mapped_param;
+        Buffer<> *buf_out_param;
+
+        ParamArg() : buf_out_param(nullptr) { }
+        ParamArg(const ParamMapping &pm)
+            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name(), pm.parameter->is_explicit_name(), false),
+               buf_out_param(nullptr) {
+              mapped_param.set_scalar(pm.parameter->type(), pm.value);
+        }
+        ParamArg(Buffer<> *buf_ptr) : buf_out_param(buf_ptr) { }
+        ParamArg(const ParamArg &) = default;
+    };
+    mutable std::map<const Internal::Parameter, ParamArg> mapping;
+
+    EXPORT void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
+
+public:
     ParamMap() { }
 
     ParamMap(const std::initializer_list<ParamMapping> &init) {
         for (const auto &pm : init) {
             if (pm.parameter != nullptr) {
-                Internal::Parameter v(pm.parameter->type(), false, 0, pm.parameter->name(), pm.parameter->is_explicit_name(), false);
-                v.set_scalar(pm.parameter->type(), pm.value);
-                mapping[*pm.parameter] = v;
-            } else {
+                mapping[*pm.parameter] = ParamArg(pm);
+            } else if (pm.buf_out_param == nullptr) {
                 // TODO: there has to be a way to do this without the const_cast.
-                set(*pm.image_param, *const_cast<Buffer<> *>(&pm.buf));
+                set(*pm.image_param, *const_cast<Buffer<> *>(&pm.buf), nullptr);
+            } else {
+                Buffer<> temp_undefined;
+                set(*pm.image_param, temp_undefined, pm.buf_out_param);
             }
         }
     }
@@ -55,24 +80,46 @@ public:
     template <typename T> void set(const Param<T> &p, T val) {
         Internal::Parameter v(p.type(), false, 0, p.name(), p.is_explicit_name(), false);
         v.set_scalar<T>(val);
-        mapping[p.parameter()] = v;
+        ParamArg pa;
+        pa.mapped_param = v;
+        pa.buf_out_param = nullptr;
+        mapping[p.parameter()] = pa;
     };
 
-    EXPORT void set(const ImageParam &p, Buffer<> &buf);
+    void set(const ImageParam &p, Buffer<> &buf) {
+        set(p, buf, nullptr);
+    }
 
     template <typename T>
     void set(const ImageParam &p, Buffer<T> &buf) {
         Buffer<> temp = buf;
-        set(p, temp);
+        set(p, temp, nullptr);
     }
 
     size_t size() const { return mapping.size(); }
 
     /** If there is an entry in the ParamMap for this Parameter, return it.
      * Otherwise return the parameter itself. */
-    const Internal::Parameter &map(const Internal::Parameter &p) const {
+    const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const {
         auto iter = mapping.find(p);
-        return (iter != mapping.end()) ? iter->second : p;
+        if (iter != mapping.end()) {
+            buf_out_param = iter->second.buf_out_param;
+            return iter->second.mapped_param;
+        } else {
+            buf_out_param = nullptr;
+            return p;
+        }
+    }
+
+    Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const {
+        auto iter = mapping.find(p);
+        if (iter != mapping.end()) {
+            buf_out_param = iter->second.buf_out_param;
+            return iter->second.mapped_param;
+        } else {
+            buf_out_param = nullptr;
+            return p;
+        }
     }
 };
 

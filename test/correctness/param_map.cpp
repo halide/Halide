@@ -47,6 +47,17 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Test bounds inference
+    Buffer<uint8_t> in_bounds;
+
+    f.infer_input_bounds(20, 20, 0, 0, { { p_img, &in_bounds } });
+
+    assert(in_bounds.defined());
+    assert(in_bounds.dim(0).extent() == 20);
+    assert(in_bounds.dim(1).extent() == 20);
+    assert(in1.dim(0).extent() == 10);
+    assert(in1.dim(1).extent() == 10);
+
     printf("Success!\n");
     return 0;
 }
