@@ -715,16 +715,19 @@ public:
      Buffer<float> im1 = r[1];
      \endcode
      *
-     * In Halide formal arguments of a computation sre specified using
-     * Param<T> and ImageParam objects in the expressions defining
-     * those computations. The param_map argument to realize allows
-     * specifying a set of per-call paramters to be used for a
-     * specific computation. In particular, this method is thread
-     * safe. One can do this either by constructing a ParamMap and
-     * using its set method to insert Parameter to scalar or Buffer
-     * value mappings.
-     * Alternatively, an initializer list can be used
-     * directly in the realize call to pass this information:
+     * In Halide formal arguments of a computation are specified using
+     * Param<T> and ImageParam objects in the expressions defining the
+     * computation. The param_map argument to realize allows
+     * specifying a set of per-call parameters to be used for a
+     * specific computation. This method is thread-safe where the
+     * globals used by Param<T> and ImageParam are not. Any parameters
+     * that are not n the param_map are taken from the global values,
+     * so those can continue to be used if they are not changing
+     * per-thread.
+     *
+     * One can explicitly construct a ParamMap and
+     * use its set method to insert Parameter to scalar or Buffer
+     * value mappings:
      *
      \code
      Param<int32> p(42);
@@ -740,6 +743,9 @@ public:
      Target t = get_jit_target_from_environment();
      Buffer<int32_t> result = f.realize(10, 10, t, params);
      \endcode
+     *
+     * Alternatively, an initializer list can be used
+     * directly in the realize call to pass this information:
      *
      \code
      Param<int32> p(42);
