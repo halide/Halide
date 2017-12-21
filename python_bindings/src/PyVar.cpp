@@ -1,23 +1,16 @@
 #include "PyVar.h"
 
-#include <boost/format.hpp>
-#include <boost/python.hpp>
-#include <string>
-
-#include "Halide.h"
-
 #include "PyBinaryOperators.h"
 
-using Halide::Expr;
-using Halide::Var;
-
-namespace py = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
 namespace {
 
 std::string var_repr(const Var &var) {
-    boost::format f("<halide.Var '%s'>");
-    return boost::str(f % var.name());
+    std::ostringstream o;
+    o << "<halide.Var '" << var.name() << "'>";
+    return o.str();
 }
 
 }  // namespace
@@ -74,3 +67,6 @@ void define_var() {
     py::scope().attr("_8") = py::object(Halide::_8);
     py::scope().attr("_9") = py::object(Halide::_9);
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

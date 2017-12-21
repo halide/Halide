@@ -1,36 +1,29 @@
 #include "PyArgument.h"
 
-#include <boost/python.hpp>
-#include <string>
-
-#include "Halide.h"
-
-namespace h = Halide;
+namespace Halide {
+namespace PythonBindings {
 
 void define_argument() {
-    using Halide::Argument;
-    namespace p = boost::python;
-
     auto argument_class =
-        p::class_<Argument>("Argument",
+        py::class_<Argument>("Argument",
                             "A struct representing an argument to a halide-generated function. "
                             "Used for specifying the function signature of generated code.",
-                            p::init<>(p::arg("self")));
+                            py::init<>(py::arg("self")));
 
     argument_class
-        .def(p::init<std::string, Argument::Kind, h::Type, uint8_t, h::Expr, h::Expr, h::Expr>(
-            (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions"),
-             p::arg("default"), p::arg("min"), p::arg("max"))))
-        .def(p::init<std::string, Argument::Kind, h::Type, uint8_t, h::Expr>(
-            (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions"),
-             p::arg("default"))))
-        .def(p::init<std::string, Argument::Kind, h::Type, uint8_t>(
-            (p::arg("self"), p::arg("name"), p::arg("kind"), p::arg("type"), p::arg("dimensions"))));
+        .def(py::init<std::string, Argument::Kind, Type, uint8_t, Expr, Expr, Expr>(
+            (py::arg("self"), py::arg("name"), py::arg("kind"), py::arg("type"), py::arg("dimensions"),
+             py::arg("default"), py::arg("min"), py::arg("max"))))
+        .def(py::init<std::string, Argument::Kind, Type, uint8_t, Expr>(
+            (py::arg("self"), py::arg("name"), py::arg("kind"), py::arg("type"), py::arg("dimensions"),
+             py::arg("default"))))
+        .def(py::init<std::string, Argument::Kind, Type, uint8_t>(
+            (py::arg("self"), py::arg("name"), py::arg("kind"), py::arg("type"), py::arg("dimensions"))));
 
     argument_class
         .def_readonly("name", &Argument::name, "The name of the argument.");
 
-    p::enum_<Argument::Kind>("ArgumentKind")
+    py::enum_<Argument::Kind>("ArgumentKind")
         .value("InputScalar", Argument::Kind::InputScalar)
         .value("InputBuffer", Argument::Kind::InputBuffer)
         .value("OutputBuffer", Argument::Kind::OutputBuffer)
@@ -64,10 +57,13 @@ void define_argument() {
         .def_readonly("max", &Argument::max);
 
     argument_class
-        .def("is_buffer", &Argument::is_buffer, p::arg("self"),
+        .def("is_buffer", &Argument::is_buffer, py::arg("self"),
              "An argument is either a primitive type (for parameters), or a buffer pointer. "
              "If 'is_buffer' is true, then 'type' should be ignored.")
-        .def("is_scalar", &Argument::is_scalar, p::arg("self"))
-        .def("is_input", &Argument::is_input, p::arg("self"))
-        .def("is_output", &Argument::is_output, p::arg("self"));
+        .def("is_scalar", &Argument::is_scalar, py::arg("self"))
+        .def("is_input", &Argument::is_input, py::arg("self"))
+        .def("is_output", &Argument::is_output, py::arg("self"));
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

@@ -1,18 +1,7 @@
 #include "PyTarget.h"
 
-#include <boost/format.hpp>
-#include <boost/python.hpp>
-
-#include <string>
-#include <vector>
-
-#include "Halide.h"
-
-using Halide::DeviceAPI;
-using Halide::Target;
-using Halide::Type;
-
-namespace py = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
 namespace {
 
@@ -51,7 +40,9 @@ struct PythonListToVectorConverter {
 };
 
 std::string target_repr(const Target &t) {
-    return boost::str(boost::format("<halide.Target %s>") % t.to_string());
+    std::ostringstream o;
+    o << "<halide.Target " << t.to_string() << ">";
+    return o.str();
 }
 
 }  // namespace
@@ -171,8 +162,11 @@ void define_target() {
 
     py::def("validate_target_string", &Target::validate_target_string);
 
-    py::def("get_host_target", &Halide::get_host_target);
-    py::def("get_target_from_environment", &Halide::get_target_from_environment);
-    py::def("get_jit_target_from_environment", &Halide::get_jit_target_from_environment);
-    py::def("target_feature_for_device_api", &Halide::target_feature_for_device_api);
+    py::def("get_host_target", &get_host_target);
+    py::def("get_target_from_environment", &get_target_from_environment);
+    py::def("get_jit_target_from_environment", &get_jit_target_from_environment);
+    py::def("target_feature_for_device_api", &target_feature_for_device_api);
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide
