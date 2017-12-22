@@ -132,6 +132,7 @@ void define_target() {
         .value("CUDACapability61", Target::Feature::CUDACapability61)
         .value("OpenCL", Target::Feature::OpenCL)
         .value("CLDoubles", Target::Feature::CLDoubles)
+        .value("CLHalf", Target::Feature::CLHalf)
         .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("UserContext", Target::Feature::UserContext)
