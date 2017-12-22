@@ -1,144 +1,130 @@
 #include "PyParam.h"
 
-#include <boost/format.hpp>
-#include <boost/mpl/list.hpp>
-#include <boost/python.hpp>
-#include <string>
-#include <vector>
-
-#include "Halide.h"
 
 #include "PyBinaryOperators.h"
 #include "PyType.h"
 
-namespace h = Halide;
-namespace p = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
-h::Expr imageparam_to_expr_operator0(h::ImageParam &that, p::tuple args_passed) {
-    std::vector<h::Expr> expr_args;
+Expr imageparam_to_expr_operator0(ImageParam &that, py::tuple args_passed) {
+    std::vector<Expr> expr_args;
     // All ImageParam operator()(...) Expr and Var variants end up building a vector<Expr>
     // all other variants are equivalent to this one
-    const size_t args_len = p::len(args_passed);
+    const size_t args_len = py::len(args_passed);
     for (size_t i = 0; i < args_len; i += 1) {
-        expr_args.push_back(p::extract<h::Expr>(args_passed[i]));
+        expr_args.push_back(py::extract<Expr>(args_passed[i]));
     }
 
     return that(expr_args);
 }
 
-h::Expr imageparam_to_expr_operator1(h::ImageParam &that, h::Expr an_expr) {
-    std::vector<h::Expr> expr_args;
+Expr imageparam_to_expr_operator1(ImageParam &that, Expr an_expr) {
+    std::vector<Expr> expr_args;
     expr_args.push_back(an_expr);
     // All ImageParam operator()(...) Expr and Var variants end up building a vector<Expr>
     // all other variants are equivalent to this one
     return that(expr_args);
 }
 
-std::string imageparam_repr(h::ImageParam &param)  // non-const due to a Halide bug in master (to be fixed)
-{
-    std::string repr;
-    if (param.defined()) {
-        boost::format f("<halide.ImageParam named '%s' (not yet defined) >");
-        repr = boost::str(f % param.name());
+std::string imageparam_repr(const ImageParam &param) {
+    std::ostringstream o;
+    o << "<halide.ImageParam '" <<param.name() << "'";
+    if (!param.defined()) {
+        o << " (undefined)";
     } else {
-        boost::format f("<halide.ImageParam named '%s' of type %s and dimensions %i %i %i %i>");
-        repr = boost::str(f % param.name() %
-                          halide_type_to_string(param.type()) %
-                          param.dim(0).extent() %
-                          param.dim(1).extent() %
-                          param.dim(2).extent() %
-                          param.dim(3).extent());
+        // TODO: add dimensions to this
+        o << " type " << halide_type_to_string(param.type());
     }
-    return repr;
+    o << ">";
+    return o.str();
 }
 
-h::Buffer<> image_param_get(h::ImageParam &param) {
+Buffer<> image_param_get(ImageParam &param) {
     return param.get();
 }
 
 template <typename T>
-void image_param_set(h::ImageParam &param, const h::Buffer<T> &im) {
+void image_param_set(ImageParam &param, const Buffer<T> &im) {
     param.set(im);
 }
 
 void define_image_param() {
-    using Halide::ImageParam;
-
     auto image_param_class =
-        p::class_<ImageParam>("ImageParam",
+        py::class_<ImageParam>("ImageParam",
                               "An Image parameter to a halide pipeline. E.g., the input image. \n"
                               "Constructor:: \n"
                               "  ImageParam(Type t, int dims, name="
                               ") \n"
                               "The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr. "
                               "Supports most of the methods of Image.",
-                              p::init<h::Type, int, std::string>(p::args("self", "t", "dims", "name")))
-            .def(p::init<h::Type, int>(p::args("self", "t", "dims")))
-            .def("name", &ImageParam::name, p::arg("self"),
-                 p::return_value_policy<p::copy_const_reference>(),
+                              py::init<Type, int, std::string>(py::args("self", "t", "dims", "name")))
+            .def(py::init<Type, int>(py::args("self", "t", "dims")))
+            .def("name", &ImageParam::name, py::arg("self"),
+                 py::return_value_policy<py::copy_const_reference>(),
                  "Get name of ImageParam.")
 
-            .def("dimensions", &ImageParam::dimensions, p::arg("self"),
+            .def("dimensions", &ImageParam::dimensions, py::arg("self"),
                  "Get the dimensionality of this image parameter")
-            .def("channels", &ImageParam::channels, p::arg("self"),
+            .def("channels", &ImageParam::channels, py::arg("self"),
                  "Get an expression giving the extent in dimension 2, "
                  "which by convention is the channel-count of the image")
 
-            .def("width", &ImageParam::width, p::arg("self"),
+            .def("width", &ImageParam::width, py::arg("self"),
                  "Get an expression giving the extent in dimension 0, which by "
                  "convention is the width of the image")
-            .def("height", &ImageParam::height, p::arg("self"),
+            .def("height", &ImageParam::height, py::arg("self"),
                  "Get an expression giving the extent in dimension 1, which by "
                  "convention is the height of the image")
 
-            .def("left", &ImageParam::left, p::arg("self"),
+            .def("left", &ImageParam::left, py::arg("self"),
                  "Get an expression giving the minimum coordinate in dimension 0, which "
                  "by convention is the coordinate of the left edge of the image")
-            .def("right", &ImageParam::right, p::arg("self"),
+            .def("right", &ImageParam::right, py::arg("self"),
                  "Get an expression giving the maximum coordinate in dimension 0, which "
                  "by convention is the coordinate of the right edge of the image")
-            .def("top", &ImageParam::top, p::arg("self"),
+            .def("top", &ImageParam::top, py::arg("self"),
                  "Get an expression giving the minimum coordinate in dimension 1, which "
                  "by convention is the top of the image")
-            .def("bottom", &ImageParam::bottom, p::arg("self"),
+            .def("bottom", &ImageParam::bottom, py::arg("self"),
                  "Get an expression giving the maximum coordinate in dimension 1, which "
                  "by convention is the bottom of the image")
 
-            .def("set", &image_param_set<uint8_t>, p::args("self", "im"),
+            .def("set", &image_param_set<uint8_t>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<uint16_t>, p::args("self", "im"),
+            .def("set", &image_param_set<uint16_t>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<uint32_t>, p::args("self", "im"),
+            .def("set", &image_param_set<uint32_t>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<int8_t>, p::args("self", "im"),
+            .def("set", &image_param_set<int8_t>, py::args("self", "im"),
                  "Bind a buffer to this IageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<int16_t>, p::args("self", "im"),
+            .def("set", &image_param_set<int16_t>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<int32_t>, p::args("self", "im"),
+            .def("set", &image_param_set<int32_t>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<float>, p::args("self", "im"),
+            .def("set", &image_param_set<float>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("set", &image_param_set<double>, p::args("self", "im"),
+            .def("set", &image_param_set<double>, py::args("self", "im"),
                  "Bind a buffer to this ImageParam. Only relevant for jitting.")
-            .def("get", &image_param_get, p::arg("self"),
+            .def("get", &image_param_get, py::arg("self"),
                  "Get the buffer bound to this ImageParam. Only relevant for jitting.")
-            .def("__getitem__", &imageparam_to_expr_operator0, p::args("self", "tuple"),
+            .def("__getitem__", &imageparam_to_expr_operator0, py::args("self", "tuple"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
                  "the dimensionality of the image (see \\ref Var::implicit).\n\n"
                  "Call with: [x], [x,y], [x,y,z], or [x,y,z,w]")
-            .def("__getitem__", &imageparam_to_expr_operator1, p::args("self", "expr"),
+            .def("__getitem__", &imageparam_to_expr_operator1, py::args("self", "expr"),
                  "Construct an expression which loads from this image. "
                  "The location is extended with enough implicit variables to match "
                  "the dimensionality of the image (see \\ref Var::implicit).\n\n"
                  "Call with: [x], [x,y], [x,y,z], or [x,y,z,w]")
 
-            .def("__repr__", &imageparam_repr, p::arg("self"));
+            .def("__repr__", &imageparam_repr, py::arg("self"));
 
-    p::implicitly_convertible<ImageParam, h::Argument>();
+    py::implicitly_convertible<ImageParam, Argument>();
 
     // "Using a param as the argument to an external stage treats it as an Expr"
-    //p::implicitly_convertible<ImageParam, h::ExternFuncArgument>();
+    //py::implicitly_convertible<ImageParam, ExternFuncArgument>();
 }
 
 // TODO: unimplemented?
@@ -270,76 +256,76 @@ void define_output_image_param() {
 }
 
 template <typename T>
-h::Expr param_as_expr(h::Param<T> &that) {
-    return static_cast<h::Expr>(that);
+Expr param_as_expr(Param<T> &that) {
+    return static_cast<Expr>(that);
 }
 
 template <typename T>
-std::string param_repr(const h::Param<T> &param) {
-    boost::format f("<halide.Param named '%s' of type %s>");
-    return boost::str(f % param.name() % halide_type_to_string(param.type()));
+std::string param_repr(const Param<T> &param) {
+    std::ostringstream o;
+    o << "<halide.Param '" <<param.name() << "'"
+      << " type " << halide_type_to_string(param.type()) << ">";
+    return o.str();
 }
 
 template <typename T>
-void define_param_impl(const std::string suffix, const h::Type type) {
-    using Halide::Param;
-
+void define_param_impl(const std::string suffix, const Type type) {
     auto param_class =
-        p::class_<Param<T>>(("Param" + suffix).c_str(),
+        py::class_<Param<T>>(("Param" + suffix).c_str(),
                             "A scalar parameter to a halide pipeline. If you're jitting, this "
                             "should be bound to an actual value of type T using the set method "
                             "before you realize the function uses this. If you're statically "
                             "compiling, this param should appear in the argument list.",
-                            p::init<>(
-                                p::arg("self"),
+                            py::init<>(
+                                py::arg("self"),
                                 "Construct a scalar parameter of type T with a unique auto-generated name"));
     param_class
-        .def(p::init<T>(
-            p::args("self", "val"),
+        .def(py::init<T>(
+            py::args("self", "val"),
             "Construct a scalar parameter of type T an initial value of "
             "'val'. Only triggers for scalar types."))
-        .def(p::init<std::string>(
-            p::args("self", "name"), "Construct a scalar parameter of type T with the given name."))
-        .def(p::init<std::string, T>(
-            p::args("self", "name", "val"),
+        .def(py::init<std::string>(
+            py::args("self", "name"), "Construct a scalar parameter of type T with the given name."))
+        .def(py::init<std::string, T>(
+            py::args("self", "name", "val"),
             "Construct a scalar parameter of type T with the given name "
             "and an initial value of 'val'."))
-        .def(p::init<T, h::Expr, h::Expr>(
-            p::args("self", "val", "min", "max"),
+        .def(py::init<T, Expr, Expr>(
+            py::args("self", "val", "min", "max"),
             "Construct a scalar parameter of type T with an initial value of 'val' "
             "and a given min and max."))
-        .def(p::init<std::string, T, h::Expr, h::Expr>(
-            p::args("self", "name", "val", "min", "max"),
+        .def(py::init<std::string, T, Expr, Expr>(
+            py::args("self", "name", "val", "min", "max"),
             "Construct a scalar parameter of type T with the given name "
             "and an initial value of 'val' and a given min and max."))
 
-        .def("name", &Param<T>::name, p::arg("self"),
-             p::return_value_policy<p::copy_const_reference>(),
+        .def("name", &Param<T>::name, py::arg("self"),
+             py::return_value_policy<py::copy_const_reference>(),
              "Get the name of this parameter")
-        .def("is_explicit_name", &Param<T>::is_explicit_name, p::arg("self"),
+        .def("is_explicit_name", &Param<T>::is_explicit_name, py::arg("self"),
              "Return true iff the name was explicitly specified in the ctor (vs autogenerated).")
 
-        .def("get", &Param<T>::get, p::arg("self"),
+        .def("get", &Param<T>::get, py::arg("self"),
              "Get the current value of this parameter. Only meaningful when jitting.")
-        .def("set", &Param<T>::set, p::args("self", "val"),
+        .def("set", &Param<T>::set, py::args("self", "val"),
              "Set the current value of this parameter. Only meaningful when jitting")
 
-        .def("type", &Param<T>::type, p::arg("self"),
+        .def("type", &Param<T>::type, py::arg("self"),
              "Get the halide type of T")
 
-        .def("set_range", &Param<T>::set_range, p::args("self", "min", "max"),
+        .def("set_range", &Param<T>::set_range, py::args("self", "min", "max"),
              "Get or set the possible range of this parameter. "
              "Use undefined Exprs to mean unbounded.")
-        .def("set_min_value", &Param<T>::set_min_value, p::args("self", "min"),
+        .def("set_min_value", &Param<T>::set_min_value, py::args("self", "min"),
              "Get or set the possible range of this parameter. "
              "Use undefined Exprs to mean unbounded.")
-        .def("set_max_value", &Param<T>::set_max_value, p::args("self", "max"),
+        .def("set_max_value", &Param<T>::set_max_value, py::args("self", "max"),
              "Get or set the possible range of this parameter. "
              "Use undefined Exprs to mean unbounded.")
-        .def("min_value", &Param<T>::min_value, p::arg("self"))
-        .def("max_value", &Param<T>::max_value, p::arg("self"))
+        .def("min_value", &Param<T>::min_value, py::arg("self"))
+        .def("max_value", &Param<T>::max_value, py::arg("self"))
 
-        .def("expr", &param_as_expr<T>, p::arg("self"),
+        .def("expr", &param_as_expr<T>, py::arg("self"),
              "You can use this parameter as an expression in a halide "
              "function definition")
 
@@ -352,15 +338,15 @@ void define_param_impl(const std::string suffix, const h::Type type) {
         //            "statically compiling halide pipelines."
         //            operator Argument() const
 
-        .def("__repr__", &param_repr<T>, p::arg("self"));
+        .def("__repr__", &param_repr<T>, py::arg("self"));
 
-    p::implicitly_convertible<Param<T>, h::Argument>();
-    //p::implicitly_convertible<Param<T>, h::ExternFuncArgument>();
-    p::implicitly_convertible<Param<T>, h::Expr>();
+    py::implicitly_convertible<Param<T>, Argument>();
+    //py::implicitly_convertible<Param<T>, ExternFuncArgument>();
+    py::implicitly_convertible<Param<T>, Expr>();
 
     add_binary_operators_with<int>(param_class);
     add_binary_operators_with<float>(param_class);
-    add_binary_operators_with<h::Expr>(param_class);
+    add_binary_operators_with<Expr>(param_class);
 
     add_binary_operators_with<Param<uint8_t>>(param_class);
     add_binary_operators_with<Param<uint16_t>>(param_class);
@@ -375,20 +361,20 @@ void define_param_impl(const std::string suffix, const h::Type type) {
 }
 
 template <typename T, typename... Args>
-p::object create_param_object(Args... args) {
-    typedef h::Param<T> ParamType;
-    typedef typename p::manage_new_object::apply<ParamType *>::type converter_t;
+py::object create_param_object(Args... args) {
+    typedef Param<T> ParamType;
+    typedef typename py::manage_new_object::apply<ParamType *>::type converter_t;
     converter_t converter;
     PyObject *obj = converter(new ParamType(args...));
-    return p::object(p::handle<>(obj));
+    return py::object(py::handle<>(obj));
 }
 
 struct end_of_recursion_t {};  // dummy helper type
 
 // C++ fun, variadic template recursive function !
 template <typename T = end_of_recursion_t, typename... Types>
-p::object create_param0_impl(h::Type type, std::string name) {
-    if (h::type_of<T>() == type) {
+py::object create_param0_impl(Type type, std::string name) {
+    if (type_of<T>() == type) {
         if (!name.empty()) {
             return create_param_object<T>(name);
         } else {
@@ -400,27 +386,28 @@ p::object create_param0_impl(h::Type type, std::string name) {
 }
 
 template <>
-p::object create_param0_impl<end_of_recursion_t>(h::Type type, std::string /*name*/) {  // end of recursion, did not find a matching type
+py::object create_param0_impl<end_of_recursion_t>(Type type, std::string /*name*/) {  // end of recursion, did not find a matching type
     throw std::invalid_argument("ParamFactory::create_param0_impl received type not handled");
-    return p::object();
+    return py::object();
 }
 
-typedef boost::mpl::list<boost::uint8_t, boost::uint16_t, boost::uint32_t,
-                         boost::int8_t, boost::int16_t, boost::int32_t,
+// TODO: int64, uint64, bool
+typedef boost::mpl::list<uint8_t, uint16_t, uint32_t,
+                         int8_t, int16_t, int32_t,
                          float, double>
     pixel_types_t;
 
 template <typename PixelTypes, typename... Args>
 struct create_param1_impl_t {
-    p::object operator()(h::Type type, p::object val, Args... args) {
+    py::object operator()(Type type, py::object val, Args... args) {
         typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
-        if (h::type_of<pixel_t>() == type) {
-            p::extract<pixel_t> val_extract(val);
+        if (type_of<pixel_t>() == type) {
+            py::extract<pixel_t> val_extract(val);
             if (val_extract.check()) {
                 pixel_t true_val = val_extract();
                 return call_create_param_object<pixel_t>(true_val, args...);
             } else {
-                const std::string val_str = p::extract<std::string>(p::str(val));
+                const std::string val_str = py::extract<std::string>(py::str(val));
                 throw std::invalid_argument("ParamFactory::create_param1_impl called with "
                                             "a value that could not be converted to the given type");
             }
@@ -431,102 +418,104 @@ struct create_param1_impl_t {
     }
 
     template <typename T>
-    p::object call_create_param_object(T true_val) {
+    py::object call_create_param_object(T true_val) {
         return create_param_object<T>(true_val);
     }
 
     template <typename T>
-    p::object call_create_param_object(T true_val, std::string name) {
+    py::object call_create_param_object(T true_val, std::string name) {
         return create_param_object<T>(name, true_val);
     }
 
     template <typename T>
-    p::object call_create_param_object(T true_val, std::string name, h::Expr min, h::Expr max) {
+    py::object call_create_param_object(T true_val, std::string name, Expr min, Expr max) {
         return create_param_object<T>(name, true_val, min, max);
     }
 
     template <typename T>
-    p::object call_create_param_object(T true_val, h::Expr min, h::Expr max) {
+    py::object call_create_param_object(T true_val, Expr min, Expr max) {
         return create_param_object<T>(true_val, min, max);
     }
 };
 
 template <typename... Args>
 struct create_param1_impl_t<boost::mpl::l_end::type, Args...> {
-    p::object operator()(h::Type type, p::object val, Args... args) {
+    py::object operator()(Type type, py::object val, Args... args) {
         // end of recursion, did not find a matching type
         throw std::invalid_argument("ParamFactory::create_param1_impl received type not handled");
-        return p::object();
+        return py::object();
     }
 };
 
 struct ParamFactory {
-    static p::object create_param0(h::Type type) {
+    static py::object create_param0(Type type) {
+        // TODO: int64, uint64, bool
         return create_param0_impl<
-            boost::uint8_t, boost::uint16_t, boost::uint32_t,
-            boost::int8_t, boost::int16_t, boost::int32_t,
+            uint8_t, uint16_t, uint32_t,
+            int8_t, int16_t, int32_t,
             float, double>(type, "");
     }
 
-    static p::object create_param1(h::Type type, std::string name) {
+    static py::object create_param1(Type type, std::string name) {
+      // TODO: int64, uint64, bool
         return create_param0_impl<
-            boost::uint8_t, boost::uint16_t, boost::uint32_t,
-            boost::int8_t, boost::int16_t, boost::int32_t,
+            uint8_t, uint16_t, uint32_t,
+            int8_t, int16_t, int32_t,
             float, double>(type, name);
     }
 
-    static p::object create_param2(h::Type type, p::object val) {
+    static py::object create_param2(Type type, py::object val) {
         return create_param1_impl_t<pixel_types_t>()(type, val);
     }
 
-    static p::object create_param3(h::Type type, std::string name, p::object val) {
+    static py::object create_param3(Type type, std::string name, py::object val) {
         return create_param1_impl_t<pixel_types_t, std::string>()(type, val, name);
     }
 
-    static p::object create_param4(h::Type type, p::object val, h::Expr min, h::Expr max) {
-        return create_param1_impl_t<pixel_types_t, h::Expr, h::Expr>()(type, val, min, max);
+    static py::object create_param4(Type type, py::object val, Expr min, Expr max) {
+        return create_param1_impl_t<pixel_types_t, Expr, Expr>()(type, val, min, max);
     }
 
-    static p::object create_param5(h::Type type, std::string name, p::object val, h::Expr min, h::Expr max) {
-        return create_param1_impl_t<pixel_types_t, std::string, h::Expr, h::Expr>()(type, val, name, min, max);
+    static py::object create_param5(Type type, std::string name, py::object val, Expr min, Expr max) {
+        return create_param1_impl_t<pixel_types_t, std::string, Expr, Expr>()(type, val, name, min, max);
     }
 };
 
 void define_param() {
-    define_param_impl<uint8_t>("_uint8", h::UInt(8));
-    define_param_impl<uint16_t>("_uint16", h::UInt(16));
-    define_param_impl<uint32_t>("_uint32", h::UInt(32));
-    define_param_impl<uint64_t>("_uint64", h::UInt(64));
+    define_param_impl<uint8_t>("_uint8", UInt(8));
+    define_param_impl<uint16_t>("_uint16", UInt(16));
+    define_param_impl<uint32_t>("_uint32", UInt(32));
+    define_param_impl<uint64_t>("_uint64", UInt(64));
 
-    define_param_impl<int8_t>("_int8", h::Int(8));
-    define_param_impl<int16_t>("_int16", h::Int(16));
-    define_param_impl<int32_t>("_int32", h::Int(32));
-    define_param_impl<int64_t>("_int64", h::Int(64));
+    define_param_impl<int8_t>("_int8", Int(8));
+    define_param_impl<int16_t>("_int16", Int(16));
+    define_param_impl<int32_t>("_int32", Int(32));
+    define_param_impl<int64_t>("_int64", Int(64));
 
-    define_param_impl<float>("_float32", h::Float(32));
-    define_param_impl<double>("_float64", h::Float(64));
+    define_param_impl<float>("_float32", Float(32));
+    define_param_impl<double>("_float64", Float(64));
 
     // "Param" will look like a class, but instead it will be simply a factory method
     // Order of definitions matter, the last defined method is attempted first
     // Here it is important to try "type, name" before "type, val"
-    p::def("Param", &ParamFactory::create_param5, p::args("type", "name", "val", "min", "max"),
+    py::def("Param", &ParamFactory::create_param5, py::args("type", "name", "val", "min", "max"),
            "Construct a scalar parameter of type T with the given name "
            "and an initial value of 'val' and a given min and max.");
-    p::def("Param", &ParamFactory::create_param4, p::args("type", "val", "min", "max"),
+    py::def("Param", &ParamFactory::create_param4, py::args("type", "val", "min", "max"),
            "Construct a scalar parameter of type T with an initial value of 'val' "
            "and a given min and max.");
-    p::def("Param", &ParamFactory::create_param3, p::args("type", "name", "val"),
+    py::def("Param", &ParamFactory::create_param3, py::args("type", "name", "val"),
            "Construct a scalar parameter of type T with the given name "
            "and an initial value of 'val'.");
-    p::def("Param", &ParamFactory::create_param2, p::args("type", "val"),
+    py::def("Param", &ParamFactory::create_param2, py::args("type", "val"),
            "Construct a scalar parameter of type T an initial value of "
            "'val'. Only triggers for scalar types.");
-    p::def("Param", &ParamFactory::create_param1, p::args("type", "name"),
+    py::def("Param", &ParamFactory::create_param1, py::args("type", "name"),
            "Construct a scalar parameter of type T with the given name.");
-    p::def("Param", &ParamFactory::create_param0, p::args("type"),
+    py::def("Param", &ParamFactory::create_param0, py::args("type"),
            "Construct a scalar parameter of type T with a unique auto-generated name");
 
-    p::def("user_context_value", &h::user_context_value,
+    py::def("user_context_value", &user_context_value,
            "Returns an Expr corresponding to the user context passed to "
            "the function (if any). It is rare that this function is necessary "
            "(e.g. to pass the user context to an extern function written in C).");
@@ -534,3 +523,6 @@ void define_param() {
     define_image_param();
     define_output_image_param();
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

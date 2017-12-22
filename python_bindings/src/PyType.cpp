@@ -1,34 +1,23 @@
 #include "PyType.h"
 
-#include <boost/format.hpp>
-#include <boost/python.hpp>
-#include <string>
-#include <vector>
-
-#include "Halide.h"
-
-using Halide::Bool;
-using Halide::Float;
-using Halide::Handle;
-using Halide::Int;
-using Halide::Type;
-using Halide::UInt;
-
-namespace py = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
 namespace {
 
-Halide::Type make_handle(int lanes) {
+Type make_handle(int lanes) {
     return Handle(lanes, nullptr);
 }
 
 std::string type_repr(const Type &t) {
-    return boost::str(boost::format("<halide.Type %s>") % halide_type_to_string(t));
+    std::ostringstream o;
+    o << "<halide.Type " << halide_type_to_string(t) << ">";
+    return o.str();
 }
 
 }  // namespace
 
-std::string halide_type_to_string(const Halide::Type &type) {
+std::string halide_type_to_string(const Type &type) {
     std::ostringstream stream;
     if (type.code() == halide_type_uint && type.bits() == 1) {
         stream << "bool";
@@ -110,3 +99,6 @@ void define_type() {
         .value("Handle", Type::Handle);
         // don't export_values(): we don't want the enums in the halide module
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

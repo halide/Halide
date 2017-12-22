@@ -1,4 +1,3 @@
-#include <boost/python.hpp>
 
 #include "PyArgument.h"
 #include "PyBoundaryConditions.h"
@@ -17,6 +16,8 @@
 #include "PyVar.h"
 
 BOOST_PYTHON_MODULE(halide) {
+    using namespace Halide::PythonBindings;
+
     define_argument();
     define_boundary_conditions();
     define_buffer();
