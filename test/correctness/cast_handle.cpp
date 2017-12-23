@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     int foo;
 
-    handle.set(&foo);
+    handle.set<void *>(&foo);
 
     Buffer<uint64_t> out1 = f.realize(4);
 
