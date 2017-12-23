@@ -10,7 +10,7 @@ def _evaluate(e):
     x = hl.Var()
     f[x] = e;
     f.realize(buf)
-    return buf(0)
+    return buf[0]
 
 def test_division():
     f32 = hl.Param(hl.Float(32), 'f32', -32.0)

@@ -1205,15 +1205,20 @@ public:
     }
 
     /** Set the min coordinate of an image in the first N dimensions */
-    template<typename ...Args>
-    void set_min(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
+    // @{
+    void set_min(std::vector<int> mins) {
+        assert(mins.size() <= (size_t)dimensions());
         device_deallocate();
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            buf.dim[i].min = x[i];
+        for (size_t i = 0; i < mins.size(); i++) {
+            buf.dim[i].min = mins[i];
         }
     }
+
+    template<typename ...Args>
+    void set_min(Args... args) {
+        set_min(std::vector<int>{args...});
+    }
+    // @}
 
     /** Test if a given coordinate is within the the bounds of an image */
     template<typename ...Args>

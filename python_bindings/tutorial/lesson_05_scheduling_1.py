@@ -490,7 +490,7 @@ def main():
         # If you like you can turn on tracing, but it's going to
         # produce a lot of prints. Instead we'll compute the answer
         # both in C and Halide and see if the answers match.
-        result = gradient_fast.realize(800, 600)
+        result = gradient_fast.realize(800, 600)[0]
 
         print("Checking Halide result against equivalent C...")
         for tile_index in range(4*3):
@@ -521,7 +521,7 @@ def main():
                         for i in range(4):
                             #print("x_vec[%i], y_vec[%i]" % (i, i),
                             #      x_vec[i], y_vec[i])
-                            if result(x_vec[i], y_vec[i]) != val[i]:
+                            if result[x_vec[i], y_vec[i]] != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
                                 return -1
 
@@ -538,7 +538,7 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            if result(x_vec[i], y_vec[i]) != val[i]:
+                            if result[x_vec[i], y_vec[i]] != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
 
 

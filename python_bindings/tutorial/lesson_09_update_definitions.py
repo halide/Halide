@@ -158,7 +158,7 @@ def main():
         # domain" and using it inside an update definition:
         r = hl.RDom(0, 50)
         f[x, r] = f[x, r] * f[x, r]
-        halide_result = f.realize(100, 100)
+        halide_result = f.realize(100, 100)[0]
 
         # The equivalent C is:
         c_result = np.empty((100, 100), dtype=np.int)
@@ -178,9 +178,9 @@ def main():
         # Check the results match:
         for yy in range(100):
             for xx in range(100):
-                if halide_result(xx, yy) != c_result[yy][xx]:
+                if halide_result[xx, yy] != c_result[yy][xx]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 
@@ -209,7 +209,7 @@ def main():
         # input image at that point.
         histogram[input[r.x, r.y]] += 1
 
-        halide_result = histogram.realize(256)
+        halide_result = histogram.realize(256)[0]
 
         # The equivalent C is:
         c_result = np.empty((256), dtype=np.int)
@@ -224,9 +224,9 @@ def main():
 
         # Check the answers agree:
         for xx in range(256):
-            if c_result[xx] != halide_result(xx):
+            if c_result[xx] != halide_result[xx]:
                 raise Exception("halide_result(%d) = %d instead of %d" % (
-                       xx, halide_result(xx), c_result[xx]))
+                       xx, halide_result[xx], c_result[xx]))
                 return -1
 
 
@@ -267,7 +267,7 @@ def main():
         yo, yi = hl.Var("yo"), hl.Var("yi")
         f.update(1).split(y, yo, yi, 4).parallel(yo)
 
-        halide_result = f.realize(16, 16)
+        halide_result = f.realize(16, 16)[0]
 
 
         # Here's the equivalent (serial) C:
@@ -305,9 +305,9 @@ def main():
         # Check the C and Halide results match:
         for yy in range( 16):
             for xx in range( 16 ):
-                if halide_result(xx, yy) != c_result[yy][xx]:
+                if halide_result[xx, yy] != c_result[yy][xx]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 
@@ -328,7 +328,7 @@ def main():
         producer[x] = x*17
         producer[x] += 1
         consumer[x] = 2 * producer[x]
-        halide_result = consumer.realize(10)
+        halide_result = consumer.realize(10)[0]
 
         # The equivalent C is:
         c_result = np.empty((10), dtype=np.int)
@@ -344,9 +344,9 @@ def main():
 
         # Check the results match
         for xx in range( 10 ):
-            if halide_result(xx) != c_result[xx]:
+            if halide_result[xx] != c_result[xx]:
                 raise Exception("halide_result(%d) = %d instead of %d" % (
-                       xx, halide_result(xx), c_result[xx]))
+                       xx, halide_result[xx], c_result[xx]))
                 return -1
 
 
@@ -385,7 +385,7 @@ def main():
 
             producer.compute_at(consumer, x)
 
-            halide_result = consumer.realize(10)
+            halide_result = consumer.realize(10)[0]
 
 
             # The equivalent C is:
@@ -408,9 +408,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -437,7 +437,7 @@ def main():
             # the Vars of a hl.Func are shared across the pure and
             # update steps.
 
-            halide_result = consumer.realize(10)
+            halide_result = consumer.realize(10)[0]
 
 
             # The equivalent C is:
@@ -457,9 +457,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -480,7 +480,7 @@ def main():
             # redundant work occurs.
             producer.compute_at(consumer, x)
 
-            halide_result = consumer.realize(10)
+            halide_result = consumer.realize(10)[0]
 
             # The equivalent C is:
             c_result = np.empty((10), dtype=np.int)
@@ -501,9 +501,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -545,7 +545,7 @@ def main():
             producer_wrapper_1.compute_at(consumer_2, x)
             producer_wrapper_2.compute_at(consumer_2, y)
 
-            halide_result = consumer_2.realize(10, 10)
+            halide_result = consumer_2.realize(10, 10)[0]
 
             # The equivalent C is:
             c_result = np.empty((10, 10), dtype=np.int)
@@ -572,9 +572,9 @@ def main():
             # Check the results match
             for yy in range( 10):
                 for xx in range( 10 ):
-                    if halide_result(xx, yy) != c_result[yy][xx]:
+                    if halide_result[xx, yy] != c_result[yy][xx]:
                         print("halide_result(%d, %d) = %d instead of %d",
-                               xx, yy, halide_result(xx, yy), c_result[yy][xx])
+                               xx, yy, halide_result[xx, yy], c_result[yy][xx])
                         return -1
 
 
@@ -600,7 +600,7 @@ def main():
 
             producer.compute_at(consumer, r)
 
-            halide_result = consumer.realize(10)
+            halide_result = consumer.realize(10)[0]
 
             # The equivalent C is:
             c_result = np.empty((10), dtype=np.int)
@@ -623,9 +623,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -651,7 +651,7 @@ def main():
         blurry = hl.Func("blurry")
         blurry[x, y] = hl.cast(hl.UInt(8), local_sum[x, y] / 25)
 
-        halide_result = blurry.realize(input.width(), input.height())
+        halide_result = blurry.realize(input.width(), input.height())[0]
 
         # The default schedule will inline 'clamped' into the update
         # step of 'local_sum', because clamped only has a pure
@@ -675,7 +675,7 @@ def main():
                         # The clamping has been inlined into the update step.
                         clamped_x = min(max(xx + r_x, 0), input.width()-1)
                         clamped_y = min(max(yy + r_y, 0), input.height()-1)
-                        local_sum[0] += input(clamped_x, clamped_y)
+                        local_sum[0] += input[clamped_x, clamped_y]
 
                 # Pure step of blurry
                 #c_result(x, y) = (uint8_t)(local_sum[0] / 25)
@@ -685,10 +685,10 @@ def main():
         # Check the results match
         for yy in range(input.height()):
             for xx in range(input.width()):
-                if halide_result(xx, yy) != c_result(xx, yy):
+                if halide_result[xx, yy] != c_result[xx, yy]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d"
                                     % (xx, yy,
-                                       halide_result(xx, yy), c_result(xx, yy)))
+                                       halide_result[xx, yy], c_result[xx, yy]))
                     return -1
 
 
@@ -711,8 +711,8 @@ def main():
         # So even though f1 references a reduction domain, it is a
         # pure function. The reduction domain has been swallowed to
         # define the inner anonymous reduction.
-        halide_result_1 = f1.realize(10)
-        halide_result_2 = f2.realize(10)
+        halide_result_1 = f1.realize(10)[0]
+        halide_result_2 = f2.realize(10)[0]
 
         # The equivalent C is:
         c_result = np.empty((10), dtype=np.int)
@@ -727,14 +727,14 @@ def main():
 
         # Check they all match.
         for xx in range( 10 ):
-            if halide_result_1(xx) != c_result[xx]:
+            if halide_result_1[xx] != c_result[xx]:
                 print("halide_result_1(%d) = %d instead of %d",
-                       x, halide_result_1(x), c_result[x])
+                       xx, halide_result_1[xx], c_result[xx])
                 return -1
 
-            if halide_result_2(xx) != c_result[xx]:
+            if halide_result_2[xx] != c_result[xx]:
                 print("halide_result_2(%d) = %d instead of %d",
-                       x, halide_result_2(x), c_result[x])
+                       xx, halide_result_2[xx], c_result[xx])
                 return -1
 
 

@@ -588,7 +588,7 @@ def main():
         # consumer.trace_stores()
         # producer.trace_stores()
 
-        halide_result = consumer.realize(800, 600)
+        halide_result = consumer.realize(800, 600)[0]
 
         # Here's the equivalent (serial) C:
 
@@ -674,11 +674,11 @@ def main():
         # should tell you something.
         for yy in range(600):
             for xx in range(800):
-                error = halide_result(xx, yy) - c_result[yy][xx]
+                error = halide_result[xx, yy] - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 if (error < -0.001) or (error > 0.001):
                     raise Exception("halide_result(%d, %d) = %f instead of %f" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 

@@ -5,40 +5,6 @@ namespace PythonBindings {
 
 namespace {
 
-// Helper class that registers a converter that can auto-convert
-// a python [List] into a std::vector<T>, greatly simplifying
-// many API bindings. (Conversions that cannot be done will throw a ValueError.)
-// TODO: move into a general helper header; other files will want to use this
-template<typename T>
-struct PythonListToVectorConverter {
-    static void *convertible(PyObject *obj) {
-        return PyList_Check(obj) ? obj : nullptr;
-    }
-
-    static void construct(PyObject *obj, py::converter::rvalue_from_python_stage1_data* data) {
-        // The contents of this method are unspeakably evil, but apparently this is how
-        // this sort of thing is done in Boost.Python. *shrug*
-        py::list list(py::handle<>(py::borrowed(obj)));
-
-        void* storage = ((py::converter::rvalue_from_python_storage<std::vector<T>>*)data)->storage.bytes;
-        auto *v = new (storage) std::vector<T>();
-
-        const size_t c = py::len(list);
-        v->reserve(c);
-        for (size_t i = 0; i < c; i++) {
-            v->push_back(py::extract<T>(list[i]));
-        }
-        data->convertible = storage;
-    }
-
-    PythonListToVectorConverter() {
-        py::converter::registry::push_back(
-            &convertible,
-            &construct,
-            py::type_id<std::vector<T>>());
-    }
-};
-
 std::string target_repr(const Target &t) {
     std::ostringstream o;
     o << "<halide.Target " << t.to_string() << ">";
@@ -47,51 +13,50 @@ std::string target_repr(const Target &t) {
 
 }  // namespace
 
-void define_target() {
-    // Register a converter that auto-converts from a python list to a vector<Feature>
-    PythonListToVectorConverter<Target::Feature> converter;
-
+void define_target(py::module &m) {
     // Disambiguate some ambigious methods
     int (Target::*natural_vector_size_method)(Type) const = &Target::natural_vector_size;
     bool (Target::*supports_type1_method)(const Type &t) const = &Target::supports_type;
     bool (Target::*supports_type2_method)(const Type &t, DeviceAPI device) const = &Target::supports_type;
 
     auto target_class =
-        py::class_<Target>("Target", py::init<>())
-            .def(py::init<std::string>(py::args("self", "name")))
-            .def(py::init<Target::OS, Target::Arch, int>(py::args("self", "os", "arch", "bits")))
-            .def(py::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>(py::args("self", "os", "arch", "bits", "features")))
+        py::class_<Target>(m, "Target")
+            .def(py::init<>())
+            .def(py::init<const std::string &>())
+            .def(py::init<Target::OS, Target::Arch, int>())
+            .def(py::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>())
 
-            .def(py::self == py::self)
-            .def(py::self != py::self)
+            .def("__eq__", [](const Target &value, Target *value2) { return value2 && value == *value2; })
+            .def("__ne__", [](const Target &value, Target *value2) { return !value2 || value != *value2; })
 
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)
             .def_readwrite("bits", &Target::bits)
 
-            .def("__repr__", &target_repr, py::arg("self"))
-            .def("__str__", &Target::to_string, py::arg("self"))
-            .def("to_string", &Target::to_string, py::arg("self"))
+            .def("__repr__", &target_repr)
+            .def("__str__", &Target::to_string)
+            .def("to_string", &Target::to_string)
 
-            .def("has_feature", &Target::has_feature, py::arg("self"))
-            .def("features_any_of", &Target::features_any_of, (py::arg("self"), py::arg("features")))
-            .def("features_all_of", &Target::features_all_of, (py::arg("self"), py::arg("features")))
+            .def("has_feature", &Target::has_feature)
+            .def("features_any_of", &Target::features_any_of, py::arg("features"))
+            .def("features_all_of", &Target::features_all_of, py::arg("features"))
 
-            .def("set_feature", &Target::set_feature, (py::arg("self"), py::arg("f"), py::arg("value") = true))
-            .def("set_features", &Target::set_features, (py::arg("self"), py::arg("features"), py::arg("value") = true))
-            .def("with_feature", &Target::with_feature, (py::arg("self"), py::arg("f")))
-            .def("without_feature", &Target::without_feature, (py::arg("self"), py::arg("f")))
-            .def("has_gpu_feature", &Target::has_gpu_feature, py::arg("self"))
-            .def("supports_type", supports_type1_method, (py::arg("self"), py::arg("type")))
-            .def("supports_type", supports_type2_method, (py::arg("self"), py::arg("type"), py::arg("device")))
-            .def("supports_device_api", &Target::supports_device_api, (py::arg("self"), py::arg("device")))
-            .def("natural_vector_size", natural_vector_size_method, (py::arg("self"), py::arg("type")))
-            .def("has_large_buffers", &Target::has_large_buffers, py::arg("self"))
-            .def("maximum_buffer_size", &Target::maximum_buffer_size, py::arg("self"))
-            .def("supported", &Target::supported, py::arg("self"))
+            .def("set_feature", &Target::set_feature, py::arg("f"), py::arg("value") = true)
+            .def("set_features", &Target::set_features, py::arg("features"), py::arg("value") = true)
+            .def("with_feature", &Target::with_feature, py::arg("feature"))
+            .def("without_feature", &Target::without_feature, py::arg("feature"))
+            .def("has_gpu_feature", &Target::has_gpu_feature)
+            .def("supports_type", supports_type1_method, py::arg("type"))
+            .def("supports_type", supports_type2_method, py::arg("type"), py::arg("device"))
+            .def("supports_device_api", &Target::supports_device_api, py::arg("device"))
+            .def("natural_vector_size", natural_vector_size_method, py::arg("type"))
+            .def("has_large_buffers", &Target::has_large_buffers)
+            .def("maximum_buffer_size", &Target::maximum_buffer_size)
+            .def("supported", &Target::supported)
+            .def_static("validate_target_string", &Target::validate_target_string, py::arg("name"));
         ;
 
-    py::enum_<Target::OS>("TargetOS")
+    py::enum_<Target::OS>(m, "TargetOS")
         .value("OSUnknown", Target::OS::OSUnknown)
         .value("Linux", Target::OS::Linux)
         .value("Windows", Target::OS::Windows)
@@ -101,7 +66,7 @@ void define_target() {
         .value("QuRT", Target::OS::QuRT)
         .value("NoOS", Target::OS::NoOS);
 
-    py::enum_<Target::Arch>("TargetArch")
+    py::enum_<Target::Arch>(m, "TargetArch")
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
@@ -109,7 +74,7 @@ void define_target() {
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC);
 
-    py::enum_<Target::Feature>("TargetFeature")
+    py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
         .value("Debug", Target::Feature::Debug)
         .value("NoAsserts", Target::Feature::NoAsserts)
@@ -161,12 +126,10 @@ void define_target() {
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
-    py::def("validate_target_string", &Target::validate_target_string);
-
-    py::def("get_host_target", &get_host_target);
-    py::def("get_target_from_environment", &get_target_from_environment);
-    py::def("get_jit_target_from_environment", &get_jit_target_from_environment);
-    py::def("target_feature_for_device_api", &target_feature_for_device_api);
+    m.def("get_host_target", &get_host_target);
+    m.def("get_target_from_environment", &get_target_from_environment);
+    m.def("get_jit_target_from_environment", &get_jit_target_from_environment);
+    m.def("target_feature_for_device_api", &target_feature_for_device_api);
 }
 
 }  // namespace PythonBindings

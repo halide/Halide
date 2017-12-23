@@ -61,7 +61,7 @@ def main():
     # Let's check it did what we expect:
     for yy in range(8):
         for xx in range(8):
-            if result(xx, yy) != xx + yy:
+            if result[xx, yy] != xx + yy:
                 print("Something went wrong!")
                 return -1
 
@@ -87,7 +87,7 @@ def main():
     # that start at (100, 50).
     for yy in range(50, 57):
         for xx in range(100, 105):
-            if shifted(xx, yy) != xx + yy:
+            if shifted[xx, yy] != xx + yy:
                 print("Something went wrong!")
                 return -1
 

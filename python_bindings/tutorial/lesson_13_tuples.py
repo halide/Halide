@@ -88,11 +88,13 @@ def main():
     # Buffers. We call this a Realization. It's equivalent to a
     # std::vector of hl.Buffer/Image objects:
     if True:
-        (im1, im2) = multi_valued.realize(80, 60)
-        assert type(im1) is hl.Buffer_int32
-        assert type(im2) is hl.Buffer_float32
-        assert im1(30, 40) == 30 + 40
-        assert numpy.isclose(im2(30, 40), math.sin(30 * 40))
+        r = multi_valued.realize(80, 60)
+        im1 = r[0]
+        im2 = r[1]
+        assert type(im1) is hl.Buffer
+        assert type(im2) is hl.Buffer
+        assert im1[30, 40] == 30 + 40
+        assert numpy.isclose(im2[30, 40], math.sin(30 * 40))
 
 
     # All Tuple elements are evaluated together over the same domain
@@ -144,8 +146,8 @@ def main():
         # First we create an Image to take the argmax over.
         input_func = hl.Func()
         input_func[x] = hl.sin(x)
-        input = input_func.realize(100)
-        assert type(input) is hl.Buffer_float32
+        input = input_func.realize(100)[0]
+        assert type(input) is hl.Buffer
 
         # Then we defined a 2-valued Tuple which tracks the maximum value
         # its index.
@@ -153,7 +155,7 @@ def main():
 
         # Pure definition.
         # (using [()] for zero-dimensional Funcs is a convention of this python interface)
-        arg_max[()] = (0, input(0))
+        arg_max[()] = (0, input[0])
 
         # Update definition.
         r = hl.RDom(1, 99)
@@ -165,12 +167,12 @@ def main():
 
         # The equivalent C++ is:
         arg_max_0 = 0
-        arg_max_1 = float(input(0))
+        arg_max_1 = float(input[0])
         for r in range(1, 100):
             old_index = arg_max_0
             old_max = arg_max_1
-            new_index = r if (old_max > input(r)) else old_index
-            new_max = max(input(r), old_max)
+            new_index = r if (old_max > input[r]) else old_index
+            new_max = max(input[r], old_max)
             # In a tuple update definition, all loads and computation
             # are done before any stores, so that all Tuple elements
             # are updated atomically with respect to recursive calls
@@ -182,12 +184,13 @@ def main():
         # Let's verify that the Halide and C++ found the same maximum
         # value and index.
         if True:
-            (r0, r1) = arg_max.realize()
+            r = arg_max.realize()
+            (r0, r1) = (r[0], r[1])
 
-            assert type(r0) is hl.Buffer_int32
-            assert type(r1) is hl.Buffer_float32
-            assert arg_max_0 == r0(0)
-            assert numpy.isclose(arg_max_1, r1(0))
+            assert type(r0) is hl.Buffer
+            assert type(r1) is hl.Buffer
+            assert arg_max_0 == r0[()]
+            assert numpy.isclose(arg_max_1, r1[()])
 
 
         # Halide provides argmax and hl.argmin as built-in reductions
@@ -284,12 +287,12 @@ def main():
         escape[x, y] = first_escape[0]
 
         # Realize the pipeline and print the result as ascii art.
-        result = escape.realize(61, 25)
-        assert type(result) is hl.Buffer_int32
+        result = escape.realize(61, 25)[0]
+        assert type(result) is hl.Buffer
         code = " .:-~*={&%#@"
         for yy in range(result.height()):
             for xx in range(result.width()):
-                index = result(xx, yy)
+                index = result[xx, yy]
                 if index < len(code):
                     print("%c" % code[index], end="")
                 else:

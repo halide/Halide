@@ -49,9 +49,6 @@ def test_type():
     h2 = hl.Handle()
     assert h64.same_handle_type(h2)
 
-    assert b1 < f32
-    assert not f32 < b1
-
     assert f32.can_represent(b1)
     assert not b1.can_represent(f32)
 
