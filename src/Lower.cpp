@@ -51,6 +51,7 @@
 #include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StrictifyFloat.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -89,6 +90,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Create a deep-copy of the entire graph of Funcs.
     vector<Function> outputs;
     std::tie(outputs, env) = deep_copy(output_funcs, env);
+
+    strictify_float(env, t);
 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
