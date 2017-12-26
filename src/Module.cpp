@@ -116,6 +116,7 @@ struct ModuleContents {
     std::vector<Module> submodules;
     std::vector<ExternalCode> external_code;
     std::map<std::string, std::string> metadata_name_map;
+    bool any_strict_float{false};
 };
 
 template<>
@@ -161,6 +162,10 @@ void Module::set_auto_schedule(const std::string &auto_schedule) {
     contents->auto_schedule = auto_schedule;
 }
 
+void Module::set_any_strict_float(bool any_strict_float) {
+    contents->any_strict_float = any_strict_float;
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
@@ -171,6 +176,10 @@ const std::string &Module::name() const {
 
 const std::string &Module::auto_schedule() const {
     return contents->auto_schedule;
+}
+
+bool Module::any_strict_float() const {
+    return contents->any_strict_float;
 }
 
 const std::vector<Buffer<>> &Module::buffers() const {

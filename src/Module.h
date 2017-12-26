@@ -97,6 +97,9 @@ public:
      * for that schedule. */
     EXPORT const std::string &auto_schedule() const;
 
+    /** Return whether this module uses strict floating-point anywhere. */
+    EXPORT bool any_strict_float() const;
+
     /** The declarations contained in this module. */
     // @{
     EXPORT const std::vector<Buffer<>> &buffers() const;
@@ -141,6 +144,9 @@ public:
     /** Set the auto_schedule text for the Module. It is an error to call this
      * multiple times for a given Module. */
     EXPORT void set_auto_schedule(const std::string &auto_schedule);
+
+    /** Set whether this module uses strict floating-point directives anywhere. */
+    EXPORT void set_any_strict_float(bool any_strict_float);
 };
 
 /** Link a set of modules together into one module. */

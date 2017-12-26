@@ -151,6 +151,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     builder(nullptr),
     value(nullptr),
     very_likely_branch(nullptr),
+    default_fp_math_md(nullptr),
+    strict_fp_math_md(nullptr),
     target(t),
     void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
     i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
@@ -250,7 +252,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
-    destructor_block(nullptr) {
+    destructor_block(nullptr),
+    strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
 }
 
@@ -372,6 +375,19 @@ void CodeGen_LLVM::init_context() {
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
     very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
+    default_fp_math_md = md_builder.createFPMath(0.0);
+    strict_fp_math_md = md_builder.createFPMath(0.0);
+    builder->setDefaultFPMathTag(default_fp_math_md);
+    llvm::FastMathFlags fast_flags;
+    fast_flags.setAllowReassoc();
+    fast_flags.setNoNaNs();
+    fast_flags.setNoInfs();
+    fast_flags.setNoSignedZeros();
+    // Don't use approximate reciprocals for division. It's too inaccurate even for us.
+    // fast_flags.setAllowReciprocal();
+    fast_flags.setAllowContract(true);
+    fast_flags.setApproxFunc();
+    builder->setFastMathFlags(fast_flags);
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
@@ -493,6 +509,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_allow_strict_float", input.any_strict_float());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -1329,6 +1346,7 @@ void CodeGen_LLVM::visit(const Mod *op) {
 
     int bits;
     if (op->type.is_float()) {
+        // TODO: figure out what to do in strict_float, perhaps use the constrained frem intrinsic.
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
@@ -2655,6 +2673,16 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
+    } else if (op->is_intrinsic(Call::no_float_simplify)) {
+        internal_assert(op->args.size() == 1);
+        value = codegen(op->args[0]);
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+        value = codegen(op->args[0]);
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
