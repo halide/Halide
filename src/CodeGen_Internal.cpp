@@ -396,7 +396,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
 
     options = llvm::TargetOptions();
     #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = !strict_float;
+    options.LessPreciseFPMADOption = !allow_strict_float;
     #endif
     options.AllowFPOpFusion = allow_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = !allow_strict_float;
