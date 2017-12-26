@@ -379,14 +379,18 @@ void CodeGen_LLVM::init_context() {
     strict_fp_math_md = md_builder.createFPMath(0.0);
     builder->setDefaultFPMathTag(default_fp_math_md);
     llvm::FastMathFlags fast_flags;
-    fast_flags.setAllowReassoc();
     fast_flags.setNoNaNs();
     fast_flags.setNoInfs();
     fast_flags.setNoSignedZeros();
     // Don't use approximate reciprocals for division. It's too inaccurate even for us.
     // fast_flags.setAllowReciprocal();
+    #if LLVM_VERSION >= 60
+    // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
+    // turns on all the flags.
+    fast_flags.setAllowReassoc();
     fast_flags.setAllowContract(true);
     fast_flags.setApproxFunc();
+    #endif
     builder->setFastMathFlags(fast_flags);
 
     // Define some types
