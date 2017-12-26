@@ -2703,6 +2703,19 @@ void CodeGen_LLVM::visit(const Call *op) {
                (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
+
+        /* This is fairly dubious, in that fast-math doesn't make much
+         * sense for anything to do with NaNs, but it seems like llvm
+         * suspends the nnan global option when generating this
+         * instruction, but if one places the flag directly on the
+         * instruction it is honored and then the compiler assumes the
+         * comparison always returns false. */
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+
         value = builder->CreateFCmpUNO(a, a);
     } else {
         // It's an extern call.
