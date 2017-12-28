@@ -2,7 +2,7 @@
 halide_library(halide_blur SRCS halide_blur_generator.cpp)
 
 # Final executable
-add_executable(blur_test test.cpp)
+add_executable(blur_test halide_blur_test.cpp)
 target_link_libraries(blur_test PUBLIC halide_blur)
 
 if (NOT MSVC)
