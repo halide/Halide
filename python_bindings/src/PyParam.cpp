@@ -325,9 +325,9 @@ void define_param() {
     param_class
         .def(py::init<Type>())
         .def(py::init<Type, std::string>())
-        .def("__init__", py::make_constructor(&param_ctor_type_value, py::default_call_policies()))
-        .def("__init__", py::make_constructor(&param_ctor_type_name, py::default_call_policies()))
-        .def("__init__", py::make_constructor(&param_ctor_type_name_value, py::default_call_policies()))
+        .def("__init__", py::make_constructor(&param_ctor_type_value, py::default_call_policies(), py::args("type", "value")))
+        .def("__init__", py::make_constructor(&param_ctor_type_name, py::default_call_policies(), py::args("type", "name")))
+        .def("__init__", py::make_constructor(&param_ctor_type_name_value, py::default_call_policies(), py::args("type", "name", "value")))
 
         .def("name", &Param<>::name, py::arg("self"),
              py::return_value_policy<py::copy_const_reference>(),
