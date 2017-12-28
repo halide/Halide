@@ -4,7 +4,7 @@ option(WITH_TEST_ERROR "Build error tests" ON)
 option(WITH_TEST_WARNING "Build warning tests" ON)
 option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
-option(WITH_TEST_GENERATORS "Build Generator tests" ON)
+option(WITH_TEST_GENERATOR "Build Generator tests" ON)
 option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
@@ -84,7 +84,7 @@ if (WITH_TEST_OPENGL)
   endif()
 endif()
 
-if (WITH_TEST_GENERATORS)
+if (WITH_TEST_GENERATOR)
 
   set(GEN_TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generator")
 
@@ -113,7 +113,7 @@ if (WITH_TEST_GENERATORS)
     endif()
 
     add_test("${TARGET}"
-             GROUPS test_generators run_tests)
+             GROUPS test_generator run_tests)
   endfunction(halide_define_aot_test)
 
   # Find all the files of form "foo_generator.cpp" in test/generator
@@ -294,9 +294,6 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
-  #
-  # Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
-  # that setting ScheduleParam via generator_args works properly.
   set(STUBTEST_GENERATOR_ARGS
       untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32
@@ -333,6 +330,13 @@ if (WITH_TEST_GENERATORS)
                                 GENERATOR_ARGS "${MDTEST_GEN_ARGS}"
                                 EXTRA_OUTPUTS stmt assembly)
   target_link_libraries(generator_aot_metadata_tester PUBLIC metadata_tester_ucon)
+
+  # Needs an extra library from this Generator
+  halide_define_aot_test(alias)
+  halide_library(alias_with_offset_42
+                 SRCS ${GEN_TEST_DIR}/alias_generator.cpp
+                 GENERATOR_NAME alias_with_offset_42)
+  target_link_libraries(generator_aot_alias PUBLIC alias_with_offset_42)
 
   halide_define_aot_test(tiled_blur)
   halide_library_from_generator(blur2x2)

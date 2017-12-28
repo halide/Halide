@@ -148,15 +148,14 @@
  *     };
  * \endcode
  *
- * A Generator can also be customized via compile-time parameters (GeneratorParams
- * or ScheduleParams), which affect code generation.
+ * A Generator can also be customized via compile-time parameters (GeneratorParams),
+ * which affect code generation.
  *
- * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
+ * GeneratorParams, Inputs, and Outputs are (by convention) always
  * public and always declared at the top of the Generator class, in the order
  *
  * \code
  *     GeneratorParam(s)
- *     ScheduleParam(s)
  *     Input<Func>(s)
  *     Input<non-Func>(s)
  *     Output<Func>(s)
@@ -238,7 +237,6 @@
 #include "ImageParam.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
-#include "ScheduleParam.h"
 #include "Target.h"
 
 namespace Halide {
@@ -429,6 +427,16 @@ private:
     // appropriate for GeneratorParam<> to be declared outside of a Generator,
     // all reasonable non-testing code should expect this to be non-null.
     GeneratorBase *generator{nullptr};
+};
+
+// This is strictly some syntactic sugar to suppress certain compiler warnings.
+template<typename FROM, typename TO>
+struct Convert {
+    template <typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
+    inline static TO2 value(const FROM &from) { return static_cast<TO2>(from); }
+
+    template <typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
+    inline static TO2 value(const FROM &from) { return from != 0; }
 };
 
 template<typename T>
@@ -698,7 +706,7 @@ public:
 
     std::string call_to_string(const std::string &v) const override {
         std::ostringstream oss;
-        oss << "(" << v << ") ? \"true\" : \"false\"";
+        oss << "std::string((" << v << ") ? \"true\" : \"false\")";
         return oss.str();
     }
 
@@ -953,15 +961,19 @@ template <typename Other, typename T>
 decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) { return a && (T)b; }
 template <typename Other, typename T>
 decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) { return (T)a && b; }
+template <typename T>
+decltype((T)0 && (T)1) operator&&(const GeneratorParam<T> &a, const  GeneratorParam<T> &b) { return (T)a && (T)b; }
 // @}
 
-/** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
+/** Logical or between between GeneratorParam<T> and any type that supports operator|| with T.
  * Returns type of underlying operator||. */
 // @{
 template <typename Other, typename T>
 decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) { return a || (T)b; }
 template <typename Other, typename T>
 decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) { return (T)a || b; }
+template <typename T>
+decltype((T)0 || (T)1) operator||(const GeneratorParam<T> &a, const  GeneratorParam<T> &b) { return (T)a || (T)b; }
 // @}
 
 /* min and max are tricky as the language support for these is in the std
@@ -2469,7 +2481,6 @@ protected:
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
-    template <typename T> using ScheduleParam = Halide::ScheduleParam<T>;
     template <typename T = void> using Buffer = Halide::Buffer<T>;
     template <typename T> using Param = Halide::Param<T>;
     static inline Type Bool(int lanes = 1) { return Halide::Bool(lanes); }
@@ -2503,6 +2514,7 @@ struct StringOrLoopLevel {
     LoopLevel loop_level;
 
     StringOrLoopLevel() = default;
+    /*not-explicit*/ StringOrLoopLevel(const char *s) : string_value(s) {}
     /*not-explicit*/ StringOrLoopLevel(const std::string &s) : string_value(s) {}
     /*not-explicit*/ StringOrLoopLevel(const LoopLevel &loop_level) : loop_level(loop_level) {}
 };
@@ -2532,13 +2544,7 @@ public:
 
     EXPORT virtual ~GeneratorBase();
 
-    EXPORT void set_generator_and_schedule_param_values(const GeneratorParamsMap &params);
-
-    template<typename T>
-    GeneratorBase &set_schedule_param(const std::string &name, const T &value) {
-        find_schedule_param_by_name(name).set(value);
-        return *this;
-    }
+    EXPORT void set_generator_param_values(const GeneratorParamsMap &params);
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -2628,9 +2634,6 @@ protected:
     template<typename T>
     using Output = GeneratorOutput<T>;
 
-    template<typename T>
-    using ScheduleParam = ScheduleParam<T>;
-
     // A Generator's creation and usage must go in a certain phase to ensure correctness;
     // the state machine here is advanced and checked at various points to ensure
     // this is the case.
@@ -2670,9 +2673,6 @@ private:
         // Ordered-list of non-null ptrs to GeneratorParam<> fields.
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
-        // Ordered-list of non-null ptrs to ScheduleParam<> fields.
-        std::vector<Internal::ScheduleParamBase *> schedule_params;
-
         // Ordered-list of non-null ptrs to Input<> fields.
         // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
@@ -2687,9 +2687,6 @@ private:
 
         // Convenience structure to look up GP by name.
         std::map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
-
-        // Convenience structure to look up SP by name.
-        std::map<std::string, Internal::ScheduleParamBase *> schedule_params_by_name;
 
     private:
         // list of synthetic GP's that we dynamically created; this list only exists to simplify
@@ -2713,7 +2710,6 @@ private:
     EXPORT ParamInfo &param_info();
 
     EXPORT Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name);
-    EXPORT Internal::ScheduleParamBase &find_schedule_param_by_name(const std::string &name);
 
     EXPORT void check_scheduled(const char* m) const;
 
@@ -3094,72 +3090,10 @@ public:
 
 class GeneratorStub : public NamesInterface {
 public:
-    // default ctor
-    GeneratorStub() = default;
-
-    // move constructor
-    GeneratorStub(GeneratorStub&& that) : generator(std::move(that.generator)) {}
-
-    // move assignment operator
-    GeneratorStub& operator=(GeneratorStub&& that) {
-        generator = std::move(that.generator);
-        return *this;
-    }
-
-    Target get_target() const { return generator->get_target(); }
-
-   template<typename T>
-   GeneratorStub &set_schedule_param(const std::string &name, const T &value) {
-       generator->set_schedule_param(name, value);
-       return *this;
-   }
-
-   GeneratorStub &schedule() {
-       generator->call_schedule();
-       return *this;
-   }
-
-    // Overloads for first output
-    operator Func() const {
-        return get_first_output();
-    }
-
-    template <typename... Args>
-    FuncRef operator()(Args&&... args) const {
-        return get_first_output()(std::forward<Args>(args)...);
-    }
-
-    template <typename ExprOrVar>
-    FuncRef operator()(std::vector<ExprOrVar> args) const {
-        return get_first_output()(args);
-    }
-
-    Realization realize(std::vector<int32_t> sizes) {
-        return generator->realize(sizes);
-    }
-
-    // Only enable if none of the args are Realization; otherwise we can incorrectly
-    // select this method instead of the Realization-as-outparam variant
-    template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
-    Realization realize(Args&&... args) {
-        return generator->realize(std::forward<Args>(args)...);
-    }
-
-    void realize(Realization r) {
-        generator->realize(r);
-    }
-
-    virtual ~GeneratorStub() {}
-
-protected:
     EXPORT GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
-
-    ScheduleParamBase &get_schedule_param(const std::string &n) const {
-        return generator->find_schedule_param_by_name(n);
-    }
+                         GeneratorFactory generator_factory,
+                         const GeneratorParamsMap &generator_params,
+                         const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
@@ -3174,10 +3108,6 @@ protected:
 
     std::vector<Func> get_output_vector(const std::string &n) const {
         return generator->get_output_vector(n);
-    }
-
-    bool has_generator() const {
-        return generator != nullptr;
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -3200,24 +3130,7 @@ protected:
         return r;
     }
 
-    EXPORT void verify_same_funcs(const Func &a, const Func &b);
-    EXPORT void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
-
-    template<typename T2>
-    void verify_same_funcs(const StubOutputBuffer<T2> &a, const StubOutputBuffer<T2> &b) {
-        verify_same_funcs(a.f, b.f);
-    }
-
-private:
     std::shared_ptr<GeneratorBase> generator;
-
-    Func get_first_output() const {
-        return generator->get_first_output();
-    }
-    explicit GeneratorStub(const GeneratorStub &) = delete;
-    GeneratorStub &operator=(const GeneratorStub &) = delete;
-    explicit GeneratorStub(const GeneratorStub &&) = delete;
-    GeneratorStub &operator=(const GeneratorStub &&) = delete;
 };
 
 }  // namespace Internal
@@ -3278,5 +3191,38 @@ namespace halide_register_generator {
 
 #define HALIDE_REGISTER_GENERATOR(...) \
     _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__))
+
+// HALIDE_REGISTER_GENERATOR_ALIAS() can be used to create an an alias-with-a-particular-set-of-param-values
+// for a given Generator in the build system. Normally, you wouldn't want to do this;
+// however, some existing Halide clients have build systems that make it challenging to
+// specify GeneratorParams inside the build system, and this allows a somewhat simpler
+// customization route for them. It's highly recommended you don't use this for new code.
+//
+// The final argument is really an initializer-list of GeneratorParams, in the form
+// of an initializer-list for map<string, string>:
+//
+//    { { "gp-name", "gp-value"} [, { "gp2-name", "gp2-value" }] }
+//
+// It is specified as a variadic template argument to allow for the fact that the embedded commas
+// would otherwise confuse the preprocessor; since (in this case) all we're going to do is
+// pass it thru as-is, this is fine (and even MSVC's 'broken' __VA_ARGS__ should be OK here).
+#define HALIDE_REGISTER_GENERATOR_ALIAS(GEN_REGISTRY_NAME, ORIGINAL_REGISTRY_NAME, ...) \
+    namespace halide_register_generator { \
+        struct halide_global_ns; \
+        namespace ORIGINAL_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context); \
+        } \
+        namespace GEN_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context); \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context) { \
+                auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context); \
+                g->set_generator_param_values(__VA_ARGS__); \
+                return g; \
+            } \
+        } \
+        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
+    } \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
+                 "HALIDE_REGISTER_GENERATOR_ALIAS must be used at global scope");
 
 #endif  // HALIDE_GENERATOR_H_

@@ -902,6 +902,13 @@ void Function::lock_loop_levels() {
     if (schedule.store_level().is_inlined()) {
         schedule.store_level() = schedule.compute_level();
     }
+    if (contents->init_def.defined()) {
+        contents->init_def.schedule().fuse_level().level.lock();
+    }
+    for (Definition &def : contents->updates) {
+        internal_assert(def.defined());
+        def.schedule().fuse_level().level.lock();
+    }
 }
 
 bool Function::frozen() const {
@@ -989,22 +996,6 @@ public:
         : substitutions(substitutions) {}
 };
 
-class SubstituteScheduleParamExprs : public IRMutator2 {
-    using IRMutator2::visit;
-
-    Expr visit(const Variable *v) override {
-        Expr expr = IRMutator2::visit(v);
-        if (v->param.defined() && v->param.is_bound_before_lowering()) {
-            expr = mutate(v->param.scalar_expr());
-        }
-        return expr;
-    }
-
-public:
-    SubstituteScheduleParamExprs() = default;
-};
-
-
 } // anonymous namespace
 
 Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
@@ -1021,12 +1012,6 @@ Function &Function::substitute_calls(const Function &orig, const Function &subst
     map<FunctionPtr, FunctionPtr> substitutions;
     substitutions.emplace(orig.get_contents(), substitute.get_contents());
     return substitute_calls(substitutions);
-}
-
-Function &Function::substitute_schedule_param_exprs() {
-    SubstituteScheduleParamExprs sub_schedule_params;
-    contents->mutate(&sub_schedule_params);
-    return *this;
 }
 
 // Deep copy an entire Function DAG.
