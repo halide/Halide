@@ -27,14 +27,14 @@ int main(int argc, char **argv) {
         f.set_error_handler(my_error_handler);
 
         error_occurred = false;
-        p.set(2);
+        p.set(2.f);
         f.realize(100, 100);
         if (error_occurred) {
             printf("Error incorrectly raised\n");
             return -1;
         }
 
-        p.set(0);
+        p.set(0.f);
         error_occurred = false;
         f.realize(100, 100);
         if (!error_occurred) {

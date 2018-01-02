@@ -203,22 +203,22 @@ int main(int argc, char **argv) {
         count_calls_val1.compute_root().memoize();
         count_calls_val2.compute_root().memoize();
 
-        val1.set(23);
-        val2.set(42);
+        val1.set<uint8_t>(23);
+        val2.set<uint8_t>(42);
 
         Buffer<uint8_t> out1 = f.realize(256, 256);
         Buffer<uint8_t> out2 = f.realize(256, 256);
 
-        val1.set(42);
+        val1.set<uint8_t>(42);
         Buffer<uint8_t> out3 = f.realize(256, 256);
 
-        val1.set(23);
+        val1.set<uint8_t>(23);
         Buffer<uint8_t> out4 = f.realize(256, 256);
 
-        val1.set(42);
+        val1.set<uint8_t>(42);
         Buffer<uint8_t> out5 = f.realize(256, 256);
 
-        val2.set(57);
+        val2.set<uint8_t>(57);
         Buffer<uint8_t> out6 = f.realize(256, 256);
 
 
