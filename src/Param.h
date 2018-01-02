@@ -5,6 +5,7 @@
 
 #include "Argument.h"
 #include "IR.h"
+#include "Util.h"
 
 /** \file
  *
@@ -22,17 +23,13 @@ class Param {
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 
-    /** True if T is of type void or const void */
-    static const bool T_is_void = std::is_same<typename std::remove_const<T>::type, void>::value;
-
     // This is a deliberately non-existent type that allows us to compile Param<>
     // but provide less-confusing error messages if you attempt to call get<> or set<>
     // without explicit types.
     struct DynamicParamType;
 
-    /** T unless T is (const) void, in which case (const)
-     * uint8_t. Useful for providing return types for operator() */
-    using not_void_T = typename std::conditional<T_is_void, DynamicParamType**, T>::type;
+    /** T unless T is (const) void, in which case pointer-to-useless-type.` */
+    using not_void_T = typename std::conditional<std::is_void<T>::value, DynamicParamType*, T>::type;
 
 
     void check_name() const {
@@ -42,9 +39,14 @@ class Param {
             << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
     }
 
+    // Must be constexpr to allow use in case clauses.
+    inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
+        return (((int) code) << 8) | bits;
+    }
+
 public:
     /** True if the Halide type is not void (or const void). */
-    static constexpr bool has_static_type = !T_is_void;
+    static constexpr bool has_static_type = !std::is_void<T>::value;
 
     /** Get the Halide type of T. Callers should not use the result if
      * has_static_halide_type is false. */
@@ -140,11 +142,49 @@ public:
     }
 
     /** Set the current value of this parameter. Only meaningful when jitting.
-        Asserts if type does not exactly match the Parameter's type. */
-    template<typename T2 = not_void_T>
-    NO_INLINE void set(T2 val) {
-        param.set_scalar<T2>(val);
+        Asserts if type is not losslessly-convertible to Parameter's type. */
+    // @{
+    template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    NO_INLINE void set(const SOME_TYPE &val) {
+        user_assert(Internal::IsRoundtrippable<T>::value(val))
+            << "The value " << val << " of type " << type_of<SOME_TYPE>() << " cannot be losslessly converted to type " << type();
+        param.set_scalar<T>(val);
     }
+
+    // Specialized version for when T = void (thus the type is only known at runtime,
+    // not compiletime). Note that this actually works fine for all Params; we specialize
+    // it just to reduce code size for the common case of T != void.
+    template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    NO_INLINE void set(const SOME_TYPE &val) {
+    #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE) \
+        case halide_type_code(CODE, BITS): \
+            user_assert(Internal::IsRoundtrippable<TYPE>::value(val)) \
+                << "The value " << val << " of type " << type_of<SOME_TYPE>() << " cannot be losslessly converted to type " << type; \
+            param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val)); \
+            break;
+
+        const Type type = param.type();
+        switch (halide_type_code(type.code(), type.bits())) {
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 16, int16_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 32, int32_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 64, int64_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 1, bool)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 8, uint8_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 16, uint16_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 32, uint32_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_uint, 64, uint64_t)
+        HALIDE_HANDLE_TYPE_DISPATCH(halide_type_handle, 64, uint64_t) // Handle types are always set via set_scalar<uint64_t>, not set_scalar<void*>
+        default:
+            internal_error << "Unsupported type in Param::set<" << type << ">\n";
+        }
+
+    #undef HALIDE_HANDLE_TYPE_DISPATCH
+
+    }
+    // @}
 
     /** Get the halide type of the Param */
     Type type() const {
@@ -182,7 +222,10 @@ public:
     }
     // @}
 
-    void set_estimate(const not_void_T &value) {
+    template<typename SOME_TYPE>
+    void set_estimate(const SOME_TYPE &value) {
+        user_assert(Internal::IsRoundtrippable<T>::value(value))
+            << "The value " << value << " cannot be losslessly converted to type " << type();
         param.set_estimate(Expr(value));
     }
 
