@@ -34,7 +34,7 @@ typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
 typedef int (*remote_power_mode_fn)(int);
-typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int);
+typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int, int);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -805,7 +805,8 @@ WEAK int halide_hexagon_set_performance(void *user_context, halide_hexagon_power
                                     perf->bwMegabytesPerSec,
                                     perf->busbwUsagePercentage,
                                     perf->set_latency,
-                                    perf->latency);
+                                    perf->latency,
+                                    perf->powerlevel);
 
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {

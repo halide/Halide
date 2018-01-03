@@ -44,6 +44,7 @@ interface halide_hexagon_remote
                          in unsigned long bwMegabytesPerSec,
                          in unsigned long busbwUsagePercentage,
                          in long set_latency,
-                         in long latency);
+                         in long latency
+                         in long powerlevel);
 
 };

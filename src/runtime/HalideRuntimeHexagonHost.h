@@ -59,10 +59,17 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 
 /** Power modes for Hexagon. */
 typedef enum halide_hexagon_power_mode_t {
-    halide_hexagon_power_low     = 0,
-    halide_hexagon_power_nominal = 1,
-    halide_hexagon_power_turbo   = 2,
-    halide_hexagon_power_default = 3, /// Resets power to its default state.
+    halide_hexagon_power_low          = 0,
+    halide_hexagon_power_low_plus     = 1,
+    halide_hexagon_power_low_2        = 2,
+    halide_hexagon_power_nominal      = 3,
+    halide_hexagon_power_nominal_plus = 4,
+    halide_hexagon_power_turbo        = 5,
+    halide_hexagon_power_default      = 6, /// Resets power to its default state.
+
+    halide_hexagon_power_svs      = halide_hexagon_power_low,
+    halide_hexagon_power_svs_plus = halide_hexagon_power_low_plus,
+    halide_hexagon_power_svs_2    = halide_hexagon_power_low_2,
 
     // These are deprecated.
     halide_hvx_power_low     = halide_hexagon_power_low,
@@ -83,6 +90,7 @@ typedef enum halide_hexagon_power_mode_t {
  *                  higher the value the deeper state of sleep
  *                  that can be entered but the longer it may
  *                  take to awaken. Only values > 0 are supported (1 microsecond is the smallest valid value)
+ * @param powerlevel - for DCVS_v2 powerlevel
  */
 typedef struct {
     bool set_mips;
@@ -93,6 +101,7 @@ typedef struct {
     unsigned short busbwUsagePercentage;
     bool set_latency;
     int latency;
+    int powerlevel;
 } halide_hexagon_power_t;
 
 // This is deprecated.

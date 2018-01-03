@@ -145,10 +145,21 @@ int halide_hexagon_remote_set_performance(
     unsigned int bwMegabytesPerSec,
     unsigned int busbwUsagePercentage,
     int set_latency,
-    int latency) {
+    int latency,
+    int powerlevel) {
 
     HAP_power_request_t request;
+    const HAP_dcvs_voltage_corner_t voltageCorner[]
+        = { HAP_DCVS_VCORNER_SVS,
+            HAP_DCVS_VCORNER_SVSPLUS,
+            HAP_DCVS_VCORNER_SVS2,
+            HAP_DCVS_VCORNER_NOM,
+            HAP_DCVS_VCORNER_NOMPLUS,
+            HAP_DCVS_VCORNER_TURBO,
+            HAP_DCVS_VCORNER_DISABLE,
+            num_power_levels };
 
+    memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_apptype;
     request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
     int retval = HAP_power_set(NULL, &request);
@@ -157,19 +168,37 @@ int halide_hexagon_remote_set_performance(
         return -1;
     }
 
-    request.type = HAP_power_set_mips_bw;
-    request.mips_bw.set_mips        = set_mips;
-    request.mips_bw.mipsPerThread   = mipsPerThread;
-    request.mips_bw.mipsTotal       = mipsTotal;
-    request.mips_bw.set_bus_bw      = set_bus_bw;
-    request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
-    request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
-    request.mips_bw.set_latency     = set_latency;
-    request.mips_bw.latency         = latency;
-    retval = HAP_power_set(NULL, &request);
-    if (0 != retval) {
-        log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
-        return -1;
+    if (use_dlopenbuf()) {
+        memset(&request, 0, sizeof(HAP_power_request_t));
+        request.type = HAP_power_set_DCVS_v2;
+        request.dcvs_v2.dcvs_enable = TRUE;
+        request.dcvs_v2.dcvs_option = HAP_power_dcvs_v2_payload::HAP_DCVS_V2_POWER_SAVER_MODE;
+        request.dcvs_v2.set_dcvs_params = TRUE;
+        request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
+        request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
+        request.dcvs_v2.dcvs_params.target_corner = voltageCorner[powerlevel];
+        request.dcvs_v2.set_latency     = set_latency;
+        request.dcvs_v2.latency         = latency;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_dcvs_v2) failed (%d)\n", retval);
+            return -1;
+        }
+    } else {
+        request.type = HAP_power_set_mips_bw;
+        request.mips_bw.set_mips        = set_mips;
+        request.mips_bw.mipsPerThread   = mipsPerThread;
+        request.mips_bw.mipsTotal       = mipsTotal;
+        request.mips_bw.set_bus_bw      = set_bus_bw;
+        request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
+        request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
+        request.mips_bw.set_latency     = set_latency;
+        request.mips_bw.latency         = latency;
+        retval = HAP_power_set(NULL, &request);
+        if (0 != retval) {
+            log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
+            return -1;
+        }
     }
     return 0;
 }
@@ -267,7 +296,8 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
                                                  bwMegabytesPerSec,
                                                  busbwUsagePercentage,
                                                  set_latency,
-                                                 latency);
+                                                 latency,
+                                                 mode);
 }
 
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
