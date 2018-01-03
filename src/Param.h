@@ -147,7 +147,7 @@ public:
     template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
     NO_INLINE void set(const SOME_TYPE &val) {
         user_assert(Internal::IsRoundtrippable<T>::value(val))
-            << "The value " << val << " of type " << type_of<SOME_TYPE>() << " cannot be losslessly converted to type " << type();
+            << "The value " << val << " cannot be losslessly converted to type " << type();
         param.set_scalar<T>(val);
     }
 
@@ -159,7 +159,7 @@ public:
     #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE) \
         case halide_type_code(CODE, BITS): \
             user_assert(Internal::IsRoundtrippable<TYPE>::value(val)) \
-                << "The value " << val << " of type " << type_of<SOME_TYPE>() << " cannot be losslessly converted to type " << type; \
+                << "The value " << val << " cannot be losslessly converted to type " << type; \
             param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val)); \
             break;
 

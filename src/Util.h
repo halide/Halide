@@ -355,16 +355,27 @@ struct StaticCast {
 // or dropping of fractional parts).
 template<typename TO>
 struct IsRoundtrippable {
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value>::type * = nullptr>
-    inline constexpr static bool value(const FROM &from) {
-        return !std::is_same<TO, FROM>::value && std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value ?
-               StaticCast<FROM>::value(StaticCast<TO>::value(from)) == from :
-               true;
-    }
-
-    template <typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_convertible<FROM, TO>::value>::type * = nullptr>
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<
+        !std::is_convertible<FROM, TO>::value
+    >::type * = nullptr>
     inline constexpr static bool value(const FROM &from) {
         return false;
+    }
+
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<
+        std::is_convertible<FROM, TO>::value &&
+        std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value
+    >::type * = nullptr>
+    inline constexpr static bool value(const FROM &from) {
+        return StaticCast<FROM>::value(StaticCast<TO>::value(from)) == from;
+    }
+
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<
+        std::is_convertible<FROM, TO>::value &&
+        !(std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value)
+    >::type * = nullptr>
+    inline constexpr static bool value(const FROM &from) {
+        return true;
     }
 };
 
