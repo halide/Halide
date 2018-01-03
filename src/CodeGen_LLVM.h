@@ -459,7 +459,7 @@ private:
      * to this block. */
     llvm::BasicBlock *destructor_block;
 
-    /** Turn off all unsade math flags in scopes while this is set. */
+    /** Turn off all unsafe math flags in scopes while this is set. */
     bool strict_float;
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
