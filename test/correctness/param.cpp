@@ -117,6 +117,61 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Test copy ctor between void and non-void Params
+    {
+        Param<int32_t> u;
+
+        Func f("f");
+        f(x) = u;
+
+        u.set(17);
+        Buffer<int32_t> out_17 = f.realize(1);
+        assert(out_17(0) == 17);
+
+        // You can always construct a Param<void> from a Param<nonvoid>
+        Param<> u_alias = u;
+        u_alias.set(123);
+        Buffer<int32_t> out_123 = f.realize(1);
+        assert(out_123(0) == 123);
+
+        // You can also construct Param<nonvoid> from Param<void>,
+        // but only if the runtime type of the RHS matches the static type
+        // of the LHS (otherwise, assert-fails)
+        Param<int32_t> u_alias2 = u_alias;
+        u_alias2.set(124);
+        Buffer<int32_t> out_124 = f.realize(1);
+        assert(out_124(0) == 124);
+    }
+
+    // Test operator= between void and non-void Params
+    {
+        Param<int32_t> u;
+
+        Func f("f");
+        f(x) = u;
+
+        u.set(17);
+        Buffer<int32_t> out_17 = f.realize(1);
+        assert(out_17(0) == 17);
+
+        // You can always do Param<void> = Param<nonvoid> (LHS takes on type of RHS)
+        Param<> u_alias(Float(64));
+        u_alias = u;
+        assert(u_alias.type() == Int(32));
+        u_alias.set(123);
+        Buffer<int32_t> out_123 = f.realize(1);
+        assert(out_123(0) == 123);
+
+        // You can also do Param<nonvoid> = Param<void>,
+        // but only if the runtime type of the RHS matches the static type
+        // of the LHS (otherwise, assert-fails)
+        Param<int32_t> u_alias2;
+        u_alias2 = u_alias;
+        u_alias2.set(124);
+        Buffer<int32_t> out_124 = f.realize(1);
+        assert(out_124(0) == 124);
+    }
+
     printf("Success!\n");
     return 0;
 }

@@ -44,6 +44,9 @@ class Param {
         return (((int) code) << 8) | bits;
     }
 
+    // Allow all Param<> variants friend access to each other
+    template<typename OTHER_TYPE> friend class Param;
+
 public:
     /** True if the Halide type is not void (or const void). */
     static constexpr bool has_static_type = !std::is_void<T>::value;
@@ -122,6 +125,37 @@ public:
         check_name();
         set_range(min, max);
         set<not_void_T>(val);
+    }
+
+    /** Construct a Param<void> from any other Param. */
+    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    Param(const Param<OTHER_TYPE> &other) : param(other.param) {
+        // empty
+    }
+
+    /** Construct a Param<non-void> from a Param with matching type.
+     * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
+    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    Param(const Param<OTHER_TYPE> &other) : param(other.param) {
+        user_assert(other.type() == type_of<T>())
+            << "Param<" << type_of<T>() << "> cannot be constructed from a Param with type " << other.type();
+    }
+
+    /** Copy a Param<void> from any other Param. */
+    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    Param<T> &operator=(const Param<OTHER_TYPE> &other) {
+        param = other.param;
+        return *this;
+    }
+
+    /** Copy a Param<non-void> from a Param with matching type.
+     * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
+    template <typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    Param<T> &operator=(const Param<OTHER_TYPE> &other) {
+        user_assert(other.type() == type_of<T>())
+            << "Param<" << type_of<T>() << "> cannot be copied from a Param with type " << other.type();
+        param = other.param;
+        return *this;
     }
 
     /** Get the name of this parameter */
