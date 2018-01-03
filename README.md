@@ -329,7 +329,7 @@ scheduling directive. To enable the `hexagon` scheduling directive, include the
 combination of targets is to use the HVX target features with an x86 linux
 host (to use the simulator) or with an ARM android target (to use Hexagon DSP hardware).
 For examples of using the `hexagon` scheduling directive on both the simulator and a
-Hexagon DSP, see the HelloHexagon example app.
+Hexagon DSP, see the blur example app.
 
 To build and run an example app using the Hexagon target,
   1. Obtain and build LLVM and Clang v4.0 or later from llvm.org
@@ -368,14 +368,14 @@ Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
 In addition to running Hexagon code on device, Halide also supports running Hexagon
 code on the simulator from the Hexagon tools.
 
-To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the simulator:
+To build and run the blur example in Halide/apps/blur on the simulator:
 
-    cd apps/HelloHexagon
+    cd apps/blur
     export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v60/hexagon_sim_remote
     export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.0/Tools/
-    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
+    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. HL_TARGET=host-hvx_128 make test
 
-#### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
+#### To build and run the blur example in Halide/apps/blur on Android:
 
 To build the example for Android, first ensure that you have a standalone toolchain
 created from the NDK using the make-standalone-toolchain.sh script:
@@ -384,7 +384,7 @@ created from the NDK using the make-standalone-toolchain.sh script:
     export ANDROID_ARM64_TOOLCHAIN=<path to put new arm64 toolchain>
     $ANDROID_NDK_HOME/build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
 
-Now build and run the HelloHexagon example:
+Now build and run the blur example using the script to run it on device:
 
     export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.0/Tools/
-    make run-arm-64-android
+    HL_TARGET=arm-64-android-hvx_128 ./adb_run_on_device.sh
