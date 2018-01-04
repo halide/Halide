@@ -1307,7 +1307,7 @@ inline Expr is_nan(Expr x) {
     Type t = Bool(x.type().lanes());
     if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_nan_f64", {std::move(x)}, Internal::Call::PureExtern);
-    } else if (x.type().element_of() == Float(64)) {
+    } else if (x.type().element_of() == Float(16)) {
         return Internal::Call::make(t, "is_nan_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         Type ft = x.type().with_code(Type::Float);

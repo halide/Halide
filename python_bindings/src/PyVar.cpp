@@ -1,118 +1,72 @@
 #include "PyVar.h"
 
-#include <boost/format.hpp>
-#include <boost/python.hpp>
-#include <string>
-
-#include "Halide.h"
-
 #include "PyBinaryOperators.h"
 
-namespace h = Halide;
+namespace Halide {
+namespace PythonBindings {
 
-bool var_is_implicit0(h::Var &that) {
-    return that.is_implicit();
+namespace {
+
+std::string var_repr(const Var &var) {
+    std::ostringstream o;
+    o << "<halide.Var '" << var.name() << "'>";
+    return o.str();
 }
 
-bool var_is_implicit1(const std::string name) {
-    return h::Var::is_implicit(name);
-}
-
-int var_implicit_index0(h::Var &that) {
-    return that.is_implicit();
-}
-
-int var_implicit_index1(const std::string name) {
-    return h::Var::is_implicit(name);
-}
-
-bool var_is_placeholder0(h::Var &that) {
-    return that.is_placeholder();
-}
-
-bool var_is_placeholder1(const std::string name) {
-    return h::Var::is_placeholder(name);
-}
-
-h::Expr var_as_expr(h::Var &that) {
-    return static_cast<h::Expr>(that);
-}
-
-std::string var_repr(const h::Var &var) {
-    std::string repr;
-    boost::format f("<halide.Var '%s'>");
-    repr = boost::str(f % var.name());
-    return repr;
-}
+}  // namespace
 
 void define_var() {
-    using Halide::Var;
+    bool (Var::*is_implicit_var)() const = &Var::is_implicit;
+    int (Var::*implicit_index_var)() const = &Var::implicit_index;
+    bool (Var::*is_placeholder_var)() const = &Var::is_placeholder;
+    Expr (Var::*as_expr_method)() const = &Var::operator Expr;
 
-    namespace p = boost::python;
+    // TODO: see below
+    // bool (*is_implicit_string)(const std::string &) = &Var::is_implicit;
+    // int (*implicit_index_string)(const std::string &) = &Var::implicit_index;
+    // bool (*is_placeholder_string)(const std::string &) = &Var::is_placeholder;
 
-    auto var_class = p::class_<Var>("Var",
-                                    "A Halide variable, to be used when defining functions. It is just"
-                                    "a name, and can be reused in places where no name conflict will"
-                                    "occur. It can be used in the left-hand-side of a function"
-                                    "definition, or as an Expr. As an Expr, it always has type Int(32).\n"
-                                    "\n"
-                                    "Constructors::\n"
-                                    "Var()      -- Construct Var with an automatically-generated unique name\n"
-                                    "Var(name)  -- Construct Var with the given string name.\n",
-                                    p::init<std::string>(p::args("self", "name")))
-                         .def(p::init<>(p::arg("self")))
-                         //.add_property("name", &Var::name) // "Get the name of a Var.")
-                         .def("name", &Var::name, p::arg("self"),
-                              p::return_value_policy<p::copy_const_reference>(),
-                              "Get the name of a Var.")
-                         .def("same_as", &Var::same_as, p::args("self", "other"), "Test if two Vars are the same.")
-                         .def("__eq__", &Var::same_as, p::args("self", "other"), "Test if two Vars are the same.")
-                         //.def(self == p::other<Var>())
-
-                         .def("implicit", &Var::implicit, p::arg("n"),
-                              "Implicit var constructor. Implicit variables are injected "
-                              "automatically into a function call if the number of arguments "
-                              "to the function are fewer than its dimensionality and a "
-                              "placeholder (\"_\") appears in its argument list. Defining a "
-                              "function to equal an expression containing implicit variables "
-                              "similarly appends those implicit variables, in the same order, "
-                              "to the left-hand-side of the definition where the placeholder "
-                              "('_') appears.")
-                         .staticmethod("implicit")
-                         .def("is_implicit", &var_is_implicit0, p::arg("self"),
-                              "Return whether the variable name is of the form for an implicit argument.")
-                         .def("name_is_implicit", &var_is_implicit1, p::arg("name"),
-                              "Return whether a variable name is of the form for an implicit argument.")
-                         .staticmethod("name_is_implicit")
-
-                         .def("implicit_index", &var_implicit_index0, p::arg("self"),
-                              "Return the argument index for a placeholder argument given its "
-                              "name. Returns 0 for \\ref _0, 1 for \\ref _1, etc. "
-                              "Returns -1 if the variable is not of implicit form. ")
-                         .def("name_implicit_index", &var_implicit_index1, p::arg("name"),
-                              "Return the argument index for a placeholder argument given its "
-                              "name. Returns 0 for \\ref _0, 1 for \\ref _1, etc. "
-                              "Returns -1 if the variable is not of implicit form. ")
-                         .staticmethod("name_implicit_index")
-
-                         .def("is_placeholder", &var_is_placeholder0, p::arg("self"),
-                              "Test if a var is the placeholder variable \\ref _")
-                         .def("name_is_placeholder", &var_is_placeholder1, p::arg("name"),
-                              "Test if a var is the placeholder variable \\ref _")
-                         .staticmethod("name_is_placeholder")
-
-                         .def("expr", &var_as_expr, p::arg("self"),  //operator Expr() const
-                              "A Var can be treated as an Expr of type Int(32)")
-
-                         .def("outermost", &Var::outermost,  // no args
-                              "A Var that represents the location outside the outermost loop.")
-                         .staticmethod("outermost")
-
-                         .def("__repr__", &var_repr, p::arg("self"));
+    auto var_class =
+        py::class_<Var>("Var", py::init<>())
+            .def(py::init<std::string>())
+            .def("name", &Var::name, py::return_value_policy<py::copy_const_reference>())
+            .def("same_as", &Var::same_as)
+            .def("implicit", &Var::implicit).staticmethod("implicit")
+            .def("is_implicit", is_implicit_var)
+            .def("implicit_index", implicit_index_var)
+            .def("is_placeholder", is_placeholder_var)
+            // TODO: Boost.Python doesn't let you (reliably) provide a static method and member
+            // method with the same name in Python 2.7 (though it does in Python3). Disable
+            // these bindings for now.
+            // .def("is_implicit", is_implicit_string).staticmethod("is_implicit")
+            // .def("implicit_index", implicit_index_string).staticmethod("implicit_index")
+            // .def("is_placeholder", is_placeholder_string).staticmethod("is_placeholder")
+            .def("outermost", &Var::outermost).staticmethod("outermost")
+            .def("__repr__", &var_repr)
+            .def("__str__", &Var::name, py::return_value_policy<py::copy_const_reference>())
+            // TODO: Python doesn't have explicit type-conversion casting;
+            // providing an explicit convert-to-Expr method here seems potentially
+            // useful. Overthinking it? Is the best name 'as_expr()', 'expr()', or something else?
+            .def("as_expr", as_expr_method)
     ;
 
     add_binary_operators(var_class);
-    add_binary_operators_with<h::Expr>(var_class);
+    add_binary_operators_with<Expr>(var_class);
 
-    p::implicitly_convertible<Var, h::Expr>();
+    py::implicitly_convertible<Var, Expr>();
+
+    py::scope().attr("_") = py::object(Halide::_);
+    py::scope().attr("_0") = py::object(Halide::_0);
+    py::scope().attr("_1") = py::object(Halide::_1);
+    py::scope().attr("_2") = py::object(Halide::_2);
+    py::scope().attr("_3") = py::object(Halide::_3);
+    py::scope().attr("_4") = py::object(Halide::_4);
+    py::scope().attr("_5") = py::object(Halide::_5);
+    py::scope().attr("_6") = py::object(Halide::_6);
+    py::scope().attr("_7") = py::object(Halide::_7);
+    py::scope().attr("_8") = py::object(Halide::_8);
+    py::scope().attr("_9") = py::object(Halide::_9);
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide
