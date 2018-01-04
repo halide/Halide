@@ -6,11 +6,8 @@
 
 #include "halide_benchmark.h"
 
-#include "matmul_cpu.h"
-#include "matmul_hvx64.h"
-#include "matmul_hvx128.h"
+#include "matmul.h"
 
-#include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 
 template <typename T>
@@ -21,41 +18,32 @@ T clamp(T x, T min, T max) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 6) {
-        printf("Usage: %s (cpu|hvx64) timing_iterations M N K\n", argv[0]);
+    if (argc < 5) {
+        printf("Usage: %s timing_iterations M N K\n", argv[0]);
         return 0;
     }
 
-    int (*pipeline)(halide_buffer_t *, halide_buffer_t*, halide_buffer_t*);
-    if (strcmp(argv[1], "cpu") == 0) {
-        pipeline = matmul_cpu;
-        printf("Using CPU schedule\n");
-    } else if (strcmp(argv[1], "hvx64") == 0) {
-        pipeline = matmul_hvx64;
-        printf("Using HVX 64 schedule\n");
-    } else if (strcmp(argv[1], "hvx128") == 0) {
-        pipeline = matmul_hvx128;
-        printf("Using HVX 128 schedule\n");
-    } else {
-        printf("Unknown schedule, valid schedules are cpu, hvx64, or hvx128\n");
-        return -1;
-    }
+    int iterations = atoi(argv[1]);
 
-    int iterations = atoi(argv[2]);
+    const int M = atoi(argv[2]);
+    const int N = atoi(argv[3]);
+    const int K = atoi(argv[4]);
 
-    const int M = atoi(argv[3]);
-    const int N = atoi(argv[4]);
-    const int K = atoi(argv[5]);
-
-    // Hexagon's device_malloc implementation will also set the host
-    // pointer if it is null, giving a zero copy buffer.
     Halide::Runtime::Buffer<uint8_t> mat_a(nullptr, N, M);
     Halide::Runtime::Buffer<uint8_t> mat_b(nullptr, K, N);
     Halide::Runtime::Buffer<uint32_t> mat_ab(nullptr, K, M);
 
+#ifdef HALIDE_RUNTIME_HEXAGON
+    // Hexagon's device_malloc implementation will also set the host
+    // pointer if it is null, giving a zero copy buffer.
     mat_a.device_malloc(halide_hexagon_device_interface());
     mat_b.device_malloc(halide_hexagon_device_interface());
     mat_ab.device_malloc(halide_hexagon_device_interface());
+#else
+    mat_a.allocate();
+    mat_b.allocate();
+    mat_ab.allocate();
+#endif
 
     // Fill the input buffer with random data.
     mat_a.for_each_value([&](uint8_t &x) {
@@ -65,14 +53,16 @@ int main(int argc, char **argv) {
         x = static_cast<uint8_t>(rand());
     });
 
+#ifdef HALIDE_RUNTIME_HEXAGON
     // To avoid the cost of powering HVX on in each call of the
     // pipeline, power it on once now. Also, set Hexagon performance to turbo.
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(nullptr);
+#endif
 
     printf("Running pipeline...\n");
     double time = Halide::Tools::benchmark(iterations, 1, [&]() {
-        int result = pipeline(mat_a, mat_b, mat_ab);
+        int result = matmul(mat_a, mat_b, mat_ab);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
         }
@@ -80,10 +70,12 @@ int main(int argc, char **argv) {
 
     printf("Done, time: %g s\n", time);
 
+#ifdef HALIDE_RUNTIME_HEXAGON
     // We're done with HVX, power it off, and reset the performance mode
     // to default to save power.
     halide_hexagon_power_hvx_off(nullptr);
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
+#endif
 
     // Copy the output back to the host. If the buffer is zero-copy (as
     // it should be on a real device), this will be a no-op.
