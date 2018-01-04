@@ -1,5 +1,5 @@
 ; Note that this is only used for LLVM 6.0+
-define weak_odr <16 x i8>  @pavgb(<16 x i8> %a, <16 x i8> %b) nounwind alwaysinline {
+define weak_odr <16 x i8>  @pavgbx16(<16 x i8> %a, <16 x i8> %b) nounwind alwaysinline {
   %1 = zext <16 x i8> %a to <16 x i32>
   %2 = zext <16 x i8> %b to <16 x i32>
   %3 = add nuw nsw <16 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
@@ -10,7 +10,7 @@ define weak_odr <16 x i8>  @pavgb(<16 x i8> %a, <16 x i8> %b) nounwind alwaysinl
 }
 
 ; Note that this is only used for LLVM 6.0+
-define weak_odr <8 x i16>  @pavgw(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+define weak_odr <8 x i16>  @pavgwx8(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
   %1 = zext <8 x i16> %a to <8 x i32>
   %2 = zext <8 x i16> %b to <8 x i32>
   %3 = add nuw nsw <8 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
