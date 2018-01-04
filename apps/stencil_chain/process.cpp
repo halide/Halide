@@ -2,7 +2,7 @@
 #include <chrono>
 
 #include "stencil_chain.h"
-#include "stencil_chain_auto_schedule_old.h"
+//#include "stencil_chain_auto_schedule_old.h"
 #include "stencil_chain_auto_schedule.h"
 
 #include "halide_benchmark.h"
@@ -39,10 +39,10 @@ int main(int argc, char **argv) {
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
     // Old auto-scheduler version
-    double best_auto_old = benchmark(timing, 1, [&]() {
+    /*double best_auto_old = benchmark(timing, 1, [&]() {
         stencil_chain_auto_schedule_old(input, output);
     });
-    printf("Old auto-scheduler time: %gms\n", best_auto_old * 1e3);
+    printf("Old auto-scheduler time: %gms\n", best_auto_old * 1e3);*/
 
     // New auto-scheduler version
     double best_auto = benchmark(timing, 1, [&]() {

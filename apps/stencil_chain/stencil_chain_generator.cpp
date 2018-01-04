@@ -18,6 +18,7 @@ public:
 
         Func f("input_wrap");
         f(x, y) = input(x, y);
+        //f(x, y) = x + y;
 
         stages.push_back(f);
 
@@ -32,6 +33,7 @@ public:
             f(x, y) = e;
             stages.push_back(f);
         }
+        std::cout << "\n\n\n";
 
         output(x, y) = stages.back()(x, y);
 

@@ -366,7 +366,19 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
     if (!cost.defined()) {
         return Cost();
     }
-    return Cost(simplify(size * cost.arith), simplify(size * cost.memory));
+    Cost total(simplify(size * cost.arith), simplify(size * cost.memory));
+
+    /*debug(0) << "\n****STAGE COST Of func: " << func << ", stage: " << stage << "\n";
+    debug(0) << "Bounds:\n";
+    for (const auto &iter : bounds) {
+        debug(0) << "\t" << iter.first << " -> min: " << iter.second.min << ", max: " << iter.second.max << "\n";
+    }
+    debug(0) << "\n";
+    debug(0) << "Size: " << size << "\n";
+    debug(0) << "Cost: " << cost << "\n";
+    debug(0) << "Total cost: " << total << "\n";
+    debug(0) << "\n";*/
+    return total;
 }
 
 Cost RegionCosts::stage_region_cost(string func, int stage, const Box &region,
