@@ -429,7 +429,7 @@ struct Test {
             check(use_avx512_skylake ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
 
             const char *check_suffix = "";
-            if (w > 3)
+            if (use_avx2 && w > 3)
                 check_suffix = "*ymm";
             check(std::string("packssdw") + check_suffix, 4*w, i16_sat(i32_1));
             check(std::string("packsswb") + check_suffix, 8*w, i8_sat(i16_1));
