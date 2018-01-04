@@ -615,6 +615,7 @@ enum RuntimeKind {
     OpenGL,
     OpenGLCompute,
     Hexagon,
+    D3D12Compute,
     MaxRuntimeKind
 };
 
@@ -647,6 +648,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX_128, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
+        one_gpu.set_feature(Target::D3D12Compute, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCL:
@@ -675,6 +677,13 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case Hexagon:
             one_gpu.set_feature(Target::HVX_64);
             module_name = "hexagon";
+            break;
+        case D3D12Compute:
+            one_gpu.set_feature(Target::D3D12Compute);
+            module_name = "d3d12compute";
+            #if !defined(_WIN32)
+                internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
+            #endif
             break;
         default:
             module_name = "shared runtime";
@@ -813,6 +822,12 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         JITModule m = make_module(for_module, target, Hexagon, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::D3D12Compute)) {
+        JITModule m = make_module(for_module, target, D3D12Compute, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }

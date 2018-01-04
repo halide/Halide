@@ -175,6 +175,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opengl_run",
         "halide_openglcompute_run",
         "halide_metal_run",
+        "halide_d3d12compute_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
         "halide_msan_annotate_memory_is_initialized",

@@ -22,6 +22,7 @@ set(RUNTIME_CPP
   cache
   can_use_target
   cuda
+  d3d12compute
   destructors
   device_interface
   errors
@@ -226,6 +227,7 @@ set(RUNTIME_HEADER_FILES
   HalideRuntimeMetal.h
   HalideRuntimeOpenGL.h
   HalideRuntimeOpenGLCompute.h
+  HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
 )
@@ -260,6 +262,7 @@ set(HEADER_FILES
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
+  CodeGen_D3D12Compute_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
   CodeGen_LLVM.h
@@ -418,6 +421,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
+  CodeGen_D3D12Compute_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
   CodeGen_Hexagon.cpp

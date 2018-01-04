@@ -76,6 +76,7 @@ DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_CPP_INITMOD(d3d12compute)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
@@ -882,6 +883,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
+        }
+        if (t.has_feature(Target::D3D12Compute)) {
+            // TODO(marcos) : I think there's more to be done here...
+            modules.push_back(get_initmod_d3d12compute(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));

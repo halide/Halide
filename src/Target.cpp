@@ -264,6 +264,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    { "d3d12compute", Target::D3D12Compute },
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -505,6 +506,9 @@ bool Target::supported() const {
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
+#if !defined(WITH_D3D12)
+    bad |= has_feature(Target::D3D12Compute);
+#endif
     return !bad;
 }
 
@@ -527,6 +531,8 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         if (t.is_float() && t.bits() == 64) {
             return has_feature(Target::CLDoubles);
         }
+    } else if (device == DeviceAPI::D3D12Compute) {
+        // TODO(marcos): check for double support (I think it is mandatory on D3D12...)
     }
 
     return true;
@@ -550,6 +556,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
     case DeviceAPI::Hexagon:       return Target::HVX_128;
+    case DeviceAPI::D3D12Compute:  return Target::D3D12Compute;
     default:                       return Target::FeatureEnd;
     }
 }

@@ -86,7 +86,8 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
-        FeatureEnd = halide_target_feature_end
+        D3D12Compute = halide_target_feature_d3d12compute,
+        FeatureEnd = halide_target_feature_end,
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
@@ -172,12 +173,12 @@ struct Target {
 
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
-     * CUDA, OpenCL, and Metal. We do not include OpenGL, because it
-     * is not capable of gpgpu, and is not scheduled via
+     * CUDA, OpenCL, Metal and D3D12Compute. We do not include OpenGL,
+     * because it is not capable of gpgpu, and is not scheduled via
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal) || has_feature(D3D12Compute);
     }
 
     /** Does this target allow using a certain type. Generally all

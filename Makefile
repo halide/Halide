@@ -568,6 +568,7 @@ RUNTIME_CPP_COMPONENTS = \
   cache \
   can_use_target \
   cuda \
+  d3d12compute \
   destructors \
   device_interface \
   errors \
