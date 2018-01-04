@@ -219,7 +219,7 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
-        {Target::FeatureEnd, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
          i8_sat(wild_i16x_ + wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
          i8_sat(wild_i16x_ + wild_i16x_)},
