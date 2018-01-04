@@ -1573,6 +1573,67 @@ WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct hal
     return 0;
 }
 
+WEAK int halide_d3d12compute_device_crop(void *user_context,
+                                         const struct halide_buffer_t *src,
+                                         struct halide_buffer_t *dst) {
+    TRACELOG;
+    debug(user_context) << "halide_d3d12compute_device_crop called.\n";
+/*
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error != 0) {
+        return metal_context.error;
+    }
+
+    dst->device_interface = src->device_interface;
+    int64_t offset = 0;
+    for (int i = 0; i < src->dimensions; i++) {
+        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
+    }
+    offset *= src->type.bytes();
+
+    device_handle *new_handle = (device_handle *)malloc(sizeof(device_handle));
+    if (new_handle == NULL) {
+        error(user_context) << "halide_metal_device_crop: malloc failed making device handle.\n";
+        return halide_error_code_out_of_memory;
+    }
+
+    retain_ns_object(((device_handle *)src->device)->buf);
+    new_handle->buf = ((device_handle *)src->device)->buf;
+    new_handle->offset = ((device_handle *)src->device)->offset + offset;
+    dst->device = (uint64_t)new_handle;
+*/
+    return 0;
+}
+
+WEAK int halide_d3d12compute_device_release_crop(void *user_context,
+                                                 struct halide_buffer_t *buf) {
+    // Basically the same code as in halide_metal_device_free, but with
+    // enough differences to require separate code.
+
+    TRACELOG;
+    debug(user_context) << "halide_d3d12compute_device_release_crop called on buf "
+                        << buf << " device is " << buf->device << "\n";
+    if (buf->device == 0) {
+        return 0;
+    }
+    /*
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    device_handle *handle = (device_handle *)buf->device;
+    
+    release_ns_object(handle->buf);
+    free(handle);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+    */
+    return 0;
+}
+
 WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer) {
     TRACELOG;
     halide_assert(user_context, buf->device == 0);
@@ -1635,6 +1696,9 @@ WEAK halide_device_interface_impl_t d3d12compute_device_interface_impl = {
     halide_d3d12compute_copy_to_device,
     halide_d3d12compute_device_and_host_malloc,
     halide_d3d12compute_device_and_host_free,
+    halide_default_buffer_copy,
+    halide_d3d12compute_device_crop,
+    halide_d3d12compute_device_release_crop,
     halide_d3d12compute_wrap_buffer,
     halide_d3d12compute_detach_buffer
 };
@@ -1648,6 +1712,9 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
     &d3d12compute_device_interface_impl
