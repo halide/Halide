@@ -119,6 +119,7 @@ protected:
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
+    static bool llvm_WebAssembly_enabled;
 
     const Module *input_module;
     std::unique_ptr<llvm::Module> module;

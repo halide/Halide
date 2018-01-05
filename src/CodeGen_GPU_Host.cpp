@@ -538,4 +538,8 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 #endif
 
+#ifdef WITH_WEBASSEMBLY
+template class CodeGen_GPU_Host<CodeGen_WebAssembly>;
+#endif
+
 }}

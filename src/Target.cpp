@@ -203,6 +203,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
+    {"webassembly", Target::WebAssembly},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -492,6 +493,9 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
+#endif
+#if !defined(WITH_WEBASSEMBLY)
+    bad |= arch == Target::WebAssembly;
 #endif
 #if !defined(WITH_PTX)
     bad |= has_feature(Target::CUDA);

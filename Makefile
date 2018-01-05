@@ -64,6 +64,7 @@ WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
@@ -89,6 +90,9 @@ MIPS_LLVM_CONFIG_LIB=$(if $(WITH_MIPS), mips, )
 
 POWERPC_CXX_FLAGS=$(if $(WITH_POWERPC), -DWITH_POWERPC=1, )
 POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
+
+WEBASSEMBLY_CXX_FLAGS=$(if $(WITH_WEBASSEMBLY), -DWITH_WEBASSEMBLY=1, )
+WEBASSEMBLY_LLVM_CONFIG_LIB=$(if $(WITH_WEBASSEMBLY), webassembly, )
 
 PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
@@ -125,6 +129,7 @@ CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
+CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 
@@ -141,7 +146,7 @@ print-%:
 # support.
 LLVM_LINK_STATIC_FLAG = $(shell $(LLVM_CONFIG) --link-static 2>/dev/null && echo " --link-static")
 
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(WEBASSEMBLY_LLVM_CONFIG_LIB))
 
 LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 
@@ -305,6 +310,7 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_WebAssembly.cpp \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -437,6 +443,7 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_WebAssembly.h \
   CodeGen_X86.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
