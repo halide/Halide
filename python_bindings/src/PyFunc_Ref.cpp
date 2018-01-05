@@ -1,15 +1,9 @@
 #include "PyFunc_Ref.h"
 
-#include <boost/python.hpp>
-#include <string>
-#include <vector>
-
-#include "Halide.h"
-
 #include "PyBinaryOperators.h"
 
-namespace h = Halide;
-namespace p = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
 template <typename A, typename B>
 A &iadd_func(A a, B b) {
@@ -39,38 +33,36 @@ A &idiv_func(A a, B b) {
 }
 
 void define_func_tuple_element_ref() {
-    using Halide::FuncTupleElementRef;
-
     auto func_tuple_element_ref_class =
-        p::class_<FuncTupleElementRef>("FuncTupleElementRef",
+        py::class_<FuncTupleElementRef>("FuncTupleElementRef",
                                        "A fragment of front-end syntax of the form f(x, y, z)[index], where x, "
                                        "y, z are Vars or Exprs. It could be the left-hand side of an update "
                                        "definition, or it could be a call to a function. We don't know "
                                        "until we see how this object gets used.",
-                                       p::no_init)
+                                       py::no_init)
 
-            .def("__iadd__", &iadd_func<FuncTupleElementRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__iadd__", &iadd_func<FuncTupleElementRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that adds the given expression to Tuple component 'idx' "
                  "of this Func. The other Tuple components are unchanged. If the expression "
                  "refers to some RDom, this performs a sum reduction of the expression over "
                  "the domain. The function must already have an initial definition.")
-            .def("__isub__", &isub_func<FuncTupleElementRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__isub__", &isub_func<FuncTupleElementRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that adds the negative of the given expression to Tuple "
                  "component 'idx' of this Func. The other Tuple components are unchanged. "
                  "If the expression refers to some RDom, this performs a sum reduction of "
                  "the negative of the expression over the domain. The function must already "
                  "have an initial definition.")
-            .def("__imul__", &imul_func<FuncTupleElementRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__imul__", &imul_func<FuncTupleElementRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that multiplies Tuple component 'idx' of this Func by "
                  "the given expression. The other Tuple components are unchanged. If the "
                  "expression refers to some RDom, this performs a product reduction of "
                  "the expression over the domain. The function must already have an "
                  "initial definition.")
-            .def("__idiv__", &idiv_func<FuncTupleElementRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__idiv__", &idiv_func<FuncTupleElementRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that divides Tuple component 'idx' of this Func by "
                  "the given expression. The other Tuple components are unchanged. "
                  "If the expression refers to some RDom, this performs a product "
@@ -83,43 +75,41 @@ void define_func_tuple_element_ref() {
 
     add_binary_operators_with<FuncTupleElementRef>(func_tuple_element_ref_class);
 
-    // h::Expr has empty constructor, thus self does the job
-    // h::Expr will "eat" int and float arguments via implicit conversion
-    add_binary_operators_with<h::Expr>(func_tuple_element_ref_class);
+    // Expr has empty constructor, thus self does the job
+    // Expr will "eat" int and float arguments via implicit conversion
+    add_binary_operators_with<Expr>(func_tuple_element_ref_class);
 
-    p::implicitly_convertible<FuncTupleElementRef, h::Expr>();
+    py::implicitly_convertible<FuncTupleElementRef, Expr>();
 }
 
 void define_func_ref_expr_class() {
-    using Halide::FuncRef;
-
     auto func_ref_expr_class =
-        p::class_<FuncRef>("FuncRef",
+        py::class_<FuncRef>("FuncRef",
                            "A fragment of front-end syntax of the form f(x, y, z), where x, y, "
                            "z are Vars or Exprs. If could be the left hand side of a definition or an "
                            "update definition, or it could be a call to a function. We don't know "
                            "until we see how this object gets used. ",
-                           p::no_init)
-            .def("__iadd__", &iadd_func<FuncRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+                           py::no_init)
+            .def("__iadd__", &iadd_func<FuncRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that adds the given expression to this Func. If the "
                  "expression refers to some RDom, this performs a sum reduction of the "
                  "expression over the domain. If the function does not already have a "
                  "pure definition, this sets it to zero.")
-            .def("__isub__", &isub_func<FuncRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__isub__", &isub_func<FuncRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that adds the negative of the given expression to this "
                  "Func. If the expression refers to some RDom, this performs a sum reduction "
                  "of the negative of the expression over the domain. If the function does "
                  "not already have a pure definition, this sets it to zero.")
-            .def("__imul__", &imul_func<FuncRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__imul__", &imul_func<FuncRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that multiplies this Func by the given expression. If the "
                  "expression refers to some RDom, this performs a product reduction of the "
                  "expression over the domain. If the function does not already have a pure "
                  "definition, this sets it to 1.")
-            .def("__idiv__", &idiv_func<FuncRef &, h::Expr>, p::args("self", "expr"),
-                 p::return_internal_reference<1>(),
+            .def("__idiv__", &idiv_func<FuncRef &, Expr>, py::args("self", "expr"),
+                 py::return_internal_reference<1>(),
                  "Define a stage that divides this Func by the given expression. "
                  "If the expression refers to some RDom, this performs a product "
                  "reduction of the inverse of the expression over the domain. If the "
@@ -138,18 +128,21 @@ void define_func_ref_expr_class() {
 
     add_binary_operators_with<FuncRef>(func_ref_expr_class);
 
-    // h::Expr has empty constructor, thus self does the job
-    // h::Expr will "eat" int and float arguments via implicit conversion
-    add_binary_operators_with<h::Expr>(func_ref_expr_class);
+    // Expr has empty constructor, thus self does the job
+    // Expr will "eat" int and float arguments via implicit conversion
+    add_binary_operators_with<Expr>(func_ref_expr_class);
 
-    p::implicitly_convertible<FuncRef, h::Expr>();
+    py::implicitly_convertible<FuncRef, Expr>();
 }
 
 void define_func_ref() {
     // only defined so that boost::python knows about these class,
     // not (yet) meant to be created or manipulated by the user
-    p::class_<h::Internal::Function> dummy("InternalFunction", p::no_init);
+    py::class_<Internal::Function> dummy("InternalFunction", py::no_init);
 
     define_func_tuple_element_ref();
     define_func_ref_expr_class();
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide
