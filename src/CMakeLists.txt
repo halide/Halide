@@ -99,6 +99,7 @@ set (RUNTIME_LL
   win32_math
   x86
   x86_avx
+  x86_avx2
   x86_sse41
 )
 
@@ -239,7 +240,7 @@ foreach (i ${RUNTIME_HEADER_FILES})
   list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
 endforeach()
 
-# The externally-visible header files that go into making Halide.h. 
+# The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 set(HEADER_FILES
   AddImageChecks.h
