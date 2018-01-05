@@ -454,14 +454,9 @@ struct Test {
 
         // skip dot product and argmin
         for (int w = 2; w <= 4; w++) {
-            check("pmaddwd", 2*w, i32(i16_1) * 3 + i32(i16_2) * 4);
-            check("pmaddwd", 2*w, i32(i16_1) * 3 - i32(i16_2) * 4);
-        }
-
-        if (use_avx2) {
-            check("vpmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
-        } else {
-            check("pmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
+            const char *check_pmaddwd = (use_avx2 && w > 3) ? "vpmaddwd*ymm" : "pmaddwd";
+            check(check_pmaddwd, 2*w, i32(i16_1) * 3 + i32(i16_2) * 4);
+            check(check_pmaddwd, 2*w, i32(i16_1) * 3 - i32(i16_2) * 4);
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
