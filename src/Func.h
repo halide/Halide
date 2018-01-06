@@ -721,7 +721,7 @@ public:
      * specifying a set of per-call parameters to be used for a
      * specific computation. This method is thread-safe where the
      * globals used by Param<T> and ImageParam are not. Any parameters
-     * that are not n the param_map are taken from the global values,
+     * that are not in the param_map are taken from the global values,
      * so those can continue to be used if they are not changing
      * per-thread.
      *

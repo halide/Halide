@@ -2,7 +2,7 @@
 #define HALIDE_PARAM_MAP_H
 
 /** \file
- * Defines a collection of parameters to be passed as formal arugments
+ * Defines a collection of parameters to be passed as formal arguments
  * to a JIT invocation.
  */
 
@@ -63,19 +63,7 @@ private:
 public:
     ParamMap() { }
 
-    ParamMap(const std::initializer_list<ParamMapping> &init) {
-        for (const auto &pm : init) {
-            if (pm.parameter != nullptr) {
-                mapping[*pm.parameter] = ParamArg(pm);
-            } else if (pm.buf_out_param == nullptr) {
-                // TODO: there has to be a way to do this without the const_cast.
-                set(*pm.image_param, *const_cast<Buffer<> *>(&pm.buf), nullptr);
-            } else {
-                Buffer<> temp_undefined;
-                set(*pm.image_param, temp_undefined, pm.buf_out_param);
-            }
-        }
-    }
+    EXPORT ParamMap(const std::initializer_list<ParamMapping> &init);
 
     template <typename T> void set(const Param<T> &p, T val) {
         Internal::Parameter v(p.type(), false, 0, p.name(), p.is_explicit_name(), false);
@@ -100,27 +88,11 @@ public:
 
     /** If there is an entry in the ParamMap for this Parameter, return it.
      * Otherwise return the parameter itself. */
-    const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const {
-        auto iter = mapping.find(p);
-        if (iter != mapping.end()) {
-            buf_out_param = iter->second.buf_out_param;
-            return iter->second.mapped_param;
-        } else {
-            buf_out_param = nullptr;
-            return p;
-        }
-    }
+    // @{
+    EXPORT const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const;
 
-    Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const {
-        auto iter = mapping.find(p);
-        if (iter != mapping.end()) {
-            buf_out_param = iter->second.buf_out_param;
-            return iter->second.mapped_param;
-        } else {
-            buf_out_param = nullptr;
-            return p;
-        }
-    }
+    EXPORT Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
+    // @}
 };
 
 }
