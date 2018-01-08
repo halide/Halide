@@ -76,6 +76,7 @@ DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_LL_INITMOD(d3d12_abi_patch_64)
 DECLARE_CPP_INITMOD(d3d12compute)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
@@ -886,6 +887,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::D3D12Compute)) {
             // TODO(marcos) : I think there's more to be done here...
+            modules.push_back(get_initmod_d3d12_abi_patch_64_ll(c));
             modules.push_back(get_initmod_d3d12compute(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
