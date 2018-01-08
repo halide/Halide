@@ -1,14 +1,11 @@
 #include "PyFunc_gpu.h"
 
-#include <boost/python.hpp>
+namespace Halide {
+namespace PythonBindings {
 
-#include "Halide.h"
-
-namespace h = Halide;
-namespace p = boost::python;
-
-void define_func_gpu_methods(p::class_<h::Func> &func_class) {
-    using namespace func_and_stage_implementation_details;
-
-    define_func_or_stage_gpu_methods<h::Func>(func_class);
+void define_func_gpu_methods(py::class_<Func> &func_class) {
+    define_func_or_stage_gpu_methods<Func>(func_class);
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

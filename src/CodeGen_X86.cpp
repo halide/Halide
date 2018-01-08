@@ -219,6 +219,8 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
+        {Target::AVX2, true, Int(8, 32), 0, "llvm.x86.avx2.padds.b",
+         i8_sat(wild_i16x_ + wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.padds.b",
          i8_sat(wild_i16x_ + wild_i16x_)},
         {Target::FeatureEnd, true, Int(8, 16), 0, "llvm.x86.sse2.psubs.b",
@@ -259,10 +261,16 @@ void CodeGen_X86::visit(const Cast *op) {
         {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgw",
          u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
 #endif
+        {Target::AVX2, false, Int(16, 16), 0, "packssdwx16",
+         i16_sat(wild_i32x_)},
         {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
          i16_sat(wild_i32x_)},
+        {Target::AVX2, false, Int(8, 32), 0, "packsswbx32",
+         i8_sat(wild_i16x_)},
         {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",
          i8_sat(wild_i16x_)},
+        {Target::AVX2, false, UInt(8, 32), 0, "packuswbx32",
+         u8_sat(wild_i16x_)},
         {Target::FeatureEnd, false, UInt(8, 16), 0, "packuswbx16",
          u8_sat(wild_i16x_)},
         {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",

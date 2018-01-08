@@ -6,11 +6,8 @@
 
 #include "halide_benchmark.h"
 
-#include "MatrixMultiply_cpu.h"
-#include "MatrixMultiply_hvx64.h"
-#include "MatrixMultiply_hvx128.h"
+#include "MatrixMultiply.h"
 
-#include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 
 int32_t saturating_rounding_doubling_high_multiply(int32_t a, int32_t b) {
@@ -37,36 +34,20 @@ int32_t multiply_quantized_multiplier(int32_t x, int32_t q, int32_t shift) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 5) {
-        printf("Usage: %s (cpu|hvx64) M N K [mat_a_offset mat_b_offset output_multiplier output_shift output_offset output_min output_max]\n", argv[0]);
+    if (argc < 4) {
+        printf("Usage: %s M N K [mat_a_offset mat_b_offset output_multiplier output_shift output_offset output_min output_max]\n", argv[0]);
         return 0;
     }
 
-    int M = atoi(argv[2]);
-    int N = atoi(argv[3]);
-    int K = atoi(argv[4]);
+    int M = atoi(argv[1]);
+    int N = atoi(argv[2]);
+    int K = atoi(argv[3]);
 
     printf("Benchmarking %dx%d * %dx%d\n", M, N, N, K);
 
-    int (*pipeline)(halide_buffer_t *, halide_buffer_t*, halide_buffer_t*, int16_t, int16_t,
-                    int, int, int, uint8_t, uint8_t, halide_buffer_t*);
-    int k_alignment = 1;
-    if (strcmp(argv[1], "cpu") == 0) {
-        pipeline = MatrixMultiply_cpu;
-        printf("Using CPU schedule\n");
-        k_alignment = 32;
-    } else if (strcmp(argv[1], "hvx64") == 0) {
-        pipeline = MatrixMultiply_hvx64;
-        printf("Using HVX 64 schedule\n");
-        k_alignment = 64;
-    } else if (strcmp(argv[1], "hvx128") == 0) {
-        pipeline = MatrixMultiply_hvx128;
-        printf("Using HVX 128 schedule\n");
-        k_alignment = 128;
-    } else {
-        printf("Unknown schedule, valid schedules are cpu, hvx64, or hvx128\n");
-        return -1;
-    }
+    // TODO: We could reduce k_alignment on some targets. 128 is
+    // conservative to enable Hexagon with 128-byte vectors.
+    int k_alignment = 128;
 
     // Align the dimensions as required.
     M = (M + 3) & ~3;
@@ -93,20 +74,27 @@ int main(int argc, char **argv) {
     int output_offset = 128;
     uint8_t output_min = 0;
     uint8_t output_max = 255;
-    if (argc > 6) mat_a_offset = atoi(argv[5]);
-    if (argc > 7) mat_b_offset = atoi(argv[6]);
-    if (argc > 8) output_multiplier = atoi(argv[7]);
-    if (argc > 9) output_shift = atoi(argv[8]);
-    if (argc > 10) output_offset = atoi(argv[9]);
-    if (argc > 11) output_min = atoi(argv[10]);
-    if (argc > 12) output_max = atoi(argv[11]);
+    if (argc > 6) mat_a_offset = atoi(argv[4]);
+    if (argc > 7) mat_b_offset = atoi(argv[5]);
+    if (argc > 8) output_multiplier = atoi(argv[6]);
+    if (argc > 9) output_shift = atoi(argv[7]);
+    if (argc > 10) output_offset = atoi(argv[8]);
+    if (argc > 11) output_min = atoi(argv[9]);
+    if (argc > 12) output_max = atoi(argv[10]);
 
     Halide::Runtime::Buffer<uint8_t> mat_ab(nullptr, K, M);
 
+#ifdef HALIDE_RUNTIME_HEXAGON
     mat_a.device_malloc(halide_hexagon_device_interface());
     mat_b.device_malloc(halide_hexagon_device_interface());
     bias.device_malloc(halide_hexagon_device_interface());
     mat_ab.device_malloc(halide_hexagon_device_interface());
+#else
+    mat_a.allocate();
+    mat_b.allocate();
+    bias.allocate();
+    mat_ab.allocate();
+#endif
 
     mat_a.for_each_value([](uint8_t &x) {
         x = static_cast<uint8_t>(rand());
@@ -118,16 +106,18 @@ int main(int argc, char **argv) {
         x = static_cast<int16_t>(rand());
     });
 
+#ifdef HALIDE_RUNTIME_HEXAGON
     // To avoid the cost of powering HVX on in each call of the
     // pipeline, power it on once now. Also, set Hexagon performance to turbo.
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(nullptr);
+#endif
 
     printf("Running pipeline...\n");
     double time = Halide::Tools::benchmark([&]() {
-        int result = pipeline(mat_a, mat_b, bias, mat_a_offset, mat_b_offset,
-                              output_multiplier, output_shift, output_offset,
-                              output_min, output_max, mat_ab);
+        int result = MatrixMultiply(mat_a, mat_b, bias, mat_a_offset, mat_b_offset,
+                                    output_multiplier, output_shift, output_offset,
+                                    output_min, output_max, mat_ab);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
         }
@@ -135,10 +125,12 @@ int main(int argc, char **argv) {
 
     printf("Done, time: %g s\n", time);
 
+#ifdef HALIDE_RUNTIME_HEXAGON
     // We're done with HVX, power it off, and reset the performance mode
     // to default to save power.
     halide_hexagon_power_hvx_off(nullptr);
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
+#endif
 
     // Copy the output back to the host. If the buffer is zero-copy (as
     // it should be on a real device), this will be a no-op.

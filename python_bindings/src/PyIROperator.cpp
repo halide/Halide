@@ -1,88 +1,81 @@
 #include "PyIROperator.h"
 
-#include <boost/python.hpp>
-// Some versions of Boost don't include raw_function in python.hpp
-#include <boost/python/raw_function.hpp>
-#include <string>
-
-#include "Halide.h"
-
-namespace h = Halide;
-namespace p = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
 namespace {
 
-h::Expr reinterpret0(h::Type t, h::Expr e) {
-    return h::reinterpret(t, e);
+Expr reinterpret0(Type t, Expr e) {
+    return reinterpret(t, e);
 }
 
-h::Expr cast0(h::Type t, h::Expr e) {
+Expr cast0(Type t, Expr e) {
     return Halide::cast(t, e);
 }
 
-h::Expr select0(h::Expr condition, h::Expr true_value, h::Expr false_value) {
-    return h::select(condition, true_value, false_value);
+Expr select0(Expr condition, Expr true_value, Expr false_value) {
+    return select(condition, true_value, false_value);
 }
 
-h::Expr select1(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr default_val) {
-    return h::select(c1, v1,
+Expr select1(Expr c1, Expr v1,
+                Expr c2, Expr v2,
+                Expr default_val) {
+    return select(c1, v1,
                      c2, v2, default_val);
 }
-h::Expr select2(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr default_val) {
-    return h::select(c1, v1,
+Expr select2(Expr c1, Expr v1,
+                Expr c2, Expr v2,
+                Expr c3, Expr v3,
+                Expr default_val) {
+    return select(c1, v1,
                      c2, v2,
                      c3, v3, default_val);
 }
-h::Expr select3(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr default_val) {
-    return h::select(c1, v1,
+Expr select3(Expr c1, Expr v1,
+                Expr c2, Expr v2,
+                Expr c3, Expr v3,
+                Expr c4, Expr v4,
+                Expr default_val) {
+    return select(c1, v1,
                      c2, v2,
                      c3, v3,
                      c4, v4, default_val);
 }
-h::Expr select4(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr c5, h::Expr v5,
-                h::Expr default_val) {
-    return h::select(c1, v1,
+Expr select4(Expr c1, Expr v1,
+                Expr c2, Expr v2,
+                Expr c3, Expr v3,
+                Expr c4, Expr v4,
+                Expr c5, Expr v5,
+                Expr default_val) {
+    return select(c1, v1,
                      c2, v2,
                      c3, v3,
                      c4, v4,
                      c5, v5, default_val);
 }
-h::Expr select5(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr c5, h::Expr v5,
-                h::Expr c6, h::Expr v6,
-                h::Expr default_val) {
-    return h::select(c1, v1,
+Expr select5(Expr c1, Expr v1,
+                Expr c2, Expr v2,
+                Expr c3, Expr v3,
+                Expr c4, Expr v4,
+                Expr c5, Expr v5,
+                Expr c6, Expr v6,
+                Expr default_val) {
+    return select(c1, v1,
                      c2, v2,
                      c3, v3,
                      c4, v4,
                      c5, v5,
                      c6, v6, default_val);
 }
-h::Expr select6(h::Expr c1, h::Expr v1,
-                h::Expr c2, h::Expr v2,
-                h::Expr c3, h::Expr v3,
-                h::Expr c4, h::Expr v4,
-                h::Expr c5, h::Expr v5,
-                h::Expr c6, h::Expr v6,
-                h::Expr c7, h::Expr v7,
-                h::Expr default_val) {
-    return h::select(c1, v1,
+Expr select6(Expr c1, Expr v1,
+                Expr c2, Expr v2,
+                Expr c3, Expr v3,
+                Expr c4, Expr v4,
+                Expr c5, Expr v5,
+                Expr c6, Expr v6,
+                Expr c7, Expr v7,
+                Expr default_val) {
+    return select(c1, v1,
                      c2, v2,
                      c3, v3,
                      c4, v4,
@@ -91,25 +84,25 @@ h::Expr select6(h::Expr c1, h::Expr v1,
                      c7, v7, default_val);
 }
 
-std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
-    const size_t c = p::len(t);
-    std::vector<h::Expr> exprs;
+std::vector<Expr> tuple_to_exprs(py::tuple t) {
+    const size_t c = py::len(t);
+    std::vector<Expr> exprs;
     exprs.reserve(c);
 
     for (size_t i = 0; i < c; i += 1) {
-        p::object o = t[i];
-        h::Expr e;
-        p::extract<h::Expr> expr_extract(o);
+        py::object o = t[i];
+        Expr e;
+        py::extract<Expr> expr_extract(o);
         if (expr_extract.check()) {
             e = expr_extract();
         } else {
             // Python 'str' is not implicitly convertible to Expr,
             // but in this context we want to explicitly check and convert.
-            p::extract<std::string> string_extract(o);
+            py::extract<std::string> string_extract(o);
             if (string_extract.check()) {
-                e = h::Expr(string_extract());
+                e = Expr(string_extract());
             } else {
-                const std::string o_str = p::extract<std::string>(p::str(o));
+                const std::string o_str = py::extract<std::string>(py::str(o));
                 throw std::invalid_argument("The value '" + o_str + "' is not convertible to Expr.");
             }
         }
@@ -118,50 +111,50 @@ std::vector<h::Expr> tuple_to_exprs(p::tuple t) {
     return exprs;
 }
 
-p::object print_expr(p::tuple args, p::dict kwargs) {
-    return p::object(h::print(tuple_to_exprs(args)));
+py::object print(py::tuple args, py::dict kwargs) {
+    return py::object(print(tuple_to_exprs(args)));
 }
 
-p::object print_when(p::tuple args, p::dict kwargs) {
-    h::Expr condition = p::extract<h::Expr>(args[0]);
-    return p::object(h::print_when(condition, tuple_to_exprs(p::extract<p::tuple>(args.slice(1, p::_)))));
+py::object print_when(py::tuple args, py::dict kwargs) {
+    Expr condition = py::extract<Expr>(args[0]);
+    return py::object(print_when(condition, tuple_to_exprs(py::extract<py::tuple>(args.slice(1, py::_)))));
 }
 
-h::Expr random_float0() {
-    return h::random_float();
+Expr random_float0() {
+    return random_float();
 }
 
-h::Expr random_float1(h::Expr seed) {
-    return h::random_float(seed);
+Expr random_float1(Expr seed) {
+    return random_float(seed);
 }
 
-h::Expr random_int0() {
-    return h::random_int();
+Expr random_int0() {
+    return random_int();
 }
 
-h::Expr random_int1(h::Expr seed) {
-    return h::random_int(seed);
+Expr random_int1(Expr seed) {
+    return random_int(seed);
 }
 
-h::Expr undef0(h::Type type) {
-    return h::undef(type);
+Expr undef0(Type type) {
+    return undef(type);
 }
 
-h::Expr memoize_tag0(h::Expr result, const std::vector<h::Expr> &cache_key_values) {
-    return h::memoize_tag(result, cache_key_values);
+Expr memoize_tag0(Expr result, const std::vector<Expr> &cache_key_values) {
+    return memoize_tag(result, cache_key_values);
 }
 
-// p::def() doesn't allow specifying a docstring with raw_function();
+// py::def() doesn't allow specifying a docstring with raw_function();
 // this is some simple sugar to allow for it.
 // TODO: unfortunately, using raw_function() means that we don't get
 // any free type info about the Python prototype look; we should
 // probably augment docstrings that use this appropriately.
 template <class F>
-p::object def_raw(const char *name, F f, size_t min_args, const char *docstring) {
-    p::object o = p::raw_function(f, min_args);
-    p::def(name, o);
+py::object def_raw(const char *name, F f, size_t min_args, const char *docstring) {
+    py::object o = py::raw_function(f, min_args);
+    py::def(name, o);
     // Must call setattr *after* def
-    p::setattr(o, "__doc__", p::str(docstring));
+    py::setattr(o, "__doc__", py::str(docstring));
     return o;
 }
 
@@ -170,103 +163,103 @@ p::object def_raw(const char *name, F f, size_t min_args, const char *docstring)
 void define_operators() {
     // defined in IROperator.h
 
-    h::Expr (*max_exprs)(h::Expr, h::Expr) = &h::max;
-    h::Expr (*max_expr_int)(h::Expr, int) = &h::max;
-    h::Expr (*max_int_expr)(int, h::Expr) = &h::max;
+    Expr (*max_exprs)(Expr, Expr) = &max;
+    Expr (*max_expr_int)(Expr, int) = &max;
+    Expr (*max_int_expr)(int, Expr) = &max;
 
-    h::Expr (*min_exprs)(h::Expr, h::Expr) = &h::min;
-    h::Expr (*min_expr_int)(h::Expr, int) = &h::min;
-    h::Expr (*min_int_expr)(int, h::Expr) = &h::min;
+    Expr (*min_exprs)(Expr, Expr) = &min;
+    Expr (*min_expr_int)(Expr, int) = &min;
+    Expr (*min_int_expr)(int, Expr) = &min;
 
-    p::def("max", max_exprs,
-           p::args("a", "b"),
+    py::def("max", max_exprs,
+           py::args("a", "b"),
            "Returns an expression representing the greater of the two "
            "arguments, after doing any necessary type coercion using "
            "Internal::match_types. Vectorizes cleanly on most platforms "
            "(with the exception of integer types on x86 without SSE4).");
 
-    p::def("max", max_expr_int,
-           p::args("a", "b"),
+    py::def("max", max_expr_int,
+           py::args("a", "b"),
            "Returns an expression representing the greater of an expression"
            " and a constant integer.  The integer is coerced to the type of the"
            " expression. Errors if the integer is not representable as that"
            " type. Vectorizes cleanly on most platforms (with the exception of"
            " integer types on x86 without SSE4).");
 
-    p::def("max", max_int_expr,
-           p::args("a", "b"),
+    py::def("max", max_int_expr,
+           py::args("a", "b"),
            "Returns an expression representing the greater of a constant"
            " integer and an expression. The integer is coerced to the type of"
            " the expression. Errors if the integer is not representable as that"
            " type. Vectorizes cleanly on most platforms (with the exception of"
            " integer types on x86 without SSE4).");
 
-    p::def("min", min_exprs,
-           p::args("a", "b"),
+    py::def("min", min_exprs,
+           py::args("a", "b"),
            "Returns an expression representing the greater of the two "
            "arguments, after doing any necessary type coercion using "
            "Internal::match_types. Vectorizes cleanly on most platforms "
            "(with the exception of integer types on x86 without SSE4).");
 
-    p::def("min", min_expr_int,
-           p::args("a", "b"),
+    py::def("min", min_expr_int,
+           py::args("a", "b"),
            "Returns an expression representing the lesser of an expression"
            " and a constant integer.  The integer is coerced to the type of the"
            " expression. Errors if the integer is not representable as that"
            " type. Vectorizes cleanly on most platforms (with the exception of"
            " integer types on x86 without SSE4).");
 
-    p::def("min", min_int_expr,
-           p::args("a", "b"),
+    py::def("min", min_int_expr,
+           py::args("a", "b"),
            "Returns an expression representing the lesser of a constant"
            " integer and an expression. The integer is coerced to the type of"
            " the expression. Errors if the integer is not representable as that"
            " type. Vectorizes cleanly on most platforms (with the exception of"
            " integer types on x86 without SSE4).");
 
-    p::def("clamp", &h::clamp,
-           p::args("a", "min_val", "max_val"),
+    py::def("clamp", &clamp,
+           py::args("a", "min_val", "max_val"),
            "Clamps an expression to lie within the given bounds. The bounds "
            "are type-cast to match the expression. Vectorizes as well as min/max.");
 
-    p::def("abs", &h::abs, p::args("a"),
+    py::def("abs", &abs, py::args("a"),
            "Returns the absolute value of a signed integer or floating-point "
            "expression. Vectorizes cleanly. Unlike in C, abs of a signed "
            "integer returns an unsigned integer of the same bit width. This "
            "means that abs of the most negative integer doesn't overflow.");
 
-    p::def("absd", &h::absd, p::args("a", "b"),
+    py::def("absd", &absd, py::args("a", "b"),
            "Return the absolute difference between two values. Vectorizes "
            "cleanly. Returns an unsigned value of the same bit width. There are "
            "various ways to write this yourself, but they contain numerous "
            "gotchas and don't always compile to good code, so use this instead.");
 
-    p::def("select", &select0, p::args("condition", "true_value", "false_value"),
+    py::def("select", &select0, py::args("condition", "true_value", "false_value"),
            "Returns an expression similar to the ternary operator in C, except "
            "that it always evaluates all arguments. If the first argument is "
            "true, then return the second, else return the third. Typically "
            "vectorizes cleanly, but benefits from SSE41 or newer on x86.");
 
-    p::def("select", &select1, p::args("c1", "v1", "c2", "v2", "default_val"),
+    py::def("select", &select1, py::args("c1", "v1", "c2", "v2", "default_val"),
            "A multi-way variant of select similar to a switch statement in C, "
            "which can accept multiple conditions and values in pairs. Evaluates "
            "to the first value for which the condition is true. Returns the "
            "final value if all conditions are false.");
 
-    p::def("select", &select2, p::args(
+    py::def("select", &select2, py::args(
                                    "c1", "v1",
                                    "c2", "v2",
                                    "c3", "v3",
                                    "default_val"));
 
-    p::def("select", &select3, p::args(
+    py::def("select", &select3, py::args(
                                    "c1", "v1",
                                    "c2", "v2",
                                    "c3", "v3",
                                    "c4", "v4",
                                    "default_val"));
 
-    p::def("select", &select4, p::args(
+    py::def("select", &select4, py::args(
                                    "c1", "v1",
                                    "c2", "v2",
                                    "c3", "v3",
@@ -274,7 +267,7 @@ void define_operators() {
                                    "c5", "v5",
                                    "default_val"));
 
-    p::def("select", &select5, p::args(
+    py::def("select", &select5, py::args(
                                    "c1", "v1",
                                    "c2", "v2",
                                    "c3", "v3",
@@ -283,7 +276,7 @@ void define_operators() {
                                    "c6", "v6",
                                    "default_val"));
 
-    p::def("select", &select6, p::args(
+    py::def("select", &select6, py::args(
                                    "c1", "v1",
                                    "c2", "v2",
                                    "c3", "v3",
@@ -294,77 +287,77 @@ void define_operators() {
                                    "default_val"));
 
     // sin, cos, tan @{
-    p::def("sin", &h::sin, p::args("x"),
+    py::def("sin", &sin, py::args("x"),
            "Return the sine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("asin", &h::asin, p::args("x"),
+    py::def("asin", &asin, py::args("x"),
            "Return the arcsine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("cos", &h::cos, p::args("x"),
+    py::def("cos", &cos, py::args("x"),
            "Return the cosine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("acos", &h::acos, p::args("x"),
+    py::def("acos", &acos, py::args("x"),
            "Return the arccosine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("tan", &h::tan, p::args("x"),
+    py::def("tan", &tan, py::args("x"),
            "Return the tangent of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("atan", &h::atan, p::args("x"),
+    py::def("atan", &atan, py::args("x"),
            "Return the arctangent of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("atan", &h::atan2, p::args("x", "y"),
+    py::def("atan", &atan2, py::args("x", "y"),
            "Return the arctangent of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("atan2", &h::atan2, p::args("x", "y"),
+    py::def("atan2", &atan2, py::args("x", "y"),
            "Return the arctangent of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
     // @}
 
     // sinh, cosh, tanh @{
-    p::def("sinh", &h::sinh, p::args("x"),
+    py::def("sinh", &sinh, py::args("x"),
            "Return the hyperbolic sine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("asinh", &h::asinh, p::args("x"),
+    py::def("asinh", &asinh, py::args("x"),
            "Return the hyperbolic arcsine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("cosh", &h::cosh, p::args("x"),
+    py::def("cosh", &cosh, py::args("x"),
            "Return the hyperbolic cosine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("acosh", &h::acosh, p::args("x"),
+    py::def("acosh", &acosh, py::args("x"),
            "Return the hyperbolic arccosine of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("tanh", &h::tanh, p::args("x"),
+    py::def("tanh", &tanh, py::args("x"),
            "Return the hyperbolic tangent of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
 
-    p::def("atanh", &h::atanh, p::args("x"),
+    py::def("atanh", &atanh, py::args("x"),
            "Return the hyperbolic arctangent of a floating-point expression. If the argument is "
            "not floating-point, it is cast to Float(32). Does not vectorize well.");
     // @}
 
-    p::def("sqrt", &h::sqrt, p::args("x"),
+    py::def("sqrt", &sqrt, py::args("x"),
            "Return the square root of a floating-point expression. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "Typically vectorizes cleanly.");
 
-    p::def("hypot", &h::hypot, p::args("x"),
+    py::def("hypot", &hypot, py::args("x"),
            "Return the square root of the sum of the squares of two "
            "floating-point expressions. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "Vectorizes cleanly.");
 
-    p::def("exp", &h::exp, p::args("x"),
+    py::def("exp", &exp, py::args("x"),
            "Return the exponential of a floating-point expression. If the "
            "argument is not floating-point, it is cast to Float(32). For "
            "Float(64) arguments, this calls the system exp function, and does "
@@ -373,7 +366,7 @@ void define_operators() {
            "large inputs, and is accurate up to the last bit of the "
            "mantissa. Vectorizes cleanly.");
 
-    p::def("log", &h::log, p::args("x"),
+    py::def("log", &log, py::args("x"),
            "Return the logarithm of a floating-point expression. If the "
            "argument is not floating-point, it is cast to Float(32). For "
            "Float(64) arguments, this calls the system log function, and does "
@@ -382,7 +375,7 @@ void define_operators() {
            "nan), and is accurate up to the last bit of the "
            "mantissa. Vectorizes cleanly.");
 
-    p::def("pow", &h::pow, p::args("x"),
+    py::def("pow", &pow, py::args("x"),
            "Return one floating point expression raised to the power of "
            "another. The type of the result is given by the type of the first "
            "argument. If the first argument is not a floating-point type, it is "
@@ -390,91 +383,88 @@ void define_operators() {
            "accurate up to the last few bits of the mantissa. Gets worse when "
            "approaching overflow. Vectorizes cleanly.");
 
-    p::def("erf", &h::erf, p::args("x"),
+    py::def("erf", &erf, py::args("x"),
            "Evaluate the error function erf. Only available for "
            "Float(32). Accurate up to the last three bits of the "
            "mantissa. Vectorizes cleanly.");
 
-    p::def("fast_log", &h::fast_log, p::args("x"),
+    py::def("fast_log", &fast_log, py::args("x"),
            "Fast approximate cleanly vectorizable log for Float(32). Returns "
            "nonsense for x <= 0.0f. Accurate up to the last 5 bits of the "
            "mantissa. Vectorizes cleanly.");
 
-    p::def("fast_exp", &h::fast_exp, p::args("x"),
+    py::def("fast_exp", &fast_exp, py::args("x"),
            "Fast approximate cleanly vectorizable exp for Float(32). Returns "
            "nonsense for inputs that would overflow or underflow. Typically "
            "accurate up to the last 5 bits of the mantissa. Gets worse when "
            "approaching overflow. Vectorizes cleanly.");
 
-    p::def("fast_pow", &h::fast_pow, p::args("x"),
+    py::def("fast_pow", &fast_pow, py::args("x"),
            "Fast approximate cleanly vectorizable pow for Float(32). Returns "
            "nonsense for x < 0.0f. Accurate up to the last 5 bits of the "
            "mantissa for typical exponents. Gets worse when approaching "
            "overflow. Vectorizes cleanly.");
 
-    p::def("fast_inverse", &h::fast_inverse, p::args("x"),
+    py::def("fast_inverse", &fast_inverse, py::args("x"),
            "Fast approximate inverse for Float(32). Corresponds to the rcpps "
            "instruction on x86, and the vrecpe instruction on ARM. "
            "Vectorizes cleanly.");
 
-    p::def("fast_inverse_sqrt", &h::fast_inverse_sqrt, p::args("x"),
+    py::def("fast_inverse_sqrt", &fast_inverse_sqrt, py::args("x"),
            "Fast approximate inverse square root for Float(32). Corresponds to "
            "the rsqrtps instruction on x86, and the vrsqrte instruction on "
            "ARM. Vectorizes cleanly.");
 
-    p::def("floor", &h::floor, p::args("x"),
+    py::def("floor", &floor, py::args("x"),
            "Return the greatest whole number less than or equal to a floating-point expression. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "The return value is still in floating point, despite being a whole number. "
            "Vectorizes cleanly");
 
-    p::def("ceil", &h::ceil, p::args("x"),
+    py::def("ceil", &ceil, py::args("x"),
            "Return the least whole number less than or equal to a floating-point expression. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "The return value is still in floating point, despite being a whole number. "
            "Vectorizes cleanly");
 
-    p::def("round", &h::round, p::args("x"),
+    py::def("round", &round, py::args("x"),
            "Return the whole number closest to a floating-point expression. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "The return value is still in floating point, despite being a whole number. "
            "Vectorizes cleanly");
 
-    p::def("trunc", &h::trunc, p::args("x"),
+    py::def("trunc", &trunc, py::args("x"),
            "Return the integer part of a floating-point expression. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "The return value is still in floating point, despite being a whole number. "
            "Vectorizes cleanly");
 
-    p::def("fract", &h::fract, p::args("x"),
+    py::def("fract", &fract, py::args("x"),
            "Return the fractional part of a floating-point expression. "
            "If the argument is not floating-point, it is cast to Float(32). "
            "The return value is in floating point, even when it is a whole number. "
            "Vectorizes cleanly");
 
-    p::def("is_nan", &h::is_nan, p::args("x"),
+    py::def("is_nan", &is_nan, py::args("x"),
            "Returns true if the argument is a Not a Number (NaN). "
            "Requires a floating point argument.  Vectorizes cleanly.");
 
-    p::def("reinterpret", &reinterpret0, p::args("t, e"),
+    py::def("reinterpret", &reinterpret0, py::args("t, e"),
            "Reinterpret the bits of one value as another type.");
 
-    p::def("cast", &cast0, p::args("t", "e"),
+    py::def("cast", &cast0, py::args("t", "e"),
            "Cast an expression to a new type.");
 
     def_raw("print_when", print_when, 2,
            "Create an Expr that prints whenever it is evaluated, "
            "provided that the condition is true.");
 
-    // We call this "print_expr" rather than "print" to avoid
-    // conflicts with Python's build-in "print()" function, in
-    // case users import all of the Halide bindings.
-    def_raw("print_expr", print_expr, 1,
+    def_raw("print", print, 1,
            "Create an Expr that prints out its value whenever it is "
            "evaluated. It also prints out everything else in the arguments "
            "list, separated by spaces. This can include string literals.");
 
-    p::def("lerp", &h::lerp, p::args("zero_val", "one_val", "weight"),
+    py::def("lerp", &lerp, py::args("zero_val", "one_val", "weight"),
            "Linear interpolate between the two values according to a weight.\n"
            "\\param zero_val The result when weight is 0\n"
            "\\param one_val The result when weight is 1\n"
@@ -514,18 +504,18 @@ void define_operators() {
            "Generally, lerp will vectorize as if it were an operation on a type "
            "twice the bit size of the inferred type for x and y. ");
 
-    p::def("popcount", &h::popcount, p::args("x"),
+    py::def("popcount", &popcount, py::args("x"),
            "Count the number of set bits in an expression.");
 
-    p::def("count_leading_zeros", &h::count_leading_zeros, p::args("x"),
+    py::def("count_leading_zeros", &count_leading_zeros, py::args("x"),
            "Count the number of leading zero bits in an expression. The result is "
            "undefined if the value of the expression is zero.");
 
-    p::def("count_trailing_zeros", &h::count_trailing_zeros, p::args("x"),
+    py::def("count_trailing_zeros", &count_trailing_zeros, py::args("x"),
            "Count the number of trailing zero bits in an expression. The result is "
            "undefined if the value of the expression is zero.");
 
-    p::def("random_float", &random_float1, p::args("seed"),
+    py::def("random_float", &random_float1, py::args("seed"),
            "Return a random variable representing a uniformly distributed "
            "float in the half-open interval [0.0f, 1.0f). For random numbers of "
            "other types, use lerp with a random float as the last parameter.\n"
@@ -553,14 +543,14 @@ void define_operators() {
            "elements.\n"
 
            "This function vectorizes cleanly.");
-    p::def("random_float", &random_float0);  // no args
+    py::def("random_float", &random_float0);  // no args
 
-    p::def("random_int", &random_int1, p::args("seed"),
+    py::def("random_int", &random_int1, py::args("seed"),
            "Return a random variable representing a uniformly distributed "
            "32-bit integer. See \\ref random_float. Vectorizes cleanly.");
-    p::def("random_int", &random_int0);  // no args
+    py::def("random_int", &random_int0);  // no args
 
-    p::def("undef", &undef0, p::args("type"),
+    py::def("undef", &undef0, py::args("type"),
            "Return an undef value of the given type. Halide skips stores that "
            "depend on undef values, so you can use this to mean \"do not modify "
            "this memory location\". This is an escape hatch that can be used for "
@@ -579,7 +569,7 @@ void define_operators() {
            "Use this feature with great caution, as you can use it to load from "
            "uninitialized memory.\n");
 
-    p::def("memoize_tag", &memoize_tag0, p::args("result", "cache_key_values"),
+    py::def("memoize_tag", &memoize_tag0, py::args("result", "cache_key_values"),
            "Control the values used in the memoization cache key for memoize. "
            "Normally parameters and other external dependencies are "
            "automatically inferred and added to the cache key. The memoize_tag "
@@ -611,7 +601,7 @@ void define_operators() {
     //template<typename ...Args>
     //Expr memoize_tag(Expr result, Args... args)
 
-    p::def("likely", &h::likely, p::args("e"),
+    py::def("likely", &likely, py::args("e"),
            "Expressions tagged with this intrinsic are considered to be part "
            "of the steady state of some loop with a nasty beginning and end "
            "(e.g. a boundary condition). When Halide encounters likely "
@@ -625,3 +615,6 @@ void define_operators() {
            "use the boundary condition helpers in the BoundaryConditions "
            "namespace instead. ");
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

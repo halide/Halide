@@ -3090,62 +3090,10 @@ public:
 
 class GeneratorStub : public NamesInterface {
 public:
-    // default ctor
-    GeneratorStub() = default;
-
-    // move constructor
-    GeneratorStub(GeneratorStub&& that) : generator(std::move(that.generator)) {}
-
-    // move assignment operator
-    GeneratorStub& operator=(GeneratorStub&& that) {
-        generator = std::move(that.generator);
-        return *this;
-    }
-
-    Target get_target() const { return generator->get_target(); }
-
-   GeneratorStub &schedule() {
-       generator->call_schedule();
-       return *this;
-   }
-
-    // Overloads for first output
-    operator Func() const {
-        return get_first_output();
-    }
-
-    template <typename... Args>
-    FuncRef operator()(Args&&... args) const {
-        return get_first_output()(std::forward<Args>(args)...);
-    }
-
-    template <typename ExprOrVar>
-    FuncRef operator()(std::vector<ExprOrVar> args) const {
-        return get_first_output()(args);
-    }
-
-    Realization realize(std::vector<int32_t> sizes) {
-        return generator->realize(sizes);
-    }
-
-    // Only enable if none of the args are Realization; otherwise we can incorrectly
-    // select this method instead of the Realization-as-outparam variant
-    template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
-    Realization realize(Args&&... args) {
-        return generator->realize(std::forward<Args>(args)...);
-    }
-
-    void realize(Realization r) {
-        generator->realize(r);
-    }
-
-    virtual ~GeneratorStub() {}
-
-protected:
     EXPORT GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
+                         GeneratorFactory generator_factory,
+                         const GeneratorParamsMap &generator_params,
+                         const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
@@ -3160,10 +3108,6 @@ protected:
 
     std::vector<Func> get_output_vector(const std::string &n) const {
         return generator->get_output_vector(n);
-    }
-
-    bool has_generator() const {
-        return generator != nullptr;
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -3186,24 +3130,7 @@ protected:
         return r;
     }
 
-    EXPORT void verify_same_funcs(const Func &a, const Func &b);
-    EXPORT void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
-
-    template<typename T2>
-    void verify_same_funcs(const StubOutputBuffer<T2> &a, const StubOutputBuffer<T2> &b) {
-        verify_same_funcs(a.f, b.f);
-    }
-
-private:
     std::shared_ptr<GeneratorBase> generator;
-
-    Func get_first_output() const {
-        return generator->get_first_output();
-    }
-    explicit GeneratorStub(const GeneratorStub &) = delete;
-    GeneratorStub &operator=(const GeneratorStub &) = delete;
-    explicit GeneratorStub(const GeneratorStub &&) = delete;
-    GeneratorStub &operator=(const GeneratorStub &&) = delete;
 };
 
 }  // namespace Internal

@@ -1,23 +1,17 @@
 #include "PyFunction.h"
 
-#include <boost/python.hpp>
-#include <vector>
-
-#include "Halide.h"
+namespace Halide {
+namespace PythonBindings {
 
 void define_extern_func_argument() {
-    using Halide::ExternFuncArgument;
-    namespace h = Halide;
-    namespace p = boost::python;
-
-    p::class_<ExternFuncArgument>("ExternFuncArgument",
+    py::class_<ExternFuncArgument>("ExternFuncArgument",
                                   "An argument to an extern-defined Func. May be a Function, Buffer, "
                                   "ImageParam or Expr.",
-                                  p::no_init)
-        .def(p::init<h::Buffer<>>(p::args("self", "b")))
-        .def(p::init<h::Expr>(p::args("self", "e")))
-        .def(p::init<int>(p::args("self", "e")))
-        .def(p::init<float>(p::args("self", "e")))
+                                  py::no_init)
+        .def(py::init<Buffer<>>(py::args("self", "b")))
+        .def(py::init<Expr>(py::args("self", "e")))
+        .def(py::init<int>(py::args("self", "e")))
+        .def(py::init<float>(py::args("self", "e")))
 
         .def_readwrite("arg_type", &ExternFuncArgument::arg_type)
         .def_readwrite("buffer", &ExternFuncArgument::buffer)
@@ -29,3 +23,6 @@ void define_extern_func_argument() {
         .def("is_image_param", &ExternFuncArgument::is_image_param)
         .def("defined", &ExternFuncArgument::defined);
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

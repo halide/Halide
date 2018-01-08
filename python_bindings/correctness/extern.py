@@ -1,6 +1,4 @@
-#!/usr/bin/python3
-
-from halide import *
+import halide as hl
 import numpy as np
 
 
@@ -14,23 +12,23 @@ def test_extern():
     print("TODO: test_extern not yet implemented in Python; skipping...")
     return 0
 
-    x = Var("x")
+    x = hl.Var("x")
 
     data = np.random.random(10).astype(np.float64)
     expected_result = np.sort(data)
     output_data = np.empty(10, dtype=np.float64)
 
-    sort_func = Func("extern_sort_func")
+    sort_func = hl.Func("extern_sort_func")
     # gsl_sort,
     # see http://www.gnu.org/software/gsl/manual/html_node/Sorting-vectors.html#Sorting-vectors
 
-    input = ImageParam(Float(64), 1, "input_data")
+    input = hl.ImageParam(hl.Float(64), 1, "input_data")
 
-    p1 = ExternFuncArgument(input) # data
+    p1 = hl.ExternFuncArgument(input) # data
     params = [p1]
 
-    output_types = TypesVector()
-    output_types.append(Int(32))
+    output_types = hl.TypesVector()
+    output_types.append(hl.Int(32))
 
     dimensionality = 1
 

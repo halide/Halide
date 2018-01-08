@@ -1,17 +1,32 @@
-#!/usr/bin/python3
+from __future__ import print_function
 
-from halide import *
-from contextlib import redirect_stdout
-import io, sys
+from contextlib import contextmanager
+import halide as hl
+import sys
+
+try:
+    from StringIO import StringIO  # Python2
+except ImportError:
+    from io import StringIO        # Python3
+
+# redirect_stdout() requires Python3, alas
+@contextmanager
+def _redirect_stdout(out):
+    old_out = sys.stdout
+    sys.stdout = out
+    try:
+        yield out
+    finally:
+        sys.stdout = old_out
 
 def test_compiletime_error():
 
-    x = Var('x')
-    y = Var('y')
-    f = Func('f')
-    f[x, y] = cast(UInt(16), x + y)
+    x = hl.Var('x')
+    y = hl.Var('y')
+    f = hl.Func('f')
+    f[x, y] = hl.cast(hl.UInt(16), x + y)
     # Deliberate type-mismatch error
-    buf = Buffer(UInt(8), 2, 2)
+    buf = hl.Buffer(hl.UInt(8), 2, 2)
     try:
         f.realize(buf)
     except RuntimeError as e:
@@ -21,12 +36,12 @@ def test_compiletime_error():
 
 def test_runtime_error():
 
-    x = Var('x')
-    f = Func('f')
-    f[x] = cast(UInt(8), x)
+    x = hl.Var('x')
+    f = hl.Func('f')
+    f[x] = hl.cast(hl.UInt(8), x)
     f.bound(x, 0, 1)
     # Deliberate runtime error
-    buf = Buffer(UInt(8), 10)
+    buf = hl.Buffer(hl.UInt(8), 10)
     try:
         f.realize(buf)
     except RuntimeError as e:
@@ -37,12 +52,12 @@ def test_runtime_error():
     return
 
 def test_print_expr():
-    x = Var('x')
-    f = Func('f')
-    f[x] = print_expr(cast(UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
-    buf = Buffer(UInt(8), 1)
-    output = io.StringIO()
-    with redirect_stdout(output):
+    x = hl.Var('x')
+    f = hl.Func('f')
+    f[x] = hl.print(hl.cast(hl.UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
+    buf = hl.Buffer(hl.UInt(8), 1)
+    output = StringIO()
+    with _redirect_stdout(output):
         f.realize(buf)
         expected = '0 is what the 1 and 3.141500 saw\n'
         actual = output.getvalue()
@@ -52,12 +67,12 @@ def test_print_expr():
 
 def test_print_when():
 
-    x = Var('x')
-    f = Func('f')
-    f[x] = print_when(x == 3, cast(UInt(8), x*x), 'is result at', x)
-    buf = Buffer(UInt(8), 10)
-    output = io.StringIO()
-    with redirect_stdout(output):
+    x = hl.Var('x')
+    f = hl.Func('f')
+    f[x] = hl.print_when(x == 3, hl.cast(hl.UInt(8), x*x), 'is result at', x)
+    buf = hl.Buffer(hl.UInt(8), 10)
+    output = StringIO()
+    with _redirect_stdout(output):
         f.realize(buf)
         expected = '9 is result at 3\n'
         actual = output.getvalue()
@@ -67,29 +82,29 @@ def test_print_when():
 
 def test_types():
 
-    t0 = Int(32)
-    t1 = Int(16)
+    t0 = hl.Int(32)
+    t1 = hl.Int(16)
 
     assert t0 != t1
     assert t0.is_float() == False
     assert t1.is_float() == False
 
-    print("Int(32) type:", Int(32))
-    print("Int(16) type:", Int(16))
+    print("hl.Int(32) type:", hl.Int(32))
+    print("hl.Int(16) type:", hl.Int(16))
 
     return
 
 def test_basics():
 
-    input = ImageParam(UInt(16), 2, 'input')
-    x, y = Var('x'), Var('y')
+    input = hl.ImageParam(hl.UInt(16), 2, 'input')
+    x, y = hl.Var('x'), hl.Var('y')
 
-    blur_x = Func('blur_x')
-    blur_xx = Func('blur_xx')
-    blur_y = Func('blur_y')
+    blur_x = hl.Func('blur_x')
+    blur_xx = hl.Func('blur_xx')
+    blur_y = hl.Func('blur_y')
 
-    yy = cast(Int(32), 1)
-    assert yy.type() == Int(32)
+    yy = hl.cast(hl.Int(32), 1)
+    assert yy.type() == hl.Int(32)
     print("yy type:", yy.type())
 
     z = x + 1
@@ -120,7 +135,7 @@ def test_basics():
     print("ping 1")
     blur_y[x,y] = (blur_x[x,y]+blur_x[x,y+1]+blur_x[x,y+2])/3
 
-    xi, yi = Var('xi'), Var('yi')
+    xi, yi = hl.Var('xi'), hl.Var('yi')
     print("ping 2")
     blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
     blur_x.compute_at(blur_y, x).vectorize(x, 8)
@@ -131,58 +146,29 @@ def test_basics():
 
     return
 
-
 def test_basics2():
 
-    input = ImageParam(Float(32), 3, 'input')
-    r_sigma = Param(Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
+    input = hl.ImageParam(hl.Float(32), 3, 'input')
+    r_sigma = hl.Param(hl.Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
     s_sigma = 8 # This is passed during code generation in the C++ version
 
-    x = Var('x')
-    y = Var('y')
-    z = Var('z')
-    c = Var('c')
+    x = hl.Var('x')
+    y = hl.Var('y')
+    z = hl.Var('z')
+    c = hl.Var('c')
 
     # Add a boundary condition
-    clamped = Func('clamped')
-    clamped[x, y] = input[clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1),0]
-
-    if True:
-        print("s_sigma", s_sigma)
-        print("s_sigma/2", s_sigma/2)
-        print("s_sigma//2", s_sigma//2)
-        print()
-        print("x * s_sigma", x * s_sigma)
-        print("x * 8", x * 8)
-        print("x * 8 + 4", x * 8 + 4)
-        print("x * 8 * 4", x * 8  * 4)
-        print()
-        print("x", x)
-        print("(x * s_sigma).type()", )
-        print("(x * 8).type()", (x * 8).type())
-        print("(x * 8 + 4).type()", (x * 8 + 4).type())
-        print("(x * 8 * 4).type()", (x * 8 * 4).type())
-        print("(x * 8 / 4).type()", (x * 8 / 4).type())
-        print("((x * 8) * 4).type()", ((x * 8) * 4).type())
-        print("(x * (8 * 4)).type()", (x * (8 * 4)).type())
-
-
-    assert (x * 8).type() == Int(32)
-    assert (x * 8 * 4).type() == Int(32) # yes this did fail at some point
-    assert ((x * 8) / 4).type() == Int(32)
-    assert (x * (8 / 4)).type() == Float(32) # under python3 division rules
-    assert (x * (8 // 4)).type() == Int(32)
-    #assert (x * 8 // 4).type() == Int(32) # not yet implemented
-
+    clamped = hl.Func('clamped')
+    clamped[x, y] = input[hl.clamp(x, 0, input.width()-1),
+                          hl.clamp(y, 0, input.height()-1),0]
 
     # Construct the bilateral grid
-    r = RDom(0, s_sigma, 0, s_sigma, 'r')
+    r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')
     val0 = clamped[x * s_sigma, y * s_sigma]
-    val00 = clamped[x * s_sigma * cast(Int(32), 1), y * s_sigma * cast(Int(32), 1)]
+    val00 = clamped[x * s_sigma * hl.cast(hl.Int(32), 1), y * s_sigma * hl.cast(hl.Int(32), 1)]
     #val1 = clamped[x * s_sigma - s_sigma/2, y * s_sigma - s_sigma/2] # should fail
-    val22 = clamped[x * s_sigma - cast(Int(32), s_sigma//2),
-                    y * s_sigma - cast(Int(32), s_sigma//2)]
+    val22 = clamped[x * s_sigma - hl.cast(hl.Int(32), s_sigma//2),
+                    y * s_sigma - hl.cast(hl.Int(32), s_sigma//2)]
     val2 = clamped[x * s_sigma - s_sigma//2, y * s_sigma - s_sigma//2]
     val3 = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
 
@@ -191,31 +177,31 @@ def test_basics2():
 
 def test_basics3():
 
-    input = ImageParam(Float(32), 3, 'input')
-    r_sigma = Param(Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
+    input = hl.ImageParam(hl.Float(32), 3, 'input')
+    r_sigma = hl.Param(hl.Float(32), 'r_sigma', 0.1) # Value needed if not generating an executable
     s_sigma = 8 # This is passed during code generation in the C++ version
 
-    x = Var('x')
-    y = Var('y')
-    z = Var('z')
-    c = Var('c')
+    x = hl.Var('x')
+    y = hl.Var('y')
+    z = hl.Var('z')
+    c = hl.Var('c')
 
     # Add a boundary condition
-    clamped = Func('clamped')
-    clamped[x, y] = input[clamp(x, 0, input.width()-1),
-                          clamp(y, 0, input.height()-1),0]
+    clamped = hl.Func('clamped')
+    clamped[x, y] = input[hl.clamp(x, 0, input.width()-1),
+                          hl.clamp(y, 0, input.height()-1),0]
 
     # Construct the bilateral grid
-    r = RDom(0, s_sigma, 0, s_sigma, 'r')
+    r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')
     val = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
-    val = clamp(val, 0.0, 1.0)
-    #zi = cast(Int(32), val * (1.0/r_sigma) + 0.5)
-    zi = cast(Int(32), (val / r_sigma) + 0.5)
-    histogram = Func('histogram')
+    val = hl.clamp(val, 0.0, 1.0)
+    #zi = hl.cast(hl.Int(32), val * (1.0/r_sigma) + 0.5)
+    zi = hl.cast(hl.Int(32), (val / r_sigma) + 0.5)
+    histogram = hl.Func('histogram')
     histogram[x, y, z, c] = 0.0
 
-    ss = select(c == 0, val, 1.0)
-    print("select(c == 0, val, 1.0)", ss)
+    ss = hl.select(c == 0, val, 1.0)
+    print("hl.select(c == 0, val, 1.0)", ss)
     left = histogram[x, y, zi, c]
     print("histogram[x, y, zi, c]", histogram[x, y, zi, c])
     print("histogram[x, y, zi, c]", left)
@@ -228,8 +214,8 @@ def test_basics3():
 
 def test_float_or_int():
 
-    x = Var('x')
-    i, f =  Int(32), Float(32)
+    x = hl.Var('x')
+    i, f =  hl.Int(32), hl.Float(32)
 
     assert ((x//2) - 1 + 2*(x%2)).type() == i
     assert ((x/2) - 1 + 2*(x%2)).type() == i
@@ -241,18 +227,18 @@ def test_float_or_int():
     assert (2*(x%2)).type() == i
     assert ((x//2) - 1 + 2*(x%2)).type() == i
 
-    assert type(x) == Var
-    assert (x.expr()).type() == i
-    assert (Expr(2.0)).type() == f
-    assert (Expr(2)).type() == i
+    assert type(x) == hl.Var
+    assert (x.as_expr()).type() == i
+    assert (hl.Expr(2.0)).type() == f
+    assert (hl.Expr(2)).type() == i
     assert (x + 2).type() == i
     assert (2 + x).type() == i
-    assert (Expr(2) + Expr(3)).type() == i
-    assert (Expr(2.0) + Expr(3)).type() == f
-    assert (Expr(2) + 3.0).type() == f
-    assert (Expr(2) + 3).type() == i
-    assert (x.expr() + 2).type() == i # yes this failed at some point
-    assert (2 + x.expr()).type() == i
+    assert (hl.Expr(2) + hl.Expr(3)).type() == i
+    assert (hl.Expr(2.0) + hl.Expr(3)).type() == f
+    assert (hl.Expr(2) + 3.0).type() == f
+    assert (hl.Expr(2) + 3).type() == i
+    assert (x.as_expr() + 2).type() == i # yes this failed at some point
+    assert (2 + x.as_expr()).type() == i
     assert (2 * (x + 2)).type() == i # yes this failed at some point
     assert (x + 0).type() == i
     assert (x % 2).type() == i
@@ -269,14 +255,14 @@ def test_float_or_int():
 
 def test_operator_order():
 
-    x = Var('x')
-    f = Func('f')
+    x = hl.Var('x')
+    f = hl.Func('f')
     x + 1
     1 + x
     print("x", x, ", x + 1", x + 1, ", 1 + x", 1 + x)
     f[x] = x ** 2
     f[x] + 1
-    Expr(1) + f[x]
+    hl.Expr(1) + f[x]
     1 + f[x]
 
     return
@@ -309,16 +295,16 @@ def test_image_to_ndarray():
 
     import numpy
 
-    i0 = Image(Float(32), 50, 50)
-    assert i0.type() == Float(32)
+    i0 = Image(hl.Float(32), 50, 50)
+    assert i0.type() == hl.Float(32)
 
     a0 = image_to_ndarray(i0)
     print("a0.shape", a0.shape)
     print("a0.dtype", a0.dtype)
     assert a0.dtype == numpy.float32
 
-    i1 = Image(Int(16), 50, 50)
-    assert i1.type() == Int(16)
+    i1 = Image(hl.Int(16), 50, 50)
+    assert i1.type() == hl.Int(16)
     i1[24, 24] = 42
     assert i1(24, 24) == 42
 
@@ -333,19 +319,19 @@ def test_image_to_ndarray():
 def test_param_bug():
     "see https://github.com/rodrigob/Halide/issues/1"
 
-    p1 = Param(UInt(8), "p1", 0)
-    p2 = Param(UInt(8), "p2")
-    p3 = Param(UInt(8), 42)
+    p1 = hl.Param(hl.UInt(8), "p1", 0)
+    p2 = hl.Param(hl.UInt(8), "p2")
+    p3 = hl.Param(hl.UInt(8), 42)
 
     return
 
 def test_imageparam_bug():
     "see https://github.com/rodrigob/Halide/issues/2"
 
-    x = Var("x")
-    y = Var("y")
-    fx = Func("fx")
-    input = ImageParam(UInt(8), 1, "input")
+    x = hl.Var("x")
+    y = hl.Var("y")
+    fx = hl.Func("fx")
+    input = hl.ImageParam(hl.UInt(8), 1, "input")
     fx[x, y] = input[y]
 
     return
