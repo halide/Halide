@@ -151,8 +151,6 @@ struct FunctionDAG {
             LeafCounter counter;
             exprs.accept(&counter);
 
-            call_counts.emplace(consumer.name(), std::move(counter.call_counts));
-
             // This is where the cost model is encoded!
             node.arith = counter.leaves;
             node.compute = simplify(cast<double>(vectors_computed) * node.arith + inner_loop_instances);
@@ -195,7 +193,7 @@ struct FunctionDAG {
             for (const Interval &i : n.region) {
                 debug(0) << "    " << i.min << ", " << i.max << "\n";
             }
-            debug(0) << "  Arithmetic cost: " << n.arith << "\n";
+            debug(0) << "  Arithmetic cost: " << n.compute << "\n";
         }
         for (const Edge &e : edges) {
             debug(0) << "Edge: " << e.producer.name() << " -> " << e.consumer.name() << "\n"
@@ -229,8 +227,8 @@ struct Group {
         // The current bounds
         vector<std::pair<int, int>> bounds;
 
-        // The current arithmetic cost, given these bounds
-        double arith;
+        // The current compute cost, given these bounds
+        double compute;
 
         // The current memory cost for loading from this func, given these bounds.
         double memory;
@@ -269,12 +267,17 @@ struct Group {
 
     void compute_bounds_and_costs(const FunctionDAG &dag) {
         map<Function, size_t, Function::Compare> group_members;
+        set<Function, Function::Compare> outputs;
         for (size_t i = 0; i < funcs.size(); i++) {
             group_members[funcs[i].func] = i;
             if (!funcs[i].is_output) {
                 funcs[i].bounds.clear();
+            } else {
+                outputs.insert(funcs[i].func);
             }
         }
+
+        // TODO: Figure out how to compute costs in the inlined case.
 
         map<string, Expr> concrete_bounds;
 
@@ -326,10 +329,10 @@ struct Group {
         // Recompute arithmetic and memory costs using these new bounds.
         for (auto &func : funcs) {
             internal_assert(dag.node_map.count(func.func));
-            Expr arith = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->arith));
-            const double *i_arith = as_const_float(arith);
-            internal_assert(i_arith) << arith;
-            func.arith = *i_arith;
+            Expr compute = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->compute));
+            const double *i_compute = as_const_float(compute);
+            internal_assert(i_compute) << compute;
+            func.compute = *i_compute;
             Expr memory = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->memory));
             const double *i_memory = as_const_float(memory);
             internal_assert(i_memory) << memory;
@@ -347,20 +350,20 @@ struct State {
     }
 
     void dump() const {
-        double total_arith = 0;
+        double total_compute = 0;
         for (const auto &g : groups) {
             for (const auto &f : g.funcs) {
-                total_arith += f.arith * g.instances;
+                total_compute += f.compute * g.instances;
             }
         }
         debug(0) << "State: \n";
         int counter = 0;
         debug(0) << "  memory cost: " << memory_cost << "\n";
-        debug(0) << "  total compute: " << total_arith << "\n";
-        debug(0) << "  essential compute: " << (total_arith - redundant_compute_cost) << "\n";
+        debug(0) << "  total compute: " << total_compute << "\n";
+        debug(0) << "  essential compute: " << (total_compute - redundant_compute_cost) << "\n";
         debug(0) << "  redundant compute: " << redundant_compute_cost << "\n";
         debug(0) << "  total cost: " << (redundant_compute_cost + memory_cost) << "\n";
-        debug(0) << "  compute multiplier: " << (1 + redundant_compute_cost / (total_arith - redundant_compute_cost)) << "\n";
+        debug(0) << "  compute multiplier: " << (1 + redundant_compute_cost / (total_compute - redundant_compute_cost)) << "\n";
         for (const auto &g : groups) {
             debug(0) << "  Group " << counter++ << ":\n"
                      << "    parallelism: " << g.parallelism << "\n"
@@ -369,7 +372,7 @@ struct State {
                 string parent = "none";
                 if (f.depth) parent = f.parent.name();
                 debug(0) << "    Function: " << f.func.name() << "\n"
-                         << "      arithmetic cost: " << f.arith << "\n"
+                         << "      compute cost: " << f.compute << "\n"
                          << "      memory cost: " << f.memory << "\n"
                          << "      is_output: " << f.is_output << "\n"
                          << "      parent " << parent << "\n"
@@ -567,14 +570,14 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
 
                     Group new_group = group;
                     Group::FunctionState *output_state = nullptr;
-                    double old_arith = 0;
+                    double old_compute = 0;
                     for (auto &fs : new_group.funcs) {
                         if (fs.func.same_as(output)) {
                             output_state = &fs;
                         }
-                        old_arith += fs.arith;
+                        old_compute += fs.compute;
                     }
-                    old_arith *= new_group.instances;
+                    old_compute *= new_group.instances;
 
                     internal_assert(output_state);
 
@@ -592,11 +595,11 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     // Should not have updated the bounds of the group output
                     internal_assert(max == min + split - 1);
 
-                    double new_arith = 0;
+                    double new_compute = 0;
                     for (auto &fs : new_group.funcs) {
-                        new_arith += fs.arith;
+                        new_compute += fs.compute;
                     }
-                    new_arith *= new_group.instances;
+                    new_compute *= new_group.instances;
 
                     // Reject out-of-hand anything
                     // particularly dumb (e.g. that causes 3x
@@ -607,7 +610,7 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     // avoid it by flooding the beam with slightly
                     // less painful incremental fuses that lead to
                     // worse overall outcomes.
-                    //if (new_arith > 1.1*old_arith) {
+                    //if (new_compute > 1.1*old_compute) {
                     //    continue;
                     //}
 
@@ -627,8 +630,8 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     }
 
                     std::shared_ptr<State> child(new State(state));
-                    internal_assert(new_arith >= old_arith) << "Fusing reduced total amount of work!\n";
-                    child->redundant_compute_cost += new_arith - old_arith;
+                    internal_assert(new_compute >= old_compute) << "Fusing reduced total amount of work!\n";
+                    child->redundant_compute_cost += new_compute - old_compute;
                     child->groups[group_idx] = new_group;
 
                     /*
@@ -928,7 +931,7 @@ void autoschedule_test() {
             // Check things that should be unique to this pipeline
             internal_assert(g.instances == 1000 * 1000); // Full fusion means a separate instance per output pixel
             internal_assert(fs.memory < 1); // Memory costs should be super cheap
-            internal_assert(fs.arith < 5); // Arithmetic costs per instances are also minor, because each instance is one pixel
+            internal_assert(fs.compute < 5); // Arithmetic costs per instances are also minor, because each instance is one pixel
 
             if (!fs.func.same_as(h.function())) {
                 internal_assert(fs.depth == 2); // Computed inside two loops of the consumer
@@ -970,7 +973,7 @@ void autoschedule_test() {
 
             internal_assert(g.instances == 1); // No fusion means a single instance of each func
             internal_assert(fs.memory > 1000); // Memory costs should be high
-            internal_assert(fs.arith > 1000); // Arithmetic costs should be high too
+            internal_assert(fs.compute > 1000); // Arithmetic costs should be high too
 
             internal_assert(fs.depth == 0); // Computed at root
             internal_assert(fs.splits[0].empty()); // No splits
@@ -993,7 +996,7 @@ void autoschedule_test() {
 
         optimal.dump();
 
-        double total_arith = 0;
+        double total_compute = 0;
         for (const auto &g : optimal.groups) {
             // Check some invariants
             internal_assert(g.funcs.size() == 1);
@@ -1001,7 +1004,7 @@ void autoschedule_test() {
             internal_assert(fs.is_output);
             internal_assert(fs.splits.size() == 2);
 
-            total_arith += g.instances * fs.arith;
+            total_compute += g.instances * fs.compute;
 
             internal_assert(g.instances > 1 && g.instances < 100); // There should be some modest number of tiles
 
@@ -1022,12 +1025,12 @@ void autoschedule_test() {
             }
 
             internal_assert(fs.memory > 100 && fs.memory < 100000); // Memory costs should be moderate
-            internal_assert(fs.arith > 1000); // Arithmetic costs should be high
+            internal_assert(fs.compute > 1000); // Arithmetic costs should be high
         }
 
         // Some redundant recompute, but small as a fraction of the total amount of work
         internal_assert(optimal.redundant_compute_cost > 0);
-        internal_assert(optimal.redundant_compute_cost < 0.1 * total_arith);
+        internal_assert(optimal.redundant_compute_cost < 0.1 * total_compute);
 
     }
 
@@ -1045,7 +1048,7 @@ void autoschedule_test() {
 
         optimal.dump();
 
-        double total_arith = 0;
+        double total_compute = 0;
         for (const auto &g : optimal.groups) {
             // Check some invariants
             internal_assert(g.funcs.size() == 1);
@@ -1053,7 +1056,7 @@ void autoschedule_test() {
             internal_assert(fs.is_output);
             internal_assert(fs.splits.size() == 2);
 
-            total_arith += g.instances * fs.arith;
+            total_compute += g.instances * fs.compute;
 
             internal_assert(g.instances > 1 && g.instances < 100); // There should be some modest number of tiles
 
@@ -1075,12 +1078,12 @@ void autoschedule_test() {
             }
 
             internal_assert(fs.memory > 100 && fs.memory < 100000); // Memory costs should be moderate
-            internal_assert(fs.arith > 1000); // Arithmetic costs should be high
+            internal_assert(fs.compute > 1000); // Arithmetic costs should be high
         }
 
         // Some redundant recompute, but small as a fraction of the total amount of work
         internal_assert(optimal.redundant_compute_cost > 0);
-        internal_assert(optimal.redundant_compute_cost < 0.1 * total_arith);
+        internal_assert(optimal.redundant_compute_cost < 0.1 * total_compute);
 
     }
 
