@@ -1,3 +1,5 @@
+#define DEBUG_RUNTIME   1   // for debug(NULL) print to work...
+
 #include "HalideRuntimeD3D12Compute.h"
 #include "scoped_spin_lock.h"
 #include "device_buffer_utils.h"
@@ -385,9 +387,30 @@ static void D3D12LoadDependencies(void* user_context)
 #endif
 }
 
-#pragma clang diagnostic ignored "-Wignored-attributes"
-static void TestMethodSignature(D3D12_CPU_DESCRIPTOR_HANDLE(__cdecl ID3D12DescriptorHeap::*pfn_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart)(void))
+//#pragma clang diagnostic ignored "-Wignored-attributes"
+//static void TestMethodSignature(D3D12_CPU_DESCRIPTOR_HANDLE(__cdecl ID3D12DescriptorHeap::*pfn_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart)(void))
+//{
+//}
+
+D3D12_DESCRIPTOR_HEAP_DESC ZCall_ID3D12DescriptorHeap_GetDesc(ID3D12DescriptorHeap* descriptorheap)
 {
+    D3D12_DESCRIPTOR_HEAP_DESC desc = { };
+    Call_ID3D12DescriptorHeap_GetDesc( (int64_t*)descriptorheap, (int64_t*)&desc );
+    return(desc);
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE ZCall_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* descriptorheap)
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = { };
+    Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart( (int64_t*)descriptorheap, (int64_t*)&cpuHandle );
+    return(cpuHandle);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE ZCall_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* descriptorheap)
+{
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = { };
+    Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart( (int64_t*)descriptorheap, (int64_t*)&gpuHandle );
+    return(gpuHandle);
 }
 
 static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
@@ -479,21 +502,21 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (int32_t)sizeof(ID3D12DescriptorHeap) << "\n";
     debug(NULL) << "!!!!!!!!!! d3d12_binder: " << (int32_t)sizeof(d3d12_binder) << "\n";
 
-    TestMethodSignature(&ID3D12DescriptorHeap::GetCPUDescriptorHandleForHeapStart);
+    //TestMethodSignature(&ID3D12DescriptorHeap::GetCPUDescriptorHandleForHeapStart);
 
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
     int a = 1;
-    D3D12_DESCRIPTOR_HEAP_DESC dhd2 = descriptorHeap->GetDesc();
+    D3D12_DESCRIPTOR_HEAP_DESC dhd2 = ZCall_ID3D12DescriptorHeap_GetDesc(descriptorHeap);
     a = 2;
-    debug(NULL) << "!!!!!!!!!! descriptor heap desc: " << (uint64_t)dhd2.Type << dhd2.NumDescriptors << dhd2.Flags << dhd2.NodeMask << "\n";
+    debug(NULL) << "!!!!!!!!!! descriptor heap desc: " << (uint64_t)dhd2.Type << ":" << dhd2.NumDescriptors << ":" << dhd2.Flags << ":" << dhd2.NodeMask << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
 
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
-    debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = ZCall_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n";
+    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
+
+    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = ZCall_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
+    debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
 
     d3d12_binder* binder = (d3d12_binder*)malloc(sizeof(d3d12_binder));
@@ -708,16 +731,16 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
     d3d12_binder* binder = (d3d12_binder*)malloc(sizeof(d3d12_binder));
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = ZCall_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-    D3D12_DESCRIPTOR_HEAP_DESC dhd2 = descriptorHeap->GetDesc();
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-    debug(NULL) << "!!!!!!!!!! descriptor heap desc: " << (uint64_t)dhd2.Type << dhd2.NumDescriptors << dhd2.Flags << dhd2.NodeMask << "\n";
+    //D3D12_DESCRIPTOR_HEAP_DESC dhd2 = GetDesc(descriptorHeap);
+    //debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
+    //debug(NULL) << "!!!!!!!!!! descriptor heap desc: " << (uint64_t)dhd2.Type << dhd2.NumDescriptors << dhd2.Flags << dhd2.NodeMask << "\n";
     binder->CPU[UAV].ptr = baseCPU.ptr +  0*descriptorSize;
     binder->CPU[CBV].ptr = baseCPU.ptr + 25*descriptorSize;
     binder->CPU[SRV].ptr = baseCPU.ptr + 50*descriptorSize;
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = ZCall_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
     binder->GPU[UAV].ptr = baseGPU.ptr +  0*descriptorSize;
     binder->GPU[CBV].ptr = baseGPU.ptr + 25*descriptorSize;

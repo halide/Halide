@@ -2454,11 +2454,11 @@ typedef struct __LUID *PLUID;
     ID3D12DescriptorHeap : public ID3D12Pageable
     {
     public:
-        virtual D3D12_DESCRIPTOR_HEAP_DESC STDMETHODCALLTYPE GetDesc( void) = 0;
+        virtual D3D12_DESCRIPTOR_HEAP_DESC STDMETHODCALLTYPE GetDesc( D3D12_DESCRIPTOR_HEAP_DESC* temp ) = 0;
         
-        virtual D3D12_CPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetCPUDescriptorHandleForHeapStart( void) = 0;
+        virtual D3D12_CPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetCPUDescriptorHandleForHeapStart( D3D12_CPU_DESCRIPTOR_HANDLE* temp ) = 0;
         
-        virtual D3D12_GPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetGPUDescriptorHandleForHeapStart( void) = 0;
+        virtual D3D12_GPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetGPUDescriptorHandleForHeapStart( D3D12_GPU_DESCRIPTOR_HANDLE* temp ) = 0;
         
     };
 

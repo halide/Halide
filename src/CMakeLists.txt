@@ -101,6 +101,7 @@ set (RUNTIME_LL
   x86
   x86_avx
   x86_sse41
+  d3d12_abi_patch_64
 )
 
 set (RUNTIME_BC
