@@ -392,6 +392,11 @@ static void D3D12LoadDependencies(void* user_context)
 //{
 //}
 
+// D3D12 ABI patch trampolines (refer to 'd3d12_abi_patch_64.ll')
+extern "C" void Call_ID3D12DescriptorHeap_GetDesc(int64_t* descriptorheap, int64_t* desc);
+extern "C" void Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* cpuHandle);
+extern "C" void Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* gpuHandle);
+
 D3D12_DESCRIPTOR_HEAP_DESC ZCall_ID3D12DescriptorHeap_GetDesc(ID3D12DescriptorHeap* descriptorheap)
 {
     D3D12_DESCRIPTOR_HEAP_DESC desc = { };

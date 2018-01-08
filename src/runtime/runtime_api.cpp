@@ -194,7 +194,4 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_initialize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
-    (void *)&Call_ID3D12DescriptorHeap_GetDesc,
-    (void *)&Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart,
-    (void *)&Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart,
 };

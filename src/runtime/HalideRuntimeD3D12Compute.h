@@ -86,10 +86,6 @@ extern int halide_d3d12compute_acquire_context(void *user_context, struct halide
  */
 extern int halide_d3d12compute_release_context(void *user_context);
 
-extern void Call_ID3D12DescriptorHeap_GetDesc(int64_t* descriptorheap, int64_t* desc);
-extern void Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* cpuHandle);
-extern void Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* gpuHandle);
-
 #ifdef __cplusplus
 } // End extern "C"
 #endif
