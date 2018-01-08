@@ -86,6 +86,7 @@ struct Target {
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
         AutoScheduleOld = halide_target_feature_auto_schedule_old,
+        AutoScheduleTopDown = halide_target_feature_auto_schedule_top_down,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

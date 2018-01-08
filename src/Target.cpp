@@ -267,6 +267,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
     {"auto_schedule_old", Target::AutoScheduleOld},
+    {"auto_schedule_top_down", Target::AutoScheduleTopDown},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

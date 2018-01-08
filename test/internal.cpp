@@ -17,6 +17,7 @@
 #include "Interval.h"
 #include "Associativity.h"
 #include "Generator.h"
+#include "AutoScheduleTopDown.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -39,6 +40,6 @@ int main(int argc, const char **argv) {
     interval_test();
     associativity_test();
     generator_test();
-
+    autoschedule_test();
     return 0;
 }

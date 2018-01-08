@@ -18,7 +18,7 @@ $(BIN)/stencil_chain_auto_schedule_old.a: $(BIN)/stencil_chain_exec
 
 $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain_exec
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime-auto_schedule_top_down auto_schedule=true
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_auto_schedule_old.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)

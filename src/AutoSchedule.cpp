@@ -4804,9 +4804,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 std::string MachineParams::to_string() const {
-    internal_assert(parallelism.type().is_int() &&
-                    last_level_cache_size.type().is_int() &&
-                    balance.type().is_int());
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();

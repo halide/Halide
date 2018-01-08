@@ -15,12 +15,12 @@ namespace Halide {
  * code for. */
 struct MachineParams {
     /** Maximum level of parallelism avalaible. */
-    Expr parallelism;
+    int parallelism;
     /** Size of the last-level cache (in KB). */
-    Expr last_level_cache_size;
+    int last_level_cache_size;
     /** Indicates how much more expensive is the cost of a load compared to
      * the cost of an arithmetic operation at last level cache. */
-    Expr balance;
+    int balance;
 
     explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance)
         : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}

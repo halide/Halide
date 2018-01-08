@@ -2,6 +2,7 @@
 
 #include "Pipeline.h"
 #include "Argument.h"
+#include "AutoScheduleTopDown.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "InferArguments.h"
@@ -154,7 +155,9 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
-    if (run_old_auto_scheduler) {
+    if (target.has_feature(Target::AutoScheduleTopDown)) {
+        return generate_schedules_top_down(contents->outputs, target, arch_params);
+    } else if (run_old_auto_scheduler) {
         return generate_schedules_old(contents->outputs, target, arch_params);
     } else {
         return generate_schedules(contents->outputs, target, arch_params);
