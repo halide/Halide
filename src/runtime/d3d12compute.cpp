@@ -40,8 +40,9 @@
 template<typename ID3D12T>
 static bool D3DError(HRESULT result, ID3D12T* object, void* user_context, const char* message)
 {
-    // ERROR CODES:
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
+    // HRESULT ERROR CODES:
+    // D3D12: https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
+    // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
     if (FAILED(result) || !object)
     {
         error(user_context) << message
@@ -50,6 +51,127 @@ static bool D3DError(HRESULT result, ID3D12T* object, void* user_context, const 
         return(true);
     }
     return(false);
+}
+
+static DXGI_FORMAT FindD3D12FormatForHalideType(halide_type_t type)
+{
+    // DXGI Formats:
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/bb173059(v=vs.85).aspx
+
+    // indexing scheme: [code][lane][bits]
+    const DXGI_FORMAT FORMATS [3][4][4] =
+    {
+        // halide_type_int
+        {
+            // 1 lane
+            {
+                DXGI_FORMAT_R8_SINT,    //  8 bits
+                DXGI_FORMAT_R16_SINT,   // 16 bits
+                DXGI_FORMAT_R32_SINT,   // 32 bits
+                DXGI_FORMAT_UNKNOWN,    // 64 bits
+            },
+            // 2 lanes
+            {
+                DXGI_FORMAT_R8G8_SINT,
+                DXGI_FORMAT_R16G16_SINT,
+                DXGI_FORMAT_R32G32_SINT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 3 lanes
+            {
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_R32G32B32_SINT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 4 lanes
+            {
+                DXGI_FORMAT_R8G8B8A8_SINT,
+                DXGI_FORMAT_R16G16B16A16_SINT,
+                DXGI_FORMAT_R32G32B32A32_SINT,
+                DXGI_FORMAT_UNKNOWN,
+            }
+        },
+        // halide_type_uint
+        {
+            // 1 lane
+            {
+                DXGI_FORMAT_R8_UINT,
+                DXGI_FORMAT_R16_UINT,
+                DXGI_FORMAT_R32_UINT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 2 lanes
+            {
+                DXGI_FORMAT_R8G8_UINT,
+                DXGI_FORMAT_R16G16_UINT,
+                DXGI_FORMAT_R32G32_UINT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 3 lanes
+            {
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_R32G32B32_UINT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 4 lanes
+            {
+                DXGI_FORMAT_R8G8B8A8_UINT,
+                DXGI_FORMAT_R16G16B16A16_UINT,
+                DXGI_FORMAT_R32G32B32A32_UINT,
+                DXGI_FORMAT_UNKNOWN,
+            }
+        },
+        // halide_type_float
+        {
+            // 1 lane
+            {
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_R16_FLOAT,
+                DXGI_FORMAT_R32_FLOAT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 2 lanes
+            {
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_R16G16_FLOAT,
+                DXGI_FORMAT_R32G32_FLOAT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 3 lanes
+            {
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_R32G32B32_FLOAT,
+                DXGI_FORMAT_UNKNOWN,
+            },
+            // 4 lanes
+            {
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R32G32B32A32_FLOAT,
+                DXGI_FORMAT_UNKNOWN,
+            }
+        },
+    };
+
+    halide_assert(NULL, (type.code >= 0) && (type.code <= 2));
+    halide_assert(NULL, (type.lanes > 0) && (type.lanes <= 4));
+
+    int i = 0;
+    switch (type.bytes())
+    {
+        case 1  : i = 0; break;
+        case 2  : i = 1; break;
+        case 4  : i = 2; break;
+        case 8  : i = 3; break;
+        default : halide_assert(NULL, false);  break;
+    }
+
+    DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+    format = FORMATS[(int)type.code][type.lanes-1][i];
+    return(format);
 }
 
 #define INLINE inline __attribute__((always_inline))
@@ -193,6 +315,7 @@ struct  d3d12_resource : public halide_d3d12_wrapper<ID3D12Resource> { };
 struct d3d12_buffer
 {
     ID3D12Resource* resource;
+    halide_buffer_t* halide;
     void* mapped;
 };
 
@@ -548,6 +671,7 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list* cmdList,
 WEAK d3d12_buffer* new_buffer(d3d12_device* device, size_t length)
 {
     TRACELOG;
+
     ID3D12Resource* resource = NULL;
     D3D12_RESOURCE_DESC desc = { };
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -576,14 +700,12 @@ WEAK d3d12_buffer* new_buffer(d3d12_device* device, size_t length)
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
     if (D3DError(result, resource, NULL, "Unable to create the Direct3D 12 buffer resource"))
         return(NULL);
-    //return(reinterpret_cast<d3d12_buffer*>(resource));
 
-    // TODO(marcos): remove this placeholder
     d3d12_buffer* buffer = (d3d12_buffer*)malloc(sizeof(d3d12_buffer));
     buffer->resource = resource;
+    buffer->halide = NULL;
     buffer->mapped = NULL;
-    //buffer->memory = malloc(length);
-    //buffer->size = length;
+
     return(buffer);
 }
 
@@ -878,22 +1000,28 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
 {
     TRACELOG;
 
-    ID3D12Resource* pResource = input_buffer->resource;
-    ID3D12Resource* pCounterResource = NULL;    // for atomic counters
+    const halide_type_t& type = input_buffer->halide->type;
+
+    //DXGI_FORMAT Format = FindD3D12FormatForHalideType(type);
+    UINT NumElements = input_buffer->halide->number_of_elements();
+    UINT Stride = type.bytes() * type.lanes;
 
     // A View of a non-Structured Buffer cannot be created using a NULL Desc.
     // Default Desc parameters cannot be used, as a Format must be supplied.
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = { };
-        uavd.Format = DXGI_FORMAT_UNKNOWN;                  // ???
+        uavd.Format = DXGI_FORMAT_UNKNOWN;
         uavd.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
         uavd.Buffer.FirstElement = 0;
-        uavd.Buffer.NumElements = 0;                        // ???
-        uavd.Buffer.StructureByteStride = 0;                // ???
-        uavd.Buffer.CounterOffsetInBytes = 0;               // 0, since there is no "counter" resource
+        uavd.Buffer.NumElements = NumElements;
+        uavd.Buffer.StructureByteStride = Stride;
+        uavd.Buffer.CounterOffsetInBytes = 0;               // 0, since this is not an atomic counter
         uavd.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
     // TODO(marcos): should probably use "index" here somewhere
     D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
+
+    ID3D12Resource* pResource = input_buffer->resource;
+    ID3D12Resource* pCounterResource = NULL;    // for atomic counters
 
     (*device)->CreateUnorderedAccessView(pResource, pCounterResource, &uavd, hDescUAV);
 
@@ -1131,6 +1259,8 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
         error(user_context) << "D3d12: Failed to allocate buffer of size " << (int64_t)size << ".\n";
         return -1;
     }
+
+    d3d12_buf->halide = buf;
 
     buf->device = (uint64_t)d3d12_buf;
     buf->device_interface = &d3d12compute_device_interface;
