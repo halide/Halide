@@ -33,9 +33,8 @@ struct FunctionDAG {
     struct Node {
         Function func;
 
-        // The amount of compute done in terms of a symbolic region of
-        // this Func. Measured in vectors-of-compute.
-        Expr compute;
+        // The amount of compute done per point evaluated.
+        double compute;
 
         // The memory cost of loading all of this Func, in terms of the same symbolic region
         Expr memory;
@@ -43,10 +42,6 @@ struct FunctionDAG {
         // The min/max variables used to denote a symbolic region of
         // this Func. Used in the cost above, and in the Edges below.
         vector<Interval> region;
-
-        // The arithmetic complexity of a single call to this
-        // Func. Measured in abstract number-of-ops.
-        Expr arith;
     };
 
     struct Edge {
@@ -56,9 +51,9 @@ struct FunctionDAG {
         // region of the consumer
         vector<Interval> bounds;
 
-        // The number of calls the consumer makes to the producer, in
-        // terms of the same symbolic region. Use this for inlining.
-        Expr calls;
+        // The number of calls the consumer makes to the producer, per
+        // point evaluated in the consumer.
+        int calls;
     };
 
     vector<Node> nodes;
@@ -88,28 +83,17 @@ struct FunctionDAG {
 
             // Create a symbolic region for this Func.
             Node node;
-            Expr vectors_computed = make_one(Int(64));
             Expr memory_allocated = make_zero(Int(64));
             for (Expr e : consumer.values()) {
                 memory_allocated += e.type().bytes();
             }
-            Expr inner_loop_instances = make_one(Int(64));
             Scope<Interval> scope;
             node.func = consumer;
             for (int i = 0; i < consumer.dimensions(); i++) {
                 Expr min_var = Variable::make(Int(32), consumer.name() + "." + std::to_string(i) + ".min");
                 Expr max_var = Variable::make(Int(32), consumer.name() + "." + std::to_string(i) + ".max");
                 Expr extent = max_var - min_var + 1;
-                if (i > 0) {
-                    inner_loop_instances *= extent;
-                    vectors_computed *= extent;
-                    memory_allocated *= extent;
-                } else {
-                    // We measure number of points computed in whole
-                    // vectors.
-                    vectors_computed *= (extent + 7) / 8; // TODO: assumes uint16
-                    memory_allocated *= extent;
-                }
+                memory_allocated *= extent;
                 Interval interval(min_var, max_var);
                 scope.push(consumer.args()[i], interval);
                 node.region.push_back(interval);
@@ -152,8 +136,7 @@ struct FunctionDAG {
             exprs.accept(&counter);
 
             // This is where the cost model is encoded!
-            node.arith = counter.leaves;
-            node.compute = simplify(cast<double>(vectors_computed) * node.arith + inner_loop_instances);
+            node.compute = counter.leaves;
             Expr balance = cast<double>(params.balance), llc = cast<double>(params.last_level_cache_size);
             Expr cost_per_load = (balance / llc) * min(memory_allocated, llc);
             node.memory = simplify(memory_allocated * cost_per_load);
@@ -262,81 +245,127 @@ struct Group {
     float parallelism;
 
     bool fully_scheduled() const {
-        return funcs.size() == 1;
+        return inlined || funcs.size() == 1;
     }
+
+    // Everything in this group is inlined into the sole output
+    bool inlined;
 
     void compute_bounds_and_costs(const FunctionDAG &dag) {
         map<Function, size_t, Function::Compare> group_members;
-        set<Function, Function::Compare> outputs;
+        FunctionState *output_state = nullptr;
         for (size_t i = 0; i < funcs.size(); i++) {
             group_members[funcs[i].func] = i;
+            funcs[i].compute = 0;
+            funcs[i].memory = 0;
             if (!funcs[i].is_output) {
                 funcs[i].bounds.clear();
             } else {
-                outputs.insert(funcs[i].func);
+                internal_assert(!output_state);
+                output_state = &funcs[i];
             }
         }
 
-        // TODO: Figure out how to compute costs in the inlined case.
-
-        map<string, Expr> concrete_bounds;
-
-        for (const auto &consumer : funcs) {
-            internal_assert(dag.incoming_edges.count(consumer.func));
-
-            const auto *node = dag.node_map.at(consumer.func);
-            internal_assert(node->region.size() == (size_t)consumer.func.dimensions());
-            internal_assert(consumer.bounds.size() == (size_t)consumer.func.dimensions());
-            for (int i = 0; i < consumer.func.dimensions(); i++) {
-                concrete_bounds[node->region[i].min.as<Variable>()->name] = consumer.bounds[i].first;
-                concrete_bounds[node->region[i].max.as<Variable>()->name] = consumer.bounds[i].second;
+        if (inlined) {
+            // Figure out the number of points computed of the output
+            int64_t points_computed = 1;
+            for (int i = 0; i < output_state->func.dimensions(); i++) {
+                int extent = output_state->bounds[i].second - output_state->bounds[i].first + 1;
+                if (i == 0) {
+                    // Assume vectorization by 16
+                    points_computed *= ((extent + 15) / 16) * 16;
+                } else {
+                    points_computed *= extent;
+                }
             }
 
-            for (const auto *edge : dag.incoming_edges.at(consumer.func)) {
-                if (!group_members.count(edge->producer)) continue; // The producer is in another group.
-                // Find the producer
-                FunctionState &producer = funcs[group_members.at(edge->producer)];
+            // Figure out the number of times every Func gets evaluated
+            map<Function, int64_t, Function::Compare> times_called;
+            times_called[output_state->func] = points_computed;
+            for (const auto &edge : dag.edges) {
+                if (group_members.count(edge.producer) && group_members.count(edge.consumer)) {
+                    times_called[edge.producer] += times_called[edge.consumer] * edge.calls;
+                }
+            }
 
-                internal_assert(edge->consumer.same_as(consumer.func));
-                internal_assert(edge->producer.same_as(producer.func));
-                internal_assert(!producer.is_output);
+            // Accumulate a total cost
+            double total_compute = 0;
+            for (const auto &func : funcs) {
+                // Discount the cost by all the call nodes that went away due to inlining.
+                double discount = func.func.dimensions(); // TODO: this assumes the expression cost just count leaves. refactor
+                total_compute += times_called[func.func] * (dag.node_map.at(func.func)->compute - discount);
+            }
 
-                bool first_consumer = producer.bounds.empty();
-                if (first_consumer) {
-                    producer.bounds.resize(producer.func.dimensions());
+            // Attribute it all to the output
+            output_state->compute = total_compute;
+        } else {
+
+            map<string, Expr> concrete_bounds;
+
+            for (auto &consumer : funcs) {
+                internal_assert(dag.incoming_edges.count(consumer.func));
+
+                const auto *node = dag.node_map.at(consumer.func);
+                internal_assert(node->region.size() == (size_t)consumer.func.dimensions());
+                internal_assert(consumer.bounds.size() == (size_t)consumer.func.dimensions());
+                int64_t points_computed = 1;
+                for (int i = 0; i < consumer.func.dimensions(); i++) {
+                    concrete_bounds[node->region[i].min.as<Variable>()->name] = consumer.bounds[i].first;
+                    concrete_bounds[node->region[i].max.as<Variable>()->name] = consumer.bounds[i].second;
+                    int extent = consumer.bounds[i].second - consumer.bounds[i].first + 1;
+                    if (i == 0) {
+                        // Assume vectorization
+                        points_computed *= ((extent + 7) / 8) * 8;
+                    } else {
+                        points_computed *= extent;
+                    }
                 }
 
-                // Expand the bounds of the producer using the bounds
-                // relationship encoded in the edge.
-                for (int i = 0; i < producer.func.dimensions(); i++) {
-                    Interval interval = edge->bounds[i];
-                    interval.min = simplify(substitute(concrete_bounds, interval.min));
-                    interval.max = simplify(substitute(concrete_bounds, interval.max));
-                    const int64_t *i_max = as_const_int(interval.max);
-                    const int64_t *i_min = as_const_int(interval.min);
-                    internal_assert(i_min) << interval.min;
-                    internal_assert(i_max) << interval.max;
+                // Record arithmetic cost
+                consumer.compute = points_computed * node->compute;
+
+                for (const auto *edge : dag.incoming_edges.at(consumer.func)) {
+                    if (!group_members.count(edge->producer)) continue; // The producer is in another group.
+                    // Find the producer
+                    FunctionState &producer = funcs[group_members.at(edge->producer)];
+
+                    internal_assert(edge->consumer.same_as(consumer.func));
+                    internal_assert(edge->producer.same_as(producer.func));
+                    internal_assert(!producer.is_output);
+
+                    bool first_consumer = producer.bounds.empty();
                     if (first_consumer) {
-                        producer.bounds[i] = {(int)(*i_min), (int)(*i_max)};
-                    } else {
-                        producer.bounds[i].first = std::min(producer.bounds[i].first, (int)(*i_min));
-                        producer.bounds[i].second = std::max(producer.bounds[i].second, (int)(*i_max));
+                        producer.bounds.resize(producer.func.dimensions());
+                    }
+
+                    // Expand the bounds of the producer using the bounds
+                    // relationship encoded in the edge.
+                    for (int i = 0; i < producer.func.dimensions(); i++) {
+                        Interval interval = edge->bounds[i];
+                        interval.min = simplify(substitute(concrete_bounds, interval.min));
+                        interval.max = simplify(substitute(concrete_bounds, interval.max));
+                        const int64_t *i_max = as_const_int(interval.max);
+                        const int64_t *i_min = as_const_int(interval.min);
+                        internal_assert(i_min) << interval.min;
+                        internal_assert(i_max) << interval.max;
+                        if (first_consumer) {
+                            producer.bounds[i] = {(int)(*i_min), (int)(*i_max)};
+                        } else {
+                            producer.bounds[i].first = std::min(producer.bounds[i].first, (int)(*i_min));
+                            producer.bounds[i].second = std::max(producer.bounds[i].second, (int)(*i_max));
+                        }
                     }
                 }
             }
-        }
 
-        // Recompute arithmetic and memory costs using these new bounds.
-        for (auto &func : funcs) {
-            internal_assert(dag.node_map.count(func.func));
-            Expr compute = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->compute));
-            const double *i_compute = as_const_float(compute);
-            internal_assert(i_compute) << compute;
-            func.compute = *i_compute;
-            Expr memory = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->memory));
-            const double *i_memory = as_const_float(memory);
-            internal_assert(i_memory) << memory;
-            func.memory = *i_memory;
+            // Recompute memory costs using these new bounds.
+            for (auto &func : funcs) {
+                internal_assert(dag.node_map.count(func.func));
+                Expr memory = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->memory));
+                const double *i_memory = as_const_float(memory);
+                internal_assert(i_memory) << memory;
+                func.memory = *i_memory;
+            }
         }
     }
 };
@@ -367,7 +396,8 @@ struct State {
         for (const auto &g : groups) {
             debug(0) << "  Group " << counter++ << ":\n"
                      << "    parallelism: " << g.parallelism << "\n"
-                     << "    instances: " << g.instances << "\n";
+                     << "    instances: " << g.instances << "\n"
+                     << "    inlined: " << g.inlined << "\n";
             for (const auto &f : g.funcs) {
                 string parent = "none";
                 if (f.depth) parent = f.parent.name();
@@ -630,7 +660,7 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     }
 
                     std::shared_ptr<State> child(new State(state));
-                    internal_assert(new_compute >= old_compute) << "Fusing reduced total amount of work!\n";
+                    internal_assert(new_compute >= old_compute) << "Fusing reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
                     child->redundant_compute_cost += new_compute - old_compute;
                     child->groups[group_idx] = new_group;
 
@@ -651,6 +681,36 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                 }
             }
         } while (0);
+
+        // Try inlining the group
+        {
+            Group new_group = group;
+            new_group.inlined = true;
+            new_group.compute_bounds_and_costs(dag);
+
+            // TODO: record the total compute for a group somewhere to avoid recomputing it everywhere
+            double old_compute = 0;
+            for (auto &fs : group.funcs) {
+                old_compute += fs.compute;
+            }
+            old_compute *= new_group.instances;
+
+            double new_compute = 0;
+            for (auto &fs : new_group.funcs) {
+                new_compute += fs.compute;
+            }
+            new_compute *= new_group.instances;
+
+            // Inlining may often be absurdly bad, but it's a terminal
+            // state for the group, so it doesn't expand the search
+            // tree much to just unconditionally consider it.
+
+            //internal_assert(new_compute >= old_compute) << "Inlining reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
+            std::shared_ptr<State> child(new State(state));
+            child->redundant_compute_cost += new_compute - old_compute;
+            child->groups[group_idx] = new_group;
+            result.emplace_back(std::move(child));
+        }
 
         // Try fusing the group under an outer serial loop
         {
@@ -683,6 +743,7 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
         Group group;
         group.parallelism = params.parallelism;
         group.instances = 1;
+        group.inlined = false;
         for (const FunctionDAG::Node &n : dag.nodes) {
             Group::FunctionState f;
             f.func = n.func;
@@ -832,8 +893,9 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
     // Apply the schedules
 
     for (auto &g : optimal.groups) {
-        internal_assert(g.funcs.size() == 1);
+        internal_assert(g.funcs.size() == 1 || g.inlined);
         auto &fs = g.funcs[0];
+        internal_assert(fs.is_output);
 
         // First do all the splits
 
@@ -872,7 +934,7 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
         loops.insert(loops.end(), outer_loops.begin(), outer_loops.end());
 
         Func(fs.func).reorder(loops);
-        Func(fs.func).vectorize(loops[0], 8);
+        Func(fs.func).vectorize(loops[0], 16);
         if (fs.depth == 0) {
             Func(fs.func).parallel(loops.back());
         }
@@ -880,8 +942,9 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
 
     // Then set the compute and store levels
     for (auto &g : optimal.groups) {
-        internal_assert(g.funcs.size() == 1);
+        internal_assert(g.funcs.size() == 1 || g.inlined);
         auto &fs = g.funcs[0];
+        internal_assert(fs.is_output);
 
         if (fs.depth == 0) {
             fs.func.schedule().store_level() = LoopLevel::root();
