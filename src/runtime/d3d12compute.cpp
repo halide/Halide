@@ -6,7 +6,14 @@
 #include "device_interface.h"
 #include "printer.h"
 
+#if !defined(INITGUID)
+    #define  INITGUID
+#endif
+#if !defined(COBJMACROS)
+    #define  COBJMACROS
+#endif
 #include "mini_d3d12.h"
+
 #define HALIDE_D3D12_DEBUG (1)
 
 #if HALIDE_D3D12_DEBUG
@@ -85,6 +92,52 @@ static PFN_D3D12_GET_DEBUG_INTERFACE        D3D12GetDebugInterface      = NULL;
 static PFN_D3D12_SERIALIZE_ROOT_SIGNATURE   D3D12SerializeRootSignature = NULL;
 static PFN_D3DCOMPILE                       D3DCompile                  = NULL;
 
+#if defined(__cplusplus) && !defined(_MSC_VER)
+#if defined(__MINGW32__)
+#undef __uuidof
+#endif
+REFIID __uuidof(const ID3D12Device&)
+{
+    return(IID_ID3D12Device);
+}
+REFIID __uuidof(const ID3D12Debug&)
+{
+    return(IID_ID3D12Debug);
+}
+REFIID __uuidof(const ID3D12CommandQueue&)
+{
+    return(IID_ID3D12CommandQueue);
+}
+REFIID __uuidof(const ID3D12CommandAllocator&)
+{
+    return(IID_ID3D12CommandAllocator);
+}
+REFIID __uuidof(const ID3D12CommandList&)
+{
+    return(IID_ID3D12CommandList);
+}
+REFIID __uuidof(const ID3D12GraphicsCommandList&)
+{
+    return(IID_ID3D12GraphicsCommandList);
+}
+REFIID __uuidof(const ID3D12Resource&)
+{
+    return(IID_ID3D12Resource);
+}
+REFIID __uuidof(const ID3D12PipelineState&)
+{
+    return(IID_ID3D12PipelineState);
+}
+REFIID __uuidof(const ID3D12RootSignature&)
+{
+    return(IID_ID3D12RootSignature);
+}
+REFIID __uuidof(const ID3D12DescriptorHeap&)
+{
+    return(IID_ID3D12DescriptorHeap);
+}
+#endif
+
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wignored-attributes"
@@ -102,76 +155,6 @@ static IID WrapGetIID(const char* lpsz)
     return(id);
 }
 #pragma clang diagnostic pop
-template<> REFIID __uuidof(const ID3D12Device&)
-{
-    // GUID : 189819f1-1db6-4b57-be54-1821339b85f7
-    static IID id = { }; // = { 0x189819f1, 0x1db6, 0x4b57,{ 0xbe,0x54,0x18,0x21,0x33,0x9b,0x85,0xf7 } };
-    id = WrapGetIID("189819f1-1db6-4b57-be54-1821339b85f7");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12Debug&)
-{
-    // GUID : 344488b7-6846-474b-b989-f027448245e0
-    static IID id = { }; // = { 0x344488b7, 0x6846, 0x474b, { 0xb9,0x89,0xf0,0x27,0x44,0x82,0x45,0xe0 } };
-    id = WrapGetIID("344488b7-6846-474b-b989-f027448245e0");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12CommandQueue&)
-{
-    // GUID : 0ec870a6-5d7e-4c22-8cfc-5baae07616ed
-    static IID id = {}; // = { 0x0ec870a6, 0x5d7e, 0x4c22, { 0x8c,0xfc,0x5b,0xaa,0xe0,0x76,0x16,0xed } };
-    id = WrapGetIID("0ec870a6-5d7e-4c22-8cfc-5baae07616ed");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12CommandAllocator&)
-{
-    // GUID : 6102dee4-af59-4b09-b999-b44d73f09b24
-    static IID id = {}; // = { 0x6102dee4, 0xaf59, 0x4b09, { 0xb9,0x99,0xb4,0x4d,0x73,0xf0,0x9b,0x24 } };
-    id = WrapGetIID("6102dee4-af59-4b09-b999-b44d73f09b24");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12CommandList&)
-{
-    // GUID : 7116d91c-e7e4-47ce-b8c6-ec8168f437e5
-    static IID id = {}; // = { 0x7116d91c, 0xe7e4, 0x47ce, { 0xb8,0xc6,0xec,0x81,0x68,0xf4,0x37,0xe5 } };
-    id = WrapGetIID("7116d91c-e7e4-47ce-b8c6-ec8168f437e5");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12GraphicsCommandList&)
-{
-    // GUID : 5b160d0f-ac1b-4185-8ba8-b3ae42a5a455
-    static IID id = {}; // = { 0x5b160d0f, 0xac1b, 0x4185, { 0x8b,0xa8,0xb3,0xae,0x42,0xa5,0xa4,0x55 } };
-    id = WrapGetIID("5b160d0f-ac1b-4185-8ba8-b3ae42a5a455");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12Resource&)
-{
-    // GUID : 696442be-a72e-4059-bc79-5b5c98040fad
-    static IID id = {}; // = { 0x696442be, 0xa72e, 0x4059, { 0xbc,0x79,0x5b,0x5c,0x98,0x04,0x0f,0xad } };
-    id = WrapGetIID("696442be-a72e-4059-bc79-5b5c98040fad");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12PipelineState&)
-{
-    // GUID : 765a30f3-f624-4c6f-a828-ace948622445
-    static IID id = {}; // = { 0x765a30f3, 0xf624, 0x4c6f, { 0xa8,0x28,0xac,0xe9,0x48,0x62,0x24,0x45 } };
-    id = WrapGetIID("765a30f3-f624-4c6f-a828-ace948622445");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12RootSignature&)
-{
-    // GUID : c54a6b66-72df-4ee8-8be5-a946a1429214
-    static IID id = {}; // = { 0xc54a6b66, 0x72df, 0x4ee8, { 0x8b,0xe5,0xa9,0x46,0xa1,0x42,0x92,0x14 } };
-    id = WrapGetIID("c54a6b66-72df-4ee8-8be5-a946a1429214");
-    return(id);
-}
-template<> REFIID __uuidof(const ID3D12DescriptorHeap&)
-{
-    // GUID : 8efb471d-616c-4f49-90f7-127bb763fa51
-    static IID id = {}; // = { 0x8efb471d, 0x616c, 0x4f49, { 0x90,0xf7,0x12,0x7b,0xb7,0x63,0xfa,0x51 } };
-    id = WrapGetIID("8efb471d-616c-4f49-90f7-127bb763fa51");
-    return(id);
-}
 #endif
 
 template<typename ID3D12Type>
@@ -393,25 +376,31 @@ static void D3D12LoadDependencies(void* user_context)
 //}
 
 // D3D12 ABI patch trampolines (refer to 'd3d12_abi_patch_64.ll')
-extern "C" void Call_ID3D12DescriptorHeap_GetDesc(int64_t* descriptorheap, int64_t* desc);
-extern "C" void Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* cpuHandle);
-extern "C" void Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* gpuHandle);
+#ifdef __cplusplus
+extern "C" {
+#endif
+    void Call_ID3D12DescriptorHeap_GetDesc(int64_t* descriptorheap, int64_t* desc);
+    void Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* cpuHandle);
+    void Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* gpuHandle);
+#ifdef __cplusplus
+}
+#endif
 
-D3D12_DESCRIPTOR_HEAP_DESC ZCall_ID3D12DescriptorHeap_GetDesc(ID3D12DescriptorHeap* descriptorheap)
+D3D12_DESCRIPTOR_HEAP_DESC Call_ID3D12DescriptorHeap_GetDesc(ID3D12DescriptorHeap* descriptorheap)
 {
     D3D12_DESCRIPTOR_HEAP_DESC desc = { };
     Call_ID3D12DescriptorHeap_GetDesc( (int64_t*)descriptorheap, (int64_t*)&desc );
     return(desc);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE ZCall_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* descriptorheap)
+D3D12_CPU_DESCRIPTOR_HANDLE Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* descriptorheap)
 {
     D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = { };
     Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart( (int64_t*)descriptorheap, (int64_t*)&cpuHandle );
     return(cpuHandle);
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE ZCall_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* descriptorheap)
+D3D12_GPU_DESCRIPTOR_HANDLE Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap* descriptorheap)
 {
     D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = { };
     Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart( (int64_t*)descriptorheap, (int64_t*)&gpuHandle );
@@ -511,16 +500,16 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
 
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
     int a = 1;
-    D3D12_DESCRIPTOR_HEAP_DESC dhd2 = ZCall_ID3D12DescriptorHeap_GetDesc(descriptorHeap);
+    D3D12_DESCRIPTOR_HEAP_DESC dhd2 = Call_ID3D12DescriptorHeap_GetDesc(descriptorHeap);
     a = 2;
     debug(NULL) << "!!!!!!!!!! descriptor heap desc: " << (uint64_t)dhd2.Type << ":" << dhd2.NumDescriptors << ":" << dhd2.Flags << ":" << dhd2.NodeMask << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
 
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = ZCall_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
 
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = ZCall_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
 
@@ -535,6 +524,8 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     binder->GPU[SRV].ptr = baseGPU.ptr + 50*descriptorSize;
     debug(NULL) << "!!!!!!!!!! BINDER-END !!!!!!!!!!\n";
     }
+
+    error(NULL) << ":)";
 
     return(reinterpret_cast<d3d12_device*>(device));
 }
@@ -736,7 +727,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
     d3d12_binder* binder = (d3d12_binder*)malloc(sizeof(d3d12_binder));
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = ZCall_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
     //D3D12_DESCRIPTOR_HEAP_DESC dhd2 = GetDesc(descriptorHeap);
@@ -745,7 +736,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
     binder->CPU[UAV].ptr = baseCPU.ptr +  0*descriptorSize;
     binder->CPU[CBV].ptr = baseCPU.ptr + 25*descriptorSize;
     binder->CPU[SRV].ptr = baseCPU.ptr + 50*descriptorSize;
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = ZCall_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
+    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
     debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
     binder->GPU[UAV].ptr = baseGPU.ptr +  0*descriptorSize;
     binder->GPU[CBV].ptr = baseGPU.ptr + 25*descriptorSize;
