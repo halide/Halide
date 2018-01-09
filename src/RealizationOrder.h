@@ -29,7 +29,7 @@ class Function;
  * the realization order and the fused groups in that order.
  */
 std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> realization_order(
-    const std::vector<Function> &output, std::map<std::string, Function> &env);
+    const std::vector<Function> &outputs, std::map<std::string, Function> &env);
 
 }
 }

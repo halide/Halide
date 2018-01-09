@@ -1,8 +1,23 @@
-#!/usr/bin/python3
+from __future__ import print_function
 
+from contextlib import contextmanager
 import halide as hl
-from contextlib import redirect_stdout
-import io, sys
+import sys
+
+try:
+    from StringIO import StringIO  # Python2
+except ImportError:
+    from io import StringIO        # Python3
+
+# redirect_stdout() requires Python3, alas
+@contextmanager
+def _redirect_stdout(out):
+    old_out = sys.stdout
+    sys.stdout = out
+    try:
+        yield out
+    finally:
+        sys.stdout = old_out
 
 def test_compiletime_error():
 
@@ -41,8 +56,8 @@ def test_print_expr():
     f = hl.Func('f')
     f[x] = hl.print(hl.cast(hl.UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
     buf = hl.Buffer(hl.UInt(8), 1)
-    output = io.StringIO()
-    with redirect_stdout(output):
+    output = StringIO()
+    with _redirect_stdout(output):
         f.realize(buf)
         expected = '0 is what the 1 and 3.141500 saw\n'
         actual = output.getvalue()
@@ -56,8 +71,8 @@ def test_print_when():
     f = hl.Func('f')
     f[x] = hl.print_when(x == 3, hl.cast(hl.UInt(8), x*x), 'is result at', x)
     buf = hl.Buffer(hl.UInt(8), 10)
-    output = io.StringIO()
-    with redirect_stdout(output):
+    output = StringIO()
+    with _redirect_stdout(output):
         f.realize(buf)
         expected = '9 is result at 3\n'
         actual = output.getvalue()
@@ -131,7 +146,6 @@ def test_basics():
 
     return
 
-
 def test_basics2():
 
     input = hl.ImageParam(hl.Float(32), 3, 'input')
@@ -147,34 +161,6 @@ def test_basics2():
     clamped = hl.Func('clamped')
     clamped[x, y] = input[hl.clamp(x, 0, input.width()-1),
                           hl.clamp(y, 0, input.height()-1),0]
-
-    if True:
-        print("s_sigma", s_sigma)
-        print("s_sigma/2", s_sigma/2)
-        print("s_sigma//2", s_sigma//2)
-        print()
-        print("x * s_sigma", x * s_sigma)
-        print("x * 8", x * 8)
-        print("x * 8 + 4", x * 8 + 4)
-        print("x * 8 * 4", x * 8  * 4)
-        print()
-        print("x", x)
-        print("(x * s_sigma).type()", )
-        print("(x * 8).type()", (x * 8).type())
-        print("(x * 8 + 4).type()", (x * 8 + 4).type())
-        print("(x * 8 * 4).type()", (x * 8 * 4).type())
-        print("(x * 8 / 4).type()", (x * 8 / 4).type())
-        print("((x * 8) * 4).type()", ((x * 8) * 4).type())
-        print("(x * (8 * 4)).type()", (x * (8 * 4)).type())
-
-
-    assert (x * 8).type() == hl.Int(32)
-    assert (x * 8 * 4).type() == hl.Int(32) # yes this did fail at some point
-    assert ((x * 8) / 4).type() == hl.Int(32)
-    assert (x * (8 / 4)).type() == hl.Float(32) # under python3 division rules
-    assert (x * (8 // 4)).type() == hl.Int(32)
-    #assert (x * 8 // 4).type() == hl.Int(32) # not yet implemented
-
 
     # Construct the bilateral grid
     r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')
@@ -242,7 +228,7 @@ def test_float_or_int():
     assert ((x//2) - 1 + 2*(x%2)).type() == i
 
     assert type(x) == hl.Var
-    assert (x.expr()).type() == i
+    assert (x.as_expr()).type() == i
     assert (hl.Expr(2.0)).type() == f
     assert (hl.Expr(2)).type() == i
     assert (x + 2).type() == i
@@ -251,8 +237,8 @@ def test_float_or_int():
     assert (hl.Expr(2.0) + hl.Expr(3)).type() == f
     assert (hl.Expr(2) + 3.0).type() == f
     assert (hl.Expr(2) + 3).type() == i
-    assert (x.expr() + 2).type() == i # yes this failed at some point
-    assert (2 + x.expr()).type() == i
+    assert (x.as_expr() + 2).type() == i # yes this failed at some point
+    assert (2 + x.as_expr()).type() == i
     assert (2 * (x + 2)).type() == i # yes this failed at some point
     assert (x + 0).type() == i
     assert (x % 2).type() == i

@@ -181,11 +181,13 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 #endif  // WITH_PTX
 
 #ifdef WITH_X86
+DECLARE_LL_INITMOD(x86_avx2)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
+DECLARE_NO_INITMOD(x86_avx2)
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
@@ -794,6 +796,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.has_feature(Target::AVX)) {
                 modules.push_back(get_initmod_x86_avx_ll(c));
+            }
+            if (t.has_feature(Target::AVX2)) {
+                modules.push_back(get_initmod_x86_avx2_ll(c));
             }
             if (t.has_feature(Target::Profile)) {
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));

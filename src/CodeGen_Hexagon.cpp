@@ -19,6 +19,8 @@
 #include "AlignLoads.h"
 #include "CSE.h"
 #include "LoopCarry.h"
+#include "Substitute.h"
+#include "LICM.h"
 
 namespace Halide {
 namespace Internal {
@@ -89,46 +91,29 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
 
 namespace {
 
-// A piece of IR uses HVX if it contains any vector type producing IR
-// nodes.
-class UsesHvx : public IRVisitor {
-private:
-    using IRVisitor::visit;
-    void visit(const Variable *op) {
-        uses_hvx = uses_hvx || op->type.is_vector();
-    }
-    void visit(const Ramp *op) {
-        uses_hvx = uses_hvx || op->type.is_vector();
-    }
-    void visit(const Broadcast *op) {
-        uses_hvx = uses_hvx || op->lanes > 1;
-    }
-    void visit(const Call *op) {
-        uses_hvx = uses_hvx || op->type.is_vector();
-    }
-
-public:
-    bool uses_hvx = false;
-};
-
-bool uses_hvx(Stmt s) {
-    UsesHvx uses;
-    s.accept(&uses);
-    return uses.uses_hvx;
-}
-
-// Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
-// as a destructor if successful.
-Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
-    // Modify the stmt to add a call to halide_qurt_hvx_lock, and
-    // register a destructor to call halide_qurt_hvx_unlock.
+Stmt call_halide_qurt_hvx_lock(const Target &target) {
     Expr hvx_mode = target.has_feature(Target::HVX_128) ? 128 : 64;
     Expr hvx_lock = Call::make(Int(32), "halide_qurt_hvx_lock", {hvx_mode}, Call::Extern);
     string hvx_lock_result_name = unique_name("hvx_lock_result");
     Expr hvx_lock_result_var = Variable::make(Int(32), hvx_lock_result_name);
     Stmt check_hvx_lock = LetStmt::make(hvx_lock_result_name, hvx_lock,
                                         AssertStmt::make(EQ::make(hvx_lock_result_var, 0), hvx_lock_result_var));
-
+    return check_hvx_lock;
+}
+Stmt call_halide_qurt_hvx_unlock() {
+    Expr hvx_unlock = Call::make(Int(32), "halide_qurt_hvx_unlock", {}, Call::Extern);
+    string hvx_unlock_result_name = unique_name("hvx_unlock_result");
+    Expr hvx_unlock_result_var = Variable::make(Int(32), hvx_unlock_result_name);
+    Stmt check_hvx_unlock = LetStmt::make(hvx_unlock_result_name, hvx_unlock,
+                                          AssertStmt::make(EQ::make(hvx_unlock_result_var, 0), hvx_unlock_result_var));
+    return check_hvx_unlock;
+}
+// Wrap the stmt in a call to qurt_hvx_lock, calling qurt_hvx_unlock
+// as a destructor if successful.
+Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
+    // Modify the stmt to add a call to halide_qurt_hvx_lock, and
+    // register a destructor to call halide_qurt_hvx_unlock.
+    Stmt check_hvx_lock = call_halide_qurt_hvx_lock(target);
     Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
     Expr hvx_unlock = Call::make(Int(32), Call::register_destructor,
                                  {Expr("halide_qurt_hvx_unlock_as_destructor"), dummy_obj}, Call::Intrinsic);
@@ -137,7 +122,6 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     stmt = Block::make(check_hvx_lock, stmt);
     return stmt;
 }
-
 bool is_dense_ramp(Expr x) {
     const Ramp *r = x.as<Ramp>();
     if (!r) return false;
@@ -173,6 +157,132 @@ class SloppyUnpredicateLoads : public IRMutator2 {
 
 Stmt sloppy_unpredicate_loads(Stmt s) {
     return SloppyUnpredicateLoads().mutate(s);
+}
+
+class InjectHVXLocks : public IRMutator2 {
+public:
+    InjectHVXLocks(const Target &t) : target(t) {
+        uses_hvx_var = Variable::make(Bool(), "uses_hvx");
+    }
+    bool uses_hvx = false;
+private:
+    Expr uses_hvx_var;
+    using IRMutator2::visit;
+    // Primarily, we do two things when we encounter a parallel for loop.
+    // First, we check if the paralell for loop uses_hvx and accordingly
+    // acqure_hvx_context i.e. acquire and release HVX locks.
+    // Then we insert a conditional unlock before the for loop, let's call
+    // this the prolog, and a conditional lock after the for loop which
+    // we shall call the epilog. So the code for a parallel loop that uses
+    // hvx should look like so.
+    //
+    // if (uses_hvx_var) {
+    //     halide_qurt_hvx_unlock();
+    // }
+    // parallel_for {
+    //     halide_qurt_hvx_lock();
+    //     ...
+    //     ...
+    //     halide_qurt_hvx_unlock();
+    // }
+    // if (uses_hvx_var) {
+    //     halide_qurt_hvx_lock();
+    // }
+    //
+    // When we move up to the enclosing scope we substitute the value of uses_hvx
+    // into the IR that should convert the conditionals to constants.
+    Stmt visit(const For *op) {
+        if (op->for_type == ForType::Parallel) {
+            bool old_uses_hvx = uses_hvx;
+            uses_hvx = false;
+
+            Stmt body = mutate(op->body);
+            Stmt s;
+            if (uses_hvx) {
+                body = acquire_hvx_context(body, target);
+                body = substitute("uses_hvx", true, body);
+                Stmt new_for = For::make(op->name, op->min, op->extent,
+                                         op->for_type, op->device_api, body);
+                Stmt prolog = IfThenElse::make(uses_hvx_var,
+                                               call_halide_qurt_hvx_unlock());
+                Stmt epilog = IfThenElse::make(uses_hvx_var,
+                                               call_halide_qurt_hvx_lock(target));
+                s = Block::make({prolog, new_for, epilog});
+                debug(4) << "Wrapping prolog & epilog around par loop\n" << s << "\n";
+            } else {
+                // We do not substitute false for "uses_hvx" into the body as we do in the true
+                // case because we want to defer that to an enclosing scope. The logic is that
+                // in case this scope doesn't use_hvx (we are here in the else because of that)
+                // then an enclosing scope might. However, substituting false for "uses_hvx"
+                // at this stage will remove the prolog and epilog checks that will be needed
+                // as the enclosing scope uses hvx. This is exhibited by the following code
+                // structure
+                //
+                // for_par(z..) {//uses hvx
+                //   for_par(y..) {  // doesn't use hvx
+                //     for_par(x..) { // uses hvx
+                //        vector code
+                //     }
+                //   }
+                //   vector code
+                // }
+                // If we substitute false in the else here, we'll get
+                // for_par(z.) {
+                //   halide_qurt_hvx_lock();
+                //   for_par(y..) {
+                //     if (false) {
+                //        halide_qurt_hvx_unlock(); // will get optimized away.
+                //     }
+                //     for_par(x..) {
+                //        halide_qurt_hvx_lock();  // double lock. Not good.
+                //        vector code
+                //        halide_qurt_hvx_unlock();
+                //     }
+                //     if (false) {
+                //        halide_qurt_hvx_lock();
+                //     }
+                //   }
+                //   vector code
+                //   halide_qurt_unlock
+                // }
+                s = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
+
+            uses_hvx = old_uses_hvx;
+            return s;
+
+        }
+        return IRMutator2::visit(op);
+    }
+    Expr visit(const Variable *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+        return op;
+    }
+    Expr visit(const Ramp *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+        return op;
+    }
+    Expr visit(const Broadcast *op) {
+        uses_hvx = uses_hvx || op->lanes > 1;
+        return op;
+    }
+    Expr visit(const Call *op) {
+        uses_hvx = uses_hvx || op->type.is_vector();
+        return op;
+    }
+
+    Target target;
+};
+
+Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
+    InjectHVXLocks i(target);
+    body = i.mutate(body);
+    if (i.uses_hvx) {
+        body = acquire_hvx_context(body, target);
+    }
+    body = substitute("uses_hvx", i.uses_hvx, body);
+    body = simplify(body);
+    return body;
 }
 
 }// namespace
@@ -227,10 +337,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
 
-    if (uses_hvx(body)) {
-        debug(1) << "Adding calls to qurt_hvx_lock...\n";
-        body = acquire_hvx_context(body, target);
-    }
+    debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
+    body = inject_hvx_lock_unlock(body, target);
 
     debug(1) << "Hexagon function body:\n";
     debug(1) << body << "\n";
