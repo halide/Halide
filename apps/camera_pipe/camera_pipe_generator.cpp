@@ -367,6 +367,11 @@ void CameraPipe::generate() {
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968);
 
+        // We can generate better-aligned tiles if we know the output starts at zero and is even
+        processed.dim(0).set_bounds(0, (processed.dim(0).extent() / 2) * 2);
+        processed.dim(1).set_bounds(0, (processed.dim(1).extent() / 2) * 2);
+        processed.dim(2).set_bounds(0, 3);
+
         // Auto schedule the pipeline: this calls auto_schedule() for
         // all of the Outputs in this Generator
         auto_schedule_outputs();

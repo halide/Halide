@@ -18,7 +18,7 @@ $(BIN)/camera_pipe_auto_schedule_old.a: $(BIN)/camera_pipe_exec
 
 $(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe_exec
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g camera_pipe -o $(BIN) -f camera_pipe_auto_schedule target=$(HL_TARGET)-auto_schedule_top_down-no_runtime auto_schedule=true
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe_exec
 	@mkdir -p $(@D)
