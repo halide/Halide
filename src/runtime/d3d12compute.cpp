@@ -216,8 +216,6 @@ ObjectiveCClass _NSConcreteGlobalBlock = { 0 };
 // The default implementation of halide_d3d12_get_symbol attempts to load
 // the D3D12 runtime shared library/DLL, and then get the symbol from it.
 static void* lib_d3d12  = NULL;
-//static void* lib_ole32  = NULL;
-static void* lib_Rpcrt4 = NULL;
 static void* lib_D3DCompiler_47 = NULL;
 
 struct LibrarySymbol
@@ -290,25 +288,6 @@ REFIID __uuidof(const ID3D12Fence&)
 {
     return(IID_ID3D12Fence);
 }
-#endif
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wignored-attributes"
-#pragma clang diagnostic ignored "-Wcast-qual"
-//static HRESULT(STDAPICALLTYPE * IIDFromString)(_In_ LPCOLESTR lpsz, _Out_ LPIID lpiid) = NULL;
-static RPC_STATUS (RPC_ENTRY * UuidFromStringA)(unsigned char __RPC_FAR *StringUuid, UUID __RPC_FAR *Uuid) = NULL;
-//static IID WrapGetIID(LPCOLESTR lpsz)
-static IID WrapGetIID(const char* lpsz)
-{
-    IID id = { };
-    // NOTE(marcos): IIDFromString expects GUID 16-bit unicode strings surrounded by curly braces
-    //               UuidFromString uses ANSI char strings without curly braces
-    //IIDFromString(lpsz, &id);
-    UuidFromStringA((unsigned char*)lpsz, &id);
-    return(id);
-}
-#pragma clang diagnostic pop
 #endif
 
 template<typename ID3D12Type>
@@ -480,15 +459,11 @@ static void D3D12LoadDependencies(void* user_context)
 
     const char* lib_names [] = {
         "d3d12.dll",
-        //"ole32.dll",
-        "Rpcrt4.dll",
         "D3DCompiler_47.dll",
     };
     static const int num_libs = sizeof(lib_names) / sizeof(lib_names[0]);
     void** lib_handles [num_libs] = {
         &lib_d3d12,
-        //&lib_ole32,
-        &lib_Rpcrt4,
         &lib_D3DCompiler_47,
     };
     for (size_t i = 0; i < num_libs; i++)
@@ -513,8 +488,6 @@ static void D3D12LoadDependencies(void* user_context)
         }
     }
 
-    //IIDFromString             = get_symbol(user_context, lib_ole32,           "IIDFromString");
-    UuidFromStringA             = get_symbol(user_context, lib_Rpcrt4,          "UuidFromStringA");
     D3D12CreateDevice           = get_symbol(user_context, lib_d3d12,           "D3D12CreateDevice");
     D3D12GetDebugInterface      = get_symbol(user_context, lib_d3d12,           "D3D12GetDebugInterface");
     D3D12SerializeRootSignature = get_symbol(user_context, lib_d3d12,           "D3D12SerializeRootSignature");
