@@ -32,10 +32,21 @@
             indent[--indent_end] = '\0';
         }
     };
-    #define TRACELOG    TraceLogScope trace_scope___; debug(NULL) << (const char*)&indent[2] << "[@]" << __FUNCTION__ << "\n";
+    #define TRACELOG        TraceLogScope trace_scope___; debug(NULL) << (const char*)&indent[2] << "[@]" << __FUNCTION__ << "\n";
+    #define TRACEPRINT(msg) debug(NULL) << (const char*)&indent[2] << "   " << msg;
 #else
     #define TRACELOG
+    #define TRACEPRINT(msg)
 #endif
+
+#define TRACEINDENT TRACEPRINT("");
+
+template<typename T>
+static T* malloct()
+{
+    T* p = (T*)malloc(sizeof(T));
+    return(p);
+}
 
 template<typename ID3D12T>
 static bool D3DError(HRESULT result, ID3D12T* object, void* user_context, const char* message)
@@ -45,6 +56,7 @@ static bool D3DError(HRESULT result, ID3D12T* object, void* user_context, const 
     // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
     if (FAILED(result) || !object)
     {
+        TRACEINDENT;
         error(user_context) << message
                             << " (HRESULT=" << (void*)(int64_t)result
                             << ", object*=" << object << ").\n";
@@ -273,6 +285,10 @@ REFIID __uuidof(const ID3D12DescriptorHeap&)
 {
     return(IID_ID3D12DescriptorHeap);
 }
+REFIID __uuidof(const ID3D12Fence&)
+{
+    return(IID_ID3D12Fence);
+}
 #endif
 
 #ifdef __clang__
@@ -301,8 +317,20 @@ struct halide_d3d12_wrapper
     ID3D12Type* operator -> () { return(reinterpret_cast<ID3D12Type*>(this)); }
 };
 
+template<typename ID3D12Type>
+struct halide_d3d12_deep_wrapper
+{
+    ID3D12Type* p;
+    operator ID3D12Type*    () { return(p); }
+    ID3D12Type* operator -> () { return(p); }
+};
+
 struct halide_d3d12compute_device : public halide_d3d12_wrapper<ID3D12Device> { };
-struct halide_d3d12compute_command_queue : public halide_d3d12_wrapper<ID3D12CommandQueue> { };
+struct halide_d3d12compute_command_queue : public halide_d3d12_deep_wrapper<ID3D12CommandQueue>
+{
+    ID3D12Fence* fence;
+    volatile uint64_t last_signal;
+};
 
 namespace Halide { namespace Runtime { namespace Internal { namespace D3D12Compute {
 
@@ -321,7 +349,10 @@ struct d3d12_buffer
 
 struct d3d12_command_allocator     : public halide_d3d12_wrapper<ID3D12CommandAllocator> { };
 
-struct d3d12_graphics_command_list : public halide_d3d12_wrapper<ID3D12GraphicsCommandList> { };
+struct d3d12_graphics_command_list : public halide_d3d12_deep_wrapper<ID3D12GraphicsCommandList>
+{
+    uint64_t signal;
+};
 
 // NOTE(marcos): at the moment, D3D12 only exposes one type of command list
 // (ID3D12GraphicsCommandList) which can also be used for either "compute"
@@ -393,7 +424,17 @@ template<>
 void release_d3d12_object<d3d12_command_queue>(d3d12_command_queue* queue)
 {
     TRACELOG;
-    (*queue)->Release();
+    queue->p->Release();
+    queue->fence->Release();
+    free(queue);
+}
+
+template<>
+void release_d3d12_object<d3d12_command_list>(d3d12_command_list* cmdList)
+{
+    TRACELOG;
+    cmdList->p->Release();
+    free(cmdList);
 }
 
 template<>
@@ -461,11 +502,13 @@ static void D3D12LoadDependencies(void* user_context)
         lib = halide_load_library(lib_names[i]);
         if (lib)
         {
-            debug(user_context) << "    Loaded runtime library: " << lib_names[i] << "\n";
+            TRACEINDENT;
+            debug(user_context) << "Loaded runtime library: " << lib_names[i] << "\n";
         }
         else
         {
-            error(user_context) << "    Unable to load runtime library: " << lib_names[i] << "\n";
+            TRACEINDENT;
+            error(user_context) << "Unable to load runtime library: " << lib_names[i] << "\n";
         }
     }
 
@@ -643,7 +686,7 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
     debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
 
-    d3d12_binder* binder = (d3d12_binder*)malloc(sizeof(d3d12_binder));
+    d3d12_binder* binder = malloct<d3d12_binder>();
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
     binder->CPU[UAV].ptr = baseCPU.ptr +  0*descriptorSize;
@@ -708,7 +751,7 @@ WEAK d3d12_buffer* new_buffer(d3d12_device* device, size_t length)
     if (D3DError(result, resource, NULL, "Unable to create the Direct3D 12 buffer resource"))
         return(NULL);
 
-    d3d12_buffer* buffer = (d3d12_buffer*)malloc(sizeof(d3d12_buffer));
+    d3d12_buffer* buffer = malloct<d3d12_buffer>();
     buffer->resource = resource;
     buffer->halide = NULL;
     buffer->mapped = NULL;
@@ -719,16 +762,32 @@ WEAK d3d12_buffer* new_buffer(d3d12_device* device, size_t length)
 WEAK d3d12_command_queue* new_command_queue(d3d12_device* device)
 {
     TRACELOG;
+
     ID3D12CommandQueue* commandQueue = NULL;
-    D3D12_COMMAND_QUEUE_DESC cqDesc = { };
-        cqDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
-        cqDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        cqDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-        cqDesc.NodeMask = 0;    // 0, for single GPU operation
-    HRESULT result = (*device)->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&commandQueue));
-    if (D3DError(result, commandQueue, NULL, "Unable to create the Direct3D 12 command queue"))
-        return(NULL);
-    return(reinterpret_cast<d3d12_command_queue*>(commandQueue));
+    {
+        D3D12_COMMAND_QUEUE_DESC cqDesc = { };
+            cqDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
+            cqDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+            cqDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+            cqDesc.NodeMask = 0;    // 0, for single GPU operation
+        HRESULT result = (*device)->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&commandQueue));
+        if (D3DError(result, commandQueue, NULL, "Unable to create the Direct3D 12 command queue"))
+            return(NULL);
+    }
+
+    ID3D12Fence* fence = NULL;
+    {
+        HRESULT result = (*device)->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+        if (D3DError(result, fence, NULL, "Unable to create the Direct3D 12 fence for command queue"))
+            return(NULL);
+    }
+
+    d3d12_command_queue* q = malloct<d3d12_command_queue>();
+    q->p = commandQueue;
+    q->fence = fence;
+    __atomic_store_n(&q->last_signal, 0, __ATOMIC_SEQ_CST);
+
+    return(q);
 }
 
 template<D3D12_COMMAND_LIST_TYPE Type>
@@ -745,7 +804,7 @@ static d3d12_command_allocator* new_command_allocator(d3d12_device* device)
 
 WEAK void add_command_list_completed_handler(d3d12_command_list* cmdList, struct command_list_completed_handler_block_literal *handler) {
     TRACELOG;
-    debug(NULL) << "?????????? WHAT SHOULD BE DONE HERE? JUST INSERT A FENCE? ??????????\n";
+    TRACEPRINT("WHAT SHOULD BE DONE HERE? JUST INSERT A FENCE?\n");
     typedef void (*add_completed_handler_method)(objc_id cmdList, objc_sel sel, struct command_list_completed_handler_block_literal *handler);
     add_completed_handler_method method = (add_completed_handler_method)&objc_msgSend;
     (*method)(cmdList, sel_getUid("addCompletedHandler:"), handler);
@@ -767,7 +826,12 @@ static d3d12_command_list* new_command_list(d3d12_device* device, d3d12_command_
     HRESULT result = (*device)->CreateCommandList(nodeMask, Type, pCommandAllocator, pInitialState, IID_PPV_ARGS(&commandList));
     if (D3DError(result, commandList, NULL, "Unable to create the Direct3D 12 command list"))
         return(NULL);
-    return(reinterpret_cast<d3d12_command_list*>(commandList));
+
+    d3d12_command_list* cmdList = malloct<d3d12_command_list>();
+    cmdList->p = commandList;
+    cmdList->signal = 0;
+
+    return(cmdList);
 }
 
 static d3d12_command_list* new_compute_command_list(d3d12_device* device, d3d12_command_allocator* allocator)
@@ -849,9 +913,9 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
         return(NULL);
 
     UINT descriptorSize = (*device)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    //debug(NULL) << "!!!!!!!!!! descriptor handle increment size: " << descriptorSize << "\n";
+    TRACEPRINT("!!! descriptor handle increment size: " << descriptorSize << "\n");
 
-    d3d12_binder* binder = (d3d12_binder*)malloc(sizeof(d3d12_binder));
+    d3d12_binder* binder = malloct<d3d12_binder>();
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
 
@@ -1003,7 +1067,7 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     if (D3DError(result, rootSignature, NULL, "Unable to create the Direct3D 12 root signature"))
         return(NULL);
 
-    d3d12_function* function = (d3d12_function*)malloc(sizeof(d3d12_function));
+    d3d12_function* function = malloct<d3d12_function>();
     function->status     = result;
     function->shaderBlob = shaderBlob;
     function->errorMsgs  = errorMsgs;
@@ -1045,7 +1109,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
 
 WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uint32_t length, uint32_t index) {
     TRACELOG;
-    debug(NULL) << "?????????? IS THIS EVEN NECESSARY ON D3D12 ??????????\n";
+    TRACEPRINT("IS THIS EVEN NECESSARY ON D3D12?\n");
     typedef void (*set_threadgroup_memory_length_method)(objc_id encoder, objc_sel sel,
                                                          size_t length, size_t index);
     set_threadgroup_memory_length_method method = (set_threadgroup_memory_length_method)&objc_msgSend;
@@ -1058,16 +1122,22 @@ static void commit_command_list(d3d12_compute_command_list* cmdList)
     TRACELOG;
     ID3D12CommandList* lists [] = { (*cmdList) };
     (*queue)->ExecuteCommandLists(1, lists);
-    //(*queue)->Signal(fence, monotonic_increasing_value);
+    cmdList->signal = __atomic_add_fetch(&queue->last_signal, 1, __ATOMIC_SEQ_CST); // ++last_signal
+    (*queue)->Signal(queue->fence, cmdList->signal);
 }
 
 static void wait_until_completed(d3d12_compute_command_list* cmdList)
 {
     TRACELOG;
-    // TODO(marcos): synchronously wait for the command list to finish executing
-    // ID3D12Fence::SetEventOnCompletion(value, event)
-    // WaitForSingleObject(event, INFINITE)
-    debug(NULL) << "!!!!!!!!!! MUST WAIT FOR COMMAND LIST COMPLETION FENCE !!!!!!!!!!\n";
+
+    // TODO(marcos): perhaps replace the busy-wait loop below by a blocking wait event?
+    // HANDLE hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    // queue->fence->SetEventOnCompletion(cmdList->signal, hEvent);
+    // WaitForSingleObject(hEvent, INFINITE);
+    // CloseHandle(hEvent);
+
+    while (queue->fence->GetCompletedValue() < cmdList->signal)
+        ;
 }
 
 static void* buffer_contents(d3d12_buffer* buffer)
@@ -1326,7 +1396,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
     module_state*& state = *(module_state**)state_ptr;
     if (!state)
     {
-        state = (module_state*)malloc(sizeof(module_state));
+        state = malloct<module_state>();
         state->library = NULL;
         state->next = state_list;
         state_list = state;
@@ -1604,6 +1674,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         return -1;
     }
     halide_assert(user_context, (NULL == function->errorMsgs));
+    TRACEINDENT;
     debug(user_context) << "SUCCESS while compiling D3D12 compute shader with entry name '" << entry_name << "'!\n";
 
     // TODO(marcos): seems like a good place to create the descriptor heaps and tables...
@@ -1692,6 +1763,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
     add_command_list_completed_handler(cmdList, &command_list_completed_handler_block);
 
     commit_command_list(cmdList);
+
+    wait_until_completed(cmdList);  // TODO(marcos): find a way to gracefully handle this hard wait...
 
     release_ns_object(pipeline_state);
     release_ns_object(function);
