@@ -3850,15 +3850,8 @@ EXTERN_C const IID IID_ID3D12GraphicsCommandList;
         
         virtual void STDMETHODCALLTYPE SetGraphicsRootSignature( 
             _In_opt_  ID3D12RootSignature *pRootSignature) = 0;
-#if 0
-        virtual void STDMETHODCALLTYPE SetComputeRootDescriptorTable( 
-            _In_  UINT RootParameterIndex,
-            _In_  D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor) = 0;
-        
-        virtual void STDMETHODCALLTYPE SetGraphicsRootDescriptorTable( 
-            _In_  UINT RootParameterIndex,
-            _In_  D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor) = 0;
-#else
+
+#if HALIDE_D3D12_APPLY_ABI_PATCHES
         #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
 
         virtual void STDMETHODCALLTYPE SetComputeRootDescriptorTable( 
@@ -3868,7 +3861,18 @@ EXTERN_C const IID IID_ID3D12GraphicsCommandList;
         virtual void STDMETHODCALLTYPE SetGraphicsRootDescriptorTable( 
             _In_  UINT RootParameterIndex,
             _In_  SIZE_T BaseDescriptor) = 0;
+#else
+        // original D3D12 header declaration:
+
+        virtual void STDMETHODCALLTYPE SetComputeRootDescriptorTable( 
+            _In_  UINT RootParameterIndex,
+            _In_  D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor) = 0;
+        
+        virtual void STDMETHODCALLTYPE SetGraphicsRootDescriptorTable( 
+            _In_  UINT RootParameterIndex,
+            _In_  D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor) = 0;
 #endif
+
         virtual void STDMETHODCALLTYPE SetComputeRoot32BitConstant( 
             _In_  UINT RootParameterIndex,
             _In_  UINT SrcData,

@@ -12,6 +12,7 @@
 #if !defined(COBJMACROS)
     #define  COBJMACROS
 #endif
+#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
 #include "mini_d3d12.h"
 
 #define HALIDE_D3D12_DEBUG (1)
@@ -878,15 +879,15 @@ static void set_compute_pipeline_state(d3d12_compute_command_list* cmdList, d3d1
     (*cmdList)->SetDescriptorHeaps(1, heaps);
 
     // more ABI issues.......
-#if 0
-    (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV]);
-    (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV]);
-    (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV]);
-#else
+#if HALIDE_D3D12_APPLY_ABI_PATCHES
     #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
     (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV].ptr);
     (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV].ptr);
     (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV].ptr);
+#else
+    (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV]);
+    (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV]);
+    (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV]);
 #endif
 }
 
