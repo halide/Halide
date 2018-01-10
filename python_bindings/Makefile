@@ -14,10 +14,10 @@ ifndef PYBIND11_PATH
 endif
 PYBIND11_PATH ?= /path/to/pybind11
 
-# OPTIMIZE ?= -O3
+OPTIMIZE ?= -O3
 
 # defining DEBUG + undefining NDEBUG gives extra debug info in PyBind11
-OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
+# OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
 CCFLAGS=$(shell $(PYTHON)-config --cflags) -I $(PYBIND11_PATH)/include -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 -fPIC $(OPTIMIZE)
 LDFLAGS=$(shell $(PYTHON)-config --ldflags) -lz
