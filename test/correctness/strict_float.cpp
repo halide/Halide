@@ -6,7 +6,9 @@
 
 using namespace Halide;
 
+#if defined(__SSE2__) || defined(__AVX__)
 #include <immintrin.h>
+#endif
 
 #ifdef __SSE2__
 float no_fma_dot_prod_sse(const float *in, int count) {
