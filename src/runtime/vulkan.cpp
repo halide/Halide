@@ -343,7 +343,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
         << ", buf: " << buf << ")\n";
 
     VulkanContext context(user_context);
-    if (ctx.error != VK_SUCCESS) {
+    if (context.error != VK_SUCCESS) {
         return -1;
     }
 
