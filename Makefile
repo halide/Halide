@@ -1533,7 +1533,17 @@ test_python: distrib
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python_bindings
+		BIN=$(CURDIR)/$(BIN_DIR)/python_bindings \
+		PYTHON=python
+
+.PHONY: test_python3
+test_python3: distrib
+	make -C $(ROOT_DIR)/python_bindings \
+		-f $(ROOT_DIR)/python_bindings/Makefile \
+		test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		PYTHON=python3
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
