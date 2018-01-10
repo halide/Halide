@@ -75,6 +75,7 @@ set(RUNTIME_CPP
   thread_pool
   to_string
   tracing
+  vulkan
   windows_clock
   windows_cuda
   windows_get_symbol
@@ -228,6 +229,7 @@ set(RUNTIME_HEADER_FILES
   HalideRuntimeOpenGL.h
   HalideRuntimeOpenGLCompute.h
   HalideRuntimeQurt.h
+  HalideRuntimeVulkan.h
   HalideBuffer.h
 )
 
@@ -609,6 +611,10 @@ endif()
 
 if (TARGET_METAL)
   target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
+endif()
+
+if (TARGET_VULKAN)
+  target_compile_definitions(Halide PRIVATE "-DWITH_VULKAN=1")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
