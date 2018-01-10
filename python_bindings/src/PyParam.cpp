@@ -27,8 +27,6 @@ void add_param_methods(py::class_<Param<>> &param_class) {
 }  // namespace
 
 void define_param(py::module &m) {
-    const Type type = type_of<T>();
-    const std::string suffix = halide_type_to_string(type);
     auto param_class =
         py::class_<Param<>>(m, "Param")
         .def(py::init<Type>(), py::arg("type"))
@@ -41,7 +39,7 @@ void define_param(py::module &m) {
         .def("min_value", &Param<>::min_value)
         .def("max_value", &Param<>::max_value)
 
-        .def("__repr__", [](const Param<T> &param) -> std::string {
+        .def("__repr__", [](const Param<> &param) -> std::string {
             std::ostringstream o;
             o << "<halide.Param '" << param.name() << "'"
               << " type " << halide_type_to_string(param.type()) << ">";
