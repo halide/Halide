@@ -31,8 +31,6 @@ int main(int argc, char **argv) {
 
     // TODO(vksnk): do we need to align C, W, H, N?
 
-    printf("Aligned to %dx%d * %dx%d\n", M, N, N, K);
-
     // Hexagon's device_malloc implementation will also set the host
     // pointer if it is null, giving a zero copy buffer.
     Halide::Runtime::Buffer<uint8_t> input_tensor(nullptr, C, W, H, N);
