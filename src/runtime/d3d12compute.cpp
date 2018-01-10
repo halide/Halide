@@ -673,6 +673,7 @@ WEAK d3d12_buffer* new_buffer(d3d12_device* device, size_t length)
     TRACELOG;
 
     ID3D12Resource* resource = NULL;
+
     D3D12_RESOURCE_DESC desc = { };
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
         desc.Alignment = 0;                             // 0 defaults to 64KB alignment, which is mandatory for buffers
@@ -684,18 +685,24 @@ WEAK d3d12_buffer* new_buffer(d3d12_device* device, size_t length)
         desc.SampleDesc.Count = 1;                      // for buffers, must always be 1
         desc.SampleDesc.Quality = 0;                    // for buffers, must always be 0
         desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;   // for buffers, must always be D3D12_TEXTURE_LAYOUT_ROW_MAJOR
-        desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    // upload heaps are handy since they are accessible both by CPU and GPU; however, they are only good for streaming
+    // (write once, read once, discard, rinse and repeat) vertex and constant buffer data; for unordered-access views,
+    // upload heaps are not allowed.
     D3D12_HEAP_PROPERTIES heapProps = { };  // CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_...)
-        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;    // WARN(marcos): upload heap is for both CPU and GPU access; not optimal for recurrent GPU access!
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
         heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
         heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
         heapProps.CreationNodeMask = 0;             // 0 is equivalent to 0b0...01 (single adapter)
         heapProps.VisibleNodeMask  = 0;             // (the same applies here)
+
     D3D12_HEAP_PROPERTIES* pHeapProperties = &heapProps;
     D3D12_HEAP_FLAGS HeapFlags = D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES;
     D3D12_RESOURCE_DESC* pDesc = &desc;
     D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
     D3D12_CLEAR_VALUE* pOptimizedClearValue = NULL; // for textures only; must be null for buffers
+
     // A commited resource manages its own private heap
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
     if (D3DError(result, resource, NULL, "Unable to create the Direct3D 12 buffer resource"))
@@ -806,9 +813,17 @@ static void set_compute_pipeline_state(d3d12_compute_command_list* cmdList, d3d1
     ID3D12DescriptorHeap* heaps [] = { binder->descriptorHeap };
     (*cmdList)->SetDescriptorHeaps(1, heaps);
 
+    // more ABI issues.......
+#if 0
     (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV]);
     (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV]);
     (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV]);
+#else
+    #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
+    (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV].ptr);
+    (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV].ptr);
+    (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV].ptr);
+#endif
 }
 
 static void end_recording(d3d12_compute_command_list* cmdList)
