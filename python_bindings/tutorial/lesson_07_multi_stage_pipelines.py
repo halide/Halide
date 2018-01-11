@@ -160,7 +160,7 @@ def main():
 
         # This time it's safe to evaluate the output over the some
         # domain as the input, because we have a boundary condition.
-        result = output.realize(input.width(), input.height(), 3)[0]
+        result = output.realize(input.width(), input.height(), 3)
 
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the

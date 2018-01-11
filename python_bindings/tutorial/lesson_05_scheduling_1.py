@@ -490,7 +490,7 @@ def main():
         # If you like you can turn on tracing, but it's going to
         # produce a lot of prints. Instead we'll compute the answer
         # both in C and Halide and see if the answers match.
-        result = gradient_fast.realize(800, 600)[0]
+        result = gradient_fast.realize(800, 600)
 
         print("Checking Halide result against equivalent C...")
         for tile_index in range(4*3):

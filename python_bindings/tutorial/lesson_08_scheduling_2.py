@@ -588,7 +588,7 @@ def main():
         # consumer.trace_stores()
         # producer.trace_stores()
 
-        halide_result = consumer.realize(800, 600)[0]
+        halide_result = consumer.realize(800, 600)
 
         # Here's the equivalent (serial) C:
 

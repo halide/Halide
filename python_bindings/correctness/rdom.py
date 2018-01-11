@@ -14,9 +14,7 @@ def test_rdom():
     r.where(r.x <= r.y)
 
     diagonal[r.x, r.y] += 2
-    # Note that Realization is *not* implicitly convertible to Buffer
-    # in the Python bindings, so we must explicitly grab the Buffer(s) we want
-    output = diagonal.realize(domain_width, domain_height)[0]
+    output = diagonal.realize(domain_width, domain_height)
     
     for iy in range(domain_height):
         for ix in range(domain_width):

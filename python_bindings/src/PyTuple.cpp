@@ -3,14 +3,6 @@
 namespace Halide {
 namespace PythonBindings {
 
-py::tuple to_python_tuple(const Tuple &ht) {
-    py::tuple pt(ht.size());
-    for (size_t i = 0; i < ht.size(); i++) {
-        pt[i] = py::cast(ht[i]);
-    }
-    return pt;
-}
-
 void define_tuple(py::module &m) {
     // Halide::Tuple isn't surfaced to the user in Python;
     // we define it here to allow PyBind to do some automatic

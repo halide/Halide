@@ -158,7 +158,7 @@ def main():
         # domain" and using it inside an update definition:
         r = hl.RDom(0, 50)
         f[x, r] = f[x, r] * f[x, r]
-        halide_result = f.realize(100, 100)[0]
+        halide_result = f.realize(100, 100)
 
         # The equivalent C is:
         c_result = np.empty((100, 100), dtype=np.int)
@@ -209,7 +209,7 @@ def main():
         # input image at that point.
         histogram[input[r.x, r.y]] += 1
 
-        halide_result = histogram.realize(256)[0]
+        halide_result = histogram.realize(256)
 
         # The equivalent C is:
         c_result = np.empty((256), dtype=np.int)
@@ -267,7 +267,7 @@ def main():
         yo, yi = hl.Var("yo"), hl.Var("yi")
         f.update(1).split(y, yo, yi, 4).parallel(yo)
 
-        halide_result = f.realize(16, 16)[0]
+        halide_result = f.realize(16, 16)
 
 
         # Here's the equivalent (serial) C:
@@ -328,7 +328,7 @@ def main():
         producer[x] = x*17
         producer[x] += 1
         consumer[x] = 2 * producer[x]
-        halide_result = consumer.realize(10)[0]
+        halide_result = consumer.realize(10)
 
         # The equivalent C is:
         c_result = np.empty((10), dtype=np.int)
@@ -385,7 +385,7 @@ def main():
 
             producer.compute_at(consumer, x)
 
-            halide_result = consumer.realize(10)[0]
+            halide_result = consumer.realize(10)
 
 
             # The equivalent C is:
@@ -437,7 +437,7 @@ def main():
             # the Vars of a hl.Func are shared across the pure and
             # update steps.
 
-            halide_result = consumer.realize(10)[0]
+            halide_result = consumer.realize(10)
 
 
             # The equivalent C is:
@@ -480,7 +480,7 @@ def main():
             # redundant work occurs.
             producer.compute_at(consumer, x)
 
-            halide_result = consumer.realize(10)[0]
+            halide_result = consumer.realize(10)
 
             # The equivalent C is:
             c_result = np.empty((10), dtype=np.int)
@@ -545,7 +545,7 @@ def main():
             producer_wrapper_1.compute_at(consumer_2, x)
             producer_wrapper_2.compute_at(consumer_2, y)
 
-            halide_result = consumer_2.realize(10, 10)[0]
+            halide_result = consumer_2.realize(10, 10)
 
             # The equivalent C is:
             c_result = np.empty((10, 10), dtype=np.int)
@@ -600,7 +600,7 @@ def main():
 
             producer.compute_at(consumer, r)
 
-            halide_result = consumer.realize(10)[0]
+            halide_result = consumer.realize(10)
 
             # The equivalent C is:
             c_result = np.empty((10), dtype=np.int)
@@ -651,7 +651,7 @@ def main():
         blurry = hl.Func("blurry")
         blurry[x, y] = hl.cast(hl.UInt(8), local_sum[x, y] / 25)
 
-        halide_result = blurry.realize(input.width(), input.height())[0]
+        halide_result = blurry.realize(input.width(), input.height())
 
         # The default schedule will inline 'clamped' into the update
         # step of 'local_sum', because clamped only has a pure
@@ -711,8 +711,8 @@ def main():
         # So even though f1 references a reduction domain, it is a
         # pure function. The reduction domain has been swallowed to
         # define the inner anonymous reduction.
-        halide_result_1 = f1.realize(10)[0]
-        halide_result_2 = f2.realize(10)[0]
+        halide_result_1 = f1.realize(10)
+        halide_result_2 = f2.realize(10)
 
         # The equivalent C is:
         c_result = np.empty((10), dtype=np.int)

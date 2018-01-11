@@ -13,7 +13,6 @@
 #include "PyLambda.h"
 #include "PyParam.h"
 #include "PyRDom.h"
-#include "PyRealization.h"
 #include "PyTarget.h"
 #include "PyTuple.h"
 #include "PyType.h"
@@ -30,7 +29,6 @@ PYBIND11_MODULE(halide, m) {
     define_tuple(m);
     define_argument(m);
     define_boundary_conditions(m);
-    define_realization(m);
     define_buffer(m);
     define_error(m);
     define_extern_func_argument(m);

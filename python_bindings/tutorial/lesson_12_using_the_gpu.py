@@ -42,7 +42,7 @@ class MyPipeline:
 
     def __init__(self, input):
 
-        assert type(input) == hl.Buffer
+        assert input.type() == hl.UInt(8)
 
         self.lut = hl.Func("lut")
         self.padded = hl.Func("padded")
@@ -250,11 +250,11 @@ class MyPipeline:
 
     def test_correctness(self, reference_output):
 
-        assert type(reference_output) == hl.Buffer
+        assert reference_output.type() == hl.UInt(8)
         output = self.curved.realize(self.input.width(),
                                      self.input.height(),
-                                     self.input.channels())[0]
-        assert type(output) == hl.Buffer
+                                     self.input.channels())
+        assert output.type() == hl.UInt(8)
 
         # Check against the reference output.
         for c in range(self.input.channels()):

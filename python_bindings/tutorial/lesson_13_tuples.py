@@ -88,11 +88,19 @@ def main():
     # Buffers. We call this a Realization. It's equivalent to a
     # std::vector of hl.Buffer/Image objects:
     if True:
-        r = multi_valued.realize(80, 60)
-        im1 = r[0]
-        im2 = r[1]
-        assert type(im1) is hl.Buffer
-        assert type(im2) is hl.Buffer
+        im1, im2 = multi_valued.realize(80, 60)
+        assert im1.type() == hl.Int(32)
+        assert im2.type() == hl.Float(32)
+        assert im1[30, 40] == 30 + 40
+        assert numpy.isclose(im2[30, 40], math.sin(30 * 40))
+
+    # You can also pass a tuple of pre-allocated buffers to realize()
+    # rather than having new ones created. (The Buffers must have the correct
+    # types and have identical sizes.)
+    if True:
+        im1 = hl.Buffer(hl.Int(32), 80, 60)
+        im2 = hl.Buffer(hl.Float(32), 80, 60)
+        multi_valued.realize((im1, im2))
         assert im1[30, 40] == 30 + 40
         assert numpy.isclose(im2[30, 40], math.sin(30 * 40))
 
@@ -146,8 +154,8 @@ def main():
         # First we create an Image to take the argmax over.
         input_func = hl.Func()
         input_func[x] = hl.sin(x)
-        input = input_func.realize(100)[0]
-        assert type(input) is hl.Buffer
+        input = input_func.realize(100)
+        assert input.type() == hl.Float(32)
 
         # Then we defined a 2-valued Tuple which tracks the maximum value
         # its index.
@@ -184,11 +192,10 @@ def main():
         # Let's verify that the Halide and C++ found the same maximum
         # value and index.
         if True:
-            r = arg_max.realize()
-            (r0, r1) = (r[0], r[1])
+            r0, r1 = arg_max.realize()
 
-            assert type(r0) is hl.Buffer
-            assert type(r1) is hl.Buffer
+            assert r0.type() == hl.Int(32)
+            assert r1.type() == hl.Float(32)
             assert arg_max_0 == r0[()]
             assert numpy.isclose(arg_max_1, r1[()])
 
@@ -287,8 +294,8 @@ def main():
         escape[x, y] = first_escape[0]
 
         # Realize the pipeline and print the result as ascii art.
-        result = escape.realize(61, 25)[0]
-        assert type(result) is hl.Buffer
+        result = escape.realize(61, 25)
+        assert result.type() == hl.Int(32)
         code = " .:-~*={&%#@"
         for yy in range(result.height()):
             for xx in range(result.width()):

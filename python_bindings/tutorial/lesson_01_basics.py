@@ -79,8 +79,8 @@ def main():
     # resolution of the output image. Halide.h also provides a basic
     # templatized image type we can use. We'll make an 800 x 600
     # image.
-    output = gradient.realize(800, 600)[0]
-    assert type(output) == hl.Buffer
+    output = gradient.realize(800, 600)
+    assert output.type() == hl.Int(32)
 
     # Halide does type inference for you. hl.Var objects represent
     # 32-bit integers, so the hl.Expr object 'x + y' also represents a

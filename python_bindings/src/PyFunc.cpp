@@ -6,6 +6,7 @@
 #include "PyFuncRef.h"
 #include "PyScheduleMethods.h"
 #include "PyStage.h"
+#include "PyTuple.h"
 #include "PyVarOrRVar.h"
 
 namespace Halide {
@@ -32,6 +33,16 @@ void define_set(py::class_<Func> &func_class) {
             return func(lhs) = rhs;
         })
     ;
+}
+
+py::object realization_to_object(const Realization &r) {
+    // Only one Buffer -> just return it
+    if (r.size() == 1) {
+        return py::cast(r[0]);
+    }
+
+    // Multiple -> return as Python tuple
+    return to_python_tuple(r);
 }
 
 }  // namespace
@@ -73,28 +84,40 @@ void define_func(py::module &m) {
         .def(py::init<>())
         .def(py::init<std::string>())
         .def(py::init<Expr>())
-        // TODO: this overload shouldn't be necessary, but for reasons that
-        // aren't clear, PyBind isn't doing the implicit Buffer -> Realization
-        // conversion here, and is choosing the std::vector<int> variant, which
-        // crashes. Adding an explicit overload for Buffer<> heals it.
-        .def("realize", [](Func &f, Buffer<> b, const Target &t, const ParamMap &param_map) -> void {
-            f.realize(Realization(b), t);
+
+        .def("realize", [](Func &f, Buffer<> buffer, const Target &target, const ParamMap &param_map) -> void {
+            f.realize(Realization(buffer), target);
         }, py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", [](Func &f, std::vector<Buffer<>> b, const Target &t, const ParamMap &param_map) -> void {
-            f.realize(Realization(b), t);
+
+        // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
+        .def("realize", [](Func &f, std::vector<Buffer<>> buffers, const Target &t, const ParamMap &param_map) -> void {
+            f.realize(Realization(buffers), t);
         }, py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", (Realization (Func::*)(std::vector<int32_t>, const Target &, const ParamMap &param_map)) &Func::realize,
-            py::arg("sizes"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", (Realization (Func::*)(const Target &, const ParamMap &param_map)) &Func::realize,
-            py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", (Realization (Func::*)(int, const Target &, const ParamMap &param_map)) &Func::realize,
-            py::arg("x_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", (Realization (Func::*)(int, int, const Target &, const ParamMap &param_map)) &Func::realize,
-            py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", (Realization (Func::*)(int, int, int, const Target &, const ParamMap &param_map)) &Func::realize,
-            py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
-        .def("realize", (Realization (Func::*)(int, int, int, int, const Target &, const ParamMap &param_map)) &Func::realize,
-            py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
+        .def("realize", [](Func &f, std::vector<int32_t> sizes, const Target &target, const ParamMap &param_map) -> py::object {
+            return realization_to_object(f.realize(sizes, target, param_map));
+        }, py::arg("sizes"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
+        .def("realize", [](Func &f, const Target &target, const ParamMap &param_map) -> py::object {
+            return realization_to_object(f.realize(target, param_map));
+        }, py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
+        .def("realize", [](Func &f, int x_size, const Target &target, const ParamMap &param_map) -> py::object {
+            return realization_to_object(f.realize(x_size, target, param_map));
+        }, py::arg("x_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
+        .def("realize", [](Func &f, int x_size, int y_size, const Target &target, const ParamMap &param_map) -> py::object {
+            return realization_to_object(f.realize(x_size, y_size, target, param_map));
+        }, py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
+        .def("realize", [](Func &f, int x_size, int y_size, int z_size, const Target &target, const ParamMap &param_map) -> py::object {
+            return realization_to_object(f.realize(x_size, y_size, z_size, target, param_map));
+        }, py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
+        .def("realize", [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target, const ParamMap &param_map) -> py::object {
+            return realization_to_object(f.realize(x_size, y_size, z_size, w_size, target, param_map));
+        }, py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
+
         .def("name", &Func::name)
 
         .def("output_types", &Func::output_types)

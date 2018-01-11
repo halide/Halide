@@ -9,8 +9,6 @@ The Python bindings attempt to mimic the Halide C++ API as closely as possible, 
     - `Halide::Error` and friends don't exist; standard Python error handling is used instead.
 - static and instance method overloads with the same name in the same class aren't allowed, so some convenience methods are missing from `Halide::Var`
 - Templated types (notably `Halide::Buffer<>` and `Halide::Param<>`) aren't provided, for obvious reasons; only the equivalents of `Halide::Buffer<void>` and `Halide::Param<void>` are supported.
-- Some implicit conversions in C++ can't be reliably inferred in Python, due to the lack of static typing necessary to correct make the inference. Of particular note:
-    - The result of `Func::realize` is a `Halide::Realization`, but is often implicitly converted to a `Halide::Buffer<>`; in Python, there's no obvious way to determing whether the caller wants to keep the `Realization` or extract a `Buffer`, so explicit extraction is needed via `[0]` or similar. TODO: should `realize()` just return a Python tuple and elide `Realization` entirely?
 - Only things in the `Halide` namespace are supported; classes and methods that involve using the `Halide::Internal` namespace are not provided.
 - No mechanism is provided for overriding any runtime functions from Python.
 - No mechanism is provided for supporting `Func::define_extern`.
