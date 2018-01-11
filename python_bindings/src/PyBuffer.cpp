@@ -39,77 +39,52 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
     return s;
 }
 
-py::dtype type_to_dtype(const Type &t) {
-    #define HANDLE_DTYPE(TYPE) if (t == type_of<TYPE>()) return py::dtype::of<TYPE>();
-    HANDLE_DTYPE(bool)
-    HANDLE_DTYPE(uint8_t)
-    HANDLE_DTYPE(uint16_t)
-    HANDLE_DTYPE(uint32_t)
-    HANDLE_DTYPE(uint64_t)
-    HANDLE_DTYPE(int8_t)
-    HANDLE_DTYPE(int16_t)
-    HANDLE_DTYPE(int32_t)
-    HANDLE_DTYPE(int64_t)
-    HANDLE_DTYPE(float)
-    HANDLE_DTYPE(double)
-    #undef HANDLE_DTYPE
+std::string type_to_format_descriptor(const Type &type) {
 
-    throw py::value_error("Unsupported ndarray type.");
-    return py::dtype::of<uint8_t>();
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (type == type_of<TYPE>()) return py::format_descriptor<TYPE>::format();
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return std::string();
 }
 
-Type dtype_to_type(const py::dtype &dtype) {
-    #define HANDLE_DTYPE(TYPE) if (dtype.is(py::dtype::of<TYPE>())) return type_of<TYPE>();
-    HANDLE_DTYPE(bool)
-    HANDLE_DTYPE(uint8_t)
-    HANDLE_DTYPE(uint16_t)
-    HANDLE_DTYPE(uint32_t)
-    HANDLE_DTYPE(uint64_t)
-    HANDLE_DTYPE(int8_t)
-    HANDLE_DTYPE(int16_t)
-    HANDLE_DTYPE(int32_t)
-    HANDLE_DTYPE(int64_t)
-    HANDLE_DTYPE(float)
-    HANDLE_DTYPE(double)
-    #undef HANDLE_DTYPE
+Type format_descriptor_to_type(const std::string &fd) {
 
-    throw py::value_error("Unsupported ndarray type.");
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (fd == py::format_descriptor<TYPE>::format()) return type_of<TYPE>();
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
     return Type();
 }
 
-Buffer<> ndarray_to_buffer(const py::array &array, const std::string &name) {
-    Type t = dtype_to_type(array.dtype());
-
-    std::vector<halide_dimension_t> dims;
-    dims.reserve(array.ndim());
-    for (int i = 0; i < array.ndim(); i++) {
-        // TODO: check for ssize_t -> int32_t overflow
-        dims.push_back({0, (int32_t) array.shape(i), (int32_t) (array.strides(i) / t.bytes())});
-    }
-
-    // TODO: it should be possible to have the Buffer point at the ndarray's
-    // memory, if we take care to ensure the ndarray lives, and the ndarray owns
-    // the data in the first place. For now, we always copy.
-
-    // tmp doesn't make a copy of the data, it just keeps a pointer.
-    return Buffer<>(t, const_cast<void *>(array.data()), (int) array.ndim(), dims.data(), name).copy();
-}
-
-py::array buffer_to_ndarray(const Buffer<> &buf) {
-    if (buf.data() == nullptr) {
-        throw py::value_error("Buffers with null data should be impossible here.");
-    }
-
-    std::vector<ssize_t> extent, stride;
-    for (int i = 0; i < buf.dimensions(); i++) {
-        extent.push_back(buf.dim(i).extent());
-        stride.push_back(buf.dim(i).stride() * buf.type().bytes());
-    }
-
-    // TODO: should be possible to avoid copying data in at least some instances
-    // by passing a handle as the trailing arg. For now, just copy.
-    return py::array(type_to_dtype(buf.type()), extent, stride, buf.data());
-}
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     if ((size_t) pos.size() != (size_t) buf.dimensions()) {
@@ -170,9 +145,24 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, p
 
 void define_buffer(py::module &m) {
     auto buffer_class =
-        py::class_<Buffer<>>(m, "Buffer")
-        // TODO: do we want a Buffer(ndarray) ctor?
-        .def(py::init(&ndarray_to_buffer), py::arg("ndarray"), py::arg("name") = "")
+        py::class_<Buffer<>>(m, "Buffer", py::buffer_protocol())
+        // This allows us to use any buffer-like python entity to create a Buffer<>
+        // (most notably, an ndarray)
+        .def(py::init([](py::buffer pyb) -> Buffer<> {
+            const py::buffer_info info = pyb.request();
+            const Type t = format_descriptor_to_type(info.format);
+
+            std::vector<halide_dimension_t> dims;
+            dims.reserve(info.ndim);
+            for (int i = 0; i < info.ndim; i++) {
+                // TODO: check for ssize_t -> int32_t overflow
+                dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
+            }
+
+            // Note that this does NOT make a copy of the data; it deliberately
+            // shares the pointer with the incoming buffer.
+            return Buffer<>(t, info.ptr, (int) info.ndim, dims.data());
+        }))
 
         // TODO replace with py::args version
         .def(py::init<>())
@@ -187,9 +177,6 @@ void define_buffer(py::module &m) {
         .def(py::init<Type, int, int>())
         .def(py::init<Type, int, int, int>())
         .def(py::init<Type, int, int, int, int>())
-
-        // TODO: do we want this as an instance method?
-        .def("to_ndarray", &buffer_to_ndarray)
 
         .def("type", &Buffer<>::type)
         .def("channels", (int (Buffer<>::*)() const) &Buffer<>::channels)
@@ -237,12 +224,27 @@ void define_buffer(py::module &m) {
             o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
             return o.str();
         })
+
+        // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
+        // most notably, we can convert to an ndarray by calling numpy.array()
+       .def_buffer([](Buffer<> &b) -> py::buffer_info {
+            const int d = b.dimensions();
+            const int bytes = b.type().bytes();
+            std::vector<ssize_t> shape, strides;
+            for (int i = 0; i < d; i++) {
+                shape.push_back((ssize_t) b.raw_buffer()->dim[i].extent);
+                strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
+            }
+            return py::buffer_info(
+                b.data(),                               // Pointer to buffer
+                bytes,                                  // Size of one scalar
+                type_to_format_descriptor(b.type()),    // Python struct-style format descriptor
+                d,                                      // Number of dimensions
+                shape,                                  // Buffer dimensions
+                strides                                // Strides (in bytes) for each index
+            );
+        })
     ;
-
-    // TODO: do we want these?
-    m.def("ndarray_to_buffer", &ndarray_to_buffer, py::arg("ndarray"), py::arg("name") = "");
-    m.def("buffer_to_ndarray", &buffer_to_ndarray, py::arg("buffer"));
-
 }
 
 }  // namespace PythonBindings

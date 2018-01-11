@@ -13,6 +13,11 @@ The Python bindings attempt to mimic the Halide C++ API as closely as possible, 
 - No mechanism is provided for overriding any runtime functions from Python.
 - No mechanism is provided for supporting `Func::define_extern`.
 
+## Enhancements to the C++ API
+
+- A `Buffer` object can be constructed from most array-like objects, and will share the underlying storage with the object in question. This is especially useful with `numpy.ndarray`.
+- Similarly, most array-like objects can be created from a `Buffer`, with underlying storage being shared.
+
 ## Prerequisites ##
 
 The bindings (and demonstration applications) should work well both for python2.7 and python3.4 (or higher), on Linux and OSX platforms. Windows is not yet supported, but could be with CMake work. (The Makefile defaults to using Python 3.x; to use Python 2, set `PYTHON = python` before building.)
