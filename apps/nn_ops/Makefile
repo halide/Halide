@@ -29,7 +29,7 @@ $(BIN)/%/MaxPool: MaxPool.cpp $(BIN)/%/MaxPool.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MaxPool.cpp $(BIN)/$*/MaxPool.o -o $(BIN)/$*/MaxPool $(LDFLAGS-$*)
 
 run-host: $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
-	# ./MatrixMultiply.sh $(BIN)/host/MatrixMultiply
+	./MatrixMultiply.sh $(BIN)/host/MatrixMultiply
 	./MaxPool.sh $(BIN)/host/MaxPool
 
 clean:

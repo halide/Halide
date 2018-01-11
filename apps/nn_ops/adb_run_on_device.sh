@@ -17,7 +17,7 @@ BIN=bin
 APP_TARGET=arm-64-android
 
 # Build the app.
-make bin/${APP_TARGET}/MatrixMultiply
+make bin/${APP_TARGET}/MatrixMultiply bin/${APP_TARGET}/MaxPool
 
 # Make a folder on device for the app and our dependencies.
 adb shell mkdir -p ${DEVICE_PATH}
@@ -32,6 +32,10 @@ adb shell cp /system/lib/rfsa/adsp/testsig* ${DEVICE_PATH} > /dev/null || true
 
 # Push and run the app!
 adb push ${BIN}/${APP_TARGET}/MatrixMultiply ${DEVICE_PATH}
+adb push ${BIN}/${APP_TARGET}/MaxPool ${DEVICE_PATH}
 adb shell chmod +x ${DEVICE_PATH}/MatrixMultiply
+adb shell chmod +x ${DEVICE_PATH}/MaxPool
 adb push MatrixMultiply.sh ${DEVICE_PATH}
+adb push MaxPool.sh ${DEVICE_PATH}
 adb shell ${DEVICE_ENV} ${DEVICE_PATH}/MatrixMultiply.sh ${DEVICE_PATH}/MatrixMultiply
+adb shell ${DEVICE_ENV} ${DEVICE_PATH}/MatrixMultiply.sh ${DEVICE_PATH}/MaxPool
