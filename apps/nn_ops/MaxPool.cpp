@@ -1,8 +1,8 @@
-#include <stdio.h>
-#include <memory.h>
 #include <assert.h>
-#include <stdlib.h>
 #include <malloc.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include <limits>
 
@@ -13,7 +13,7 @@
 #include "HalideBuffer.h"
 
 int clamp(int x, int low, int high) {
-  return std::min(std::max(x, low), high);
+    return std::min(std::max(x, low), high);
 }
 
 int main(int argc, char **argv) {
@@ -100,20 +100,20 @@ int main(int argc, char **argv) {
     output_tensor.for_each_element([&](int c, int x, int y, int b) {
         int32_t output = std::numeric_limits<int32_t>::min();
 
-        for(int iy = 0; iy < filter_height; iy++) {
+        for (int iy = 0; iy < filter_height; iy++) {
             for (int ix = 0; ix < filter_width; ix++) {
                 output =
                     std::max(output,
-                        static_cast<int32_t>(
-                            input_tensor(c,
-                              clamp(x * stride + ix - pad_width, 0, W - 1),
-                              clamp(y * stride + iy - pad_height, 0, H - 1),
-                              b)));
+                             static_cast<int32_t>(
+                                 input_tensor(c,
+                                              clamp(x * stride + ix - pad_width, 0, W - 1),
+                                              clamp(y * stride + iy - pad_height, 0, H - 1),
+                                              b)));
             }
         }
 
-        output = std::max(output, (int32_t)output_min);
-        output = std::min(output, (int32_t)output_max);
+        output = std::max(output, (int32_t) output_min);
+        output = std::min(output, (int32_t) output_max);
         if (output != output_tensor(c, x, y, b)) {
             printf("Mismatch at %d %d %d %d: %d != %d\n", c, x, y, b, output, output_tensor(c, x, y, b));
             abort();
