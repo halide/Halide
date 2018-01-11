@@ -146,10 +146,11 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, p
 void define_buffer(py::module &m) {
     auto buffer_class =
         py::class_<Buffer<>>(m, "Buffer", py::buffer_protocol())
+
         // This allows us to use any buffer-like python entity to create a Buffer<>
         // (most notably, an ndarray)
-        .def(py::init([](py::buffer pyb) -> Buffer<> {
-            const py::buffer_info info = pyb.request();
+        .def(py::init([](py::buffer buffer, const std::string &name) -> Buffer<> {
+            const py::buffer_info info = buffer.request();
             const Type t = format_descriptor_to_type(info.format);
 
             std::vector<halide_dimension_t> dims;
@@ -161,8 +162,8 @@ void define_buffer(py::module &m) {
 
             // Note that this does NOT make a copy of the data; it deliberately
             // shares the pointer with the incoming buffer.
-            return Buffer<>(t, info.ptr, (int) info.ndim, dims.data());
-        }))
+            return Buffer<>(t, info.ptr, (int) info.ndim, dims.data(), name);
+        }), py::arg("buffer"), py::arg("name") = "")
 
         // TODO replace with py::args version
         .def(py::init<>())
@@ -177,6 +178,11 @@ void define_buffer(py::module &m) {
         .def(py::init<Type, int, int>())
         .def(py::init<Type, int, int, int>())
         .def(py::init<Type, int, int, int, int>())
+
+        .def(py::init<Type, int, int, int, int>())
+
+        .def("set_name", &Buffer<>::set_name)
+        .def("name", &Buffer<>::name)
 
         .def("type", &Buffer<>::type)
         .def("channels", (int (Buffer<>::*)() const) &Buffer<>::channels)

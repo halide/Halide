@@ -62,7 +62,7 @@ def test_extern():
     input.set(data)
     sort_func.realize(output_data)
 
-    assert numpy.isclose(expected_result, output_data)
+    assert np.isclose(expected_result, output_data)
 
     return
 

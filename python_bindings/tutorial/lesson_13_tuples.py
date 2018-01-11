@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import halide as hl
 
-import numpy
+import numpy as np
 import math
 
 def main():
@@ -92,7 +92,7 @@ def main():
         assert im1.type() == hl.Int(32)
         assert im2.type() == hl.Float(32)
         assert im1[30, 40] == 30 + 40
-        assert numpy.isclose(im2[30, 40], math.sin(30 * 40))
+        assert np.isclose(im2[30, 40], math.sin(30 * 40))
 
     # You can also pass a tuple of pre-allocated buffers to realize()
     # rather than having new ones created. (The Buffers must have the correct
@@ -102,15 +102,15 @@ def main():
         im2 = hl.Buffer(hl.Float(32), 80, 60)
         multi_valued.realize((im1, im2))
         assert im1[30, 40] == 30 + 40
-        assert numpy.isclose(im2[30, 40], math.sin(30 * 40))
+        assert np.isclose(im2[30, 40], math.sin(30 * 40))
 
 
     # All Tuple elements are evaluated together over the same domain
     # in the same loop nest, but stored in distinct allocations. The
     # equivalent C++ code to the above is:
     if True:
-        multi_valued_0 = numpy.empty((80*60), dtype=numpy.int32)
-        multi_valued_1 = numpy.empty((80*60), dtype=numpy.int32)
+        multi_valued_0 = np.empty((80*60), dtype=np.int32)
+        multi_valued_1 = np.empty((80*60), dtype=np.int32)
 
         for yy in range(80):
             for xx in range(60):
@@ -197,7 +197,7 @@ def main():
             assert r0.type() == hl.Int(32)
             assert r1.type() == hl.Float(32)
             assert arg_max_0 == r0[()]
-            assert numpy.isclose(arg_max_1, r1[()])
+            assert np.isclose(arg_max_1, r1[()])
 
 
         # Halide provides argmax and hl.argmin as built-in reductions

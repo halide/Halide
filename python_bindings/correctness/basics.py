@@ -3,6 +3,7 @@ from __future__ import division
 
 from contextlib import contextmanager
 import halide as hl
+import numpy as np
 import sys
 
 try:
@@ -224,15 +225,15 @@ def test_operator_order():
 def test_ndarray_to_buffer():
     import numpy
 
-    a0 = numpy.ones((200, 300), dtype=numpy.float32)
-    buf0 = hl.ndarray_to_buffer(a0, "float32_test_buffer")
+    a0 = np.ones((200, 300), dtype=np.float32)
+    buf0 = hl.Buffer(a0, "float32_test_buffer")
     assert buf0.type() == hl.Float(32)
-    # assert buf0[0, 0] == 1.0
+    assert buf0.name() == "float32_test_buffer"
+    assert buf0[0, 0] == 1.0
 
-    a1 = numpy.ones((640, 480), dtype=numpy.uint8)
+    a1 = np.ones((640, 480), dtype=np.uint8)
     buf1 = hl.Buffer(a1, "uint8_test_buffer")
     assert buf1.type() == hl.UInt(8)
-    # print("buf1", buf1)
 
 
 def test_buffer_to_ndarray():
@@ -241,18 +242,18 @@ def test_buffer_to_ndarray():
     buf0 = hl.Buffer(hl.Float(32), 50, 50)
     assert buf0.type() == hl.Float(32)
 
-    a0 = hl.buffer_to_ndarray(buf0)
+    a0 = np.array(buf0)
     assert a0.shape == (50, 50)
-    assert a0.dtype == numpy.float32
+    assert a0.dtype == np.float32
 
     buf1 = hl.Buffer(hl.Int(16), 50, 50)
     assert buf1.type() == hl.Int(16)
     buf1[24, 24] = 42
     assert buf1[24, 24] == 42
 
-    a1 = buf1.to_ndarray()
+    a1 = np.array(buf1)
     assert a1.shape == (50, 50)
-    assert a1.dtype == numpy.int16
+    assert a1.dtype == np.int16
     assert a1[24, 24] == 42
 
 if __name__ == "__main__":

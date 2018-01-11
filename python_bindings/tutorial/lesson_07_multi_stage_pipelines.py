@@ -94,10 +94,7 @@ def main():
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
 
-        result_data = hl.buffer_to_ndarray(result)
-        print("result.shape", result_data.shape)
-
-        imsave("blurry_parrot_1.png", result_data)
+        imsave("blurry_parrot_1.png", result)
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
@@ -165,10 +162,7 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-        result_data = hl.buffer_to_ndarray(result)
-        print("result.shape", result_data.shape)
-
-        imsave("blurry_parrot_2.png", result_data)
+        imsave("blurry_parrot_2.png", result)
         print("Created blurry_parrot_2.png")
 
     print("Success!")

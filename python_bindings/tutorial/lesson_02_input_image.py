@@ -30,11 +30,10 @@ def main():
 
     # First we'll load the input image we wish to brighten.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
-    input_data = imread(image_path)
-    assert input_data.dtype == np.uint8
 
     # We create a hl.Buffer object to wrap the numpy array
-    input = hl.Buffer(input_data)
+    input = hl.Buffer(imread(image_path))
+    assert input.type() == hl.UInt(8)
 
     # Next we define our hl.Func object that represents our one pipeline
     # stage.
@@ -98,10 +97,7 @@ def main():
     assert output_image.type() == hl.UInt(8)
 
     # Save the output for inspection. It should look like a bright parrot.
-    output_data = hl.buffer_to_ndarray(output_image)
-    #print("output_data", output_data)
-    #print("output_data.shape", output_data.shape)
-    imsave("brighter.png", output_data)
+    imsave("brighter.png", output_image)
     print("Created brighter.png result file.")
 
     print("Success!")
