@@ -219,7 +219,7 @@ void define_buffer(py::module &m) {
         })
 
         .def("__getitem__", [](Buffer<> &buf, const Expr &pos) -> Expr {
-            return buf({pos});
+            return buf(std::vector<Expr>{pos});
         })
         .def("__getitem__", [](Buffer<> &buf, const std::vector<Expr> &pos) -> Expr {
             return buf(pos);
