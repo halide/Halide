@@ -1,0 +1,45 @@
+## PYBIND TODO:
+
+- Realization should probably be eliminated, and an ordinary Python tuple used instead.
+- BoundaryConditions isn't in a sub-name. Should it be?
+- should we define __len__ for everything that implements size()?
+- Some API classes missing entirely: e.g., Pipeline, Generators, etc
+- Some API classes have many missing-but-needed methods (e.g. Func)
+- Some API classes have many deliberately-missing methods (e.g. Argument) because the methods (or field-accessor wrappers) shouldn't be necessary for Python user code (ie, they)
+- Should the Buffer<->ndarray conversion routines be standalone, or ctor+instancemethod, or both?
+- 'throw' usage mixes C++11 and PyBind types; unify for consistency
+- minimize Py dependencies in tests. (scipy?)
+
+- Wrappers Missing Entirely:
+    - ConciseCasts 
+    - DeviceInterface
+    - evaluate()
+    - Float16 [possible via numpy?]
+    - Generator
+    - Module
+    - OutputImageParam
+    - Outputs
+    - Pipeline
+- Wrappers Incomplete, Tests Incomplete:
+    - BoundaryConditions
+    - Buffer
+    - Func
+    - FuncRef
+    - FuncTupleElementRef
+    - LoopLevel
+    - ImageParam
+    - IROperator
+    - ParamMap
+    - Stage
+- Wrappers Complete, Tests Incomplete:
+    - ExternFuncArgument
+    - InlineReductions
+    - RDom
+    - RVar
+- Wrappers Complete, Tests Complete:
+    - Expr
+    - Target
+    - Type
+    - Var
+
+
