@@ -157,6 +157,8 @@ void define_buffer(py::module &m) {
                 shape.push_back((ssize_t) b.raw_buffer()->dim[i].extent);
                 strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
             }
+
+            // std::cerr << "Buffer<"<<b.type()<<"> -> buffer_info @ "<<b.data()<<"\n";
             return py::buffer_info(
                 b.data(),                               // Pointer to buffer
                 bytes,                                  // Size of one scalar
@@ -184,9 +186,10 @@ void define_buffer(py::module &m) {
 
             // Note that this does NOT make a copy of the data; it deliberately
             // shares the pointer with the incoming buffer.
+            // std::cerr << "buffer -> Buffer<"<<t<<"> @ "<<info.ptr<<"\n";
             return Buffer<>(t, info.ptr, (int) info.ndim, dims.data(), name);
         }), py::arg("buffer"), py::arg("name") = "",
-            py::keep_alive<0, 1>() // ensure that the buffer stays alive while the Buffer<> exists
+            py::keep_alive<1, 2>() // ensure that the py::buffer stays alive as long as the Buffer<> exists
         )
 
 
