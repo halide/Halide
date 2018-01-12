@@ -365,10 +365,11 @@ struct Test {
             check("pminsw", 4*w, min(i16_1, i16_2));
             check("pmaxub", 8*w, max(u8_1, u8_2));
             check("pminub", 8*w, min(u8_1, u8_2));
-            check("pmulhuw", 4*w, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-            check("pmulhuw", 4*w, u16((u32(u16_1) * u32(u16_2))>>16));
-            check("pmulhuw", 4*w, u16_1 / 15);
 
+            const char *check_pmulhuw = (use_avx2 && w > 3) ? "vpmulhuw*ymm" : "pmulhuw";
+            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2))/(256*256)));
+            check(check_pmulhuw, 4*w, u16((u32(u16_1) * u32(u16_2))>>16));
+            check(check_pmulhuw, 4*w, u16_1 / 15);
 
             check("cmpeqps", 2*w, select(f32_1 == f32_2, 1.0f, 2.0f));
             check("cmpltps", 2*w, select(f32_1 < f32_2, 1.0f, 2.0f));
@@ -428,9 +429,12 @@ struct Test {
             check("psubq", w, i64_1 - i64_2);
             check(use_avx512_skylake ? "vpmullq" : "pmuludq", w, u64_1 * u64_2);
 
-            check("packssdw", 4*w, i16_sat(i32_1));
-            check("packsswb", 8*w, i8_sat(i16_1));
-            check("packuswb", 8*w, u8_sat(i16_1));
+            const char *check_suffix = "";
+            if (use_avx2 && w > 3)
+                check_suffix = "*ymm";
+            check(std::string("packssdw") + check_suffix, 4*w, i16_sat(i32_1));
+            check(std::string("packsswb") + check_suffix, 8*w, i8_sat(i16_1));
+            check(std::string("packuswb") + check_suffix, 8*w, u8_sat(i16_1));
         }
 
         // SSE 3
@@ -450,14 +454,9 @@ struct Test {
 
         // skip dot product and argmin
         for (int w = 2; w <= 4; w++) {
-            check("pmaddwd", 2*w, i32(i16_1) * 3 + i32(i16_2) * 4);
-            check("pmaddwd", 2*w, i32(i16_1) * 3 - i32(i16_2) * 4);
-        }
-
-        if (use_avx2) {
-            check("vpmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
-        } else {
-            check("pmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
+            const char *check_pmaddwd = (use_avx2 && w > 3) ? "vpmaddwd*ymm" : "pmaddwd";
+            check(check_pmaddwd, 2*w, i32(i16_1) * 3 + i32(i16_2) * 4);
+            check(check_pmaddwd, 2*w, i32(i16_1) * 3 - i32(i16_2) * 4);
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
@@ -562,16 +561,16 @@ struct Test {
         if (use_avx2) {
             check("vpaddb*ymm", 32, u8_1 + u8_2);
             check("vpsubb*ymm", 32, u8_1 - u8_2);
-            check("vpaddsb", 32, i8_sat(i16(i8_1) + i16(i8_2)));
-            check("vpsubsb", 32, i8_sat(i16(i8_1) - i16(i8_2)));
-            check("vpaddusb", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-            check("vpsubusb", 32, u8(max(i16(u8_1) - i16(u8_2), 0)));
+            check("vpaddsb*ymm", 32, i8_sat(i16(i8_1) + i16(i8_2)));
+            check("vpsubsb*ymm", 32, i8_sat(i16(i8_1) - i16(i8_2)));
+            check("vpaddusb*ymm", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+            check("vpsubusb*ymm", 32, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("vpaddw*ymm", 16, u16_1 + u16_2);
             check("vpsubw*ymm", 16, u16_1 - u16_2);
-            check("vpaddsw", 16, i16_sat(i32(i16_1) + i32(i16_2)));
-            check("vpsubsw", 16, i16_sat(i32(i16_1) - i32(i16_2)));
-            check("vpaddusw", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-            check("vpsubusw", 16, u16(max(i32(u16_1) - i32(u16_2), 0)));
+            check("vpaddsw*ymm", 16, i16_sat(i32(i16_1) + i32(i16_2)));
+            check("vpsubsw*ymm", 16, i16_sat(i32(i16_1) - i32(i16_2)));
+            check("vpaddusw*ymm", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+            check("vpsubusw*ymm", 16, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("vpaddd*ymm", 8, i32_1 + i32_2);
             check("vpsubd*ymm", 8, i32_1 - i32_2);
             check("vpmulhw*ymm", 16, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -585,26 +584,20 @@ struct Test {
             check("vpcmp*d*ymm", 8, select(u32_1 == u32_2, u32(1), u32(2)));
             check("vpcmp*d*ymm", 8, select(u32_1 > u32_2, u32(1), u32(2)));
 
-            check("vpavgb", 32, u8((u16(u8_1) + u16(u8_2) + 1)/2));
-            check("vpavgw", 16, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+            check("vpavgb*ymm", 32, u8((u16(u8_1) + u16(u8_2) + 1)/2));
+            check("vpavgw*ymm", 16, u16((u32(u16_1) + u32(u16_2) + 1)/2));
             check("vpmaxsw*ymm", 16, max(i16_1, i16_2));
             check("vpminsw*ymm", 16, min(i16_1, i16_2));
             check("vpmaxub*ymm", 32, max(u8_1, u8_2));
             check("vpminub*ymm", 32, min(u8_1, u8_2));
-            check("vpmulhuw*ymm", 16, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-            check("vpmulhuw*ymm", 16, u16((u32(u16_1) * u32(u16_2))>>16));
 
             check("vpaddq*ymm", 8, i64_1 + i64_2);
             check("vpsubq*ymm", 8, i64_1 - i64_2);
-            check(use_avx512_skylake ? "vpmullq" : "vpmuludq", 8, u64_1 * u64_2);
+            check(use_avx512_skylake ? "vpmullq" : "vpmuludq*ymm", 8, u64_1 * u64_2);
 
-            check("vpackssdw", 16, i16_sat(i32_1));
-            check("vpacksswb", 32, i8_sat(i16_1));
-            check("vpackuswb", 32, u8_sat(i16_1));
-
-            check("vpabsb", 32, abs(i8_1));
-            check("vpabsw", 16, abs(i16_1));
-            check("vpabsd", 8, abs(i32_1));
+            check("vpabsb*ymm", 32, abs(i8_1));
+            check("vpabsw*ymm", 16, abs(i16_1));
+            check("vpabsd*ymm", 8, abs(i32_1));
 
             // llvm doesn't distinguish between signed and unsigned multiplies
             // check("vpmuldq", 8, i64(i32_1) * i64(i32_2));
@@ -626,7 +619,7 @@ struct Test {
             check("vpminsd*ymm", 8, min(i32_1, i32_2));
 
             check("vpcmpeqq*ymm", 4, select(i64_1 == i64_2, i64(1), i64(2)));
-            check("vpackusdw", 16, u16(clamp(i32_1, 0, max_u16)));
+            check("vpackusdw*ymm", 16, u16(clamp(i32_1, 0, max_u16)));
             check("vpcmpgtq*ymm", 4, select(i64_1 > i64_2, i64(1), i64(2)));
         }
 

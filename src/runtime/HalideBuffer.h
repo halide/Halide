@@ -173,7 +173,7 @@ private:
     struct DevRefCountCropped : DeviceRefCount {
         Buffer<T, D> cropped_from;
         DevRefCountCropped(const Buffer<T, D> &cropped_from) : cropped_from(cropped_from) {
-            ownership = BufferDeviceOwnership::Cropped; 
+            ownership = BufferDeviceOwnership::Cropped;
         }
     };
 
@@ -371,7 +371,7 @@ private:
 
     /** Crop a single dimension without handling device allocation. */
     void crop_host(int d, int min, int extent) {
-        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug 
+        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug
         // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
         // Should either fix that or kill the asserts and document the routine accordingly.
         //        assert(dim(d).min() <= min);
@@ -1564,7 +1564,10 @@ public:
             swaps.pop_back();
         }
 
-        Buffer<T, D> dst(nullptr, src.dimensions(), shape);
+        // Use an explicit runtime type, and make dst a Buffer<void>, to allow
+        // using this method with Buffer<void> for either src or dst.
+        const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<not_void_T>();
+        Buffer<> dst(dst_type, nullptr, src.dimensions(), shape);
         dst.allocate(allocate_fn, deallocate_fn);
 
         return dst;
@@ -1693,7 +1696,7 @@ public:
         bool all_equal = true;
         for_each_element([&](const int *pos) {all_equal &= (*this)(pos) == val;});
         return all_equal;
-    }    
+    }
 
     void fill(not_void_T val) {
         set_host_dirty();

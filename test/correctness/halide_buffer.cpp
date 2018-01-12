@@ -128,6 +128,22 @@ int main(int argc, char **argv) {
         });
     }
 
+    {
+        // Check that copy() works to/from Buffer<void>
+        Buffer<int> a(2, 2);
+        a.fill(42);
+
+        Buffer<> b = a.copy();
+        assert(b.as<int>().all_equal(42));
+
+        Buffer<int> c = b.copy();
+        assert(c.all_equal(42));
+
+        // This will fail at runtime, as c and d do not have identical types
+        // Buffer<uint8_t> d = c.copy();
+        // assert(d.all_equal(42));
+    }
+
     printf("Success!\n");
     return 0;
 }

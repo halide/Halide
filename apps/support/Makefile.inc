@@ -8,7 +8,7 @@ UNAME ?= $(shell uname)
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
-LDFLAGS += -lole32 -lkernel32 -lpsapi -luuid -Wl,--stack,8388608
+LDFLAGS += -lz -lole32 -lkernel32 -lpsapi -luuid -Wl,--stack,8388608
 else
 LDFLAGS += -ldl -lpthread -lz
 endif
@@ -22,6 +22,22 @@ CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tool
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
 endif
+
+# To run apps on android that support this, build a separate toolchain from the Android NDK
+# using the make-standalone-toolchain.sh script:
+#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
+#$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
+CXX-host ?= $(CXX)
+CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
+CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
+
+CXXFLAGS-host ?= $(CXXFLAGS)
+CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
+CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
+
+LDFLAGS-host ?= $(LDFLAGS)
+LDFLAGS-arm-64-android ?= -llog -fPIE -pie
+LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
 LIB_HALIDE = $(HALIDE_BIN_PATH)/lib/libHalide.a
 
