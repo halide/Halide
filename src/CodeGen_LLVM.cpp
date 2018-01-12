@@ -382,7 +382,7 @@ void CodeGen_LLVM::init_context() {
     fast_flags.setNoNaNs();
     fast_flags.setNoInfs();
     fast_flags.setNoSignedZeros();
-    // Don't use approximate reciprocals for division. It's too inaccurate even for us.
+    // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
     // fast_flags.setAllowReciprocal();
     #if LLVM_VERSION >= 60
     // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
@@ -513,7 +513,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
-    module->addModuleFlag(llvm::Module::Warning, "halide_allow_strict_float", input.any_strict_float());
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";

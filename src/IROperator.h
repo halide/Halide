@@ -1922,7 +1922,7 @@ inline Expr no_float_simplify(Expr e) {
  * in evaluating an expression. Equivalent to no_float_simplify plus
  * turning on the StrictFloat target flag within a certain scope.
  * May not be implemented for all backends. (E.g. it is difficult to do
- * this for C++ code generation as it depends on the compielr flags used to
+ * this for C++ code generation as it depends on the compiler flags used to
  * compile the generated code. */
 inline Expr strict_float(Expr e) {
     Type t = e.type();

@@ -391,18 +391,18 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
 
-    bool allow_strict_float = false;
-    get_md_bool(module.getModuleFlag("halide_allow_strict_float"), allow_strict_float);
+    bool per_instruction_fast_math_flags = false;
+    get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
 
     options = llvm::TargetOptions();
     #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = !allow_strict_float;
+    options.LessPreciseFPMADOption = !per_instruction_fast_math_flags;
     #endif
-    options.AllowFPOpFusion = allow_strict_float ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
-    options.UnsafeFPMath = !allow_strict_float;
-    options.NoInfsFPMath = !allow_strict_float;
-    options.NoNaNsFPMath = !allow_strict_float;
-    options.HonorSignDependentRoundingFPMathOption = !allow_strict_float;
+    options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+    options.UnsafeFPMath = !per_instruction_fast_math_flags;
+    options.NoInfsFPMath = !per_instruction_fast_math_flags;
+    options.NoNaNsFPMath = !per_instruction_fast_math_flags;
+    options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
