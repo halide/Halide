@@ -4,6 +4,7 @@
 - minimize Py dependencies in tests. (scipy?)
 - All docstrings have been removed; if we re-add them, we should find a way to import them from Doxygen output to ensure they are fresh.
 - Tutorials are incomplete and need lots of love.
+- Many error messages need to be made more informative.
 
 - Wrappers Missing Entirely:
     - ConciseCasts 

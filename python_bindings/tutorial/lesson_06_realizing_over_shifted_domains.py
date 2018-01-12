@@ -74,7 +74,7 @@ def main():
 
     # We start by creating an image that represents that rectangle:
     shifted = hl.Buffer(hl.Int(32), 5, 7) # In the constructor we tell it the size.
-    shifted.set_min(100, 50) # Then we tell it the top-left corner.
+    shifted.set_min([100, 50]) # Then we tell it the top-left corner.
 
     print("Evaluating gradient from (100, 50) to (104, 56)")
 

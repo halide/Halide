@@ -158,6 +158,7 @@ void define_buffer(py::module &m) {
                 strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
             }
 
+// TODO: this isn't really right if any mins are nonzero
             // std::cerr << "Buffer<"<<b.type()<<"> -> buffer_info @ "<<b.data()<<"\n";
             return py::buffer_info(
                 b.data(),                               // Pointer to buffer
@@ -192,6 +193,11 @@ void define_buffer(py::module &m) {
             py::keep_alive<1, 2>() // ensure that the py::buffer stays alive as long as the Buffer<> exists
         )
         .def(py::init<>())
+        .def(py::init<const Buffer<> &>())
+        .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+            // The zero-dimensional version is missing, but we can approximate it
+            return Buffer<>(type, sizes, name);
+        }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
         // TODO replace with py::args version
         // .def(py::init<Type>())  -- C++ API missing
@@ -218,6 +224,7 @@ void define_buffer(py::module &m) {
         .def("name", &Buffer<>::name)
 
         .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other)) &Buffer<>::same_as, py::arg("other"))
+        .def("defined", &Buffer<>::defined)
 
         .def("type", &Buffer<>::type)
         .def("channels", (int (Buffer<>::*)() const) &Buffer<>::channels)
@@ -226,18 +233,121 @@ void define_buffer(py::module &m) {
         .def("height", (int (Buffer<>::*)() const) &Buffer<>::height)
         .def("top", (int (Buffer<>::*)() const) &Buffer<>::top)
         .def("bottom", (int (Buffer<>::*)() const) &Buffer<>::bottom)
+        .def("left", (int (Buffer<>::*)() const) &Buffer<>::left)
+        .def("right", (int (Buffer<>::*)() const) &Buffer<>::right)
+        .def("number_of_elements", (size_t (Buffer<>::*)() const) &Buffer<>::number_of_elements)
+        .def("size_in_bytes", (size_t (Buffer<>::*)() const) &Buffer<>::size_in_bytes)
+        .def("has_device_allocation", (bool (Buffer<>::*)() const) &Buffer<>::has_device_allocation)
+        .def("host_dirty", (bool (Buffer<>::*)() const) &Buffer<>::host_dirty)
+        .def("device_dirty", (bool (Buffer<>::*)() const) &Buffer<>::device_dirty)
+
+        .def("set_host_dirty", [](Buffer<> &b, bool dirty) -> void {
+            b.set_host_dirty(dirty);
+        }, py::arg("dirty") = true)
+        .def("set_device_dirty", [](Buffer<> &b, bool dirty) -> void {
+            b.set_device_dirty(dirty);
+        }, py::arg("dirty") = true)
+
+        .def("copy", &Buffer<>::copy)
+        .def("copy_from", &Buffer<>::copy_from<void>)
+
+        .def("add_dimension", (void (Buffer<>::*)()) &Buffer<>::add_dimension)
+
+        .def("allocate", [](Buffer<> &b) -> void {
+            b.allocate(nullptr, nullptr);
+        })
+        .def("deallocate", (void (Buffer<>::*)()) &Buffer<>::deallocate)
+        .def("device_deallocate", (void (Buffer<>::*)()) &Buffer<>::device_deallocate)
+
+        .def("crop", [](Buffer<> &b, int d, int min, int extent) -> void {
+            b.crop(d, min, extent);
+        }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        .def("crop", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> void {
+            b.crop(rect);
+        }, py::arg("rect"))
+
+        // cropped() is in Halide::Runtime::Buffer, but not Halide::Buffer
+        // .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
+        //     return b.cropped(d, min, extent);
+        // }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        // .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
+        //     return b.cropped(rect);
+        // }, py::arg("rect"))
+
+        .def("embed", [](Buffer<> &b, int d, int pos) -> void {
+            b.embed(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+        .def("embedded", [](Buffer<> &b, int d, int pos) -> Buffer<> {
+            return b.embedded(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+
+        .def("slice", [](Buffer<> &b, int d, int pos) -> void {
+            b.slice(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+        .def("sliced", [](Buffer<> &b, int d, int pos) -> Buffer<> {
+            return b.sliced(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+
+        .def("translate", [](Buffer<> &b, int d, int dx) -> void {
+            b.translate(d, dx);
+        }, py::arg("dimension"), py::arg("dx"))
+
+        // translated() is in Halide::Runtime::Buffer, but not Halide::Buffer
+        // .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
+        //     return b.translated(d, dx);
+        // }, py::arg("dimension"), py::arg("dx"))
+
+        .def("transpose", [](Buffer<> &b, int d1, int d2) -> void {
+            b.transpose(d1, d2);
+        }, py::arg("d1"), py::arg("d2"))
+
+        // transposed() is in Halide::Runtime::Buffer, but not Halide::Buffer
+        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+        //     return b.transposed(d1, d2);
+        // }, py::arg("d1"), py::arg("d2"))
+
+
+    // HALIDE_BUFFER_FORWARD(fill)
+    // HALIDE_BUFFER_FORWARD_CONST(all_equal)
+    // HALIDE_BUFFER_FORWARD_CONST(dim)
+    // HALIDE_BUFFER_FORWARD_CONST(for_each_element)
 
         .def("copy_to_host", [](Buffer<> &b) -> int {
-            // TODO: do we need a way to specify context?
             return b.copy_to_host(nullptr);
         })
+        .def("device_detach_native", [](Buffer<> &b) -> int {
+            return b.device_detach_native(nullptr);
+        })
+        .def("device_free", [](Buffer<> &b) -> int {
+            return b.device_free(nullptr);
+        })
+        .def("device_sync", [](Buffer<> &b) -> int {
+            return b.device_sync(nullptr);
+        })
 
-        .def("set_min", [](Buffer<> &b, py::args args) -> void {
-            if (args.size() > (size_t) b.dimensions()) {
+        .def("copy_to_device", (int (Buffer<>::*)(const Target &)) &Buffer<>::copy_to_device,
+            py::arg("target") = get_jit_target_from_environment())
+        .def("copy_to_device", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) &Buffer<>::copy_to_device,
+            py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+
+        .def("device_malloc", (int (Buffer<>::*)(const Target &)) &Buffer<>::device_malloc,
+            py::arg("target") = get_jit_target_from_environment())
+        .def("device_malloc", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) &Buffer<>::device_malloc,
+            py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+
+        .def("set_min", [](Buffer<> &b, const std::vector<int> mins) -> void {
+            if (mins.size() > (size_t) b.dimensions()) {
                 throw py::value_error("Too many arguments");
             }
-            b.set_min(args_to_vector<int>(args));
-        })
+            b.set_min(mins);
+        }, py::arg("mins"))
+
+        .def("contains", [](Buffer<> &b, const std::vector<int> coords) -> bool {
+            if (coords.size() > (size_t) b.dimensions()) {
+                throw py::value_error("Too many arguments");
+            }
+            return b.contains(coords);
+        }, py::arg("coords"))
 
         .def("__getitem__", [](Buffer<> &buf, const int &pos) -> py::object {
             return buffer_getitem_operator(buf, {pos});
