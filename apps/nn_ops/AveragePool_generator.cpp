@@ -1,13 +1,17 @@
-// 'MaxPool' implementation in Halide.
+// 'AveragePool' implementation in Halide.
 
 #include "common.h"
 #include <Halide.h>
 
+using Halide::Expr;
+using Halide::Func;
 using Halide::Generator;
+using Halide::ImageParam;
+using Halide::Var;
 using Halide::BoundaryConditions::constant_exterior;
 using Halide::ConciseCasts::u8_sat;
 
-class MaxPool : public Generator<MaxPool> {
+class AveragePool : public Generator<AveragePool> {
 public:
     // Unsigned 8-bit input tensor, indexed by depth, x, y, batch.
     ImageParam input_{ UInt(8), 4, "input" };
@@ -21,8 +25,10 @@ public:
     Param<int> stride_{ "stride" };
     Param<int> pad_width_{ "pad_width" };
     Param<int> pad_height_{ "pad_height" };
+
     Param<int> filter_width_{ "filter_width" };
     Param<int> filter_height_{ "filter_height" };
+
     Param<uint8_t> output_min_{ "output_min" };
     Param<uint8_t> output_max_{ "output_max" };
 
@@ -32,17 +38,8 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), depth("depth"), batch("batch");
 
-        // Cast the input to 32 bits.
-        Func input_upcast("input_upcast");
-        input_upcast(depth, x, y, batch) =
-            cast<int32_t>(input_(depth, x, y, batch));
-
-        // Use the minimum 32-bit integer for the boundary condition. Since
-        // max(min_value, v) = v, this boundary condition enables us to implement
-        // the local maximum operation using a reduction domain below and safely
-        // handle boundary cases.
-        constexpr int kMinValue = -2147483648;
-        Func input_bounded = constant_exterior(input_upcast, kMinValue,
+        // Add a zero boundary condition to x and y dimensions of the input.
+        Func input_bounded = constant_exterior(input_, 0,
                                                { { Expr(), Expr() },
                                                  { 0, input_.dim(1).extent() },
                                                  { 0, input_.dim(2).extent() },
@@ -53,31 +50,48 @@ public:
         shifted_input_bounded(depth, x, y, batch) =
             input_bounded(depth, x - pad_width_, y - pad_height_, batch);
 
-        // Compute the local sliding-window maximum, where the window extents are
-        // defined by the filter width and height.
-        Func local_max("local_max");
+        Func sum("sum");
         RDom filter_dom(0, filter_width_, 0, filter_height_);
-        local_max(depth, x, y, batch) = maximum(select(
+        sum(depth, x, y, batch) += (cast<int32_t>(select(
             stride_ == 1,
             shifted_input_bounded(depth, x + filter_dom.x, y + filter_dom.y, batch),
             shifted_input_bounded(depth, x * stride_ + filter_dom.x,
-                                  y * stride_ + filter_dom.y, batch)));
+                                  y * stride_ + filter_dom.y, batch))));
+
+        Expr in_x_origin = x * stride_ - pad_width_;
+        Expr x_start = max(0, -in_x_origin);
+        Expr x_end = min(filter_width_, input_.dim(1).extent() - in_x_origin);
+
+        Expr in_y_origin = y * stride_ - pad_height_;
+        Expr y_start = max(0, -in_y_origin);
+        Expr y_end = min(filter_height_, input_.dim(2).extent() - in_y_origin);
+
+        Expr filter_count = (x_end - x_start) * (y_end - y_start);
+
+        Func average("average");
+        // We add filter_count / 2 before dividing by filter_count to round the
+        // result.
+        average(depth, x, y, batch) =
+            (sum(depth, x, y, batch) + filter_count / 2) / filter_count;
 
         // Saturate and narrow the output.
         Func output("output");
         output(depth, x, y, batch) =
-            clamp(u8_sat(local_max(depth, x, y, batch)), output_min_, output_max_);
+            min(output_max_, max(output_min_, u8_sat(average(depth, x, y, batch))));
 
-        // The schedule.
-
-        const bool use_hexagon =
+        bool use_hexagon =
             get_target().features_any_of({ Target::HVX_64, Target::HVX_128 });
-
-        if (use_hexagon) {
+        // Specifying .hexagon() on a Func will generate an RPC to run this stage
+        // on Hexagon. If Hexagon is the host (that is, the architecture is
+        // Hexagon), we have to omit the .hexagon() directive as we are already
+        // running on Hexagon.
+        if (use_hexagon && get_target().arch != Target::Hexagon) {
             output.hexagon();
         }
 
         int vector_size_u8 = natural_vector_size_with_hexagon(get_target());
+
+        shifted_input_bounded.compute_at(output, batch);
 
         // We only perform vectorization when the depth >= vector size.
         Expr can_vectorize_across_depth =
@@ -85,15 +99,26 @@ public:
         output.specialize(can_vectorize_across_depth)
             .vectorize(depth, vector_size_u8);
 
-        // Parallelize across vertical strips.
         Var yi("yi");
         constexpr int kSplitFactor = 4;
         output.split(y, y, yi, kSplitFactor).parallel(y);
 
-        shifted_input_bounded.compute_at(output, Var::outermost());
+        struct SpecialCase {
+            int stride;
+            int filter_width;
+            int filter_height;
+        };
+
+        std::vector<SpecialCase> special_cases = { { 1, 4, 4 }, { 2, 7, 7 } };
+        for (const SpecialCase &special_case : special_cases) {
+            Expr params_matched = (filter_width_ == special_case.filter_width &&
+                                   filter_height_ == special_case.filter_height &&
+                                   stride_ == special_case.stride);
+            sum.update(0).specialize(params_matched).unroll(filter_dom.x);
+        }
 
         return output;
     }
 };
 
-HALIDE_REGISTER_GENERATOR(MaxPool, MaxPool)
+HALIDE_REGISTER_GENERATOR(AveragePool, AveragePool)
