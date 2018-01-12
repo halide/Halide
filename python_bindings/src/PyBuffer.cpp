@@ -147,10 +147,32 @@ void define_buffer(py::module &m) {
     auto buffer_class =
         py::class_<Buffer<>>(m, "Buffer", py::buffer_protocol())
 
+        // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
+        // most notably, we can convert to an ndarray by calling numpy.array()
+       .def_buffer([](Buffer<> &b) -> py::buffer_info {
+            const int d = b.dimensions();
+            const int bytes = b.type().bytes();
+            std::vector<ssize_t> shape, strides;
+            for (int i = 0; i < d; i++) {
+                shape.push_back((ssize_t) b.raw_buffer()->dim[i].extent);
+                strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
+            }
+            return py::buffer_info(
+                b.data(),                               // Pointer to buffer
+                bytes,                                  // Size of one scalar
+                type_to_format_descriptor(b.type()),    // Python struct-style format descriptor
+                d,                                      // Number of dimensions
+                shape,                                  // Buffer dimensions
+                strides                                 // Strides (in bytes) for each index
+            );
+        })
+
         // This allows us to use any buffer-like python entity to create a Buffer<>
         // (most notably, an ndarray)
         .def(py::init([](py::buffer buffer, const std::string &name) -> Buffer<> {
-            const py::buffer_info info = buffer.request();
+            constexpr bool writable = true;  // Buffer<> assumes all instances are writable.
+            const py::buffer_info info = buffer.request(writable);
+
             const Type t = format_descriptor_to_type(info.format);
 
             std::vector<halide_dimension_t> dims;
@@ -163,7 +185,10 @@ void define_buffer(py::module &m) {
             // Note that this does NOT make a copy of the data; it deliberately
             // shares the pointer with the incoming buffer.
             return Buffer<>(t, info.ptr, (int) info.ndim, dims.data(), name);
-        }), py::arg("buffer"), py::arg("name") = "")
+        }), py::arg("buffer"), py::arg("name") = "",
+            py::keep_alive<0, 1>() // ensure that the buffer stays alive while the Buffer<> exists
+        )
+
 
         // TODO replace with py::args version
         .def(py::init<>())
@@ -229,26 +254,6 @@ void define_buffer(py::module &m) {
             std::ostringstream o;
             o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
             return o.str();
-        })
-
-        // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
-        // most notably, we can convert to an ndarray by calling numpy.array()
-       .def_buffer([](Buffer<> &b) -> py::buffer_info {
-            const int d = b.dimensions();
-            const int bytes = b.type().bytes();
-            std::vector<ssize_t> shape, strides;
-            for (int i = 0; i < d; i++) {
-                shape.push_back((ssize_t) b.raw_buffer()->dim[i].extent);
-                strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
-            }
-            return py::buffer_info(
-                b.data(),                               // Pointer to buffer
-                bytes,                                  // Size of one scalar
-                type_to_format_descriptor(b.type()),    // Python struct-style format descriptor
-                d,                                      // Number of dimensions
-                shape,                                  // Buffer dimensions
-                strides                                // Strides (in bytes) for each index
-            );
         })
     ;
 }

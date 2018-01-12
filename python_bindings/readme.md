@@ -15,8 +15,7 @@ The Python bindings attempt to mimic the Halide C++ API as closely as possible, 
 
 ## Enhancements to the C++ API
 
-- A `Buffer` object can be constructed from most array-like objects, and will share the underlying storage with the object in question. This is especially useful with `numpy.ndarray`.
-- Similarly, most array-like objects can be created from a `Buffer`, with underlying storage being shared.
+- The `Buffer` supports the Python Buffer Protocol (https://www.python.org/dev/peps/pep-3118/) and thus is easily and cheaply converted to and from other compatible objects (e.g., NumPy's `ndarray`), with storage being shared.
 
 ## Prerequisites ##
 
