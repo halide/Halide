@@ -93,12 +93,6 @@ void define_type(py::module &m) {
     m.def("Float", Float, py::arg("bits"), py::arg("lanes") = 1);
     m.def("Bool", Bool, py::arg("lanes") = 1);
     m.def("Handle", make_handle, py::arg("lanes") = 1);
-
-    py::enum_<halide_type_code_t>(m, "TypeCode")
-        .value("Int", Type::Int)
-        .value("UInt", Type::UInt)
-        .value("Float", Type::Float)
-        .value("Handle", Type::Handle);
 }
 
 }  // namespace PythonBindings

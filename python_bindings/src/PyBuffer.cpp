@@ -191,14 +191,7 @@ void define_buffer(py::module &m) {
         }), py::arg("buffer"), py::arg("name") = "",
             py::keep_alive<1, 2>() // ensure that the py::buffer stays alive as long as the Buffer<> exists
         )
-
-
-        // TODO replace with py::args version
         .def(py::init<>())
-        .def(py::init<int>())
-        .def(py::init<int, int>())
-        .def(py::init<int, int, int>())
-        .def(py::init<int, int, int, int>())
 
         // TODO replace with py::args version
         // .def(py::init<Type>())  -- C++ API missing
@@ -207,10 +200,24 @@ void define_buffer(py::module &m) {
         .def(py::init<Type, int, int, int>())
         .def(py::init<Type, int, int, int, int>())
 
-        .def(py::init<Type, int, int, int, int>())
+        // .def(py::init<const Buffer<> &>())
+        // .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+        //     // The zero-dimensional version is missing, but we can approximate it
+        //     return Buffer<>(type, sizes, name);
+        // }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+
+        .def_static("make_scalar", (Buffer<> (*)(Type, const std::string &)) Buffer<>::make_scalar,
+            py::arg("type"), py::arg("name") = "")
+        .def_static("make_interleaved", (Buffer<> (*)(Type, int, int, int, const std::string &)) Buffer<>::make_interleaved,
+            py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
+        .def_static("make_with_shape_of", [](Buffer<> buffer, const std::string &name) -> Buffer<> {
+            return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);
+        }, py::arg("src"), py::arg("name") = "")
 
         .def("set_name", &Buffer<>::set_name)
         .def("name", &Buffer<>::name)
+
+        .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other)) &Buffer<>::same_as, py::arg("other"))
 
         .def("type", &Buffer<>::type)
         .def("channels", (int (Buffer<>::*)() const) &Buffer<>::channels)

@@ -6,11 +6,17 @@
 namespace Halide {
 namespace PythonBindings {
 
+// Methods that are defined on both Func and Stage.
 template <typename PythonClass>
 NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
     using T = typename PythonClass::type;
 
     class_instance
+
+    .def("compute_with", (T &(T::*)(Stage, VarOrRVar, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &)) &T::compute_with,
+        py::arg("stage"), py::arg("var"), py::arg("align"))
+    .def("compute_with", (T &(T::*)(Stage, VarOrRVar, LoopAlignStrategy)) &T::compute_with,
+        py::arg("stage"), py::arg("var"), py::arg("align") = LoopAlignStrategy::Auto)
 
     .def("unroll", (T &(T::*)(VarOrRVar)) &T::unroll,
         py::arg("var"))
@@ -22,6 +28,9 @@ NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
 
     .def("fuse", &T::fuse,
         py::arg("inner"), py::arg("outer"), py::arg("fused"))
+
+    .def("serial", &T::serial,
+        py::arg("var"))
 
     .def("tile", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, Expr, Expr, TailStrategy)) &T::tile,
         py::arg("x"), py::arg("y"), py::arg("xo"), py::arg("yo"), py::arg("xi"), py::arg("yi"), py::arg("xfactor"), py::arg("yfactor"), py::arg("tail") = TailStrategy::Auto)
@@ -50,12 +59,21 @@ NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
     .def("gpu_blocks", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, DeviceAPI)) &T::gpu_blocks,
         py::arg("block_x"), py::arg("block_y"), py::arg("block_z"), py::arg("device_api") = DeviceAPI::Default_GPU)
 
+    .def("gpu", (T &(T::*)(VarOrRVar, VarOrRVar, DeviceAPI)) &T::gpu,
+        py::arg("block_x"), py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
+    .def("gpu", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, DeviceAPI)) &T::gpu,
+        py::arg("block_x"), py::arg("block_y"), py::arg("thread_x"), py::arg("thread_y"), py::arg("device_api") = DeviceAPI::Default_GPU)
+    .def("gpu", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, VarOrRVar, DeviceAPI)) &T::gpu,
+        py::arg("block_x"), py::arg("block_y"), py::arg("block_z"), py::arg("thread_x"), py::arg("thread_y"), py::arg("thread_z"), py::arg("device_api") = DeviceAPI::Default_GPU)
+
     .def("gpu_threads", (T &(T::*)(VarOrRVar, DeviceAPI)) &T::gpu_threads,
         py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
     .def("gpu_threads", (T &(T::*)(VarOrRVar, VarOrRVar, DeviceAPI)) &T::gpu_threads,
         py::arg("thread_x"), py::arg("thread_y"), py::arg("device_api") = DeviceAPI::Default_GPU)
     .def("gpu_threads", (T &(T::*)(VarOrRVar, VarOrRVar, VarOrRVar, DeviceAPI)) &T::gpu_threads,
         py::arg("thread_x"), py::arg("thread_y"), py::arg("thread_z"), py::arg("device_api") = DeviceAPI::Default_GPU)
+    .def("gpu_single_thread", (T &(T::*)(DeviceAPI)) &T::gpu_single_thread,
+        py::arg("device_api") = DeviceAPI::Default_GPU)
 
     .def("gpu_tile", (T &(T::*)(VarOrRVar, VarOrRVar, Var, Expr, TailStrategy, DeviceAPI)) &T::gpu_tile,
         py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"),
@@ -86,6 +104,25 @@ NO_INLINE void add_schedule_methods(PythonClass &class_instance) {
         py::arg("x"), py::arg("y"), py::arg("z"), py::arg("tx"), py::arg("ty"), py::arg("tz"), py::arg("x_size"), py::arg("y_size"), py::arg("z_size"),
         py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
+    .def("rename", &T::rename,
+        py::arg("old_name"), py::arg("new_name"))
+
+    .def("specialize", &T::specialize,
+        py::arg("condition"))
+    .def("specialize_fail", &T::specialize_fail,
+        py::arg("message"))
+
+    .def("allow_race_conditions", &T::allow_race_conditions)
+    .def("hexagon", &T::hexagon, py::arg("x") = Var::outermost())
+
+    .def("prefetch", (T &(T::*)(const Func &, VarOrRVar, Expr, PrefetchBoundStrategy)) &T::prefetch,
+        py::arg("func"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+    .def("prefetch", [](T &t, const ImageParam &image, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) -> T & {
+        // Templated function; specializing only on ImageParam for now
+        return t.prefetch(image, var, offset, strategy);
+    }, py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+
+    .def("source_location", &T::source_location)
     ;
 }
 

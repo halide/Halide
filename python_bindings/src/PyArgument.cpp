@@ -4,11 +4,6 @@ namespace Halide {
 namespace PythonBindings {
 
 void define_argument(py::module &m) {
-    py::enum_<Argument::Kind>(m, "ArgumentKind")
-        .value("InputScalar", Argument::Kind::InputScalar)
-        .value("InputBuffer", Argument::Kind::InputBuffer)
-        .value("OutputBuffer", Argument::Kind::OutputBuffer);
-
     auto argument_class =
         py::class_<Argument>(m, "Argument")
         .def(py::init<>())

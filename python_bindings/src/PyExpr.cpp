@@ -48,17 +48,6 @@ void define_expr(py::module &m) {
     py::implicitly_convertible<RDom, Expr>();
     py::implicitly_convertible<RVar, Expr>();
     py::implicitly_convertible<Var, Expr>();
-
-    py::enum_<DeviceAPI>(m, "DeviceAPI")
-        .value("None", DeviceAPI::None)
-        .value("Host", DeviceAPI::Host)
-        .value("Default_GPU", DeviceAPI::Default_GPU)
-        .value("CUDA", DeviceAPI::CUDA)
-        .value("OpenCL", DeviceAPI::OpenCL)
-        .value("GLSL", DeviceAPI::GLSL)
-        .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
-        .value("Metal", DeviceAPI::Metal)
-        .value("Hexagon", DeviceAPI::Hexagon);
 }
 
 }  // namespace PythonBindings

@@ -4,6 +4,7 @@
 #include "PyBuffer.h"
 #include "PyExpr.h"
 #include "PyFuncRef.h"
+#include "PyLoopLevel.h"
 #include "PyScheduleMethods.h"
 #include "PyStage.h"
 #include "PyTuple.h"
@@ -48,32 +49,9 @@ py::object realization_to_object(const Realization &r) {
 }  // namespace
 
 void define_func(py::module &m) {
-    py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
-        .value("Text", StmtOutputFormat::Text)
-        .value("HTML", StmtOutputFormat::HTML);
-
-    py::enum_<TailStrategy>(m, "TailStrategy")
-        .value("RoundUp", TailStrategy::RoundUp)
-        .value("GuardWithIf", TailStrategy::GuardWithIf)
-        .value("ShiftInwards", TailStrategy::ShiftInwards)
-        .value("Auto", TailStrategy::Auto)
-    ;
-
-    py::enum_<NameMangling>(m, "NameMangling")
-        .value("Default", NameMangling::Default)
-        .value("C", NameMangling::C)
-        .value("CPlusPlus", NameMangling::CPlusPlus)
-    ;
-
     define_func_ref(m);
     define_var_or_rvar(m);
-
-    // TODO: LoopLevel to its own file?
-    auto looplevel_class = py::class_<LoopLevel>(m, "LoopLevel")
-        .def(py::init<>())
-        .def("inlined", &LoopLevel::inlined)
-        .def("root", &LoopLevel::root)
-    ;
+    define_loop_level(m);
 
     // TODO: ParamMap to its own file?
     auto param_map_class = py::class_<ParamMap>(m, "ParamMap")

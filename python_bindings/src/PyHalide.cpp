@@ -3,6 +3,7 @@
 #include "PyArgument.h"
 #include "PyBoundaryConditions.h"
 #include "PyBuffer.h"
+#include "PyEnums.h"
 #include "PyError.h"
 #include "PyExpr.h"
 #include "PyExternFuncArgument.h"
@@ -24,6 +25,7 @@ PYBIND11_MODULE(halide, m) {
     // Order of definitions matters somewhat:
     // things used for default arguments must be registered
     // prior to that usage.
+    define_enums(m);
     define_target(m);
     define_expr(m);
     define_tuple(m);
