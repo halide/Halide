@@ -362,6 +362,7 @@ SOURCE_FILES = \
   ObjectInstanceRegistry.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
+  ParamMap.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
@@ -505,8 +506,9 @@ HEADER_FILES = \
   Outputs.h \
   OutputImageParam.h \
   ParallelRVar.h \
-  Parameter.h \
   Param.h \
+  ParamMap.h \
+  Parameter.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
@@ -644,6 +646,7 @@ RUNTIME_LL_COMPONENTS = \
   win32_math \
   x86 \
   x86_avx \
+  x86_avx2 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
