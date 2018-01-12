@@ -40,11 +40,16 @@ vector<vector<string>> find_fused_groups(const vector<string> &order,
     set<string> visited;
     vector<vector<string>> result;
 
-    for (const auto &fn : order) {
+    // Iterate starting from the last function to be realized. This way,
+    // if any of the functions in the fused group refers to other functions
+    // that were scheduled inline, those inlined function will come first
+    // (first to be realized) before the fused group in the fuse_adjacency_list.
+    for (int i = (int)order.size() - 1; i >= 0; --i) {
+        const string &fn = order[i];
         if (visited.find(fn) == visited.end()) {
             vector<string> group;
             find_fused_groups_dfs(fn, fuse_adjacency_list, visited, group);
-            result.push_back(group);
+            result.insert(result.begin(), group);
         }
     }
     return result;
