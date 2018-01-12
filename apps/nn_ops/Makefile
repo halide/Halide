@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 BIN ?= bin
 
-all: $(BIN)/host/AveragePool $(BIN)/host/Convolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
+all: $(BIN)/host/AveragePool $(BIN)/host/Convolution $(BIN)/host/DepthwiseConvolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
 
 $(BIN)/AveragePool.generator: AveragePool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -27,6 +27,18 @@ $(BIN)/%/Convolution.o: $(BIN)/Convolution.generator
 $(BIN)/%/Convolution: Convolution.cpp $(BIN)/%/Convolution.o
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 Convolution.cpp $(BIN)/$*/Convolution.o -o $(BIN)/$*/Convolution $(LDFLAGS-$*)
+
+$(BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+
+$(BIN)/%/DepthwiseConvolution.o: $(BIN)/DepthwiseConvolution.generator
+	@mkdir -p $(@D)
+	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution target=$(HL_TARGET)
+
+$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp $(BIN)/%/DepthwiseConvolution.o
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 DepthwiseConvolution.cpp $(BIN)/$*/DepthwiseConvolution.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
 
 $(BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -64,9 +76,10 @@ $(BIN)/%/MaxPool: MaxPool.cpp $(BIN)/%/MaxPool.o
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MaxPool.cpp $(BIN)/$*/MaxPool.o -o $(BIN)/$*/MaxPool $(LDFLAGS-$*)
 
-run-host: $(BIN)/host/AveragePool $(BIN)/host/Convolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
+run-host: $(BIN)/host/AveragePool $(BIN)/host/DepthwiseConvolution $(BIN)/host/Convolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
 	./AveragePool.sh $(BIN)/host/AveragePool
 	./Convolution.sh $(BIN)/host/Convolution
+	./DepthwiseConvolution.sh $(BIN)/host/DepthwiseConvolution
 	./Im2col.sh $(BIN)/host/Im2col
 	./MatrixMultiply.sh $(BIN)/host/MatrixMultiply
 	./MaxPool.sh $(BIN)/host/MaxPool

@@ -1,0 +1,13 @@
+DW_CONVOLUTION=$1
+# Columns are: schedule C W H N filter_width, filter_height,
+# input_offset, filter_offset, output_multiplier, output_shift, output_offset,
+# stride, pad_width, pad_height, output_min, output_max
+
+$DW_CONVOLUTION 8 17 17 1 1 1 -128 -128 1073741824 8 128 1 0 0 0 255
+$DW_CONVOLUTION 8 17 17 1 3 3 -128 -128 1073741824 8 128 1 1 1 0 255
+$DW_CONVOLUTION 8 17 17 1 5 5 -128 -128 1073741824 8 128 1 2 2 0 255
+$DW_CONVOLUTION 8 17 17 1 3 3 -128 -128 1073741824 8 128 2 1 1 0 255
+$DW_CONVOLUTION 8 17 17 1 5 5 -128 -128 1073741824 8 128 2 2 2 0 255
+
+$DW_CONVOLUTION 8 17 17 1 3 3 -128 -140 1073741824 8 128 2 1 1 0 255
+$DW_CONVOLUTION 8 17 17 1 5 5 -128 -140 1073741824 8 128 2 2 2 0 255
