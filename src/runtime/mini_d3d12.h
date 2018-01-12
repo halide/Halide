@@ -4905,10 +4905,17 @@ EXTERN_C const IID IID_ID3D12Device;
             REFIID riid,
             _COM_Outptr_  void **ppvRootSignature) = 0;
         
+#if HALIDE_D3D12_APPLY_ABI_PATCHES
+        #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
+        virtual void STDMETHODCALLTYPE CreateConstantBufferView( 
+            _In_opt_  const D3D12_CONSTANT_BUFFER_VIEW_DESC *pDesc,
+            _In_  SIZE_T DestDescriptor) = 0;
+#else
         virtual void STDMETHODCALLTYPE CreateConstantBufferView( 
             _In_opt_  const D3D12_CONSTANT_BUFFER_VIEW_DESC *pDesc,
             _In_  D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor) = 0;
-        
+#endif
+
         virtual void STDMETHODCALLTYPE CreateShaderResourceView( 
             _In_opt_  ID3D12Resource *pResource,
             _In_opt_  const D3D12_SHADER_RESOURCE_VIEW_DESC *pDesc,
