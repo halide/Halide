@@ -30,6 +30,7 @@ set(RUNTIME_CPP
   gcd_thread_pool
   gpu_device_selection
   hexagon_cpu_features
+  hexagon_dma
   hexagon_host
   ios_io
   linux_clock
