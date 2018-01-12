@@ -18,31 +18,32 @@
 #define HALIDE_D3D12_DEBUG (1)
 
 #if HALIDE_D3D12_DEBUG
+    static const char indent_pattern [] = "   ";
     static char  indent [128] = { };
     static int   indent_end   = 0;
     struct TraceLogScope
     {
         TraceLogScope()
         {
-            indent[indent_end++] = ' ';
-            indent[indent_end++] = ' ';
-            indent[indent_end++] = ' ';
+            for (const char* p = indent_pattern; *p; ++p)
+                indent[indent_end++] = *p;
         }
         ~TraceLogScope()
         {
-            indent[--indent_end] = '\0';
-            indent[--indent_end] = '\0';
-            indent[--indent_end] = '\0';
+            for (const char* p = indent_pattern; *p; ++p)
+                indent[--indent_end] = '\0';
         }
     };
-    #define TRACELOG        TraceLogScope trace_scope___; debug(NULL) << (const char*)&indent[2] << "[@]" << __FUNCTION__ << "\n";
-    #define TRACEPRINT(msg) debug(NULL) << (const char*)&indent[2] << msg;
+    #define TRACEINDENT     ((const char*)indent)
+    #define TRACEPRINT(msg) debug(NULL) << TRACEINDENT << msg;
+    #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
 #else
-    #define TRACELOG
+    #define TRACEINDENT ""
     #define TRACEPRINT(msg)
+    #define TRACELOG
 #endif
 
-#define TRACEINDENT TRACEPRINT("   ");
+static void* user_context = NULL;   // in case there's no user context available in the scope of a function
 
 template<typename T>
 static T* malloct()
@@ -79,14 +80,13 @@ static bool D3DError(HRESULT result, ID3D12T* object, void* user_context, const 
     // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
     if (FAILED(result) || !object)
     {
-        TRACEINDENT;
-        error(user_context) << message
+        error(user_context) << TRACEINDENT
+                            << message
                             << " (HRESULT=" << (void*)(int64_t)result
                             << ", object*=" << object << ").\n";
         return(true);
     }
-    TRACEINDENT;
-    debug(user_context) << d3d12typename(object) << " object created: " << object << "\n";
+    debug(user_context) << TRACEINDENT << d3d12typename(object) << " object created: " << object << "\n";
     return(false);
 }
 
@@ -384,8 +384,7 @@ template<typename d3d12_T>
 static void release_d3d12_object(d3d12_T* obj)
 {
     TRACELOG;
-    TRACEINDENT;
-    debug(NULL) << "!!!!!!!!!! RELEASING UNKNOWN D3D12 OBJECT !!!!!!!!!!\n";
+    debug(NULL) << TRACEINDENT << "!!!!!!!!!! RELEASING UNKNOWN D3D12 OBJECT !!!!!!!!!!\n";
 }
 
 template<typename d3d12_T>
@@ -480,11 +479,11 @@ static void D3D12LoadDependencies(void* user_context)
         lib = halide_load_library(lib_names[i]);
         if (lib)
         {
-            TRACEINDENT; debug(user_context) << "Loaded runtime library: " << lib_names[i] << "\n";
+            debug(user_context) << TRACEINDENT << "Loaded runtime library: " << lib_names[i] << "\n";
         }
         else
         {
-            TRACEINDENT; error(user_context) << "Unable to load runtime library: " << lib_names[i] << "\n";
+            error(user_context) << TRACEINDENT << "Unable to load runtime library: " << lib_names[i] << "\n";
         }
     }
 
@@ -608,7 +607,7 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     if (D3DError(result, device, user_context, "Unable to create the Direct3D 12 device"))
         return(NULL);
 
-#if 0
+#if 0 && HALIDE_D3D12_APPLY_ABI_PATCHES
     {
     d3d12_device* dev = reinterpret_cast<d3d12_device*>(device);
     debug(NULL) << "!!!!!!!!!! BINDER-INI !!!!!!!!!!\n";
@@ -682,6 +681,13 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list* cmdList,
                                 int32_t threads_x, int32_t threads_y, int32_t threads_z)
 {
     TRACELOG;
+
+    static int32_t total_dispatches = 0;
+    debug(user_context) << TRACEINDENT
+                        << "Dispatching threadgroups (number " << total_dispatches++ << ") "
+                           "blocks(" << blocks_x << ", " << blocks_y << ", " << blocks_z << " ) "
+                           "threads(" << threads_x << ", " << threads_y << ", " << threads_z << ")\n";
+
     (*cmdList)->Dispatch(blocks_x, blocks_y, blocks_z);
 }
 
@@ -818,7 +824,7 @@ static d3d12_command_allocator* new_command_allocator(d3d12_device* device)
 
 WEAK void add_command_list_completed_handler(d3d12_command_list* cmdList, struct command_list_completed_handler_block_literal *handler) {
     TRACELOG;
-    TRACEINDENT; TRACEPRINT("WHAT SHOULD BE DONE HERE? JUST INSERT A FENCE?\n");
+    TRACEPRINT("WHAT SHOULD BE DONE HERE? JUST INSERT A FENCE?\n");
     typedef void (*add_completed_handler_method)(objc_id cmdList, objc_sel sel, struct command_list_completed_handler_block_literal *handler);
     add_completed_handler_method method = (add_completed_handler_method)&objc_msgSend;
     (*method)(cmdList, sel_getUid("addCompletedHandler:"), handler);
@@ -927,20 +933,20 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
         return(NULL);
 
     UINT descriptorSize = (*device)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    //TRACEINDENT; TRACEPRINT("!!! descriptor handle increment size: " << descriptorSize << "\n");
+    //TRACEPRINT("!!! descriptor handle increment size: " << descriptorSize << "\n");
 
     d3d12_binder* binder = malloct<d3d12_binder>();
     binder->descriptorHeap = descriptorHeap;
     binder->descriptorSize = descriptorSize;
 
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
-    //TRACEINDENT; TRACEPRINT("!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n");
+    //TRACEPRINT("!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n");
     binder->CPU[UAV].ptr = baseCPU.ptr +  0*descriptorSize;
     binder->CPU[CBV].ptr = baseCPU.ptr + 25*descriptorSize;
     binder->CPU[SRV].ptr = baseCPU.ptr + 50*descriptorSize;
 
     D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
-    //TRACEINDENT; TRACEPRINT("!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n");
+    //TRACEPRINT("!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n");
     binder->GPU[UAV].ptr = baseGPU.ptr +  0*descriptorSize;
     binder->GPU[CBV].ptr = baseGPU.ptr + 25*descriptorSize;
     binder->GPU[SRV].ptr = baseGPU.ptr + 50*descriptorSize;
@@ -1015,6 +1021,23 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     ID3DBlob* errorMsgs  = NULL;
     HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
 
+    if (FAILED(result) || (NULL == shaderBlob))
+    {
+        debug(user_context) << TRACEINDENT << "Unable to compile D3D12 compute shader (HRESULT=" << result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n";
+        if (errorMsgs)
+        {
+            const char* errorMessage = (const char*)errorMsgs->GetBufferPointer();
+            debug(user_context) << TRACEINDENT << "D3D12Compute: ERROR: D3DCompiler: " << errorMessage << "\n";
+            errorMsgs->Release();
+        }
+        debug(user_context) << TRACEINDENT << source << "\n";
+        error(user_context) << "!!! HALT !!!";
+        return(NULL);
+    }
+
+    halide_assert(user_context, (NULL == errorMsgs));
+    debug(user_context) << TRACEINDENT << "SUCCESS while compiling D3D12 compute shader with entry name '" << entryPoint << "'!\n";
+
     // TODO(marcos): since a single "uber" root signature can fit all kernels,
     // the root signature should be created/serialized at device creation time
     // unbounded descriptor tables to accommodate all buffers:
@@ -1086,6 +1109,7 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     function->shaderBlob = shaderBlob;
     function->errorMsgs  = errorMsgs;
     function->rootSignature = rootSignature;
+
     return(function);
 }
 
@@ -1146,7 +1170,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
 
 WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uint32_t length, uint32_t index) {
     TRACELOG;
-    TRACEINDENT; TRACEPRINT("IS THIS EVEN NECESSARY ON D3D12?\n");
+    TRACEPRINT("IS THIS EVEN NECESSARY ON D3D12?\n");
     typedef void (*set_threadgroup_memory_length_method)(objc_id encoder, objc_sel sel,
                                                          size_t length, size_t index);
     set_threadgroup_memory_length_method method = (set_threadgroup_memory_length_method)&objc_msgSend;
@@ -1173,8 +1197,20 @@ static void wait_until_completed(d3d12_compute_command_list* cmdList)
     // WaitForSingleObject(hEvent, INFINITE);
     // CloseHandle(hEvent);
 
+    HRESULT result_before = (*device)->GetDeviceRemovedReason();
+
     while (queue->fence->GetCompletedValue() < cmdList->signal)
         ;
+
+    HRESULT result_after = (*device)->GetDeviceRemovedReason();
+    if (FAILED(result_after))
+    {
+        debug(NULL) << TRACEINDENT
+                    << "Device Lost! GetDeviceRemovedReason(): "
+                    << "before: " << (void*)(int64_t)result_before << " | "
+                    << "after: "  << (void*)(int64_t)result_after  << "\n";
+        error(NULL) << "!!! HALT !!!";
+    }
 }
 
 static void* buffer_contents(d3d12_buffer* buffer)
@@ -1238,19 +1274,19 @@ WEAK int halide_d3d12compute_acquire_context(void* user_context, halide_d3d12com
 
     if (create && (NULL == device))
     {
-        TRACEINDENT; debug(user_context) << "D3D12Compute - Allocating: D3D12CreateSystemDefaultDevice\n";
+        debug(user_context) << TRACEINDENT << "D3D12Compute - Allocating: D3D12CreateSystemDefaultDevice\n";
         device = D3D12CreateSystemDefaultDevice(user_context);
         if (NULL == device)
         {
-            TRACEINDENT; error(user_context) << "D3D12Compute: cannot allocate system default device.\n";
+            error(user_context) << TRACEINDENT << "D3D12Compute: cannot allocate system default device.\n";
             __sync_lock_release(&thread_lock);
             return -1;
         }
-        TRACEINDENT; debug(user_context) << "D3D12Compute - Allocating: new_command_queue\n";
+        debug(user_context) << TRACEINDENT << "D3D12Compute - Allocating: new_command_queue\n";
         queue = new_command_queue(device);
         if (NULL == queue)
         {
-            TRACEINDENT; error(user_context) << "D3D12Compute: cannot allocate command queue.\n";
+            error(user_context) << TRACEINDENT << "D3D12Compute: cannot allocate command queue.\n";
             release_ns_object(device);
             device = NULL;
             __sync_lock_release(&thread_lock);
@@ -1349,9 +1385,9 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
 {
     TRACELOG;
 
-    debug(user_context)
-        << "halide_d3d12compute_device_malloc (user_context: " << user_context
-        << ", buf: " << buf << ")\n";
+    debug(user_context) << TRACEINDENT
+                        << "(user_context: " << user_context
+                        << ", buf: " << buf << ")\n";
 
     size_t size = buf->size_in_bytes();
     halide_assert(user_context, size != 0);
@@ -1365,7 +1401,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
         halide_assert(user_context, buf->dim[i].stride > 0);
     }
 
-    debug(user_context) << "    allocating " << *buf << "\n";
+    debug(user_context) << TRACEINDENT << "allocating " << *buf << "\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -1390,7 +1426,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -1399,8 +1435,10 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t* buf) {
     TRACELOG;
 
-    debug(user_context) << "halide_d3d12compute_device_free called on buf "
+    debug(user_context) << TRACEINDENT
+                        << "halide_d3d12compute_device_free called on buf "
                         << buf << " device is " << buf->device << "\n";
+
     if (buf->device == 0) {
         return 0;
     }
@@ -1416,7 +1454,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t* bu
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -1453,7 +1491,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
         uint64_t t_before_compile = halide_current_time_ns(user_context);
         #endif
 
-        TRACEINDENT; debug(user_context) << "D3D12Compute - Allocating: new_library_with_source " << state->library << "\n";
+        debug(user_context) << TRACEINDENT << "D3D12Compute - Allocating: new_library_with_source " << state->library << "\n";
         state->library = new_library_with_source(d3d12_context.device, source, source_size);
         if (state->library == 0) {
             error(user_context) << "D3D12Compute: new_library_with_source failed.\n";
@@ -1462,13 +1500,13 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after_compile = halide_current_time_ns(user_context);
-        TRACEINDENT; debug(user_context) << "Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n";
+        debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n";
         #endif
     }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEINDENT; debug(user_context) << "Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -1523,7 +1561,7 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -1599,7 +1637,8 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t*
     void* dst_data = buffer_contents(copy_dst);
     c.dst = reinterpret_cast<uint64_t>(dst_data);
 
-    debug(user_context) << "halide_d3d12compute_copy_to_device dev = " << (void*)buffer->device
+    debug(user_context) << TRACEINDENT
+                        << "halide_d3d12compute_copy_to_device dev = " << (void*)buffer->device
                         << " d3d12_buffer = " << copy_dst
                         << " host = " << buffer->host
                         << "\n";
@@ -1619,7 +1658,8 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t*
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "Time for halide_d3d12compute_copy_to_device: "
+    debug(user_context) << TRACEINDENT
+                        << "Time for halide_d3d12compute_copy_to_device: "
                         << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
@@ -1655,7 +1695,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t* b
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "Time for halide_d3d12compute_copy_to_host: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_copy_to_host: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -1704,21 +1744,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     d3d12_function* function = new_function_with_name(device, state->library, entry_name, strlen(entry_name));
     halide_assert(user_context, function);
-    if (FAILED(function->status) || (NULL == function->shaderBlob))
-    {
-        TRACEINDENT; debug(user_context) << "Unable to compile D3D12 compute shader (HRESULT=" << function->status << ", ShaderBlob=" << function->shaderBlob << " entry=" << entry_name << ").\n";
-        if (function->errorMsgs)
-        {
-            const char* errorMessage = (const char*)function->errorMsgs->GetBufferPointer();
-            TRACEINDENT; debug(user_context) << "D3D12Compute: ERROR: D3DCompiler: " << errorMessage << "\n";
-            function->errorMsgs->Release();
-        }
-        TRACEINDENT; debug(user_context) << state->library->source << "\n";
-        TRACEINDENT; error(user_context) << "ALL HALTED\n";
-        return -1;
-    }
-    halide_assert(user_context, (NULL == function->errorMsgs));
-    TRACEINDENT; debug(user_context) << "SUCCESS while compiling D3D12 compute shader with entry name '" << entry_name << "'!\n";
 
     // TODO(marcos): seems like a good place to create the descriptor heaps and tables...
     d3d12_binder* binder = new_descriptor_binder(device);
@@ -1792,13 +1817,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     // Round shared memory size up to a multiple of 16, as required by setThreadgroupMemoryLength.
     shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
-    debug(user_context) << "Setting shared memory length to " << shared_mem_bytes << "\n";
+    debug(user_context) << TRACEINDENT << "Setting shared memory length to " << shared_mem_bytes << "\n";
     set_threadgroup_memory_length(cmdList, shared_mem_bytes, 0);
-
-    static int32_t total_dispatches = 0;
-    debug(user_context) << "Dispatching threadgroups (number " << total_dispatches++ <<
-        ") blocks(" << blocksX << ", " << blocksY << ", " << blocksZ <<
-        ") threads(" << threadsX << ", " << threadsY << ", " << threadsZ << ")\n";
 
     dispatch_threadgroups(cmdList,
                           blocksX, blocksY, blocksZ,
@@ -1816,7 +1836,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -1824,12 +1844,13 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
 WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
-    debug(user_context) << "halide_d3d12compute_device_and_host_malloc called.\n";
+    debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_and_host_malloc called.\n";
     int result = halide_d3d12compute_device_malloc(user_context, buffer);
     if (result == 0) {
         d3d12_buffer *metal_buffer = (d3d12_buffer *)(buffer->device);
         buffer->host = (uint8_t *)buffer_contents(metal_buffer);
-        debug(user_context) << "halide_d3d12compute_device_and_host_malloc"
+        debug(user_context) << TRACEINDENT 
+                            << "halide_d3d12compute_device_and_host_malloc"
                             << " device = " << (void*)buffer->device
                             << " metal_buffer = " << metal_buffer
                             << " host = " << buffer->host << "\n";
@@ -1839,7 +1860,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
 
 WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
-    debug(user_context) << "halide_d3d12compute_device_and_host_free called.\n";
+    debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_and_host_free called.\n";
     halide_d3d12compute_device_free(user_context, buffer);
     buffer->host = NULL;
     return 0;
@@ -1849,7 +1870,7 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
                                          const struct halide_buffer_t *src,
                                          struct halide_buffer_t *dst) {
     TRACELOG;
-    debug(user_context) << "halide_d3d12compute_device_crop called.\n";
+    debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop called.\n";
 /*
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
@@ -1883,7 +1904,8 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
     // enough differences to require separate code.
 
     TRACELOG;
-    debug(user_context) << "halide_d3d12compute_device_release_crop called on buf "
+    debug(user_context) << TRACEINDENT 
+                        << "halide_d3d12compute_device_release_crop called on buf "
                         << buf << " device is " << buf->device << "\n";
     if (buf->device == 0) {
         return 0;
@@ -1900,7 +1922,7 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
     */
     return 0;
