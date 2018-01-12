@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 BIN ?= bin
 
-all: $(BIN)/host/AveragePool $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
+all: $(BIN)/host/AveragePool $(BIN)/host/Convolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
 
 $(BIN)/AveragePool.generator: AveragePool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -15,6 +15,18 @@ $(BIN)/%/AveragePool.o: $(BIN)/AveragePool.generator
 $(BIN)/%/AveragePool: AveragePool.cpp $(BIN)/%/AveragePool.o
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 AveragePool.cpp $(BIN)/$*/AveragePool.o -o $(BIN)/$*/AveragePool $(LDFLAGS-$*)
+
+$(BIN)/Convolution.generator: Convolution_generator.cpp common.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+
+$(BIN)/%/Convolution.o: $(BIN)/Convolution.generator
+	@mkdir -p $(@D)
+	$^ -g Convolution -o $(BIN)/$* -e o,h -f Convolution target=$(HL_TARGET)
+
+$(BIN)/%/Convolution: Convolution.cpp $(BIN)/%/Convolution.o
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 Convolution.cpp $(BIN)/$*/Convolution.o -o $(BIN)/$*/Convolution $(LDFLAGS-$*)
 
 $(BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -52,8 +64,9 @@ $(BIN)/%/MaxPool: MaxPool.cpp $(BIN)/%/MaxPool.o
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MaxPool.cpp $(BIN)/$*/MaxPool.o -o $(BIN)/$*/MaxPool $(LDFLAGS-$*)
 
-run-host: $(BIN)/host/AveragePool $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
+run-host: $(BIN)/host/AveragePool $(BIN)/host/Convolution $(BIN)/host/Im2col $(BIN)/host/MatrixMultiply $(BIN)/host/MaxPool
 	./AveragePool.sh $(BIN)/host/AveragePool
+	./Convolution.sh $(BIN)/host/Convolution
 	./Im2col.sh $(BIN)/host/Im2col
 	./MatrixMultiply.sh $(BIN)/host/MatrixMultiply
 	./MaxPool.sh $(BIN)/host/MaxPool
