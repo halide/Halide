@@ -49,9 +49,10 @@ vector<vector<string>> find_fused_groups(const vector<string> &order,
         if (visited.find(fn) == visited.end()) {
             vector<string> group;
             find_fused_groups_dfs(fn, fuse_adjacency_list, visited, group);
-            result.insert(result.begin(), group);
+            result.push_back(group);
         }
     }
+    std::reverse(result.begin(), result.end());
     return result;
 }
 
