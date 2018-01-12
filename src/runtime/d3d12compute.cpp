@@ -391,6 +391,11 @@ template<typename d3d12_T>
 static void release_ns_object(d3d12_T* obj)
 {
     TRACELOG;
+    if (!obj)
+    {
+        TRACEPRINT("null object -- nothing to be released.\n");
+        return;
+    }
     release_d3d12_object(obj);
 }
 
@@ -411,11 +416,26 @@ void release_d3d12_object<d3d12_command_queue>(d3d12_command_queue* queue)
 }
 
 template<>
+void release_d3d12_object<d3d12_command_allocator>(d3d12_command_allocator* cmdAllocator)
+{
+    TRACELOG;
+    (*cmdAllocator)->Release();
+}
+
+template<>
 void release_d3d12_object<d3d12_command_list>(d3d12_command_list* cmdList)
 {
     TRACELOG;
     cmdList->p->Release();
     free(cmdList);
+}
+
+template<>
+void release_d3d12_object<d3d12_binder>(d3d12_binder* binder)
+{
+    TRACELOG;
+    binder->descriptorHeap->Release();
+    free(binder);
 }
 
 template<>
@@ -1121,6 +1141,8 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
     // constant buffer managed internally by the runtime:
     if (input_buffer->halide == NULL)
     {
+        TRACEPRINT("CBV" "\n");
+
         ID3D12Resource* pResource = input_buffer->resource;
         D3D12_GPU_VIRTUAL_ADDRESS pGPU = pResource->GetGPUVirtualAddress();
 
@@ -1140,6 +1162,8 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
     }
     else
     {
+        TRACEPRINT("UAV" "\n");
+
         const halide_type_t& type = input_buffer->halide->type;
 
         //DXGI_FORMAT Format = FindD3D12FormatForHalideType(type);
@@ -1181,6 +1205,7 @@ WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uin
 static void commit_command_list(d3d12_compute_command_list* cmdList)
 {
     TRACELOG;
+    end_recording(cmdList);
     ID3D12CommandList* lists [] = { (*cmdList) };
     (*queue)->ExecuteCommandLists(1, lists);
     cmdList->signal = __atomic_add_fetch(&queue->last_signal, 1, __ATOMIC_SEQ_CST); // ++last_signal
@@ -1535,12 +1560,13 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device* device, struc
             D3D12_RANGE* pWrittenRange = NULL;
             resource->Unmap(Subresource, pWrittenRange);
             synchronize_resource(blitCmdList, d3d12_buffer);
-            //end_recording(blitCmdList);
         }
     }
-    end_recording(blitCmdList);
     commit_command_list(blitCmdList);
     wait_until_completed(blitCmdList);
+
+    release_ns_object(blitCmdList);
+    release_ns_object(sync_command_allocator);
 }
 
 }
@@ -1791,7 +1817,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
     if (args_buffer)
     {
         set_input_buffer(cmdList, binder, args_buffer, buffer_index);
-        release_ns_object(args_buffer);
         buffer_index++;
     }
 
@@ -1823,7 +1848,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
     dispatch_threadgroups(cmdList,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
-    end_recording(cmdList);
 
     add_command_list_completed_handler(cmdList, &command_list_completed_handler_block);
 
@@ -1831,7 +1855,11 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     wait_until_completed(cmdList);  // TODO(marcos): find a way to gracefully handle this hard wait...
 
+    release_ns_object(cmdList);
+    release_ns_object(command_allocator);
+    release_ns_object(args_buffer);
     release_ns_object(pipeline_state);
+    release_ns_object(binder);
     release_ns_object(function);
 
     #ifdef DEBUG_RUNTIME
