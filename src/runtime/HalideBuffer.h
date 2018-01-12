@@ -1206,7 +1206,7 @@ public:
 
     /** Set the min coordinate of an image in the first N dimensions */
     // @{
-    void set_min(std::vector<int> mins) {
+    void set_min(const std::vector<int> &mins) {
         assert(mins.size() <= (size_t)dimensions());
         device_deallocate();
         for (size_t i = 0; i < mins.size(); i++) {
@@ -1222,7 +1222,7 @@ public:
 
     /** Test if a given coordinate is within the the bounds of an image */
     // @{
-    bool contains(std::vector<int> coords) const {
+    bool contains(const std::vector<int> &coords) const {
         assert(coords.size() <= (size_t)dimensions());
         for (size_t i = 0; i < coords.size(); i++) {
             if (coords[i] < dim(i).min() || coords[i] > dim(i).max()) {
