@@ -102,13 +102,18 @@ int main(int argc, char **argv) {
 
         for (int iy = 0; iy < filter_height; iy++) {
             for (int ix = 0; ix < filter_width; ix++) {
-                output =
-                    std::max(output,
-                             static_cast<int32_t>(
-                                 input_tensor(c,
-                                              clamp(x * stride + ix - pad_width, 0, W - 1),
-                                              clamp(y * stride + iy - pad_height, 0, H - 1),
-                                              b)));
+                int32_t input = 0;
+                if ((x * stride + ix - pad_width >= 0)
+                    && (x * stride + ix - pad_width < W)
+                    && (y * stride + iy - pad_height >= 0)
+                    && (y * stride + iy - pad_height < H)) {
+                    input = static_cast<int32_t>(
+                        input_tensor(c,
+                                     x * stride + ix - pad_width,
+                                     y * stride + iy - pad_height,
+                                     b));
+                }
+                output = std::max(output, input);
             }
         }
 
