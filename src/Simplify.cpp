@@ -4332,9 +4332,6 @@ private:
                     } else {
                         return mutate(Div::make(a, b));
                     }
-                } else {
-                    user_warning << "Cannot replace bit shift with arithmetic "
-                                 << "operator (integer overflow).\n";
                 }
             }
 

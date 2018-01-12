@@ -13,7 +13,7 @@ scipy
 
 # io
 #python3-protobuf
-#pillow
+pillow
 #pystache
 
 # helpers
@@ -24,9 +24,6 @@ scipy
 #blessings
 #contexttimer
 #joblib
-
-# testing
-nose
 
 # documentation
 sphinx

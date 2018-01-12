@@ -23,6 +23,7 @@
 namespace Halide {
 
 class OutputImageParam;
+class ParamMap;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -51,13 +52,14 @@ struct StorageDim;
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
+    /** Reference to the Function this stage (or definition) belongs to. */
+    Internal::Function function;
     Internal::Definition definition;
-    std::string stage_name;
+    /** Indicate which stage the definition belongs to (0 for initial
+     * definition, 1 for first update, etc.). */
+    size_t stage_index;
     /** Pure Vars of the Function (from the init definition). */
     std::vector<Var> dim_vars;
-    /** This is just a reference to the FuncSchedule owned by the Function
-     * associated with this Stage. */
-    Internal::FuncSchedule func_schedule;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
@@ -66,17 +68,23 @@ class Stage {
     void remove(const std::string &var);
     Stage &purify(VarOrRVar old_name, VarOrRVar new_name);
 
+    const std::vector<Internal::StorageDim> &storage_dims() const {
+        return function.schedule().storage_dims();
+    }
+
+    Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
+
 public:
-    Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
-          const Internal::FuncSchedule &func_s)
-            : definition(d), stage_name(n), dim_vars(args), func_schedule(func_s) {
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
+          const std::vector<Var> &args)
+            : function(f), definition(d), stage_index(stage_index), dim_vars(args) {
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
 
-    Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
-          const Internal::FuncSchedule &func_s)
-            : definition(d), stage_name(n), func_schedule(func_s) {
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
+          const std::vector<std::string> &args)
+            : function(f), definition(d), stage_index(stage_index) {
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -95,7 +103,7 @@ public:
     EXPORT std::string dump_argument_list() const;
 
     /** Return the name of this stage, e.g. "f.update(2)" */
-    EXPORT const std::string &name() const;
+    EXPORT std::string name() const;
 
     /** Calling rfactor() on an associative update definition a Func will split
      * the update into an intermediate which computes the partial results and
@@ -169,6 +177,132 @@ public:
     // @{
     EXPORT Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
     EXPORT Func rfactor(RVar r, Var v);
+    // @}
+
+    /** Schedule the iteration over this stage to be fused with another
+     * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
+     * be computed AFTER 's' in the innermost fused dimension. There should not
+     * be any dependencies between those two fused stages. If either of the
+     * stages being fused is a stage of an extern Func, this will throw an error.
+     *
+     * Note that the two stages that are fused together should have the same
+     * exact schedule from the outermost to the innermost fused dimension, and
+     * the stage we are calling compute_with on should not have specializations,
+     * e.g. f2.compute_with(f1, x) is allowed only if f2 has no specializations.
+     *
+     * Given the constraints, this has a variety of uses. Consider the
+     * following code:
+     \code
+     f(x, y) = x + y;
+     g(x, y) = x - y;
+     h(x, y) = f(x, y) + g(x, y);
+     f.compute_root();
+     g.compute_root();
+     f.split(x, xo, xi, 8);
+     g.split(x, xo, xi, 8);
+     g.compute_with(f, xo);
+     \endcode
+     *
+     * This is equivalent to:
+     \code
+     for y:
+       for xo:
+         for xi:
+           f(8*xo + xi) = (8*xo + xi) + y
+         for xi:
+           g(8*xo + xi) = (8*xo + xi) - y
+     for y:
+       for x:
+         h(x, y) = f(x, y) + g(x, y)
+     \endcode
+     *
+     * The size of the dimensions of the stages computed_with do not have
+     * to match. Consider the following code where 'g' is half the size of 'f':
+     \code
+     Image<int> f_im(size, size), g_im(size/2, size/2);
+     input(x, y) = x + y;
+     f(x, y) = input(x, y);
+     g(x, y) = input(2*x, 2*y);
+     g.compute_with(f, y);
+     input.compute_at(f, y);
+     Pipeline({f, g}).realize({f_im, g_im});
+     \endcode
+     *
+     * This is equivalent to:
+     \code
+     for y = 0 to size-1:
+       for x = 0 to size-1:
+         input(x, y) = x + y;
+       for x = 0 to size-1:
+         f(x, y) = input(x, y)
+       for x = 0 to size/2-1:
+         if (y < size/2-1):
+           g(x, y) = input(2*x, 2*y)
+     \endcode
+     *
+     * 'align' specifies how the loop iteration of each dimension of the
+     * two stages being fused should be aligned in the fused loop nests
+     * (see LoopAlignStrategy for options). Consider the following loop nests:
+     \code
+     for z = f_min_z to f_max_z:
+       for y = f_min_y to f_max_y:
+         for x = f_min_x to f_max_x:
+           f(x, y, z) = x + y + z
+     for z = g_min_z to g_max_z:
+       for y = g_min_y to g_max_y:
+         for x = g_min_x to g_max_x:
+           g(x, y, z) = x - y - z
+     \endcode
+     *
+     * If no alignment strategy is specified, the following loop nest will be
+     * generated:
+     \code
+     for z = min(f_min_z, g_min_z) to max(f_max_z, g_max_z):
+       for y = min(f_min_y, g_min_y) to max(f_max_y, g_max_y):
+         for x = f_min_x to f_max_x:
+           if (f_min_z <= z <= f_max_z):
+             if (f_min_y <= y <= f_max_y):
+               f(x, y, z) = x + y + z
+         for x = g_min_x to g_max_x:
+           if (g_min_z <= z <= g_max_z):
+             if (g_min_y <= y <= g_max_y):
+               g(x, y, z) = x - y - z
+     \endcode
+     *
+     * Instead, these alignment strategies:
+     \code
+     g.compute_with(f, y, {{z, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignEnd}});
+     \endcode
+     * will produce the following loop nest:
+     \code
+     f_loop_min_z = f_min_z
+     f_loop_max_z = max(f_max_z, (f_min_z - g_min_z) + g_max_z)
+     for z = f_min_z to f_loop_max_z:
+       f_loop_min_y = min(f_min_y, (f_max_y - g_max_y) + g_min_y)
+       f_loop_max_y = f_max_y
+       for y = f_loop_min_y to f_loop_max_y:
+         for x = f_min_x to f_max_x:
+           if (f_loop_min_z <= z <= f_loop_max_z):
+             if (f_loop_min_y <= y <= f_loop_max_y):
+               f(x, y, z) = x + y + z
+         for x = g_min_x to g_max_x:
+           g_shift_z = g_min_z - f_loop_min_z
+           g_shift_y = g_max_y - f_loop_max_y
+           if (g_min_z <= (z + g_shift_z) <= g_max_z):
+             if (g_min_y <= (y + g_shift_y) <= g_max_y):
+               g(x, y + g_shift_y, z + g_shift_z) = x - (y + g_shift_y) - (z + g_shift_z)
+     \endcode
+     *
+     * LoopAlignStrategy::AlignStart on dimension z will shift the loop iteration
+     * of 'g' at dimension z so that its starting value matches that of 'f'.
+     * Likewise, LoopAlignStrategy::AlignEnd on dimension y will shift the loop
+     * iteration of 'g' at dimension y so that its end value matches that of 'f'.
+     */
+    // @{
+    EXPORT Stage &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Stage &compute_with(LoopLevel loop_level, LoopAlignStrategy align = LoopAlignStrategy::Auto);
+    EXPORT Stage &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Stage &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
     // @}
 
     /** Scheduling calls that control how the domain of this stage is
@@ -581,18 +715,62 @@ public:
      Buffer<float> im1 = r[1];
      \endcode
      *
+     * In Halide formal arguments of a computation are specified using
+     * Param<T> and ImageParam objects in the expressions defining the
+     * computation. The param_map argument to realize allows
+     * specifying a set of per-call parameters to be used for a
+     * specific computation. This method is thread-safe where the
+     * globals used by Param<T> and ImageParam are not. Any parameters
+     * that are not in the param_map are taken from the global values,
+     * so those can continue to be used if they are not changing
+     * per-thread.
+     *
+     * One can explicitly construct a ParamMap and
+     * use its set method to insert Parameter to scalar or Buffer
+     * value mappings:
+     *
+     \code
+     Param<int32> p(42);
+     ImageParam img(Int(32), 1);
+     f(x) = img(x) + p;
+
+     Buffer<int32_t) arg_img(10, 10);
+     <fill in arg_img...>
+     ParamMap params;
+     params.set(p, 17);
+     params.set(img, arg_img);
+
+     Target t = get_jit_target_from_environment();
+     Buffer<int32_t> result = f.realize(10, 10, t, params);
+     \endcode
+     *
+     * Alternatively, an initializer list can be used
+     * directly in the realize call to pass this information:
+     *
+     \code
+     Param<int32> p(42);
+     ImageParam img(Int(32), 1);
+     f(x) = img(x) + p;
+
+     Buffer<int32_t) arg_img(10, 10);
+     <fill in arg_img...>
+
+     Target t = get_jit_target_from_environment();
+     Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
+     \endcode
+     *
      */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size,
-                               const Target &target = Target());
-    EXPORT Realization realize(const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    EXPORT Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -601,16 +779,34 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    EXPORT void realize(Realization dst, const Target &target = Target());
+    EXPORT void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
      * referenced. Communicates the result by allocating new buffers
      * of the appropriate size and binding them to the unbound
-     * ImageParams. */
+     * ImageParams.
+     *
+     * Set the documentation for Func::realize regarding the
+     * ParamMap. There is one difference in that input Buffer<>
+     * arguments that are being inferred are specified as a pointer to
+     * the Buffer<> in the ParamMap. E.g.
+     *
+     \code
+     Param<int32> p(42);
+     ImageParam img(Int(32), 1);
+     f(x) = img(x) + p;
+
+     Target t = get_jit_target_from_environment();
+     Buffer<> in;
+     f.infer_input_bounds(10, 10, t, { { img, &in } });
+     \endcode
+     * On return, in will be an allocated buffer of the correct size
+     * to evaulate f over a 10x10 region.
+     */
     // @{
-    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(Realization dst);
+    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
+    EXPORT void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
@@ -954,8 +1150,9 @@ public:
                               int dimensionality,
                               NameMangling mangling,
                               bool uses_old_buffer_t) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      dimensionality, mangling, DeviceAPI::Host, uses_old_buffer_t);
+        define_extern(function_name, params, t,
+                      Internal::make_argument_list(dimensionality),
+                      mangling, uses_old_buffer_t);
     }
 
     EXPORT void define_extern(const std::string &function_name,
@@ -965,8 +1162,9 @@ public:
                               NameMangling mangling = NameMangling::Default,
                               DeviceAPI device_api = DeviceAPI::Host,
                               bool uses_old_buffer_t = false) {
-        define_extern(function_name, params, std::vector<Type>{t},
-                      dimensionality, mangling, device_api, uses_old_buffer_t);
+        define_extern(function_name, params, t,
+                      Internal::make_argument_list(dimensionality),
+                      mangling, device_api, uses_old_buffer_t);
     }
 
     EXPORT void define_extern(const std::string &function_name,
@@ -975,14 +1173,58 @@ public:
                               int dimensionality,
                               NameMangling mangling,
                               bool uses_old_buffer_t) {
-      define_extern(function_name, params, types,
-                    dimensionality, mangling, DeviceAPI::Host, uses_old_buffer_t);
+        define_extern(function_name, params, types,
+                      Internal::make_argument_list(dimensionality),
+                      mangling, uses_old_buffer_t);
     }
 
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               const std::vector<Type> &types,
                               int dimensionality,
+                              NameMangling mangling = NameMangling::Default,
+                              DeviceAPI device_api = DeviceAPI::Host,
+                              bool uses_old_buffer_t = false) {
+        define_extern(function_name, params, types,
+                      Internal::make_argument_list(dimensionality),
+                      mangling, device_api, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              Type t,
+                              const std::vector<Var> &arguments,
+                              NameMangling mangling,
+                              bool uses_old_buffer_t) {
+        define_extern(function_name, params, std::vector<Type>{t},
+                      arguments, mangling, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              Type t,
+                              const std::vector<Var> &arguments,
+                              NameMangling mangling = NameMangling::Default,
+                              DeviceAPI device_api = DeviceAPI::Host,
+                              bool uses_old_buffer_t = false) {
+        define_extern(function_name, params, std::vector<Type>{t},
+                      arguments, mangling, device_api, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              const std::vector<Type> &types,
+                              const std::vector<Var> &arguments,
+                              NameMangling mangling,
+                              bool uses_old_buffer_t) {
+      define_extern(function_name, params, types,
+                    arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              const std::vector<Type> &types,
+                              const std::vector<Var> &arguments,
                               NameMangling mangling = NameMangling::Default,
                               DeviceAPI device_api = DeviceAPI::Host,
                               bool uses_old_buffer_t = false);
@@ -1830,6 +2072,13 @@ public:
     /** Schedule a function to be computed within the iteration over
      * a given LoopLevel. */
     EXPORT Func &compute_at(LoopLevel loop_level);
+
+    /** Schedule the iteration over the initial definition of this function
+     *  to be fused with another stage 's' from outermost loop to a
+     * given LoopLevel. See \ref Stage::compute_with */
+    // @{
+    EXPORT Func &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    EXPORT Func &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
 
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :

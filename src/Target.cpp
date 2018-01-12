@@ -237,6 +237,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_61", Target::CUDACapability61},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
+    {"cl_half", Target::CLHalf},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"user_context", Target::UserContext},
