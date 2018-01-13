@@ -68,6 +68,24 @@ struct DefinitionContents {
             s.definition.mutate(mutator);
         }
     }
+
+    vector<string> get_schedule_list() {
+        vector<string> schedules;
+
+        vector<string> stage_s = stage_schedule.get_schedule_list();
+        schedules.insert(schedules.end(), stage_s.begin(), stage_s.end());
+
+        for (Specialization &s : specializations) {
+            std::ostringstream cond;
+            cond << ".specialize(" << s.condition << ").";
+            schedules.push_back(cond.str());
+
+            vector<string> s_schedules = s.definition.get_schedule_list();
+            schedules.insert(schedules.end(), s_schedules.begin(), s_schedules.end());
+        }
+
+        return schedules;
+    }
 };
 
 template<>
@@ -205,6 +223,11 @@ const Specialization &Definition::add_specialization(Expr condition) {
 
     contents->specializations.push_back(s);
     return contents->specializations.back();
+}
+
+vector<string> Definition::get_schedule_list() {
+    internal_assert(defined());
+    return contents->get_schedule_list();
 }
 
 }

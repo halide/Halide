@@ -150,6 +150,23 @@ struct FunctionContents {
             extern_proxy_expr = mutator->mutate(extern_proxy_expr);
         }
     }
+
+    vector<string> get_schedule_list() {
+        vector<string> schedules;
+
+        vector<string> fs = func_schedule.get_schedule_list();
+        schedules.insert(schedules.end(), fs.begin(), fs.end());
+
+        vector<string> s_init = init_def.get_schedule_list();
+        schedules.insert(schedules.end(), s_init.begin(), s_init.end());
+
+        for (Definition &def : updates) {
+            vector<string> s = def.get_schedule_list();
+            schedules.insert(schedules.end(), s.begin(), s.end());
+        }
+
+        return schedules;
+    }
 };
 
 struct FunctionGroup {
@@ -1012,6 +1029,11 @@ Function &Function::substitute_calls(const Function &orig, const Function &subst
     map<FunctionPtr, FunctionPtr> substitutions;
     substitutions.emplace(orig.get_contents(), substitute.get_contents());
     return substitute_calls(substitutions);
+}
+
+vector<string> Function::get_schedule_list() {
+    internal_assert(contents.defined());
+    return contents->get_schedule_list();
 }
 
 // Deep copy an entire Function DAG.

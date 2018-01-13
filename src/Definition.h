@@ -115,6 +115,8 @@ public:
      * no debug symbols were found or the debug symbols were not
      * understood. Works on OS X and Linux only. */
     EXPORT std::string source_location() const;
+
+    EXPORT std::vector<std::string> get_schedule_list();
 };
 
 struct Specialization {

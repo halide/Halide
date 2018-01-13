@@ -249,6 +249,78 @@ struct FuncScheduleContents {
             }
         }
     }
+
+    std::vector<std::string> get_schedule_list() {
+        std::vector<std::string> schedules;
+
+        // Declare compute and storage levels. Store/compute inline should
+        // be the default, so we don't have to do anything
+        compute_level.lock();
+        store_level.lock();
+        if (compute_level.is_root()) {
+            schedules.push_back("compute_root()");
+        } else if (!compute_level.is_inlined()) {
+            std::ostringstream oss;
+            oss << "compute_at(" << compute_level.func() << ", " << compute_level.var().name() << ")";
+            schedules.push_back(oss.str());
+        }
+
+        if (store_level.is_root()) {
+            schedules.push_back("store_root()");
+        } else if (!store_level.is_inlined()) {
+            std::ostringstream oss;
+            oss << "store_at(" << compute_level.func() << ", " << compute_level.var().name() << ")";
+            schedules.push_back(oss.str());
+        }
+
+        if (memoized) {
+            schedules.push_back("memoize()");
+        }
+
+        std::ostringstream storage_order;
+        storage_order << "reorder_storage(";
+        for (size_t i = 0; i < storage_dims.size(); ++i) {
+            const StorageDim &s = storage_dims[i];
+            if (i > 0) {
+                storage_order << ", ";
+            }
+            storage_order << s.var;
+            if (s.alignment.defined()) {
+                std::ostringstream oss;
+                oss << "align_storage(" << s.var << ", " << s.alignment << ")";
+                schedules.push_back(oss.str());
+            }
+            if (s.fold_factor.defined()) {
+                std::ostringstream oss;
+                oss << "fold_storage(" << s.var << ", " << s.fold_factor << ", " << s.fold_forward << ")";
+                schedules.push_back(oss.str());
+            }
+        }
+        storage_order << ")";
+        schedules.push_back(storage_order.str());
+
+        for (const Bound &b : bounds) {
+            std::ostringstream oss;
+            if (!b.modulus.defined() && !b.remainder.defined()) {
+                oss << "bound(" << b.var << ", " << b.min << ", " << b.extent << ")";
+            } else {
+                internal_assert(!b.min.defined() && !b.extent.defined());
+                oss << "align_bounds(" << b.var << ", " << b.min << ", " << b.extent << ")";
+            }
+            schedules.push_back(oss.str());
+        }
+
+        for (const Bound &e : estimates) {
+            std::ostringstream oss;
+            internal_assert(!e.modulus.defined() && !e.remainder.defined());
+            oss << "estimate(" << e.var << ", " << e.min << ", " << e.extent << ")";
+            schedules.push_back(oss.str());
+        }
+
+        // TODO(psuriana): How do you handle wrappers?
+
+        return schedules;
+    }
 };
 
 template<>
@@ -260,6 +332,28 @@ template<>
 EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
+
+namespace {
+std::ostream& operator<<(std::ostream& stream, const LoopAlignStrategy strategy){
+    switch(strategy){
+        case LoopAlignStrategy::AlignStart:
+            stream << "LoopAlignStrategy::AlignStart";
+            break;
+        case LoopAlignStrategy::AlignEnd:
+            stream << "LoopAlignStrategy::AlignEnd";
+            break;
+        case LoopAlignStrategy::NoAlign:
+            stream << "LoopAlignStrategy::NoAlign";
+            break;
+        case LoopAlignStrategy::Auto:
+            stream << "LoopAlignStrategy::Auto";
+            break;
+        default:
+            internal_assert(false);
+    }
+    return stream;
+}
+} // anonymous namespace
 
 
 /** A schedule for a sigle halide stage_index, which defines where, when, and
@@ -299,6 +393,135 @@ struct StageScheduleContents {
                 p.offset = mutator->mutate(p.offset);
             }
         }
+    }
+
+    std::vector<std::string> get_schedule_list() {
+        std::vector<std::string> schedules;
+
+        if (allow_race_conditions) {
+            schedules.push_back("allow_race_conditions()");
+        }
+
+        for (const Split &s : splits) {
+            std::ostringstream oss;
+            if (s.is_split()) {
+                oss << "split(" << s.old_var << ", " << s.outer << ", " << s.inner << ", " << s.factor;
+                switch (s.tail) {
+                    case TailStrategy::RoundUp:
+                        oss << ", TailStrategy::RoundUp)";
+                        break;
+                    case TailStrategy::GuardWithIf:
+                        oss << ", TailStrategy::GuardWithIf)";
+                        break;
+                    case TailStrategy::ShiftInwards:
+                        oss << ", TailStrategy::ShiftInwards)";
+                        break;
+                    case TailStrategy::Auto:
+                        oss << ")";
+                        break;
+                    default:
+                        internal_assert(false);
+                    }
+            } else if (s.is_fuse()) {
+                oss << "fuse(" << s.inner << ", " << s.outer << ", " << s.old_var << ")";
+            } else if (s.is_rename()) {
+                oss << "rename(" << s.old_var << ", " << s.outer << ")";
+            } else { // Purify
+                // TODO(psuriana): How do you re-generate rfactor?
+                user_assert(false) << "Cannot generate schedule resulting from rfactor";
+            }
+            schedules.push_back(oss.str());
+        }
+
+        std::ostringstream dims_order;
+        dims_order << "reorder(";
+        for (int i = 0; i < (int)dims.size() - 1; ++i) { // Ignore __outermost
+            const Dim &d = dims[i];
+            if (i > 0) {
+                dims_order << ", ";
+            }
+            dims_order << d.var;
+
+            // Mark device API
+            std::string device_api;
+            switch (d.device_api)  {
+                case DeviceAPI::Hexagon:
+                    device_api = "DeviceAPI::Hexagon";
+                    schedules.push_back("hexagon(" + d.var + ")");
+                    break;
+                default:
+                    // Other device APIs (excluding Host and None) are
+                    // assigned by gpu_XXX()
+                    break;
+            }
+
+            // Mark for-loop type
+            std::ostringstream oss;
+            switch (d.for_type)  {
+                case ForType::Parallel:
+                    oss << "parallel(" << d.var << ")";
+                    break;
+                case ForType::Vectorized:
+                    oss << "vectorize(" << d.var << ")";
+                    break;
+                case ForType::Unrolled:
+                    oss << "unroll(" << d.var << ")";
+                    break;
+                case ForType::GPUBlock:
+                    oss << "gpu_blocks(" << d.var << ", " << device_api << ")";
+                    break;
+                case ForType::GPUThread:
+                    oss << "gpu_threads(" << d.var << ", " << device_api << ")";
+                    break;
+                default:
+                    break;
+            }
+            if (!oss.str().empty()) {
+                schedules.push_back(oss.str());
+            }
+        }
+        dims_order << ")";
+        schedules.push_back(dims_order.str());
+
+        for (const PrefetchDirective &p : prefetches) {
+            std::ostringstream oss;
+            oss << "prefetch(" << p.name << ", " << p.var << ", " << p.offset << ", ";
+            switch (p.strategy) {
+                case PrefetchBoundStrategy::Clamp:
+                    oss << "PrefetchBoundStrategy::Clamp";
+                    break;
+                case PrefetchBoundStrategy::GuardWithIf:
+                    oss << "PrefetchBoundStrategy::GuardWithIf";
+                    break;
+                case PrefetchBoundStrategy::NonFaulting:
+                    oss << "TailStrategy::NonFaulting";
+                    break;
+                default:
+                    internal_assert(false);
+            }
+            oss << ")";
+            schedules.push_back(oss.str());
+        }
+
+        // Is this stage computed with some other stage?
+        if (!fuse_level.level.is_inlined() && !fuse_level.level.is_root()) {
+            std::ostringstream oss;
+            oss << "compute_with(" << fuse_level.level.func();
+            if (fuse_level.level.stage_index() > 0) {
+                oss << ".update(" << fuse_level.level.stage_index() << ")";
+            }
+            oss << ", " << fuse_level.level.var().name() << ", {";
+            for (auto iter = fuse_level.align.begin(); iter != fuse_level.align.end(); ++iter) {
+                oss << "{" << iter->first << ", " << iter->second << "}";
+                if (std::next(iter) != fuse_level.align.end()) {
+                    oss << ", ";
+                }
+            }
+            oss << "})";
+            schedules.push_back(oss.str());
+        }
+
+        return schedules;
     }
 };
 
@@ -443,6 +666,11 @@ void FuncSchedule::mutate(IRMutator2 *mutator) {
     }
 }
 
+std::vector<std::string> FuncSchedule::get_schedule_list() {
+    internal_assert(contents.defined());
+    return contents->get_schedule_list();
+}
+
 
 StageSchedule::StageSchedule() : contents(new StageScheduleContents) {}
 
@@ -549,6 +777,11 @@ void StageSchedule::mutate(IRMutator2 *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }
+}
+
+std::vector<std::string> StageSchedule::get_schedule_list() {
+    internal_assert(contents.defined());
+    return contents->get_schedule_list();
 }
 
 }  // namespace Internal

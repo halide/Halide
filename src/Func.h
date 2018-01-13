@@ -2315,6 +2315,8 @@ public:
     /** Get the source location of the pure definition of this
      * Func. See Stage::source_location() */
     EXPORT std::string source_location() const;
+
+    EXPORT std::vector<std::string> get_schedule_list();
 };
 
 namespace Internal {

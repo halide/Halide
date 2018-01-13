@@ -3079,6 +3079,10 @@ void *Func::compile_jit(const Target &target) {
     return pipeline().compile_jit(target);
 }
 
+vector<string> Func::get_schedule_list() {
+    return func.get_schedule_list();
+}
+
 EXPORT Var _("_");
 EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
            _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");

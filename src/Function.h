@@ -323,6 +323,8 @@ public:
 
     /** Return true iff the name matches one of the Function's pure args. */
     EXPORT bool is_pure_arg(const std::string &name) const;
+
+    EXPORT std::vector<std::string> get_schedule_list();
 };
 
 /** Deep copy an entire Function DAG. */

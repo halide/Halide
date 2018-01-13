@@ -448,6 +448,11 @@ public:
     /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
     void mutate(IRMutator2 *);
+
+    /** Return a list of schedules, which, if applied, will bring the Func
+     * to this current FuncSchedule's state. Note that this list isn't
+     * necessarily the same as the original schedules applied. */
+    EXPORT std::vector<std::string> get_schedule_list();
 };
 
 
@@ -539,6 +544,11 @@ public:
     /** Pass an IRMutator2 through to all Exprs referenced in the
      * Schedule. */
     void mutate(IRMutator2 *);
+
+    /** Return a list of schedules, which, if applied, will bring the Func
+     * to this current StageSchedule's state. Note that this list isn't
+     * necessarily the same as the original schedules applied. */
+    EXPORT std::vector<std::string> get_schedule_list();
 };
 
 }
