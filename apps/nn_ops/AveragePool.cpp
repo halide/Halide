@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
     output_tensor.for_each_element([&](int c, int x, int y, int b) {
         int32_t output = 0;
 
+        int filter_count = 0;
         for (int iy = 0; iy < filter_height; iy++) {
             for (int ix = 0; ix < filter_width; ix++) {
                 int32_t input = 0;
@@ -113,20 +114,12 @@ int main(int argc, char **argv) {
                                      x * stride + ix - pad_width,
                                      y * stride + iy - pad_height,
                                      b));
+                    filter_count++;
                 }
                 output += input;
             }
         }
 
-        int in_x_origin = x * stride - pad_width;
-        int x_start = std::max(0, -in_x_origin);
-        int x_end = std::min(filter_width, W - in_x_origin);
-
-        int in_y_origin = y * stride - pad_height;
-        int y_start = std::max(0, -in_y_origin);
-        int y_end = std::min(filter_height, H - in_y_origin);
-
-        int filter_count = (x_end - x_start) * (y_end - y_start);
         output = (output + filter_count / 2) / filter_count;
 
         output = std::max(output, (int32_t) output_min);
