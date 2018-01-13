@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         (H + 2 * pad_height - filter_height + stride - 1) / stride + 1;
 
     Halide::Runtime::Buffer<uint8_t> output_tensor(nullptr,
-                                output_depth, output_width, output_height, N);
+                                                   output_depth, output_width, output_height, N);
 
 #ifdef HALIDE_RUNTIME_HEXAGON
     input_tensor.device_malloc(halide_hexagon_device_interface());
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     printf("Running pipeline...\n");
     double time = Halide::Tools::benchmark([&]() {
         int result = Im2col(input_tensor, stride, pad_width, pad_height,
-                                 filter_width, filter_height, byte_zero, output_tensor);
+                            filter_width, filter_height, byte_zero, output_tensor);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
         }

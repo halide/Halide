@@ -24,13 +24,3 @@ Expr rounding_shift_right(Expr x, Expr shift) {
 Expr multiply_quantized_multiplier(Expr x, Expr q, Expr shift) {
     return rounding_shift_right(saturating_rounding_doubling_high_multiply(x, q), shift);
 }
-
-int natural_vector_size_with_hexagon(Target target) {
-    if (target.has_feature(Target::HVX_64)) {
-        return 64;
-    } else if (target.has_feature(Target::HVX_128)) {
-        return 128;
-    }
-
-    return target.natural_vector_size<uint8_t>();
-}

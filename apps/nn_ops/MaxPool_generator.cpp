@@ -77,7 +77,12 @@ public:
             output.hexagon();
         }
 
-        int vector_size_u8 = natural_vector_size_with_hexagon(get_target());
+        int vector_size_u8 = get_target().natural_vector_size<uint8_t>();
+        if (get_target().has_feature(Target::HVX_64)) {
+            vector_size_u8 = 64;
+        } else if (get_target().has_feature(Target::HVX_128)) {
+            vector_size_u8 = 128;
+        }
 
         // We only perform vectorization when the depth >= vector size.
         Expr can_vectorize_across_depth =
