@@ -306,12 +306,13 @@ void define_buffer(py::module &m) {
             b.crop(rect);
         }, py::arg("rect"))
 
-        .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
-            return b.cropped(d, min, extent);
-        }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
-        .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
-            return b.cropped(rect);
-        }, py::arg("rect"))
+        // Present in Runtime::Buffer but not Buffer
+        // .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
+        //     return b.cropped(d, min, extent);
+        // }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        // .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
+        //     return b.cropped(rect);
+        // }, py::arg("rect"))
 
         .def("embed", [](Buffer<> &b, int d, int pos) -> void {
             b.embed(d, pos);
@@ -334,19 +335,22 @@ void define_buffer(py::module &m) {
             b.translate(delta);
         }, py::arg("delta"))
 
-        .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
-            return b.translated(d, dx);
-        }, py::arg("dimension"), py::arg("dx"))
-        .def("translated", [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
-            return b.translated(delta);
-        }, py::arg("delta"))
+        // Present in Runtime::Buffer but not Buffer
+        // .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
+        //     return b.translated(d, dx);
+        // }, py::arg("dimension"), py::arg("dx"))
+        // .def("translated", [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
+        //     return b.translated(delta);
+        // }, py::arg("delta"))
 
         .def("transpose", [](Buffer<> &b, int d1, int d2) -> void {
             b.transpose(d1, d2);
         }, py::arg("d1"), py::arg("d2"))
-        .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
-            return b.transposed(d1, d2);
-        }, py::arg("d1"), py::arg("d2"))
+
+        // Present in Runtime::Buffer but not Buffer
+        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+        //     return b.transposed(d1, d2);
+        // }, py::arg("d1"), py::arg("d2"))
 
         .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
             return b.dim(dimension);

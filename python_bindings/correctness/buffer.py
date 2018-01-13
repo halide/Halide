@@ -57,7 +57,8 @@ def test_buffer_to_ndarray():
 
     # Ensure that Buffers that have nonzero mins get converted correctly,
     # since the Python Buffer Protocol doesn't have the 'min' concept
-    cropped = buf.cropped(dimension = 0, min = 1, extent = 2)
+    cropped = buf.copy()
+    cropped.crop(dimension = 0, min = 1, extent = 2)
 
     # Should share storage with cropped (and buf)
     cropped_array_shared = np.array(cropped, copy = False)
@@ -73,8 +74,8 @@ def test_buffer_to_ndarray():
 
     cropped[1, 2] = 5
 
-    assert buf[1, 2] == 5
-    assert array_shared[1, 2] == 5
+    assert buf[1, 2] == 3
+    assert array_shared[1, 2] == 3
     assert array_copied[1, 2] == 42
 
     assert cropped[1, 2] == 5
