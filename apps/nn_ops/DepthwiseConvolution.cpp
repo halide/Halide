@@ -9,7 +9,10 @@
 
 #include "halide_benchmark.h"
 
-#include "DepthwiseConvolution.h"
+#include "DepthwiseConvolution_1.h"
+#include "DepthwiseConvolution_2.h"
+#include "DepthwiseConvolution_4.h"
+#include "DepthwiseConvolution_8.h"
 
 #include "HalideBuffer.h"
 
@@ -64,6 +67,8 @@ int main(int argc, char **argv) {
     int filter_width = 1;
     int filter_height = 1;
 
+    int depth_multiplier = 1;
+
     int16_t input_offset = -128;
     int16_t filter_offset = -128;
 
@@ -80,24 +85,25 @@ int main(int argc, char **argv) {
 
     if (argc > 7) filter_width = atoi(argv[5]);
     if (argc > 8) filter_height = atoi(argv[6]);
-    if (argc > 9) input_offset = atoi(argv[7]);
-    if (argc > 10) filter_offset = atoi(argv[8]);
-    if (argc > 11) output_multiplier = atoi(argv[9]);
-    if (argc > 12) output_shift = atoi(argv[10]);
-    if (argc > 13) output_offset = atoi(argv[11]);
-    if (argc > 14) stride = atoi(argv[12]);
-    if (argc > 15) pad_width = atoi(argv[13]);
-    if (argc > 16) pad_height = atoi(argv[14]);
-    if (argc > 17) output_min = atoi(argv[15]);
-    if (argc > 18) output_max = atoi(argv[16]);
+    if (argc > 9) depth_multiplier = atoi(argv[7]);
+    if (argc > 10) input_offset = atoi(argv[8]);
+    if (argc > 11) filter_offset = atoi(argv[9]);
+    if (argc > 12) output_multiplier = atoi(argv[10]);
+    if (argc > 13) output_shift = atoi(argv[11]);
+    if (argc > 14) output_offset = atoi(argv[12]);
+    if (argc > 15) stride = atoi(argv[13]);
+    if (argc > 16) pad_width = atoi(argv[14]);
+    if (argc > 17) pad_height = atoi(argv[15]);
+    if (argc > 18) output_min = atoi(argv[16]);
+    if (argc > 19) output_max = atoi(argv[17]);
 
     // Hexagon's device_malloc implementation will also set the host
     // pointer if it is null, giving a zero copy buffer.
     Halide::Runtime::Buffer<uint8_t> input_tensor(nullptr, C, W, H, N);
-    Halide::Runtime::Buffer<uint8_t> filter_tensor(nullptr, C, filter_width, filter_height);
-    Halide::Runtime::Buffer<int32_t> bias_tensor(nullptr, C);
+    Halide::Runtime::Buffer<uint8_t> filter_tensor(nullptr, depth_multiplier * C, filter_width, filter_height);
+    Halide::Runtime::Buffer<int32_t> bias_tensor(nullptr, depth_multiplier * C);
 
-    Halide::Runtime::Buffer<uint8_t> output_tensor(nullptr, C, W / stride, H / stride, N);
+    Halide::Runtime::Buffer<uint8_t> output_tensor(nullptr, depth_multiplier * C, W / stride, H / stride, N);
 
 #ifdef HALIDE_RUNTIME_HEXAGON
     input_tensor.device_malloc(halide_hexagon_device_interface());
@@ -130,13 +136,27 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_on(nullptr);
 #endif
 
+    auto dw_convolution_fn = DepthwiseConvolution_1;
+    if (depth_multiplier == 1) {
+        dw_convolution_fn = DepthwiseConvolution_1;
+    } else if (depth_multiplier == 2) {
+        dw_convolution_fn = DepthwiseConvolution_2;
+    } else if (depth_multiplier == 4) {
+        dw_convolution_fn = DepthwiseConvolution_4;
+    } else if (depth_multiplier == 8) {
+        dw_convolution_fn = DepthwiseConvolution_8;
+    } else {
+        printf("This depth multiplier is not covered by this test\n");
+        abort();
+    }
+
     printf("Running pipeline...\n");
     double time = Halide::Tools::benchmark([&]() {
-        int result = DepthwiseConvolution(input_tensor, filter_tensor, bias_tensor,
-                                          input_offset, filter_offset,
-                                          output_multiplier, output_shift, output_offset,
-                                          stride, pad_width, pad_height,
-                                          output_min, output_max, output_tensor);
+        int result = dw_convolution_fn(input_tensor, filter_tensor, bias_tensor,
+                                       input_offset, filter_offset,
+                                       output_multiplier, output_shift, output_offset,
+                                       stride, pad_width, pad_height,
+                                       output_min, output_max, output_tensor);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
         }
@@ -167,7 +187,7 @@ int main(int argc, char **argv) {
                 int y_offset = y * stride + filter_y - pad_height;
                 if ((x_offset >= 0) && (x_offset < W) && (y_offset >= 0) && (y_offset < H)) {
                     input_value = static_cast<int32_t>(
-                        (int16_t) input_tensor(c, x_offset, y_offset, b) + input_offset);
+                        (int16_t) input_tensor(c / depth_multiplier, x_offset, y_offset, b) + input_offset);
                 }
                 int32_t filter_value = static_cast<int32_t>(
                     (int16_t) filter_tensor(c, filter_x, filter_y) + filter_offset);

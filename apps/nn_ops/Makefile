@@ -32,13 +32,25 @@ $(BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
-$(BIN)/%/DepthwiseConvolution.o: $(BIN)/DepthwiseConvolution.generator
+$(BIN)/%/DepthwiseConvolution_1.o: $(BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution target=$(HL_TARGET)
+	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution_1 target=$(HL_TARGET) depth_multiplier=1
 
-$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp $(BIN)/%/DepthwiseConvolution.o
+$(BIN)/%/DepthwiseConvolution_2.o: $(BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 DepthwiseConvolution.cpp $(BIN)/$*/DepthwiseConvolution.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
+	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution_2 target=$(HL_TARGET) depth_multiplier=2
+
+$(BIN)/%/DepthwiseConvolution_4.o: $(BIN)/DepthwiseConvolution.generator
+	@mkdir -p $(@D)
+	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution_4 target=$(HL_TARGET) depth_multiplier=4
+
+$(BIN)/%/DepthwiseConvolution_8.o: $(BIN)/DepthwiseConvolution.generator
+	@mkdir -p $(@D)
+	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution_8 target=$(HL_TARGET) depth_multiplier=8
+
+$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 DepthwiseConvolution.cpp $(BIN)/$*/DepthwiseConvolution_1.o $(BIN)/$*/DepthwiseConvolution_2.o $(BIN)/$*/DepthwiseConvolution_4.o $(BIN)/$*/DepthwiseConvolution_8.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
 
 $(BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
