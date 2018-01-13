@@ -5,7 +5,7 @@ import halide as hl
 # this is a temporary equivalent for testing purposes
 def _evaluate(e):
     # TODO: support zero-dim Func, Buffers
-    buf = hl.Buffer(e.type(), 1)
+    buf = hl.Buffer(type = e.type(), sizes = [1])
     f = hl.Func();
     x = hl.Var()
     f[x] = e;

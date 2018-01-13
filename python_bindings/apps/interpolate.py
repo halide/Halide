@@ -189,7 +189,7 @@ def main():
     t1 = datetime.now()
     print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
 
-    output_data = np.array(output_image)
+    output_data = np.array(output_image, copy = False)
 
     # save results
     input_path = "interpolate_input.png"

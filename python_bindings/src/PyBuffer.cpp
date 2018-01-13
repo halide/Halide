@@ -39,6 +39,51 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
     return s;
 }
 
+void call_fill(Buffer<> &b, py::object value) {
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (b.type() == type_of<TYPE>()) { b.as<TYPE>().fill(value.cast<TYPE>()); return; }
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+}
+
+bool call_all_equal(Buffer<> &b, py::object value) {
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (b.type() == type_of<TYPE>()) { return b.as<TYPE>().all_equal(value.cast<TYPE>()); }
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return false;
+}
+
 std::string type_to_format_descriptor(const Type &type) {
 
     #define HANDLE_BUFFER_TYPE(TYPE) \
@@ -88,9 +133,9 @@ Type format_descriptor_to_type(const std::string &fd) {
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     if ((size_t) pos.size() != (size_t) buf.dimensions()) {
-        // TODO improve error
         throw py::value_error("Incorrect number of dimensions.");
     }
+    // TODO: add bounds checking?
 
     #define HANDLE_BUFFER_TYPE(TYPE) \
         if (buf.type() == type_of<TYPE>()) \
@@ -116,9 +161,9 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
 
 py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, py::object value) {
     if ((size_t) pos.size() != (size_t) buf.dimensions()) {
-        // TODO improve error
         throw py::value_error("Incorrect number of dimensions.");
     }
+    // TODO: add bounds checking?
     #define HANDLE_BUFFER_TYPE(TYPE) \
         if (buf.type() == type_of<TYPE>()) \
             return py::cast(buf.as<TYPE>()(pos.data()) = value.cast<TYPE>());
@@ -144,6 +189,16 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, p
 }  // namespace
 
 void define_buffer(py::module &m) {
+    using BufferDimension = Halide::Runtime::Buffer<>::Dimension;
+
+    auto buffer_dimension_class =
+        py::class_<BufferDimension>(m, "BufferDimension")
+        .def("min", &BufferDimension::min)
+        .def("stride", &BufferDimension::stride)
+        .def("extent", &BufferDimension::extent)
+        .def("max", &BufferDimension::max)
+    ;
+
     auto buffer_class =
         py::class_<Buffer<>>(m, "Buffer", py::buffer_protocol())
 
@@ -158,8 +213,6 @@ void define_buffer(py::module &m) {
                 strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
             }
 
-// TODO: this isn't really right if any mins are nonzero
-            // std::cerr << "Buffer<"<<b.type()<<"> -> buffer_info @ "<<b.data()<<"\n";
             return py::buffer_info(
                 b.data(),                               // Pointer to buffer
                 bytes,                                  // Size of one scalar
@@ -187,30 +240,17 @@ void define_buffer(py::module &m) {
 
             // Note that this does NOT make a copy of the data; it deliberately
             // shares the pointer with the incoming buffer.
-            // std::cerr << "buffer -> Buffer<"<<t<<"> @ "<<info.ptr<<"\n";
             return Buffer<>(t, info.ptr, (int) info.ndim, dims.data(), name);
         }), py::arg("buffer"), py::arg("name") = "",
+            // TODO: this may not be optimal; we really want to preserve the py::buffer_info,
+            // not the py::buffer
             py::keep_alive<1, 2>() // ensure that the py::buffer stays alive as long as the Buffer<> exists
         )
         .def(py::init<>())
         .def(py::init<const Buffer<> &>())
         .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-            // The zero-dimensional version is missing, but we can approximate it
             return Buffer<>(type, sizes, name);
         }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
-
-        // TODO replace with py::args version
-        // .def(py::init<Type>())  -- C++ API missing
-        .def(py::init<Type, int>())
-        .def(py::init<Type, int, int>())
-        .def(py::init<Type, int, int, int>())
-        .def(py::init<Type, int, int, int, int>())
-
-        // .def(py::init<const Buffer<> &>())
-        // .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
-        //     // The zero-dimensional version is missing, but we can approximate it
-        //     return Buffer<>(type, sizes, name);
-        // }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
         .def_static("make_scalar", (Buffer<> (*)(Type, const std::string &)) Buffer<>::make_scalar,
             py::arg("type"), py::arg("name") = "")
@@ -266,13 +306,12 @@ void define_buffer(py::module &m) {
             b.crop(rect);
         }, py::arg("rect"))
 
-        // cropped() is in Halide::Runtime::Buffer, but not Halide::Buffer
-        // .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
-        //     return b.cropped(d, min, extent);
-        // }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
-        // .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
-        //     return b.cropped(rect);
-        // }, py::arg("rect"))
+        .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
+            return b.cropped(d, min, extent);
+        }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
+            return b.cropped(rect);
+        }, py::arg("rect"))
 
         .def("embed", [](Buffer<> &b, int d, int pos) -> void {
             b.embed(d, pos);
@@ -291,26 +330,51 @@ void define_buffer(py::module &m) {
         .def("translate", [](Buffer<> &b, int d, int dx) -> void {
             b.translate(d, dx);
         }, py::arg("dimension"), py::arg("dx"))
+        .def("translate", [](Buffer<> &b, const std::vector<int> &delta) -> void {
+            b.translate(delta);
+        }, py::arg("delta"))
 
-        // translated() is in Halide::Runtime::Buffer, but not Halide::Buffer
-        // .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
-        //     return b.translated(d, dx);
-        // }, py::arg("dimension"), py::arg("dx"))
+        .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
+            return b.translated(d, dx);
+        }, py::arg("dimension"), py::arg("dx"))
+        .def("translated", [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
+            return b.translated(delta);
+        }, py::arg("delta"))
 
         .def("transpose", [](Buffer<> &b, int d1, int d2) -> void {
             b.transpose(d1, d2);
         }, py::arg("d1"), py::arg("d2"))
+        .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+            return b.transposed(d1, d2);
+        }, py::arg("d1"), py::arg("d2"))
 
-        // transposed() is in Halide::Runtime::Buffer, but not Halide::Buffer
-        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
-        //     return b.transposed(d1, d2);
-        // }, py::arg("d1"), py::arg("d2"))
+        .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
+            return b.dim(dimension);
+        }, py::arg("dimension"),
+           py::keep_alive<0, 1>() // Keep Buffer<> alive while Dimension exists
+        )
+
+        .def("for_each_element", [](Buffer<> &b, py::function f) -> void {
+            const int d = b.dimensions();
+            std::vector<int> pos_v(d, 0);
+            b.for_each_element([&f, &pos_v](const int *pos) -> void {
+                for (size_t i = 0; i < pos_v.size(); ++i) {
+                    pos_v[i] = pos[i];
+                }
+                f(pos_v);
+            });
+        }, py::arg("f"))
 
 
-    // HALIDE_BUFFER_FORWARD(fill)
-    // HALIDE_BUFFER_FORWARD_CONST(all_equal)
-    // HALIDE_BUFFER_FORWARD_CONST(dim)
-    // HALIDE_BUFFER_FORWARD_CONST(for_each_element)
+        .def("fill", &call_fill, py::arg("value"))
+        .def("all_equal", &call_all_equal, py::arg("value"))
+
+        // TODO: for_each_value() needs to be rethought a bit for Python;
+        // for C++ is passes a by-reference to each value (for mutation),
+        // but Python doesn't allow mutable references to intrinsic types
+        // like int. Leaving unimplemented for now.
+        // .def("for_each_value", [](Buffer<> &b, py::args f, py::args other_buffers) -> void {
+        // }, py::arg("f"))
 
         .def("copy_to_host", [](Buffer<> &b) -> int {
             return b.copy_to_host(nullptr);
@@ -373,6 +437,7 @@ void define_buffer(py::module &m) {
         .def("__repr__", [](const Buffer<> &b) -> std::string {
             std::ostringstream o;
             o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+o<<" HOST:"<<b.data();
             return o.str();
         })
     ;

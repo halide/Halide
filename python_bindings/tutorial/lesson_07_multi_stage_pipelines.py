@@ -86,7 +86,7 @@ def main():
         # over a domain shifted inwards by one pixel, we won't be
         # asking the Halide routine to read out of bounds. We saw how
         # to do this in the previous lesson:
-        result = hl.Buffer(hl.UInt(8), input.width() - 2, input.height() - 2, 3)
+        result = hl.Buffer(hl.UInt(8), [input.width() - 2, input.height() - 2, 3])
         result.set_min([1, 1])
         output.realize(result)
 

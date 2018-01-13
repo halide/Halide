@@ -18,12 +18,12 @@
     - Pipeline
 - Wrappers Incomplete, Tests Incomplete:
     - BoundaryConditions
-    - Buffer
     - Func
     - ImageParam
     - IROperator
     - ParamMap
 - Wrappers Believed To Be Complete, But Tests Incomplete:
+    - Buffer
     - ExternFuncArgument
     - FuncRef
     - FuncTupleElementRef

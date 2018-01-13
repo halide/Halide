@@ -27,7 +27,7 @@ def test_compiletime_error():
     f = hl.Func('f')
     f[x, y] = hl.cast(hl.UInt(16), x + y)
     # Deliberate type-mismatch error
-    buf = hl.Buffer(hl.UInt(8), 2, 2)
+    buf = hl.Buffer(hl.UInt(8), [2, 2])
     try:
         f.realize(buf)
     except RuntimeError as e:
@@ -41,7 +41,7 @@ def test_runtime_error():
     f[x] = hl.cast(hl.UInt(8), x)
     f.bound(x, 0, 1)
     # Deliberate runtime error
-    buf = hl.Buffer(hl.UInt(8), 10)
+    buf = hl.Buffer(hl.UInt(8), [10])
     try:
         f.realize(buf)
     except RuntimeError as e:
@@ -53,7 +53,7 @@ def test_print_expr():
     x = hl.Var('x')
     f = hl.Func('f')
     f[x] = hl.print(hl.cast(hl.UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
-    buf = hl.Buffer(hl.UInt(8), 1)
+    buf = hl.Buffer(hl.UInt(8), [1])
     output = StringIO()
     with _redirect_stdout(output):
         f.realize(buf)
@@ -65,7 +65,7 @@ def test_print_when():
     x = hl.Var('x')
     f = hl.Func('f')
     f[x] = hl.print_when(x == 3, hl.cast(hl.UInt(8), x*x), 'is result at', x)
-    buf = hl.Buffer(hl.UInt(8), 10)
+    buf = hl.Buffer(hl.UInt(8), [10])
     output = StringIO()
     with _redirect_stdout(output):
         f.realize(buf)
@@ -223,38 +223,100 @@ def test_operator_order():
     1 + f[x]
 
 def test_ndarray_to_buffer():
-    import numpy
+    a0 = np.ones((200, 300), dtype=np.int32)
 
-    a0 = np.ones((200, 300), dtype=np.float32)
-    buf0 = hl.Buffer(a0, "float32_test_buffer")
-    assert buf0.type() == hl.Float(32)
-    assert buf0.name() == "float32_test_buffer"
-    assert buf0[0, 0] == 1.0
+    # Buffer always shares data (when possible) by default,
+    # and maintains the shape of the data source. (note that
+    # the ndarray is col-major by default!)
+    b0 = hl.Buffer(a0, "float32_test_buffer")
+    assert b0.type() == hl.Int(32)
+    assert b0.name() == "float32_test_buffer"
+    assert b0.all_equal(1)
 
-    a1 = np.ones((640, 480), dtype=np.uint8)
-    buf1 = hl.Buffer(a1, "uint8_test_buffer")
-    assert buf1.type() == hl.UInt(8)
+    assert b0.dim(0).min() == 0
+    assert b0.dim(0).max() == 199
+    assert b0.dim(0).extent() == 200
+    assert b0.dim(0).stride() == 300
+
+    assert b0.dim(1).min() == 0
+    assert b0.dim(1).max() == 299
+    assert b0.dim(1).extent() == 300
+    assert b0.dim(1).stride() == 1
+
+    a0[12, 34] = 56
+    assert b0[12, 34] == 56
+
+    b0[56, 34] = 12
+    assert a0[56, 34] == 12
 
 
 def test_buffer_to_ndarray():
-    import numpy
+    buf = hl.Buffer(hl.Int(16), [4, 4])
+    assert buf.type() == hl.Int(16)
+    buf.fill(0)
+    buf[1, 2] = 42
+    assert buf[1, 2] == 42
 
-    buf0 = hl.Buffer(hl.Float(32), 50, 50)
-    assert buf0.type() == hl.Float(32)
+    # Should share storage with buf
+    array_shared = np.array(buf, copy = False)
+    assert array_shared.shape == (4, 4)
+    assert array_shared.dtype == np.int16
+    assert array_shared[1, 2] == 42
 
-    a0 = np.array(buf0)
-    assert a0.shape == (50, 50)
-    assert a0.dtype == np.float32
+    # Should *not* share storage with buf
+    array_copied = np.array(buf, copy = True)
+    assert array_copied.shape == (4, 4)
+    assert array_copied.dtype == np.int16
+    assert array_copied[1, 2] == 42
 
-    buf1 = hl.Buffer(hl.Int(16), 50, 50)
-    assert buf1.type() == hl.Int(16)
-    buf1[24, 24] = 42
-    assert buf1[24, 24] == 42
+    buf[1, 2] = 3
+    assert array_shared[1, 2] == 3
+    assert array_copied[1, 2] == 42
 
-    a1 = np.array(buf1)
-    assert a1.shape == (50, 50)
-    assert a1.dtype == np.int16
-    assert a1[24, 24] == 42
+    # Ensure that Buffers that have nonzero mins get converted correctly,
+    # since the Python Buffer Protocol doesn't have the 'min' concept
+    cropped = buf.cropped(dimension = 0, min = 1, extent = 2)
+
+    # Should share storage with cropped (and buf)
+    cropped_array_shared = np.array(cropped, copy = False)
+    assert cropped_array_shared.shape == (2, 4)
+    assert cropped_array_shared.dtype == np.int16
+    assert cropped_array_shared[0, 2] == 3
+
+    # Should *not* share storage with anything
+    cropped_array_copied = np.array(cropped, copy = True)
+    assert cropped_array_copied.shape == (2, 4)
+    assert cropped_array_copied.dtype == np.int16
+    assert cropped_array_copied[0, 2] == 3
+
+    cropped[1, 2] = 5
+
+    assert buf[1, 2] == 5
+    assert array_shared[1, 2] == 5
+    assert array_copied[1, 2] == 42
+
+    assert cropped[1, 2] == 5
+    assert cropped_array_shared[0, 2] == 5
+    assert cropped_array_copied[0, 2] == 3
+
+
+def _assert_fn(e):
+    assert e
+
+def test_for_each_element():
+    buf = hl.Buffer(hl.Float(32), [3, 4])
+    for x in range(3):
+        for y in range(4):
+            buf[x, y] = x + y
+    # Can't use 'assert' in a lambda, but can call a fn that uses it.
+    buf.for_each_element(lambda pos, buf=buf: _assert_fn(buf[pos[0], pos[1]] == pos[0] + pos[1]))
+
+def test_fill_all_equal():
+    buf = hl.Buffer(hl.Int(32), [3, 4])
+    buf.fill(3)
+    assert buf.all_equal(3)
+    buf[1, 2] = 4
+    assert not buf.all_equal(3)
 
 if __name__ == "__main__":
     test_compiletime_error()
@@ -268,3 +330,5 @@ if __name__ == "__main__":
     test_basics3()
     test_ndarray_to_buffer()
     test_buffer_to_ndarray()
+    test_for_each_element()
+    test_fill_all_equal()

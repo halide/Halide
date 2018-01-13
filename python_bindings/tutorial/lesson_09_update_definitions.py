@@ -663,7 +663,7 @@ def main():
         #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
         local_sum = np.empty((1), dtype=np.int32)
 
-        c_result = hl.Buffer(hl.UInt(8), input.width(), input.height())
+        c_result = hl.Buffer(hl.UInt(8), [input.width(), input.height()])
         for yy in range(input.height()):
             for xx in range(input.width()):
                 # FIXME this loop is quite slow

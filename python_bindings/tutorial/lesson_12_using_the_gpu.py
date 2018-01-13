@@ -218,10 +218,8 @@ class MyPipeline:
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        output = hl.Buffer(hl.UInt(8),
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels())
+        output = hl.Buffer(hl.UInt(8), 
+                        [self.input.width(), self.input.height(), self.input.channels()])
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -278,7 +276,7 @@ def main():
     input = hl.Buffer(imread(image_path))
 
     # Allocated an image that will store the correct output
-    reference_output = hl.Buffer(hl.UInt(8), input.width(), input.height(), input.channels())
+    reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
 
     print("Testing performance on CPU:")
     p1 = MyPipeline(input)
