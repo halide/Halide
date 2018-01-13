@@ -1,25 +1,8 @@
 from __future__ import print_function
 from __future__ import division
 
-from contextlib import contextmanager
 import halide as hl
 import numpy as np
-import sys
-
-try:
-    from StringIO import StringIO  # Python2
-except ImportError:
-    from io import StringIO        # Python3
-
-# redirect_stdout() requires Python3, alas
-@contextmanager
-def _redirect_stdout(out):
-    old_out = sys.stdout
-    sys.stdout = out
-    try:
-        yield out
-    finally:
-        sys.stdout = old_out
 
 def test_compiletime_error():
     x = hl.Var('x')
@@ -48,30 +31,6 @@ def test_runtime_error():
         assert 'do not cover required region' in str(e)
     else:
         assert False, 'Did not see expected exception!'
-
-def test_print_expr():
-    x = hl.Var('x')
-    f = hl.Func('f')
-    f[x] = hl.print(hl.cast(hl.UInt(8), x), 'is what', 'the', 1, 'and', 3.1415, 'saw')
-    buf = hl.Buffer(hl.UInt(8), [1])
-    output = StringIO()
-    with _redirect_stdout(output):
-        f.realize(buf)
-        expected = '0 is what the 1 and 3.141500 saw\n'
-        actual = output.getvalue()
-        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
-
-def test_print_when():
-    x = hl.Var('x')
-    f = hl.Func('f')
-    f[x] = hl.print_when(x == 3, hl.cast(hl.UInt(8), x*x), 'is result at', x)
-    buf = hl.Buffer(hl.UInt(8), [10])
-    output = StringIO()
-    with _redirect_stdout(output):
-        f.realize(buf)
-        expected = '9 is result at 3\n'
-        actual = output.getvalue()
-        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
 
 def test_basics():
     input = hl.ImageParam(hl.UInt(16), 2, 'input')
@@ -170,7 +129,6 @@ def test_basics3():
     left += 5
     left += ss
 
-
 def test_float_or_int():
     x = hl.Var('x')
     i32, f32 =  hl.Int(32), hl.Float(32)
@@ -222,113 +180,11 @@ def test_operator_order():
     hl.Expr(1) + f[x]
     1 + f[x]
 
-def test_ndarray_to_buffer():
-    a0 = np.ones((200, 300), dtype=np.int32)
-
-    # Buffer always shares data (when possible) by default,
-    # and maintains the shape of the data source. (note that
-    # the ndarray is col-major by default!)
-    b0 = hl.Buffer(a0, "float32_test_buffer")
-    assert b0.type() == hl.Int(32)
-    assert b0.name() == "float32_test_buffer"
-    assert b0.all_equal(1)
-
-    assert b0.dim(0).min() == 0
-    assert b0.dim(0).max() == 199
-    assert b0.dim(0).extent() == 200
-    assert b0.dim(0).stride() == 300
-
-    assert b0.dim(1).min() == 0
-    assert b0.dim(1).max() == 299
-    assert b0.dim(1).extent() == 300
-    assert b0.dim(1).stride() == 1
-
-    a0[12, 34] = 56
-    assert b0[12, 34] == 56
-
-    b0[56, 34] = 12
-    assert a0[56, 34] == 12
-
-
-def test_buffer_to_ndarray():
-    buf = hl.Buffer(hl.Int(16), [4, 4])
-    assert buf.type() == hl.Int(16)
-    buf.fill(0)
-    buf[1, 2] = 42
-    assert buf[1, 2] == 42
-
-    # Should share storage with buf
-    array_shared = np.array(buf, copy = False)
-    assert array_shared.shape == (4, 4)
-    assert array_shared.dtype == np.int16
-    assert array_shared[1, 2] == 42
-
-    # Should *not* share storage with buf
-    array_copied = np.array(buf, copy = True)
-    assert array_copied.shape == (4, 4)
-    assert array_copied.dtype == np.int16
-    assert array_copied[1, 2] == 42
-
-    buf[1, 2] = 3
-    assert array_shared[1, 2] == 3
-    assert array_copied[1, 2] == 42
-
-    # Ensure that Buffers that have nonzero mins get converted correctly,
-    # since the Python Buffer Protocol doesn't have the 'min' concept
-    cropped = buf.cropped(dimension = 0, min = 1, extent = 2)
-
-    # Should share storage with cropped (and buf)
-    cropped_array_shared = np.array(cropped, copy = False)
-    assert cropped_array_shared.shape == (2, 4)
-    assert cropped_array_shared.dtype == np.int16
-    assert cropped_array_shared[0, 2] == 3
-
-    # Should *not* share storage with anything
-    cropped_array_copied = np.array(cropped, copy = True)
-    assert cropped_array_copied.shape == (2, 4)
-    assert cropped_array_copied.dtype == np.int16
-    assert cropped_array_copied[0, 2] == 3
-
-    cropped[1, 2] = 5
-
-    assert buf[1, 2] == 5
-    assert array_shared[1, 2] == 5
-    assert array_copied[1, 2] == 42
-
-    assert cropped[1, 2] == 5
-    assert cropped_array_shared[0, 2] == 5
-    assert cropped_array_copied[0, 2] == 3
-
-
-def _assert_fn(e):
-    assert e
-
-def test_for_each_element():
-    buf = hl.Buffer(hl.Float(32), [3, 4])
-    for x in range(3):
-        for y in range(4):
-            buf[x, y] = x + y
-    # Can't use 'assert' in a lambda, but can call a fn that uses it.
-    buf.for_each_element(lambda pos, buf=buf: _assert_fn(buf[pos[0], pos[1]] == pos[0] + pos[1]))
-
-def test_fill_all_equal():
-    buf = hl.Buffer(hl.Int(32), [3, 4])
-    buf.fill(3)
-    assert buf.all_equal(3)
-    buf[1, 2] = 4
-    assert not buf.all_equal(3)
-
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
-    test_print_expr()
-    test_print_when()
     test_float_or_int()
     test_operator_order()
     test_basics()
     test_basics2()
     test_basics3()
-    test_ndarray_to_buffer()
-    test_buffer_to_ndarray()
-    test_for_each_element()
-    test_fill_all_equal()

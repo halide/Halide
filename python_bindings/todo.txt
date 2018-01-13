@@ -1,5 +1,6 @@
 ## PYBIND TODO:
 
+- There is (apparently?) no way to override the logical "and" and "or" operators in Python to work with Expr; you must use the bitwise | and & instead. Worse, using the logical operators just short-circuits weirdly; it would be nice if we could at least make using and/or with Expr an error.
 - BoundaryConditions isn't in a sub-name. Should it be?
 - minimize Py dependencies in tests. (scipy?)
 - All docstrings have been removed; if we re-add them, we should find a way to import them from Doxygen output to ensure they are fresh.
@@ -20,7 +21,6 @@
     - BoundaryConditions
     - Func
     - ImageParam
-    - IROperator
     - ParamMap
 - Wrappers Believed To Be Complete, But Tests Incomplete:
     - Buffer
@@ -28,6 +28,7 @@
     - FuncRef
     - FuncTupleElementRef
     - InlineReductions
+    - IROperator
     - LoopLevel
     - RDom
     - RVar

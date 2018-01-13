@@ -1536,8 +1536,8 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	CC=`echo ${CC} | sed 's/ccache //'` \
 	bazel build --verbose_failures :all
 
-.PHONY: test_python
-test_python: distrib
+.PHONY: test_python2
+test_python2: distrib
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
@@ -1546,8 +1546,8 @@ test_python: distrib
 		PYTHON=python \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
-.PHONY: test_python3
-test_python3: distrib
+.PHONY: test_python
+test_python: distrib
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \

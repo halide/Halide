@@ -40,8 +40,8 @@ def main():
     color_image = hl.Func()
     c = hl.Var("c")
     color_image[x, y, c] = hl.select(c == 0, 245, # Red value
-                                  c == 1, 42,  # Green value
-                                  132)        # Blue value
+                                     c == 1, 42,  # Green value
+                                     132)        # Blue value
 
     # This method is often convenient because it makes it easy to
     # operate on this hl.Func in a way that treats each item in the

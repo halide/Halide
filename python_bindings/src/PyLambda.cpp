@@ -7,7 +7,7 @@ void define_lambda(py::module &m) {
     // TODO: 'lambda' is a reserved word in Python, so we
     // can't use it for a function. Using 'lambda_func' for now.
     m.def("lambda_func", [](py::args args) -> Func {
-        std::vector<Var> vars = args_to_vector<Var>(args, 0, 1);
+        auto vars = args_to_vector<Var>(args, 0, 1);
         Expr e = args[args.size() - 1].cast<Expr>();
         Func f("lambda" + Internal::unique_name('_'));
         f(vars) = e;
