@@ -165,7 +165,7 @@ def main():
         arg_max[()] = (0, input[0])
 
         # Update definition.
-        r = hl.RDom(1, 99)
+        r = hl.RDom([(1, 99)])
         old_index = arg_max[()][0]
         old_max   = arg_max[()][1]
         new_index = hl.select(old_max > input[r], r, old_index)
@@ -268,7 +268,7 @@ def main():
         mandelbrot[x, y, t] = Complex(0.0, 0.0)
 
         # We'll use an update definition to take 12 steps.
-        r = hl.RDom(1, 12)
+        r = hl.RDom([(1, 12)])
         current = Complex(mandelbrot[x, y, r-1])
 
         # The following line uses the complex multiplication and

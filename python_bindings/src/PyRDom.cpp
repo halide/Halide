@@ -27,16 +27,7 @@ void define_rdom(py::module &m) {
         .def(py::init<>())
         .def(py::init<Buffer<>>(), py::arg("buffer"))
         .def(py::init<OutputImageParam>(), py::arg("image_param"))
-        .def(py::init([](py::args args) -> RDom {
-            std::string name;
-            size_t end_offset = 0;
-            if (args.size() % 2) {
-                // If number of args is odd, last arg must be a string.
-                name = args[args.size()-1].cast<std::string>();
-                end_offset = 1;
-            }
-            return RDom(args_to_pair_vector<Expr,Expr>(args, 0, end_offset), name);
-        }))
+        .def(py::init<const std::vector<std::pair<Expr, Expr>> &, std::string>(), py::arg("ranges"), py::arg("name") = "")
         .def("domain", &RDom::domain)
         .def("defined", &RDom::defined)
         .def("same_as", &RDom::same_as)

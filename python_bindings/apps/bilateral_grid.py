@@ -27,7 +27,7 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     clamped = hl.repeat_edge(input)
 
     # Construct the bilateral grid
-    r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')
+    r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
     val = clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
     val = hl.clamp(val, 0.0, 1.0)
 

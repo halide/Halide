@@ -156,7 +156,7 @@ def main():
         # But it's more manageable and more flexible to put the loop
         # in the generated code. We do this by defining a "reduction
         # domain" and using it inside an update definition:
-        r = hl.RDom(0, 50)
+        r = hl.RDom([(0, 50)])
         f[x, r] = f[x, r] * f[x, r]
         halide_result = f.realize(100, 100)
 
@@ -202,7 +202,7 @@ def main():
         histogram[x] = 0
 
         # Define a multi-dimensional reduction domain over the input image:
-        r = hl.RDom(0, input.width(), 0, input.height())
+        r = hl.RDom([(0, input.width()), (0, input.height())])
 
         # For every point in the reduction domain, increment the
         # histogram bucket corresponding to the intensity of the
@@ -593,7 +593,7 @@ def main():
 
             producer, consumer = hl.Func("producer"), hl.Func("consumer")
 
-            r = hl.RDom(0, 5)
+            r = hl.RDom([(0, 5)])
             producer[x] = x * 17
             consumer[x] = x + 10
             consumer[x] += r + producer[x + r]
@@ -640,7 +640,7 @@ def main():
         clamped = hl.repeat_edge(input)
 
         # Define a 5x5 box that starts at (-2, -2)
-        r = hl.RDom(-2, 5, -2, 5)
+        r = hl.RDom([(-2, 5), (-2, 5)])
 
         # Compute the 5x5 sum around each pixel.
         local_sum = hl.Func("local_sum")
@@ -699,7 +699,7 @@ def main():
         # innermost into their consumer. The most useful one is
         # "sum".
         f1 = hl.Func ("f1")
-        r = hl.RDom (0, 100)
+        r = hl.RDom([(0, 100)])
         f1[x] = hl.sum(r + x) * 7
 
         # Sum creates a small anonymous hl.Func to do the reduction. It's equivalent to:
@@ -756,7 +756,7 @@ def main():
         y_clamped = hl.clamp(y, 0, input.height()-1)
         clamped[x, y] = input[x_clamped, y_clamped]
 
-        box = hl.RDom(-2, 5, -2, 5)
+        box = hl.RDom([(-2, 5), (-2, 5)])
         # Compute the local maximum minus the local minimum:
         spread = hl.Func("spread")
         spread[x, y] = (maximum(clamped(x + box.x, y + box.y)) -

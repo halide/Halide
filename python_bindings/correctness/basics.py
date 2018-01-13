@@ -126,7 +126,7 @@ def test_basics2():
                           hl.clamp(y, 0, input.height()-1),0]
 
     # Construct the bilateral grid
-    r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')
+    r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
     val0 = clamped[x * s_sigma, y * s_sigma]
     val00 = clamped[x * s_sigma * hl.cast(hl.Int(32), 1), y * s_sigma * hl.cast(hl.Int(32), 1)]
     val22 = clamped[x * s_sigma - hl.cast(hl.Int(32), s_sigma//2),
@@ -158,7 +158,7 @@ def test_basics3():
                           hl.clamp(y, 0, input.height()-1),0]
 
     # Construct the bilateral grid
-    r = hl.RDom(0, s_sigma, 0, s_sigma, 'r')
+    r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
     val = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
     val = hl.clamp(val, 0.0, 1.0)
     zi = hl.cast(hl.Int(32), (val / r_sigma) + 0.5)
