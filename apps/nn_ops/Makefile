@@ -24,9 +24,9 @@ $(BIN)/%/Convolution.o: $(BIN)/Convolution.generator
 	@mkdir -p $(@D)
 	$^ -g Convolution -o $(BIN)/$* -e o,h -f Convolution target=$(HL_TARGET)
 
-$(BIN)/%/Convolution: Convolution.cpp $(BIN)/%/Convolution.o
+$(BIN)/%/Convolution: Convolution.cpp common_reference.cpp $(BIN)/%/Convolution.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 Convolution.cpp $(BIN)/$*/Convolution.o -o $(BIN)/$*/Convolution $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 Convolution.cpp common_reference.cpp $(BIN)/$*/Convolution.o -o $(BIN)/$*/Convolution $(LDFLAGS-$*)
 
 $(BIN)/DepthwiseConvolution.generator: DepthwiseConvolution_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -48,9 +48,9 @@ $(BIN)/%/DepthwiseConvolution_8.o: $(BIN)/DepthwiseConvolution.generator
 	@mkdir -p $(@D)
 	$^ -g DepthwiseConvolution -o $(BIN)/$* -e o,h -f DepthwiseConvolution_8 target=$(HL_TARGET) depth_multiplier=8
 
-$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o
+$(BIN)/%/DepthwiseConvolution: DepthwiseConvolution.cpp common_reference.cpp $(BIN)/%/DepthwiseConvolution_1.o $(BIN)/%/DepthwiseConvolution_2.o $(BIN)/%/DepthwiseConvolution_4.o $(BIN)/%/DepthwiseConvolution_8.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 DepthwiseConvolution.cpp $(BIN)/$*/DepthwiseConvolution_1.o $(BIN)/$*/DepthwiseConvolution_2.o $(BIN)/$*/DepthwiseConvolution_4.o $(BIN)/$*/DepthwiseConvolution_8.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 DepthwiseConvolution.cpp common_reference.cpp $(BIN)/$*/DepthwiseConvolution_1.o $(BIN)/$*/DepthwiseConvolution_2.o $(BIN)/$*/DepthwiseConvolution_4.o $(BIN)/$*/DepthwiseConvolution_8.o -o $(BIN)/$*/DepthwiseConvolution $(LDFLAGS-$*)
 
 $(BIN)/Im2col.generator: Im2col_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -72,9 +72,9 @@ $(BIN)/%/MatrixMultiply.o: $(BIN)/MatrixMultiply.generator
 	@mkdir -p $(@D)
 	$^ -g MatrixMultiply -o $(BIN)/$* -e o,h -f MatrixMultiply target=$(HL_TARGET)
 
-$(BIN)/%/MatrixMultiply: MatrixMultiply.cpp $(BIN)/%/MatrixMultiply.o
+$(BIN)/%/MatrixMultiply: MatrixMultiply.cpp common_reference.cpp $(BIN)/%/MatrixMultiply.o
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MatrixMultiply.cpp $(BIN)/$*/MatrixMultiply.o -o $(BIN)/$*/MatrixMultiply $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 MatrixMultiply.cpp common_reference.cpp $(BIN)/$*/MatrixMultiply.o -o $(BIN)/$*/MatrixMultiply $(LDFLAGS-$*)
 
 $(BIN)/MaxPool.generator: MaxPool_generator.cpp common.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
