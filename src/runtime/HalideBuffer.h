@@ -1225,7 +1225,7 @@ public:
     bool contains(const std::vector<int> &coords) const {
         assert(coords.size() <= (size_t)dimensions());
         for (size_t i = 0; i < coords.size(); i++) {
-            if (coords[i] < dim(i).min() || coords[i] > dim(i).max()) {
+            if (coords[i] < dim((int) i).min() || coords[i] > dim((int) i).max()) {
                 return false;
             }
         }
