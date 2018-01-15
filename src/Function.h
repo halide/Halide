@@ -137,6 +137,11 @@ public:
     /** Get the name of the function. */
     EXPORT const std::string &name() const;
 
+    /** If this is a wrapper of another func, created by a chain of in
+     * or clone_in calls, returns the name of the original
+     * Func. Otherwise returns the name. */
+    EXPORT const std::string &parent_name() const;
+
     /** Get a mutable handle to the init definition. */
     EXPORT Definition &definition();
 

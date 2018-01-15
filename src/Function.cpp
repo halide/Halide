@@ -58,7 +58,7 @@ public:
 }
 
 struct FunctionContents {
-    std::string name;
+    std::string name, parent_name;
     std::vector<Type> output_types;
 
     // The names of the dimensions of the Function. Corresponds to the
@@ -289,6 +289,7 @@ Function::Function(const std::string &n) {
     contents.strong = new FunctionGroup;
     contents.strong->members.resize(1);
     contents->name = n;
+    contents->parent_name = n;
 }
 
 // Return deep-copy of ExternFuncArgument 'src'
@@ -326,6 +327,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     debug(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
 
     copy->name = contents->name;
+    copy->parent_name = contents->parent_name;
     copy->args = contents->args;
     copy->output_types = contents->output_types;
     copy->debug_file = contents->debug_file;
@@ -428,6 +430,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents.strong = new FunctionGroup;
         contents.strong->members.resize(1);
         contents->name = unique_name('f');
+        contents->parent_name = contents->name;
     }
 
     user_assert(!contents->init_def.defined())
@@ -636,7 +639,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
-
             Dim d = {v, ForType::Serial, DeviceAPI::None,
                      pure ? Dim::Type::PureRVar : Dim::Type::ImpureRVar};
             r.schedule().dims().push_back(d);
@@ -726,6 +728,10 @@ void Function::mutate(IRMutator2 *mutator) {
 
 const std::string &Function::name() const {
     return contents->name;
+}
+
+const std::string &Function::parent_name() const {
+    return contents->parent_name;
 }
 
 Definition &Function::definition() {

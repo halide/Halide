@@ -148,6 +148,7 @@ class KeyInfo {
     Expr key_size_expr;
     const std::string &top_level_name;
     const std::string &function_name;
+    int memoize_instance;
 
     size_t parameters_alignment() {
         int32_t max_alignment = 0;
@@ -181,8 +182,10 @@ class KeyInfo {
 // It was deleted as part of the address_of intrinsic cleanup).
 
 public:
-  KeyInfo(const Function &function, const std::string &name)
-        : top_level_name(name), function_name(function.name())
+    KeyInfo(const Function &function, const std::string &name, int memoize_instance)
+        : top_level_name(name),
+          function_name(function.parent_name()),
+          memoize_instance(memoize_instance)
     {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
@@ -213,10 +216,7 @@ public:
         // Store a pointer to a string identifying the filter and
         // function. Assume this will be unique due to CSE. This can
         // break with loading and unloading of code, though the name
-        // mechanism can also break in those conditions. For JIT, a
-        // counter is needed as the address may be reused. This isn't
-        // a problem when using full names as the function names
-        // already are uniquefied by a counter.
+        // mechanism can also break in those conditions.
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
@@ -225,9 +225,8 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static std::atomic<int> memoize_instance {0};
         writes.push_back(Store::make(key_name,
-                                     memoize_instance++,
+                                     memoize_instance,
                                      (index / Int(32).bytes()),
                                      Parameter(), const_true()));
         alignment += 4;
@@ -308,12 +307,15 @@ public:
 class InjectMemoization : public IRMutator2 {
 public:
     const std::map<std::string, Function> &env;
+    int memoize_instance;
     const std::string &top_level_name;
     const std::vector<Function> &outputs;
 
-  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name,
-                    const std::vector<Function> &outputs) :
-    env(e), top_level_name(name), outputs(outputs) {}
+    InjectMemoization(const std::map<std::string, Function> &e,
+                      int memoize_instance,
+                      const std::string &name,
+                      const std::vector<Function> &outputs) :
+        env(e), memoize_instance(memoize_instance), top_level_name(name), outputs(outputs) {}
 private:
 
     using IRMutator2::visit;
@@ -345,7 +347,7 @@ private:
 
             Stmt mutated_body = mutate(op->body);
 
-            KeyInfo key_info(f, top_level_name);
+            KeyInfo key_info(f, top_level_name, memoize_instance);
 
             std::string cache_key_name = op->name + ".cache_key";
             std::string cache_result_name = op->name + ".cache_result";
@@ -407,7 +409,7 @@ private:
                 return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
             } else {
                 const Function f(iter->second);
-                KeyInfo key_info(f, top_level_name);
+                KeyInfo key_info(f, top_level_name, memoize_instance);
 
                 std::string cache_key_name = op->name + ".cache_key";
                 std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
@@ -427,15 +429,20 @@ private:
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
                         const std::string &name,
                         const std::vector<Function> &outputs) {
-    InjectMemoization injector(env, name, outputs);
+    // Cache keys use the addresses of names of Funcs. For JIT, a
+    // counter for the pipeline is needed as the address may be reused
+    // across pipelines. This isn't a problem when using full names as
+    // the function names already are uniquefied by a counter.
+    static std::atomic<int> memoize_instance {0};
+
+    InjectMemoization injector(env, memoize_instance++, name, outputs);
 
     return injector.mutate(s);
 }
 
 class RewriteMemoizedAllocations : public IRMutator2 {
 public:
-    RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
-        : env(e) {}
+    RewriteMemoizedAllocations(const std::map<std::string, Function> &e) : env(e) {}
 
 private:
     const std::map<std::string, Function> &env;
@@ -520,6 +527,7 @@ private:
 };
 
 Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env) {
+
     RewriteMemoizedAllocations rewriter(env);
 
     return rewriter.mutate(s);
