@@ -23,6 +23,12 @@ OPTIMIZE ?= -O3
 CCFLAGS=$(shell $(PYTHON)-config --cflags) -I $(PYBIND11_PATH)/include -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 -fPIC -fvisibility=hidden $(OPTIMIZE)
 LDFLAGS=$(shell $(PYTHON)-config --ldflags) -lz
 
+ifeq ($(UNAME), Darwin)
+	# Some Mac Python3 installs incorrectly include "-lintl" in --ldflags, 
+	# which isn't needed and may be missing. Just strip it.
+	LDFLAGS := $(filter-out -lintl,$(LDFLAGS))
+endif
+
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/py_%.o)
 
