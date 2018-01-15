@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 all: $(BIN)/process
 
-TIMING_ITERATIONS ?= 5
+TIMING_ITERATIONS ?= 50
 
 $(BIN)/camera_pipe_exec: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)

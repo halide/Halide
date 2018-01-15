@@ -11,6 +11,7 @@
 #include <set>
 #include <queue>
 #include <algorithm>
+#include <fstream>
 
 // TODO: overview of algorithm
 
@@ -34,8 +35,11 @@ struct FunctionDAG {
     struct Node {
         Function func;
 
-        // The amount of compute done per point evaluated.
+        // The amount of compute done per point evaluated, including the need to generate the call.
         double compute;
+
+        // The amount of compute done per point evaluated if inlined.
+        double compute_if_inlined;
 
         // The memory cost of loading all of this Func, in terms of the same symbolic region
         Expr memory;
@@ -138,6 +142,7 @@ struct FunctionDAG {
 
             // This is where the cost model is encoded!
             node.compute = counter.leaves;
+            node.compute_if_inlined = std::max(0, counter.leaves - consumer.dimensions());
             Expr balance = cast<double>(params.balance), llc = cast<double>(params.last_level_cache_size);
             Expr cost_per_load = (balance / llc) * min(memory_allocated, llc);
             node.memory = simplify(memory_allocated * cost_per_load);
@@ -176,8 +181,8 @@ struct FunctionDAG {
                     edge.producer = env[p.first];
                     edge.bounds = p.second.bounds;
                     for (Interval &i : edge.bounds) {
-                        i.max = apply_param_estimates.mutate(i.max);
-                        i.min = apply_param_estimates.mutate(i.min);
+                        i.max = simplify(apply_param_estimates.mutate(i.max));
+                        i.min = simplify(apply_param_estimates.mutate(i.min));
                     }
                     edge.calls = counter.calls[edge.producer.name()];
                     edges.emplace_back(std::move(edge));
@@ -206,6 +211,7 @@ struct FunctionDAG {
                 debug(0) << "    " << i.min << ", " << i.max << "\n";
             }
             debug(0) << "  Arithmetic cost: " << n.compute << "\n";
+            debug(0) << "  Inlined cost: " << n.compute_if_inlined << "\n";
         }
         for (const Edge &e : edges) {
             debug(0) << "Edge: " << e.producer.name() << " -> " << e.consumer.name() << "\n"
@@ -273,12 +279,58 @@ struct Group {
     vector<FunctionState> funcs;
     float parallelism;
 
+    bool may_partition;
+    // Everything in this group is inlined into the sole output
+    bool inlined;
+
     bool fully_scheduled() const {
         return inlined || funcs.size() == 1;
     }
 
-    // Everything in this group is inlined into the sole output
-    bool inlined;
+    uint64_t hash() const {
+        uint64_t result = inlined;
+        for (const auto &fs : funcs) {
+            result *= 37;
+            result ^= uintptr_t(fs.func.get_contents().get());
+            result *= 37;
+            result ^= fs.compute_depth;
+            if (fs.compute_depth) {
+                result *= 37;
+                result ^= uintptr_t(fs.parent.get_contents().get());
+            }
+            for (const auto &s : fs.splits) {
+                for (int i : s) {
+                    result *= 37;
+                    result ^= i;
+                }
+            }
+            for (int i : fs.loop_order) {
+                result *= 37;
+                result ^= i;
+            }
+        }
+        return result;
+    }
+
+    int64_t eval_bound(Expr e, const map<string, Expr> &concrete_bounds) {
+        if (const int64_t *i = as_const_int(e)) {
+            return *i;
+        } else if (const Variable *v = e.as<Variable>()) {
+            return eval_bound(concrete_bounds.at(v->name), concrete_bounds);
+        } else if (const Add *op = e.as<Add>()) {
+            return eval_bound(op->a, concrete_bounds) + eval_bound(op->b, concrete_bounds);
+        } else if (const Sub *op = e.as<Sub>()) {
+            return eval_bound(op->a, concrete_bounds) - eval_bound(op->b, concrete_bounds);
+        } else if (const Mul *op = e.as<Mul>()) {
+            return eval_bound(op->a, concrete_bounds) * eval_bound(op->b, concrete_bounds);
+        } else if (const Max *op = e.as<Max>()) {
+            return std::max(eval_bound(op->a, concrete_bounds), eval_bound(op->b, concrete_bounds));
+        } else if (const Min *op = e.as<Min>()) {
+            return std::min(eval_bound(op->a, concrete_bounds), eval_bound(op->b, concrete_bounds));
+        } else {
+            return eval_bound(simplify(substitute(concrete_bounds, e)), concrete_bounds);
+        }
+    }
 
     void compute_bounds_and_costs(const FunctionDAG &dag) {
         map<Function, size_t, Function::Compare> group_members;
@@ -294,103 +346,96 @@ struct Group {
             }
         }
 
-        if (inlined) {
-            internal_assert(outputs.size() == 1);
-            auto output_state = *outputs.begin();
+        // Compute the support region for each Func
+        map<string, Expr> concrete_bounds;
 
-            // Figure out the number of times every Func gets evaluated
-            map<Function, int64_t, Function::Compare> times_called;
+        for (auto &consumer : funcs) {
+            internal_assert(dag.incoming_edges.count(consumer.func));
 
-            // Figure out the number of points computed of the output
-            int64_t points_computed = 1;
-            for (int i = 0; i < output_state->func.dimensions(); i++) {
-                int extent = output_state->compute_bounds[i].second - output_state->compute_bounds[i].first + 1;
-                if (i == 0) {
-                    // Assume vectorization by 16
-                    points_computed *= ((extent + 15) / 16) * 16;
-                } else {
-                    points_computed *= extent;
-                }
+            const auto *node = dag.node_map.at(consumer.func);
+            internal_assert(node->region.size() == (size_t)consumer.func.dimensions());
+            internal_assert(consumer.compute_bounds.size() == (size_t)consumer.func.dimensions());
+            for (int i = 0; i < consumer.func.dimensions(); i++) {
+                concrete_bounds[node->region[i].min.as<Variable>()->name] = consumer.compute_bounds[i].first;
+                concrete_bounds[node->region[i].max.as<Variable>()->name] = consumer.compute_bounds[i].second;
             }
 
-            times_called[output_state->func] = points_computed;
-            for (const auto &edge : dag.edges) {
-                if (group_members.count(edge.producer) && group_members.count(edge.consumer)) {
-                    times_called[edge.producer] += times_called[edge.consumer] * edge.calls;
-                }
-            }
+            for (const auto *edge : dag.incoming_edges.at(consumer.func)) {
+                if (!group_members.count(edge->producer)) continue; // The producer is in another group.
+                // Find the producer
+                FunctionState &producer = funcs[group_members.at(edge->producer)];
 
-            // Accumulate a total cost
-            double total_compute = 0;
-            for (const auto &func : funcs) {
-                // Discount the cost by all the call nodes that went away due to inlining.
-                double discount = func.func.dimensions(); // TODO: this assumes the expression cost just count leaves. refactor
-                total_compute += times_called[func.func] * (dag.node_map.at(func.func)->compute - discount);
-            }
+                internal_assert(edge->consumer.same_as(consumer.func));
+                internal_assert(edge->producer.same_as(producer.func));
+                internal_assert(!producer.is_output);
 
-            // Attribute it all to the output
-            output_state->compute = total_compute;
-        } else {
-
-            map<string, Expr> concrete_bounds;
-
-            for (auto &consumer : funcs) {
-                internal_assert(dag.incoming_edges.count(consumer.func));
-
-                const auto *node = dag.node_map.at(consumer.func);
-                internal_assert(node->region.size() == (size_t)consumer.func.dimensions());
-                internal_assert(consumer.compute_bounds.size() == (size_t)consumer.func.dimensions());
-                int64_t points_computed = 1;
-                for (int i = 0; i < consumer.func.dimensions(); i++) {
-                    concrete_bounds[node->region[i].min.as<Variable>()->name] = consumer.compute_bounds[i].first;
-                    concrete_bounds[node->region[i].max.as<Variable>()->name] = consumer.compute_bounds[i].second;
-                    int extent = consumer.compute_bounds[i].second - consumer.compute_bounds[i].first + 1;
-                    if (i == 0) {
-                        // Assume vectorization
-                        points_computed *= ((extent + 7) / 8) * 8;
-                    } else {
-                        points_computed *= extent;
-                    }
+                bool first_consumer = producer.compute_bounds.empty();
+                if (first_consumer) {
+                    producer.compute_bounds.resize(producer.func.dimensions());
                 }
 
-                // Record arithmetic cost
-                consumer.compute = points_computed * node->compute;
-
-                for (const auto *edge : dag.incoming_edges.at(consumer.func)) {
-                    if (!group_members.count(edge->producer)) continue; // The producer is in another group.
-                    // Find the producer
-                    FunctionState &producer = funcs[group_members.at(edge->producer)];
-
-                    internal_assert(edge->consumer.same_as(consumer.func));
-                    internal_assert(edge->producer.same_as(producer.func));
-                    internal_assert(!producer.is_output);
-
-                    bool first_consumer = producer.compute_bounds.empty();
+                // Expand the bounds of the producer using the bounds
+                // relationship encoded in the edge.
+                for (int i = 0; i < producer.func.dimensions(); i++) {
+                    Interval interval = edge->bounds[i];
+                    int64_t min = eval_bound(interval.min, concrete_bounds);
+                    int64_t max = eval_bound(interval.max, concrete_bounds);
                     if (first_consumer) {
-                        producer.compute_bounds.resize(producer.func.dimensions());
-                    }
-
-                    // Expand the bounds of the producer using the bounds
-                    // relationship encoded in the edge.
-                    for (int i = 0; i < producer.func.dimensions(); i++) {
-                        Interval interval = edge->bounds[i];
-                        interval.min = simplify(substitute(concrete_bounds, interval.min));
-                        interval.max = simplify(substitute(concrete_bounds, interval.max));
-                        const int64_t *i_max = as_const_int(interval.max);
-                        const int64_t *i_min = as_const_int(interval.min);
-                        internal_assert(i_min) << interval.min;
-                        internal_assert(i_max) << interval.max;
-                        if (first_consumer) {
-                            producer.compute_bounds[i] = {(int)(*i_min), (int)(*i_max)};
-                        } else {
-                            producer.compute_bounds[i].first = std::min(producer.compute_bounds[i].first, (int)(*i_min));
-                            producer.compute_bounds[i].second = std::max(producer.compute_bounds[i].second, (int)(*i_max));
-                        }
+                        producer.compute_bounds[i] = {(int)(min), (int)(max)};
+                    } else {
+                        producer.compute_bounds[i].first = std::min(producer.compute_bounds[i].first, (int)(min));
+                        producer.compute_bounds[i].second = std::max(producer.compute_bounds[i].second, (int)(max));
                     }
                 }
             }
+        }
 
-            // Recompute memory costs using these new bounds.
+        // Use these bounds and number-of-call relationships to
+        // figure out the minimum number of points computed for
+        // each producer, and thus best-case compute arithmetic cost.
+        map<Function, double, Function::Compare> points_computed;
+        for (auto &f : funcs) {
+            double calls = 1;
+            double cost = 0;
+            const auto *node = dag.node_map.at(f.func);
+            if (f.is_output || !inlined) {
+                // Consider explicitly realizing it
+                for (int i = 0; i < f.func.dimensions(); i++) {
+                    int extent = f.compute_bounds[i].second - f.compute_bounds[i].first + 1;
+                    if (i == 0) {
+                        // Assume vectorization by 16
+                        calls *= ((extent + 15) / 16) * 16;
+                    } else {
+                        calls *= extent;
+                    }
+                }
+                cost = calls * node->compute;
+            }
+
+            // Now consider inlining it
+            if (!f.is_output) {
+                double calls_if_inlined = 0;
+                for (const auto *edge : dag.outgoing_edges.at(f.func)) {
+                    calls_if_inlined += points_computed[edge->consumer] * edge->calls;
+                }
+                // Apply a compute discount if inlined for skipping the call node.
+                double cost_if_inlined = calls_if_inlined * node->compute_if_inlined;
+                // debug(0) << f.func.name() << ": " << calls << ", " << calls_if_inlined << ", " << cost << ", " << cost_if_inlined << "\n";
+                if (inlined) {
+                    calls = calls_if_inlined;
+                    cost = cost_if_inlined;
+                } else {
+                    calls = std::min(calls, calls_if_inlined);
+                    cost = std::min(cost, cost_if_inlined);
+                }
+            }
+
+            points_computed[f.func] = calls;
+            f.compute = cost;
+        }
+
+        if (!inlined) {
+            // Recompute memory costs using the new bounds.
             for (auto &func : funcs) {
                 internal_assert(dag.node_map.count(func.func));
                 Expr memory = simplify(substitute(concrete_bounds, dag.node_map.at(func.func)->memory));
@@ -403,18 +448,110 @@ struct Group {
 };
 
 struct State {
-    vector<Group> groups;
-    double redundant_compute_cost, memory_cost;
+    vector<std::shared_ptr<Group>> groups;
+    double redundant_compute_cost, essential_compute_cost, memory_cost;
+
+    bool last_action_was_fuse;
+    int last_fuse_dim;
 
     bool cheaper_than(const State &other) {
         return (redundant_compute_cost + memory_cost) < (other.redundant_compute_cost + other.memory_cost);
     }
 
+    uint64_t hash() const {
+        uint64_t result = groups.size();
+        for (auto &g : groups) {
+            result = (result * 1234567) ^ g->hash();
+        }
+        return result;
+    }
+
+    void dump_to_postscript(const std::string &filename) const {
+        std::ofstream out(filename);
+        size_t y = 0, x = 0;
+        out << "(Courier) findfont 12 scalefont setfont\n"
+            << "<</PageSize [800 800] >> setpagedevice\n";
+
+        struct ContainingLoop {
+            string func;
+            int depth;
+            int start_y;
+            int width;
+            void end(std::ofstream &out, int x, int end_y) {
+                int start_x = x - width/2;
+                int end_x = x + width/2;
+                out << start_x << " " << start_y << " moveto\n"
+                    << start_x << " " << end_y << " lineto\n"
+                    << end_x << " " << end_y << " lineto\n"
+                    << end_x << " " << start_y << " lineto\n"
+                    << start_x << " " << start_y << " lineto\n";
+            }
+        };
+
+        vector<ContainingLoop> containing_loops;
+
+        y += 10;
+        x += 110;
+
+        for (const auto &g : groups) {
+            const auto &f = g->funcs[0];
+            if (f.compute_depth == 0) {
+                containing_loops.clear();
+            } else {
+                while (containing_loops.back().func != f.parent.name()) {
+                    containing_loops.back().end(out, x, y);
+                    containing_loops.pop_back();
+                    y += 10;
+                }
+                while (containing_loops.back().depth > f.compute_depth) {
+                    containing_loops.back().end(out, x, y);
+                    containing_loops.pop_back();
+                    y += 10;
+                }
+                while (containing_loops.back().depth < f.compute_depth) {
+                    ContainingLoop l = containing_loops.back();
+                    l.depth++;
+                    l.start_y = y;
+                    l.width = 200 - containing_loops.size() * 20;
+                    y += 10;
+                    containing_loops.push_back(l);
+                }
+            }
+
+            for (int i = 0; i < (int)f.loop_order.size() + (g->funcs.size() > 1); i++) {
+                ContainingLoop l;
+                l.func = f.func.name();
+                l.depth = i + 1;
+                l.start_y = y;
+                l.width = 200 - containing_loops.size() * 20;
+                y += 10;
+                containing_loops.push_back(l);
+            }
+
+            for (const auto &f : g->funcs) {
+                y += 5;
+                int left = x - (f.func.name().size() * 7) / 2;
+                out << left << " " << y << " moveto\n"
+                    << '(' << f.func.name() << ") show\n";
+                y += 20;
+            }
+        }
+
+        while (!containing_loops.empty()) {
+            containing_loops.back().end(out, x, y);
+            containing_loops.pop_back();
+            y += 10;
+        }
+
+        out << "stroke showpage\n";
+        out.close();
+    }
+
     void dump() const {
         double total_compute = 0;
         for (const auto &g : groups) {
-            for (const auto &f : g.funcs) {
-                total_compute += f.compute * g.compute_instances;
+            for (const auto &f : g->funcs) {
+                total_compute += f.compute * g->compute_instances;
             }
         }
         debug(0) << "State: \n";
@@ -427,11 +564,11 @@ struct State {
         debug(0) << "  compute multiplier: " << (1 + redundant_compute_cost / (total_compute - redundant_compute_cost)) << "\n";
         for (const auto &g : groups) {
             debug(0) << "  Group " << counter++ << ":\n"
-                     << "    parallelism: " << g.parallelism << "\n"
-                     << "    compute instances: " << g.compute_instances << "\n"
-                     << "    store instances: " << g.store_instances << "\n"
-                     << "    inlined: " << g.inlined << "\n";
-            for (const auto &f : g.funcs) {
+                     << "    parallelism: " << g->parallelism << "\n"
+                     << "    compute instances: " << g->compute_instances << "\n"
+                     << "    store instances: " << g->store_instances << "\n"
+                     << "    inlined: " << g->inlined << "\n";
+            for (const auto &f : g->funcs) {
                 string parent = "none";
                 if (f.compute_depth) parent = f.parent.name();
                 debug(0) << "    Function: " << f.func.name() << "\n"
@@ -445,12 +582,11 @@ struct State {
                 for (const auto &i : f.compute_bounds) {
                     debug(0) << "[" << i.first << ", " << i.second << "] ";
                 }
-                debug(0) << "      store bounds: ";
+                debug(0) << "\n      store bounds: ";
                 for (const auto &i : f.store_bounds) {
                     debug(0) << "[" << i.first << ", " << i.second << "] ";
                 }
-                debug(0) << "\n"
-                         << "      loop order: ";
+                debug(0) << "\n      loop order: ";
                 for (int l : f.loop_order) {
                     debug(0) << l << " ";
                 }
@@ -469,8 +605,15 @@ struct State {
     // Set the bounds of the non-outputs in each group using the edges in the dag
     void compute_bounds_and_costs(const FunctionDAG &dag) {
         for (auto &g : groups) {
-            g.compute_bounds_and_costs(dag);
+            g->compute_bounds_and_costs(dag);
         }
+    }
+
+    bool fully_scheduled() const {
+        for (auto &g : groups) {
+            if (!g->fully_scheduled()) return false;
+        }
+        return true;
     }
 };
 
@@ -490,10 +633,10 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
     // largest marginal cost.
     int group_idx = -1;
     for (size_t i = 0; i < state.groups.size(); i++) {
-        const Group &g = state.groups[i];
+        const Group &g = *(state.groups[i]);
         if (g.fully_scheduled()) continue;
         if (group_idx == -1 ||
-            g.funcs.size() > state.groups[group_idx].funcs.size()) {
+            g.funcs.size() > state.groups[group_idx]->funcs.size()) {
             group_idx = i;
         }
     }
@@ -504,7 +647,7 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
         return result;
     }
 
-    const Group &group = state.groups[group_idx];
+    const Group &group = *(state.groups[group_idx]);
 
     // Try partitioning the group
     if (group.funcs.size() > 1) {
@@ -514,74 +657,49 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
             num_outputs += fs.is_output;
         }
 
-        for (size_t i = 1; i < group.funcs.size(); i++) {
-            // debug(0) << "  Generating partition...\n";
-            // TODO: If it's possible for a partioning to be
-            // non-contiguous in the realization order, then this is a
-            // subset of interesting partitionings. A better choice
-            // would be to pick one Func, and then put everything
-            // upstream of it in group A.
-            std::shared_ptr<State> child(new State(state));
-            map<Function, size_t, Function::Compare> funcs_in_A, funcs_in_B;
-            Group A = group, B = group;
-            A.funcs.clear();
-            B.funcs.clear();
-            set<Function, Function::Compare> in_A;
-            vector<Function> pending = {group.funcs[i].func};
 
-            // find everything upstream and place it in A
-            while (!pending.empty()) {
-                Function f = pending.back();
-                pending.pop_back();
-                in_A.insert(f);
-                for (const auto *edge : dag.incoming_edges.at(f)) {
-                    pending.push_back(edge->producer);
-                }
+        // Try inlining the group
+        if (num_outputs == 1) {
+            std::shared_ptr<Group> new_group(new Group(group));
+            new_group->inlined = true;
+            new_group->may_partition = false;
+            new_group->compute_bounds_and_costs(dag);
+
+            // TODO: record the total compute for a group somewhere to avoid recomputing it everywhere
+            double old_compute = 0;
+            for (auto &fs : group.funcs) {
+                old_compute += fs.compute;
             }
+            old_compute *= new_group->compute_instances;
 
-            for (size_t j = 0; j < group.funcs.size(); j++) {
-                if (in_A.count(group.funcs[j].func)) {
-                    funcs_in_A[group.funcs[j].func] = A.funcs.size();
-                    A.funcs.push_back(group.funcs[j]);
-                    // debug(0) << "A: " << group.funcs[j].func.name() << "\n";
-                } else {
-                    funcs_in_B[group.funcs[j].func] = B.funcs.size();
-                    B.funcs.push_back(group.funcs[j]);
-                    // debug(0) << "B: " << group.funcs[j].func.name() << "\n";
-                }
+            double new_compute = 0;
+            for (auto &fs : new_group->funcs) {
+                new_compute += fs.compute;
             }
+            new_compute *= new_group->compute_instances;
 
-            internal_assert(funcs_in_A.size() && funcs_in_B.size());
-
-            // Find the broken edges
-            for (const auto &edge : dag.edges) {
-                auto producer_in_A = funcs_in_A.find(edge.producer);
-                auto consumer_in_B = funcs_in_B.find(edge.consumer);
-                if (producer_in_A != funcs_in_A.end() &&
-                    consumer_in_B != funcs_in_B.end()) {
-                    // This is a broken edge
-
-                    // Incur a memory cost
-                    child->memory_cost += A.funcs[producer_in_A->second].memory * A.compute_instances;
-
-                    // Update the output flags
-                    A.funcs[producer_in_A->second].is_output = true;
-                }
-            }
-
-            // If there are multiple outputs, our only possible next
-            // move is a partition, so don't bother - we could have
-            // just made a smaller partition.
-            int num_outputs = 0;
-            for (const auto &fs : A.funcs) {
-                num_outputs += fs.is_output;
-            }
-
-            if (num_outputs == 1) {
-                // Keep the groups in topological order, to make debugging easier.
-                child->groups[group_idx] = std::move(A);
-                child->groups.emplace(child->groups.begin() + group_idx, std::move(B));
+            // Inlining may often be absurdly bad. Don't clutter the beam.
+            if (true || new_compute < 2*old_compute) {
+                std::shared_ptr<State> child(new State(state));
+                child->redundant_compute_cost += new_compute - old_compute;
+                child->groups[group_idx] = new_group;
+                child->last_action_was_fuse = false;
                 result.emplace_back(std::move(child));
+
+                if (new_group->funcs.size() == 2 &&
+                    new_group->funcs[0].func.name() == "output") {
+                    // if (new_compute < old_compute) {
+                    debug(0) << "OLD:\n";
+                    state.dump();
+                    debug(0) << "NEW:\n";
+                    result.back()->dump();
+                }
+                internal_assert(new_compute >= old_compute) << "Inlining reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
+            }
+
+            // If inlining was free, don't bother generating other children
+            if (new_compute == old_compute) {
+                return result;
             }
         }
 
@@ -615,6 +733,11 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
 
             // Over all possible dimensions
             for (int dim = 0; dim < output.dimensions(); dim++) {
+                if (state.last_action_was_fuse && dim >= state.last_fuse_dim) {
+                    // We can reach this child state in a simpler way, so prune.
+                    continue;
+                }
+
                 int extent = -1;
                 for (auto &fs : group.funcs) {
                     if (fs.func.same_as(output)) {
@@ -667,16 +790,17 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     // variable for the loop index, and take the max
                     // over all values of it producer footprint later.
 
-                    Group new_group = group;
+                    std::shared_ptr<Group> new_group(new Group(group));
+                    new_group->may_partition = true;
                     Group::FunctionState *output_state = nullptr;
                     double old_compute = 0;
-                    for (auto &fs : new_group.funcs) {
+                    for (auto &fs : new_group->funcs) {
                         if (fs.func.same_as(output)) {
                             output_state = &fs;
                         }
                         old_compute += fs.compute;
                     }
-                    old_compute *= new_group.compute_instances;
+                    old_compute *= new_group->compute_instances;
 
                     internal_assert(output_state);
 
@@ -684,37 +808,37 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     int &max = output_state->compute_bounds[dim].second;
 
                     int outer_loop_size = (extent + split - 1) / split;
-                    new_group.compute_instances *= outer_loop_size;
+                    new_group->compute_instances *= outer_loop_size;
 
                     max = min + split - 1;
 
                     // Recompute bounds and arithmetic cost up the pipeline
-                    new_group.compute_bounds_and_costs(dag);
+                    new_group->compute_bounds_and_costs(dag);
 
                     // Should not have updated the bounds of the group output
                     internal_assert(max == min + split - 1);
 
                     double new_compute = 0;
-                    for (auto &fs : new_group.funcs) {
+                    for (auto &fs : new_group->funcs) {
                         new_compute += fs.compute;
                     }
-                    new_compute *= new_group.compute_instances;
+                    new_compute *= new_group->compute_instances;
 
-                    // Reject out-of-hand anything
-                    // particularly dumb (e.g. that causes 3x
-                    // redundant work or more). Sometimes a painful
-                    // partitioning of the pipeline must occur. Beam
-                    // search with a large beam will eventually decide
-                    // to try it. Beam search with a small beam can
-                    // avoid it by flooding the beam with slightly
-                    // less painful incremental fuses that lead to
-                    // worse overall outcomes.
-                    //if (new_compute > 1.1*old_compute) {
+                    // Reject out-of-hand anything particularly dumb
+                    // (e.g. that causes 2x redundant work or
+                    // more). Sometimes a painful partitioning of the
+                    // pipeline must occur. Beam search with a large
+                    // beam will eventually decide to try it. Beam
+                    // search with a small beam can avoid it by
+                    // flooding the beam with slightly less painful
+                    // incremental fuses that lead to worse overall
+                    // outcomes.
+                    //if (new_compute > 2*old_compute) {
                     //    continue;
                     //}
 
                     // Record what we did
-                    for (auto &fs : new_group.funcs) {
+                    for (auto &fs : new_group->funcs) {
                         if (fs.func.same_as(output)) {
                             fs.splits[dim].push_back(split);
                             fs.loop_order.push_back(dim);
@@ -730,56 +854,111 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     }
 
                     std::shared_ptr<State> child(new State(state));
-                    internal_assert(new_compute >= old_compute) << "Fusing reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
+                    //internal_assert(new_compute >= old_compute) << "Fusing reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
                     child->redundant_compute_cost += new_compute - old_compute;
                     child->groups[group_idx] = new_group;
+                    child->last_action_was_fuse = true;
+                    child->last_fuse_dim = dim;
 
-                    /*
-                    if (group.funcs.size() == 2 &&
-                        group.funcs[0].func.name() == "output" &&
-                        group.funcs[1].func.name() == "stage_7" &&
-                        dim == 1) {
+                    if (0) {
                         debug(0) << "Considering fusing group along output dimension " << dim << " with factor " << split << "\n";
                         debug(0) << "Old group:\n";
                         state.dump();
                         debug(0) << "New group:\n";
                         child->dump();
                     }
-                    */
-
                     result.emplace_back(std::move(child));
                 }
             }
         } while (0);
 
-        // Try inlining the group
-        if (num_outputs == 1) {
-            Group new_group = group;
-            new_group.inlined = true;
-            new_group.compute_bounds_and_costs(dag);
-
-            // TODO: record the total compute for a group somewhere to avoid recomputing it everywhere
-            double old_compute = 0;
-            for (auto &fs : group.funcs) {
-                old_compute += fs.compute;
+        // Try partitioning the group into smaller groups
+        int num_partitions = 0;
+        for (size_t i = 1; group.may_partition && i < group.funcs.size(); i++) {
+            if (dag.node_map.at(group.funcs[i].func)->compute_if_inlined == 0) {
+                // It's dumb to partition here.
+                //continue;
             }
-            old_compute *= new_group.compute_instances;
 
-            double new_compute = 0;
-            for (auto &fs : new_group.funcs) {
-                new_compute += fs.compute;
-            }
-            new_compute *= new_group.compute_instances;
-
-            // Inlining may often be absurdly bad, but it's a terminal
-            // state for the group, so it doesn't expand the search
-            // tree much to just unconditionally consider it.
-
-            //internal_assert(new_compute >= old_compute) << "Inlining reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
+            // debug(0) << "  Generating partition...\n";
+            // TODO: If it's possible for a partioning to be
+            // non-contiguous in the realization order, then this is a
+            // subset of interesting partitionings. A better choice
+            // would be to pick one Func, and then put everything
+            // upstream of it in group A.
             std::shared_ptr<State> child(new State(state));
-            child->redundant_compute_cost += new_compute - old_compute;
-            child->groups[group_idx] = new_group;
-            result.emplace_back(std::move(child));
+            map<Function, size_t, Function::Compare> funcs_in_A, funcs_in_B;
+            std::shared_ptr<Group> A(new Group(group)), B(new Group(group));
+            // Don't explore states that just partition A again - we
+            // could equally have just made a smaller partition here.
+            // TODO: The following rules out good states. Not sure why.
+            A->funcs.clear();
+            B->funcs.clear();
+            set<Function, Function::Compare> in_A;
+            vector<Function> pending = {group.funcs[i].func};
+
+            // find everything upstream and place it in A
+            while (!pending.empty()) {
+                Function f = pending.back();
+                pending.pop_back();
+                in_A.insert(f);
+                for (const auto *edge : dag.incoming_edges.at(f)) {
+                    pending.push_back(edge->producer);
+                }
+            }
+
+            for (size_t j = 0; j < group.funcs.size(); j++) {
+                if (in_A.count(group.funcs[j].func)) {
+                    funcs_in_A[group.funcs[j].func] = A->funcs.size();
+                    A->funcs.push_back(group.funcs[j]);
+                    // debug(0) << "A: " << group.funcs[j].func.name() << "\n";
+                } else {
+                    funcs_in_B[group.funcs[j].func] = B->funcs.size();
+                    B->funcs.push_back(group.funcs[j]);
+                    // debug(0) << "B: " << group.funcs[j].func.name() << "\n";
+                }
+            }
+
+            internal_assert(funcs_in_A.size() && funcs_in_B.size());
+
+            // Find the broken edges
+            for (const auto &edge : dag.edges) {
+                auto producer_in_A = funcs_in_A.find(edge.producer);
+                auto consumer_in_B = funcs_in_B.find(edge.consumer);
+                if (producer_in_A != funcs_in_A.end() &&
+                    consumer_in_B != funcs_in_B.end()) {
+                    // This is a broken edge
+
+                    // Incur a memory cost
+                    child->memory_cost += A->funcs[producer_in_A->second].memory * A->compute_instances;
+
+                    // Update the output flags
+                    A->funcs[producer_in_A->second].is_output = true;
+                }
+            }
+
+            // If there are multiple outputs, our only possible next
+            // move is a partition, so don't bother - we could have
+            // just made a smaller partition.
+            int num_outputs = 0;
+            for (const auto &fs : A->funcs) {
+                num_outputs += fs.is_output;
+            }
+
+            if (num_outputs == 1) {
+                // Keep the groups in topological order, to make debugging easier.
+                child->groups[group_idx] = std::move(A);
+                child->groups.emplace(child->groups.begin() + group_idx, std::move(B));
+                child->last_action_was_fuse = false;
+                result.emplace_back(std::move(child));
+                num_partitions++;
+            }
+        }
+        internal_assert(group.may_partition);
+
+        if (group.may_partition && !num_partitions) {
+            debug(0) << "Unpartitionable group " << group_idx << "!\n";
+            state.dump();
         }
 
         // Try fusing the group under an outer serial loop
@@ -805,16 +984,20 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
 
 // Returns optimal schedule
 State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const MachineParams &params, size_t beam_size) {
+    std::set<uint64_t> visited;
     State initial;
     {
         initial.redundant_compute_cost = 0;
         initial.memory_cost = 0;
+        initial.last_action_was_fuse = false;
+        initial.last_fuse_dim = 0;
 
-        Group group;
-        group.parallelism = params.parallelism;
-        group.compute_instances = 1;
-        group.store_instances = 1;
-        group.inlined = false;
+        std::shared_ptr<Group> group(new Group);
+        group->parallelism = params.parallelism;
+        group->compute_instances = 1;
+        group->store_instances = 1;
+        group->inlined = false;
+        group->may_partition = true;
         for (const FunctionDAG::Node &n : dag.nodes) {
             Group::FunctionState f;
             f.func = n.func;
@@ -846,16 +1029,24 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
             f.store_depth = 0;
             f.compute_depth = 0;
 
-            group.funcs.emplace_back(std::move(f));
+            group->funcs.emplace_back(std::move(f));
         }
 
         initial.groups.emplace_back(std::move(group));
 
         initial.compute_bounds_and_costs(dag);
+
+        // Record our initial underestimate of compute cost
+        initial.essential_compute_cost = 0;
+        for (auto &g : initial.groups) {
+            for (auto &f : g->funcs) {
+                initial.essential_compute_cost += f.compute;
+            }
+        }
     }
 
     for (auto &g : initial.groups) {
-        for (auto &fs : g.funcs) {
+        for (auto &fs : g->funcs) {
             internal_assert(fs.splits.size() == (size_t)fs.func.dimensions());
         }
     }
@@ -888,29 +1079,55 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
 
         // Limit the size of the queue
         if (queue.size() > beam_size) {
-            decltype(queue) trimmed;
-            for (size_t i = 0; i < beam_size; i++) {
-                trimmed.emplace(std::move(queue.top()));
+            // Bucket the states by number of groups
+            map<size_t, decltype(queue)> queues;
+            /*
+            while (!queue.empty()) {
+                queues[queue.top()->groups.size()].emplace(std::move(queue.top()));
                 queue.pop();
+            }
+            */
+            queues[0].swap(queue);
+
+            // Take the top K from each bucket
+            decltype(queue) trimmed;
+            for (auto p : queues) {
+                for (size_t i = 0; i < beam_size && !p.second.empty(); i++) {
+                    trimmed.emplace(std::move(p.second.top()));
+                    p.second.pop();
+                }
             }
             queue.swap(trimmed);
         }
 
+        internal_assert(!queue.empty());
+
         auto state = queue.top();
         queue.pop();
 
-        if (report) debug(0) << "Considering partial schedule with cost " << state->memory_cost << " " << state->redundant_compute_cost << "\n";
+        if (state->fully_scheduled()) {
+            // This is best-first search, and we hit a leaf, so it must be the best leaf.
+            debug(0) << "Found completed schedule with cost " << state->memory_cost << " " << state->redundant_compute_cost << " " << state->essential_compute_cost << "\n";
+            return *state;
+        }
+
+        if (report) debug(0) << "Considering partial schedule with cost " << state->groups.size() << " " << state->memory_cost << " " << state->redundant_compute_cost << " " << state->essential_compute_cost << "\n";
         //state.dump();
 
         auto children = make_children(*state, dag);
         for (auto &c : children) {
-            queue.emplace(std::move(c));
-        }
-
-        if (children.empty()) {
-            // This is best-first search, and we hit a leaf, so it must be the best leaf.
-            debug(0) << "Found completed schedule with cost " << state->memory_cost << " " << state->redundant_compute_cost << "\n";
-            return *state;
+            uint64_t h = c->hash();
+            if (visited.count(h)) {
+                //debug(0) << "Already visited this state. Skipping\n";
+                continue;
+            }
+            visited.insert(h);
+            if (c->redundant_compute_cost * 10 > c->essential_compute_cost) {
+                //debug(0) << "Rejecting child with costs: " << c->groups.size() << " " << c->memory_cost << " " << c->redundant_compute_cost << " " << c->essential_compute_cost << "\n";
+            } else {
+                //debug(0) << "Accepting child with costs: " << c->groups.size() << " " << c->memory_cost << " " << c->redundant_compute_cost << " " << c->essential_compute_cost << "\n";
+                queue.emplace(std::move(c));
+            }
         }
     }
 
@@ -966,8 +1183,8 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
     // Apply the schedules
 
     for (auto &g : optimal.groups) {
-        internal_assert(g.funcs.size() == 1 || g.inlined);
-        auto &fs = g.funcs[0];
+        internal_assert(g->funcs.size() == 1 || g->inlined);
+        auto &fs = g->funcs[0];
         internal_assert(fs.is_output);
 
         // First do all the splits
@@ -1017,8 +1234,8 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
 
     // Then set the compute and store levels
     for (auto &g : optimal.groups) {
-        internal_assert(g.funcs.size() == 1 || g.inlined);
-        auto &fs = g.funcs[0];
+        internal_assert(g->funcs.size() == 1 || g->inlined);
+        auto &fs = g->funcs[0];
         internal_assert(fs.is_output);
 
         if (fs.compute_depth == 0) {
@@ -1038,14 +1255,16 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
         }
     }
 
-    Func(optimal.groups[0].funcs[0].func).print_loop_nest();
+    Func output(optimal.groups[0]->funcs[0].func);
+
+    optimal.dump_to_postscript(output.name() + ".ps");
 
     return "";
 }
 
 void autoschedule_test() {
     MachineParams params(8, 16 * 1024 * 1024, 40);
-    size_t beam_size = 100;
+    size_t beam_size = 1000;
     Target target("host");
 
     Var x, y;
@@ -1067,57 +1286,58 @@ void autoschedule_test() {
 
         internal_assert(optimal.redundant_compute_cost == 0); // No redundant recompute
 
+        internal_assert(optimal.groups.size() == 1); // This should have been inlined into a single group
         for (const auto &g : optimal.groups) {
-            // Check some invariants
-            internal_assert(g.funcs.size() == 1); // After scheduling, we should only have singleton groupos
-            const auto &fs = g.funcs[0];
-            internal_assert(fs.is_output); // After grouping, everything ends up as a group output.
-            internal_assert(fs.splits.size() == 2); // There is always one split list per dimension
-
-            // Check things that should be unique to this pipeline
-            internal_assert(g.compute_instances == 1000 * 1000); // Full fusion means a separate instance per output pixel
-            internal_assert(fs.memory < 1); // Memory costs should be super cheap
-            internal_assert(fs.compute < 5); // Arithmetic costs per instances are also minor, because each instance is one pixel
-
-            if (!fs.func.same_as(h.function())) {
-                internal_assert(fs.compute_depth == 2); // Computed inside two loops of the consumer
-                internal_assert(fs.parent.same_as(h.function()));
-                internal_assert(fs.splits[0].empty()); // Not split
+            internal_assert(g->inlined);
+            internal_assert(g->funcs.size() == 3); // There should be one entry per func
+            const auto &fs = g->funcs[0];
+            internal_assert(fs.is_output); // The first group element is the output
+            for (const auto &fs : g->funcs) {
+                internal_assert(fs.splits.size() == 2); // There is always one split list per dimension
+                internal_assert(g->compute_instances == 1); // Full fusion with no tiling
+                internal_assert(fs.memory == 0); // Memory costs should be zero
+                internal_assert(fs.compute > 1000); // Arithmetic costs should be large
+                internal_assert(fs.splits[0].empty()); // No splits
                 internal_assert(fs.splits[1].empty());
-            } else {
-                // For the output, 1x1 tiles
-                internal_assert(fs.splits[0].size() == 1);
-                internal_assert(fs.splits[1].size() == 1);
-                internal_assert(fs.splits[0][0] == 1);
-                internal_assert(fs.splits[1][0] == 1);
             }
         }
     }
 
     {
-        // In a pipeline with huge stencils, nothing should be fused
+        // In a pipeline with huge expensive stencils and low memory costs, nothing should be fused
         Func f("f"), g("g"), h("h");
-        f(x, y) = (x + y) * (x + y) * (x + y);
-        g(x, y) = f(x-1000, y-2000) + f(x+1000, y+2000);
-        h(x, y) = g(x-2000, y-1000) + g(x+2000, y+1000);
+        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y) * (x + 4*y) * (x + 5*y);
+        Expr e = 0;
+        for (int i = 0; i < 100; i++) {
+            e += f(x + i*10, y + i*10);
+        }
+        g(x, y) = e;
+        e = 0;
+        for (int i = 0; i < 100; i++) {
+            e += g(x + i*10, y + i*10);
+        }
+        h(x, y) = e;
 
         h.estimate(x, 0, 1000).estimate(y, 0, 1000);
 
+        MachineParams cheap_memory = params;
+        cheap_memory.balance = 1;
+
         vector<Function> outputs = {h.function()};
-        FunctionDAG dag(outputs, params);
-        State optimal = optimal_schedule(dag, outputs, params, beam_size);
+        FunctionDAG dag(outputs, cheap_memory);
+        State optimal = optimal_schedule(dag, outputs, cheap_memory, beam_size);
 
         optimal.dump();
 
         internal_assert(optimal.redundant_compute_cost == 0); // No redundant recompute
         for (const auto &g : optimal.groups) {
             // Check some invariants
-            internal_assert(g.funcs.size() == 1);
-            const auto &fs = g.funcs[0];
+            internal_assert(g->funcs.size() == 1);
+            const auto &fs = g->funcs[0];
             internal_assert(fs.splits.size() == 2);
             internal_assert(fs.is_output);
 
-            internal_assert(g.compute_instances == 1); // No fusion means a single instance of each func
+            internal_assert(g->compute_instances == 1); // No fusion means a single instance of each func
             internal_assert(fs.memory > 1000); // Memory costs should be high
             internal_assert(fs.compute > 1000); // Arithmetic costs should be high too
 
@@ -1131,10 +1351,10 @@ void autoschedule_test() {
     {
         // In a pipeline with moderate isotropic stencils, there should be some square tiling
         Func f("f"), h("h");
-        f(x, y) = (x + y) * (x + y) * (x + y);
-        h(x, y) = f(x-3, y-3) + f(x+3, y+3);
+        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
+        h(x, y) = f(x-9, y-9) + f(x+9, y+9) + f(x-9, y+9) + f(x+9, y-9);
 
-        h.estimate(x, 0, 1024).estimate(y, 0, 1024);
+        h.estimate(x, 0, 2048).estimate(y, 0, 2048);
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params);
@@ -1145,14 +1365,14 @@ void autoschedule_test() {
         double total_compute = 0;
         for (const auto &g : optimal.groups) {
             // Check some invariants
-            internal_assert(g.funcs.size() == 1);
-            const auto &fs = g.funcs[0];
+            internal_assert(g->funcs.size() == 1);
+            const auto &fs = g->funcs[0];
             internal_assert(fs.is_output);
             internal_assert(fs.splits.size() == 2);
 
-            total_compute += g.compute_instances * fs.compute;
+            total_compute += g->compute_instances * fs.compute;
 
-            internal_assert(g.compute_instances > 1 && g.compute_instances < 100); // There should be some modest number of tiles
+            internal_assert(g->compute_instances > 1 && g->compute_instances < 500); // There should be some modest number of tiles
 
             if (!fs.func.same_as(h.function())) {
                 internal_assert(fs.compute_depth == 2); // Computed inside two loops of the consumer
@@ -1160,14 +1380,16 @@ void autoschedule_test() {
                 internal_assert(fs.splits[0].empty());
                 internal_assert(fs.splits[1].empty());
             } else {
-                // For the output, moderately-sized squarish tiles
+                // For the output, moderately-sized squarish
+                // tiles. The tiles may be wider than tall due to
+                // vectorization.
                 internal_assert(fs.splits[0].size() == 1);
                 internal_assert(fs.splits[1].size() == 1);
                 tile_x = fs.splits[0][0];
                 tile_y = fs.splits[1][0];
                 internal_assert(tile_x > 30 && tile_x < 600);
                 internal_assert(tile_y > 30 && tile_y < 600);
-                internal_assert(tile_x * 2 >= tile_y && tile_y * 2 >= tile_x);
+                internal_assert(tile_x >= tile_y && tile_y * 4 >= tile_x);
             }
 
             internal_assert(fs.memory > 100 && fs.memory < 100000); // Memory costs should be moderate
@@ -1183,10 +1405,10 @@ void autoschedule_test() {
     // Smaller footprint stencil -> smaller tiles
     {
         Func f("f"), g("g"), h("h");
-        f(x, y) = (x + y) * (x + y) * (x + y);
-        h(x, y) = f(x-1, y-1) + f(x+1, y+1);
+        f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
+        h(x, y) = f(x, y) + f(x+1, y+1) + f(x, y+1) + f(x+1, y);
 
-        h.estimate(x, 0, 1024).estimate(y, 0, 1024);
+        h.estimate(x, 0, 2048).estimate(y, 0, 2048);
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params);
@@ -1197,14 +1419,14 @@ void autoschedule_test() {
         double total_compute = 0;
         for (const auto &g : optimal.groups) {
             // Check some invariants
-            internal_assert(g.funcs.size() == 1);
-            const auto &fs = g.funcs[0];
+            internal_assert(g->funcs.size() == 1);
+            const auto &fs = g->funcs[0];
             internal_assert(fs.is_output);
             internal_assert(fs.splits.size() == 2);
 
-            total_compute += g.compute_instances * fs.compute;
+            total_compute += g->compute_instances * fs.compute;
 
-            internal_assert(g.compute_instances > 1 && g.compute_instances < 100); // There should be some modest number of tiles
+            internal_assert(g->compute_instances > 1 && g->compute_instances < 1000); // There should be some modest number of tiles
 
             if (!fs.func.same_as(h.function())) {
                 internal_assert(fs.compute_depth == 2); // Computed inside two loops of the consumer
@@ -1214,13 +1436,13 @@ void autoschedule_test() {
             } else {
                 internal_assert(fs.splits[0].size() == 1);
                 internal_assert(fs.splits[1].size() == 1);
-                internal_assert(tile_x > fs.splits[0][0]);
-                internal_assert(tile_y > fs.splits[1][0]);
+                internal_assert(tile_x >= fs.splits[0][0]);
+                internal_assert(tile_y >= fs.splits[1][0]);
                 tile_x = fs.splits[0][0];
                 tile_y = fs.splits[1][0];
                 internal_assert(tile_x > 15 && tile_x < 300);
                 internal_assert(tile_y > 15 && tile_y < 300);
-                internal_assert(tile_x * 2 >= tile_y && tile_y * 2 >= tile_x);
+                internal_assert(tile_x >= tile_y && tile_y * 8 >= tile_x);
             }
 
             internal_assert(fs.memory > 100 && fs.memory < 100000); // Memory costs should be moderate

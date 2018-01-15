@@ -26,7 +26,7 @@ $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_auto_sch
 
 $(BIN)/out.png: $(BIN)/process
 	@mkdir -p $(@D)
-	$(BIN)/process $(IMAGES)/rgb.png 10 $(BIN)/out.png
+	$(BIN)/process $(IMAGES)/rgb.png 100 $(BIN)/out.png
 
 clean:
 	rm -rf $(BIN)

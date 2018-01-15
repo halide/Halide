@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    Buffer<float> in_png = Tools::load_and_convert_image(argv[1]);
+
     ImageParam input(Float(32), 3);
 
     // Input must have four color channels - rgba
@@ -80,7 +82,7 @@ int main(int argc, char **argv) {
     if (target.has_gpu_feature()) {
         sched = 4;
     } else {
-        sched = 2;
+        sched = 5;
     }
 
     switch (sched) {
@@ -199,6 +201,21 @@ int main(int argc, char **argv) {
 
         break;
     }
+    case 5:
+    {
+        // Autoscheduled
+        normalize.estimate(x, 0, in_png.width())
+            .estimate(y, 0, in_png.height())
+            .estimate(c, 0, 4);
+
+
+        input.dim(0).set_bounds_estimate(0, in_png.width());
+        input.dim(1).set_bounds_estimate(0, in_png.height());
+        input.dim(2).set_bounds_estimate(0, 4);
+
+        Pipeline(normalize).auto_schedule(target);
+        break;
+    }
     default:
         assert(0 && "No schedule with this number.");
     }
@@ -206,7 +223,6 @@ int main(int argc, char **argv) {
     // JIT compile the pipeline eagerly, so we don't interfere with timing
     normalize.compile_jit(target);
 
-    Buffer<float> in_png = Tools::load_and_convert_image(argv[1]);
     Buffer<float> out(in_png.width(), in_png.height(), 3);
     assert(in_png.channels() == 4);
     input.set(in_png);

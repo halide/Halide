@@ -18,7 +18,7 @@ $(BIN)/local_laplacian_auto_schedule_old.a: $(BIN)/local_laplacian_exec
 
 $(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian_exec
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g local_laplacian -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime-auto_schedule_top_down auto_schedule=true
 
 $(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_auto_schedule_old.a $(BIN)/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)
