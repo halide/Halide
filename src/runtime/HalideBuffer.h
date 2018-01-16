@@ -1205,28 +1205,38 @@ public:
     }
 
     /** Set the min coordinate of an image in the first N dimensions */
-    template<typename ...Args>
-    void set_min(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
+    // @{
+    void set_min(const std::vector<int> &mins) {
+        assert(mins.size() <= (size_t)dimensions());
         device_deallocate();
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            buf.dim[i].min = x[i];
+        for (size_t i = 0; i < mins.size(); i++) {
+            buf.dim[i].min = mins[i];
         }
     }
 
-    /** Test if a given coordinate is within the the bounds of an image */
     template<typename ...Args>
-    bool contains(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            if (x[i] < dim(i).min() || x[i] > dim(i).max()) {
+    void set_min(Args... args) {
+        set_min(std::vector<int>{args...});
+    }
+    // @}
+
+    /** Test if a given coordinate is within the the bounds of an image */
+    // @{
+    bool contains(const std::vector<int> &coords) const {
+        assert(coords.size() <= (size_t)dimensions());
+        for (size_t i = 0; i < coords.size(); i++) {
+            if (coords[i] < dim((int) i).min() || coords[i] > dim((int) i).max()) {
                 return false;
             }
         }
         return true;
     }
+
+    template<typename ...Args>
+    bool contains(Args... args) const {
+        return contains(std::vector<int>{args...});
+    }
+    // @}
 
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
