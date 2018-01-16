@@ -15,6 +15,8 @@
 #define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
 #include "mini_d3d12.h"
 
+static void* const user_context = NULL;   // in case there's no user context available in the scope of a function
+
 #define HALIDE_D3D12_DEBUG (1)
 
 #if HALIDE_D3D12_DEBUG
@@ -35,15 +37,13 @@
         }
     };
     #define TRACEINDENT     ((const char*)indent)
-    #define TRACEPRINT(msg) debug(NULL) << TRACEINDENT << msg;
+    #define TRACEPRINT(msg) debug(user_context) << TRACEINDENT << msg;
     #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
 #else
     #define TRACEINDENT ""
     #define TRACEPRINT(msg)
     #define TRACELOG
 #endif
-
-static void* user_context = NULL;   // in case there's no user context available in the scope of a function
 
 template<typename T>
 static T* malloct()
@@ -59,6 +59,7 @@ static const char* d3d12typename(ID3D12T*)
 }
 
 #define D3D12TYPENAME(T) static const char* d3d12typename(T*) { return(#T); }
+
 D3D12TYPENAME(ID3D12Device)
 D3D12TYPENAME(ID3D12Debug)
 D3D12TYPENAME(ID3D12CommandQueue)
@@ -70,7 +71,12 @@ D3D12TYPENAME(ID3D12PipelineState)
 D3D12TYPENAME(ID3D12RootSignature)
 D3D12TYPENAME(ID3D12DescriptorHeap)
 D3D12TYPENAME(ID3D12Fence)
+
 D3D12TYPENAME(ID3DBlob)
+
+D3D12TYPENAME(IDXGIFactory1)
+D3D12TYPENAME(IDXGIAdapter1)
+D3D12TYPENAME(IDXGIOutput)
 
 template<typename ID3D12T>
 static bool D3DError(HRESULT result, ID3D12T* object, void* user_context, const char* message)
@@ -193,8 +199,8 @@ static DXGI_FORMAT FindD3D12FormatForHalideType(halide_type_t type)
         },
     };
 
-    halide_assert(NULL, (type.code >= 0) && (type.code <= 2));
-    halide_assert(NULL, (type.lanes > 0) && (type.lanes <= 4));
+    halide_assert(user_context, (type.code >= 0) && (type.code <= 2));
+    halide_assert(user_context, (type.lanes > 0) && (type.lanes <= 4));
 
     int i = 0;
     switch (type.bytes())
@@ -203,7 +209,7 @@ static DXGI_FORMAT FindD3D12FormatForHalideType(halide_type_t type)
         case 2  : i = 1; break;
         case 4  : i = 2; break;
         case 8  : i = 3; break;
-        default : halide_assert(NULL, false);  break;
+        default : halide_assert(user_context, false);  break;
     }
 
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
@@ -241,6 +247,7 @@ ObjectiveCClass _NSConcreteGlobalBlock = { 0 };
 // the D3D12 runtime shared library/DLL, and then get the symbol from it.
 static void* lib_d3d12  = NULL;
 static void* lib_D3DCompiler_47 = NULL;
+static void* lib_dxgi = NULL;
 
 struct LibrarySymbol
 {
@@ -263,12 +270,15 @@ static PFN_D3D12_CREATE_DEVICE              D3D12CreateDevice           = NULL;
 static PFN_D3D12_GET_DEBUG_INTERFACE        D3D12GetDebugInterface      = NULL;
 static PFN_D3D12_SERIALIZE_ROOT_SIGNATURE   D3D12SerializeRootSignature = NULL;
 static PFN_D3DCOMPILE                       D3DCompile                  = NULL;
+static PFN_CREATEDXGIFACORY1                CreateDXGIFactory1          = NULL;
 
 #if defined(__cplusplus) && !defined(_MSC_VER)
 #if defined(__MINGW32__)
 #undef __uuidof
 #endif
+
 #define UUIDOF(T) REFIID __uuidof(const T&) { return( IID_ ## T ); }
+
 UUIDOF(ID3D12Device)
 UUIDOF(ID3D12Debug)
 UUIDOF(ID3D12CommandQueue)
@@ -280,6 +290,10 @@ UUIDOF(ID3D12PipelineState)
 UUIDOF(ID3D12RootSignature)
 UUIDOF(ID3D12DescriptorHeap)
 UUIDOF(ID3D12Fence)
+
+UUIDOF(IDXGIFactory1)
+UUIDOF(IDXGIAdapter1)
+UUIDOF(IDXGIOutput)
 #endif
 
 template<typename ID3D12Type>
@@ -384,7 +398,7 @@ template<typename d3d12_T>
 static void release_d3d12_object(d3d12_T* obj)
 {
     TRACELOG;
-    debug(NULL) << TRACEINDENT << "!!!!!!!!!! RELEASING UNKNOWN D3D12 OBJECT !!!!!!!!!!\n";
+    debug(user_context) << TRACEINDENT << "!!!!!!!!!! RELEASING UNKNOWN D3D12 OBJECT !!!!!!!!!!\n";
 }
 
 template<typename d3d12_T>
@@ -481,11 +495,13 @@ static void D3D12LoadDependencies(void* user_context)
     const char* lib_names [] = {
         "d3d12.dll",
         "D3DCompiler_47.dll",
+        "dxgi.dll",
     };
     static const int num_libs = sizeof(lib_names) / sizeof(lib_names[0]);
     void** lib_handles [num_libs] = {
         &lib_d3d12,
         &lib_D3DCompiler_47,
+        &lib_dxgi,
     };
     for (size_t i = 0; i < num_libs; i++)
     {
@@ -511,6 +527,7 @@ static void D3D12LoadDependencies(void* user_context)
     D3D12GetDebugInterface      = get_symbol(user_context, lib_d3d12,           "D3D12GetDebugInterface");
     D3D12SerializeRootSignature = get_symbol(user_context, lib_d3d12,           "D3D12SerializeRootSignature");
     D3DCompile                  = get_symbol(user_context, lib_D3DCompiler_47,  "D3DCompile");
+    CreateDXGIFactory1          = get_symbol(user_context, lib_dxgi,            "CreateDXGIFactory1");
 
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
@@ -598,100 +615,28 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
 #endif
 
 #if 0
-    IDXGIFactory4* dxgiFactory = NULL;
-    result = CreateDXGIFactory1(__uuidof(IDXGIFactory4), IID_PPV_ARGS(&dxgiFactory));
-    if (FAILED(result))
-    {
+    IDXGIFactory1* dxgiFactory = NULL;
+    result = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
+    if (D3DError(result, dxgiFactory, user_context, "Unable to create DXGI Factory (IDXGIFactory1)"))
         return(NULL);
-    }
 
-    IDXGIAdapter* dxgiAdapter = NULL;
-    result = dxgiFactory->EnumAdapters(0, &dxgiAdapter);
-    if (FAILED(result))
-    {
+    IDXGIAdapter1* dxgiAdapter = NULL;
+    result = dxgiFactory->EnumAdapters1(0, &dxgiAdapter);
+    if (D3DError(result, dxgiAdapter, user_context, "Unable to enumerate DXGI adapters (IDXGIAdapter1)"))
         return(NULL);
-    }
 
     // NOTE(marcos): ignoring IDXGIOutput setup since this is for compute only
     IDXGIOutput* dxgiDisplayOutput = NULL;
     result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
-    if(FAILED(result))
-    {
+    if (D3DError(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)"))
         return(NULL);
-    }
 #endif
 
-    IDXGIAdapter* dxgiAdapter = NULL;    // NULL -> default adapter
+    IDXGIAdapter1* dxgiAdapter = NULL;    // NULL -> default adapter
     ID3D12Device* device = NULL;
     result = D3D12CreateDevice(dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
     if (D3DError(result, device, user_context, "Unable to create the Direct3D 12 device"))
         return(NULL);
-
-#if 0 && HALIDE_D3D12_APPLY_ABI_PATCHES
-    {
-    d3d12_device* dev = reinterpret_cast<d3d12_device*>(device);
-    debug(NULL) << "!!!!!!!!!! BINDER-INI !!!!!!!!!!\n";
-    ID3D12DescriptorHeap* descriptorHeap = NULL;
-    D3D12_DESCRIPTOR_HEAP_DESC dhd = { };
-        dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        dhd.NumDescriptors  = 0;    // TODO(marcos): replace this arbitrary descriptor count...
-        dhd.NumDescriptors += 25;   // have some descriptors for the unbounded UAV table
-        dhd.NumDescriptors += 25;   // then some for the unbounded CBV table
-        dhd.NumDescriptors += 25;   // then some for the unbounded SRV table
-        dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        dhd.NodeMask = 0;
-    HRESULT result = (*dev)->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(&descriptorHeap));
-    if (D3DError(result, descriptorHeap, NULL, "Unable to create the Direct3D 12 descriptor heap"))
-        return(NULL);
-    debug(NULL) << "!!!!!!!!!! HRESULT: " << result << "\n";
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-    UINT descriptorSize = (*dev)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    debug(NULL) << "!!!!!!!!!! descriptor handle increment size: " << descriptorSize << "\n";
-
-    debug(NULL) << "!!!!!!!!!! D3D12_DESCRIPTOR_HEAP_DESC: " << (int32_t)sizeof(D3D12_DESCRIPTOR_HEAP_DESC) << "\n";
-    debug(NULL) << "!!!!!!!!!! dhd.Type: " << (int32_t)sizeof(dhd.Type) << "\n";
-    debug(NULL) << "!!!!!!!!!! dhd.NumDescriptors: " << (int32_t)sizeof(dhd.NumDescriptors) << "\n";
-    debug(NULL) << "!!!!!!!!!! dhd.Flags: " << (int32_t)sizeof(dhd.Flags) << "\n";
-    debug(NULL) << "!!!!!!!!!! dhd.NodeMask: " << (int32_t)sizeof(dhd.NodeMask) << "\n";
-    debug(NULL) << "!!!!!!!!!! D3D12_CPU_DESCRIPTOR_HANDLE: " << (int32_t)sizeof(D3D12_CPU_DESCRIPTOR_HANDLE) << "\n";
-    D3D12_CPU_DESCRIPTOR_HANDLE bCPU = { };
-    debug(NULL) << "!!!!!!!!!! ptr: " << (int32_t)sizeof(bCPU.ptr) << "\n";
-    debug(NULL) << "!!!!!!!!!! D3D12_GPU_DESCRIPTOR_HANDLE: " << (int32_t)sizeof(D3D12_GPU_DESCRIPTOR_HANDLE) << "\n";
-    D3D12_GPU_DESCRIPTOR_HANDLE bGPU = { };
-    debug(NULL) << "!!!!!!!!!! ptr: " << (int32_t)sizeof(bGPU.ptr) << "\n";
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (int32_t)sizeof(ID3D12DescriptorHeap) << "\n";
-    debug(NULL) << "!!!!!!!!!! d3d12_binder: " << (int32_t)sizeof(d3d12_binder) << "\n";
-
-    //TestMethodSignature(&ID3D12DescriptorHeap::GetCPUDescriptorHandleForHeapStart);
-
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-    int a = 1;
-    D3D12_DESCRIPTOR_HEAP_DESC dhd2 = Call_ID3D12DescriptorHeap_GetDesc(descriptorHeap);
-    a = 2;
-    debug(NULL) << "!!!!!!!!!! descriptor heap desc: " << (uint64_t)dhd2.Type << ":" << dhd2.NumDescriptors << ":" << dhd2.Flags << ":" << dhd2.NodeMask << "\n";
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-
-    D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
-    debug(NULL) << "!!!!!!!!!! descriptor heap base for CPU: " << baseCPU.ptr << "\n";
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-
-    D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
-    debug(NULL) << "!!!!!!!!!! descriptor heap base for GPU: " << baseGPU.ptr << "\n";
-    debug(NULL) << "!!!!!!!!!! ID3D12DescriptorHeap: " << (uint64_t)descriptorHeap << "\n";
-
-    d3d12_binder* binder = malloct<d3d12_binder>();
-    binder->descriptorHeap = descriptorHeap;
-    binder->descriptorSize = descriptorSize;
-    binder->CPU[UAV].ptr = baseCPU.ptr +  0*descriptorSize;
-    binder->CPU[CBV].ptr = baseCPU.ptr + 25*descriptorSize;
-    binder->CPU[SRV].ptr = baseCPU.ptr + 50*descriptorSize;
-    binder->GPU[UAV].ptr = baseGPU.ptr +  0*descriptorSize;
-    binder->GPU[CBV].ptr = baseGPU.ptr + 25*descriptorSize;
-    binder->GPU[SRV].ptr = baseGPU.ptr + 50*descriptorSize;
-    debug(NULL) << "!!!!!!!!!! BINDER-END !!!!!!!!!!\n";
-    error(NULL) << ":)";
-    }
-#endif
 
     return(reinterpret_cast<d3d12_device*>(device));
 }
@@ -834,7 +779,7 @@ template<D3D12_COMMAND_LIST_TYPE Type>
 static d3d12_command_allocator* new_command_allocator(d3d12_device* device)
 {
     TRACELOG;
-    halide_assert(NULL, device);
+    halide_assert(user_context, device);
     ID3D12CommandAllocator* commandAllocator = NULL;
     HRESULT result = (*device)->CreateCommandAllocator(Type, IID_PPV_ARGS(&commandAllocator));
     if (D3DError(result, commandAllocator, NULL, "Unable to create the Direct3D 12 command allocator"))
@@ -1111,8 +1056,8 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     result = D3D12SerializeRootSignature(&rsd, Version, &pSignBlob, &pSignError);
     if (D3DError(result, pSignBlob, NULL, "Unable to serialize the Direct3D 12 root signature"))
     {
-        halide_assert(NULL, pSignError);
-        error(NULL) << (const char*)pSignError->GetBufferPointer();
+        halide_assert(user_context, pSignError);
+        error(user_context) << (const char*)pSignError->GetBufferPointer();
         return(NULL);
     }
 
@@ -1230,18 +1175,18 @@ static void wait_until_completed(d3d12_compute_command_list* cmdList)
     HRESULT result_after = (*device)->GetDeviceRemovedReason();
     if (FAILED(result_after))
     {
-        debug(NULL) << TRACEINDENT
-                    << "Device Lost! GetDeviceRemovedReason(): "
-                    << "before: " << (void*)(int64_t)result_before << " | "
-                    << "after: "  << (void*)(int64_t)result_after  << "\n";
-        error(NULL) << "!!! HALT !!!";
+        debug(user_context) << TRACEINDENT
+                            << "Device Lost! GetDeviceRemovedReason(): "
+                            << "before: " << (void*)(int64_t)result_before << " | "
+                            << "after: "  << (void*)(int64_t)result_after  << "\n";
+        error(user_context) << "!!! HALT !!!";
     }
 }
 
 static void* buffer_contents(d3d12_buffer* buffer)
 {
     TRACELOG;
-    halide_assert(NULL, !buffer->mapped);
+    halide_assert(user_context, !buffer->mapped);
     UINT Subresource = 0;
     const D3D12_RANGE* pReadRange = NULL;
     void* pData = NULL;
@@ -1554,7 +1499,7 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device* device, struc
         d3d12_buffer* d3d12_buffer = (struct d3d12_buffer*)buffer->device;
         if (is_buffer_managed(d3d12_buffer))
         {
-            halide_assert(NULL, d3d12_buffer->mapped);
+            halide_assert(user_context, d3d12_buffer->mapped);
             ID3D12Resource* resource = d3d12_buffer->resource;
             UINT Subresource = 0;
             D3D12_RANGE* pWrittenRange = NULL;
@@ -1873,6 +1818,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
 WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_and_host_malloc called.\n";
+
+    // TODO(marcos): this function is not properly implemented as of yet...
+    halide_assert(user_context, false);
+
     int result = halide_d3d12compute_device_malloc(user_context, buffer);
     if (result == 0) {
         d3d12_buffer *metal_buffer = (d3d12_buffer *)(buffer->device);
