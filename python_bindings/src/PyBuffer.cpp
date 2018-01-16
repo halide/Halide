@@ -441,7 +441,6 @@ void define_buffer(py::module &m) {
         .def("__repr__", [](const Buffer<> &b) -> std::string {
             std::ostringstream o;
             o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
-o<<" HOST:"<<b.data();
             return o.str();
         })
     ;
