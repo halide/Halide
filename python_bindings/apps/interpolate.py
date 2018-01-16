@@ -1,10 +1,14 @@
-#!/usr/bin/python3
 """
 Fast image interpolation using a pyramid.
 """
 
 from __future__ import print_function
-from __future__ import division
+
+# TODO: This allows you to use "true" div (vs floordiv) in Python2 for the / operator;
+# unfortunately it appears to also replace the overloads we've carefully added for Halide.
+# Figure out if it's possible to allow this to leave our Halide stuff unaffected.
+#
+# from __future__ import division
 
 import time, sys
 import halide as hl

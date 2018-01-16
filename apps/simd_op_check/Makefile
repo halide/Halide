@@ -12,7 +12,7 @@ CXX-hexagon-32-noos-hvx_128 ?= $(HL_HEXAGON_TOOLS)/bin/hexagon-clang++
 CXXFLAGS-arm-64-android ?= -llog -fPIE -pie
 CXXFLAGS-arm-32-android ?= -llog -fPIE -pie
 CXXFLAGS-hexagon-32-noos-hvx_64 ?= -mhvx -G0
-CXXFLAGS-hexagon-32-noos-hvx_128 ?= -mhvx-double -G0
+CXXFLAGS-hexagon-32-noos-hvx_128 ?= -mhvx -mhvx-double -G0
 
 LDFLAGS-host ?= -lpthread -ldl
 LDFLAGS-hexagon-32-noos-hvx_64 ?= -L../../tools/sim_qurt -lsim_qurt

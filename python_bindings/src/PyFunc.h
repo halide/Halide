@@ -1,87 +1,78 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYFUNC_H
 #define HALIDE_PYTHON_BINDINGS_PYFUNC_H
 
-#include <boost/python.hpp>
-#include <boost/python/tuple.hpp>
-#include <string>
-#include <vector>
+#include "PyHalide.h"
 
-#include "Halide.h"
+namespace Halide {
+namespace PythonBindings {
 
 void define_func();
 
-namespace func_and_stage_implementation_details {
-// These are methods shared with Stage
-
-// we use hh and bp to avoid collisions with h, b used in the rest of the code
-namespace hh = Halide;
-namespace bp = boost::python;
-
 template <typename FuncOrStage>
-FuncOrStage &func_parallel0(FuncOrStage &that, hh::VarOrRVar var) {
+FuncOrStage &func_parallel0(FuncOrStage &that, VarOrRVar var) {
     return that.parallel(var);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_parallel1(FuncOrStage &that, hh::VarOrRVar var, int factor) {
+FuncOrStage &func_parallel1(FuncOrStage &that, VarOrRVar var, int factor) {
     return that.parallel(var, factor);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_split(FuncOrStage &that, hh::VarOrRVar var, hh::VarOrRVar outer, hh::VarOrRVar inner, int factor) {
+FuncOrStage &func_split(FuncOrStage &that, VarOrRVar var, VarOrRVar outer, VarOrRVar inner, int factor) {
     return that.split(var, outer, inner, factor);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_vectorize0(FuncOrStage &that, hh::VarOrRVar var) {
+FuncOrStage &func_vectorize0(FuncOrStage &that, VarOrRVar var) {
     return that.vectorize(var);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_vectorize1(FuncOrStage &that, hh::VarOrRVar var, int factor) {
+FuncOrStage &func_vectorize1(FuncOrStage &that, VarOrRVar var, int factor) {
     return that.vectorize(var, factor);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_unroll0(FuncOrStage &that, hh::VarOrRVar var) {
+FuncOrStage &func_unroll0(FuncOrStage &that, VarOrRVar var) {
     return that.unroll(var);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_unroll1(FuncOrStage &that, hh::VarOrRVar var, int factor) {
+FuncOrStage &func_unroll1(FuncOrStage &that, VarOrRVar var, int factor) {
     return that.unroll(var, factor);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_tile0(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
-                        hh::VarOrRVar xo, hh::VarOrRVar yo,
-                        hh::VarOrRVar xi, hh::VarOrRVar yi,
-                        hh::Expr xfactor, hh::Expr yfactor) {
+FuncOrStage &func_tile0(FuncOrStage &that, VarOrRVar x, VarOrRVar y,
+                        VarOrRVar xo, VarOrRVar yo,
+                        VarOrRVar xi, VarOrRVar yi,
+                        Expr xfactor, Expr yfactor) {
     return that.tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
-                        hh::VarOrRVar xi, hh::VarOrRVar yi,
-                        hh::Expr xfactor, hh::Expr yfactor) {
+FuncOrStage &func_tile1(FuncOrStage &that, VarOrRVar x, VarOrRVar y,
+                        VarOrRVar xi, VarOrRVar yi,
+                        Expr xfactor, Expr yfactor) {
     return that.tile(x, y, xi, yi, xfactor, yfactor);
 }
 
 template <typename FuncOrStage, typename PythonIterable>
 FuncOrStage &func_reorder0(FuncOrStage &that, PythonIterable args_passed) {
-    std::vector<hh::VarOrRVar> var_or_rvar_args;
+    std::vector<VarOrRVar> var_or_rvar_args;
 
-    const size_t args_len = bp::len(args_passed);
+    const size_t args_len = py::len(args_passed);
     for (size_t i = 0; i < args_len; i += 1) {
-        bp::object o = args_passed[i];
-        bp::extract<hh::VarOrRVar> var_or_rvar_extract(o);
+        py::object o = args_passed[i];
+        py::extract<VarOrRVar> var_or_rvar_extract(o);
 
         if (var_or_rvar_extract.check()) {
             var_or_rvar_args.push_back(var_or_rvar_extract());
         } else {
             for (size_t j = 0; j < args_len; j += 1) {
-                bp::object o = args_passed[j];
-                const std::string o_str = bp::extract<std::string>(bp::str(o));
+                py::object o = args_passed[j];
+                const std::string o_str = py::extract<std::string>(py::str(o));
                 printf("Func::reorder args_passed[%lu] == %s\n", j, o_str.c_str());
             }
             throw std::invalid_argument("Func::reorder() only handles a list of (convertible to) VarOrRVar.");
@@ -92,33 +83,33 @@ FuncOrStage &func_reorder0(FuncOrStage &that, PythonIterable args_passed) {
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_reorder1(FuncOrStage &that, bp::object v0,
-                           bp::object v1, bp::object v2, bp::object v3, bp::object v4, bp::object v5) {
-    bp::list args_list;
-    for (const bp::object &v : { v0, v1, v2, v3, v4, v5 }) {
+FuncOrStage &func_reorder1(FuncOrStage &that, py::object v0,
+                           py::object v1, py::object v2, py::object v3, py::object v4, py::object v5) {
+    py::list args_list;
+    for (const py::object &v : { v0, v1, v2, v3, v4, v5 }) {
         if (not v.is_none()) {
             args_list.append(v);
         }
     }
 
-    return func_reorder0<FuncOrStage, bp::list>(that, args_list);
+    return func_reorder0<FuncOrStage, py::list>(that, args_list);
 }
 
 template <typename FuncOrStage, typename PythonIterable>
 FuncOrStage &func_reorder_storage0(FuncOrStage &that, PythonIterable args_passed) {
-    std::vector<hh::Var> var_args;
+    std::vector<Var> var_args;
 
-    const size_t args_len = bp::len(args_passed);
+    const size_t args_len = py::len(args_passed);
     for (size_t i = 0; i < args_len; i += 1) {
-        bp::object o = args_passed[i];
-        bp::extract<hh::Var &> var_extract(o);
+        py::object o = args_passed[i];
+        py::extract<Var &> var_extract(o);
 
         if (var_extract.check()) {
             var_args.push_back(var_extract());
         } else {
             for (size_t j = 0; j < args_len; j += 1) {
-                bp::object o = args_passed[j];
-                const std::string o_str = bp::extract<std::string>(bp::str(o));
+                py::object o = args_passed[j];
+                const std::string o_str = py::extract<std::string>(py::str(o));
                 printf("Func::reorder_storage args_passed[%lu] == %s\n", j, o_str.c_str());
             }
             throw std::invalid_argument("Func::reorder_storage() only handles a list of (convertible to) Var.");
@@ -129,19 +120,20 @@ FuncOrStage &func_reorder_storage0(FuncOrStage &that, PythonIterable args_passed
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_reorder_storage1(FuncOrStage &that, bp::object v0,
-                                   bp::object v1, bp::object v2,
-                                   bp::object v3, bp::object v4, bp::object v5) {
-    bp::list args_list;
-    for (const bp::object &v : { v0, v1, v2, v3, v4, v5 }) {
+FuncOrStage &func_reorder_storage1(FuncOrStage &that, py::object v0,
+                                   py::object v1, py::object v2,
+                                   py::object v3, py::object v4, py::object v5) {
+    py::list args_list;
+    for (const py::object &v : { v0, v1, v2, v3, v4, v5 }) {
         if (not v.is_none()) {
             args_list.append(v);
         }
     }
 
-    return func_reorder_storage0<FuncOrStage, bp::list>(that, args_list);
+    return func_reorder_storage0<FuncOrStage, py::list>(that, args_list);
 }
 
-}  // namespace func_and_stage_implementation_details
+}  // namespace PythonBindings
+}  // namespace Halide
 
 #endif  // HALIDE_PYTHON_BINDINGS_PYFUNC_H

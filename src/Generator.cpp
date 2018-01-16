@@ -459,7 +459,7 @@ void StubEmitter::emit() {
         stream << decl << "\n";
     }
 
-    stream << indent() << "class " << class_name << " final : public Halide::Internal::GeneratorStub {\n";
+    stream << indent() << "class " << class_name << " final : public Halide::NamesInterface {\n";
     stream << indent() << "public:\n";
     indent_level++;
 
@@ -563,14 +563,29 @@ void StubEmitter::emit() {
     stream << indent() << ")\n";
     stream << indent() << "{\n";
     indent_level++;
-    stream << indent() << class_name << " self(context, inputs, generator_params);\n";
-    stream << indent() << "self.schedule();\n";
+    stream << indent() << "using Stub = Halide::Internal::GeneratorStub;\n";
+    stream << indent() << "Stub stub(\n";
+    indent_level++;
+    stream << indent() << "context,\n";
+    stream << indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory,\n";
+    stream << indent() << "generator_params.to_generator_params_map(),\n";
+    stream << indent() << "{\n";
+    indent_level++;
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        stream << indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
+        stream << ",\n";
+    }
+    indent_level--;
+    stream << indent() << "}\n";
+    indent_level--;
+    stream << indent() << ");\n";
+
     stream << indent() << "return {\n";
     indent_level++;
     for (const auto &out : out_info) {
-        stream << indent() << "self." << out.name << ",\n";
+        stream << indent() << "stub." << out.getter << ",\n";
     }
-    stream << indent() << "self.get_target()\n";
+    stream << indent() << "stub.generator->get_target()\n";
     indent_level--;
     stream << indent() << "};\n";
     indent_level--;
@@ -607,101 +622,7 @@ void StubEmitter::emit() {
     stream << indent() << "}\n";
     stream << "\n";
 
-    stream << indent() << class_name << "() {}\n";
-
-    stream << "\n";
-
-    stream << indent() << "NO_INLINE " << class_name << "(\n";
-    indent_level++;
-    stream << indent() << "const GeneratorContext& context,\n";
-    stream << indent() << "const Inputs& inputs,\n";
-    stream << indent() << "const GeneratorParams& params = GeneratorParams()\n";
-    indent_level--;
-    stream << indent() << ")\n";
-    indent_level++;
-    stream << indent() << ": GeneratorStub(context, halide_register_generator::" << generator_registered_name << "_ns::factory, params.to_generator_params_map(), {\n";
-    indent_level++;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << indent() << "to_stub_input_vector(inputs." << inputs[i]->name() << ")";
-        stream << ",\n";
-    }
-    indent_level--;
-    stream << indent() << "})\n";
-    for (const auto &out : out_info) {
-        stream << indent() << ", " << out.name << "(" << out.getter << ")\n";
-    }
-    indent_level--;
-    stream << indent() << "{\n";
-    stream << indent() << "}\n";
-    stream << "\n";
-
-    stream << indent() << "// delegating ctor to allow GeneratorContext-pointer\n";
-    stream << indent() << class_name << "(\n";
-    indent_level++;
-    stream << indent() << "const GeneratorContext* context,\n";
-    stream << indent() << "const Inputs& inputs,\n";
-    stream << indent() << "const GeneratorParams& params = GeneratorParams()\n";
-    indent_level--;
-    stream << indent() << ")\n";
-    indent_level++;
-    stream << indent() << ": " << class_name << "(*context, inputs, params) {}\n";
-    stream << "\n";
-    indent_level--;
-
-    stream << indent() << "// schedule method\n";
-    stream << indent() << class_name << " &schedule() {\n";
-    indent_level++;
-    stream << indent() << "(void) GeneratorStub::schedule();\n";
-    stream << indent() << "return *this;\n";
-    indent_level--;
-    stream << indent() << "}\n";
-    stream << "\n";
-
-    stream << indent() << "// move constructor\n";
-    stream << indent() << class_name << "("<< class_name << "&& that)\n";
-    indent_level++;
-    stream << indent() << ": GeneratorStub(std::move(that))\n";
-    for (const auto &out : out_info) {
-        stream << indent() << ", " << out.name << "(std::move(that." << out.name << "))\n";
-    }
-    indent_level--;
-    stream << indent() << "{\n";
-    stream << indent() << "}\n";
-    stream << "\n";
-
-    stream << indent() << "// move assignment operator\n";
-    stream << indent() << class_name << "& operator=("<< class_name << "&& that) {\n";
-    indent_level++;
-    stream << indent() << "GeneratorStub::operator=(std::move(that));\n";
-    for (const auto &out : out_info) {
-        stream << indent() << out.name << " = std::move(that." << out.name << ");\n";
-    }
-    stream << indent() << "return *this;\n";
-    indent_level--;
-    stream << indent() << "}\n";
-    stream << "\n";
-
-    stream << indent() << "// Output(s)\n";
-    stream << indent() << "// TODO: identify vars used\n";
-    for (const auto &out : out_info) {
-        stream << indent() << out.ctype << " " << out.name << ";\n";
-    }
-    stream << "\n";
-
-    stream << indent() << "~" << class_name << "() { if (has_generator()) verify(); }\n";
-    stream << "\n";
-
-    indent_level--;
-    stream << indent() << "protected:\n";
-    indent_level++;
-    stream << indent() << "NO_INLINE void verify() {\n";
-    indent_level++;
-    for (const auto &out : out_info) {
-        stream << indent() << "verify_same_funcs(" << out.name << ", " << out.getter << ");\n";
-    }
-    indent_level--;
-    stream << indent() << "}\n";
-    stream << "\n";
+    stream << indent() << class_name << "() = delete;\n";
 
     indent_level--;
     stream << indent() << "};\n";
@@ -723,18 +644,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
     generator->set_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
     generator->call_generate();
-}
-
-void GeneratorStub::verify_same_funcs(const Func &a, const Func &b) {
-    user_assert(a.function().get_contents().same_as(b.function().get_contents()))
-        << "Expected Func " << a.name() << " and " << b.name() << " to match.\n";
-}
-
-void GeneratorStub::verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b) {
-    user_assert(a.size() == b.size()) << "Mismatch in Function vector length.\n";
-    for (size_t i = 0; i < a.size(); ++i) {
-        verify_same_funcs(a[i], b[i]);
-    }
+    generator->call_schedule();
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {

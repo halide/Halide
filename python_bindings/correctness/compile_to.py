@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import os.path
 
 import halide as hl

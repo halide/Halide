@@ -14,6 +14,7 @@
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
+#include "ParamMap.h"
 #include "Tuple.h"
 #include "Target.h"
 
@@ -59,7 +60,7 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
+    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map, bool is_bounds_inference);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -353,16 +354,16 @@ public:
 
     /** See Func::realize */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size, int y_size,
-                               const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
     EXPORT Realization realize(int x_size,
-                               const Target &target = Target());
-    EXPORT Realization realize(const Target &target = Target());
+                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    EXPORT Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or
@@ -374,7 +375,7 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    EXPORT void realize(Realization dst, const Target &target = Target());
+    EXPORT void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -382,8 +383,8 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(Realization dst);
+    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
+    EXPORT void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

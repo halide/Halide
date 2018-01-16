@@ -718,6 +718,37 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define atanh_f64 atanh\n";
     }
 
+    if (target.has_feature(Target::CLHalf)) {
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                   << "inline half half_from_bits(unsigned short x) {return as_half(x);}\n"
+                   << "inline half nan_f16() { return nan((unsigned short)0); }\n"
+                   << "inline half neg_inf_f16() { return -INFINITY; }\n"
+                   << "inline half inf_f16() { return INFINITY; }\n"
+                   << "bool is_nan_f16(half x) {return x != x; }\n"
+                   << "#define sqrt_f16 sqrt\n"
+                   << "#define sin_f16 sin\n"
+                   << "#define cos_f16 cos\n"
+                   << "#define exp_f16 exp\n"
+                   << "#define log_f16 log\n"
+                   << "#define abs_f16 fabs\n"
+                   << "#define floor_f16 floor\n"
+                   << "#define ceil_f16 ceil\n"
+                   << "#define round_f16 round\n"
+                   << "#define trunc_f16 trunc\n"
+                   << "#define pow_f16 pow\n"
+                   << "#define asin_f16 asin\n"
+                   << "#define acos_f16 acos\n"
+                   << "#define tan_f16 tan\n"
+                   << "#define atan_f16 atan\n"
+                   << "#define atan2_f16 atan2\n"
+                   << "#define sinh_f16 sinh\n"
+                   << "#define asinh_f16 asinh\n"
+                   << "#define cosh_f16 cosh\n"
+                   << "#define acosh_f16 acosh\n"
+                   << "#define tanh_f16 tanh\n"
+                   << "#define atanh_f16 atanh\n";
+    }
+
     src_stream << '\n';
 
     // Add at least one kernel to avoid errors on some implementations for functions

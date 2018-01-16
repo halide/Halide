@@ -1,32 +1,29 @@
 #include "PyLambda.h"
 
-#include <boost/python.hpp>
+namespace Halide {
+namespace PythonBindings {
 
-#include "Halide.h"
-
-namespace h = Halide;
-
-h::Func lambda0D(h::Expr e) {
+Func lambda0D(Expr e) {
     return lambda(e);
 }
 
-h::Func lambda1D(h::Var x, h::Expr e) {
+Func lambda1D(Var x, Expr e) {
     return lambda(x, e);
 }
 
-h::Func lambda2D(h::Var x, h::Var y, h::Expr e) {
+Func lambda2D(Var x, Var y, Expr e) {
     return lambda(x, y, e);
 }
 
-h::Func lambda3D(h::Var x, h::Var y, h::Var z, h::Expr e) {
+Func lambda3D(Var x, Var y, Var z, Expr e) {
     return lambda(x, y, z, e);
 }
 
-h::Func lambda4D(h::Var x, h::Var y, h::Var z, h::Var w, h::Expr e) {
+Func lambda4D(Var x, Var y, Var z, Var w, Expr e) {
     return lambda(x, y, z, w, e);
 }
 
-h::Func lambda5D(h::Var x, h::Var y, h::Var z, h::Var w, h::Var v, h::Expr e) {
+Func lambda5D(Var x, Var y, Var z, Var w, Var v, Expr e) {
     return lambda(x, y, z, w, v, e);
 }
 
@@ -34,40 +31,43 @@ h::Func lambda5D(h::Var x, h::Var y, h::Var z, h::Var w, h::Var v, h::Expr e) {
 /// See test/lambda.cpp for example usage.
 /// lambda is a python keyword so we used lambda0D, lambda1D, ... lambda5D instead.
 void define_lambda() {
-    namespace p = boost::python;
 
-    p::def("lambda0D", &lambda0D, p::arg("e"),
+
+    py::def("lambda0D", &lambda0D, py::arg("e"),
            "Create a zero-dimensional halide function that returns the given "
            "expression. The function may have more dimensions if the expression "
            "contains implicit arguments.");
 
-    p::def("lambda1D", &lambda1D, p::args("x", "e"),
+    py::def("lambda1D", &lambda1D, py::args("x", "e"),
            "Create a 1-D halide function in the first argument that returns "
            "the second argument. The function may have more dimensions if the "
            "expression contains implicit arguments and the list of Var "
            "arguments contains a placeholder (\"_\").");
 
-    p::def("lambda2D", &lambda2D, p::args("x", "y", "e"),
+    py::def("lambda2D", &lambda2D, py::args("x", "y", "e"),
            "Create a 2-D halide function in the first two arguments that "
            "returns the last argument. The function may have more dimensions if "
            "the expression contains implicit arguments and the list of Var "
            "arguments contains a placeholder (\"_\").");
 
-    p::def("lambda3D", &lambda3D, p::args("x", "y", "z", "e"),
+    py::def("lambda3D", &lambda3D, py::args("x", "y", "z", "e"),
            "Create a 3-D halide function in the first three arguments that "
            "returns the last argument.  The function may have more dimensions "
            "if the expression contains implicit arguments and the list of Var "
            "arguments contains a placeholder (\"_\").");
 
-    p::def("lambda4D", &lambda4D, p::args("x", "y", "z", "w", "e"),
+    py::def("lambda4D", &lambda4D, py::args("x", "y", "z", "w", "e"),
            "Create a 4-D halide function in the first four arguments that "
            "returns the last argument. The function may have more dimensions if "
            "the expression contains implicit arguments and the list of Var "
            "arguments contains a placeholder (\"_\").");
 
-    p::def("lambda5D", &lambda5D, p::args("x", "y", "z", "w", "v", "e"),
+    py::def("lambda5D", &lambda5D, py::args("x", "y", "z", "w", "v", "e"),
            "Create a 5-D halide function in the first five arguments that "
            "returns the last argument. The function may have more dimensions if "
            "the expression contains implicit arguments and the list of Var "
            "arguments contains a placeholder (\"_\").");
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

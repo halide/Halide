@@ -338,6 +338,47 @@ void halide_toc_impl(const char *file, int line);
 #define TOC HALIDE_TOC
 #endif
 
+// statically cast a value from one type to another: this is really just
+// some syntactic sugar around static_cast<>() to avoid compiler warnings
+// regarding 'bool' in some compliation configurations.
+template<typename TO>
+struct StaticCast {
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
+    inline constexpr static TO2 value(const FROM &from) { return static_cast<TO2>(from); }
+
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
+    inline constexpr static TO2 value(const FROM &from) { return from != 0; }
+};
+
+// Like std::is_convertible, but with additional tests for arithmetic types:
+// ensure that the value will roundtrip losslessly (e.g., no integer truncation
+// or dropping of fractional parts).
+template<typename TO>
+struct IsRoundtrippable {
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<
+        !std::is_convertible<FROM, TO>::value
+    >::type * = nullptr>
+    inline constexpr static bool value(const FROM &from) {
+        return false;
+    }
+
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<
+        std::is_convertible<FROM, TO>::value &&
+        std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value
+    >::type * = nullptr>
+    inline constexpr static bool value(const FROM &from) {
+        return StaticCast<FROM>::value(StaticCast<TO>::value(from)) == from;
+    }
+
+    template <typename FROM, typename TO2 = TO, typename std::enable_if<
+        std::is_convertible<FROM, TO>::value &&
+        !(std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value)
+    >::type * = nullptr>
+    inline constexpr static bool value(const FROM &from) {
+        return true;
+    }
+};
+
 }  // namespace Internal
 }  // namespace Halide
 

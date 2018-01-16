@@ -12,16 +12,10 @@ struct LinearBlur : public Halide::Generator<LinearBlur> {
     void generate() {
         Var x("x"), y("y"), c("c");
 
-        auto linear = srgb_to_linear(this, {input});
-        linear.schedule();
-
-        auto blurred = simple_blur(this, {linear.linear, input.width(), input.height()});
-        blurred.schedule();
-
-        auto srgb = linear_to_srgb(this, {blurred.output});
-        srgb.schedule();
-
-        output(x, y, c) = srgb.srgb(x, y, c);
+        Func linear = srgb_to_linear::generate(this, {input});
+        Func blurred = simple_blur::generate(this, {linear, input.width(), input.height()});
+        Func srgb = linear_to_srgb::generate(this, {blurred});
+        output(x, y, c) = srgb(x, y, c);
 
         if (auto_schedule) {
             input.dim(0).set_bounds_estimate(0, 1536)

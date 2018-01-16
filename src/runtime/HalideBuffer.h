@@ -173,7 +173,7 @@ private:
     struct DevRefCountCropped : DeviceRefCount {
         Buffer<T, D> cropped_from;
         DevRefCountCropped(const Buffer<T, D> &cropped_from) : cropped_from(cropped_from) {
-            ownership = BufferDeviceOwnership::Cropped; 
+            ownership = BufferDeviceOwnership::Cropped;
         }
     };
 
@@ -371,7 +371,7 @@ private:
 
     /** Crop a single dimension without handling device allocation. */
     void crop_host(int d, int min, int extent) {
-        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug 
+        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug
         // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
         // Should either fix that or kill the asserts and document the routine accordingly.
         //        assert(dim(d).min() <= min);
@@ -1205,28 +1205,38 @@ public:
     }
 
     /** Set the min coordinate of an image in the first N dimensions */
-    template<typename ...Args>
-    void set_min(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
+    // @{
+    void set_min(const std::vector<int> &mins) {
+        assert(mins.size() <= (size_t)dimensions());
         device_deallocate();
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            buf.dim[i].min = x[i];
+        for (size_t i = 0; i < mins.size(); i++) {
+            buf.dim[i].min = mins[i];
         }
     }
 
-    /** Test if a given coordinate is within the the bounds of an image */
     template<typename ...Args>
-    bool contains(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            if (x[i] < dim(i).min() || x[i] > dim(i).max()) {
+    void set_min(Args... args) {
+        set_min(std::vector<int>{args...});
+    }
+    // @}
+
+    /** Test if a given coordinate is within the the bounds of an image */
+    // @{
+    bool contains(const std::vector<int> &coords) const {
+        assert(coords.size() <= (size_t)dimensions());
+        for (size_t i = 0; i < coords.size(); i++) {
+            if (coords[i] < dim((int) i).min() || coords[i] > dim((int) i).max()) {
                 return false;
             }
         }
         return true;
     }
+
+    template<typename ...Args>
+    bool contains(Args... args) const {
+        return contains(std::vector<int>{args...});
+    }
+    // @}
 
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
@@ -1564,7 +1574,10 @@ public:
             swaps.pop_back();
         }
 
-        Buffer<T, D> dst(nullptr, src.dimensions(), shape);
+        // Use an explicit runtime type, and make dst a Buffer<void>, to allow
+        // using this method with Buffer<void> for either src or dst.
+        const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<not_void_T>();
+        Buffer<> dst(dst_type, nullptr, src.dimensions(), shape);
         dst.allocate(allocate_fn, deallocate_fn);
 
         return dst;
@@ -1693,7 +1706,7 @@ public:
         bool all_equal = true;
         for_each_element([&](const int *pos) {all_equal &= (*this)(pos) == val;});
         return all_equal;
-    }    
+    }
 
     void fill(not_void_T val) {
         set_host_dirty();

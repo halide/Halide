@@ -59,8 +59,8 @@ struct Box {
 
     size_t size() const {return bounds.size();}
     bool empty() const {return bounds.empty();}
-    Interval &operator[](int i) {return bounds[i];}
-    const Interval &operator[](int i) const {return bounds[i];}
+    Interval &operator[](size_t i) {return bounds[i];}
+    const Interval &operator[](size_t i) const {return bounds[i];}
     void resize(size_t sz) {bounds.resize(sz);}
     void push_back(const Interval &i) {bounds.push_back(i);}
 
