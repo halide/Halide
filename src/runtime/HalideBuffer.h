@@ -60,7 +60,10 @@ struct AllInts<double, Args...> : std::false_type {};
  * class itself. */
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
-    std::atomic<int> ref_count {0};
+    std::atomic<int> ref_count;
+
+    // Note that ref_count always starts at 1
+    AllocationHeader(void (*deallocate_fn)(void *)) : deallocate_fn(deallocate_fn), ref_count(1) {}
 };
 
 /** This indicates how to deallocate the device for a Halide::Runtime::Buffer. */
@@ -743,9 +746,8 @@ public:
         size_t size = size_in_bytes();
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
-        alloc = (AllocationHeader *)allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
-        alloc->deallocate_fn = deallocate_fn;
-        alloc->ref_count = 1;
+        void *alloc_storage = allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
+        alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
