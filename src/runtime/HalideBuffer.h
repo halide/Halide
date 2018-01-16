@@ -193,6 +193,7 @@ private:
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
+                alloc->~AllocationHeader();
                 fn(alloc);
             }
             buf.host = nullptr;
