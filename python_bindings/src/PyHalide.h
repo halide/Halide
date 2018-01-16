@@ -19,7 +19,6 @@ namespace PythonBindings {
 
 namespace py = pybind11;
 
-// TODO: PyUtil.h?
 template<typename T>
 std::vector<T> args_to_vector(const py::args &args, size_t start_offset = 0, size_t end_offset = 0) {
     if (args.size() < start_offset + end_offset) {
