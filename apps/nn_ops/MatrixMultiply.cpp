@@ -1,37 +1,15 @@
-#include <stdio.h>
-#include <memory.h>
 #include <assert.h>
-#include <stdlib.h>
 #include <malloc.h>
+#include <memory.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "halide_benchmark.h"
 
+#include "common_reference.h"
 #include "MatrixMultiply.h"
 
 #include "HalideBuffer.h"
-
-int32_t saturating_rounding_doubling_high_multiply(int32_t a, int32_t b) {
-    int64_t a_wide = a;
-    int64_t b_wide = b;
-    int64_t ab_wide = a_wide * b_wide;
-    int64_t nudge = 1 << 30;
-    int64_t result = (ab_wide + nudge) >> 31;
-    result = std::max(result, (int64_t)std::numeric_limits<int32_t>::min());
-    result = std::min(result, (int64_t)std::numeric_limits<int32_t>::max());
-    return (int32_t)result;
-}
-
-int32_t rounding_shift_right(int32_t x, int32_t shift) {
-    // Shift must satisfy 0 <= shift <= 31
-    int32_t mask = ((1ll << shift) - 1);
-    int32_t remainder = x & mask;
-    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
-    return (x >> shift) + (remainder > threshold ? 1 : 0);
-}
-
-int32_t multiply_quantized_multiplier(int32_t x, int32_t q, int32_t shift) {
-    return rounding_shift_right(saturating_rounding_doubling_high_multiply(x, q), shift);
-}
 
 int main(int argc, char **argv) {
     if (argc < 4) {
@@ -140,15 +118,15 @@ int main(int argc, char **argv) {
     mat_ab.for_each_element([&](int x, int y) {
         int32_t ab_xy = bias(x);
         for (int k = 0; k < N; k++) {
-            int32_t a_ky = (int32_t)mat_a(k, y) + mat_a_offset;
-            int32_t b_xk = (int32_t)mat_b(x, k) + mat_b_offset;
+            int32_t a_ky = (int32_t) mat_a(k, y) + mat_a_offset;
+            int32_t b_xk = (int32_t) mat_b(x, k) + mat_b_offset;
             ab_xy += a_ky * b_xk;
         }
 
-        int32_t output = multiply_quantized_multiplier(ab_xy, output_multiplier, output_shift);
+        int32_t output = multiply_quantized_multiplier_reference(ab_xy, output_multiplier, output_shift);
         output += output_offset;
-        output = std::max(output, (int32_t)output_min);
-        output = std::min(output, (int32_t)output_max);
+        output = std::max(output, (int32_t) output_min);
+        output = std::min(output, (int32_t) output_max);
         if (output != mat_ab(x, y)) {
             printf("Mismatch at %d %d: %d != %d\n", x, y, output, mat_ab(x, y));
             abort();

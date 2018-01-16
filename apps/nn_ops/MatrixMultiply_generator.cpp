@@ -13,31 +13,31 @@
 #include "common.h"
 #include <Halide.h>
 
+using Halide::Generator;
+using Halide::OutputImageParam;
+using Halide::RVar;
 using Halide::ConciseCasts::i32;
 using Halide::ConciseCasts::u16;
 using Halide::ConciseCasts::u32;
 using Halide::ConciseCasts::u8_sat;
-using Halide::Generator;
-using Halide::OutputImageParam;
-using Halide::RVar;
 
 class MatrixMultiply : public Generator<MatrixMultiply> {
 public:
     // Two unsigned 8-bit input matrices, indexed by x, y.
-    ImageParam mat_a_{UInt(8), 2, "mat_a"};
-    ImageParam mat_b_{UInt(8), 2, "mat_b"};
+    ImageParam mat_a_{ UInt(8), 2, "mat_a" };
+    ImageParam mat_b_{ UInt(8), 2, "mat_b" };
 
     // A 1D array of 32-bit biases indexed by output width.
-    ImageParam bias_{Int(32), 1, "bias"};
+    ImageParam bias_{ Int(32), 1, "bias" };
 
     // Offsets and multipliers for the input, filter, and output.
-    Param<int16_t> mat_a_offset_{"mat_a_offset", 0, -255, 0};
-    Param<int16_t> mat_b_offset_{"mat_b_offset", 0, -255, 0};
-    Param<int> output_multiplier_{"output_multiplier"};
-    Param<int> output_shift_{"output_shift"};
-    Param<int> output_offset_{"output_offset", 0, 0, 255};
-    Param<uint8_t> output_min_{"output_min"};
-    Param<uint8_t> output_max_{"output_max"};
+    Param<int16_t> mat_a_offset_{ "mat_a_offset", 0, -255, 0 };
+    Param<int16_t> mat_b_offset_{ "mat_b_offset", 0, -255, 0 };
+    Param<int> output_multiplier_{ "output_multiplier" };
+    Param<int> output_shift_{ "output_shift" };
+    Param<int> output_offset_{ "output_offset", 0, 0, 255 };
+    Param<uint8_t> output_min_{ "output_min" };
+    Param<uint8_t> output_max_{ "output_max" };
 
     Func build() {
         // We take two 8 bit matrices as input.

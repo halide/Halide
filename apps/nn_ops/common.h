@@ -16,5 +16,4 @@ Halide::Expr rounding_shift_right(Halide::Expr x, Halide::Expr shift);
 // Performs right shift and multiply by a multiplier.
 Halide::Expr multiply_quantized_multiplier(
     Halide::Expr x, Halide::Expr quantized_multiplier, Halide::Expr shift);
-
 #endif
