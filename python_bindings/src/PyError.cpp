@@ -10,13 +10,13 @@ void halide_python_error(void *, const char *msg) {
 }
 
 void halide_python_print(void *, const char *msg) {
-    PySys_WriteStdout("%s", msg);
+    py::print(msg, py::arg("end") = "");
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char* msg) {
-        PySys_WriteStdout("%s", msg);
+        py::print(msg, py::arg("end") = "");
     }
 
     void error(const char* msg) {
@@ -25,15 +25,9 @@ public:
     }
 };
 
-void translate_error(Error const &e) {
-    PyErr_SetString(PyExc_RuntimeError, e.what());
-}
-
 }  // namespace
 
-void define_error() {
-    py::register_exception_translator<Error>(&translate_error);
-
+void define_error(py::module &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
