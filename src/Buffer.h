@@ -176,41 +176,41 @@ public:
     template<typename ...Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(Type t,
-                    Internal::add_const_if_T_is_const<T, void> *data,
+                    Runtime::ExternalDataSource<Internal::add_const_if_T_is_const<T, void>> data,
                     int first, Args&&... rest) :
-        Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+        Buffer(Runtime::Buffer<T>(t, std::move(data), Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
 
     template<typename ...Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
-    explicit Buffer(T *data,
+    explicit Buffer(Runtime::ExternalDataSource<T> data,
                     int first, Args&&... rest) :
-        Buffer(Runtime::Buffer<T>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+        Buffer(Runtime::Buffer<T>(std::move(data), Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
 
-    explicit Buffer(T *data,
+    explicit Buffer(Runtime::ExternalDataSource<T> data,
                     const std::vector<int> &sizes,
                     const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(data, sizes), name) {}
+        Buffer(Runtime::Buffer<T>(std::move(data), sizes), name) {}
 
     explicit Buffer(Type t,
-                    Internal::add_const_if_T_is_const<T, void> *data,
+                    Runtime::ExternalDataSource<Internal::add_const_if_T_is_const<T, void>> data,
                     const std::vector<int> &sizes,
                     const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(t, data, sizes), name) {}
+        Buffer(Runtime::Buffer<T>(t, std::move(data), sizes), name) {}
 
     explicit Buffer(Type t,
-                    Internal::add_const_if_T_is_const<T, void> *data,
+                    Runtime::ExternalDataSource<Internal::add_const_if_T_is_const<T, void>> data,
                     int d,
                     const halide_dimension_t *shape,
                     const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(t, data, d, shape), name) {}
+        Buffer(Runtime::Buffer<T>(t, std::move(data), d, shape), name) {}
 
-    explicit Buffer(T *data,
+    explicit Buffer(Runtime::ExternalDataSource<T> data,
                     int d,
                     const halide_dimension_t *shape,
                     const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(data, d, shape), name) {}
+        Buffer(Runtime::Buffer<T>(std::move(data), d, shape), name) {}
 
 
     static Buffer<T> make_scalar(const std::string &name = "") {
