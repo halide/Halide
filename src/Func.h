@@ -401,6 +401,24 @@ public:
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
+    // If we mark these as deprecated, some build environments will complain
+    // about the internal-only calls. Since these are rarely used outside
+    // Func itself, we'll just comment them as deprecated for now.
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Stage &allow_race_conditions();
 
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
@@ -1830,6 +1848,20 @@ public:
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          Expr x_size, Expr y_size, Expr z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Func &gpu_tile(VarOrRVar x, Expr x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
