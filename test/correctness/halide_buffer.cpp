@@ -144,6 +144,63 @@ int main(int argc, char **argv) {
         // assert(d.all_equal(42));
     }
 
+    // Check that keep_alive works properly
+    {
+        static int dtor_count = 0;
+        struct MyKeepAlive : public KeepAlive {
+            void *data;
+            explicit MyKeepAlive(size_t bytes) {
+                data = malloc(bytes);
+            }
+            ~MyKeepAlive() override {
+                dtor_count++;
+                free(data);
+            }
+        };
+
+        dtor_count = 0;
+        auto keep_alive = std::unique_ptr<MyKeepAlive>(new MyKeepAlive(sizeof(int) * 4));
+        int *host_ptr = (int*) keep_alive->data;
+        Buffer<int> a0({host_ptr, std::move(keep_alive)}, 2, 2);
+        a0.fill(1);
+        assert(a0.all_equal(1));
+        assert(a0.data() == host_ptr);
+        assert(dtor_count == 0);
+
+        // a1 shares the same storage with a0
+        Buffer<int> a1 = a0;
+        assert(a1.all_equal(1));
+        assert(a1.data() == host_ptr);
+
+        // filling a1 also fills a0
+        a1.fill(2);
+        assert(a0.all_equal(2));
+        assert(a1.data() == host_ptr);
+
+        // b is a copy of a0/a1, with its own storage
+        auto b = a0.copy();
+        assert(dtor_count == 0);
+        assert(b.all_equal(2));
+        assert(b.data() != host_ptr);
+
+        // re-allocates the data in a0 (but doesn't copy old data over);
+        // keep_alive is still around because a1 still references it
+        a0.allocate();
+        a0.fill(3);
+        assert(a0.data() != host_ptr);
+        assert(a0.all_equal(3));
+        assert(a1.all_equal(2));
+        assert(dtor_count == 0);
+
+        // reallocate in a1; this finally discards the keep_alive
+        a1.allocate();
+        a1.fill(4);
+        assert(a1.data() != host_ptr);
+        assert(a0.all_equal(3));
+        assert(a1.all_equal(4));
+        assert(dtor_count == 1);
+    }
+
     printf("Success!\n");
     return 0;
 }

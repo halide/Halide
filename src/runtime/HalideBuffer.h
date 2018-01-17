@@ -56,11 +56,47 @@ struct AllInts<float, Args...> : std::false_type {};
 template<typename ...Args>
 struct AllInts<double, Args...> : std::false_type {};
 
+struct KeepAlive {
+    virtual ~KeepAlive() {}
+};
+
+/** ExternalDataSource is a simple adapter class that is used to specify the data source
+ * for Buffer ctors which take a data pointer which is *not* copied by Buffer.
+ *
+ * There is an implicit ctor for ExternalDataSource that allows you to simply pass an arbitrary pointer,
+ * in which case Buffer assumes that the pointer will remain valid "forever".
+ *
+ * You can also optionally pass a unique_ptr<KeepAlive>; this is a pointer to an opaque data structure
+ * that will be kept alive for as long as the Buffer needs access to the pointer. When the Buffer
+ * no longer needs access (i.e., is deleted, or reallocated), the KeepAlive instance will be deleted;
+ * you should create a subclass of KeepAlive to do any resource releasing necessary in the virtual dtor.
+ */
+template<typename T>
+struct ExternalDataSource final {
+    T * const data;
+    std::unique_ptr<KeepAlive> keep_alive;
+
+    /*not-explicit*/ ExternalDataSource(T *data, std::unique_ptr<KeepAlive> keep_alive = nullptr) : data(data), keep_alive(std::move(keep_alive)) {}
+
+    // Movable, but not copyable
+    ExternalDataSource(const ExternalDataSource &) = delete;
+    ExternalDataSource& operator=(const ExternalDataSource &) = delete;
+
+    ExternalDataSource(ExternalDataSource &&other) = default;
+    ExternalDataSource& operator=(ExternalDataSource &&rhs) = default;
+};
+
+
 /** A struct acting as a header for allocations owned by the Buffer
  * class itself. */
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
-    std::atomic<int> ref_count {0};
+    std::atomic<int> ref_count;
+    std::unique_ptr<KeepAlive> keep_alive;
+
+    // Note that ref_count always starts at 1
+    AllocationHeader(void (*deallocate_fn)(void *), std::unique_ptr<KeepAlive> keep_alive = nullptr)
+        : deallocate_fn(deallocate_fn), ref_count(1), keep_alive(std::move(keep_alive)) {}
 };
 
 /** This indicates how to deallocate the device for a Halide::Runtime::Buffer. */
@@ -190,6 +226,7 @@ private:
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
+                alloc->~AllocationHeader();
                 fn(alloc);
             }
             buf.host = nullptr;
@@ -743,13 +780,26 @@ public:
         size_t size = size_in_bytes();
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
-        alloc = (AllocationHeader *)allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
-        alloc->deallocate_fn = deallocate_fn;
-        alloc->ref_count = 1;
+        void *alloc_storage = allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
+        alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
 
+private:
+    void set_keep_alive(std::unique_ptr<KeepAlive> keep_alive) {
+        if (alloc != nullptr) {
+            assert(false);
+            return;
+        }
+
+        if (keep_alive != nullptr) {
+            void *alloc_storage = malloc(sizeof(AllocationHeader));
+            alloc = new (alloc_storage) AllocationHeader(free, std::move(keep_alive));
+        }
+    }
+
+public:
     /** Drop reference to any owned host or device memory, possibly
      * freeing it, if this buffer held the last reference to
      * it. Retains the shape of the buffer. Does nothing if this
@@ -865,15 +915,16 @@ public:
      * host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args&&... rest) {
+    explicit Buffer(halide_type_t t, ExternalDataSource<add_const_if_T_is_const<void>> data, int first, Args&&... rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *)data.data;
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
+        set_keep_alive(std::move(data.keep_alive));
     }
 
     /** Initialize an Buffer from a pointer and some sizes. Assumes
@@ -881,68 +932,73 @@ public:
      * take ownership of the data and does not set the host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(T *data, int first, Args&&... rest) {
+    explicit Buffer(ExternalDataSource<T> data, int first, Args&&... rest) {
         buf.type = static_halide_type();
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *)data.data;
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
+        set_keep_alive(std::move(data.keep_alive));
     }
 
     /** Initialize an Buffer from a pointer and a vector of
      * sizes. Assumes dense row-major packing and a min coordinate of
      * zero. Does not take ownership of the data and does not set the
      * host_dirty flag. */
-    explicit Buffer(T *data, const std::vector<int> &sizes) {
+    explicit Buffer(ExternalDataSource<T> data, const std::vector<int> &sizes) {
         buf.type = static_halide_type();
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *)data.data;
         make_shape_storage();
         initialize_shape(sizes);
+        set_keep_alive(std::move(data.keep_alive));
     }
 
     /** Initialize an Buffer of runtime type from a pointer and a
      * vector of sizes. Assumes dense row-major packing and a min
      * coordinate of zero. Does not take ownership of the data and
      * does not set the host_dirty flag. */
-    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, const std::vector<int> &sizes) {
+    explicit Buffer(halide_type_t t, ExternalDataSource<add_const_if_T_is_const<void>> data, const std::vector<int> &sizes) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
         buf.type = t;
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *)data.data;
         make_shape_storage();
         initialize_shape(sizes);
+        set_keep_alive(std::move(data.keep_alive));
     }
 
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
-    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int d, const halide_dimension_t *shape) {
+    explicit Buffer(halide_type_t t, ExternalDataSource<add_const_if_T_is_const<void>> data, int d, const halide_dimension_t *shape) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
         buf.type = t;
         buf.dimensions = d;
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *)data.data;
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
         }
+        set_keep_alive(std::move(data.keep_alive));
     }
 
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
-    explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
+    explicit Buffer(ExternalDataSource<T> data, int d, const halide_dimension_t *shape) {
         buf.type = halide_type_of<typename std::remove_cv<T>::type>();
         buf.dimensions = d;
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *)data.data;
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
         }
+        set_keep_alive(std::move(data.keep_alive));
     }
 
     /** Destructor. Will release any underlying owned allocation if
