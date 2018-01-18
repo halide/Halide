@@ -774,20 +774,8 @@ public:
      * to make a buffer suitable for bounds query calls. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    Buffer(halide_type_t t, int first, Args... rest) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
-        buf.type = t;
-        buf.dimensions = 1 + (int)(sizeof...(rest));
-        make_shape_storage();
-        initialize_shape(0, first, rest...);
-        if (!any_zero(first, rest...)) {
-            check_overflow();
-            allocate();
-        }
-    }
-
+    Buffer(halide_type_t t, int first, Args... rest)
+        : Buffer(t, std::vector<int>{first, rest...}) {}
 
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
@@ -795,33 +783,13 @@ public:
 
     // The overload with one argument is 'explicit', so that
     // (say) int is not implicitly convertable to Buffer<int>
-    explicit Buffer(int first) {
-        static_assert(!T_is_void,
-                      "To construct a Buffer<void>, pass a halide_type_t as the first argument to the constructor");
-        buf.type = static_halide_type();
-        buf.dimensions = 1;
-        make_shape_storage();
-        initialize_shape(0, first);
-        if (first != 0) {
-            check_overflow();
-            allocate();
-        }
-    }
+    explicit Buffer(int first)
+        : Buffer(std::vector<int>{first}) {}
 
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    Buffer(int first, int second, Args... rest) {
-        static_assert(!T_is_void,
-                      "To construct a Buffer<void>, pass a halide_type_t as the first argument to the constructor");
-        buf.type = static_halide_type();
-        buf.dimensions = 2 + (int)(sizeof...(rest));
-        make_shape_storage();
-        initialize_shape(0, first, second, rest...);
-        if (!any_zero(first, second, rest...)) {
-            check_overflow();
-            allocate();
-        }
-    }
+    Buffer(int first, int second, Args... rest)
+        : Buffer(std::vector<int>{first, second, rest...}) {}
     // @}
 
     /** Allocate a new image of unknown type using a vector of ints as the size. */
@@ -870,29 +838,16 @@ public:
      * host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args&&... rest) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
-        buf.type = t;
-        buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
-        make_shape_storage();
-        initialize_shape(0, first, int(rest)...);
-    }
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args&&... rest)
+        : Buffer(t, data, std::vector<int>{first, rest...}) {}
 
     /** Initialize a Buffer from a pointer and some sizes. Assumes
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data and does not set the host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(T *data, int first, Args&&... rest) {
-        buf.type = static_halide_type();
-        buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
-        make_shape_storage();
-        initialize_shape(0, first, int(rest)...);
-    }
+    explicit Buffer(T *data, int first, Args&&... rest)
+        : Buffer(data, std::vector<int>{first, rest...}) {}
 
     /** Initialize a Buffer from a pointer and a vector of
      * sizes. Assumes dense row-major packing and a min coordinate of
