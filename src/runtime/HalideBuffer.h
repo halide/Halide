@@ -874,7 +874,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
     }
@@ -887,7 +887,7 @@ public:
     explicit Buffer(T *data, int first, Args&&... rest) {
         buf.type = static_halide_type();
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
     }
@@ -899,7 +899,7 @@ public:
     explicit Buffer(T *data, const std::vector<int> &sizes) {
         buf.type = static_halide_type();
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         initialize_shape(sizes);
     }
@@ -914,7 +914,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         initialize_shape(sizes);
     }
@@ -928,7 +928,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = d;
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
@@ -941,7 +941,7 @@ public:
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
         buf.type = halide_type_of<typename std::remove_cv<T>::type>();
         buf.dimensions = d;
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
