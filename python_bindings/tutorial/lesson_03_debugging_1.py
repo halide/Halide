@@ -21,7 +21,7 @@
 
 # This time we'll just import the entire Halide namespace
 #using namespace Halide
-from halide import *
+import halide as hl
 
 def main():
 
@@ -31,10 +31,10 @@ def main():
     # This lesson will be about debugging, but unfortunately in C++,
     # objects don't know their own names, which makes it hard for us
     # to understand the generated code. To get around this, you can
-    # pass a string to the Func and Var constructors to give them a
+    # pass a string to the hl.Func and hl.Var constructors to give them a
     # name for debugging purposes.
-    gradient = Func("gradient")
-    x, y = Var("x"), Var("y")
+    gradient = hl.Func("gradient")
+    x, y = hl.Var("x"), hl.Var("y")
     gradient[x, y] = x + y
 
     # Realize the function to produce an output image. We'll keep it

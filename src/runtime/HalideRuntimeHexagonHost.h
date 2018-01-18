@@ -11,6 +11,8 @@ extern "C" {
  *  Routines specific to the Halide Hexagon host-side runtime.
  */
 
+#define HALIDE_RUNTIME_HEXAGON
+
 typedef int halide_hexagon_handle_t;
 
 extern const struct halide_device_interface_t *halide_hexagon_device_interface();

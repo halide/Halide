@@ -20,21 +20,21 @@
 #include "Halide.h"
 #include <stdio.h>
 #using namespace Halide
-from halide import *
+import halide as hl
 from struct import unpack
 
 def main():
 
     # We'll define the simple one-stage pipeline that we used in lesson 10.
-    brighter = Func("brighter")
-    x, y = Var("x"), Var("y")
+    brighter = hl.Func("brighter")
+    x, y = hl.Var("x"), hl.Var("y")
 
     # Declare the arguments.
-    offset = Param(UInt(8))
-    input = ImageParam(UInt(8), 2)
+    offset = hl.Param(hl.UInt(8))
+    input = hl.ImageParam(hl.UInt(8), 2)
     args = [input, offset]
 
-    # Define the Func.
+    # Define the hl.Func.
     brighter[x, y] = input[x, y] + offset
 
     # Schedule it.
@@ -57,9 +57,9 @@ def main():
 
     if create_android:
         # Let's use this to compile a 32-bit arm android version of this code:
-        target = Target()
-        target.os = TargetOS.Android  # The operating system
-        target.arch = TargetArch.ARM  # The CPU architecture
+        target = hl.Target()
+        target.os = hl.TargetOS.Android  # The operating system
+        target.arch = hl.TargetArch.ARM  # The CPU architecture
         target.bits = 32              # The bit-width of the architecture
         arm_features = []             # A list of features to set
         target.set_features(arm_features)
@@ -68,11 +68,11 @@ def main():
 
     if create_windows:
         # And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
-        target = Target()
-        target.os = TargetOS.Windows
-        target.arch = TargetArch.X86
+        target = hl.Target()
+        target.os = hl.TargetOS.Windows
+        target.arch = hl.TargetArch.X86
         target.bits = 64
-        target.set_features([TargetFeature.AVX, TargetFeature.SSE41])
+        target.set_features([hl.TargetFeature.AVX, hl.TargetFeature.SSE41])
         brighter.compile_to_file("lesson_11_x86_64_windows", args, "lesson_11_x86_64_windows", target)
 
     if create_ios:
@@ -82,11 +82,11 @@ def main():
         # this using the target features field.  Support for Apple's
         # 64-bit ARM processors is very new in llvm, and still somewhat
         # flaky.
-        target = Target()
-        target.os = TargetOS.IOS
-        target.arch = TargetArch.ARM
+        target = hl.Target()
+        target.os = hl.TargetOS.IOS
+        target.arch = hl.TargetArch.ARM
         target.bits = 32
-        target.set_features([TargetFeature.ARMv7s])
+        target.set_features([hl.TargetFeature.ARMv7s])
         brighter.compile_to_file("lesson_11_arm_32_ios", args, "lesson_11_arm_32_ios", target)
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # Halide tutorial lesson 6.
 
-# This lesson demonstrates how to evaluate a Func over a domain that
+# This lesson demonstrates how to evaluate a hl.Func over a domain that
 # does not start at (0, 0).
 
 # This lesson can be built by invoking the command:
@@ -21,7 +21,7 @@
 #include <stdio.h>
 
 #using namespace Halide
-from halide import *
+import halide as hl
 
 def main():
 
@@ -31,8 +31,8 @@ def main():
     # domains that do not start at the origin.
 
     # We define our familiar gradient function.
-    gradient = Func ("gradient")
-    x, y = Var("x"), Var("y")
+    gradient = hl.Func ("gradient")
+    x, y = hl.Var("x"), hl.Var("y")
     gradient[x, y] = x + y
 
     # And turn on tracing so we can see how it is being evaluated.
@@ -53,15 +53,15 @@ def main():
     # What if we're managing memory carefully and don't want Halide
     # to allocate a new image for us? We can call realize another
     # way. We can pass it an image we would like it to fill in. The
-    # following evaluates our Func into an existing image:
+    # following evaluates our hl.Func into an existing image:
     print("Evaluating gradient from (0, 0) to (7, 7)")
-    result = Buffer(Int(32), 8, 8)
+    result = hl.Buffer(hl.Int(32), [8, 8])
     gradient.realize(result)
 
     # Let's check it did what we expect:
     for yy in range(8):
         for xx in range(8):
-            if result(xx, yy) != xx + yy:
+            if result[xx, yy] != xx + yy:
                 print("Something went wrong!")
                 return -1
 
@@ -73,8 +73,8 @@ def main():
     # from (100, 50) to (104, 56) inclusive.
 
     # We start by creating an image that represents that rectangle:
-    shifted = Buffer(Int(32), 5, 7) # In the constructor we tell it the size.
-    shifted.set_min(100, 50) # Then we tell it the top-left corner.
+    shifted = hl.Buffer(hl.Int(32), [5, 7]) # In the constructor we tell it the size.
+    shifted.set_min([100, 50]) # Then we tell it the top-left corner.
 
     print("Evaluating gradient from (100, 50) to (104, 56)")
 
@@ -87,17 +87,17 @@ def main():
     # that start at (100, 50).
     for yy in range(50, 57):
         for xx in range(100, 105):
-            if shifted(xx, yy) != xx + yy:
+            if shifted[xx, yy] != xx + yy:
                 print("Something went wrong!")
                 return -1
 
 
 
-    # The image 'shifted' stores the value of our Func over a domain
+    # The image 'shifted' stores the value of our hl.Func over a domain
     # that starts at (100, 50), so asking for shifted(0, 0) would in
     # fact read out-of-bounds and probably crash.
 
-    # What if we want to evaluate our Func over some region that
+    # What if we want to evaluate our hl.Func over some region that
     # isn't rectangular? Too bad. Halide only does rectangles :)
 
     print("Success!")

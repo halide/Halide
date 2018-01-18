@@ -1,6 +1,0 @@
-This a boiled down version of
-    https :  //github.com/ndarray/Boost.NumPy
-
-             many files are removed,
-             and namespace changed from boost::numpy to
-                     Halide::numpy to avoid clashes.

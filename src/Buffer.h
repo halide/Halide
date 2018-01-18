@@ -104,6 +104,10 @@ public:
 
     typedef T ElemType;
 
+    // This class isn't final (and is subclassed from the Python binding
+    // code, at least) so it needs a virtual dtor.
+    virtual ~Buffer() {}
+
     /** Make a null Buffer, which points to no Runtime::Buffer */
     Buffer() {}
 
@@ -382,6 +386,7 @@ public:
     HALIDE_BUFFER_FORWARD(deallocate)
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
+    HALIDE_BUFFER_FORWARD_CONST(all_equal)
     HALIDE_BUFFER_FORWARD(fill)
     HALIDE_BUFFER_FORWARD_CONST(for_each_element)
 
