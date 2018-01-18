@@ -3,6 +3,7 @@
 #include "device_interface.h"
 #include "printer.h"
 #include "mini_cuda.h"
+#include "scoped_spin_lock.h"
 
 #define INLINE inline __attribute__((always_inline))
 
@@ -111,19 +112,19 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
             return 0;
         }
 
-        while (__sync_lock_test_and_set(&context_lock, 1)) { }
+        {
+            ScopedSpinLock spinlock(&context_lock);
 
-        __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
-        if (local_val == NULL) {
-            CUresult error = create_cuda_context(user_context, &local_val);
-            if (error != CUDA_SUCCESS) {
-                __sync_lock_release(&context_lock);
-                return error;
+            __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+            if (local_val == NULL) {
+                CUresult error = create_cuda_context(user_context, &local_val);
+                if (error != CUDA_SUCCESS) {
+                    __sync_lock_release(&context_lock);
+                    return error;
+                }
             }
-        }
-        __atomic_store(&context, &local_val, __ATOMIC_RELEASE);
-
-        __sync_lock_release(&context_lock);
+            __atomic_store(&context, &local_val, __ATOMIC_RELEASE);
+        }  // spinlock
     }
 
     *ctx = local_val;
@@ -442,53 +443,53 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 
 
     halide_assert(user_context, &filters_list_lock != NULL);
-    while (__sync_lock_test_and_set(&filters_list_lock, 1)) { }
+    {
+        ScopedSpinLock spinlock(&filters_list_lock);
 
-    // Create the state object if necessary. This only happens once, regardless
-    // of how many times halide_initialize_kernels/halide_release is called.
-    // halide_release traverses this list and releases the module objects, but
-    // it does not modify the list nodes created/inserted here.
-    registered_filters **filters = (registered_filters**)state_ptr;
-    if (!(*filters)) {
-        *filters = (registered_filters*)malloc(sizeof(registered_filters));
-        (*filters)->modules = NULL;
-        (*filters)->next = filters_list;
-        filters_list = *filters;
-    }
-
-    // Create the module itself if necessary.
-    module_state *loaded_module = find_module_for_context(*filters, ctx.context);
-    if (loaded_module == NULL) {
-        loaded_module = (module_state *)malloc(sizeof(module_state));
-        debug(user_context) <<  "    cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
-
-        CUjit_option options[] = { CU_JIT_MAX_REGISTERS };
-        unsigned int max_regs_per_thread = 64;
-
-        // A hack to enable control over max register count for
-        // testing. This should be surfaced in the schedule somehow
-        // instead.
-        char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
-        if (regs) {
-            max_regs_per_thread = atoi(regs);
+        // Create the state object if necessary. This only happens once, regardless
+        // of how many times halide_initialize_kernels/halide_release is called.
+        // halide_release traverses this list and releases the module objects, but
+        // it does not modify the list nodes created/inserted here.
+        registered_filters **filters = (registered_filters**)state_ptr;
+        if (!(*filters)) {
+            *filters = (registered_filters*)malloc(sizeof(registered_filters));
+            (*filters)->modules = NULL;
+            (*filters)->next = filters_list;
+            filters_list = *filters;
         }
-        void *optionValues[] = { (void*)(uintptr_t) max_regs_per_thread };
-        CUresult err = cuModuleLoadDataEx(&loaded_module->module, ptx_src, 1, options, optionValues);
 
-        if (err != CUDA_SUCCESS) {
-            free(loaded_module);
-            error(user_context) << "CUDA: cuModuleLoadData failed: "
-                                << get_error_name(err);
-            return err;
-        } else {
-            debug(user_context) << (void *)(loaded_module->module) << "\n";
+        // Create the module itself if necessary.
+        module_state *loaded_module = find_module_for_context(*filters, ctx.context);
+        if (loaded_module == NULL) {
+            loaded_module = (module_state *)malloc(sizeof(module_state));
+            debug(user_context) <<  "    cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
+
+            CUjit_option options[] = { CU_JIT_MAX_REGISTERS };
+            unsigned int max_regs_per_thread = 64;
+
+            // A hack to enable control over max register count for
+            // testing. This should be surfaced in the schedule somehow
+            // instead.
+            char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
+            if (regs) {
+                max_regs_per_thread = atoi(regs);
+            }
+            void *optionValues[] = { (void*)(uintptr_t) max_regs_per_thread };
+            CUresult err = cuModuleLoadDataEx(&loaded_module->module, ptx_src, 1, options, optionValues);
+
+            if (err != CUDA_SUCCESS) {
+                free(loaded_module);
+                error(user_context) << "CUDA: cuModuleLoadData failed: "
+                                    << get_error_name(err);
+                return err;
+            } else {
+                debug(user_context) << (void *)(loaded_module->module) << "\n";
+            }
+            loaded_module->context = ctx.context;
+            loaded_module->next = (*filters)->modules;
+            (*filters)->modules = loaded_module;
         }
-        loaded_module->context = ctx.context;
-        loaded_module->next = (*filters)->modules;
-        (*filters)->modules = loaded_module;
-    }
-
-    __sync_lock_release(&filters_list_lock);
+    }  // spinlock
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -563,49 +564,51 @@ WEAK int halide_cuda_device_release(void *user_context) {
         }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
-        while (__sync_lock_test_and_set(&filters_list_lock, 1)) { }
+        {
+            ScopedSpinLock spinlock(&filters_list_lock);
 
-        // Unload the modules attached to this context. Note that the list
-        // nodes themselves are not freed, only the module objects are
-        // released. Subsequent calls to halide_init_kernels might re-create
-        // the program object using the same list node to store the module
-        // object.
-        registered_filters *filters = filters_list;
-        while (filters) {
-            module_state **prev_ptr = &filters->modules;
-            module_state *loaded_module = filters->modules;
-            while (loaded_module != NULL) {
-                if (loaded_module->context == ctx) {
-                    debug(user_context) << "    cuModuleUnload " << loaded_module->module << "\n";
-                    err = cuModuleUnload(loaded_module->module);
-                    halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-                    *prev_ptr = loaded_module->next;
-                    free(loaded_module);
-                    loaded_module = *prev_ptr;
-                } else {
-                    loaded_module = loaded_module->next;
-                    prev_ptr = &loaded_module->next;
+            // Unload the modules attached to this context. Note that the list
+            // nodes themselves are not freed, only the module objects are
+            // released. Subsequent calls to halide_init_kernels might re-create
+            // the program object using the same list node to store the module
+            // object.
+            registered_filters *filters = filters_list;
+            while (filters) {
+                module_state **prev_ptr = &filters->modules;
+                module_state *loaded_module = filters->modules;
+                while (loaded_module != NULL) {
+                    if (loaded_module->context == ctx) {
+                        debug(user_context) << "    cuModuleUnload " << loaded_module->module << "\n";
+                        err = cuModuleUnload(loaded_module->module);
+                        halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+                        *prev_ptr = loaded_module->next;
+                        free(loaded_module);
+                        loaded_module = *prev_ptr;
+                    } else {
+                        loaded_module = loaded_module->next;
+                        prev_ptr = &loaded_module->next;
+                    }
                 }
+                filters = filters->next;
             }
-            filters = filters->next;
-        }
-
-        __sync_lock_release(&filters_list_lock);
+        }  // spinlock
 
         CUcontext old_ctx;
         cuCtxPopCurrent(&old_ctx);
 
         // Only destroy the context if we own it
 
-        while (__sync_lock_test_and_set(&context_lock, 1)) { }
-        if (ctx == context) {
-            debug(user_context) << "    cuCtxDestroy " << context << "\n";
-            err = cuProfilerStop();
-            err = cuCtxDestroy(context);
-            halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-            context = NULL;
-        }
-        __sync_lock_release(&context_lock);
+        {
+            ScopedSpinLock spinlock(&context_lock);
+
+            if (ctx == context) {
+                debug(user_context) << "    cuCtxDestroy " << context << "\n";
+                err = cuProfilerStop();
+                err = cuCtxDestroy(context);
+                halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+                context = NULL;
+            }
+        }  // spinlock
     }
 
     halide_cuda_release_context(user_context);

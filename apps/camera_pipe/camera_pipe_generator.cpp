@@ -166,6 +166,9 @@ public:
                     .vectorize(x, 2*vec, TailStrategy::RoundUp)
                     .fold_storage(y, 4);
             }
+            intermediates[1].compute_with(
+                intermediates[0], x,
+                {{x, LoopAlignStrategy::AlignStart}, {y, LoopAlignStrategy::AlignStart}});
             output.compute_at(output_compute_at)
                 .vectorize(x)
                 .unroll(y)

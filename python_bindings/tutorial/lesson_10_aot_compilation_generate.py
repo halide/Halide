@@ -34,16 +34,16 @@
 #include "Halide.h"
 #include <stdio.h>
 #using namespace Halide
-from halide import *
+import halide as hl
 
 def main():
 
     # We'll define a simple one-stage pipeline:
-    brighter = Func("brighter")
-    x, y = Var("x"), Var("y")
+    brighter = hl.Func("brighter")
+    x, y = hl.Var("x"), hl.Var("y")
 
     # The pipeline will depend on one scalar parameter.
-    offset = Param(UInt(8), name="offset")
+    offset = hl.Param(hl.UInt(8), name="offset")
 
     # And take one grayscale 8-bit input buffer. The first
     # constructor argument gives the type of a pixel, and the second
@@ -51,15 +51,15 @@ def main():
     # channels!). For a grayscale image this is two for a color
     # image it's three. Currently, four dimensions is the maximum for
     # inputs and outputs.
-    input = ImageParam(UInt(8), 2)
+    input = hl.ImageParam(hl.UInt(8), 2)
 
     # If we were jit-compiling, these would just be an int and a
-    # Buffer, but because we want to compile the pipeline once and
+    # hl.Buffer, but because we want to compile the pipeline once and
     # have it work for any value of the parameter, we need to make a
-    # Param object, which can be used like an Expr, and an ImageParam
-    # object, which can be used like a Buffer.
+    # hl.Param object, which can be used like an hl.Expr, and an hl.ImageParam
+    # object, which can be used like a hl.Buffer.
 
-    # Define the Func.
+    # Define the hl.Func.
     brighter[x, y] = input[x, y] + offset
 
     # Schedule it.

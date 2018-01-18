@@ -1,50 +1,31 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
-#include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 
 #ifdef CONV3X3A16
-#include "conv3x3a16_hvx128.h"
-#include "conv3x3a16_hvx64.h"
-#include "conv3x3a16_cpu.h"
+#include "conv3x3a16.h"
 #endif
 
 #ifdef DILATE3X3
-#include "dilate3x3_hvx128.h"
-#include "dilate3x3_hvx64.h"
-#include "dilate3x3_cpu.h"
+#include "dilate3x3.h"
 #endif
 
 #ifdef MEDIAN3X3
-#include "median3x3_hvx128.h"
-#include "median3x3_hvx64.h"
-#include "median3x3_cpu.h"
+#include "median3x3.h"
 #endif
 
 #ifdef GAUSSIAN5X5
-#include "gaussian5x5_hvx128.h"
-#include "gaussian5x5_hvx64.h"
-#include "gaussian5x5_cpu.h"
+#include "gaussian5x5.h"
 #endif
 
 #ifdef SOBEL
-#include "sobel_hvx128.h"
-#include "sobel_hvx64.h"
-#include "sobel_cpu.h"
+#include "sobel.h"
 #endif
 
 #ifdef CONV3X3A32
-#include "conv3x3a32_hvx128.h"
-#include "conv3x3a32_hvx64.h"
-#include "conv3x3a32_cpu.h"
+#include "conv3x3a32.h"
 #endif
-
-enum bmark_run_mode_t {
-    hvx64 = 1,
-    hvx128 = 2,
-    cpu = 3
-};
 
 template <typename T>
 T clamp(T val, T min, T max) {
@@ -58,7 +39,7 @@ T clamp(T val, T min, T max) {
 struct PipelineDescriptorBase {
     virtual void init() = 0;
     virtual const char * name() = 0;
-    virtual int run(bmark_run_mode_t mode) = 0;
+    virtual int run() = 0;
     virtual bool verify(int W, int H) = 0;
     virtual bool defined() = 0;
     virtual void finalize() = 0;
@@ -74,9 +55,15 @@ public:
                                          i8_mask(nullptr, 3, 3, 2) {}
 
     void init() {
+#ifdef HALIDE_RUNTIME_HEXAGON
         u8_in.device_malloc(halide_hexagon_device_interface());
         u8_out.device_malloc(halide_hexagon_device_interface());
         i8_mask.device_malloc(halide_hexagon_device_interface());
+#else
+        u8_in.allocate();
+        u8_out.allocate();
+        i8_mask.allocate();
+#endif
 
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -128,15 +115,9 @@ public:
         return true;
     }
 
-    int run(bmark_run_mode_t mode) {
+    int run() {
 #ifdef CONV3X3A16
-        if (mode == bmark_run_mode_t::hvx64) {
-            return conv3x3a16_hvx64(u8_in, i8_mask, u8_out);
-        } else if (mode == bmark_run_mode_t::hvx128) {
-            return conv3x3a16_hvx128(u8_in, i8_mask, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu) {
-            return conv3x3a16_cpu(u8_in, i8_mask, u8_out);
-        }
+        return conv3x3a16(u8_in, i8_mask, u8_out);
 #endif
         return 1;
     }
@@ -158,8 +139,13 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
                                          u8_out(nullptr, W, H, 2) {}
 
     void init() {
+#ifdef HALIDE_RUNTIME_HEXAGON
         u8_in.device_malloc(halide_hexagon_device_interface());
         u8_out.device_malloc(halide_hexagon_device_interface());
+#else
+        u8_in.allocate();
+        u8_out.allocate();
+#endif
 
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -200,15 +186,9 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
         return true;
     }
 
-    int run(bmark_run_mode_t mode) {
+    int run() {
 #ifdef DILATE3X3
-        if (mode == bmark_run_mode_t::hvx64) {
-            return dilate3x3_hvx64(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::hvx128) {
-            return dilate3x3_hvx128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu) {
-            return dilate3x3_cpu(u8_in, u8_out);
-        }
+        return dilate3x3(u8_in, u8_out);
 #endif
         return 1;
     }
@@ -226,8 +206,13 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
                                           u8_out(nullptr, W, H, 2) {}
 
     void init() {
+#ifdef HALIDE_RUNTIME_HEXAGON
         u8_in.device_malloc(halide_hexagon_device_interface());
         u8_out.device_malloc(halide_hexagon_device_interface());
+#else
+        u8_in.allocate();
+        u8_out.allocate();
+#endif
 
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -266,15 +251,9 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
         return true;
     }
 
-    int run(bmark_run_mode_t mode) {
+    int run() {
 #ifdef MEDIAN3X3
-        if (mode == bmark_run_mode_t::hvx64) {
-            return median3x3_hvx64(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::hvx128) {
-            return median3x3_hvx128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu) {
-            return median3x3_cpu(u8_in, u8_out);
-        }
+        return median3x3(u8_in, u8_out);
 #endif
         return 1;
     }
@@ -292,8 +271,13 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
                                            u8_out(nullptr, W, H, 2) {}
 
     void init() {
+#ifdef HALIDE_RUNTIME_HEXAGON
         u8_in.device_malloc(halide_hexagon_device_interface());
         u8_out.device_malloc(halide_hexagon_device_interface());
+#else
+        u8_in.allocate();
+        u8_out.allocate();
+#endif
 
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -334,15 +318,9 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
         return true;
     }
 
-    int run(bmark_run_mode_t mode) {
+    int run() {
 #ifdef GAUSSIAN5X5
-        if (mode == bmark_run_mode_t::hvx64) {
-            return gaussian5x5_hvx64(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::hvx128) {
-            return gaussian5x5_hvx128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu) {
-            return gaussian5x5_cpu(u8_in, u8_out);
-        }
+        return gaussian5x5(u8_in, u8_out);
 #endif
         return 1;
     }
@@ -360,8 +338,13 @@ class SobelDescriptor : public PipelineDescriptorBase {
                                      u8_out(nullptr, W, H, 2) {}
 
     void init() {
+#ifdef HALIDE_RUNTIME_HEXAGON
         u8_in.device_malloc(halide_hexagon_device_interface());
         u8_out.device_malloc(halide_hexagon_device_interface());
+#else
+        u8_in.allocate();
+        u8_out.allocate();
+#endif
 
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -408,15 +391,9 @@ class SobelDescriptor : public PipelineDescriptorBase {
         return true;
     }
 
-    int run(bmark_run_mode_t mode) {
+    int run() {
 #ifdef SOBEL
-        if (mode == bmark_run_mode_t::hvx64) {
-            return sobel_hvx64(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::hvx128) {
-            return sobel_hvx128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu) {
-            return sobel_cpu(u8_in, u8_out);
-        }
+        return sobel(u8_in, u8_out);
 #endif
         return 1;
     }
@@ -436,9 +413,15 @@ public:
                                          i8_mask(nullptr, 3, 3, 2) {}
 
     void init() {
+#ifdef HALIDE_RUNTIME_HEXAGON
         u8_in.device_malloc(halide_hexagon_device_interface());
         u8_out.device_malloc(halide_hexagon_device_interface());
         i8_mask.device_malloc(halide_hexagon_device_interface());
+#else
+        u8_in.allocate();
+        u8_out.allocate();
+        i8_mask.allocate();
+#endif
 
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
@@ -489,15 +472,9 @@ public:
         return true;
     }
 
-    int run(bmark_run_mode_t mode) {
+    int run() {
 #ifdef CONV3X3A32
-        if (mode == bmark_run_mode_t::hvx64) {
-            return conv3x3a32_hvx64(u8_in, i8_mask, u8_out);
-        } else if (mode == bmark_run_mode_t::hvx128) {
-            return conv3x3a32_hvx128(u8_in, i8_mask, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu) {
-            return conv3x3a32_cpu(u8_in, i8_mask, u8_out);
-        }
+        return conv3x3a32(u8_in, i8_mask, u8_out);
 #endif
         return 1;
     }

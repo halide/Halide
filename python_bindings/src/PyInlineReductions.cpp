@@ -1,94 +1,46 @@
 #include "PyInlineReductions.h"
 
-#include <boost/python.hpp>
-#include <string>
+#include "PyTuple.h"
 
-#include "Halide.h"
-
-#include "PyExpr.h"
+namespace Halide {
+namespace PythonBindings {
 
 
-namespace h = Halide;
-namespace p = boost::python;
+void define_inline_reductions(py::module &m) {
+    m.def("sum", (Expr (*)(Expr, const std::string &s)) &Halide::sum,
+            py::arg("expr"), py::arg("name") = "sum");
+    m.def("sum", (Expr (*)(RDom, Expr, const std::string &s)) &Halide::sum,
+            py::arg("rdom"), py::arg("expr"), py::arg("name") = "sum");
 
-h::Expr sum0(h::Expr e, const std::string name) {
-    return h::sum(e, name);
+    m.def("product", (Expr (*)(Expr, const std::string &s)) &Halide::product,
+            py::arg("expr"), py::arg("name") = "product");
+    m.def("product", (Expr (*)(RDom, Expr, const std::string &s)) &Halide::product,
+            py::arg("rdom"), py::arg("expr"), py::arg("name") = "product");
+
+    m.def("maximum", (Expr (*)(Expr, const std::string &s)) &Halide::maximum,
+            py::arg("expr"), py::arg("name") = "maximum");
+    m.def("maximum", (Expr (*)(RDom, Expr, const std::string &s)) &Halide::maximum,
+            py::arg("rdom"), py::arg("expr"), py::arg("name") = "maximum");
+
+    m.def("minimum", (Expr (*)(Expr, const std::string &s)) &Halide::minimum,
+            py::arg("expr"), py::arg("name") = "minimum");
+    m.def("minimum", (Expr (*)(RDom, Expr, const std::string &s)) &Halide::minimum,
+            py::arg("rdom"), py::arg("expr"), py::arg("name") = "minimum");
+
+    m.def("argmax", [](Expr e, const std::string &s) -> py::tuple {
+        return to_python_tuple(argmin(e, s));
+    }, py::arg("expr"), py::arg("name") = "argmax");
+    m.def("argmax", [](RDom r, Expr e, const std::string &s) -> py::tuple {
+        return to_python_tuple(argmax(r, e, s));
+    }, py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmax");
+
+    m.def("argmin", [](Expr e, const std::string &s) -> py::tuple {
+        return to_python_tuple(argmin(e, s));
+    }, py::arg("expr"), py::arg("name") = "argmin");
+    m.def("argmin", [](RDom r, Expr e, const std::string &s) -> py::tuple {
+        return to_python_tuple(argmin(r, e, s));
+    }, py::arg("rdom"), py::arg("expr"), py::arg("name") = "argmin");
 }
 
-h::Expr sum1(h::RDom r, h::Expr e, const std::string name) {
-    return h::sum(r, e, name);
-}
-
-h::Expr product0(h::Expr e, const std::string name) {
-    return h::product(e, name);
-}
-
-h::Expr product1(h::RDom r, h::Expr e, const std::string name) {
-    return h::product(r, e, name);
-}
-
-h::Expr maximum0(h::Expr e, const std::string name) {
-    return h::maximum(e, name);
-}
-
-h::Expr maximum1(h::RDom r, h::Expr e, const std::string name) {
-    return h::maximum(r, e, name);
-}
-
-h::Expr minimum0(h::Expr e, const std::string name) {
-    return h::minimum(e, name);
-}
-
-h::Expr minimum1(h::RDom r, h::Expr e, const std::string name) {
-    return h::minimum(r, e, name);
-}
-
-p::object argmin0(h::Expr e, const std::string name) {
-    return expr_vector_to_python_tuple(h::argmin(e, name).as_vector());
-}
-
-p::object argmin1(h::RDom r, h::Expr e, const std::string name) {
-    return expr_vector_to_python_tuple(h::argmin(r, e, name).as_vector());
-}
-
-p::object argmax0(h::Expr e, const std::string name) {
-    return expr_vector_to_python_tuple(h::argmin(e, name).as_vector());
-}
-
-p::object argmax1(h::RDom r, h::Expr e, const std::string name) {
-    return expr_vector_to_python_tuple(h::argmax(r, e, name).as_vector());
-}
-
-void define_inline_reductions() {
-    // Defines some inline reductions: sum, product, minimum, maximum.
-
-    p::def("sum", &sum0, (p::arg("e"), p::arg("name") = "sum"),
-           "An inline reduction.");
-    p::def("sum", &sum1, (p::arg("r"), p::arg("e"), p::arg("name") = "sum"),
-           "An inline reduction.");
-
-    p::def("product", &product0, (p::arg("e"), p::arg("name") = "product"),
-           "An inline reduction.");
-    p::def("product", &product1, (p::arg("r"), p::arg("e"), p::arg("name") = "product"),
-           "An inline reduction.");
-
-    p::def("maximum", &maximum0, (p::arg("e"), p::arg("name") = "maximum"),
-           "An inline reduction.");
-    p::def("maximum", &maximum1, (p::arg("r"), p::arg("e"), p::arg("name") = "maximum"),
-           "An inline reduction.");
-
-    p::def("minimum", &minimum0, (p::arg("e"), p::arg("name") = "minimum"),
-           "An inline reduction.");
-    p::def("minimum", &minimum1, (p::arg("r"), p::arg("e"), p::arg("name") = "minimum"),
-           "An inline reduction.");
-
-    p::def("argmin", &argmin0, (p::arg("e"), p::arg("name") = "argmin"),
-           "An inline reduction.");
-    p::def("argmin", &argmin1, (p::arg("r"), p::arg("e"), p::arg("name") = "argmin"),
-           "An inline reduction.");
-
-    p::def("argmax", &argmax0, (p::arg("e"), p::arg("name") = "argmax"),
-           "An inline reduction.");
-    p::def("argmax", &argmax1, (p::arg("r"), p::arg("e"), p::arg("name") = "argmax"),
-           "An inline reduction.");
-}
+}  // namespace PythonBindings
+}  // namespace Halide

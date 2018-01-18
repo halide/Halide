@@ -137,9 +137,9 @@ void check_estimates_on_outputs(const vector<Function> &outputs) {
 
 struct DependenceAnalysis {
     // Map containing all the functions in the pipeline.
-    const map<string, Function> &env;
-    const vector<string> &order;
-    const FuncValueBounds &func_val_bounds;
+    map<string, Function> env;
+    vector<string> order;
+    FuncValueBounds func_val_bounds;
 
     struct RegionsRequiredQuery {
         string f;
@@ -1050,9 +1050,11 @@ struct Partitioner {
     // Output functions of the pipeline.
     const vector<Function> &outputs;
 
-    Partitioner(const map<string, Box> &_pipeline_bounds, const MachineParams &_arch_params,
-                DependenceAnalysis &_dep_analysis, RegionCosts &_costs,
-                const vector<Function> &_outputs, const set<string> &unbounded);
+    Partitioner(const map<string, Box> &_pipeline_bounds,
+                const MachineParams &_arch_params,
+                const vector<Function> &_outputs,
+                DependenceAnalysis &_dep_analysis,
+                RegionCosts &_costs);
 
     void initialize_groups();
 
@@ -1290,19 +1292,14 @@ void Partitioner::disp_pipeline_costs() {
 // algorithm operates.
 Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
                          const MachineParams &_arch_params,
-                         DependenceAnalysis &_dep_analysis,
-                         RegionCosts &_costs,
                          const vector<Function> &_outputs,
-                         const set<string> &unbounded)
+                         DependenceAnalysis &_dep_analysis,
+                         RegionCosts &_costs)
         : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
           dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs) {
     // Place each stage of a function in its own group. Each stage is
-    // a node in the pipeline graph. If a function is unbounded, then
-    // we should inline it.
+    // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
-        if (unbounded.find(f.first) != unbounded.end()) {
-            continue;
-        }
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
@@ -1315,9 +1312,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
     for (const auto &f : dep_analysis.env) {
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
-
             set<string> parents = get_parents(f.second, s);
-
             for (const string &c : parents) {
                 // Filter out the calls to pipeline inputs. 'env' only contains
                 // the functions computed and not the inputs.
@@ -1330,7 +1325,6 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
 
                     FStage prod_stage(prod_func, final_stage);
                     FStage cons_stage(f.second, s);
-
                     children[prod_stage].insert(cons_stage);
                 }
             }
@@ -1340,36 +1334,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
                 // different stages of the same function.
                 FStage prod_stage(f.second, s - 1);
                 FStage cons_stage(f.second, s);
-
                 children[prod_stage].insert(cons_stage);
-            }
-        }
-    }
-
-    // Add the inlined unbounded functions into the consumer groups.
-    for (const auto &f : unbounded) {
-        for (const auto &o : outputs) {
-            internal_assert(o.name() != f) << "Output \"" << f << "\" should have been bounded\n";
-        }
-        const Function &func = get_element(dep_analysis.env, f);
-        int num_stages = func.updates().size() + 1;
-        for (auto &iter : groups) {
-            bool use_f = false;
-            for (int s = 0; s < num_stages; s++) {
-                FStage prod_stage(func, s);
-                for (const auto &m : iter.second.members) {
-                    const auto &c = get_element(children, prod_stage);
-                    if (c.find(m) != c.end()) {
-                        use_f = true;
-                        break;
-                    }
-                }
-            }
-            if (use_f) {
-                for (int s = 0; s < num_stages; s++) {
-                    iter.second.members.push_back(FStage(func, s));
-                }
-                iter.second.inlined.insert(f);
             }
         }
     }
@@ -3094,7 +3059,6 @@ void validate_no_partial_schedules(const Function &f) {
                 << "\" since stage " << stage << " is not serial at dim " << d.var << "\n";
         }
 
-
         if (stage == 0) {
             // Since we can only specialize on a Func, we only need to check for no
             // specializations for the initial stage.
@@ -3165,7 +3129,7 @@ void validate_no_partial_schedules(const Function &f) {
 // inline the Func. Return true of any of the Funcs is inlined.
 bool inline_all_trivial_functions(const vector<Function> &outputs,
                                   const vector<string> &order,
-                                  map<string, Function> &env) {
+                                  const map<string, Function> &env) {
     bool inlined = false;
     // The very last few functions in 'order' are the last to be realized in the
     // pipeline (the final producers) so there is no point in checking it.
@@ -3305,13 +3269,13 @@ bool used_by_extern_func(const map<string, Function> &env, const Function &f) {
 }
 
 // If the bounds of a Func are undefined, then we should just inline the Func
-// as long as it is not an extern Func or used by some extern Func.
+// as long as it is legal to inline or used by some extern Func.
 set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
                                     const map<string, Function> &env) {
     set<string> unbounded;
     for (const auto &iter : env) {
         const Function &f = iter.second;
-        if (f.has_extern_definition() || used_by_extern_func(env, f)) {
+        if (!f.can_be_inlined() || used_by_extern_func(env, f)) {
             continue;
         }
         const Box &bound = get_element(pipeline_bounds, iter.first);
@@ -3320,6 +3284,31 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
         }
     }
     return unbounded;
+}
+
+bool inline_unbounded(const vector<Function> &outputs,
+                      const vector<string> &order,
+                      const map<string, Function> &env,
+                      const set<string> &unbounded) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        Function f1 = env.at(order[i]);
+        if (!unbounded.count(f1.name())) {
+            continue;
+        }
+        inlined = true;
+        debug(4) << "Function \"" << order[i] << "\" is unbounded\n";
+        for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+            internal_assert(order[i] != order[j]);
+            Function f2 = env.at(order[j]);
+            debug(5) << "Inline unbounded function \"" << f1.name()
+                     << "\" inside \"" << f2.name() << "\"\n";
+            inline_function(f2, f1);
+        }
+    }
+    return inlined;
 }
 
 } // anonymous namespace
@@ -3346,7 +3335,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // order to pass to get_func() when generating the string representation
     // of the schedule.
     debug(2) << "Computing full realization order...\n";
-    vector<string> full_order = realization_order(outputs, env);
+    vector<string> full_order = realization_order(outputs, env).first;
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
@@ -3386,7 +3375,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     // Compute the realization order of the functions within the pipeline.
-    vector<string> order = realization_order(outputs, env);
+    vector<string> order = realization_order(outputs, env).first;
 
     // Run a pre-pass that inline all Funcs which values are accessed by
     // another single Func in element-wise manner. We need to do this
@@ -3409,7 +3398,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
             map<string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
-        order = realization_order(outputs, env);
+        order = realization_order(outputs, env).first;
     }
 
     // Compute the bounds of function values which are used for dependence analysis.
@@ -3437,9 +3426,32 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // used by some extern Funcs.
     debug(2) << "Determining all unbounded functions...\n";
     set<string> unbounded = get_unbounded_functions(pipeline_bounds, env);
+    if (!unbounded.empty()) {
+        // If some functions are unbounded, we should inline those directly.
+        // Also, we need to recompute 'env' and re-initialize 'costs' and
+        // 'dep_analysis'
+        debug(2) << "Inlining all unbounded functions...\n";
+        internal_assert(inline_unbounded(outputs, order, env, unbounded));
+
+        env.clear();
+        for (Function f : outputs) {
+            map<string, Function> more_funcs = find_transitive_calls(f);
+            env.insert(more_funcs.begin(), more_funcs.end());
+        }
+        order = realization_order(outputs, env).first;
+
+        debug(2) << "Re-computing function value bounds...\n";
+        func_val_bounds = compute_function_value_bounds(order, env);
+        debug(2) << "Re-initializing region costs...\n";
+        RegionCosts costs(env);
+        debug(2) << "Re-initializing dependence analysis...\n";
+        dep_analysis = DependenceAnalysis(env, order, func_val_bounds);
+        debug(2) << "Re-computing pipeline bounds...\n";
+        pipeline_bounds = get_pipeline_bounds(dep_analysis, outputs, &costs.input_estimates);
+    }
 
     debug(2) << "Initializing partitioner...\n";
-    Partitioner part(pipeline_bounds, arch_params, dep_analysis, costs, outputs, unbounded);
+    Partitioner part(pipeline_bounds, arch_params, outputs, dep_analysis, costs);
 
     // Compute and display reuse
     /* TODO: Use the reuse estimates to reorder loops
