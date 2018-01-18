@@ -186,6 +186,46 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, p
     return py::object();
 }
 
+// Use an alias class so that if we are created via a py::buffer, we can
+// keep the py::buffer_info class alive for the life of the Buffer<>,
+// ensuring the data isn't collected out from under us.
+class PyBuffer : public Buffer<> {
+    py::buffer_info info;
+
+    static std::vector<halide_dimension_t> make_dim_vec(const py::buffer_info &info) {
+        const Type t = format_descriptor_to_type(info.format);
+        std::vector<halide_dimension_t> dims;
+        dims.reserve(info.ndim);
+        for (int i = 0; i < info.ndim; i++) {
+            // TODO: check for ssize_t -> int32_t overflow
+            dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
+        }
+        return dims;
+    }
+
+    PyBuffer(py::buffer_info &&info, const std::string &name)
+        : Buffer<>(
+            format_descriptor_to_type(info.format),
+            info.ptr,
+            (int) info.ndim,
+            make_dim_vec(info).data(),
+            name
+        ),
+        info(std::move(info)) {}
+
+public:
+    PyBuffer()
+        : Buffer<>(), info() {}
+
+    explicit PyBuffer(const Buffer<> &b)
+        : Buffer<>(b), info() {}
+
+    PyBuffer(py::buffer buffer, const std::string &name)
+        : PyBuffer(buffer.request(/*writable*/ true), name) {}
+
+    virtual ~PyBuffer() {}
+};
+
 }  // namespace
 
 void define_buffer(py::module &m) {
@@ -200,7 +240,7 @@ void define_buffer(py::module &m) {
     ;
 
     auto buffer_class =
-        py::class_<Buffer<>>(m, "Buffer", py::buffer_protocol())
+        py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::buffer_protocol())
 
         // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
         // most notably, we can convert to an ndarray by calling numpy.array()
@@ -225,29 +265,9 @@ void define_buffer(py::module &m) {
 
         // This allows us to use any buffer-like python entity to create a Buffer<>
         // (most notably, an ndarray)
-        .def(py::init([](py::buffer buffer, const std::string &name) -> Buffer<> {
-            constexpr bool writable = true;  // Buffer<> assumes all instances are writable.
-            const py::buffer_info info = buffer.request(writable);
-
-            const Type t = format_descriptor_to_type(info.format);
-
-            std::vector<halide_dimension_t> dims;
-            dims.reserve(info.ndim);
-            for (int i = 0; i < info.ndim; i++) {
-                // TODO: check for ssize_t -> int32_t overflow
-                dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
-            }
-
-            // Note that this does NOT make a copy of the data; it deliberately
-            // shares the pointer with the incoming buffer.
-            return Buffer<>(t, info.ptr, (int) info.ndim, dims.data(), name);
-        }), py::arg("buffer"), py::arg("name") = "",
-            // TODO: this may not be optimal; we really want to preserve the py::buffer_info,
-            // not the py::buffer
-            py::keep_alive<1, 2>() // ensure that the py::buffer stays alive as long as the Buffer<> exists
-        )
-        .def(py::init<>())
-        .def(py::init<const Buffer<> &>())
+        .def(py::init_alias<py::buffer, const std::string &>(), py::arg("buffer"), py::arg("name") = "")
+        .def(py::init_alias<>())
+        .def(py::init_alias<const Buffer<> &>())
         .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
             return Buffer<>(type, sizes, name);
         }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")

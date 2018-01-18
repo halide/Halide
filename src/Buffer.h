@@ -104,6 +104,10 @@ public:
 
     typedef T ElemType;
 
+    // This class isn't final (and is subclassed from the Python binding
+    // code, at least) so it needs a virtual dtor.
+    virtual ~Buffer() {}
+
     /** Make a null Buffer, which points to no Runtime::Buffer */
     Buffer() {}
 
