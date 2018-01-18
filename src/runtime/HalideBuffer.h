@@ -1579,7 +1579,9 @@ public:
 
         // Use an explicit runtime type, and make dst a Buffer<void>, to allow
         // using this method with Buffer<void> for either src or dst.
-        const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<not_void_T>();
+        const halide_type_t dst_type = T_is_void
+            ? src.type()
+            : halide_type_of<typename std::remove_cv<not_void_T>::type>();
         Buffer<> dst(dst_type, nullptr, src.dimensions(), shape);
         dst.allocate(allocate_fn, deallocate_fn);
 
