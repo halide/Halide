@@ -104,6 +104,9 @@ public:
 
     typedef T ElemType;
 
+    // This is virtual solely to make some of the Python bindings easier to manage.
+    virtual ~Buffer() {}
+
     /** Make a null Buffer, which points to no Runtime::Buffer */
     Buffer() {}
 

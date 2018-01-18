@@ -3,6 +3,7 @@ from __future__ import division
 
 import halide as hl
 import numpy as np
+import gc
 
 def test_ndarray_to_buffer():
     a0 = np.ones((200, 300), dtype=np.int32)
@@ -101,8 +102,26 @@ def test_fill_all_equal():
     buf[1, 2] = 4
     assert not buf.all_equal(3)
 
+
+def test_bufferinfo_sharing():
+    # Torture-test to ensure that huge Python Buffer Protocol allocations are properly
+    # shared (rather than copied), and also that the lifetime is held appropriately
+    a0 = np.ones((20000, 30000), dtype=np.int32)
+    b0 = hl.Buffer(a0)
+    del a0
+    for i in range(200):
+        b1 = hl.Buffer(b0)
+        b0 = b1
+        b1 = None
+        gc.collect()
+
+    b0[56, 34] = 12
+    assert b0[56, 34] == 12
+
 if __name__ == "__main__":
     test_ndarray_to_buffer()
     test_buffer_to_ndarray()
     test_for_each_element()
     test_fill_all_equal()
+    test_bufferinfo_sharing()
+
