@@ -691,7 +691,7 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list* cmdList,
     (*cmdList)->Dispatch(blocks_x, blocks_y, blocks_z);
 }
 
-WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12_HEAP_TYPE type)
+WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12_HEAP_TYPE heaptype)
 {
     d3d12_buffer buffer = { };
 
@@ -709,11 +709,9 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12
         desc.SampleDesc.Quality = 0;                    // ditto, (0)
         desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;   // ditto, (D3D12_TEXTURE_LAYOUT_ROW_MAJOR)
         desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    if (D3D12_HEAP_TYPE_DEFAULT == type)
-        desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
     D3D12_HEAP_PROPERTIES heapProps = { };              // CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_...)
-        heapProps.Type = type;
+        heapProps.Type = heaptype;
         heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
         heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
         heapProps.CreationNodeMask = 0;                 // 0 is equivalent to 0b0...01 (single adapter)
@@ -722,10 +720,27 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12
     D3D12_HEAP_PROPERTIES* pHeapProperties = &heapProps;
     D3D12_HEAP_FLAGS HeapFlags = D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES;
     D3D12_RESOURCE_DESC* pDesc = &desc;
-    D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
-    if (D3D12_HEAP_TYPE_READBACK == type)
-        InitialResourceState = D3D12_RESOURCE_STATE_COPY_DEST;
+    D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_COMMON;
     D3D12_CLEAR_VALUE* pOptimizedClearValue = NULL;     // for buffers, this must be NULL
+
+    switch (heaptype)
+    {
+        case D3D12_HEAP_TYPE_UPLOAD :
+            // committed resources in UPLOAD heaps must start in and never change from GENERIC_READ state:
+            InitialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
+            break;
+        case D3D12_HEAP_TYPE_READBACK :
+            // committed resources in READBACK heaps must start in and never change from COPY_DEST state:
+            InitialResourceState = D3D12_RESOURCE_STATE_COPY_DEST;
+            break;
+        case D3D12_HEAP_TYPE_DEFAULT :
+            desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+            InitialResourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            break;
+        default :
+            TRACEPRINT("UNSUPPORTED D3D12 BUFFER HEAP TYPE: " << (int)heaptype << "\n"); halide_assert(user_context, false);
+            break;
+    }
 
     // A commited resource manages its own private heap
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
@@ -751,6 +766,7 @@ WEAK d3d12_buffer new_device_buffer(d3d12_device* device, size_t length)
     return(buffer);
 }
 
+// faux type name for logging purposes in D3DError()
 struct ID3D12MemoryMappedResource;
 D3D12TYPENAME(ID3D12MemoryMappedResource)
 
@@ -758,12 +774,34 @@ WEAK void* map_buffer(d3d12_buffer* buffer)
 {
     TRACELOG;
 
-    halide_assert(user_context, (buffer->mapped == NULL));
+    if (buffer->mapped)
+        return(buffer->mapped);
+
+    D3D12_RANGE readRange = { };
+    switch (buffer->type)
+    {
+        case d3d12_buffer::Constant :
+        case d3d12_buffer::Upload   :
+            // upload buffers are write-only, so there is no read range
+            readRange.Begin = 0;
+            readRange.End = 0;
+            break;
+        case d3d12_buffer::ReadBack :
+            // everything in the buffer might be read by the CPU
+            // (we could also simply pass pReadRange = NULL to Map(), but that issues a debug-layer warning...)
+            readRange.Begin = 0;
+            readRange.End = buffer->capacity;
+            break;
+        default :
+            TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
+            halide_assert(user_context, false);
+            break;
+    }
 
     // If a resource contains a buffer, then it simply contains one subresource with an index of 0.
     ID3D12Resource* resource = buffer->resource;
     UINT Subresource = 0;
-    const D3D12_RANGE* pReadRange = NULL;
+    const D3D12_RANGE* pReadRange = &readRange;
     void* pData = NULL;
     HRESULT result = resource->Map(Subresource, pReadRange, &pData);
     if (D3DError(result, (ID3D12MemoryMappedResource*)pData, NULL, "Unable to map Direct3D 12 staging buffer memory"))
@@ -775,13 +813,50 @@ WEAK void* map_buffer(d3d12_buffer* buffer)
     return(pData);
 }
 
+WEAK void unmap_buffer(d3d12_buffer* buffer)
+{
+    TRACELOG;
+
+    void* pData = buffer->mapped;
+    if (!pData)
+        return;
+
+    D3D12_RANGE writtenRange = { };
+    switch (buffer->type)
+    {
+        case d3d12_buffer::Constant :
+        case d3d12_buffer::Upload   :
+            writtenRange.Begin = 0;
+            writtenRange.End = buffer->capacity;
+            break;
+        case d3d12_buffer::ReadBack :
+            // host/CPU never writes directly to a ReadBack buffer, it only reads from it
+            writtenRange.Begin = 0;
+            writtenRange.End = 0;
+            break;
+        default :
+            TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
+            halide_assert(user_context, false);
+            break;
+    }
+
+    ID3D12Resource* resource = buffer->resource;
+    UINT Subresource = 0;
+    const D3D12_RANGE* pWrittenRange = &writtenRange;
+    resource->Unmap(Subresource, pWrittenRange);
+    if (D3DError(/*S_OK*/HRESULT(0x0), (ID3D12MemoryMappedResource*)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory"))
+        return;
+
+    buffer->mapped = NULL;
+}
+
 WEAK d3d12_buffer new_upload_buffer(d3d12_device* device, size_t length)
 {
     TRACELOG;
     d3d12_buffer buffer = new_buffer_resource(device, length, D3D12_HEAP_TYPE_UPLOAD);
     buffer.type = d3d12_buffer::Upload;
+    // upload heaps may keep the buffer mapped persistently
     map_buffer(&buffer);
-    halide_assert(user_context, buffer.mapped);
     return(buffer);
 }
 
@@ -790,8 +865,6 @@ WEAK d3d12_buffer new_readback_buffer(d3d12_device* device, size_t length)
     TRACELOG;
     d3d12_buffer buffer = new_buffer_resource(device, length, D3D12_HEAP_TYPE_READBACK);
     buffer.type = d3d12_buffer::ReadBack;
-    map_buffer(&buffer);
-    halide_assert(user_context, buffer.mapped);
     return(buffer);
 }
 
@@ -801,7 +874,6 @@ WEAK d3d12_buffer new_constant_buffer(d3d12_device* device, size_t length)
     // CBV buffer can simply use an upload heap for host and device memory:
     d3d12_buffer buffer = new_upload_buffer(device, length);
     buffer.type = d3d12_buffer::Constant;
-    halide_assert(user_context, buffer.mapped);
     return(buffer);
 }
 
@@ -1018,20 +1090,47 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
     UINT64 NumBytes  = staging->size;
     ID3D12Resource* pDstBuffer = NULL;
     ID3D12Resource* pSrcBuffer = NULL;
+
+    D3D12_RESOURCE_BARRIER barrierBefore = { };
+    D3D12_RESOURCE_BARRIER barrierAfter  = { };
+
     switch (staging->buffer->type)
     {
-        case d3d12_buffer::Upload   :
+        case d3d12_buffer::Upload :
             pDstBuffer = buffer->resource;
             pSrcBuffer = staging->buffer->resource;
+            barrierAfter.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrierAfter.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrierAfter.Transition.pResource   = buffer->resource;
+            barrierAfter.Transition.Subresource = 0;
+            barrierAfter.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            barrierAfter.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrierBefore = barrierAfter;
+            barrierBefore.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+            barrierBefore.Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
             break;
         case d3d12_buffer::ReadBack :
+            unmap_buffer(staging->buffer);
             pDstBuffer = staging->buffer->resource;
             pSrcBuffer = buffer->resource;
+            barrierAfter.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrierAfter.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrierAfter.Transition.pResource   = buffer->resource;
+            barrierAfter.Transition.Subresource = 0;
+            barrierAfter.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            barrierAfter.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            barrierBefore = barrierAfter;
+            barrierBefore.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            barrierBefore.Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
             break;
         default :
+            TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
+            halide_assert(user_context, false);
             break;
     }
+    (*cmdList)->ResourceBarrier(1, &barrierAfter);
     (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
+    (*cmdList)->ResourceBarrier(1, &barrierBefore);
 }
 
 WEAK bool is_buffer_managed(d3d12_buffer* buffer)
@@ -1322,9 +1421,17 @@ static void* buffer_contents(d3d12_buffer* buffer)
 
         case d3d12_buffer::Constant :
         case d3d12_buffer::Upload   :
-        case d3d12_buffer::ReadBack :
         {
             pData = buffer->mapped;
+            break;
+        }
+
+        case d3d12_buffer::ReadBack :
+        {
+            // on readback heaps, map/unmap as needed, since the results are only effectively
+            // published after a Map() call, and should ideally be in an unmapped state prior
+            // to the CopyBufferRegion() call
+            pData = map_buffer(&readback);
             break;
         }
 
