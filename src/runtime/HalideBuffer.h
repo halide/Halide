@@ -574,7 +574,7 @@ public:
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
     template<typename T2, int D2> friend class Buffer;
 
-    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+    /** Determine if if a Buffer<T, D> can be constructed from some other Buffer type.
      * If this can be determined at compile time, fail with a static assert; otherwise
      * return a boolean based on runtime typing. */
     template<typename T2, int D2>
@@ -591,7 +591,7 @@ public:
         return true;
     }
 
-    /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
+    /** Fail an assertion at runtime or compile-time if a Buffer<T, D>
      * cannot be constructed from some other Buffer type. */
     template<typename T2, int D2>
     static void assert_can_convert_from(const Buffer<T2, D2> &other) {
@@ -797,7 +797,7 @@ public:
     // (say) int is not implicitly convertable to Buffer<int>
     explicit Buffer(int first) {
         static_assert(!T_is_void,
-                      "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
+                      "To construct a Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         buf.type = static_halide_type();
         buf.dimensions = 1;
         make_shape_storage();
@@ -812,7 +812,7 @@ public:
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     Buffer(int first, int second, Args... rest) {
         static_assert(!T_is_void,
-                      "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
+                      "To construct a Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         buf.type = static_halide_type();
         buf.dimensions = 2 + (int)(sizeof...(rest));
         make_shape_storage();
@@ -841,6 +841,8 @@ public:
 
     /** Allocate a new image of known type using a vector of ints as the size. */
     Buffer(const std::vector<int> &sizes) {
+        static_assert(!T_is_void,
+                      "To construct a Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         buf.type = static_halide_type();
         buf.dimensions = (int)sizes.size();
         make_shape_storage();
@@ -851,7 +853,7 @@ public:
         }
     }
 
-    /** Make an Buffer that refers to a statically sized array. Does not
+    /** Make a Buffer that refers to a statically sized array. Does not
      * take ownership of the data, and does not set the host_dirty flag. */
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N]) {
@@ -862,7 +864,7 @@ public:
         initialize_shape_from_array_shape(buf.dimensions - 1, vals);
     }
 
-    /** Initialize an Buffer of runtime type from a pointer and some
+    /** Initialize a Buffer of runtime type from a pointer and some
      * sizes. Assumes dense row-major packing and a min coordinate of
      * zero. Does not take ownership of the data and does not set the
      * host_dirty flag. */
@@ -879,7 +881,7 @@ public:
         initialize_shape(0, first, int(rest)...);
     }
 
-    /** Initialize an Buffer from a pointer and some sizes. Assumes
+    /** Initialize a Buffer from a pointer and some sizes. Assumes
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data and does not set the host_dirty flag. */
     template<typename ...Args,
@@ -892,7 +894,7 @@ public:
         initialize_shape(0, first, int(rest)...);
     }
 
-    /** Initialize an Buffer from a pointer and a vector of
+    /** Initialize a Buffer from a pointer and a vector of
      * sizes. Assumes dense row-major packing and a min coordinate of
      * zero. Does not take ownership of the data and does not set the
      * host_dirty flag. */
@@ -904,7 +906,7 @@ public:
         initialize_shape(sizes);
     }
 
-    /** Initialize an Buffer of runtime type from a pointer and a
+    /** Initialize a Buffer of runtime type from a pointer and a
      * vector of sizes. Assumes dense row-major packing and a min
      * coordinate of zero. Does not take ownership of the data and
      * does not set the host_dirty flag. */
@@ -919,7 +921,7 @@ public:
         initialize_shape(sizes);
     }
 
-    /** Initialize an Buffer from a pointer to the min coordinate and
+    /** Initialize a Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
     explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int d, const halide_dimension_t *shape) {
@@ -935,7 +937,7 @@ public:
         }
     }
 
-    /** Initialize an Buffer from a pointer to the min coordinate and
+    /** Initialize a Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
