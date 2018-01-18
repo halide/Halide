@@ -104,7 +104,8 @@ public:
 
     typedef T ElemType;
 
-    // This is virtual solely to make some of the Python bindings easier to manage.
+    // This class isn't final (and is subclassed from the Python binding
+    // code, at least) so it needs a virtual dtor.
     virtual ~Buffer() {}
 
     /** Make a null Buffer, which points to no Runtime::Buffer */
