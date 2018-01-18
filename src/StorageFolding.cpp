@@ -28,7 +28,7 @@ using std::map;
 class CountProducers : public IRVisitor {
     const std::string &name;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer && (op->name == name)) {
             count++;
         } else {
@@ -51,16 +51,16 @@ int count_producers(Stmt in, const std::string &name) {
 }
 
 // Fold the storage of a function in a particular dimension by a particular factor
-class FoldStorageOfFunction : public IRMutator {
+class FoldStorageOfFunction : public IRMutator2 {
     string func;
     int dim;
     Expr factor;
     string dynamic_footprint;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Call *op) {
-        IRMutator::visit(op);
+    Expr visit(const Call *op) override {
+        Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
@@ -129,11 +129,11 @@ class FoldStorageOfFunction : public IRMutator {
                                   {expr, dim, old_min, old_extent}, Call::Extern);
             }
         }
-
+        return expr;
     }
 
-    void visit(const Provide *op) {
-        IRMutator::visit(op);
+    Stmt visit(const Provide *op) override {
+        Stmt stmt = IRMutator2::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
         if (op->name == func) {
@@ -141,6 +141,7 @@ class FoldStorageOfFunction : public IRMutator {
             args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             stmt = Provide::make(op->name, op->values, args);
         }
+        return stmt;
     }
 
 
@@ -150,14 +151,14 @@ public:
 };
 
 // Inject dynamic folding checks against a tracked live range.
-class InjectFoldingCheck : public IRMutator {
+class InjectFoldingCheck : public IRMutator2 {
     Function func;
     string footprint, loop_var;
     int dim;
     const StorageDim &storage_dim;
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             Stmt body = op->body;
             if (op->is_producer) {
@@ -240,13 +241,13 @@ class InjectFoldingCheck : public IRMutator {
                     body = Block::make(AssertStmt::make(check, bad_fold_error), body);
                 }
             }
-            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (func.has_extern_definition() &&
             starts_with(op->name, func.name() + ".") &&
             ends_with(op->name, ".tmp_buffer")) {
@@ -275,9 +276,9 @@ class InjectFoldingCheck : public IRMutator {
             // we're preserving valid values from previous loop
             // iterations.
 
-            stmt = LetStmt::make(op->name, op->value, body);
+            return LetStmt::make(op->name, op->value, body);
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
 
     }
@@ -294,22 +295,22 @@ public:
 
 
 // Attempt to fold the storage of a particular function in a statement
-class AttemptStorageFoldingOfFunction : public IRMutator {
+class AttemptStorageFoldingOfFunction : public IRMutator2 {
     Function func;
     bool explicit_only;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const ProducerConsumer *op) {
+    Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
-            stmt = op;
+            return op;
         } else {
-            IRMutator::visit(op);
+            return IRMutator2::visit(op);
         }
     }
 
-    void visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
 
@@ -317,8 +318,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // by the threads as this loop counter varies
             // (i.e. there's no cross-talk between threads), then it's
             // safe to proceed.
-            stmt = op;
-            return;
+            return op;
         }
 
         Stmt body = op->body;
@@ -434,7 +434,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         // for further folding opportinities
                         // recursively.
                     } else if (!body.same_as(op->body)) {
-                        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
                         if (!dynamic_footprint.empty()) {
                             Expr init_val;
                             if (min_monotonic_increasing) {
@@ -446,10 +446,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                             stmt = Block::make(init_min, stmt);
                             stmt = Allocate::make(dynamic_footprint, Int(32), {}, const_true(), stmt);
                         }
-                        return;
+                        return stmt;
                     } else {
-                        stmt = op;
-                        return;
+                        return op;
                     }
                 }
             } else {
@@ -467,9 +466,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
 
         if (body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }
     }
 
@@ -485,12 +484,12 @@ public:
 };
 
 // Look for opportunities for storage folding in a statement
-class StorageFolding : public IRMutator {
+class StorageFolding : public IRMutator2 {
     const map<string, Function> &env;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    void visit(const Realize *op) {
+    Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
 
         // Get the function associated with this realization, which
@@ -506,9 +505,9 @@ class StorageFolding : public IRMutator {
         body = folder.mutate(body);
 
         if (body.same_as(op->body)) {
-            stmt = op;
+            return op;
         } else if (folder.dims_folded.empty()) {
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            return Realize::make(op->name, op->types, op->bounds, op->condition, body);
         } else {
             Region bounds = op->bounds;
 
@@ -521,7 +520,7 @@ class StorageFolding : public IRMutator {
                 bounds[d] = Range(0, f);
             }
 
-            stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
+            return Realize::make(op->name, op->types, bounds, op->condition, body);
         }
     }
 
@@ -531,11 +530,11 @@ public:
 
 // Because storage folding runs before simplification, it's useful to
 // at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
-class SubstituteInConstants : public IRMutator {
-    using IRMutator::visit;
+class SubstituteInConstants : public IRMutator2 {
+    using IRMutator2::visit;
 
     Scope<Expr> scope;
-    void visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         Expr value = simplify(mutate(op->value));
 
         Stmt body;
@@ -548,17 +547,17 @@ class SubstituteInConstants : public IRMutator {
         }
 
         if (body.same_as(op->body) && value.same_as(op->value)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = LetStmt::make(op->name, value, body);
+            return LetStmt::make(op->name, value, body);
         }
     }
 
-    void visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         if (scope.contains(op->name)) {
-            expr = scope.get(op->name);
+            return scope.get(op->name);
         } else {
-            expr = op;
+            return op;
         }
     }
 };
