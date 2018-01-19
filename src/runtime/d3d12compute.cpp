@@ -9,6 +9,10 @@
 #define d3d12_load_library          halide_load_library
 #define d3d12_get_library_symbol    halide_get_library_symbol
 
+#ifndef UNUSED
+#define UNUSED(x) ((void)x)
+#endif//UNUSED
+
 #if !defined(INITGUID)
     #define  INITGUID
 #endif
@@ -273,18 +277,19 @@ struct LibrarySymbol
     template<typename T>
     operator T () { return((T)symbol); }
     void* symbol;
-};
-static INLINE LibrarySymbol get_symbol(void* user_context, void* lib, const char* name)
-{
-    void* s = d3d12_get_library_symbol(lib, name);
-    if (!s)
+
+    static LibrarySymbol get(void* user_context, void* lib, const char* name)
     {
-        error(user_context) << "Symbol not found: " << name << "\n";
+        void* s = d3d12_get_library_symbol(lib, name);
+        if (!s)
+        {
+            error(user_context) << "Symbol not found: " << name << "\n";
+        }
+        debug(user_context) << TRACEINDENT << "Symbol '" << name << "' found at " << s << "\n";
+        LibrarySymbol symbol = { s };
+        return symbol;
     }
-    debug(user_context) << TRACEINDENT << "Symbol '" << name << "' found at " << s << "\n";
-    LibrarySymbol symbol = { s };
-    return symbol;
-}
+};
 
 static PFN_D3D12_CREATE_DEVICE              D3D12CreateDevice           = NULL;
 static PFN_D3D12_GET_DEBUG_INTERFACE        D3D12GetDebugInterface      = NULL;
@@ -578,7 +583,7 @@ static void D3D12LoadDependencies(void* user_context)
         }
     }
 
-    PFN_D3D12_CREATE_DEVICE D3D12CreateDevice1 = get_symbol(user_context, lib_d3d12, "D3D12CreateDevice"); (void)D3D12CreateDevice1;
+    PFN_D3D12_CREATE_DEVICE D3D12CreateDevice1 = LibrarySymbol::get(user_context, lib_d3d12, "D3D12CreateDevice"); UNUSED(D3D12CreateDevice1);
 
     #if HALIDE_D3D12_RENDERDOC
         #if !RENDERDOC_AUTOINIT
@@ -588,11 +593,11 @@ static void D3D12LoadDependencies(void* user_context)
         #endif
     #endif
 
-    D3D12CreateDevice           = get_symbol(user_context, lib_d3d12,           "D3D12CreateDevice");
-    D3D12GetDebugInterface      = get_symbol(user_context, lib_d3d12,           "D3D12GetDebugInterface");
-    D3D12SerializeRootSignature = get_symbol(user_context, lib_d3d12,           "D3D12SerializeRootSignature");
-    D3DCompile                  = get_symbol(user_context, lib_D3DCompiler_47,  "D3DCompile");
-    CreateDXGIFactory1          = get_symbol(user_context, lib_dxgi,            "CreateDXGIFactory1");
+    D3D12CreateDevice           = LibrarySymbol::get(user_context, lib_d3d12,           "D3D12CreateDevice");
+    D3D12GetDebugInterface      = LibrarySymbol::get(user_context, lib_d3d12,           "D3D12GetDebugInterface");
+    D3D12SerializeRootSignature = LibrarySymbol::get(user_context, lib_d3d12,           "D3D12SerializeRootSignature");
+    D3DCompile                  = LibrarySymbol::get(user_context, lib_D3DCompiler_47,  "D3DCompile");
+    CreateDXGIFactory1          = LibrarySymbol::get(user_context, lib_dxgi,            "CreateDXGIFactory1");
 
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
@@ -625,11 +630,6 @@ static void D3D12LoadDependencies(void* user_context)
     halide_assert(user_context, sizeof(SIZE_T) == (32 / 8));
 #endif
 }
-
-//#pragma clang diagnostic ignored "-Wignored-attributes"
-//static void TestMethodSignature(D3D12_CPU_DESCRIPTOR_HANDLE(__cdecl ID3D12DescriptorHeap::*pfn_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart)(void))
-//{
-//}
 
 // D3D12 ABI patch trampolines (refer to 'd3d12_abi_patch_64.ll')
 #ifdef __cplusplus
@@ -2007,7 +2007,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_device* device = d3d12_context.device;
 
     #if HALIDE_D3D12_RENDERDOC
-    ID3D12Device* d = (*device);    (void)d;
+    ID3D12Device* d = (*device); UNUSED(d);
     StartCapturingGPUActivity();
     #endif
 
