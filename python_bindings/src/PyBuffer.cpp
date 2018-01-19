@@ -279,7 +279,7 @@ void define_buffer(py::module &m) {
         // Note that this exists solely to allow you to create a Buffer with a null host ptr;
         // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
         // TODO: is this the best name?
-        .def_static("make_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+        .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
             return Buffer<>(type, nullptr, sizes, name);
         }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 

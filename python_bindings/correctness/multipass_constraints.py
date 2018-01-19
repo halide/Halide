@@ -28,7 +28,7 @@ def test_multipass_constraints():
                                            o.dim(0).extent()))
 
     # Make a bounds query buffer
-    query_buf = hl.Buffer.make_query(type = hl.Float(32), sizes = [7, 8])
+    query_buf = hl.Buffer.make_bounds_query(type = hl.Float(32), sizes = [7, 8])
     query_buf.set_min([2, 2])
 
     f.infer_input_bounds(query_buf)
