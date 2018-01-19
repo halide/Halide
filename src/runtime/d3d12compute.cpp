@@ -6,6 +6,9 @@
 #include "device_interface.h"
 #include "printer.h"
 
+#define d3d12_load_library          halide_load_library
+#define d3d12_get_library_symbol    halide_get_library_symbol
+
 #if !defined(INITGUID)
     #define  INITGUID
 #endif
@@ -17,9 +20,25 @@
 
 static void* const user_context = NULL;   // in case there's no user context available in the scope of a function
 
-#define HALIDE_D3D12_DEBUG (1)
+#define HALIDE_D3D12_TRACE      (1)
+#define HALIDE_D3D12_DEBUG      (0)
+#define HALIDE_D3D12_RENDERDOC  (0)
 
-#if HALIDE_D3D12_DEBUG
+#if HALIDE_D3D12_RENDERDOC && HALIDE_D3D12_DEBUG
+    #error RenderDoc does not work with Dirct3D debug layers...
+#endif
+
+#if HALIDE_D3D12_RENDERDOC
+#define WIN32
+#define RenderDocAssert(expr)           halide_assert(user_context, expr)
+#define LoadRenderDocLibrary(dll)       d3d12_load_library(dll)
+#define GetRenderDocProcAddr(dll,proc)  d3d12_get_library_symbol(dll, proc)
+#define RENDERDOC_NO_STDINT
+#define RENDERDOC_AUTOINIT              (0)
+#include "renderdoc/RenderDocGlue.h"
+#endif
+
+#if HALIDE_D3D12_TRACE
     static const char indent_pattern [] = "   ";
     static char  indent [128] = { };
     static int   indent_end   = 0;
@@ -257,11 +276,12 @@ struct LibrarySymbol
 };
 static INLINE LibrarySymbol get_symbol(void* user_context, void* lib, const char* name)
 {
-    void* s = halide_get_library_symbol(lib, name);
+    void* s = d3d12_get_library_symbol(lib, name);
     if (!s)
     {
         error(user_context) << "Symbol not found: " << name << "\n";
     }
+    debug(user_context) << TRACEINDENT << "Symbol '" << name << "' found at " << s << "\n";
     LibrarySymbol symbol = { s };
     return symbol;
 }
@@ -547,16 +567,26 @@ static void D3D12LoadDependencies(void* user_context)
         {
             continue;
         }
-        lib = halide_load_library(lib_names[i]);
+        lib = d3d12_load_library(lib_names[i]);
         if (lib)
         {
-            debug(user_context) << TRACEINDENT << "Loaded runtime library: " << lib_names[i] << "\n";
+            debug(user_context) << TRACEINDENT << "Loaded runtime library '" << lib_names[i] << "' at location " << lib << "\n";
         }
         else
         {
             error(user_context) << TRACEINDENT << "Unable to load runtime library: " << lib_names[i] << "\n";
         }
     }
+
+    PFN_D3D12_CREATE_DEVICE D3D12CreateDevice1 = get_symbol(user_context, lib_d3d12, "D3D12CreateDevice"); (void)D3D12CreateDevice1;
+
+    #if HALIDE_D3D12_RENDERDOC
+        #if !RENDERDOC_AUTOINIT
+            TRACEPRINT("Initializing RenderDoc\n");
+            bool rdinit = InitRenderDoc();
+            halide_assert(user_context, rdinit);
+        #endif
+    #endif
 
     D3D12CreateDevice           = get_symbol(user_context, lib_d3d12,           "D3D12CreateDevice");
     D3D12GetDebugInterface      = get_symbol(user_context, lib_d3d12,           "D3D12GetDebugInterface");
@@ -1786,7 +1816,8 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
     return 0;
 }
 
-WEAK int halide_d3d12compute_device_release(void *user_context) {
+WEAK int halide_d3d12compute_device_release(void* user_context)
+{
     TRACELOG;
 
     // The D3D12Context object does not allow the context storage to be modified,
@@ -1818,7 +1849,14 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
         }
 
         // Release the device itself, if we created it.
-        if (acquired_device == device) {
+        if (acquired_device == device)
+        {
+            debug(user_context) <<  "D3D12Compute - Releasing: upload and readback heaps " << &upload << "," << &readback << "\n";
+            release_ns_object(&upload);
+            release_ns_object(&readback);
+            d3d12_buffer empty = { };
+            upload = readback = empty;
+
             debug(user_context) <<  "D3D12Compute - Releasing: new_command_queue " << queue << "\n";
             release_ns_object(queue);
             queue = NULL;
@@ -1968,6 +2006,11 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     d3d12_device* device = d3d12_context.device;
 
+    #if HALIDE_D3D12_RENDERDOC
+    ID3D12Device* d = (*device);    (void)d;
+    StartCapturingGPUActivity();
+    #endif
+
     d3d12_command_allocator* command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_COMPUTE>(device);
     if (command_allocator == 0) {
         error(user_context) << "D3D12Compute: Could not create compute command allocator.\n";
@@ -2076,6 +2119,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
     release_ns_object(pipeline_state);
     release_ns_object(binder);
     release_ns_object(function);
+
+    #if HALIDE_D3D12_RENDERDOC
+    FinishCapturingGPUActivity();
+    #endif
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
