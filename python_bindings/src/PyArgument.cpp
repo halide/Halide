@@ -7,7 +7,10 @@ void define_argument(py::module &m) {
     auto argument_class =
         py::class_<Argument>(m, "Argument")
         .def(py::init<>())
-        .def(py::init([](ImageParam im) -> Argument {
+        .def(py::init([](const OutputImageParam &im) -> Argument {
+            return im;
+        }), py::arg("im"))
+        .def(py::init([](const ImageParam &im) -> Argument {
             return im;
         }), py::arg("im"))
         .def(py::init([](Param<> param) -> Argument {
@@ -19,6 +22,7 @@ void define_argument(py::module &m) {
 
     py::implicitly_convertible<Buffer<>, Argument>();
     py::implicitly_convertible<ImageParam, Argument>();
+    py::implicitly_convertible<OutputImageParam, Argument>();
     py::implicitly_convertible<Param<>, Argument>();
 }
 

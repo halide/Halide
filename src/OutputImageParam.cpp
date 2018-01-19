@@ -22,11 +22,11 @@ bool OutputImageParam::defined() const {
 }
 
 Dimension OutputImageParam::dim(int i) {
-    return Dimension(param, i, func);
+    return Dimension(param, i, func, /*is_const*/ false);
 }
 
 const Dimension OutputImageParam::dim(int i) const {
-    return Dimension(param, i, func);
+    return Dimension(param, i, func, /*is_const*/ true);
 }
 
 int OutputImageParam::host_alignment() const {

@@ -14,22 +14,22 @@
     - Float16 [possible via numpy?]
     - Generator
     - Module
-    - OutputImageParam
     - Outputs
     - Pipeline
 - Wrappers Incomplete, Tests Incomplete:
     - BoundaryConditions
     - Func
-    - ImageParam
     - ParamMap
 - Wrappers Believed To Be Complete, But Tests Incomplete:
     - Buffer
     - ExternFuncArgument
     - FuncRef
     - FuncTupleElementRef
+    - ImageParam
     - InlineReductions
     - IROperator
     - LoopLevel
+    - OutputImageParam
     - RDom
     - RVar
     - Stage

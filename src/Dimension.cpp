@@ -5,7 +5,7 @@
 namespace Halide {
 namespace Internal {
 
-Dimension::Dimension(const Internal::Parameter &p, int d, Func f) : param(p), d(d), f(f) {
+Dimension::Dimension(const Internal::Parameter &p, int d, Func f, bool is_const) : param(p), d(d), f(f), is_const(is_const) {
     user_assert(param.defined())
         << "Can't access the dimensions of an undefined Parameter\n";
     user_assert(param.is_buffer())
@@ -46,25 +46,30 @@ Expr Dimension::stride() const {
 }
 
 Dimension Dimension::set_extent(Expr extent) {
+    user_assert(!is_const) << "Cannot modify a const Dimension";
     param.set_extent_constraint(d, extent);
     return *this;
 }
 
 Dimension Dimension::set_min(Expr min) {
+    user_assert(!is_const) << "Cannot modify a const Dimension";
     param.set_min_constraint(d, min);
     return *this;
 }
 
 Dimension Dimension::set_stride(Expr stride) {
+    user_assert(!is_const) << "Cannot modify a const Dimension";
     param.set_stride_constraint(d, stride);
     return *this;
 }
 
 Dimension Dimension::set_bounds(Expr min, Expr extent) {
+    user_assert(!is_const) << "Cannot modify a const Dimension";
     return set_min(min).set_extent(extent);
 }
 
 Dimension Dimension::set_bounds_estimate(Expr min, Expr extent) {
+    user_assert(!is_const) << "Cannot modify a const Dimension";
     param.set_min_constraint_estimate(d, min);
     param.set_extent_constraint_estimate(d, extent);
     // Update the estimates on the linked Func as well.
@@ -77,11 +82,11 @@ Dimension Dimension::set_bounds_estimate(Expr min, Expr extent) {
 }
 
 Dimension Dimension::dim(int i) {
-    return Dimension(param, i, f);
+    return Dimension(param, i, f, is_const);
 }
 
 const Dimension Dimension::dim(int i) const {
-    return Dimension(param, i, f);
+    return Dimension(param, i, f, /*is_const*/ true);
 }
 
 }  // namespace Internal
