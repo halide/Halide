@@ -2026,10 +2026,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
                            int num_coords_dim0,
                            int num_coords_dim1)
 {
-    static int hitcount = 0;
-    if (++hitcount > 1)
-        return(0);
-
     TRACELOG;
 
     #ifdef DEBUG_RUNTIME
