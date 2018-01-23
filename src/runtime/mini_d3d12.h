@@ -4189,16 +4189,30 @@ EXTERN_C const IID IID_ID3D12GraphicsCommandList;
         void ( STDMETHODCALLTYPE *SetGraphicsRootSignature )( 
             ID3D12GraphicsCommandList * This,
             _In_opt_  ID3D12RootSignature *pRootSignature);
-        
+
+#if HALIDE_D3D12_APPLY_ABI_PATCHES
+        #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
+
+        void ( STDMETHODCALLTYPE *SetComputeRootDescriptorTable )( 
+            ID3D12GraphicsCommandList * This,
+            _In_  UINT RootParameterIndex,
+            _In_  SIZE_T BaseDescriptor);
+
+        void ( STDMETHODCALLTYPE *SetGraphicsRootDescriptorTable )( 
+            ID3D12GraphicsCommandList * This,
+            _In_  UINT RootParameterIndex,
+            _In_  SIZE_T BaseDescriptor);
+#else
         void ( STDMETHODCALLTYPE *SetComputeRootDescriptorTable )( 
             ID3D12GraphicsCommandList * This,
             _In_  UINT RootParameterIndex,
             _In_  D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor);
-        
+
         void ( STDMETHODCALLTYPE *SetGraphicsRootDescriptorTable )( 
             ID3D12GraphicsCommandList * This,
             _In_  UINT RootParameterIndex,
             _In_  D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor);
+#endif
         
         void ( STDMETHODCALLTYPE *SetComputeRoot32BitConstant )( 
             ID3D12GraphicsCommandList * This,
@@ -6103,7 +6117,7 @@ typedef struct DXGI_ADAPTER_DESC1
     UINT Flags;
     } 	DXGI_ADAPTER_DESC1;
 
-struct DXGI_SWAP_CHAIN_DESC;
+typedef struct DXGI_SWAP_CHAIN_DESC DXGI_SWAP_CHAIN_DESC;
 
 
 #ifndef __IDXGIObject_INTERFACE_DEFINED__
@@ -6943,6 +6957,31 @@ typedef HRESULT(WINAPI* PFN_D3DCOMPILE)(
            _In_ UINT Flags2,
            _Out_ ID3DBlob** ppCode,
            _Always_(_Outptr_opt_result_maybenull_) ID3DBlob** ppErrorMsgs);
+
+#define D3DCOMPILE_DEBUG                                (1 << 0)
+#define D3DCOMPILE_SKIP_VALIDATION                      (1 << 1)
+#define D3DCOMPILE_SKIP_OPTIMIZATION                    (1 << 2)
+#define D3DCOMPILE_PACK_MATRIX_ROW_MAJOR                (1 << 3)
+#define D3DCOMPILE_PACK_MATRIX_COLUMN_MAJOR             (1 << 4)
+#define D3DCOMPILE_PARTIAL_PRECISION                    (1 << 5)
+#define D3DCOMPILE_FORCE_VS_SOFTWARE_NO_OPT             (1 << 6)
+#define D3DCOMPILE_FORCE_PS_SOFTWARE_NO_OPT             (1 << 7)
+#define D3DCOMPILE_NO_PRESHADER                         (1 << 8)
+#define D3DCOMPILE_AVOID_FLOW_CONTROL                   (1 << 9)
+#define D3DCOMPILE_PREFER_FLOW_CONTROL                  (1 << 10)
+#define D3DCOMPILE_ENABLE_STRICTNESS                    (1 << 11)
+#define D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY       (1 << 12)
+#define D3DCOMPILE_IEEE_STRICTNESS                      (1 << 13)
+#define D3DCOMPILE_OPTIMIZATION_LEVEL0                  (1 << 14)
+#define D3DCOMPILE_OPTIMIZATION_LEVEL1                  0
+#define D3DCOMPILE_OPTIMIZATION_LEVEL2                  ((1 << 14) | (1 << 15))
+#define D3DCOMPILE_OPTIMIZATION_LEVEL3                  (1 << 15)
+#define D3DCOMPILE_RESERVED16                           (1 << 16)
+#define D3DCOMPILE_RESERVED17                           (1 << 17)
+#define D3DCOMPILE_WARNINGS_ARE_ERRORS                  (1 << 18)
+#define D3DCOMPILE_RESOURCES_MAY_ALIAS                  (1 << 19)
+#define D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES   (1 << 20)
+#define D3DCOMPILE_ALL_RESOURCES_BOUND                  (1 << 21)
 
 #ifdef __clang__
 #pragma clang diagnostic pop
