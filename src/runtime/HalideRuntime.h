@@ -105,6 +105,7 @@ struct halide_mutex {
  * re-zeros the memory.
  */
 //@{
+extern void halide_mutex_init(struct halide_mutex *mutex);
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
 extern void halide_mutex_destroy(struct halide_mutex *mutex);

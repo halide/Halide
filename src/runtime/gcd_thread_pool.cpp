@@ -142,6 +142,9 @@ WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
     }
 }
 
+WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
+}
+
 WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
     dispatch_once_f(&mutex->once, mutex, init_mutex);

@@ -10,6 +10,7 @@ extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, false};
+    halide_mutex_init(&(s.lock));
     return &s;
 }
 }

@@ -3,6 +3,7 @@
 
 using namespace Halide::Runtime::Internal::Qurt;
 
+#define QURT_MUTEX_INIT_FLAG   0xFACEFACEFACEFACE         // some pattern value
 
 extern "C" {
 extern void *memalign(size_t, size_t);
@@ -16,6 +17,11 @@ int halide_host_cpu_count() {
     // Assume a Snapdragon 820
     return 4;
 }
+
+typedef struct {
+    uint64_t init_flag;
+    qurt_mutex_t mutex;
+} qurt_mutex_wrapper_t;
 
 namespace {
 struct spawned_thread {
@@ -55,17 +61,32 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_lock(halide_mutex *mutex) {
-    qurt_mutex_lock((qurt_mutex_t *)mutex);
+WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    //TODO: not thread safe unless there is std::call_once type support
+    if( pmutex->init_flag != QURT_MUTEX_INIT_FLAG) {
+        pmutex->init_flag = QURT_MUTEX_INIT_FLAG;
+        qurt_mutex_init(&pmutex->mutex);
+    }
 }
 
-WEAK void halide_mutex_unlock(halide_mutex *mutex) {
-    qurt_mutex_unlock((qurt_mutex_t *)mutex);
+WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG);             // check mutex is initialized
+    qurt_mutex_lock((qurt_mutex_t *)&pmutex->mutex);
 }
 
-WEAK void halide_mutex_destroy(halide_mutex *mutex) {
-    qurt_mutex_destroy((qurt_mutex_t *)mutex);
-    memset(mutex, 0, sizeof(halide_mutex));
+WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG);
+    qurt_mutex_unlock((qurt_mutex_t *)&pmutex->mutex);
+}
+
+WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG);
+    qurt_mutex_destroy((qurt_mutex_t *)&pmutex->mutex);
+    memset(mutex_arg, 0, sizeof(halide_mutex));
 }
 
 WEAK void halide_cond_init(struct halide_cond *cond) {

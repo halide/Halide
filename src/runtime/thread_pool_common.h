@@ -52,6 +52,10 @@ struct work_queue_t {
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
 
+    work_queue_t() {
+        halide_mutex_init(&mutex);
+    }
+
     bool running() {
         return !shutdown;
     }
