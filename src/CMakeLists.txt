@@ -616,7 +616,7 @@ if (TARGET_METAL)
   target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
 endif()
 
-if (TARGET_D3D12)
+if (TARGET_D3D12COMPUTE)
   target_compile_definitions(Halide PRIVATE "-DWITH_D3D12=1")
 endif()
 
