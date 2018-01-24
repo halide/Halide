@@ -63,6 +63,9 @@ void define_func(py::module &m) {
         .def(py::init<std::string>())
         .def(py::init<Expr>())
 
+        // for implicitly_convertible
+        .def(py::init([](const ImageParam &im) -> Func { return im; }))
+
         .def("realize", [](Func &f, Buffer<> buffer, const Target &target, const ParamMap &param_map) -> void {
             f.realize(Realization(buffer), target);
         }, py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
@@ -224,6 +227,20 @@ void define_func(py::module &m) {
              py::arg("arguments"), py::arg("mangling"),
              py::arg("uses_old_buffer_t"))
 
+        .def("output_buffer", &Func::output_buffer)
+        .def("output_buffers", &Func::output_buffers)
+
+        .def("infer_input_bounds", (void (Func::*)(int, int, int, int, const ParamMap &)) &Func::infer_input_bounds,
+            py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("param_map") = ParamMap())
+
+        .def("infer_input_bounds", [](Func &f, Buffer<> buffer, const ParamMap &param_map) -> void {
+            f.infer_input_bounds(Realization(buffer), param_map);
+        }, py::arg("dst"), py::arg("param_map") = ParamMap())
+
+        .def("infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer, const ParamMap &param_map) -> void {
+            f.infer_input_bounds(Realization(buffer), param_map);
+        }, py::arg("dst"), py::arg("param_map") = ParamMap())
+
         .def("__repr__", [](const Func &func) -> std::string {
             std::ostringstream o;
             o << "<halide.Func '" << func.name() << "'>";
@@ -255,6 +272,8 @@ void define_func(py::module &m) {
     define_set<Expr, Tuple>(func_class);
 
     add_schedule_methods(func_class);
+
+    py::implicitly_convertible<ImageParam, Func>();
 
     define_stage(m);
 }

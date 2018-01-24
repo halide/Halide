@@ -245,6 +245,10 @@ void define_buffer(py::module &m) {
         // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
         // most notably, we can convert to an ndarray by calling numpy.array()
        .def_buffer([](Buffer<> &b) -> py::buffer_info {
+            if (b.data() == nullptr) {
+                throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
+            }
+
             const int d = b.dimensions();
             const int bytes = b.type().bytes();
             std::vector<ssize_t> shape, strides;
@@ -271,6 +275,12 @@ void define_buffer(py::module &m) {
         .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
             return Buffer<>(type, sizes, name);
         }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
+
+        // Note that this exists solely to allow you to create a Buffer with a null host ptr;
+        // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
+        .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, nullptr, sizes, name);
+        }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
         .def_static("make_scalar", (Buffer<> (*)(Type, const std::string &)) Buffer<>::make_scalar,
             py::arg("type"), py::arg("name") = "")
