@@ -11,9 +11,9 @@
 extern "C" DLLEXPORT int copy_and_check_strides(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         for (int i = 0; i < 2; i++) {
-	    in->dim[i].min = out->dim[i].min;
-	    in->dim[i].extent = out->dim[i].extent;
-	}
+            in->dim[i].min = out->dim[i].min;
+            in->dim[i].extent = out->dim[i].extent;
+        }
     } else if (!out->is_bounds_query()) {
         // Check that the storage has been reordered.
         assert(out->dim[0].stride > out->dim[1].stride);

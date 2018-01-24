@@ -76,6 +76,19 @@ public:
             default:
                 break;
             }
+        } else if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+            // Hexagon schedule.
+            const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
+
+            blur_y.compute_root()
+                .hexagon()
+                .prefetch(input, y, 2)
+                .split(y, y, yi, 128).parallel(y)
+                .vectorize(x, vector_size * 2);
+            blur_x
+                .store_at(blur_y, y)
+                .compute_at(blur_y, yi)
+                .vectorize(x, vector_size);
         } else {
             // CPU schedule.
             blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);

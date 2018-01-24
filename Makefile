@@ -266,6 +266,15 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 SRC_DIR  = $(ROOT_DIR)/src
 
+# Allow the user to specify PYBIND11_PATH as a relative path,
+# but canonicalize it to an absolute path since the sub-makefile
+# we call may have a different working dir.
+ifdef PYBIND11_PATH
+	REAL_PYBIND11_PATH = $(realpath $(PYBIND11_PATH))
+else
+	REAL_PYBIND11_PATH = /PYBIND11_PATH/is/undefined
+endif
+
 TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 
 # The following directories are all relative to the output directory (i.e. $(CURDIR), not $(SRC_DIR))
@@ -374,6 +383,7 @@ SOURCE_FILES = \
   ObjectInstanceRegistry.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
+  ParamMap.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
@@ -517,8 +527,9 @@ HEADER_FILES = \
   Outputs.h \
   OutputImageParam.h \
   ParallelRVar.h \
-  Parameter.h \
   Param.h \
+  ParamMap.h \
+  Parameter.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
@@ -656,6 +667,7 @@ RUNTIME_LL_COMPONENTS = \
   win32_math \
   x86 \
   x86_avx \
+  x86_avx2 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
@@ -1536,13 +1548,25 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	CC=`echo ${CC} | sed 's/ccache //'` \
 	bazel build --verbose_failures :all
 
+.PHONY: test_python2
+test_python2: distrib
+	make -C $(ROOT_DIR)/python_bindings \
+		-f $(ROOT_DIR)/python_bindings/Makefile \
+		test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
+		PYTHON=python \
+		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+
 .PHONY: test_python
 test_python: distrib
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python_bindings
+		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		PYTHON=python3 \
+		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
@@ -1566,6 +1590,10 @@ ifneq (,$(findstring clang version 6.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 7.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1586,7 +1614,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 40 50 60))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 40 50 60 70))
 LLVM_OK=yes
 endif
 

@@ -1,671 +1,480 @@
 #include "PyBuffer.h"
 
-#include <boost/cstdint.hpp>
-#include <boost/format.hpp>
-#include <boost/functional/hash/hash.hpp>
-#include <boost/mpl/list.hpp>
-#include <boost/python.hpp>
-#include <functional>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
-#include "Halide.h"
-
 #include "PyFunc.h"
 #include "PyType.h"
 
-#define USE_NUMPY
-#ifdef USE_NUMPY
-#ifdef USE_BOOST_NUMPY
-#include <boost/numpy.hpp>
-#else
-#include "halide_numpy/numpy.hpp"
-#endif
-#endif  // USE_NUMPY
+namespace Halide {
+namespace PythonBindings {
 
-namespace h = Halide;
-namespace p = boost::python;
+namespace {
 
-#ifdef USE_NUMPY
-#ifdef USE_BOOST_NUMPY
-namespace bn = boost::numpy;
-#else
-namespace bn = Halide::numpy;
-#endif
-#endif  // USE_NUMPY
-
-template <typename Ret, typename T, typename... Args>
-Ret buffer_call_operator(h::Buffer<T> &that, Args... args) {
-    return that(args...);
+// Standard stream output for halide_dimension_t
+std::ostream &operator<<(std::ostream &stream, const halide_dimension_t &d) {
+    stream << "[" << d.min << "," << d.extent << "," << d.stride << "]";
+    return stream;
 }
 
-template <typename T>
-h::Expr buffer_call_operator_tuple(h::Buffer<T> &that, p::tuple &args_passed) {
-    std::vector<h::Expr> expr_args;
-    for (ssize_t i = 0; i < p::len(args_passed); i++) {
-        expr_args.push_back(p::extract<h::Expr>(args_passed[i]));
-    }
-    return that(expr_args);
-}
-
-template <typename T>
-T buffer_to_setitem_operator0(h::Buffer<T> &that, int x, T value) {
-    return that(x) = value;
-}
-
-template <typename T>
-T buffer_to_setitem_operator1(h::Buffer<T> &that, int x, int y, T value) {
-    return that(x, y) = value;
-}
-
-template <typename T>
-T buffer_to_setitem_operator2(h::Buffer<T> &that, int x, int y, int z, T value) {
-    return that(x, y, z) = value;
-}
-
-template <typename T>
-T buffer_to_setitem_operator3(h::Buffer<T> &that, int x, int y, int z, int w, T value) {
-    return that(x, y, z, w) = value;
-}
-
-template <typename T>
-T buffer_to_setitem_operator4(h::Buffer<T> &that, p::tuple &args_passed, T value) {
-    std::vector<int> int_args;
-    const size_t args_len = p::len(args_passed);
-    for (size_t i = 0; i < args_len; i += 1) {
-        p::object o = args_passed[i];
-        p::extract<int> int32_extract(o);
-
-        if (int32_extract.check()) {
-            int_args.push_back(int32_extract());
+// Standard stream output for vector<halide_dimension_t>
+std::ostream &operator<<(std::ostream &stream, const std::vector<halide_dimension_t> &shape) {
+    stream << "[";
+    bool need_comma = false;
+    for (auto &d : shape) {
+        if (need_comma) {
+            stream << ',';
         }
+        stream << d;
+        need_comma = true;
     }
+    stream << "]";
+    return stream;
+}
 
-    if (int_args.size() != args_len) {
-        for (size_t j = 0; j < args_len; j += 1) {
-            p::object o = args_passed[j];
-            const std::string o_str = p::extract<std::string>(p::str(o));
-            printf("buffer_to_setitem_operator4 args_passed[%lu] == %s\n", j, o_str.c_str());
+// Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
+// (Oddly, Buffer<> has no API to do this directly.)
+std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
+    std::vector<halide_dimension_t> s;
+    for (int i = 0; i < b.dimensions(); ++i) {
+        s.push_back(b.raw_buffer()->dim[i]);
+    }
+    return s;
+}
+
+void call_fill(Buffer<> &b, py::object value) {
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (b.type() == type_of<TYPE>()) { b.as<TYPE>().fill(value.cast<TYPE>()); return; }
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+}
+
+bool call_all_equal(Buffer<> &b, py::object value) {
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (b.type() == type_of<TYPE>()) { return b.as<TYPE>().all_equal(value.cast<TYPE>()); }
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return false;
+}
+
+std::string type_to_format_descriptor(const Type &type) {
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (type == type_of<TYPE>()) return py::format_descriptor<TYPE>::format();
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return std::string();
+}
+
+Type format_descriptor_to_type(const std::string &fd) {
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (fd == py::format_descriptor<TYPE>::format()) return type_of<TYPE>();
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return Type();
+}
+
+
+py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
+    if ((size_t) pos.size() != (size_t) buf.dimensions()) {
+        throw py::value_error("Incorrect number of dimensions.");
+    }
+    // TODO: add bounds checking?
+
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (buf.type() == type_of<TYPE>()) \
+            return py::cast(buf.as<TYPE>()(pos.data()));
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return py::object();
+}
+
+py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, py::object value) {
+    if ((size_t) pos.size() != (size_t) buf.dimensions()) {
+        throw py::value_error("Incorrect number of dimensions.");
+    }
+    // TODO: add bounds checking?
+    #define HANDLE_BUFFER_TYPE(TYPE) \
+        if (buf.type() == type_of<TYPE>()) \
+            return py::cast(buf.as<TYPE>()(pos.data()) = value.cast<TYPE>());
+
+    HANDLE_BUFFER_TYPE(bool)
+    HANDLE_BUFFER_TYPE(uint8_t)
+    HANDLE_BUFFER_TYPE(uint16_t)
+    HANDLE_BUFFER_TYPE(uint32_t)
+    HANDLE_BUFFER_TYPE(uint64_t)
+    HANDLE_BUFFER_TYPE(int8_t)
+    HANDLE_BUFFER_TYPE(int16_t)
+    HANDLE_BUFFER_TYPE(int32_t)
+    HANDLE_BUFFER_TYPE(int64_t)
+    HANDLE_BUFFER_TYPE(float)
+    HANDLE_BUFFER_TYPE(double)
+
+    #undef HANDLE_BUFFER_TYPE
+
+    throw py::value_error("Unsupported Buffer<> type.");
+    return py::object();
+}
+
+// Use an alias class so that if we are created via a py::buffer, we can
+// keep the py::buffer_info class alive for the life of the Buffer<>,
+// ensuring the data isn't collected out from under us.
+class PyBuffer : public Buffer<> {
+    py::buffer_info info;
+
+    static std::vector<halide_dimension_t> make_dim_vec(const py::buffer_info &info) {
+        const Type t = format_descriptor_to_type(info.format);
+        std::vector<halide_dimension_t> dims;
+        dims.reserve(info.ndim);
+        for (int i = 0; i < info.ndim; i++) {
+            // TODO: check for ssize_t -> int32_t overflow
+            dims.push_back({0, (int32_t) info.shape[i], (int32_t) (info.strides[i] / t.bytes())});
         }
-        throw std::invalid_argument("buffer_to_setitem_operator4 only handles "
-                                    "a tuple of (convertible to) int.");
+        return dims;
     }
 
-    switch (int_args.size()) {
-    case 1:
-        return that(int_args[0]) = value;
-    case 2:
-        return that(int_args[0], int_args[1]) = value;
-    case 3:
-        return that(int_args[0], int_args[1], int_args[2]) = value;
-    case 4:
-        return that(int_args[0], int_args[1], int_args[2], int_args[3]) = value;
-    default:
-        printf("buffer_to_setitem_operator4 receive a tuple with %zu integers\n", int_args.size());
-        throw std::invalid_argument("buffer_to_setitem_operator4 only handles 1 to 4 dimensional tuples");
-    }
-
-    return 0;  // this line should never be reached
-}
-
-template <typename T>
-const T *buffer_data(const h::Buffer<T> &buffer) {
-    return buffer.data();
-}
-
-template <typename T>
-void buffer_set_min1(h::Buffer<T> &im, int m0) {
-    im.set_min(m0);
-}
-
-template <typename T>
-void buffer_set_min2(h::Buffer<T> &im, int m0, int m1) {
-    im.set_min(m0, m1);
-}
-
-template <typename T>
-void buffer_set_min3(h::Buffer<T> &im, int m0, int m1, int m2) {
-    im.set_min(m0, m1, m2);
-}
-
-template <typename T>
-void buffer_set_min4(h::Buffer<T> &im, int m0, int m1, int m2, int m3) {
-    im.set_min(m0, m1, m2, m3);
-}
-
-template <typename T>
-std::string buffer_repr(const h::Buffer<T> &buffer) {
-    std::string repr;
-
-    h::Type t = halide_type_of<T>();
-    std::string suffix = "_???";
-    if (t.is_float()) {
-        suffix = "_float";
-    } else if (t.is_int()) {
-        suffix = "_int";
-    } else if (t.is_uint()) {
-        suffix = "_uint";
-    } else if (t.is_bool()) {
-        suffix = "_bool";
-    } else if (t.is_handle()) {
-        suffix = "_handle";
-    }
-
-    boost::format f("<halide.Buffer%s%i; element_size %i bytes; "
-                    "extent (%i %i %i %i); min (%i %i %i %i); stride (%i %i %i %i)>");
-
-    repr = boost::str(f % suffix % t.bits() % t.bytes() % buffer.extent(0) % buffer.extent(1) % buffer.extent(2) % buffer.extent(3) % buffer.min(0) % buffer.min(1) % buffer.min(2) % buffer.min(3) % buffer.stride(0) % buffer.stride(1) % buffer.stride(2) % buffer.stride(3));
-
-    return repr;
-}
-
-template <typename T>
-boost::python::object get_type_function_wrapper() {
-    std::function<h::Type(h::Buffer<T> &)> return_type_func =
-        [&](h::Buffer<T> &that) -> h::Type { return halide_type_of<T>(); };
-    auto call_policies = p::default_call_policies();
-    typedef boost::mpl::vector<h::Type, h::Buffer<T> &> func_sig;
-    return p::make_function(return_type_func, call_policies, p::arg("self"), func_sig());
-}
-
-template <typename T>
-void buffer_copy_to_host(h::Buffer<T> &im) {
-    im.copy_to_host();
-}
-
-template <typename T>
-void buffer_set_host_dirty(h::Buffer<T> &im, bool value) {
-    im.set_host_dirty(value);
-}
-
-template <typename T>
-int buffer_channels(h::Buffer<T> &im) {
-    return im.channels();
-}
-
-template <typename T>
-int buffer_width(h::Buffer<T> &im) {
-    return im.width();
-}
-
-template <typename T>
-int buffer_height(h::Buffer<T> &im) {
-    return im.height();
-}
-
-template <typename T>
-int buffer_dimensions(h::Buffer<T> &im) {
-    return im.dimensions();
-}
-
-template <typename T>
-int buffer_left(h::Buffer<T> &im) {
-    return im.left();
-}
-
-template <typename T>
-int buffer_right(h::Buffer<T> &im) {
-    return im.right();
-}
-
-template <typename T>
-int buffer_top(h::Buffer<T> &im) {
-    return im.top();
-}
-
-template <typename T>
-int buffer_bottom(h::Buffer<T> &im) {
-    return im.bottom();
-}
-
-template <typename T>
-int buffer_stride(h::Buffer<T> &im, int d) {
-    return im.stride(d);
-}
-
-template <typename T>
-int buffer_min(h::Buffer<T> &im, int d) {
-    return im.min(d);
-}
-
-template <typename T>
-int buffer_extent(h::Buffer<T> &im, int d) {
-    return im.extent(d);
-}
-
-
-
-template <typename T>
-void define_buffer_impl(const std::string suffix, const h::Type type) {
-    using h::Buffer;
-    using h::Expr;
-
-    auto buffer_class =
-        p::class_<Buffer<T>>(
-            ("Buffer" + suffix).c_str(),
-            "A reference-counted handle on a dense multidimensional array "
-            "containing scalar values of type T. Can be directly accessed and "
-            "modified. May have up to four dimensions. Color images are "
-            "represented as three-dimensional, with the third dimension being "
-            "the color channel. In general we store color images in "
-            "color-planes, as opposed to packed RGB, because this tends to "
-            "vectorize more cleanly.",
-            p::init<>(p::arg("self"), "Construct an undefined buffer handle"));
-
-    // Constructors
-    buffer_class
-        .def(p::init<int>(
-            p::args("self", "x"),
-            "Allocate an buffer with the given dimensions."))
-
-        .def(p::init<int, int>(
-            p::args("self", "x", "y"),
-            "Allocate an buffer with the given dimensions."))
-
-        .def(p::init<int, int, int>(
-            p::args("self", "x", "y", "z"),
-            "Allocate an buffer with the given dimensions."))
-
-        .def(p::init<int, int, int, int>(
-            p::args("self", "x", "y", "z", "w"),
-            "Allocate an buffer with the given dimensions."))
-
-        .def(p::init<h::Realization &>(
-            p::args("self", "r"),
-            "Wrap a single-element realization in an Buffer object."))
-
-        .def(p::init<halide_buffer_t>(
-            p::args("self", "b"),
-            "Wrap a halide_buffer_t in an Buffer object, so that we can access its pixels."));
-
-    buffer_class
-        .def("__repr__", buffer_repr<T>, p::arg("self"));
-
-    buffer_class
-        .def("data", buffer_data<T>, p::arg("self"),
-             p::return_value_policy<p::return_opaque_pointer>(),  // not sure this will do what we want
-             "Get a pointer to the element at the min location.")
-
-        .def("copy_to_host", buffer_copy_to_host<T>, p::arg("self"),
-             "Manually copy-back data to the host, if it's on a device. ")
-        .def("set_host_dirty", buffer_set_host_dirty<T>,
-             (p::arg("self"), p::arg("dirty") = true),
-             "Mark the buffer as dirty-on-host. ")
-        .def("type", get_type_function_wrapper<T>(),
-             "Return Type instance for the data type of the buffer.")
-        .def("channels", buffer_channels<T>, p::arg("self"),
-             "Get the extent of dimension 2, which by convention we use as"
-             "the number of color channels (often 3). Unlike extent(2), "
-             "returns one if the buffer has fewer than three dimensions.")
-        .def("dimensions", buffer_dimensions<T>, p::arg("self"),
-             "Get the dimensionality of the data. Typically two for grayscale images, and three for color images.")
-        .def("stride", buffer_stride<T>, p::args("self", "dim"),
-             "Get the number of elements in the buffer between two adjacent "
-             "elements in the given dimension. For example, the stride in "
-             "dimension 0 is usually 1, and the stride in dimension 1 is "
-             "usually the extent of dimension 0. This is not necessarily true though.")
-        .def("extent", buffer_extent<T>, p::args("self", "dim"),
-             "Get the size of a dimension.")
-        .def("min", buffer_min<T>, p::args("self", "dim"),
-             "Get the min coordinate of a dimension. The top left of the "
-             "buffer represents this point in a function that was realized "
-             "into this buffer.");
-
-    buffer_class
-        .def("set_min", buffer_set_min1<T>,
-             p::args("self", "m0"),
-             "Set the coordinates corresponding to the host pointer.")
-        .def("set_min", buffer_set_min2<T>,
-             p::args("self", "m0", "m1"),
-             "Set the coordinates corresponding to the host pointer.")
-        .def("set_min", buffer_set_min3<T>,
-             p::args("self", "m0", "m1", "m2"),
-             "Set the coordinates corresponding to the host pointer.")
-        .def("set_min", buffer_set_min4<T>,
-             p::args("self", "m0", "m1", "m2", "m3"),
-             "Set the coordinates corresponding to the host pointer.");
-
-    buffer_class
-        .def("width", buffer_width<T>, p::arg("self"),
-             "Get the extent of dimension 0, which by convention we use as "
-             "the width of the image. Unlike extent(0), returns one if the "
-             "buffer is zero-dimensional.")
-        .def("height", buffer_height<T>, p::arg("self"),
-             "Get the extent of dimension 1, which by convention we use as "
-             "the height of the image. Unlike extent(1), returns one if the "
-             "buffer has fewer than two dimensions.")
-        .def("left", buffer_left<T>, p::arg("self"),
-             "Get the minimum coordinate in dimension 0, which by convention "
-             "is the coordinate of the left edge of the image. Returns zero "
-             "for zero-dimensional images.")
-        .def("right", buffer_right<T>, p::arg("self"),
-             "Get the maximum coordinate in dimension 0, which by convention "
-             "is the coordinate of the right edge of the image. Returns zero "
-             "for zero-dimensional images.")
-        .def("top", buffer_top<T>, p::arg("self"),
-             "Get the minimum coordinate in dimension 1, which by convention "
-             "is the top of the image. Returns zero for zero- or "
-             "one-dimensional images.")
-        .def("bottom", buffer_bottom<T>, p::arg("self"),
-             "Get the maximum coordinate in dimension 1, which by convention "
-             "is the bottom of the image. Returns zero for zero- or "
-             "one-dimensional images.");
-
-    const char *get_item_doc =
-        "Construct an expression which loads from this buffer. ";
-
-    // Access operators (to Expr, and to actual value)
-    buffer_class
-        .def("__getitem__", buffer_call_operator<Expr, T, Expr>,
-             p::args("self", "x"),
-             get_item_doc);
-    buffer_class
-        .def("__getitem__", buffer_call_operator<Expr, T, Expr, Expr>,
-             p::args("self", "x", "y"),
-             get_item_doc);
-    buffer_class
-        .def("__getitem__", buffer_call_operator<Expr, T, Expr, Expr, Expr>,
-             p::args("self", "x", "y", "z"),
-             get_item_doc)
-        .def("__getitem__", buffer_call_operator<Expr, T, Expr, Expr, Expr, Expr>,
-             p::args("self", "x", "y", "z", "w"),
-             get_item_doc)
-        .def("__getitem__", buffer_call_operator_tuple<T>,
-             p::args("self", "tuple"),
-             get_item_doc)
-        // Note that we return copy values (not references like in the C++ API)
-        .def("__getitem__", buffer_call_operator<T, T>,
-             p::arg("self"),
-             "Assuming this buffer is zero-dimensional, get its value")
-        .def("__call__", buffer_call_operator<T, T, int>,
-             p::args("self", "x"),
-             "Assuming this buffer is one-dimensional, get the value of the element at position x")
-        .def("__call__", buffer_call_operator<T, T, int, int>,
-             p::args("self", "x", "y"),
-             "Assuming this buffer is two-dimensional, get the value of the element at position (x, y)")
-        .def("__call__", buffer_call_operator<T, T, int, int, int>,
-             p::args("self", "x", "y", "z"),
-             "Assuming this buffer is three-dimensional, get the value of the element at position (x, y, z)")
-        .def("__call__", buffer_call_operator<T, T, int, int, int, int>,
-             p::args("self", "x", "y", "z", "w"),
-             "Assuming this buffer is four-dimensional, get the value of the element at position (x, y, z, w)")
-
-        .def("__setitem__", buffer_to_setitem_operator0<T>, p::args("self", "x", "value"),
-             "Assuming this buffer is one-dimensional, set the value of the element at position x")
-        .def("__setitem__", buffer_to_setitem_operator1<T>, p::args("self", "x", "y", "value"),
-             "Assuming this buffer is two-dimensional, set the value of the element at position (x, y)")
-        .def("__setitem__", buffer_to_setitem_operator2<T>, p::args("self", "x", "y", "z", "value"),
-             "Assuming this buffer is three-dimensional, set the value of the element at position (x, y, z)")
-        .def("__setitem__", buffer_to_setitem_operator3<T>, p::args("self", "x", "y", "z", "w", "value"),
-             "Assuming this buffer is four-dimensional, set the value of the element at position (x, y, z, w)")
-        .def("__setitem__", buffer_to_setitem_operator4<T>, p::args("self", "tuple", "value"),
-             "Assuming this buffer is one to four-dimensional, "
-             "set the value of the element at position indicated by tuple (x, y, z, w)");
-
-    p::implicitly_convertible<Buffer<T>, h::Argument>();
-}
-
-p::object buffer_to_python_object(const h::Buffer<> &im) {
-    PyObject *obj = nullptr;
-    if (im.type() == h::UInt(8)) {
-        p::manage_new_object::apply<h::Buffer<uint8_t> *>::type converter;
-        obj = converter(new h::Buffer<uint8_t>(im));
-    } else if (im.type() == h::UInt(16)) {
-        p::manage_new_object::apply<h::Buffer<uint16_t> *>::type converter;
-        obj = converter(new h::Buffer<uint16_t>(im));
-    } else if (im.type() == h::UInt(32)) {
-        p::manage_new_object::apply<h::Buffer<uint32_t> *>::type converter;
-        obj = converter(new h::Buffer<uint32_t>(im));
-    } else if (im.type() == h::UInt(64)) {
-        p::manage_new_object::apply<h::Buffer<uint64_t> *>::type converter;
-        obj = converter(new h::Buffer<uint64_t>(im));
-    } else if (im.type() == h::Int(8)) {
-        p::manage_new_object::apply<h::Buffer<int8_t> *>::type converter;
-        obj = converter(new h::Buffer<int8_t>(im));
-    } else if (im.type() == h::Int(16)) {
-        p::manage_new_object::apply<h::Buffer<int16_t> *>::type converter;
-        obj = converter(new h::Buffer<int16_t>(im));
-    } else if (im.type() == h::Int(32)) {
-        p::manage_new_object::apply<h::Buffer<int32_t> *>::type converter;
-        obj = converter(new h::Buffer<int32_t>(im));
-    } else if (im.type() == h::Int(64)) {
-        p::manage_new_object::apply<h::Buffer<int64_t> *>::type converter;
-        obj = converter(new h::Buffer<int64_t>(im));
-    } else if (im.type() == h::Float(32)) {
-        p::manage_new_object::apply<h::Buffer<float> *>::type converter;
-        obj = converter(new h::Buffer<float>(im));
-    } else if (im.type() == h::Float(64)) {
-        p::manage_new_object::apply<h::Buffer<double> *>::type converter;
-        obj = converter(new h::Buffer<double>(im));
-    } else {
-        throw std::invalid_argument("buffer_to_python_object received an Buffer of unsupported type.");
-    }
-
-    return p::object(p::handle<>(obj));
-}
-
-h::Buffer<> python_object_to_buffer(p::object obj) {
-    p::extract<h::Buffer<uint8_t>> buffer_extract_uint8(obj);
-    p::extract<h::Buffer<uint16_t>> buffer_extract_uint16(obj);
-    p::extract<h::Buffer<uint32_t>> buffer_extract_uint32(obj);
-    p::extract<h::Buffer<int8_t>> buffer_extract_int8(obj);
-    p::extract<h::Buffer<int16_t>> buffer_extract_int16(obj);
-    p::extract<h::Buffer<int32_t>> buffer_extract_int32(obj);
-    p::extract<h::Buffer<float>> buffer_extract_float(obj);
-    p::extract<h::Buffer<double>> buffer_extract_double(obj);
-
-    if (buffer_extract_uint8.check()) {
-        return buffer_extract_uint8();
-    } else if (buffer_extract_uint16.check()) {
-        return buffer_extract_uint16();
-    } else if (buffer_extract_uint32.check()) {
-        return buffer_extract_uint32();
-    } else if (buffer_extract_int8.check()) {
-        return buffer_extract_int8();
-    } else if (buffer_extract_int16.check()) {
-        return buffer_extract_int16();
-    } else if (buffer_extract_int32.check()) {
-        return buffer_extract_int32();
-    } else if (buffer_extract_float.check()) {
-        return buffer_extract_float();
-    } else if (buffer_extract_double.check()) {
-        return buffer_extract_double();
-    } else {
-        throw std::invalid_argument("python_object_to_buffer received an object that is not an Buffer<T>");
-    }
-    return h::Buffer<>();
-}
-
-#ifdef USE_NUMPY
-
-bn::dtype type_to_dtype(const h::Type &t) {
-    if (t == h::UInt(8)) return bn::dtype::get_builtin<uint8_t>();
-    if (t == h::UInt(16)) return bn::dtype::get_builtin<uint16_t>();
-    if (t == h::UInt(32)) return bn::dtype::get_builtin<uint32_t>();
-    if (t == h::UInt(64)) return bn::dtype::get_builtin<uint64_t>();
-    if (t == h::Int(8)) return bn::dtype::get_builtin<int8_t>();
-    if (t == h::Int(16)) return bn::dtype::get_builtin<int16_t>();
-    if (t == h::Int(32)) return bn::dtype::get_builtin<int32_t>();
-    if (t == h::Int(64)) return bn::dtype::get_builtin<int64_t>();
-    if (t == h::Float(32)) return bn::dtype::get_builtin<float>();
-    if (t == h::Float(64)) return bn::dtype::get_builtin<double>();
-    throw std::runtime_error("type_to_dtype received a Halide::Type with no known numpy dtype equivalent");
-    return bn::dtype::get_builtin<uint8_t>();
-}
-
-h::Type dtype_to_type(const bn::dtype &t) {
-    if (t == bn::dtype::get_builtin<uint8_t>()) return h::UInt(8);
-    if (t == bn::dtype::get_builtin<uint16_t>()) return h::UInt(16);
-    if (t == bn::dtype::get_builtin<uint32_t>()) return h::UInt(32);
-    if (t == bn::dtype::get_builtin<uint64_t>()) return h::UInt(64);
-    if (t == bn::dtype::get_builtin<int8_t>()) return h::Int(8);
-    if (t == bn::dtype::get_builtin<int16_t>()) return h::Int(16);
-    if (t == bn::dtype::get_builtin<int32_t>()) return h::Int(32);
-    if (t == bn::dtype::get_builtin<int64_t>()) return h::Int(64);
-    if (t == bn::dtype::get_builtin<float>()) return h::Float(32);
-    if (t == bn::dtype::get_builtin<double>()) return h::Float(64);
-    throw std::runtime_error("dtype_to_type received a numpy type with no known Halide type equivalent");
-    return h::Type();
-}
-
-/// Will create a Halide::Buffer object pointing to the array data
-p::object ndarray_to_buffer(bn::ndarray &array) {
-    h::Type t = dtype_to_type(array.get_dtype());
-    const int dims = array.get_nd();
-    void *host = reinterpret_cast<void *>(array.get_data());
-    halide_dimension_t *shape =
-        (halide_dimension_t *)__builtin_alloca(sizeof(halide_dimension_t) * dims);
-    for (int i = 0; i < dims; i++) {
-        shape[i].min = 0;
-        shape[i].extent = array.shape(i);
-        shape[i].stride = array.strides(i) / t.bytes();
-    }
-
-    return buffer_to_python_object(h::Buffer<>(t, host, dims, shape));
-}
-
-bn::ndarray buffer_to_ndarray(p::object buffer_object) {
-    h::Buffer<> im = python_object_to_buffer(buffer_object);
-
-    if (im.data() == nullptr) {
-        throw std::invalid_argument("Can't create a numpy array from a Buffer with a null host pointer");
-    }
-
-    std::vector<int32_t> extent(im.dimensions()), stride(im.dimensions());
-    for (int i = 0; i < im.dimensions(); i++) {
-        extent[i] = im.dim(i).extent();
-        stride[i] = im.dim(i).stride() * im.type().bytes();
-    }
-
-    return bn::from_data(
-        im.data(),
-        type_to_dtype(im.type()),
-        extent,
-        stride,
-        buffer_object);
-}
-
-#endif  // USE_NUMPY
-
-struct BufferFactory {
-    template <typename T, typename... Args>
-    static p::object create_buffer_object(Args... args) {
-        typedef h::Buffer<T> BufferType;
-        typedef typename p::manage_new_object::apply<BufferType *>::type converter_t;
-        converter_t converter;
-        PyObject *obj = converter(new BufferType(args...));
-        return p::object(p::handle<>(obj));
-    }
-
-    template <typename... Args>
-    static p::object create_buffer_impl(h::Type t, Args... args) {
-        if (t == h::UInt(8)) return create_buffer_object<uint8_t>(args...);
-        if (t == h::UInt(16)) return create_buffer_object<uint16_t>(args...);
-        if (t == h::UInt(32)) return create_buffer_object<uint32_t>(args...);
-        if (t == h::UInt(64)) return create_buffer_object<uint64_t>(args...);
-        if (t == h::Int(8)) return create_buffer_object<int8_t>(args...);
-        if (t == h::Int(16)) return create_buffer_object<int16_t>(args...);
-        if (t == h::Int(32)) return create_buffer_object<int32_t>(args...);
-        if (t == h::Int(64)) return create_buffer_object<int64_t>(args...);
-        if (t == h::Float(32)) return create_buffer_object<float>(args...);
-        if (t == h::Float(64)) return create_buffer_object<double>(args...);
-        throw std::invalid_argument("BufferFactory::create_buffer_impl received type not handled");
-        return p::object();
-    }
-
-    static p::object create_buffer0(h::Type type) {
-        return create_buffer_impl(type);
-    }
-
-    static p::object create_buffer1(h::Type type, int x) {
-        return create_buffer_impl(type, x);
-    }
-
-    static p::object create_buffer2(h::Type type, int x, int y) {
-        return create_buffer_impl(type, x, y);
-    }
-
-    static p::object create_buffer3(h::Type type, int x, int y, int z) {
-        return create_buffer_impl(type, x, y, z);
-    }
-
-    static p::object create_buffer4(h::Type type, int x, int y, int z, int w) {
-        return create_buffer_impl(type, x, y, z, w);
-    }
-
-    static p::object create_buffer_from_realization(h::Type type, h::Realization &r) {
-        return create_buffer_impl(type, r);
-    }
-
-    static p::object create_buffer_from_buffer(halide_buffer_t b) {
-        return create_buffer_impl(b.type, b);
-    }
+    PyBuffer(py::buffer_info &&info, const std::string &name)
+        : Buffer<>(
+            format_descriptor_to_type(info.format),
+            info.ptr,
+            (int) info.ndim,
+            make_dim_vec(info).data(),
+            name
+        ),
+        info(std::move(info)) {}
+
+public:
+    PyBuffer()
+        : Buffer<>(), info() {}
+
+    explicit PyBuffer(const Buffer<> &b)
+        : Buffer<>(b), info() {}
+
+    PyBuffer(py::buffer buffer, const std::string &name)
+        : PyBuffer(buffer.request(/*writable*/ true), name) {}
+
+    virtual ~PyBuffer() {}
 };
 
-void define_buffer() {
-    define_buffer_impl<uint8_t>("_uint8", h::UInt(8));
-    define_buffer_impl<uint16_t>("_uint16", h::UInt(16));
-    define_buffer_impl<uint32_t>("_uint32", h::UInt(32));
-    define_buffer_impl<uint64_t>("_uint64", h::UInt(64));
+}  // namespace
 
-    define_buffer_impl<int8_t>("_int8", h::Int(8));
-    define_buffer_impl<int16_t>("_int16", h::Int(16));
-    define_buffer_impl<int32_t>("_int32", h::Int(32));
-    define_buffer_impl<int64_t>("_int64", h::Int(64));
+void define_buffer(py::module &m) {
+    using BufferDimension = Halide::Runtime::Buffer<>::Dimension;
 
-    define_buffer_impl<float>("_float32", h::Float(32));
-    define_buffer_impl<double>("_float64", h::Float(64));
+    auto buffer_dimension_class =
+        py::class_<BufferDimension>(m, "BufferDimension")
+        .def("min", &BufferDimension::min)
+        .def("stride", &BufferDimension::stride)
+        .def("extent", &BufferDimension::extent)
+        .def("max", &BufferDimension::max)
+    ;
 
-    // "Buffer" will look like a class, but instead it will be simply a factory method
-    p::def("Buffer", &BufferFactory::create_buffer0,
-           p::args("type"),
-           "Construct a zero-dimensional buffer of type T");
-    p::def("Buffer", &BufferFactory::create_buffer1,
-           p::args("type", "x"),
-           "Construct a one-dimensional buffer of type T");
-    p::def("Buffer", &BufferFactory::create_buffer2,
-           p::args("type", "x", "y"),
-           "Construct a two-dimensional buffer of type T");
-    p::def("Buffer", &BufferFactory::create_buffer3,
-           p::args("type", "x", "y", "z"),
-           "Construct a three-dimensional buffer of type T");
-    p::def("Buffer", &BufferFactory::create_buffer4,
-           p::args("type", "x", "y", "z", "w"),
-           "Construct a four-dimensional buffer of type T");
+    auto buffer_class =
+        py::class_<Buffer<>, PyBuffer>(m, "Buffer", py::buffer_protocol())
 
-    p::def("Buffer", &BufferFactory::create_buffer_from_realization,
-           p::args("type", "r"),
-           p::with_custodian_and_ward_postcall<0, 2>(),  // the realization reference count is increased
-           "Wrap a single-element realization in an Buffer object of type T.");
+        // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
+        // most notably, we can convert to an ndarray by calling numpy.array()
+       .def_buffer([](Buffer<> &b) -> py::buffer_info {
+            if (b.data() == nullptr) {
+                throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
+            }
 
-    p::def("Buffer", &BufferFactory::create_buffer_from_buffer,
-           p::args("b"),
-           p::with_custodian_and_ward_postcall<0, 2>(),  // the buffer_t reference count is increased
-           "Wrap a halide_buffer_t in an Buffer object, so that we can access its pixels.");
+            const int d = b.dimensions();
+            const int bytes = b.type().bytes();
+            std::vector<ssize_t> shape, strides;
+            for (int i = 0; i < d; i++) {
+                shape.push_back((ssize_t) b.raw_buffer()->dim[i].extent);
+                strides.push_back((ssize_t) (b.raw_buffer()->dim[i].stride * bytes));
+            }
 
-#ifdef USE_NUMPY
-    bn::initialize();
+            return py::buffer_info(
+                b.data(),                               // Pointer to buffer
+                bytes,                                  // Size of one scalar
+                type_to_format_descriptor(b.type()),    // Python struct-style format descriptor
+                d,                                      // Number of dimensions
+                shape,                                  // Buffer dimensions
+                strides                                 // Strides (in bytes) for each index
+            );
+        })
 
-    p::def("ndarray_to_buffer", &ndarray_to_buffer,
-           p::args("array"),
-           p::with_custodian_and_ward_postcall<0, 1>(),  // the array reference count is increased
-           "Converts a numpy array into a Halide::Buffer."
-           "Will take into account the array size, dimensions, and type."
-           "Created Buffer refers to the array data (no copy).");
+        // This allows us to use any buffer-like python entity to create a Buffer<>
+        // (most notably, an ndarray)
+        .def(py::init_alias<py::buffer, const std::string &>(), py::arg("buffer"), py::arg("name") = "")
+        .def(py::init_alias<>())
+        .def(py::init_alias<const Buffer<> &>())
+        .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, sizes, name);
+        }), py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
-    p::def("Buffer", &ndarray_to_buffer,
-           p::args("array"),
-           p::with_custodian_and_ward_postcall<0, 1>(),  // the array reference count is increased
-           "Wrap numpy array in a Halide::Buffer."
-           "Will take into account the array size, dimensions, and type."
-           "Created Buffer refers to the array data (no copy).");
+        // Note that this exists solely to allow you to create a Buffer with a null host ptr;
+        // this is necessary for some bounds-query operations (e.g. Func::infer_input_bounds).
+        .def_static("make_bounds_query", [](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
+            return Buffer<>(type, nullptr, sizes, name);
+        }, py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
-    p::def("buffer_to_ndarray", &buffer_to_ndarray,
-           p::args("buffer"),
-           p::with_custodian_and_ward_postcall<0, 1>(),  // the buffer reference count is increased
-           "Creates a numpy array from a Halide::Buffer."
-           "Will take into account the Buffer size, dimensions, and type."
-           "Created ndarray refers to the Buffer data (no copy).");
-#endif  // USE_NUMPY
+        .def_static("make_scalar", (Buffer<> (*)(Type, const std::string &)) Buffer<>::make_scalar,
+            py::arg("type"), py::arg("name") = "")
+        .def_static("make_interleaved", (Buffer<> (*)(Type, int, int, int, const std::string &)) Buffer<>::make_interleaved,
+            py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
+        .def_static("make_with_shape_of", [](Buffer<> buffer, const std::string &name) -> Buffer<> {
+            return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);
+        }, py::arg("src"), py::arg("name") = "")
+
+        .def("set_name", &Buffer<>::set_name)
+        .def("name", &Buffer<>::name)
+
+        .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other)) &Buffer<>::same_as, py::arg("other"))
+        .def("defined", &Buffer<>::defined)
+
+        .def("type", &Buffer<>::type)
+        .def("channels", (int (Buffer<>::*)() const) &Buffer<>::channels)
+        .def("dimensions", (int (Buffer<>::*)() const) &Buffer<>::dimensions)
+        .def("width", (int (Buffer<>::*)() const) &Buffer<>::width)
+        .def("height", (int (Buffer<>::*)() const) &Buffer<>::height)
+        .def("top", (int (Buffer<>::*)() const) &Buffer<>::top)
+        .def("bottom", (int (Buffer<>::*)() const) &Buffer<>::bottom)
+        .def("left", (int (Buffer<>::*)() const) &Buffer<>::left)
+        .def("right", (int (Buffer<>::*)() const) &Buffer<>::right)
+        .def("number_of_elements", (size_t (Buffer<>::*)() const) &Buffer<>::number_of_elements)
+        .def("size_in_bytes", (size_t (Buffer<>::*)() const) &Buffer<>::size_in_bytes)
+        .def("has_device_allocation", (bool (Buffer<>::*)() const) &Buffer<>::has_device_allocation)
+        .def("host_dirty", (bool (Buffer<>::*)() const) &Buffer<>::host_dirty)
+        .def("device_dirty", (bool (Buffer<>::*)() const) &Buffer<>::device_dirty)
+
+        .def("set_host_dirty", [](Buffer<> &b, bool dirty) -> void {
+            b.set_host_dirty(dirty);
+        }, py::arg("dirty") = true)
+        .def("set_device_dirty", [](Buffer<> &b, bool dirty) -> void {
+            b.set_device_dirty(dirty);
+        }, py::arg("dirty") = true)
+
+        .def("copy", &Buffer<>::copy)
+        .def("copy_from", &Buffer<>::copy_from<void>)
+
+        .def("add_dimension", (void (Buffer<>::*)()) &Buffer<>::add_dimension)
+
+        .def("allocate", [](Buffer<> &b) -> void {
+            b.allocate(nullptr, nullptr);
+        })
+        .def("deallocate", (void (Buffer<>::*)()) &Buffer<>::deallocate)
+        .def("device_deallocate", (void (Buffer<>::*)()) &Buffer<>::device_deallocate)
+
+        .def("crop", [](Buffer<> &b, int d, int min, int extent) -> void {
+            b.crop(d, min, extent);
+        }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        .def("crop", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> void {
+            b.crop(rect);
+        }, py::arg("rect"))
+
+        // Present in Runtime::Buffer but not Buffer
+        // .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
+        //     return b.cropped(d, min, extent);
+        // }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
+        // .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
+        //     return b.cropped(rect);
+        // }, py::arg("rect"))
+
+        .def("embed", [](Buffer<> &b, int d, int pos) -> void {
+            b.embed(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+        .def("embedded", [](Buffer<> &b, int d, int pos) -> Buffer<> {
+            return b.embedded(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+
+        .def("slice", [](Buffer<> &b, int d, int pos) -> void {
+            b.slice(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+        .def("sliced", [](Buffer<> &b, int d, int pos) -> Buffer<> {
+            return b.sliced(d, pos);
+        }, py::arg("dimension"), py::arg("pos"))
+
+        .def("translate", [](Buffer<> &b, int d, int dx) -> void {
+            b.translate(d, dx);
+        }, py::arg("dimension"), py::arg("dx"))
+        .def("translate", [](Buffer<> &b, const std::vector<int> &delta) -> void {
+            b.translate(delta);
+        }, py::arg("delta"))
+
+        // Present in Runtime::Buffer but not Buffer
+        // .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
+        //     return b.translated(d, dx);
+        // }, py::arg("dimension"), py::arg("dx"))
+        // .def("translated", [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
+        //     return b.translated(delta);
+        // }, py::arg("delta"))
+
+        .def("transpose", [](Buffer<> &b, int d1, int d2) -> void {
+            b.transpose(d1, d2);
+        }, py::arg("d1"), py::arg("d2"))
+
+        // Present in Runtime::Buffer but not Buffer
+        // .def("transposed", [](Buffer<> &b, int d1, int d2) -> Buffer<> {
+        //     return b.transposed(d1, d2);
+        // }, py::arg("d1"), py::arg("d2"))
+
+        .def("dim", [](Buffer<> &b, int dimension) -> BufferDimension {
+            return b.dim(dimension);
+        }, py::arg("dimension"),
+           py::keep_alive<0, 1>() // Keep Buffer<> alive while Dimension exists
+        )
+
+        .def("for_each_element", [](Buffer<> &b, py::function f) -> void {
+            const int d = b.dimensions();
+            std::vector<int> pos_v(d, 0);
+            b.for_each_element([&f, &pos_v](const int *pos) -> void {
+                for (size_t i = 0; i < pos_v.size(); ++i) {
+                    pos_v[i] = pos[i];
+                }
+                f(pos_v);
+            });
+        }, py::arg("f"))
+
+
+        .def("fill", &call_fill, py::arg("value"))
+        .def("all_equal", &call_all_equal, py::arg("value"))
+
+        // TODO: for_each_value() needs to be rethought a bit for Python;
+        // for C++ is passes a by-reference to each value (for mutation),
+        // but Python doesn't allow mutable references to intrinsic types
+        // like int. Leaving unimplemented for now.
+        // .def("for_each_value", [](Buffer<> &b, py::args f, py::args other_buffers) -> void {
+        // }, py::arg("f"))
+
+        .def("copy_to_host", [](Buffer<> &b) -> int {
+            return b.copy_to_host(nullptr);
+        })
+        .def("device_detach_native", [](Buffer<> &b) -> int {
+            return b.device_detach_native(nullptr);
+        })
+        .def("device_free", [](Buffer<> &b) -> int {
+            return b.device_free(nullptr);
+        })
+        .def("device_sync", [](Buffer<> &b) -> int {
+            return b.device_sync(nullptr);
+        })
+
+        .def("copy_to_device", (int (Buffer<>::*)(const Target &)) &Buffer<>::copy_to_device,
+            py::arg("target") = get_jit_target_from_environment())
+        .def("copy_to_device", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) &Buffer<>::copy_to_device,
+            py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+
+        .def("device_malloc", (int (Buffer<>::*)(const Target &)) &Buffer<>::device_malloc,
+            py::arg("target") = get_jit_target_from_environment())
+        .def("device_malloc", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) &Buffer<>::device_malloc,
+            py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+
+        .def("set_min", [](Buffer<> &b, const std::vector<int> mins) -> void {
+            if (mins.size() > (size_t) b.dimensions()) {
+                throw py::value_error("Too many arguments");
+            }
+            b.set_min(mins);
+        }, py::arg("mins"))
+
+        .def("contains", [](Buffer<> &b, const std::vector<int> coords) -> bool {
+            if (coords.size() > (size_t) b.dimensions()) {
+                throw py::value_error("Too many arguments");
+            }
+            return b.contains(coords);
+        }, py::arg("coords"))
+
+        .def("__getitem__", [](Buffer<> &buf, const int &pos) -> py::object {
+            return buffer_getitem_operator(buf, {pos});
+        })
+        .def("__getitem__", [](Buffer<> &buf, const std::vector<int> &pos) -> py::object {
+            return buffer_getitem_operator(buf, pos);
+        })
+
+        .def("__getitem__", [](Buffer<> &buf, const Expr &pos) -> Expr {
+            return buf(std::vector<Expr>{pos});
+        })
+        .def("__getitem__", [](Buffer<> &buf, const std::vector<Expr> &pos) -> Expr {
+            return buf(pos);
+        })
+
+        .def("__setitem__", [](Buffer<> &buf, const int &pos, py::object value) -> py::object {
+            return buffer_setitem_operator(buf, {pos}, value);
+        })
+        .def("__setitem__", [](Buffer<> &buf, const std::vector<int> &pos, py::object value) -> py::object {
+            return buffer_setitem_operator(buf, pos, value);
+        })
+
+        .def("__repr__", [](const Buffer<> &b) -> std::string {
+            std::ostringstream o;
+            o << "<halide.Buffer of type " << halide_type_to_string(b.type()) << " shape:" << get_buffer_shape(b) << ">";
+            return o.str();
+        })
+    ;
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide

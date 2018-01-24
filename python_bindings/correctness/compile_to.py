@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import os.path
 
 import halide as hl
@@ -34,8 +32,6 @@ def main():
     f.compile_to_file("f_all", args)
     assert os.path.isfile("f_all.h")
     assert os.path.isfile("f_all.o")
-
-    print("Success!")
 
     return 0
 

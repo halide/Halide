@@ -2159,7 +2159,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
         }
 
         if ((funcs.size() == 1) &&
-            (funcs[0].has_extern_definition() || (funcs[0].definition().schedule().fused_pairs().size() == 0))) {
+            (funcs[0].has_extern_definition() || (funcs[0].definition().schedule().fused_pairs().empty()))) {
             // There is only one function in the group and either there is
             // no loop fusion among its definition or the function is
             // an extern function

@@ -1,99 +1,80 @@
-#ifndef HALIDE_PYTHON_BINDINGS_add_binary_operators_H
-#define HALIDE_PYTHON_BINDINGS_add_binary_operators_H
+#ifndef HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H
+#define HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H
 
-#include <boost/python/operators.hpp>
-#include <boost/python/self.hpp>
+#include "PyHalide.h"
 
-template <typename A, typename B, typename WrappedType>
-auto floordiv(A a, B b) -> decltype(a / b) {
-    // Halide does floordiv by default over Expr and similar.
-    // see https://lists.csail.mit.edu/pipermail/halide-dev/2015-June/001679.html
-    return a / b;
-}
+namespace Halide {
+namespace PythonBindings {
 
-template <typename PythonClass, typename T>
+template <typename other_t, typename PythonClass>
 void add_binary_operators_with(PythonClass &class_instance) {
-    using namespace boost::python;
+    using self_t = typename PythonClass::type;
 
-    typedef typename PythonClass::wrapped_type wrapped_t;
+#define BINARY_OP(op, method) \
+    .def("__" #method "__", [](const self_t &self, const other_t &other) -> decltype(self op other) { return self op other; }, py::is_operator()) \
+    .def("__r" #method "__", [](const self_t &self, const other_t &other) -> decltype(self op other) { return other op self; }, py::is_operator())
 
-    // <boost/python/operators.hpp> lists all operators
     class_instance
-        .def(self + other<T>())
-        .def(other<T>() + self)
+        BINARY_OP(+, add)
+        BINARY_OP(-, sub)
+        BINARY_OP(*, mul)
+        BINARY_OP(/, div)  // TODO: verify only needed for python 2.x (harmless for Python 3.x)
+        BINARY_OP(/, truediv)
+        BINARY_OP(%, mod)
+        BINARY_OP(<<, lshift)
+        BINARY_OP(>>, rshift)
+        BINARY_OP(&, and)
+        BINARY_OP(|, or)
+        BINARY_OP(^, xor)
+        BINARY_OP(<, lt)
+        BINARY_OP(<=, le)
+        BINARY_OP(==, eq)
+        BINARY_OP(!=, ne)
+        BINARY_OP(>=, ge)
+        BINARY_OP(>, gt)
+    ;
+#undef BINARY_OP
 
-        .def(self - other<T>())
-        .def(other<T>() - self)
+    const auto pow_wrap = [](const self_t &self, const other_t &other) -> decltype(Halide::pow(self, other)) {
+        return Halide::pow(self, other);
+    };
 
-        .def(self * other<T>())
-        .def(other<T>() * self)
+    const auto floordiv_wrap = [](const self_t &self, const other_t &other) -> decltype(self / other) {
+        static_assert(std::is_same<decltype(self / other), Expr>::value, "We expect all operator// overloads to produce Expr");
+        Expr e = self / other;
+        if (e.type().is_float()) {
+            e = Halide::floor(e);
+        }
+        return e;
+    };
 
-        .def(self / other<T>())
-        .def(other<T>() / self)
-
-        .def(self % other<T>())
-        .def(other<T>() % self)
-
-        .def(pow(self, other<T>()))
-        .def(pow(other<T>(), self))
-
-        .def(self & other<T>())  // and
-        .def(other<T>() & self)
-
-        .def(self | other<T>())  // or
-        .def(other<T>() | self)
-
-        .def(self < other<T>())
-        .def(other<T>() < self)
-
-        .def(self <= other<T>())
-        .def(other<T>() <= self)
-
-        .def(self == other<T>())
-        .def(other<T>() == self)
-
-        .def(self != other<T>())
-        .def(other<T>() != self)
-
-        .def(self > other<T>())
-        .def(other<T>() > self)
-
-        .def(self >= other<T>())
-        .def(other<T>() >= self)
-
-        .def(self >> other<T>())
-        .def(other<T>() >> self)
-
-        .def(self << other<T>())
-        .def(other<T>() << self)
-
-        .def("__floordiv__", &floordiv<wrapped_t, T, wrapped_t>)
-        .def("__floordiv__", &floordiv<T, wrapped_t, wrapped_t>)
-
-        ;
+    class_instance
+        .def("__pow__", pow_wrap, py::is_operator())
+        .def("__rpow__", pow_wrap, py::is_operator())
+        .def("__floordiv__", floordiv_wrap, py::is_operator())
+        .def("__rfloordiv__", floordiv_wrap, py::is_operator())
+    ;
 }
 
 template <typename PythonClass>
 void add_binary_operators(PythonClass &class_instance) {
-    using namespace boost::python;
-
-    typedef typename PythonClass::wrapped_type wrapped_t;
+    using self_t = typename PythonClass::type;
 
     // The order of definitions matters.
-    // Python first will try input value as int, then float, then wrapped_t
-    add_binary_operators_with<PythonClass, wrapped_t>(class_instance);
-    add_binary_operators_with<PythonClass, float>(class_instance);
-    add_binary_operators_with<PythonClass, int>(class_instance);
+    // Python first will try input value as int, then float, then self_t
+    add_binary_operators_with<self_t>(class_instance);
+    add_binary_operators_with<Expr>(class_instance);
+    add_binary_operators_with<float>(class_instance);
+    add_binary_operators_with<int>(class_instance);
 
     // Define unary operators
-    // <boost/python/operators.hpp> lists all operators
     class_instance
-        .def(-self)  // neg
-        //.def(+self) // pos
-        .def(~self)  // invert
-        //.def(abs(self))
-        //.def(!!self) // nonzero
+        .def(-py::self)  // neg
+        .def(~py::self)  // invert
         ;
 }
 
-#endif  // HALIDE_PYTHON_BINDINGS_add_binary_operators_H
+}  // namespace PythonBindings
+}  // namespace Halide
+
+#endif  // HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H

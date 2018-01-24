@@ -1,44 +1,33 @@
 #include "PyError.h"
 
-#include <boost/python.hpp>
-#include <string>
-
-#include "Halide.h"
-
-namespace h = Halide;
-namespace p = boost::python;
+namespace Halide {
+namespace PythonBindings {
 
 namespace {
 
 void halide_python_error(void *, const char *msg) {
-    throw h::Error(msg);
+    throw Error(msg);
 }
 
 void halide_python_print(void *, const char *msg) {
-    PySys_WriteStdout("%s", msg);
+    py::print(msg, py::arg("end") = "");
 }
 
-class HalidePythonCompileTimeErrorReporter : public h::CompileTimeErrorReporter {
+class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char* msg) {
-        PySys_WriteStdout("%s", msg);
+        py::print(msg, py::arg("end") = "");
     }
 
     void error(const char* msg) {
-        throw h::Error(msg);
+        throw Error(msg);
         // This method must not return!
     }
 };
 
-void translate_error(h::Error const &e) {
-    PyErr_SetString(PyExc_RuntimeError, e.what());
-}
-
 }  // namespace
 
-void define_error() {
-    p::register_exception_translator<h::Error>(&translate_error);
-
+void define_error(py::module &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
@@ -47,4 +36,7 @@ void define_error() {
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 }
+
+}  // namespace PythonBindings
+}  // namespace Halide
 
