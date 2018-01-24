@@ -5,12 +5,12 @@ import halide as hl
 # this is a temporary equivalent for testing purposes
 def _evaluate(e):
     # TODO: support zero-dim Func, Buffers
-    buf = hl.Buffer(e.type(), 1)
+    buf = hl.Buffer(type = e.type(), sizes = [1])
     f = hl.Func();
     x = hl.Var()
     f[x] = e;
     f.realize(buf)
-    return buf(0)
+    return buf[0]
 
 def test_division():
     f32 = hl.Param(hl.Float(32), 'f32', -32.0)

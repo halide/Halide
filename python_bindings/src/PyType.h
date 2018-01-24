@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_type();
+void define_type(py::module &m);
 
 std::string halide_type_to_string(const Type &type);
 

@@ -5,7 +5,6 @@ from scipy.misc import imread, imsave
 import os.path
 
 def get_blur(input):
-
     assert type(input) == hl.ImageParam
     assert input.dimensions() == 2
 
@@ -32,7 +31,6 @@ def get_blur(input):
 
 
 def get_input_data():
-
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
@@ -45,7 +43,6 @@ def get_input_data():
     return input_data
 
 def main():
-
     # define and compile the function
     input = hl.ImageParam(hl.UInt(8), 2, "input_param")
     blur = get_blur(input)

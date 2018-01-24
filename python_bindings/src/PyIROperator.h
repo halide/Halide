@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_operators();
+void define_operators(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

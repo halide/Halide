@@ -179,7 +179,7 @@ def main():
 
 
     def buffer_t_to_buffer_struct(buffer):
-        assert type(buffer) == hl.Buffer
+        assert buffer.type() == hl.Int(32)
         b = buffer.raw_buffer()
         bb = BufferStruct()
 

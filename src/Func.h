@@ -360,14 +360,7 @@ public:
                       VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    // TODO(psuriana): For now we need to expand "tx" into Var and RVar versions
-    // due to conflict with the deprecated interfaces since Var can be implicitly
-    // converted into either VarOrRVar or Expr. Merge this later once we remove
-    // the deprecated interfaces.
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
@@ -382,12 +375,7 @@ public:
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
-                           VarOrRVar tx, Var ty,
-                           Expr x_size, Expr y_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
-                           VarOrRVar tx, RVar ty,
+                           VarOrRVar tx, VarOrRVar ty,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -400,24 +388,6 @@ public:
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                           Expr x_size, Expr y_size, Expr z_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-
-    // If we mark these as deprecated, some build environments will complain
-    // about the internal-only calls. Since these are rarely used outside
-    // Func itself, we'll just comment them as deprecated for now.
-    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
-    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
-                           Expr x_size, Expr y_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
-    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1822,10 +1792,7 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
@@ -1840,12 +1807,7 @@ public:
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
-                          VarOrRVar tx, Var ty,
-                          Expr x_size, Expr y_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
-                          VarOrRVar tx, RVar ty,
+                          VarOrRVar tx, VarOrRVar ty,
                           Expr x_size, Expr y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1858,20 +1820,6 @@ public:
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                          Expr x_size, Expr y_size, Expr z_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
-
-    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
-    EXPORT Func &gpu_tile(VarOrRVar x, Expr x_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
-    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
-    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);

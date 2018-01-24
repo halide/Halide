@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_var();
+void define_var(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

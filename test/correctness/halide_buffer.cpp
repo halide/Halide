@@ -144,6 +144,16 @@ int main(int argc, char **argv) {
         // assert(d.all_equal(42));
     }
 
+    {
+        int data[4] = { 42, 42, 42, 42 };
+
+        // Check that copy() works with const
+        Buffer<const int> a(data, 2, 2);
+
+        Buffer<const int> b = a.copy();
+        assert(b.all_equal(42));
+    }
+
     printf("Success!\n");
     return 0;
 }

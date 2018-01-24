@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_func_ref();
+void define_func_ref(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide
