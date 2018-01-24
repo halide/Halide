@@ -21,21 +21,21 @@ def test_var():
     assert v3.is_implicit()
     assert not v4.is_implicit()
 
-    # assert hl.Var.is_implicit("_1")
-    # assert not hl.Var.is_implicit("v4")
+    assert hl.Var("_1").is_implicit()
+    assert not hl.Var("v4").is_implicit()
 
     assert v1.implicit_index() == 1
     assert v2.implicit_index() == 1
     assert v3.implicit_index() == 1
     assert v4.implicit_index() == -1
 
-    # assert hl.Var.implicit_index("_1") == 1
-    # assert hl.Var.implicit_index("v4") == -1
+    assert hl.Var("_1").implicit_index() == 1
+    assert hl.Var("v4").implicit_index() == -1
 
     ph = hl._
     assert ph.name() == "_"
     assert ph.is_placeholder()
-    # assert hl.Var.is_placeholder(ph)
+    assert hl.Var.is_placeholder(ph)
     assert not v1.is_placeholder()
 
     outermost = hl.Var.outermost()
@@ -50,7 +50,7 @@ def test_var():
     r = hl.random_int(x)
 
     # This verifies that halide.Var is explicitly convertible to halide.Expr
-    r = hl.random_int(x.as_expr())
+    r = hl.random_int(hl.Expr(x))
 
 if __name__ == "__main__":
     test_var()
