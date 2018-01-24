@@ -58,7 +58,8 @@ public:
 }
 
 struct FunctionContents {
-    std::string name, parent_name;
+    std::string name;
+    std::string origin_name;
     std::vector<Type> output_types;
 
     // The names of the dimensions of the Function. Corresponds to the
@@ -289,7 +290,7 @@ Function::Function(const std::string &n) {
     contents.strong = new FunctionGroup;
     contents.strong->members.resize(1);
     contents->name = n;
-    contents->parent_name = n;
+    contents->origin_name = n;
 }
 
 // Return deep-copy of ExternFuncArgument 'src'
@@ -327,7 +328,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     debug(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
 
     copy->name = contents->name;
-    copy->parent_name = contents->parent_name;
+    copy->origin_name = contents->origin_name;
     copy->args = contents->args;
     copy->output_types = contents->output_types;
     copy->debug_file = contents->debug_file;
@@ -430,7 +431,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents.strong = new FunctionGroup;
         contents.strong->members.resize(1);
         contents->name = unique_name('f');
-        contents->parent_name = contents->name;
+        contents->origin_name = contents->name;
     }
 
     user_assert(!contents->init_def.defined())
@@ -730,8 +731,8 @@ const std::string &Function::name() const {
     return contents->name;
 }
 
-const std::string &Function::parent_name() const {
-    return contents->parent_name;
+const std::string &Function::origin_name() const {
+    return contents->origin_name;
 }
 
 Definition &Function::definition() {

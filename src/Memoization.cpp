@@ -184,7 +184,7 @@ class KeyInfo {
 public:
     KeyInfo(const Function &function, const std::string &name, int memoize_instance)
         : top_level_name(name),
-          function_name(function.parent_name()),
+          function_name(function.origin_name()),
           memoize_instance(memoize_instance)
     {
         dependencies.visit_function(function);
