@@ -22,13 +22,16 @@
 #ifndef EXPORT
 #if defined(_MSC_VER)
 #ifdef Halide_EXPORTS
-#define EXPORT __declspec(dllexport)
+//#define EXPORT __declspec(dllexport)
 #else
-#define EXPORT __declspec(dllimport)
+//#define EXPORT __declspec(dllimport)
 #endif
 #else
-#define EXPORT __attribute__((visibility("default")))
+//#define EXPORT __attribute__((visibility("default")))
 #endif
+
+#define EXPORT
+
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.
