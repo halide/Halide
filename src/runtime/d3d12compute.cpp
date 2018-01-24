@@ -1161,6 +1161,9 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
         barrier.Transition.Subresource = 0;
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
+    // NOTE(marcos): can we leverage more asynchronous parallelism with special
+    // flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
+
     switch (staging->buffer->type)
     {
         case d3d12_buffer::Upload :
@@ -1184,6 +1187,18 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
     (*cmdList)->ResourceBarrier(1, &barrier);
     (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
     swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
+    (*cmdList)->ResourceBarrier(1, &barrier);
+}
+
+WEAK void compute_barrier(d3d12_copy_command_list* cmdList, d3d12_buffer* buffer)
+{
+    TRACELOG;
+
+    D3D12_RESOURCE_BARRIER barrier = { };
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.UAV.pResource = buffer->resource;
+
     (*cmdList)->ResourceBarrier(1, &barrier);
 }
 
@@ -1369,6 +1384,8 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             //DXGI_FORMAT Format = FindD3D12FormatForHalideType(type);
             UINT NumElements = input_buffer->halide->number_of_elements();
             UINT Stride = type.bytes() * type.lanes;
+            TRACEPRINT("---------- INFLATING SIZE ----------");
+            Stride = sizeof(uint32_t) * type.lanes;
 
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
             // Default Desc parameters cannot be used, as a Format must be supplied.
@@ -1401,16 +1418,6 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             halide_assert(user_context, false);
             break;
     }
-
-    // TODO(marcos): add resource transition
-    /*
-    D3D12_RESOURCE_BARRIER transition = { };
-        transition.Type;
-        transition.Flags;
-        transition.Transition;
-        transition.UAV;
-    (*cmdList)->ResourceBarrier(1, &transition);
-    */
 }
 
 WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uint32_t length, uint32_t index) {
@@ -1671,6 +1678,8 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
                         << ", buf: " << buf << ")\n";
 
     size_t size = buf->size_in_bytes();
+    TRACEPRINT("---------- INFLATING SIZE ----------");
+    size *= 4*4;
     halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
@@ -2040,7 +2049,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_device* device = d3d12_context.device;
 
     #if HALIDE_D3D12_RENDERDOC
-    ID3D12Device* d = (*device); UNUSED(d);
     StartCapturingGPUActivity();
     #endif
 
@@ -2119,8 +2127,9 @@ WEAK int halide_d3d12compute_run(void *user_context,
         if (!arg_is_buffer[i])
             continue;
         halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-        uint64_t handle = ((halide_buffer_t *)args[i])->device;
-        d3d12_buffer* buffer = (d3d12_buffer *)handle;
+        halide_buffer_t* hbuffer = (halide_buffer_t*)args[i];
+        uint64_t handle = hbuffer->device;
+        d3d12_buffer* buffer = (d3d12_buffer*)handle;
         set_input_buffer(cmdList, binder, buffer, buffer_index);
         buffer_index++;
     }
@@ -2141,6 +2150,18 @@ WEAK int halide_d3d12compute_run(void *user_context,
     dispatch_threadgroups(cmdList,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
+
+    // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
+    // in addition, only buffers written by the dispatch need barriers...
+    for (size_t i = 0; arg_sizes[i] != 0; i++)
+    {
+        if (!arg_is_buffer[i])
+            continue;
+        halide_buffer_t* hbuffer = (halide_buffer_t*)args[i];
+        uint64_t handle = hbuffer->device;
+        d3d12_buffer* buffer = (d3d12_buffer*)handle;
+        compute_barrier(cmdList, buffer);
+    }
 
     add_command_list_completed_handler(cmdList, &command_list_completed_handler_block);
 

@@ -591,8 +591,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             // NOTE(marcos): I guess there is no point in having "const" Buffer
             // or const RWBuffer; storage type also does not make sense here...
             stream << ",\n";
-            if (arg.write) stream << "RW";
-            stream << "Buffer"
+            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
+            // all buffers as UAVs since there is no way the runtime can know
+            // if a given halide_buffer_t is read-only (SRV) or read-write...
+            //if (arg.write) stream << "RW";
+            //stream << "Buffer"
+            stream << "RWBuffer"
                    << "<" << print_type(arg.type) << ">"
                    << " " << print_name(arg.name);
             Allocation alloc;
