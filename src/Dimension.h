@@ -91,12 +91,11 @@ private:
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
      * these. */
-    EXPORT Dimension(const Internal::Parameter &p, int d, Func f, bool is_const);
+    EXPORT Dimension(const Internal::Parameter &p, int d, Func f);
 
     Parameter param;
     int d;
     Func f;
-    bool is_const;
 };
 
 }  // namespace Internal
