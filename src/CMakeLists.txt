@@ -616,6 +616,10 @@ if (TARGET_METAL)
   target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
 endif()
 
+if (TARGET_D3D12)
+  target_compile_definitions(Halide PRIVATE "-DWITH_D3D12=1")
+endif()
+
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
