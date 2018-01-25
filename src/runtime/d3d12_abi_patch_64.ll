@@ -37,14 +37,14 @@ define weak_odr void @Call_ID3D12DescriptorHeap_GetDesc(i64* %descriptorheap, i6
     call void asm sideeffect
     inteldialect
     "
-    push rbp                    \0A\09
-    mov rbp, rsp                \0A\09
-    sub rsp, 32                 \0A\09
-    and spl, -16                \0A\09
-    lea rax, qword ptr [rcx]    \0A\09
-    mov rax, qword ptr [rax]    \0A\09
-    call qword ptr [rax+40h]    \0A\09
-    leave                       \0A\09
+    push    rbp
+    mov     rbp, rsp
+    sub     rsp,  32
+    and     spl, -16
+    lea     rax, qword ptr [rcx]
+    mov     rax, qword ptr [rax]
+    call    qword ptr [rax+40h]
+    leave
     "
     ,
     "~{rsp},~{rbp},~{rax}"();
@@ -56,14 +56,14 @@ define weak_odr void @Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapSta
     call void asm sideeffect
     inteldialect
     "
-    push rbp                    \0A\09
-    mov rbp, rsp                \0A\09
-    sub rsp, 32                 \0A\09
-    and spl, -16                \0A\09
-    lea rax, qword ptr [rcx]    \0A\09
-    mov rax, qword ptr [rax]    \0A\09
-    call qword ptr [rax+48h]    \0A\09
-    leave                       \0A\09
+    push    rbp
+    mov     rbp, rsp
+    sub     rsp,  32
+    and     spl, -16
+    lea     rax, qword ptr [rcx]
+    mov     rax, qword ptr [rax]
+    call    qword ptr [rax+48h]
+    leave
     "
     ,
     "~{rsp},~{rbp},~{rax}"();
@@ -75,14 +75,14 @@ define weak_odr void @Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapSta
     call void asm sideeffect
     inteldialect
     "
-    push rbp                    \0A\09
-    mov rbp, rsp                \0A\09
-    sub rsp, 32                 \0A\09
-    and spl, -16                \0A\09
-    lea rax, qword ptr [rcx]    \0A\09
-    mov rax, qword ptr [rax]    \0A\09
-    call qword ptr [rax+50h]    \0A\09
-    leave                       \0A\09
+    push    rbp
+    mov     rbp, rsp
+    sub     rsp,  32
+    and     spl, -16
+    lea     rax, qword ptr [rcx]
+    mov     rax, qword ptr [rax]
+    call    qword ptr [rax+50h]
+    leave
     "
     ,
     "~{rsp},~{rbp},~{rax}"();
@@ -94,15 +94,15 @@ define weak_odr void @Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTab
     call void asm sideeffect
     inteldialect
     "
-    push rbp                    \0A\09
-    mov rbp, rsp                \0A\09
-    sub rsp, 32                 \0A\09
-    and spl, -16                \0A\09
-    lea rax, qword ptr [rcx]    \0A\09
-    mov rax, qword ptr [rax]    \0A\09
-    mov r8, qword ptr [r8]      \0A\09
-    call qword ptr [rax+0F8h]   \0A\09
-    leave                       \0A\09
+    push    rbp
+    mov     rbp, rsp
+    sub     rsp,  32
+    and     spl, -16
+    lea     rax, qword ptr [rcx]
+    mov     rax, qword ptr [rax]
+    mov     r8,  qword ptr [r8]
+    call    qword ptr [rax+0F8h]
+    leave
     "
     ,
     "~{rsp},~{rbp},~{rax},~{r8}"();
@@ -114,15 +114,15 @@ define weak_odr void @Call_ID3D12Device_CreateConstantBufferView(i64* %device, i
     call void asm sideeffect
     inteldialect
     "
-    push rbp                    \0A\09
-    mov rbp, rsp                \0A\09
-    sub rsp, 32                 \0A\09
-    and spl, -16                \0A\09
-    lea rax, qword ptr [rcx]    \0A\09
-    mov rax, qword ptr [rax]    \0A\09
-    mov r8, qword ptr [r8]      \0A\09
-    call qword ptr [rax+88h]    \0A\09
-    leave                       \0A\09
+    push    rbp
+    mov     rbp, rsp
+    sub     rsp,  32
+    and     spl, -16
+    lea     rax, qword ptr [rcx]
+    mov     rax, qword ptr [rax]
+    mov     r8,  qword ptr [r8]
+    call    qword ptr [rax+88h]
+    leave
     "
     ,
     "~{rsp},~{rbp},~{rax},~{r8}"();
