@@ -87,17 +87,11 @@ public:
 
 private:
     friend class ::Halide::OutputImageParam;
-    template<typename T2> friend class GeneratorInput_Buffer;
-    template<typename T2> friend class GeneratorOutput_Buffer;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct
      * these. */
     EXPORT Dimension(const Internal::Parameter &p, int d, Func f);
-
-    /** Only friends may copy these, too. This prevents
-     * users removing constness by making a non-const copy. */
-    Dimension(const Dimension &) = default;
 
     Parameter param;
     int d;

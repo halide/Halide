@@ -42,7 +42,7 @@ class MyPipeline:
 
     def __init__(self, input):
 
-        assert type(input) == hl.Buffer_uint8
+        assert input.type() == hl.UInt(8)
 
         self.lut = hl.Func("lut")
         self.padded = hl.Func("padded")
@@ -218,10 +218,8 @@ class MyPipeline:
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        output = hl.Buffer(hl.UInt(8),
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels())
+        output = hl.Buffer(hl.UInt(8), 
+                        [self.input.width(), self.input.height(), self.input.channels()])
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -250,22 +248,22 @@ class MyPipeline:
 
     def test_correctness(self, reference_output):
 
-        assert type(reference_output) == hl.Buffer_uint8
+        assert reference_output.type() == hl.UInt(8)
         output = self.curved.realize(self.input.width(),
                                      self.input.height(),
                                      self.input.channels())
-        assert type(output) == hl.Buffer_uint8
+        assert output.type() == hl.UInt(8)
 
         # Check against the reference output.
         for c in range(self.input.channels()):
             for y in range(self.input.height()):
                 for x in range(self.input.width()):
-                    if output(x, y, c) != reference_output(x, y, c):
+                    if output[x, y, c] != reference_output[x, y, c]:
                         print(
                             "Mismatch between output (%d) and "
                             "reference output (%d) at %d, %d, %d" % (
-                                output(x, y, c),
-                                reference_output(x, y, c),
+                                output[x, y, c],
+                                reference_output[x, y, c],
                                 x, y, c))
                         return
 
@@ -275,11 +273,10 @@ class MyPipeline:
 def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
-    input_data = imread(image_path)
-    input = hl.Buffer(input_data)
+    input = hl.Buffer(imread(image_path))
 
     # Allocated an image that will store the correct output
-    reference_output = hl.Buffer(hl.UInt(8), input.width(), input.height(), input.channels())
+    reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
 
     print("Testing performance on CPU:")
     p1 = MyPipeline(input)

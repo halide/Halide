@@ -944,8 +944,9 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             // We should employ ShiftInwards when we can to prevent
             // overcompute and adding constraints to the bounds of
             // inputs and outputs. However, if we're already covered
-            // by an earlier ShiftInwards split, there's no point - it
-            // just complicates the IR and confuses bounds inference. An example of this is:
+            // by an earlier larger ShiftInwards split, there's no
+            // point - it just complicates the IR and confuses bounds
+            // inference. An example of this is:
             //
             // f.vectorize(x, 8).unroll(x, 4);
             //
@@ -963,19 +964,22 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             //
             // It's only the tail/epilogue that changes.
 
-            std::set<string> descends_from_shiftinwards_outer;
+            std::map<string, Expr> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
+                auto it = descends_from_shiftinwards_outer.find(s.old_var);
                 if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
-                } else if (s.is_split() && descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.inner);
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                    descends_from_shiftinwards_outer[s.outer] = s.factor;
+                } else if (s.is_split() && it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.inner] = it->second;
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 } else if ((s.is_rename() || s.is_purify()) &&
-                           descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                           it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 }
             }
-            if (descends_from_shiftinwards_outer.count(old_name)) {
+            auto it = descends_from_shiftinwards_outer.find(old_name);
+            if (it != descends_from_shiftinwards_outer.end() &&
+                can_prove(it->second >= factor)) {
                 tail = TailStrategy::RoundUp;
             } else {
                 tail = TailStrategy::ShiftInwards;
@@ -1574,17 +1578,7 @@ Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
-                       TailStrategy tail, DeviceAPI device_api) {
-    split(x, bx, tx, x_size, tail);
-    set_dim_device_api(bx, device_api);
-    set_dim_device_api(tx, device_api);
-    set_dim_type(bx, ForType::GPUBlock);
-    set_dim_type(tx, ForType::GPUThread);
-    return *this;
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
                        TailStrategy tail, DeviceAPI device_api) {
     split(x, bx, tx, x_size, tail);
     set_dim_device_api(bx, device_api);
@@ -1624,15 +1618,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, Var ty,
-                       Expr x_size, Expr y_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    return gpu_tile(x, y, x, y, tx, ty, x_size, y_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, RVar ty,
+                       VarOrRVar tx, VarOrRVar ty,
                        Expr x_size, Expr y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
@@ -1678,42 +1664,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     return gpu_tile(x, y, z, x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar);
-    split(x, bx, tx, x_size, tail);
-    set_dim_device_api(bx, device_api);
-    set_dim_device_api(tx, device_api);
-    set_dim_type(bx, ForType::GPUBlock);
-    set_dim_type(tx, ForType::GPUThread);
-    return *this;
-}
-
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       Expr x_size, Expr y_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        by("__deprecated_block_id_y", y.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar),
-        ty("__deprecated_thread_id_y", y.is_rvar);
-    return gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                       Expr x_size, Expr y_size, Expr z_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        by("__deprecated_block_id_y", y.is_rvar),
-        bz("__deprecated_block_id_z", z.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar),
-        ty("__deprecated_thread_id_y", y.is_rvar),
-        tz("__deprecated_thread_id_z", z.is_rvar);
-    return gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
 Stage &Stage::hexagon(VarOrRVar x) {
@@ -2194,13 +2144,7 @@ Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVa
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
@@ -2225,18 +2169,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, Var ty,
-                     Expr x_size, Expr y_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args())
-        .gpu_tile(x, y, tx, ty, x_size, y_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, RVar ty,
+                     VarOrRVar tx, VarOrRVar ty,
                      Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
@@ -2266,30 +2199,6 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     invalidate_cache();
     Stage(func, func.definition(), 0, args())
         .gpu_tile(x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, x_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     Expr x_size, Expr y_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, y, x_size, y_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                     Expr x_size, Expr y_size, Expr z_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, y, z, x_size, y_size, z_size, tail, device_api);
     return *this;
 }
 
