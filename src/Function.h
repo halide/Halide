@@ -236,12 +236,12 @@ public:
 
     /** Add an external definition of this Func. */
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &args,
-                              const std::vector<Type> &types,
-                              const std::vector<std::string> &dims,
-                              NameMangling mangling,
-                              DeviceAPI device_api,
-                              bool uses_old_buffer_t);
+                       const std::vector<ExternFuncArgument> &args,
+                       const std::vector<Type> &types,
+                       const std::vector<std::string> &dims,
+                       NameMangling mangling,
+                       DeviceAPI device_api,
+                       bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
     // @{

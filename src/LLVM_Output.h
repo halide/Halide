@@ -52,7 +52,7 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
  * all modes (equivalent to the ar -D option).
  */
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
-                                  const std::string &dst_file, bool deterministic = true);
+                           const std::string &dst_file, bool deterministic = true);
 }
 
 #endif

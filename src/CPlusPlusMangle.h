@@ -17,9 +17,11 @@ namespace Internal {
  * The target parameter is used to decide on the C++
  * ABI/mangling style to use.
  */
-std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
-                                                   Type return_type, const std::vector<ExternFuncArgument> &args,
-                                                   const Target &target);
+std::string cplusplus_function_mangled_name(const std::string &name,
+                                            const std::vector<std::string> &namespaces,
+                                            Type return_type,
+                                            const std::vector<ExternFuncArgument> &args,
+                                            const Target &target);
 
 void cplusplus_mangle_test();
 

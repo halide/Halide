@@ -43,8 +43,8 @@ namespace Internal {
  * schedules and returns a string representation of the schedules. The target
  * architecture is specified by 'target'. */
 std::string generate_schedules(const std::vector<Function> &outputs,
-                                      const Target &target,
-                                      const MachineParams &arch_params);
+                               const Target &target,
+                               const MachineParams &arch_params);
 
 }
 }

@@ -1206,10 +1206,10 @@ public:
 
 protected:
     GIOBase(size_t array_size,
-                   const std::string &name,
-                   IOKind kind,
-                   const std::vector<Type> &types,
-                   int dims);
+            const std::string &name,
+            IOKind kind,
+            const std::vector<Type> &types,
+            int dims);
     virtual ~GIOBase();
 
     friend class GeneratorBase;
@@ -1867,9 +1867,9 @@ protected:
                         int d);
 
     GeneratorOutputBase(const std::string &name,
-                               IOKind kind,
-                               const std::vector<Type> &t,
-                               int d);
+                        IOKind kind,
+                        const std::vector<Type> &t,
+                        int d);
 
     ~GeneratorOutputBase() override;
 
@@ -2564,7 +2564,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
-                               const LoweredFunc::LinkageType linkage_type = LoweredFunc::ExternalPlusMetadata);
+                        const LoweredFunc::LinkageType linkage_type = LoweredFunc::ExternalPlusMetadata);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
@@ -2879,7 +2879,7 @@ public:
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
     static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                        const GeneratorContext &context);
+                                                 const GeneratorContext &context);
 
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
@@ -3091,9 +3091,9 @@ public:
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                         GeneratorFactory generator_factory,
-                         const GeneratorParamsMap &generator_params,
-                         const std::vector<std::vector<Internal::StubInput>> &inputs);
+                  GeneratorFactory generator_factory,
+                  const GeneratorParamsMap &generator_params,
+                  const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used

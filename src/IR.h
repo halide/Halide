@@ -208,8 +208,8 @@ struct Load : public ExprNode<Load> {
     Parameter param;
 
     static Expr make(Type type, const std::string &name,
-                            Expr index, Buffer<> image,
-                            Parameter param, Expr predicate);
+                     Expr index, Buffer<> image,
+                     Parameter param, Expr predicate);
 
     static const IRNodeType _node_type = IRNodeType::Load;
 };
@@ -312,7 +312,7 @@ struct Store : public StmtNode<Store> {
     Parameter param;
 
     static Stmt make(const std::string &name, Expr value, Expr index,
-                            Parameter param, Expr predicate);
+                     Parameter param, Expr predicate);
 
     static const IRNodeType _node_type = IRNodeType::Store;
 };
@@ -357,8 +357,8 @@ struct Allocate : public StmtNode<Allocate> {
     Stmt body;
 
     static Stmt make(const std::string &name, Type type, const std::vector<Expr> &extents,
-                            Expr condition, Stmt body,
-                            Expr new_expr = Expr(), const std::string &free_function = std::string());
+                     Expr condition, Stmt body,
+                     Expr new_expr = Expr(), const std::string &free_function = std::string());
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
@@ -557,8 +557,8 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
-                            FunctionPtr func = FunctionPtr(), int value_index = 0,
-                            Buffer<> image = Buffer<>(), Parameter param = Parameter());
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
     static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
@@ -636,7 +636,7 @@ struct Variable : public ExprNode<Variable> {
     }
 
     static Expr make(Type type, const std::string &name, Buffer<> image,
-                            Parameter param, ReductionDomain reduction_domain);
+                     Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _node_type = IRNodeType::Variable;
 };
@@ -735,7 +735,7 @@ struct Prefetch : public StmtNode<Prefetch> {
     Parameter param;
 
     static Stmt make(const std::string &name, const std::vector<Type> &types,
-                            const Region &bounds, Parameter param = Parameter());
+                     const Region &bounds, Parameter param = Parameter());
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };

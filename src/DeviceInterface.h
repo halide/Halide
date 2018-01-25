@@ -18,8 +18,8 @@ namespace Halide {
  * argument is printed in the error message. If error_site is null,
  * this routine returns nullptr instead of calling user_error. */
 const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
-                                                                            const Target &t = get_jit_target_from_environment(),
-                                                                            const char *error_site = nullptr);
+                                                                     const Target &t = get_jit_target_from_environment(),
+                                                                     const char *error_site = nullptr);
 
 /** Get the specific DeviceAPI that Halide would select when presented
  * with DeviceAPI::Default_GPU for a given target. If no suitable api

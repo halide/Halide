@@ -45,7 +45,7 @@ public:
 
     /** Construct a Definition with the supplied args, values, and reduction domain. */
     Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
-                      const ReductionDomain &rdom, bool is_init);
+               const ReductionDomain &rdom, bool is_init);
 
     /** Construct an undefined Definition object. */
     Definition();

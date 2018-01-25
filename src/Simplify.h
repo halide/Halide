@@ -22,11 +22,11 @@ namespace Internal {
  */
 // @{
 Stmt simplify(Stmt, bool simplify_lets = true,
-                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+              const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 Expr simplify(Expr, bool simplify_lets = true,
-                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+              const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
 
 /** A common use of the simplifier is to prove boolean expressions are

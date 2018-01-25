@@ -159,10 +159,10 @@ Outputs compile_standalone_runtime(const Outputs &output_files, Target t);
 typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
 
 void compile_multitarget(const std::string &fn_name,
-                                const Outputs &output_files,
-                                const std::vector<Target> &targets,
-                                ModuleProducer module_producer,
-                                const std::map<std::string, std::string> &suffixes = {});
+                         const Outputs &output_files,
+                         const std::vector<Target> &targets,
+                         ModuleProducer module_producer,
+                         const std::map<std::string, std::string> &suffixes = {});
 
 }
 

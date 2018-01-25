@@ -319,14 +319,14 @@ public:
     Stage &vectorize(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
     Stage &tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar xo, VarOrRVar yo,
-                       VarOrRVar xi, VarOrRVar yi, Expr
-                       xfactor, Expr yfactor,
-                       TailStrategy tail = TailStrategy::Auto);
+                VarOrRVar xo, VarOrRVar yo,
+                VarOrRVar xi, VarOrRVar yi, Expr
+                xfactor, Expr yfactor,
+                TailStrategy tail = TailStrategy::Auto);
     Stage &tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar xi, VarOrRVar yi,
-                       Expr xfactor, Expr yfactor,
-                       TailStrategy tail = TailStrategy::Auto);
+                VarOrRVar xi, VarOrRVar yi,
+                Expr xfactor, Expr yfactor,
+                TailStrategy tail = TailStrategy::Auto);
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
@@ -351,51 +351,51 @@ public:
 
     Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu(VarOrRVar block_x, VarOrRVar block_y,
-                      VarOrRVar thread_x, VarOrRVar thread_y,
-                      DeviceAPI device_api = DeviceAPI::Default_GPU);
+               VarOrRVar thread_x, VarOrRVar thread_y,
+               DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
-                      DeviceAPI device_api = DeviceAPI::Default_GPU);
+               VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
+               DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+                    TailStrategy tail = TailStrategy::Auto,
+                    DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+                    TailStrategy tail = TailStrategy::Auto,
+                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
-                           VarOrRVar bx, VarOrRVar by,
-                           VarOrRVar tx, VarOrRVar ty,
-                           Expr x_size, Expr y_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+                    VarOrRVar bx, VarOrRVar by,
+                    VarOrRVar tx, VarOrRVar ty,
+                    Expr x_size, Expr y_size,
+                    TailStrategy tail = TailStrategy::Auto,
+                    DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
-                           VarOrRVar tx, VarOrRVar ty,
-                           Expr x_size, Expr y_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+                    VarOrRVar tx, VarOrRVar ty,
+                    Expr x_size, Expr y_size,
+                    TailStrategy tail = TailStrategy::Auto,
+                    DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                           VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
-                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                           Expr x_size, Expr y_size, Expr z_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+                    VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                    VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                    Expr x_size, Expr y_size, Expr z_size,
+                    TailStrategy tail = TailStrategy::Auto,
+                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                           Expr x_size, Expr y_size, Expr z_size,
-                           TailStrategy tail = TailStrategy::Auto,
-                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+                    VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                    Expr x_size, Expr y_size, Expr z_size,
+                    TailStrategy tail = TailStrategy::Auto,
+                    DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &allow_race_conditions();
 
     Stage &hexagon(VarOrRVar x = Var::outermost());
     Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
-                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Stage &prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset = 1,
-                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
@@ -733,13 +733,13 @@ public:
     // @{
     Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
     Realization realize(int x_size, int y_size, int z_size, int w_size,
-                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
     Realization realize(int x_size, int y_size, int z_size,
-                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
     Realization realize(int x_size, int y_size,
-                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
     Realization realize(int x_size,
-                               const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
     Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
     // @}
 
@@ -785,9 +785,9 @@ public:
      * as this halide function */
     //@{
     void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
-                                   const Target &target = get_target_from_environment());
+                            const Target &target = get_target_from_environment());
     void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &,
-                                   const Target &target = get_target_from_environment());
+                            const Target &target = get_target_from_environment());
     // @}
 
     /** Statically compile this function to llvm assembly, with the
@@ -796,9 +796,9 @@ public:
      * as this halide function */
     //@{
     void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
-                                         const Target &target = get_target_from_environment());
+                                  const Target &target = get_target_from_environment());
     void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &,
-                                         const Target &target = get_target_from_environment());
+                                  const Target &target = get_target_from_environment());
     // @}
 
     /** Statically compile this function to an object file, with the
@@ -808,9 +808,9 @@ public:
      * directly; call compile_to_static_library or compile_to_file instead. */
     //@{
     void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
-                                  const Target &target = get_target_from_environment());
+                           const Target &target = get_target_from_environment());
     void compile_to_object(const std::string &filename, const std::vector<Argument> &,
-                                  const Target &target = get_target_from_environment());
+                           const Target &target = get_target_from_environment());
     // @}
 
     /** Emit a header file with the given filename for this
@@ -821,7 +821,7 @@ public:
      * yet to call this. You probably don't want to use this directly;
      * call compile_to_static_library or compile_to_file instead. */
     void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
-                                  const Target &target = get_target_from_environment());
+                           const Target &target = get_target_from_environment());
 
     /** Statically compile this function to text assembly equivalent
      * to the object file generated by compile_to_object. This is
@@ -830,9 +830,9 @@ public:
      * some custom toolchain to produce an object file (e.g. iOS) */
     //@{
     void compile_to_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
-                                    const Target &target = get_target_from_environment());
+                             const Target &target = get_target_from_environment());
     void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
-                                    const Target &target = get_target_from_environment());
+                             const Target &target = get_target_from_environment());
     // @}
 
     /** Statically compile this function to C source code. This is
@@ -840,17 +840,17 @@ public:
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
     void compile_to_c(const std::string &filename,
-                             const std::vector<Argument> &,
-                             const std::string &fn_name = "",
-                             const Target &target = get_target_from_environment());
+                      const std::vector<Argument> &,
+                      const std::string &fn_name = "",
+                      const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
     void compile_to_lowered_stmt(const std::string &filename,
-                                        const std::vector<Argument> &args,
-                                        StmtOutputFormat fmt = Text,
-                                        const Target &target = get_target_from_environment());
+                                 const std::vector<Argument> &args,
+                                 StmtOutputFormat fmt = Text,
+                                 const Target &target = get_target_from_environment());
 
     /** Write out the loop nests specified by the schedule for this
      * Function. Helpful for understanding what a schedule is
@@ -862,16 +862,16 @@ public:
      * function.
      */
     void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
-                                const std::string &fn_name = "",
-                                const Target &target = get_target_from_environment());
+                         const std::string &fn_name = "",
+                         const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
      * arguments. The name defaults to the same name as this halide
      * function.
      */
     void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
-                                          const std::string &fn_name = "",
-                                          const Target &target = get_target_from_environment());
+                                   const std::string &fn_name = "",
+                                   const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
      * each resulting function will be considered (in order) via halide_can_use_target_features()
@@ -881,22 +881,22 @@ public:
      * All targets must have identical arch-os-bits.
      */
     void compile_to_multitarget_static_library(const std::string &filename_prefix,
-                                                      const std::vector<Argument> &args,
-                                                      const std::vector<Target> &targets);
+                                               const std::vector<Argument> &args,
+                                               const std::vector<Target> &targets);
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
     Module compile_to_module(const std::vector<Argument> &args, const std::string &fn_name = "",
-                                    const Target &target = get_target_from_environment());
+                             const Target &target = get_target_from_environment());
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
     void compile_to(const Outputs &output_files,
-                           const std::vector<Argument> &args,
-                           const std::string &fn_name,
-                           const Target &target = get_target_from_environment());
+                    const std::vector<Argument> &args,
+                    const std::string &fn_name,
+                    const Target &target = get_target_from_environment());
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -932,7 +932,7 @@ public:
      * for declarations.
      */
     void set_custom_allocator(void *(*malloc)(void *, size_t),
-                                     void (*free)(void *, void *));
+                              void (*free)(void *, void *));
 
     /** Set a custom task handler to be called by the parallel for
      * loop. It is useful to set this if you want to do some
@@ -1115,89 +1115,89 @@ public:
      * fftw. */
     // @{
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              Type t,
-                              int dimensionality,
-                              NameMangling mangling,
-                              bool uses_old_buffer_t) {
+                       const std::vector<ExternFuncArgument> &params,
+                       Type t,
+                       int dimensionality,
+                       NameMangling mangling,
+                       bool uses_old_buffer_t) {
         define_extern(function_name, params, t,
                       Internal::make_argument_list(dimensionality),
                       mangling, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              Type t,
-                              int dimensionality,
-                              NameMangling mangling = NameMangling::Default,
-                              DeviceAPI device_api = DeviceAPI::Host,
-                              bool uses_old_buffer_t = false) {
+                       const std::vector<ExternFuncArgument> &params,
+                       Type t,
+                       int dimensionality,
+                       NameMangling mangling = NameMangling::Default,
+                       DeviceAPI device_api = DeviceAPI::Host,
+                       bool uses_old_buffer_t = false) {
         define_extern(function_name, params, t,
                       Internal::make_argument_list(dimensionality),
                       mangling, device_api, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              const std::vector<Type> &types,
-                              int dimensionality,
-                              NameMangling mangling,
-                              bool uses_old_buffer_t) {
+                       const std::vector<ExternFuncArgument> &params,
+                       const std::vector<Type> &types,
+                       int dimensionality,
+                       NameMangling mangling,
+                       bool uses_old_buffer_t) {
         define_extern(function_name, params, types,
                       Internal::make_argument_list(dimensionality),
                       mangling, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              const std::vector<Type> &types,
-                              int dimensionality,
-                              NameMangling mangling = NameMangling::Default,
-                              DeviceAPI device_api = DeviceAPI::Host,
-                              bool uses_old_buffer_t = false) {
+                       const std::vector<ExternFuncArgument> &params,
+                       const std::vector<Type> &types,
+                       int dimensionality,
+                       NameMangling mangling = NameMangling::Default,
+                       DeviceAPI device_api = DeviceAPI::Host,
+                       bool uses_old_buffer_t = false) {
         define_extern(function_name, params, types,
                       Internal::make_argument_list(dimensionality),
                       mangling, device_api, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              Type t,
-                              const std::vector<Var> &arguments,
-                              NameMangling mangling,
-                              bool uses_old_buffer_t) {
+                       const std::vector<ExternFuncArgument> &params,
+                       Type t,
+                       const std::vector<Var> &arguments,
+                       NameMangling mangling,
+                       bool uses_old_buffer_t) {
         define_extern(function_name, params, std::vector<Type>{t},
                       arguments, mangling, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              Type t,
-                              const std::vector<Var> &arguments,
-                              NameMangling mangling = NameMangling::Default,
-                              DeviceAPI device_api = DeviceAPI::Host,
-                              bool uses_old_buffer_t = false) {
+                       const std::vector<ExternFuncArgument> &params,
+                       Type t,
+                       const std::vector<Var> &arguments,
+                       NameMangling mangling = NameMangling::Default,
+                       DeviceAPI device_api = DeviceAPI::Host,
+                       bool uses_old_buffer_t = false) {
         define_extern(function_name, params, std::vector<Type>{t},
                       arguments, mangling, device_api, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              const std::vector<Type> &types,
-                              const std::vector<Var> &arguments,
-                              NameMangling mangling,
-                              bool uses_old_buffer_t) {
+                       const std::vector<ExternFuncArgument> &params,
+                       const std::vector<Type> &types,
+                       const std::vector<Var> &arguments,
+                       NameMangling mangling,
+                       bool uses_old_buffer_t) {
       define_extern(function_name, params, types,
                     arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
-                              const std::vector<ExternFuncArgument> &params,
-                              const std::vector<Type> &types,
-                              const std::vector<Var> &arguments,
-                              NameMangling mangling = NameMangling::Default,
-                              DeviceAPI device_api = DeviceAPI::Host,
-                              bool uses_old_buffer_t = false);
+                       const std::vector<ExternFuncArgument> &params,
+                       const std::vector<Type> &types,
+                       const std::vector<Var> &arguments,
+                       NameMangling mangling = NameMangling::Default,
+                       DeviceAPI device_api = DeviceAPI::Host,
+                       bool uses_old_buffer_t = false);
     // @}
 
     /** Get the types of the outputs of this Func. */
@@ -1493,17 +1493,17 @@ public:
      * reorder the resulting dimensions to be xi, yi, xo, yo from
      * innermost outwards. This gives a tiled traversal. */
     Func &tile(VarOrRVar x, VarOrRVar y,
-                      VarOrRVar xo, VarOrRVar yo,
-                      VarOrRVar xi, VarOrRVar yi,
-                      Expr xfactor, Expr yfactor,
-                      TailStrategy tail = TailStrategy::Auto);
+               VarOrRVar xo, VarOrRVar yo,
+               VarOrRVar xi, VarOrRVar yi,
+               Expr xfactor, Expr yfactor,
+               TailStrategy tail = TailStrategy::Auto);
 
     /** A shorter form of tile, which reuses the old variable names as
      * the new outer dimensions */
     Func &tile(VarOrRVar x, VarOrRVar y,
-                      VarOrRVar xi, VarOrRVar yi,
-                      Expr xfactor, Expr yfactor,
-                      TailStrategy tail = TailStrategy::Auto);
+               VarOrRVar xi, VarOrRVar yi,
+               Expr xfactor, Expr yfactor,
+               TailStrategy tail = TailStrategy::Auto);
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
@@ -1772,9 +1772,9 @@ public:
     // @{
     Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
-                     VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
+              VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
+              VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** Short-hand for tiling a domain and mapping the tile indices
@@ -1783,36 +1783,36 @@ public:
      * other scheduling first. */
     // @{
     Func &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+                   TailStrategy tail = TailStrategy::Auto,
+                   DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Func &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+                   TailStrategy tail = TailStrategy::Auto,
+                   DeviceAPI device_api = DeviceAPI::Default_GPU);
     Func &gpu_tile(VarOrRVar x, VarOrRVar y,
-                          VarOrRVar bx, VarOrRVar by,
-                          VarOrRVar tx, VarOrRVar ty,
-                          Expr x_size, Expr y_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+                   VarOrRVar bx, VarOrRVar by,
+                   VarOrRVar tx, VarOrRVar ty,
+                   Expr x_size, Expr y_size,
+                   TailStrategy tail = TailStrategy::Auto,
+                   DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Func &gpu_tile(VarOrRVar x, VarOrRVar y,
-                          VarOrRVar tx, VarOrRVar ty,
-                          Expr x_size, Expr y_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+                   VarOrRVar tx, VarOrRVar ty,
+                   Expr x_size, Expr y_size,
+                   TailStrategy tail = TailStrategy::Auto,
+                   DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
-                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                          Expr x_size, Expr y_size, Expr z_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+                   VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                   VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                   Expr x_size, Expr y_size, Expr z_size,
+                   TailStrategy tail = TailStrategy::Auto,
+                   DeviceAPI device_api = DeviceAPI::Default_GPU);
     Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                          Expr x_size, Expr y_size, Expr z_size,
-                          TailStrategy tail = TailStrategy::Auto,
-                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+                   VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                   Expr x_size, Expr y_size, Expr z_size,
+                   TailStrategy tail = TailStrategy::Auto,
+                   DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
     /** Schedule for execution using coordinate-based hardware api.
@@ -1861,9 +1861,9 @@ public:
      */
     // @{
     Func &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
-                          PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Func &prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset = 1,
-                          PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Func &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {

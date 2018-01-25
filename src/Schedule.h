@@ -160,7 +160,7 @@ class LoopLevel {
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
     LoopLevel(const std::string &func_name, const std::string &var_name,
-                     bool is_rvar, int stage_index, bool locked = false);
+              bool is_rvar, int stage_index, bool locked = false);
 
 public:
     /** Return the index of the function stage associated with this loop level.
@@ -426,7 +426,7 @@ public:
     const std::map<std::string, Internal::FunctionPtr> &wrappers() const;
     std::map<std::string, Internal::FunctionPtr> &wrappers();
     void add_wrapper(const std::string &f,
-                            const Internal::FunctionPtr &wrapper);
+                     const Internal::FunctionPtr &wrapper);
     // @}
 
     /** At what sites should we inject the allocation and the

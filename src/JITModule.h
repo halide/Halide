@@ -101,7 +101,7 @@ struct JITModule {
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
     void add_extern_for_export(const std::string &name,
-                                      const ExternCFunction &extern_c_function);
+                               const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     Symbol find_symbol_by_name(const std::string &) const;
@@ -109,9 +109,9 @@ struct JITModule {
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
     void compile_module(std::unique_ptr<llvm::Module> mod,
-                               const std::string &function_name, const Target &target,
-                               const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
-                               const std::vector<std::string> &requested_exports = std::vector<std::string>());
+                        const std::string &function_name, const Target &target,
+                        const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
+                        const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
     /** Encapsulate device (GPU) and buffer interactions. */
     void memoization_cache_set_size(int64_t size) const;
