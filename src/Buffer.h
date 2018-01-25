@@ -97,7 +97,18 @@ class Buffer {
 
     template<typename T2>
     static void assert_can_convert_from(const Buffer<T2> &other) {
-        Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+        if (!other.defined()) {
+            // Avoid UB of deferencing offset of a null contents ptr
+            static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
+                        "Can't convert from a Buffer<const T> to a Buffer<T>");
+            static_assert(std::is_same<typename std::remove_const<T>::type,
+                                     typename std::remove_const<T2>::type>::value ||
+                        std::is_void<T>::value ||
+                        std::is_void<T2>::value,
+                        "type mismatch constructing Buffer");
+        } else {
+            Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+        }
     }
 
 public:
