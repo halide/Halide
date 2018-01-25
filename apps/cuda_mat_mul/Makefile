@@ -3,8 +3,10 @@ include ../support/Makefile.inc
 BIN ?= bin
 MATRIX_SIZE ?= 1024
 
-CXXFLAGS += -I /usr/local/cuda-8.0/include
-LDFLAGS += -L /usr/local/cuda-8.0/lib64
+CUDA_SDK ?= /usr/local/cuda-8.0
+
+CXXFLAGS += -I $(CUDA_SDK)/include
+LDFLAGS += -L $(CUDA_SDK)/lib64
 
 all: $(BIN)/runner
 

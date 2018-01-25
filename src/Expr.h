@@ -362,7 +362,8 @@ enum class MemoryType {
      * allocator. */
     Register,
 
-    /** Allocation is stored in GPU shared memory. Can be shared
+    /** Allocation is stored in GPU shared memory. Also known as
+     * "local" in OpenCL, and "threadgroup" in metal. Can be shared
      * across GPU threads within the same block. */
     GPUShared,
 };
