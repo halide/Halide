@@ -19,7 +19,7 @@
 #if !defined(COBJMACROS)
     #define  COBJMACROS
 #endif
-#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
+#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)  // keep this def reserved for future use...
 #include "mini_d3d12.h"
 
 static void* const user_context = NULL;   // in case there's no user context available in the scope of a function
@@ -662,6 +662,8 @@ extern "C" {
     void Call_ID3D12DescriptorHeap_GetDesc(int64_t* descriptorheap, int64_t* desc);
     void Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* cpuHandle);
     void Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* gpuHandle);
+    void Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* commandList, UINT RootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE* pBaseDescriptor);
+    void Call_ID3D12Device_CreateConstantBufferView(ID3D12Device* device, D3D12_CONSTANT_BUFFER_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE* pDestDescriptor);
 #ifdef __cplusplus
 }
 #endif
@@ -685,6 +687,16 @@ D3D12_GPU_DESCRIPTOR_HANDLE Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForH
     D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = { };
     Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart( (int64_t*)descriptorheap, (int64_t*)&gpuHandle );
     return(gpuHandle);
+}
+
+void Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* commandList, UINT RootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE BaseDescriptor)
+{
+    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(commandList, RootParameterIndex, &BaseDescriptor);
+}
+
+void Call_ID3D12Device_CreateConstantBufferView(ID3D12Device* device, D3D12_CONSTANT_BUFFER_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor)
+{
+    Call_ID3D12Device_CreateConstantBufferView(device, pDesc, &DestDescriptor);
 }
 
 static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
@@ -1069,11 +1081,14 @@ static void set_compute_pipeline_state(d3d12_compute_command_list* cmdList, d3d1
     ID3D12DescriptorHeap* heaps [] = { binder->descriptorHeap };
     (*cmdList)->SetDescriptorHeaps(1, heaps);
 
+    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), UAV, binder->GPU[UAV]);
+    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), CBV, binder->GPU[CBV]);
+    Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable((*cmdList), SRV, binder->GPU[SRV]);
 #if HALIDE_D3D12_APPLY_ABI_PATCHES
-    #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
-    (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV].ptr);
-    (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV].ptr);
-    (*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV].ptr);
+    //#pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
+    //(*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV].ptr);
+    //(*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV].ptr);
+    //(*cmdList)->SetComputeRootDescriptorTable(SRV, binder->GPU[SRV].ptr);
 #else
     (*cmdList)->SetComputeRootDescriptorTable(UAV, binder->GPU[UAV]);
     (*cmdList)->SetComputeRootDescriptorTable(CBV, binder->GPU[CBV]);
@@ -1363,9 +1378,10 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             D3D12_CPU_DESCRIPTOR_HANDLE hDescCBV = binder->CPU[CBV];
             binder->CPU[CBV].ptr += binder->descriptorSize;
 
+            Call_ID3D12Device_CreateConstantBufferView((*device), &cbvd, hDescCBV);
             #if HALIDE_D3D12_APPLY_ABI_PATCHES
                 #pragma message ("WARN(marcos): UGLY ABI PATCH HERE!")
-                (*device)->CreateConstantBufferView(&cbvd, hDescCBV.ptr);
+                //(*device)->CreateConstantBufferView(&cbvd, hDescCBV.ptr);
             #else
                 (*device)->CreateConstantBufferView(&cbvd, hDescCBV);
             #endif

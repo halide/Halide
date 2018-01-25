@@ -49,3 +49,15 @@ define weak_odr void @Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapSta
     call void asm sideeffect inteldialect "push rbp\0A\09mov rbp, rsp\0A\09sub rsp, 32\0A\09and spl, -16\0A\09lea rax, qword ptr [rcx]\0A\09mov rax, qword ptr [rax]\0A\09call qword ptr [rax+50h]\0A\09leave", "~{rsp},~{rbp},~{rax}"();
     ret void
 }
+
+define weak_odr void @Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(i64* %commandList, i64 %RootParameterIndex, i64* %pBaseDescriptor) naked nounwind uwtable
+{
+    call void asm sideeffect inteldialect "push rbp\0A\09mov rbp, rsp\0A\09sub rsp, 32\0A\09and spl, -16\0A\09lea rax, qword ptr [rcx]\0A\09mov rax, qword ptr [rax]\0A\09mov r8, qword ptr [r8]\0A\09call qword ptr [rax+0F8h]\0A\09leave", "~{rsp},~{rbp},~{rax}"();
+    ret void
+}
+
+define weak_odr void @Call_ID3D12Device_CreateConstantBufferView(i64* %device, i64* %pDesc, i64* %pDestDescriptor) naked nounwind uwtable
+{
+    call void asm sideeffect inteldialect "push rbp\0A\09mov rbp, rsp\0A\09sub rsp, 32\0A\09and spl, -16\0A\09lea rax, qword ptr [rcx]\0A\09mov rax, qword ptr [rax]\0A\09mov r8, qword ptr [r8]\0A\09call qword ptr [rax+88h]\0A\09leave", "~{rsp},~{rbp},~{rax}"();
+    ret void
+}
