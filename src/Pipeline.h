@@ -67,34 +67,34 @@ class Pipeline {
 
 public:
     /** Make an undefined Pipeline object. */
-    EXPORT Pipeline();
+    Pipeline();
 
     /** Make a pipeline that computes the given Func. Schedules the
      * Func compute_root(). */
-    EXPORT Pipeline(Func output);
+    Pipeline(Func output);
 
     /** Make a pipeline that computes the givens Funcs as
      * outputs. Schedules the Funcs compute_root(). */
-    EXPORT Pipeline(const std::vector<Func> &outputs);
+    Pipeline(const std::vector<Func> &outputs);
 
     /** Get the Funcs this pipeline outputs. */
-    EXPORT std::vector<Func> outputs() const;
+    std::vector<Func> outputs() const;
 
     /** Generate a schedule for the pipeline. */
     //@{
-    EXPORT std::string auto_schedule(const Target &target,
+    std::string auto_schedule(const Target &target,
                                      const MachineParams &arch_params = MachineParams::generic());
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the
      * realization order. */
-    EXPORT Func get_func(size_t index);
+    Func get_func(size_t index);
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in
      * output_files struct.
      */
-    EXPORT void compile_to(const Outputs &output_files,
+    void compile_to(const Outputs &output_files,
                            const std::vector<Argument> &args,
                            const std::string &fn_name,
                            const Target &target);
@@ -103,7 +103,7 @@ public:
      * filename (which should probably end in .bc), type signature,
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_bitcode. */
-    EXPORT void compile_to_bitcode(const std::string &filename,
+    void compile_to_bitcode(const std::string &filename,
                                    const std::vector<Argument> &args,
                                    const std::string &fn_name,
                                    const Target &target = get_target_from_environment());
@@ -112,7 +112,7 @@ public:
      * filename (which should probably end in .ll), type signature,
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_llvm_assembly. */
-    EXPORT void compile_to_llvm_assembly(const std::string &filename,
+    void compile_to_llvm_assembly(const std::string &filename,
                                          const std::vector<Argument> &args,
                                          const std::string &fn_name,
                                          const Target &target = get_target_from_environment());
@@ -122,7 +122,7 @@ public:
      * .o or .obj), type signature, and C function name (which defaults to
      * the same name as this halide function. You probably don't want to
      * use this directly; call compile_to_static_library or compile_to_file instead. */
-    EXPORT void compile_to_object(const std::string &filename,
+    void compile_to_object(const std::string &filename,
                                   const std::vector<Argument> &,
                                   const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
@@ -133,7 +133,7 @@ public:
      * actually have to have defined any of these functions yet to
      * call this. You probably don't want to use this directly; call
      * compile_to_static_library or compile_to_file instead. */
-    EXPORT void compile_to_header(const std::string &filename,
+    void compile_to_header(const std::string &filename,
                                   const std::vector<Argument> &,
                                   const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
@@ -143,7 +143,7 @@ public:
      * for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file. */
-    EXPORT void compile_to_assembly(const std::string &filename,
+    void compile_to_assembly(const std::string &filename,
                                     const std::vector<Argument> &args,
                                     const std::string &fn_name,
                                     const Target &target = get_target_from_environment());
@@ -152,7 +152,7 @@ public:
      * for providing fallback code paths that will compile on many
      * platforms. Vectorization will fail, and parallelization will
      * produce serial code. */
-    EXPORT void compile_to_c(const std::string &filename,
+    void compile_to_c(const std::string &filename,
                              const std::vector<Argument> &,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment());
@@ -160,7 +160,7 @@ public:
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
-    EXPORT void compile_to_lowered_stmt(const std::string &filename,
+    void compile_to_lowered_stmt(const std::string &filename,
                                         const std::vector<Argument> &args,
                                         StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
@@ -168,18 +168,18 @@ public:
     /** Write out the loop nests specified by the schedule for this
      * Pipeline's Funcs. Helpful for understanding what a schedule is
      * doing. */
-    EXPORT void print_loop_nest();
+    void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
      * arguments. */
-    EXPORT void compile_to_file(const std::string &filename_prefix,
+    void compile_to_file(const std::string &filename_prefix,
                                 const std::vector<Argument> &args,
                                 const std::string &fn_name,
                                 const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
      * arguments. */
-    EXPORT void compile_to_static_library(const std::string &filename_prefix,
+    void compile_to_static_library(const std::string &filename_prefix,
                                           const std::vector<Argument> &args,
                                           const std::string &fn_name,
                                           const Target &target = get_target_from_environment());
@@ -191,13 +191,13 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
+    void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
-    EXPORT Module compile_to_module(const std::vector<Argument> &args,
+    Module compile_to_module(const std::vector<Argument> &args,
                                     const std::string &fn_name,
                                     const Target &target = get_target_from_environment(),
                                     const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::ExternalPlusMetadata);
@@ -210,7 +210,7 @@ public:
      * pointer to the compiled pipeline. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
+     void *compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
@@ -221,7 +221,7 @@ public:
      \endcode
      * This will clobber Halide's version.
      */
-    EXPORT void set_error_handler(void (*handler)(void *, const char *));
+    void set_error_handler(void (*handler)(void *, const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
      * return 32-byte aligned chunks of memory, and it should be safe
@@ -235,7 +235,7 @@ public:
      * These will clobber Halide's versions. See \file HalideRuntime.h
      * for declarations.
      */
-    EXPORT void set_custom_allocator(void *(*malloc)(void *, size_t),
+    void set_custom_allocator(void *(*malloc)(void *, size_t),
                                      void (*free)(void *, void *));
 
     /** Set a custom task handler to be called by the parallel for
@@ -256,7 +256,7 @@ public:
      * If you're trying to use a custom parallel runtime, you probably
      * don't want to call this. See instead \ref Func::set_custom_do_par_for .
     */
-    EXPORT void set_custom_do_task(
+    void set_custom_do_task(
         int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
                               int, uint8_t *));
 
@@ -284,7 +284,7 @@ public:
      * own version of the above function, and it will clobber Halide's
      * version.
      */
-    EXPORT void set_custom_do_par_for(
+    void set_custom_do_par_for(
         int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
                                  int, uint8_t *));
 
@@ -296,7 +296,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
+    void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -306,21 +306,21 @@ public:
      \endcode
      * This will clobber Halide's version.
      */
-    EXPORT void set_custom_print(void (*handler)(void *, const char *));
+    void set_custom_print(void (*handler)(void *, const char *));
 
     /** Install a set of external C functions or Funcs to satisfy
      * dependencies introduced by HalideExtern and define_extern
      * mechanisms. These will be used by calls to realize,
      * infer_bounds, and compile_jit. */
-    EXPORT void set_jit_externs(const std::map<std::string, JITExtern> &externs);
+    void set_jit_externs(const std::map<std::string, JITExtern> &externs);
 
     /** Return the map of previously installed externs. Is an empty
      * map unless set otherwise. */
-    EXPORT const std::map<std::string, JITExtern> &get_jit_externs();
+    const std::map<std::string, JITExtern> &get_jit_externs();
 
     /** Get a struct containing the currently set custom functions
      * used by JIT. */
-    EXPORT const Internal::JITHandlers &jit_handlers();
+    const Internal::JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
@@ -343,27 +343,27 @@ public:
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    EXPORT void add_custom_lowering_pass(Internal::IRMutator2 *pass,
+    void add_custom_lowering_pass(Internal::IRMutator2 *pass,
                                          void (*deleter)(Internal::IRMutator2 *));
 
     /** Remove all previously-set custom lowering passes */
-    EXPORT void clear_custom_lowering_passes();
+    void clear_custom_lowering_passes();
 
     /** Get the custom lowering passes. */
-    EXPORT const std::vector<CustomLoweringPass> &custom_lowering_passes();
+    const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     /** See Func::realize */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    Realization realize(int x_size, int y_size, int z_size, int w_size,
                                const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    EXPORT Realization realize(int x_size, int y_size, int z_size,
+    Realization realize(int x_size, int y_size, int z_size,
                                const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    EXPORT Realization realize(int x_size, int y_size,
+    Realization realize(int x_size, int y_size,
                                const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    EXPORT Realization realize(int x_size,
+    Realization realize(int x_size,
                                const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    EXPORT Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or
@@ -375,7 +375,7 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    EXPORT void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -383,8 +383,8 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
-    EXPORT void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
+    void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
@@ -395,15 +395,15 @@ public:
      pipeline.compile_to_assembly("/dev/stdout", pipeline.infer_arguments());
      \endcode
      */
-    EXPORT std::vector<Argument> infer_arguments();
+    std::vector<Argument> infer_arguments();
 
     /** Check if this pipeline object is defined. That is, does it
      * have any outputs? */
-    EXPORT bool defined() const;
+    bool defined() const;
 
     /** Invalidate any internal cached state, e.g. because Funcs have
      * been rescheduled. */
-    EXPORT void invalidate_cache();
+    void invalidate_cache();
 
 private:
     std::string generate_function_name() const;
@@ -472,9 +472,9 @@ private:
     ExternCFunction extern_c_function_;
 
 public:
-    EXPORT JITExtern(Pipeline pipeline);
-    EXPORT JITExtern(Func func);
-    EXPORT JITExtern(const ExternCFunction &extern_c_function);
+    JITExtern(Pipeline pipeline);
+    JITExtern(Func func);
+    JITExtern(const ExternCFunction &extern_c_function);
 
     template <typename RT, typename... Args>
     JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}

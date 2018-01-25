@@ -54,7 +54,7 @@ public:
     }
 
     /** Construct a Tuple from a function reference. */
-    EXPORT Tuple(const FuncRef &);
+    Tuple(const FuncRef &);
 
     /** Treat the tuple as a vector of Exprs */
     const std::vector<Expr> &as_vector() const {

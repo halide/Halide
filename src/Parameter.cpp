@@ -47,10 +47,10 @@ struct ParameterContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
+void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";

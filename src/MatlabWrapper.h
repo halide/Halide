@@ -20,7 +20,7 @@ namespace Internal {
 /** Add a mexFunction wrapper definition to the module, calling the
  * function with the name pipeline_name. Returns the mexFunction
  * definition. */
-EXPORT llvm::Function *define_matlab_wrapper(llvm::Module *module,
+llvm::Function *define_matlab_wrapper(llvm::Module *module,
                                              llvm::Function *pipeline_argv_wrapper,
                                              llvm::Function *metadata_getter);
 

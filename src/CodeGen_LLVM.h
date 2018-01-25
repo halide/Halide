@@ -480,7 +480,7 @@ private:
 }
 
 /** Given a Halide module, generate an llvm::Module. */
-EXPORT std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
+std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
                                                   llvm::LLVMContext &context);
 
 }

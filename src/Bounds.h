@@ -162,7 +162,7 @@ Box box_touched(Stmt s, std::string fn,
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
                                               const std::map<std::string, Function> &env);
 
-EXPORT void bounds_test();
+void bounds_test();
 
 }
 }

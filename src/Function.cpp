@@ -163,12 +163,12 @@ FunctionContents *FunctionPtr::get() const {
 }
 
 template<>
-EXPORT RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
+RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
     return f->ref_count;
 }
 
 template<>
-EXPORT void destroy<FunctionGroup>(const FunctionGroup *f) {
+void destroy<FunctionGroup>(const FunctionGroup *f) {
     delete f;
 }
 

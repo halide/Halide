@@ -119,12 +119,12 @@ struct ModuleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<ModuleContents>(const ModuleContents *f) {
+RefCount &ref_count<ModuleContents>(const ModuleContents *f) {
     return f->ref_count;
 }
 
 template<>
-EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
+void destroy<ModuleContents>(const ModuleContents *f) {
     delete f;
 }
 

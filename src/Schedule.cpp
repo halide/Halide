@@ -41,12 +41,12 @@ struct LoopLevelContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
+RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
+void destroy<LoopLevelContents>(const LoopLevelContents *p) {
     delete p;
 }
 
@@ -252,12 +252,12 @@ struct FuncScheduleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
+RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
+void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
 
@@ -303,12 +303,12 @@ struct StageScheduleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
+RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
+void destroy<StageScheduleContents>(const StageScheduleContents *p) {
     delete p;
 }
 

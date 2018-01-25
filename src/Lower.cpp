@@ -430,7 +430,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     return result_module;
 }
 
-EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
+Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
                             const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.

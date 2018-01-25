@@ -18,36 +18,36 @@ namespace Internal {
 /** Is the expression either an IntImm, a FloatImm, a StringImm, or a
  * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
  * any constant folding. */
-EXPORT bool is_const(const Expr &e);
+bool is_const(const Expr &e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-EXPORT bool is_const(const Expr &e, int64_t v);
+bool is_const(const Expr &e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-EXPORT const int64_t *as_const_int(const Expr &e);
+const int64_t *as_const_int(const Expr &e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-EXPORT const uint64_t *as_const_uint(const Expr &e);
+const uint64_t *as_const_uint(const Expr &e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
  * return a pointer to its value. Otherwise returns nullptr. */
-EXPORT const double *as_const_float(const Expr &e);
+const double *as_const_float(const Expr &e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. Only returns true for
  * integer types. */
-EXPORT bool is_const_power_of_two_integer(const Expr &e, int *bits);
+bool is_const_power_of_two_integer(const Expr &e, int *bits);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
-EXPORT bool is_positive_const(const Expr &e);
+bool is_positive_const(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) */
-EXPORT bool is_negative_const(const Expr &e);
+bool is_negative_const(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) and
@@ -55,26 +55,26 @@ EXPORT bool is_negative_const(const Expr &e);
  * negative value of the Expr's type from inclusion. Intended to be
  * used when the value will be negated as part of simplification.)
  */
-EXPORT bool is_negative_negatable_const(const Expr &e);
+bool is_negative_negatable_const(const Expr &e);
 
 /** Is the expression an undef */
-EXPORT bool is_undef(const Expr &e);
+bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-EXPORT bool is_zero(const Expr &e);
+bool is_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-EXPORT bool is_one(const Expr &e);
+bool is_one(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
-EXPORT bool is_two(const Expr &e);
+bool is_two(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
-EXPORT bool is_no_op(const Stmt &s);
+bool is_no_op(const Stmt &s);
 
 /** Does the expression
  * 1) Take on the same value no matter where it appears in a Stmt, and
@@ -84,9 +84,9 @@ bool is_pure(const Expr &e);
 
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
-EXPORT Expr make_const(Type t, int64_t val);
-EXPORT Expr make_const(Type t, uint64_t val);
-EXPORT Expr make_const(Type t, double val);
+Expr make_const(Type t, int64_t val);
+Expr make_const(Type t, uint64_t val);
+Expr make_const(Type t, double val);
 inline Expr make_const(Type t, int32_t val)   {return make_const(t, (int64_t)val);}
 inline Expr make_const(Type t, uint32_t val)  {return make_const(t, (uint64_t)val);}
 inline Expr make_const(Type t, int16_t val)   {return make_const(t, (int64_t)val);}
@@ -99,7 +99,7 @@ inline Expr make_const(Type t, float16_t val) {return make_const(t, (double)val)
 // @}
 
 /** Check if a constant value can be correctly represented as the given type. */
-EXPORT void check_representable(Type t, int64_t val);
+void check_representable(Type t, int64_t val);
 
 /** Construct a boolean constant from a C++ boolean value.
  * May also be a vector if width is given.
@@ -109,29 +109,29 @@ EXPORT void check_representable(Type t, int64_t val);
  * is that C++ does not have a real bool type - it is in fact
  * close enough to char that C++ does not know how to distinguish them.
  * make_bool is the explicit coercion. */
-EXPORT Expr make_bool(bool val, int lanes = 1);
+Expr make_bool(bool val, int lanes = 1);
 
 /** Construct the representation of zero in the given type */
-EXPORT Expr make_zero(Type t);
+Expr make_zero(Type t);
 
 /** Construct the representation of one in the given type */
-EXPORT Expr make_one(Type t);
+Expr make_one(Type t);
 
 /** Construct the representation of two in the given type */
-EXPORT Expr make_two(Type t);
+Expr make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
  * trues, if a lanes argument is given. */
-EXPORT Expr const_true(int lanes = 1);
+Expr const_true(int lanes = 1);
 
 /** Construct the constant boolean false. May also be a vector of
  * falses, if a lanes argument is given. */
-EXPORT Expr const_false(int lanes = 1);
+Expr const_false(int lanes = 1);
 
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
  * Expr. */
-EXPORT Expr lossless_cast(Type t, Expr e);
+Expr lossless_cast(Type t, Expr e);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -157,22 +157,22 @@ EXPORT Expr lossless_cast(Type t, Expr e);
  * in an Int(16).
  *
  */
-EXPORT void match_types(Expr &a, Expr &b);
+void match_types(Expr &a, Expr &b);
 
 /** Halide's vectorizable transcendentals. */
 // @{
-EXPORT Expr halide_log(Expr a);
-EXPORT Expr halide_exp(Expr a);
-EXPORT Expr halide_erf(Expr a);
+Expr halide_log(Expr a);
+Expr halide_exp(Expr a);
+Expr halide_erf(Expr a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
-EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
+Expr raise_to_integer_power(Expr a, int64_t b);
 
 /** Split a boolean condition into vector of ANDs. If 'cond' is undefined,
  * return an empty vector. */
-EXPORT void split_into_ands(const Expr &cond, std::vector<Expr> &result);
+void split_into_ands(const Expr &cond, std::vector<Expr> &result);
 
 /** A builder to help create Exprs representing halide_buffer_t
  * structs (e.g. foo.buffer) via calls to halide_buffer_init. Fill out
@@ -191,7 +191,7 @@ struct BufferBuilder {
     int dimensions = 0;
     std::vector<Expr> mins, extents, strides;
     Expr host_dirty, device_dirty;
-    EXPORT Expr build() const;
+    Expr build() const;
 };
 
 /** If e is a ramp expression with stride, default 1, return the base,
@@ -1191,13 +1191,13 @@ inline Expr erf(Expr x) {
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
-EXPORT Expr fast_log(Expr x);
+Expr fast_log(Expr x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-EXPORT Expr fast_exp(Expr x);
+Expr fast_exp(Expr x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
@@ -1744,7 +1744,7 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args
  * evaluated. It also prints out everything else in the arguments
  * list, separated by spaces. This can include string literals. */
 //@{
-EXPORT Expr print(const std::vector<Expr> &values);
+Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
 inline NO_INLINE Expr print(Expr a, Args&&... args) {
@@ -1757,7 +1757,7 @@ inline NO_INLINE Expr print(Expr a, Args&&... args) {
 /** Create an Expr that prints whenever it is evaluated, provided that
  * the condition is true. */
 // @{
-EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
+Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
 inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
@@ -1790,7 +1790,7 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
  * will allow the optimizer to assume positive, nonzero values for y.
  */
 // @{
-EXPORT Expr require(Expr condition, const std::vector<Expr> &values);
+Expr require(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
 inline NO_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
@@ -1832,7 +1832,7 @@ inline Expr undef() {
 }
 
 namespace Internal {
-EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 }  // namespace Internal
 
 /** Control the values used in the memoization cache key for memoize.
@@ -1907,7 +1907,7 @@ Expr saturating_cast(Expr e) {
 
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
-EXPORT Expr saturating_cast(Type t, Expr e);
+Expr saturating_cast(Type t, Expr e);
 
 }
 
