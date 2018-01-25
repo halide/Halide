@@ -28,7 +28,7 @@ struct Stmt;
 std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 struct LoweredFunc;
-std::ostream &operator << (std::ostream &, const LoweredFunc &);
+std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 /** For optional debugging during codegen, use the debug class as
  * follows:
