@@ -21,7 +21,7 @@
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER) && defined(Halide_EXPORTS)
-#define __declspec(dllimport)
+#define HALIDE_EXPORT __declspec(dllimport)
 #else
 #define HALIDE_EXPORT
 #endif
