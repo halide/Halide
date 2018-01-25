@@ -12,6 +12,7 @@
 #include <queue>
 #include <algorithm>
 #include <fstream>
+#include <chrono>
 
 // TODO: overview of algorithm
 
@@ -710,7 +711,7 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
             set<Function, Function::Compare> outputs;
             set<Function, Function::Compare> group_members;
             bool can_parallelize = true;
-            const Group::FunctionState *old_output_state;
+            const Group::FunctionState *old_output_state = nullptr;
             for (auto &f : group.funcs) {
                 // TODO: Check we don't already have split store_at compute_at within this group (compute depth == store depth)
                 group_members.insert(f.func);
@@ -1347,7 +1348,7 @@ void autoschedule_test() {
         }
     }
 
-    int tile_x, tile_y;
+    int tile_x = 0, tile_y = 0;
     {
         // In a pipeline with moderate isotropic stencils, there should be some square tiling
         Func f("f"), h("h");
