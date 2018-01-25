@@ -9,6 +9,25 @@
 #define d3d12_load_library          halide_load_library
 #define d3d12_get_library_symbol    halide_get_library_symbol
 
+#define WIN32API
+extern "C" WIN32API void* LoadLibraryA(const char *);
+extern "C" WIN32API void* GetProcAddress(void *, const char *);
+
+void* ll(const char *name)
+{
+    //fprintf(stdout, "ll(%s)\n", name);
+    void* lib = LoadLibraryA(name);
+    //debug(user_context) << TRACEINDENT << "ll(" << name << ") = " << lib <<"\n";
+    return((void*)lib);
+}
+void* gpa(void* lib, const char *name)
+{
+    //fprintf(stdout, "gpa(%p, %s)\n", lib, name);
+    void* proc = GetProcAddress(lib, name);
+    //debug(user_context) << TRACEINDENT << "gpa(" << lib << ", " << name << ") = " << proc << "\n";
+    return((void*)proc);
+}
+
 #ifndef UNUSED
 #define UNUSED(x) ((void)x)
 #endif//UNUSED
@@ -69,25 +88,6 @@ static void* const user_context = NULL;   // in case there's no user context ava
     #define TRACEPRINT(msg)
     #define TRACELOG
 #endif
-
-#define WIN32API
-extern "C" WIN32API void* LoadLibraryA(const char *);
-extern "C" WIN32API void* GetProcAddress(void *, const char *);
-
-void* ll(const char *name)
-{
-    //fprintf(stdout, "ll(%s)\n", name);
-    void* lib = LoadLibraryA(name);
-    //debug(user_context) << TRACEINDENT << "ll(" << name << ") = " << lib <<"\n";
-    return((void*)lib);
-}
-void* gpa(void* lib, const char *name)
-{
-    //fprintf(stdout, "gpa(%p, %s)\n", lib, name);
-    void* proc = GetProcAddress(lib, name);
-    //debug(user_context) << TRACEINDENT << "gpa(" << lib << ", " << name << ") = " << proc << "\n";
-    return((void*)proc);
-}
 
 template<typename T>
 static T* malloct()
@@ -574,8 +574,8 @@ static void D3D12LoadDependencies(void* user_context)
 {
     TRACELOG;
 
-    halide_set_custom_load_library(ll);
-    halide_set_custom_get_library_symbol(gpa);
+    //halide_set_custom_load_library(ll);
+    //halide_set_custom_get_library_symbol(gpa);
 
     const char* lib_names [] = {
         "d3d12.dll",
