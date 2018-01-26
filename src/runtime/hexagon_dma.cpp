@@ -334,6 +334,8 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     }
    
     void *dest = reinterpret_cast<void *>(dst->host);
+    // TODO: doing a manual copy from the cache to destination buffer
+    // This should be removed once the cache locking is addressed inside Halide Pipeline 
     if (dest) { 
         memcpy(dest, dev->cache_buf, buf_size);
     }
@@ -417,7 +419,8 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
         debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
         return halide_error_code_copy_to_host_failed;
     }
-
+    // TODO: doing a manual copy from the cache to destination buffer
+    // This should be removed once the cache locking is addressed inside Halide Pipeline
     void *dest = reinterpret_cast<void *>(buf->host);
     if (dest) {
         memcpy(dest, dev->cache_buf, size);
