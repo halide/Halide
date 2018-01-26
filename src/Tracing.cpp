@@ -191,12 +191,12 @@ private:
             Stmt new_body = op->body;
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+            stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
             new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+            stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
         }
         return stmt;
     }
@@ -278,7 +278,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
             Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
             output_region.push_back(Range(min, extent));
         }
-        s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
+        s = Realize::make(output.name(), output.output_types(), MemoryType::Auto, output_region, const_true(), s);
     }
 
     // Inject tracing calls

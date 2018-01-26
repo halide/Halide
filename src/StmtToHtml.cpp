@@ -360,6 +360,8 @@ private:
             stream << keyword("gpu_block");
         } else if (op->for_type == ForType::GPUThread) {
             stream << keyword("gpu_thread");
+        } else if (op->for_type == ForType::GPULane) {
+            stream << keyword("gpu_lane");
         } else {
             internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }

@@ -343,6 +343,9 @@ public:
     Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    Stage &gpu_lanes(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     Stage &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     Stage &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -393,9 +396,9 @@ public:
 
     Stage &hexagon(VarOrRVar x = Var::outermost());
     Stage &prefetch(const Func &f, VarOrRVar var, Expr offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Stage &prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                           PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
@@ -1748,6 +1751,13 @@ public:
     Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
+    /** The given dimension corresponds to the lanes in a GPU
+     * warp. GPU warp lanes are distinguished from GPU threads by the
+     * fact that all warp lanes run together in lockstep, which
+     * permits lightweight communication of data from one lane to
+     * another. */
+    Func &gpu_lanes(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     /** Tell Halide to run this stage using a single gpu thread and
      * block. This is not an efficient use of your GPU, but it can be
      * useful to avoid copy-back for intermediate update stages that
@@ -2211,6 +2221,12 @@ public:
     /** Get a handle on an update step for the purposes of scheduling
      * it. */
     Stage update(int idx = 0);
+
+    /** Set the type of memory this Func should be stored in. Controls
+     * whether allocations go on the stack or the heap on the CPU, and
+     * in global vs shared vs local on the GPU. See the documentation
+     * on MemoryType for more detail. */
+    Func &store_in(MemoryType memory_type);
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no

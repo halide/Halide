@@ -375,6 +375,7 @@ SOURCE_FILES = \
   LLVM_Runtime_Linker.cpp \
   LoopCarry.cpp \
   Lower.cpp \
+  LowerWarpShuffles.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -517,6 +518,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
   Lower.h \
+  LowerWarpShuffles.h \
   MainPage.h \
   MatlabWrapper.h \
   Memoization.h \

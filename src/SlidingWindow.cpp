@@ -394,7 +394,8 @@ class SlidingWindow : public IRMutator2 {
         if (new_body.same_as(op->body)) {
             return op;
         } else {
-            return Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+            return Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, new_body);
         }
     }
 public:
