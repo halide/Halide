@@ -263,29 +263,7 @@ static DXGI_FORMAT FindD3D12FormatForHalideType(halide_type_t type)
 
 #define INLINE inline __attribute__((always_inline))
 
-// ---
-extern "C" {
-typedef void *objc_id;
-typedef void *objc_sel;
-}
 
-namespace Halide { namespace Runtime { namespace Internal {
-
-objc_sel sel_getUid(const char *string) { return(0); }
-objc_id objc_msgSend(objc_id self, objc_sel op, ...) { return(0); }
-
-extern "C" size_t strlen(const char *string);
-
-WEAK void ns_log_object(objc_id obj) { }
-
-}}}
-
-extern "C" {
-struct ObjectiveCClass { void* dummy; };
-}
-
-ObjectiveCClass _NSConcreteGlobalBlock = { 0 };
-// ---
 
 // The default implementation of halide_d3d12_get_symbol attempts to load
 // the D3D12 runtime shared library/DLL, and then get the symbol from it.
@@ -368,9 +346,6 @@ namespace Halide { namespace Runtime { namespace Internal { namespace D3D12Compu
 
 typedef halide_d3d12compute_device        d3d12_device;
 typedef halide_d3d12compute_command_queue d3d12_command_queue;
-
-struct  d3d12_resource : public halide_d3d12_wrapper<ID3D12Resource> { };
-//typedef d3d12_resource d3d12_buffer;
 
 struct d3d12_buffer
 {
@@ -464,17 +439,8 @@ WEAK int wrap_buffer(void* user_context, struct halide_buffer_t* buf, d3d12_buff
 WEAK d3d12_device* device = NULL;
 WEAK d3d12_command_queue* queue = NULL;
 
-WEAK d3d12_buffer upload   = { };
-WEAK d3d12_buffer readback = { };
-
-template<typename ID3D12T>
-static void Release_ID3D12Object(ID3D12T* obj)
-{
-    TRACELOG;
-    TRACEPRINT(d3d12typename(obj) << "\n");
-    if (obj)
-        obj->Release();
-}
+WEAK d3d12_buffer upload   = { };   // staging buffer to transfer data to the device
+WEAK d3d12_buffer readback = { };   // staging buffer to retrieve data from the device
 
 template<typename d3d12_T>
 static void release_d3d12_object(d3d12_T* obj)
@@ -484,7 +450,7 @@ static void release_d3d12_object(d3d12_T* obj)
 }
 
 template<typename d3d12_T>
-static void release_ns_object(d3d12_T* obj)
+static void release_object(d3d12_T* obj)
 {
     TRACELOG;
     if (!obj)
@@ -493,6 +459,17 @@ static void release_ns_object(d3d12_T* obj)
         return;
     }
     release_d3d12_object(obj);
+}
+
+template<typename ID3D12T>
+static void Release_ID3D12Object(ID3D12T* obj)
+{
+    TRACELOG;
+    TRACEPRINT(d3d12typename(obj) << "\n");
+    if (obj)
+    {
+        obj->Release();
+    }
 }
 
 template<>
@@ -963,17 +940,14 @@ static d3d12_command_allocator* new_command_allocator(d3d12_device* device)
     return(reinterpret_cast<d3d12_command_allocator*>(commandAllocator));
 }
 
-WEAK void add_command_list_completed_handler(d3d12_command_list* cmdList, struct command_list_completed_handler_block_literal *handler) {
+WEAK void add_command_list_completed_handler(d3d12_command_list* cmdList, struct command_list_completed_handler_block_literal* handler)
+{
     TRACELOG;
-    TRACEPRINT("WHAT SHOULD BE DONE HERE? JUST INSERT A FENCE?\n");
-    typedef void (*add_completed_handler_method)(objc_id cmdList, objc_sel sel, struct command_list_completed_handler_block_literal *handler);
-    add_completed_handler_method method = (add_completed_handler_method)&objc_msgSend;
-    (*method)(cmdList, sel_getUid("addCompletedHandler:"), handler);
-}
-
-WEAK objc_id command_list_error(d3d12_command_list* cmdList) {
-    TRACELOG;
-    return objc_msgSend(cmdList, sel_getUid("error"));
+    TRACEPRINT("... ignoring ...\n");
+    // there's no equivalent to Metal's 'addCompletedHandler' in D3D12...
+    // the only sensible way to emulate it would be to associate an event object
+    // with a fence via ID3D12Fence::SetEventOnCompletion() and have a background
+    // thread wait on that event and invoke the callback
 }
 
 template<D3D12_COMMAND_LIST_TYPE Type>
@@ -1207,19 +1181,21 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
     //flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
 #endif
+    // NOTE(marcos): for some reason, this prints the source code truncated...
+    //TRACEPRINT("-------------- source code: \n" << source << "||||\n");
+
     HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
 
     if (FAILED(result) || (NULL == shaderBlob))
     {
-        debug(user_context) << TRACEINDENT << "Unable to compile D3D12 compute shader (HRESULT=" << result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n";
+        debug(user_context) << TRACEINDENT << "Unable to compile D3D12 compute shader (HRESULT=" << (void*)(int64_t)result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n";
         if (errorMsgs)
         {
             const char* errorMessage = (const char*)errorMsgs->GetBufferPointer();
             debug(user_context) << TRACEINDENT << "D3D12Compute: ERROR: D3DCompiler: " << errorMessage << "\n";
             Release_ID3D12Object(errorMsgs);
         }
-        debug(user_context) << TRACEINDENT << source << "\n";
-        error(user_context) << "!!! HALT !!!";
+        error(user_context) << TRACEINDENT << source << "\n" << "!!! HALT !!!";
         return(NULL);
     }
 
@@ -1305,6 +1281,10 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
 {
     TRACELOG;
 
+    // if we could tell whether the buffer is read-only or read-write, we could
+    // bind read-only buffers with SRV descriptors... for now, bind all non-CBV
+    // buffers as UAVs...
+
     switch (input_buffer->type)
     {
         case d3d12_buffer::Constant :
@@ -1341,7 +1321,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             //DXGI_FORMAT Format = FindD3D12FormatForHalideType(type);
             UINT NumElements = input_buffer->halide->number_of_elements();
             UINT Stride = type.bytes() * type.lanes;
-            TRACEPRINT("---------- INFLATING SIZE ----------");
+            TRACEPRINT("---------- INFLATING SIZE ----------\n");
             Stride = sizeof(uint32_t) * type.lanes;
 
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
@@ -1377,14 +1357,12 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
     }
 }
 
-WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uint32_t length, uint32_t index) {
+WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uint32_t length, uint32_t index)
+{
     TRACELOG;
-    TRACEPRINT("IS THIS EVEN NECESSARY ON D3D12?\n");
-    typedef void (*set_threadgroup_memory_length_method)(objc_id encoder, objc_sel sel,
-                                                         size_t length, size_t index);
-    set_threadgroup_memory_length_method method = (set_threadgroup_memory_length_method)&objc_msgSend;
-    (*method)(cmdList, sel_getUid("setThreadgroupMemoryLength:atIndex:"),
-              length, index);
+    TRACEPRINT("... ignoring ...\n");
+    // Direct3D 12 Compute kernels require groupshared memory to be  determined
+    // at compile-time...
 }
 
 static void commit_command_list(d3d12_compute_command_list* cmdList)
@@ -1529,7 +1507,7 @@ WEAK int halide_d3d12compute_acquire_context(void* user_context, halide_d3d12com
         if (NULL == queue)
         {
             error(user_context) << TRACEINDENT << "D3D12Compute: cannot allocate command queue.\n";
-            release_ns_object(device);
+            release_object(device);
             device = NULL;
             __sync_lock_release(&thread_lock);
             return -1;
@@ -1585,37 +1563,39 @@ WEAK void D3D12ContextHolder::restore()
     halide_d3d12compute_release_context(user_context);
 }
 
-struct command_list_completed_handler_block_descriptor_1 {
+struct command_list_completed_handler_block_descriptor_1
+{
     unsigned long reserved;
     unsigned long block_size;
 };
 
-struct command_list_completed_handler_block_literal {
-    void *isa;
-    int flags;
-    int reserved;
-    void (*invoke)(command_list_completed_handler_block_literal *, d3d12_command_list* cmdList);
-    struct command_list_completed_handler_block_descriptor_1 *descriptor;
+struct command_list_completed_handler_block_literal
+{
+    void (*invoke)(command_list_completed_handler_block_literal*, d3d12_command_list* cmdList);
+    struct command_list_completed_handler_block_descriptor_1* descriptor;
 };
 
-WEAK command_list_completed_handler_block_descriptor_1 command_list_completed_handler_descriptor = {
-    0, sizeof(command_list_completed_handler_block_literal)
+WEAK command_list_completed_handler_block_descriptor_1 command_list_completed_handler_descriptor =
+{
 };
 
 static void command_list_completed_handler_invoke(command_list_completed_handler_block_literal* block, d3d12_command_list* cmdList)
 {
     TRACELOG;
+    TRACEPRINT("... ignoring ...\n")
+    /*
     objc_id buffer_error = command_list_error(cmdList);
-    if (buffer_error != NULL) {
+    if (buffer_error != NULL)
+    {
         ns_log_object(buffer_error);
-        release_ns_object(buffer_error);
+        release_object(buffer_error);
     }
+    */
 }
 
-WEAK command_list_completed_handler_block_literal command_list_completed_handler_block = {
-    &_NSConcreteGlobalBlock,
-    (1 << 28) | (1 << 29), // BLOCK_IS_GLOBAL | BLOCK_HAS_DESCRIPTOR
-    0, command_list_completed_handler_invoke,
+WEAK command_list_completed_handler_block_literal command_list_completed_handler_block =
+{
+    command_list_completed_handler_invoke,
     &command_list_completed_handler_descriptor
 };
 
@@ -1635,7 +1615,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
                         << ", buf: " << buf << ")\n";
 
     size_t size = buf->size_in_bytes();
-    TRACEPRINT("---------- INFLATING SIZE ----------");
+    TRACEPRINT("---------- INFLATING SIZE ----------\n");
     size *= 4*4;
     halide_assert(user_context, size != 0);
     if (buf->device) {
@@ -1695,7 +1675,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t* bu
     #endif
 
     d3d12_buffer *d3d12_buf = (d3d12_buffer *)buf->device;
-    release_ns_object(d3d12_buf);
+    release_object(d3d12_buf);
 
     halide_d3d12compute_detach_buffer(user_context, buf);
 
@@ -1786,8 +1766,8 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device* device, struc
     commit_command_list(blitCmdList);
     wait_until_completed(blitCmdList);
 
-    release_ns_object(blitCmdList);
-    release_ns_object(sync_command_allocator);
+    release_object(blitCmdList);
+    release_object(sync_command_allocator);
 }
 
 }
@@ -1840,7 +1820,7 @@ WEAK int halide_d3d12compute_device_release(void* user_context)
         while (state) {
           if (state->library) {
                 debug(user_context) << "D3D12Compute - Releasing: new_library_with_source " << state->library << "\n";
-                release_ns_object(state->library);
+                release_object(state->library);
                 state->library = NULL;
             }
             state = state->next;
@@ -1850,17 +1830,17 @@ WEAK int halide_d3d12compute_device_release(void* user_context)
         if (acquired_device == device)
         {
             debug(user_context) <<  "D3D12Compute - Releasing: upload and readback heaps " << &upload << "," << &readback << "\n";
-            release_ns_object(&upload);
-            release_ns_object(&readback);
+            release_object(&upload);
+            release_object(&readback);
             d3d12_buffer empty = { };
             upload = readback = empty;
 
             debug(user_context) <<  "D3D12Compute - Releasing: new_command_queue " << queue << "\n";
-            release_ns_object(queue);
+            release_object(queue);
             queue = NULL;
 
             debug(user_context) << "D3D12Compute - Releasing: D3D12CreateSystemDefaultDevice " << device << "\n";
-            release_ns_object(device);
+            release_object(device);
             device = NULL;
         }
     }
@@ -2055,7 +2035,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         if (!args_buffer)
         {
             error(user_context) << "D3D12Compute: Could not allocate arguments buffer.\n";
-            release_ns_object(function);
+            release_object(function);
             return -1;
         }
         uint8_t* args_ptr = (uint8_t*)buffer_contents(&args_buffer);
@@ -2094,7 +2074,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_compute_pipeline_state* pipeline_state = new_compute_pipeline_state_with_function(d3d12_context.device, function);
     if (pipeline_state == 0) {
         error(user_context) << "D3D12Compute: Could not allocate pipeline state.\n";
-        release_ns_object(function);
+        release_object(function);
         return -1;
     }
     set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
@@ -2130,12 +2110,12 @@ WEAK int halide_d3d12compute_run(void *user_context,
     FinishCapturingGPUActivity();
     #endif
 
-    release_ns_object(cmdList);
-    release_ns_object(command_allocator);
-    release_ns_object(&args_buffer);
-    release_ns_object(pipeline_state);
-    release_ns_object(binder);
-    release_ns_object(function);
+    release_object(cmdList);
+    release_object(command_allocator);
+    release_object(&args_buffer);
+    release_object(pipeline_state);
+    release_object(binder);
+    release_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -2178,6 +2158,8 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
                                          struct halide_buffer_t *dst) {
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop called.\n";
+    debug(user_context) << TRACEINDENT << "NOT YET IMPLEMENTED.\n";
+    halide_assert(user_context, false);
 /*
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
@@ -2214,6 +2196,8 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
     debug(user_context) << TRACEINDENT 
                         << "halide_d3d12compute_device_release_crop called on buf "
                         << buf << " device is " << buf->device << "\n";
+    debug(user_context) << TRACEINDENT << "NOT YET IMPLEMENTED.\n";
+    halide_assert(user_context, false);
     if (buf->device == 0) {
         return 0;
     }
@@ -2224,7 +2208,7 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
 
     device_handle *handle = (device_handle *)buf->device;
     
-    release_ns_object(handle->buf);
+    release_object(handle->buf);
     free(handle);
 
     #ifdef DEBUG_RUNTIME
