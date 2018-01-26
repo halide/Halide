@@ -277,13 +277,15 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
                               allocations.get(op->name).type == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
-        rhs << print_storage_type(op->type) << "("
-            << print_name(op->name)
-            << ")";
+        rhs << print_storage_type(op->type)
+            << "("
+            << "(" << print_name(op->name) << ")";
+        rhs << "[" << id_index << "]";
+        rhs << ")";
     } else {
         rhs << print_name(op->name);
+        rhs << "[" << id_index << "]";
     }
-    rhs << "[" << id_index << "]";
 
     std::map<string, string>::iterator cached = cache.find(rhs.str());
     if (cached != cache.end()) {
@@ -627,6 +629,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     }
 
     stream << "\n";
+
+    return;
 }
 
 void CodeGen_D3D12Compute_Dev::init_module() {
