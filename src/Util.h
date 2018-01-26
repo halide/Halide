@@ -20,7 +20,7 @@
 #include <cstring>
 
 #ifndef HALIDE_EXPORT
-#if defined(_MSC_VER) && defined(Halide_EXPORTS)
+#if defined(_MSC_VER) && !defined(Halide_EXPORTS)
 #define HALIDE_EXPORT __declspec(dllimport)
 #else
 #define HALIDE_EXPORT
