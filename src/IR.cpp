@@ -376,7 +376,8 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     return node;
 }
 
-Stmt Allocate::make(const std::string &name, Type type, const std::vector<Expr> &extents,
+Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
+                    const std::vector<Expr> &extents,
                     Expr condition, Stmt body,
                     Expr new_expr, const std::string &free_function) {
     for (size_t i = 0; i < extents.size(); i++) {
@@ -390,6 +391,7 @@ Stmt Allocate::make(const std::string &name, Type type, const std::vector<Expr> 
     Allocate *node = new Allocate;
     node->name = name;
     node->type = type;
+    node->memory_type = memory_type;
     node->extents = extents;
     node->new_expr = std::move(new_expr);
     node->free_function = free_function;
@@ -439,7 +441,7 @@ Stmt Free::make(const std::string &name) {
     return node;
 }
 
-Stmt Realize::make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body) {
+Stmt Realize::make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
     for (size_t i = 0; i < bounds.size(); i++) {
         internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
         internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
@@ -454,6 +456,7 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
     Realize *node = new Realize;
     node->name = name;
     node->types = types;
+    node->memory_type = memory_type;
     node->bounds = bounds;
     node->condition = std::move(condition);
     node->body = std::move(body);

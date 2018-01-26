@@ -175,7 +175,7 @@ void ComputeModulusRemainder::visit(const Variable *op) {
     }
 }
 
-int gcd(int a, int b) {
+int64_t gcd(int64_t a, int64_t b) {
     if (a < b) std::swap(a, b);
     while (b != 0) {
         int64_t tmp = b;
@@ -185,11 +185,11 @@ int gcd(int a, int b) {
     return a;
 }
 
-int lcm(int a, int b) {
+int64_t lcm(int64_t a, int64_t b) {
     return (a*b)/gcd(a, b);
 }
 
-int mod(int a, int m) {
+int64_t mod(int64_t a, int64_t m) {
     if (m == 0) return a;
     return mod_imp(a, m);
 }

@@ -59,6 +59,8 @@ protected:
     void visit(const Allocate *);
     void visit(const Free *);
     void visit(const AssertStmt *);
+    void visit(const Load *);
+    void visit(const Store *);
     // @}
 
     std::string march() const;

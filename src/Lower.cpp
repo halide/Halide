@@ -33,6 +33,7 @@
 #include "IRPrinter.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "Prefetch.h"
@@ -298,6 +299,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Bounding small allocations...\n";
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
+
+    if (t.has_feature(Target::CUDA)) {
+        debug(1) << "Injecting warp shuffles...\n";
+        s = lower_warp_shuffles(s);
+        debug(2) << "Lowering after injecting warp shuffles:\n" << s << "\n\n";
+    }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);

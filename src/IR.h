@@ -342,6 +342,7 @@ struct Provide : public StmtNode<Provide> {
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
+    MemoryType memory_type;
     std::vector<Expr> extents;
     Expr condition;
 
@@ -354,9 +355,11 @@ struct Allocate : public StmtNode<Allocate> {
     // default will be called.
     Expr new_expr;
     std::string free_function;
+
     Stmt body;
 
-    EXPORT static Stmt make(const std::string &name, Type type, const std::vector<Expr> &extents,
+    EXPORT static Stmt make(const std::string &name, Type type, MemoryType memory_type,
+                            const std::vector<Expr> &extents,
                             Expr condition, Stmt body,
                             Expr new_expr = Expr(), const std::string &free_function = std::string());
 
@@ -402,11 +405,12 @@ typedef std::vector<Range> Region;
 struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
+    MemoryType memory_type;
     Region bounds;
     Expr condition;
     Stmt body;
 
-    EXPORT static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body);
+    EXPORT static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
 
