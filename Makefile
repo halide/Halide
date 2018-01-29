@@ -112,7 +112,8 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
-WITH_RTTI ?= 
+LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
+WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI), , not-empty)
 RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
 
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
@@ -1621,7 +1622,7 @@ LLVM_OK=yes
 endif
 
 ifneq ($(LLVM_OK), )
-$(BUILD_DIR)/llvm_ok:
+$(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
@@ -1630,6 +1631,26 @@ $(BUILD_DIR)/llvm_ok:
 	@echo "Can't find llvm or version of llvm too old (we need 3.7 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
+	@exit 1
+endif
+
+ifneq ($(WITH_RTTI), )
+ifneq ($(LLVM_HAS_NO_RTTI), )
+else
+RTTI_OK=yes # Enabled in Halide and LLVM
+endif
+else
+RTTI_OK=yes # Enabled in LLVM but not in Halide
+endif
+
+ifneq ($(RTTI_OK), )
+$(BUILD_DIR)/rtti_ok:
+	mkdir -p $(BUILD_DIR)
+	touch $(BUILD_DIR)/rtti_ok
+else
+$(BUILD_DIR)/rtti_ok:
+	@echo "Can't enable RTTI - llvm was compiled without it."
+	@echo "LLVM c++ flags: " $(LLVM_CXX_FLAGS)
 	@exit 1
 endif
 
