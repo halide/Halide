@@ -164,6 +164,13 @@ class LICM : public IRMutator2 {
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
+        } else if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::reinterpret)) {
+                internal_assert(call->args.size() == 1);
+                return cost(call->args[0], vars);
+            } else {
+                return 100;
+            }
         } else {
             return 100;
         }
