@@ -637,14 +637,38 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
+                             GeneratorFactory generator_factory)
+    : generator(generator_factory(context)) {}
+
+GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
-    : generator(generator_factory(context)) {
+    : GeneratorStub(context, generator_factory) {
+    generate(generator_params, inputs);
+}
+
+void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
+                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
     generator->call_generate();
     generator->call_schedule();
+}
+
+GeneratorStub::Names GeneratorStub::get_names() const {
+    auto &pi = generator->param_info();
+    Names names;
+    for (auto o : pi.generator_params) {
+        names.generator_params.push_back(o->name);
+    }
+    for (auto o : pi.filter_inputs) {
+        names.inputs.push_back(o->name());
+    }
+    for (auto o : pi.filter_outputs) {
+        names.outputs.push_back(o->name());
+    }
+    return names;
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {
@@ -1114,6 +1138,22 @@ std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
     }
     internal_error << "Output " << n << " not found.\n";
     return {};
+}
+
+std::vector<std::vector<Func>> GeneratorBase::get_output_vector() {
+    std::vector<std::vector<Func>> v;
+    check_min_phase(GenerateCalled);
+    // There usually are very few outputs, so a linear search is fine
+    ParamInfo &pi = param_info();
+    for (auto output : pi.filter_outputs) {
+        const std::string &name = output->name();
+        if (output->is_array()) {
+            v.push_back(get_output_vector(name));
+        } else {
+            v.push_back(std::vector<Func>{get_output(name)});
+        }
+    }
+    return v;
 }
 
 Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const std::string &name) {
