@@ -23,24 +23,24 @@ namespace Halide {
 
 /** Emit an expression on an output stream (such as std::cout) in a
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
+std::ostream &operator<<(std::ostream &stream, const Expr &);
 
 /** Emit a halide type on an output stream (such as std::cout) in a
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
+std::ostream &operator<<(std::ostream &stream, const Type &);
 
 /** Emit a halide Module on an output stream (such as std::cout) in a
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
+std::ostream &operator<<(std::ostream &stream, const Module &);
 
 /** Emit a halide device api type in a human readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
+std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
 /** Emit a halide memory type in a human readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const MemoryType &);
+std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 
 /** Emit a halide LoopLevel in a human readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
 
 namespace Internal {
 
@@ -49,28 +49,28 @@ struct AssociativeOp;
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
+std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
 
 /** Emit a halide associative op on an output stream (such as std::cout) in a
  * human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
+std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
+std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
-EXPORT std::ostream &operator<<(std::ostream &stream, const ForType &);
+std::ostream &operator<<(std::ostream &stream, const ForType &);
 
 /** Emit a halide name mangling value in a human readable format */
-EXPORT std::ostream &operator<<(std::ostream &stream, const NameMangling &);
+std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 
 /** Emit a halide LoweredFunc in a human readable format */
-EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
+std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 
 /** Emit a halide linkage value in a human readable format */
-EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &);
+std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -78,23 +78,23 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const LoweredFunc::Linkage
  */
 class IRPrinter : public IRVisitor {
 public:
-    EXPORT virtual ~IRPrinter();
+    virtual ~IRPrinter();
 
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
-    EXPORT IRPrinter(std::ostream &);
+    IRPrinter(std::ostream &);
 
     /** emit an expression on the output stream */
-    EXPORT void print(Expr);
+    void print(Expr);
 
     /** emit a statement on the output stream */
-    EXPORT void print(Stmt);
+    void print(Stmt);
 
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
-    EXPORT void print_list(const std::vector<Expr> &exprs);
+    void print_list(const std::vector<Expr> &exprs);
 
-    EXPORT static void test();
+    static void test();
 
 protected:
     /** The stream we're outputting on */

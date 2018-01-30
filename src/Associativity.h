@@ -101,7 +101,7 @@ struct AssociativeOp {
 AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
-EXPORT void associativity_test();
+void associativity_test();
 
 }
 }

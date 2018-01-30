@@ -73,6 +73,7 @@ else
     WITH_INTROSPECTION ?= not-empty
 endif
 WITH_EXCEPTIONS ?=
+WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
@@ -111,8 +112,12 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
+LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
+WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
+RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
+
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
-CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE -fvisibility=hidden
+CXX_FLAGS = $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -143,6 +148,10 @@ LLVM_LINK_STATIC_FLAG = $(shell $(LLVM_CONFIG) --link-static 2>/dev/null && echo
 
 LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
 
+LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM
+
+LLVM_LIBS_FOR_SHARED_LIBHALIDE=$(if $(WITH_LLVM_INSIDE_SHARED_LIBHALIDE),$(LLVM_STATIC_LIBS),$(LLVM_SHARED_LIBS))
+
 LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 
 TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools
@@ -162,6 +171,10 @@ endif
 
 ifeq ($(UNAME), Linux)
 TEST_LD_FLAGS += -rdynamic -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
+endif
+
+ifeq ($(WITH_LLVM_INSIDE_SHARED_LIBHALIDE), )
+TEST_LD_FLAGS += -Wl,--rpath=$(LLVM_LIBDIR)
 endif
 
 ifneq ($(WITH_PTX), )
@@ -723,7 +736,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LD_FLAGS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_LD_FLAGS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1609,7 +1622,7 @@ LLVM_OK=yes
 endif
 
 ifneq ($(LLVM_OK), )
-$(BUILD_DIR)/llvm_ok:
+$(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
@@ -1618,6 +1631,26 @@ $(BUILD_DIR)/llvm_ok:
 	@echo "Can't find llvm or version of llvm too old (we need 3.7 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
+	@exit 1
+endif
+
+ifneq ($(WITH_RTTI), )
+ifneq ($(LLVM_HAS_NO_RTTI), )
+else
+RTTI_OK=yes # Enabled in Halide and LLVM
+endif
+else
+RTTI_OK=yes # Enabled in LLVM but not in Halide
+endif
+
+ifneq ($(RTTI_OK), )
+$(BUILD_DIR)/rtti_ok:
+	mkdir -p $(BUILD_DIR)
+	touch $(BUILD_DIR)/rtti_ok
+else
+$(BUILD_DIR)/rtti_ok:
+	@echo "Can't enable RTTI - llvm was compiled without it."
+	@echo "LLVM c++ flags: " $(LLVM_CXX_FLAGS)
 	@exit 1
 endif
 

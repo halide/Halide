@@ -19,7 +19,7 @@ struct BufferContents {
     Runtime::Buffer<> buf;
 };
 
-EXPORT Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
+Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
 
 template<typename ...Args>
 struct all_ints_and_optional_name : std::false_type {};

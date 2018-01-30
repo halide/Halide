@@ -99,10 +99,10 @@ struct IRNode {
 };
 
 template<>
-EXPORT inline RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
+inline RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
 
 template<>
-EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
+inline void destroy<IRNode>(const IRNode *n) {delete n;}
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
@@ -133,16 +133,16 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    EXPORT void accept(IRVisitor *v) const;
-    EXPORT Expr mutate_expr(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const;
+    Expr mutate_expr(IRMutator2 *v) const;
     ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    EXPORT void accept(IRVisitor *v) const;
-    EXPORT Stmt mutate_stmt(IRMutator2 *v) const;
+    void accept(IRVisitor *v) const;
+    Stmt mutate_stmt(IRMutator2 *v) const;
     StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };
@@ -285,21 +285,21 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    EXPORT explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    EXPORT explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-    EXPORT          Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    EXPORT explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    EXPORT explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    EXPORT explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    EXPORT explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    EXPORT explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-    EXPORT          Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-    EXPORT          Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    EXPORT explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
+    explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
+             Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
+    explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
+    explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
+    explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
+    explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
+    explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
+             Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
+             Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
+    explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    EXPORT          Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+             Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
 
     /** Get the type of this expression node */
     Type type() const {
