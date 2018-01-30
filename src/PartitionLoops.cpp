@@ -442,26 +442,21 @@ class PartitionLoops : public IRMutator2 {
     bool in_gpu_loop = false;
 
     Stmt visit(const For *op) override {
-        Stmt stmt;
         Stmt body = op->body;
 
-        bool old_in_gpu_loop = in_gpu_loop;
-        in_gpu_loop |= CodeGen_GPU_Dev::is_gpu_var(op->name);
+        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop ||
+                                             CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
         // barriers or warp shuffles, it's not safe to duplicate code.
         if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
         }
 
         // We shouldn't partition GLSL loops - they have control-flow
         // constraints.
         if (op->device_api == DeviceAPI::GLSL) {
-            stmt = op;
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return op;
         }
 
         // Find simplifications in this loop body
@@ -469,9 +464,7 @@ class PartitionLoops : public IRMutator2 {
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return IRMutator2::visit(op);
         }
 
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
@@ -638,6 +631,7 @@ class PartitionLoops : public IRMutator2 {
             internal_assert(!expr_uses_var(epilogue_val, op->name));
         }
 
+        Stmt stmt;
         // Bust serial for loops up into three.
         if (op->for_type == ForType::Serial) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
@@ -690,12 +684,8 @@ class PartitionLoops : public IRMutator2 {
         if (can_prove(epilogue_val <= prologue_val)) {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return IRMutator2::visit(op);
         }
-
-        in_gpu_loop = old_in_gpu_loop;
 
         debug(3) << "Partition loop.\n"
                  << "Old: " << Stmt(op) << "\n"
