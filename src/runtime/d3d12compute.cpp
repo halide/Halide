@@ -1321,8 +1321,11 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             //DXGI_FORMAT Format = FindD3D12FormatForHalideType(type);
             UINT NumElements = input_buffer->halide->number_of_elements();
             UINT Stride = type.bytes() * type.lanes;
-            TRACEPRINT("---------- INFLATING SIZE ----------\n");
-            Stride = sizeof(uint32_t) * type.lanes;
+            if ((type.bits < 32) && (type.code <= halide_type_uint))
+            {
+                TRACEPRINT("---------- INFLATING SIZE ----------\n");
+                Stride = sizeof(uint32_t) * type.lanes;
+            }
 
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
             // Default Desc parameters cannot be used, as a Format must be supplied.
@@ -1615,8 +1618,15 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
                         << ", buf: " << buf << ")\n";
 
     size_t size = buf->size_in_bytes();
-    TRACEPRINT("---------- INFLATING SIZE ----------\n");
-    size *= 4*4;
+
+    halide_type_t& type = buf->type;
+    if ((type.bits < 32) && (type.code <= halide_type_uint))
+    {
+        TRACEPRINT("---------- INFLATING SIZE ----------\n");
+        size_t ratio = sizeof(uint32_t) / type.bytes();
+        size *= ratio;
+    }
+
     halide_assert(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation

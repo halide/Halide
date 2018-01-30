@@ -436,8 +436,35 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
     }
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
-    print_assignment(op->type, print_type(op->type) + "(" + print_expr(op->value) + ")");
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
+{
+    string value_expr = print_expr(op->value);
+
+    // special case for integer downcasting since HLSL does not have built-in
+    // support for 8bit and 16bit integers; we can go about this by masking
+    // the least significatn bits accordingly
+    Type target_type = op->type;
+    Type source_type = op->value.type();
+    bool isIntegerDowncast  = (target_type.code() <= halide_type_uint)
+                           && (source_type.code() <= halide_type_uint)
+                           && (target_type.bits() < source_type.bits());
+    if (isIntegerDowncast)
+    {
+        switch (target_type.bits())
+        {
+            case 8  :
+                value_expr += " & 0xFF";
+                break;
+            case 16 :
+                value_expr += " & 0xFFFF";
+                break;
+            default :
+                user_error << "Unsupported integer downcast from " << source_type << " to " << target_type << "\n";
+                break;
+        }
+    }
+
+    print_assignment(op->type, print_type(op->type) + "(" + value_expr + ")");
 }
 
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
