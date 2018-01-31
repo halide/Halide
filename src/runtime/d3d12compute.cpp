@@ -350,7 +350,8 @@ typedef halide_d3d12compute_command_queue d3d12_command_queue;
 struct d3d12_buffer
 {
     ID3D12Resource* resource;
-    UINT capacity;  // in bytes
+    UINT sizeInBytes;
+    DXGI_FORMAT format;
     D3D12_RESOURCE_STATES state;
 
     enum
@@ -754,9 +755,10 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12
         return(buffer);
 
     buffer.resource = resource;
-    buffer.capacity = length;
+    buffer.sizeInBytes = length;
     buffer.state = InitialResourceState;
     buffer.type = d3d12_buffer::Unknown;
+    buffer.format = DXGI_FORMAT_UNKNOWN;
     buffer.mallocd = false;
 
     return(buffer);
@@ -797,7 +799,7 @@ WEAK void* map_buffer(d3d12_buffer* buffer)
             // everything in the buffer might be read by the CPU
             // (we could also simply pass pReadRange = NULL to Map(), but that issues a debug-layer warning...)
             readRange.Begin = 0;
-            readRange.End = buffer->capacity;
+            readRange.End = buffer->sizeInBytes;
             break;
         default :
             TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
@@ -834,7 +836,7 @@ WEAK void unmap_buffer(d3d12_buffer* buffer)
         case d3d12_buffer::Constant :
         case d3d12_buffer::Upload   :
             writtenRange.Begin = 0;
-            writtenRange.End = buffer->capacity;
+            writtenRange.End = buffer->sizeInBytes;
             break;
         case d3d12_buffer::ReadBack :
             // host/CPU never writes directly to a ReadBack buffer, it only reads from it
@@ -1287,16 +1289,18 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
         {
             TRACEPRINT("CBV" "\n");
 
-            // NOTE(marcos): if there is no associated Halide buffer, it is probably a
-            // constant buffer managed internally by the runtime:
+            // NOTE(marcos): constant buffers are only used internally by the
+            // runtime; users cannot create, control or access them, so it is
+            // expected that no halide_buffer_t will be associated with them:
             halide_assert(NULL, input_buffer->halide == NULL);
+            halide_assert(NULL, input_buffer->format == DXGI_FORMAT_UNKNOWN);
 
             ID3D12Resource* pResource = input_buffer->resource;
             D3D12_GPU_VIRTUAL_ADDRESS pGPU = pResource->GetGPUVirtualAddress();
 
             D3D12_CONSTANT_BUFFER_VIEW_DESC cbvd = { };
                 cbvd.BufferLocation = pGPU;
-                cbvd.SizeInBytes = input_buffer->capacity;
+                cbvd.SizeInBytes = input_buffer->sizeInBytes;
 
             D3D12_CPU_DESCRIPTOR_HANDLE hDescCBV = binder->CPU[CBV];
             binder->CPU[CBV].ptr += binder->descriptorSize;
@@ -1316,14 +1320,15 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
         {
             TRACEPRINT("UAV" "\n");
 
-            const halide_type_t& type = input_buffer->halide->type;
+            DXGI_FORMAT Format = input_buffer->format;
+            halide_assert(NULL, DXGI_FORMAT_UNKNOWN != Format);
 
             UINT NumElements = input_buffer->halide->number_of_elements();
 
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
             // Default Desc parameters cannot be used, as a Format must be supplied.
             D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = { };
-                uavd.Format = FindD3D12FormatForHalideType(type);
+                uavd.Format = Format;
                 uavd.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
                 uavd.Buffer.FirstElement = 0;
                 uavd.Buffer.NumElements = NumElements;
@@ -1873,7 +1878,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t*
     // 'memcpy' to staging buffer:
     size_t total_size = buffer->size_in_bytes();
     halide_assert(user_context, total_size > 0);
-    halide_assert(user_context, upload.capacity >= total_size);
+    halide_assert(user_context, upload.sizeInBytes >= total_size);
     void* staging_ptr = buffer_contents(&upload);
     c.dst = reinterpret_cast<uint64_t>(staging_ptr);
     copy_memory(c, user_context);
@@ -2226,7 +2231,9 @@ WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffe
 
     d3d12_buffer* d3d12_buf = reinterpret_cast<d3d12_buffer*>(device_buf_handle);
     halide_assert(user_context, d3d12_buf->halide == 0);
+
     d3d12_buf->halide = halide_buf;
+    d3d12_buf->format = FindD3D12FormatForHalideType(halide_buf->type);
 
     halide_buf->device = device_buf_handle;
     halide_buf->device_interface = &d3d12compute_device_interface;
