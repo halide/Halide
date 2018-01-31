@@ -50,9 +50,11 @@ public:
                      const std::string &name, bool is_explicit_name = false,
                      bool register_instance = true);
 
-    /** Copy ctor, operator=, and dtor, needed for ObjectRegistry accounting. */
+    /** Copy+Move ctor, operator=, and dtor, needed for ObjectRegistry accounting. */
     Parameter(const Parameter&);
     Parameter& operator=(const Parameter&);
+    Parameter(Parameter&&);
+    Parameter& operator=(Parameter&&);
     ~Parameter();
 
     /** Get the type of this parameter */
