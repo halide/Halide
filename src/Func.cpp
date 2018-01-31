@@ -186,7 +186,7 @@ int Func::outputs() const {
 
 /** Get the name of the extern function called for an extern
  * definition. */
-EXPORT const std::string &Func::extern_function_name() const {
+const std::string &Func::extern_function_name() const {
     return func.extern_function_name();
 }
 
@@ -293,7 +293,8 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             // validate that this doesn't introduce a race condition.
             if (!dims[i].is_pure() && var.is_rvar &&
                 (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread)) {
+                 t == ForType::GPUBlock || t == ForType::GPUThread ||
+                 t == ForType::GPULane)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -944,8 +945,9 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             // We should employ ShiftInwards when we can to prevent
             // overcompute and adding constraints to the bounds of
             // inputs and outputs. However, if we're already covered
-            // by an earlier ShiftInwards split, there's no point - it
-            // just complicates the IR and confuses bounds inference. An example of this is:
+            // by an earlier larger ShiftInwards split, there's no
+            // point - it just complicates the IR and confuses bounds
+            // inference. An example of this is:
             //
             // f.vectorize(x, 8).unroll(x, 4);
             //
@@ -963,19 +965,22 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             //
             // It's only the tail/epilogue that changes.
 
-            std::set<string> descends_from_shiftinwards_outer;
+            std::map<string, Expr> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
+                auto it = descends_from_shiftinwards_outer.find(s.old_var);
                 if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
-                } else if (s.is_split() && descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.inner);
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                    descends_from_shiftinwards_outer[s.outer] = s.factor;
+                } else if (s.is_split() && it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.inner] = it->second;
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 } else if ((s.is_rename() || s.is_purify()) &&
-                           descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                           it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 }
             }
-            if (descends_from_shiftinwards_outer.count(old_name)) {
+            auto it = descends_from_shiftinwards_outer.find(old_name);
+            if (it != descends_from_shiftinwards_outer.end() &&
+                can_prove(it->second >= factor)) {
                 tail = TailStrategy::RoundUp;
             } else {
                 tail = TailStrategy::ShiftInwards;
@@ -1527,6 +1532,12 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI de
     return *this;
 }
 
+Stage &Stage::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_type(tx, ForType::GPULane);
+    return *this;
+}
+
 Stage &Stage::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_type(bx, ForType::GPUBlock);
@@ -1936,6 +1947,12 @@ Func &Func::memoize() {
     return *this;
 }
 
+Func &Func::store_in(MemoryType t) {
+    invalidate_cache();
+    func.schedule().memory_type() = t;
+    return *this;
+}
+
 Stage Func::specialize(Expr c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0, args()).specialize(c);
@@ -2095,6 +2112,12 @@ Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
 Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).gpu_threads(tx, ty, tz, device_api);
+    return *this;
+}
+
+Func &Func::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).gpu_lanes(tx, device_api);
     return *this;
 }
 
@@ -2984,8 +3007,8 @@ void *Func::compile_jit(const Target &target) {
     return pipeline().compile_jit(target);
 }
 
-EXPORT Var _("_");
-EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
+Var _("_");
+Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
            _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }

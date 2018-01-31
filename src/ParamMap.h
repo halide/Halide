@@ -58,12 +58,12 @@ private:
     };
     mutable std::map<const Internal::Parameter, ParamArg> mapping;
 
-    EXPORT void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
+    void set(const ImageParam &p, Buffer<> &buf, Buffer<> *buf_out_param);
 
 public:
     ParamMap() { }
 
-    EXPORT ParamMap(const std::initializer_list<ParamMapping> &init);
+    ParamMap(const std::initializer_list<ParamMapping> &init);
 
     template <typename T> void set(const Param<T> &p, T val) {
         Internal::Parameter v(p.type(), false, 0, p.name(), p.is_explicit_name(), false);
@@ -89,9 +89,9 @@ public:
     /** If there is an entry in the ParamMap for this Parameter, return it.
      * Otherwise return the parameter itself. */
     // @{
-    EXPORT const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const;
+    const Internal::Parameter &map(const Internal::Parameter &p, Buffer<> *&buf_out_param) const;
 
-    EXPORT Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
+    Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
     // @}
 };
 

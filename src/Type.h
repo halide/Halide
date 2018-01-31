@@ -359,7 +359,7 @@ struct Type {
     bool is_handle() const {return code() == Handle;}
 
     /** Check that the type name of two handles matches. */
-    EXPORT bool same_handle_type(const Type &other) const;
+    bool same_handle_type(const Type &other) const;
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
@@ -387,31 +387,31 @@ struct Type {
     }
 
     /** Can this type represent all values of another type? */
-    EXPORT bool can_represent(Type other) const;
+    bool can_represent(Type other) const;
 
     /** Can this type represent a particular constant? */
     // @{
-    EXPORT bool can_represent(double x) const;
-    EXPORT bool can_represent(int64_t x) const;
-    EXPORT bool can_represent(uint64_t x) const;
+    bool can_represent(double x) const;
+    bool can_represent(int64_t x) const;
+    bool can_represent(uint64_t x) const;
     // @}
 
     /** Check if an integer constant value is the maximum or minimum
      * representable value for this type. */
     // @{
-    EXPORT bool is_max(uint64_t) const;
-    EXPORT bool is_max(int64_t) const;
-    EXPORT bool is_min(uint64_t) const;
-    EXPORT bool is_min(int64_t) const;
+    bool is_max(uint64_t) const;
+    bool is_max(int64_t) const;
+    bool is_min(uint64_t) const;
+    bool is_min(int64_t) const;
     // @}
 
     /** Return an expression which is the maximum value of this type.
      * Returns infinity for types which can represent it. */
-    EXPORT Expr max() const;
+    Expr max() const;
 
     /** Return an expression which is the minimum value of this type.
      * Returns -infinity for types which can represent it. */
-    EXPORT Expr min() const;
+    Expr min() const;
 };
 
 /** Constructing a signed integer type */

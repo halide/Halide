@@ -334,6 +334,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   LoopCarry.h
   Lower.h
+  LowerWarpShuffles.h
   MainPage.h
   MatlabWrapper.h
   Memoization.h
@@ -487,6 +488,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LICM.cpp
   LoopCarry.cpp
   Lower.cpp
+  LowerWarpShuffles.cpp
   MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
@@ -544,9 +546,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 )
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
-# Default to not exporting symbols from libHalide
-set_target_properties(Halide PROPERTIES CXX_VISIBILITY_PRESET hidden)
-set_target_properties(Halide PROPERTIES VISIBILITY_INLINES_HIDDEN 1)
 # Ensure that these tools are build first
 add_dependencies(Halide
   binary2cpp
@@ -649,7 +648,9 @@ if (MSVC)
     target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
   endif()
 else()
-  target_compile_options(Halide PUBLIC "-fno-rtti")
+  if (NOT HALIDE_ENABLE_RTTI)
+    target_compile_options(Halide PUBLIC "-fno-rtti")
+  endif()
 endif()
 
 # Get the LLVM libraries we need

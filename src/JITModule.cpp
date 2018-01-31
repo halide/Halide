@@ -144,10 +144,10 @@ public:
 };
 
 template <>
-EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
 
 template <>
-EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
+void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
 

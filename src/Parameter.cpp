@@ -47,10 +47,10 @@ struct ParameterContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
+void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
@@ -98,6 +98,17 @@ Parameter::Parameter(const Parameter& that) : contents(that.contents) {
     }
 }
 
+Parameter::Parameter(Parameter&& that) {
+    bool that_registered = that.contents.defined() && that.contents->is_registered;
+    if (that_registered) {
+        ObjectInstanceRegistry::unregister_instance(&that);
+    }
+    std::swap(contents, that.contents);
+    if (that_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
+    }
+}
+
 Parameter& Parameter::operator=(const Parameter& that) {
     bool was_registered = contents.defined() && contents->is_registered;
     contents = that.contents;
@@ -112,6 +123,20 @@ Parameter& Parameter::operator=(const Parameter& that) {
         // Parameter p = make_interesting_parameter();
         // p = Parameter();
         ObjectInstanceRegistry::unregister_instance(this);
+    }
+    return *this;
+}
+
+Parameter& Parameter::operator=(Parameter&& that) {
+    bool this_registered = contents.defined() && contents->is_registered;
+    bool that_registered = that.contents.defined() && that.contents->is_registered;
+    std::swap(contents, that.contents);
+    if (that_registered && !this_registered) {
+        ObjectInstanceRegistry::unregister_instance(&that);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
+    } else if (!that_registered && this_registered) {
+        ObjectInstanceRegistry::unregister_instance(this);
+        ObjectInstanceRegistry::register_instance(&that, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     }
     return *this;
 }

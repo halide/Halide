@@ -42,6 +42,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
+# Export all symbols
+SET(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -136,6 +138,7 @@ option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
+option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 
 if (HALIDE_SHARED_LIBRARY)
   set(HALIDE_LIBRARY_TYPE SHARED)
@@ -143,11 +146,17 @@ else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
+if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
+  message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
+endif()
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
   else()
-    target_compile_options("${name}" PUBLIC "-fno-rtti")
+    if (NOT HALIDE_ENABLE_RTTI)
+      target_compile_options("${name}" PUBLIC "-fno-rtti")
+    endif()
   endif()
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
