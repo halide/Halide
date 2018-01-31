@@ -49,9 +49,9 @@ static void* const user_context = NULL;   // in case there's no user context ava
 #define HALIDE_D3D12_DEBUG_SHADERS  (1)
 #define HALIDE_D3D12_RENDERDOC      (0)
 
-//#if HALIDE_D3D12_RENDERDOC && HALIDE_D3D12_DEBUG_RUNTIME
-//    #error RenderDoc does not work with Dirct3D debug layers...
-//#endif
+#if HALIDE_D3D12_RENDERDOC && HALIDE_D3D12_DEBUG_RUNTIME
+    #pragma message "RenderDoc might now work well along with the Dirct3D debug layers..."
+#endif
 
 #if HALIDE_D3D12_RENDERDOC
 #define WIN32
@@ -1281,10 +1281,6 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
 {
     TRACELOG;
 
-    // if we could tell whether the buffer is read-only or read-write, we could
-    // bind read-only buffers with SRV descriptors... for now, bind all non-CBV
-    // buffers as UAVs...
-
     switch (input_buffer->type)
     {
         case d3d12_buffer::Constant :
@@ -1310,35 +1306,32 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             break;
         }
 
-        case d3d12_buffer::ReadWrite :
         case d3d12_buffer::ReadOnly  :
+            // TODO(marcos): read-only buffers should ideally be bound as SRV,
+            // but Halide buffers (halide_buffer_t) do not distinguish between
+            // read-only and read-write / write-only buffers... for the moment,
+            // just bind read-only buffers with UAV descriptors:
+        case d3d12_buffer::ReadWrite :
         case d3d12_buffer::WriteOnly :
         {
             TRACEPRINT("UAV" "\n");
 
             const halide_type_t& type = input_buffer->halide->type;
 
-            //DXGI_FORMAT Format = FindD3D12FormatForHalideType(type);
             UINT NumElements = input_buffer->halide->number_of_elements();
-            UINT Stride = type.bytes() * type.lanes;
-            if ((type.bits < 32) && (type.code <= halide_type_uint))
-            {
-                TRACEPRINT("---------- INFLATING SIZE ----------\n");
-                Stride = sizeof(uint32_t) * type.lanes;
-            }
 
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
             // Default Desc parameters cannot be used, as a Format must be supplied.
             D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = { };
-                uavd.Format = DXGI_FORMAT_UNKNOWN;
+                uavd.Format = FindD3D12FormatForHalideType(type);
                 uavd.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
                 uavd.Buffer.FirstElement = 0;
                 uavd.Buffer.NumElements = NumElements;
-                uavd.Buffer.StructureByteStride = Stride;
-                uavd.Buffer.CounterOffsetInBytes = 0;               // 0, since this is not an atomic counter
+                uavd.Buffer.StructureByteStride = 0;
+                uavd.Buffer.CounterOffsetInBytes = 0;   // 0, since this is not an atomic counter
                 uavd.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-            // TODO(marcos): should probably use "index" here somewhere
+            // TODO(marcos): should probably use the "index" input argument here somewhere...
             D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
             binder->CPU[UAV].ptr += binder->descriptorSize;
 
@@ -1618,14 +1611,6 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
                         << ", buf: " << buf << ")\n";
 
     size_t size = buf->size_in_bytes();
-
-    halide_type_t& type = buf->type;
-    if ((type.bits < 32) && (type.code <= halide_type_uint))
-    {
-        TRACEPRINT("---------- INFLATING SIZE ----------\n");
-        size_t ratio = sizeof(uint32_t) / type.bytes();
-        size *= ratio;
-    }
 
     halide_assert(user_context, size != 0);
     if (buf->device) {
