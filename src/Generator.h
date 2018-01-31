@@ -418,8 +418,12 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
-    explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
+    // No copy
+    GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
+    // No move
+    GeneratorParamBase(GeneratorParamBase&&) = delete;
+    void operator=(GeneratorParamBase&&) = delete;
 
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
@@ -1248,8 +1252,12 @@ protected:
 private:
     template<typename T> friend class GeneratorParam_Synthetic;
 
-    explicit GIOBase(const GIOBase &) = delete;
+    // No copy
+    GIOBase(const GIOBase &) = delete;
     void operator=(const GIOBase &) = delete;
+    // No move
+    GIOBase(GIOBase&&) = delete;
+    void operator=(GIOBase&&) = delete;
 };
 
 template<>
