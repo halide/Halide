@@ -1,4 +1,11 @@
+#ifndef DEBUG_RUNTIME
 #define DEBUG_RUNTIME   1   // for debug(NULL) print to work...
+#endif//DEBUG_RUNTIME
+
+#define HALIDE_D3D12_TRACE          (1)
+#define HALIDE_D3D12_DEBUG_RUNTIME  (1)
+#define HALIDE_D3D12_DEBUG_SHADERS  (1)
+#define HALIDE_D3D12_RENDERDOC      (0)
 
 #include "HalideRuntimeD3D12Compute.h"
 #include "scoped_spin_lock.h"
@@ -6,8 +13,36 @@
 #include "device_interface.h"
 #include "printer.h"
 
+#if HALIDE_D3D12_TRACE
+    static const char indent_pattern [] = "   ";
+    static char  indent [128] = { };
+    static int   indent_end   = 0;
+    struct TraceLogScope
+    {
+        TraceLogScope()
+        {
+            for (const char* p = indent_pattern; *p; ++p)
+                indent[indent_end++] = *p;
+        }
+        ~TraceLogScope()
+        {
+            for (const char* p = indent_pattern; *p; ++p)
+                indent[--indent_end] = '\0';
+        }
+    };
+    #define TRACEINDENT     ((const char*)indent)
+    #define TRACEPRINT(msg) debug(user_context) << TRACEINDENT << msg;
+    #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
+#else
+    #define TRACEINDENT ""
+    #define TRACEPRINT(msg)
+    #define TRACELOG
+#endif
+
 #define d3d12_load_library          halide_load_library
 #define d3d12_get_library_symbol    halide_get_library_symbol
+
+#define d3d12_debug_break (*((volatile int8_t*)NULL) = 0)
 
 #define WIN32API
 extern "C" WIN32API void* LoadLibraryA(const char *);
@@ -44,11 +79,6 @@ void* gpa(void* lib, const char *name)
 
 static void* const user_context = NULL;   // in case there's no user context available in the scope of a function
 
-#define HALIDE_D3D12_TRACE          (1)
-#define HALIDE_D3D12_DEBUG_RUNTIME  (1)
-#define HALIDE_D3D12_DEBUG_SHADERS  (1)
-#define HALIDE_D3D12_RENDERDOC      (0)
-
 #if HALIDE_D3D12_RENDERDOC && HALIDE_D3D12_DEBUG_RUNTIME
     #pragma message "RenderDoc might now work well along with the Dirct3D debug layers..."
 #endif
@@ -61,32 +91,6 @@ static void* const user_context = NULL;   // in case there's no user context ava
 #define RENDERDOC_NO_STDINT
 #define RENDERDOC_AUTOINIT              (0)
 #include "renderdoc/RenderDocGlue.h"
-#endif
-
-#if HALIDE_D3D12_TRACE
-    static const char indent_pattern [] = "   ";
-    static char  indent [128] = { };
-    static int   indent_end   = 0;
-    struct TraceLogScope
-    {
-        TraceLogScope()
-        {
-            for (const char* p = indent_pattern; *p; ++p)
-                indent[indent_end++] = *p;
-        }
-        ~TraceLogScope()
-        {
-            for (const char* p = indent_pattern; *p; ++p)
-                indent[--indent_end] = '\0';
-        }
-    };
-    #define TRACEINDENT     ((const char*)indent)
-    #define TRACEPRINT(msg) debug(user_context) << TRACEINDENT << msg;
-    #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
-#else
-    #define TRACEINDENT ""
-    #define TRACEPRINT(msg)
-    #define TRACELOG
 #endif
 
 template<typename T>
@@ -1201,8 +1205,14 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
         return(NULL);
     }
 
-    halide_assert(user_context, (NULL == errorMsgs));
     debug(user_context) << TRACEINDENT << "SUCCESS while compiling D3D12 compute shader with entry name '" << entryPoint << "'!\n";
+
+    // even though it was successful, there may have been warning messages emitted by the compiler:
+    if (NULL != errorMsgs)
+    {
+        const char* errorMessage = (const char*)errorMsgs->GetBufferPointer();
+        debug(user_context) << TRACEINDENT << "D3DCompiler warnings:\n" << errorMessage << "\n";
+    }
 
     // TODO(marcos): since a single "uber" root signature can fit all kernels,
     // the root signature should be created/serialized at device creation time
