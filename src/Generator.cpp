@@ -641,7 +641,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(context)) {
-    generator->set_generator_param_values(generator_params);
+    generator->init_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
     generator->call_generate();
     generator->call_schedule();
@@ -871,7 +871,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
                     auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
-                    gen->set_generator_param_values(sub_generator_args);
+                    gen->init_generator_param_values(sub_generator_args);
                     return gen->build_module(name);
                 };
             if (targets.size() > 1 || !emit_options.substitutions.empty()) {
@@ -1124,19 +1124,19 @@ Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const 
     return *it->second;
 }
 
-void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
+void GeneratorBase::init_generator_param_values(const GeneratorParamsMap &params) {
     ParamInfo &pi = param_info();
     for (auto &key_value : params) {
         auto gp = pi.generator_params_by_name.find(key_value.first);
         if (gp != pi.generator_params_by_name.end()) {
             if (gp->second->is_looplevel_param()) {
                 if (!key_value.second.string_value.empty()) {
-                    gp->second->set_from_string(key_value.second.string_value);
+                    gp->second->init_from_string(key_value.second.string_value);
                 } else {
-                    gp->second->set(key_value.second.loop_level);
+                    gp->second->init(key_value.second.loop_level);
                 }
             } else {
-                gp->second->set_from_string(key_value.second.string_value);
+                gp->second->init_from_string(key_value.second.string_value);
             }
             continue;
         }
@@ -1719,7 +1719,7 @@ void generator_test() {
         internal_assert(tester.phase == GeneratorBase::Created);
 
         // Verify that calling GeneratorParam::set() works.
-        tester.gp0.set(1);
+        tester.gp0.init(1);
 
         tester.set_inputs_vector({{StubInput(42)}});
         internal_assert(tester.phase == GeneratorBase::InputsSet);
@@ -1727,7 +1727,7 @@ void generator_test() {
         // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
 
         // Also ok to call in this phase.
-        tester.gp1.set(2.f);
+        tester.gp1.init(2.f);
 
         tester.call_generate();
         internal_assert(tester.phase == GeneratorBase::GenerateCalled);
@@ -1770,7 +1770,7 @@ void generator_test() {
         internal_assert(tester.phase == GeneratorBase::Created);
 
         // Verify that calling GeneratorParam::set() works.
-        tester.gp0.set(1);
+        tester.gp0.init(1);
 
         // set_inputs_vector() can't be called on an old-style Generator;
         // that's OK, since we can skip from Created -> GenerateCalled anyway
@@ -1780,14 +1780,14 @@ void generator_test() {
         // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
 
         // Also ok to call in this phase.
-        tester.gp1.set(2.f);
+        tester.gp1.init(2.f);
 
         tester.build_pipeline();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
 
         // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
-        // tester.gp2.set(2);  // This will assert-fail.
-        // tester.sp2.set(202);  // This will assert-fail.
+        // tester.gp2.init(2);  // This will assert-fail.
+        // tester.sp2.init(202);  // This will assert-fail.
     }
 
     // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
