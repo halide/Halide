@@ -63,9 +63,9 @@ int main(int argc, char **argv) {
         // than call apply().
         auto gen = context.create<Example>();  // gen's type is std::unique_ptr<Example>
 
-        // GeneratorParams must be set before calling apply()
+        // GeneratorParams must be inited before calling apply()
         // (you'll assert-fail if you set them later).
-        gen->compiletime_factor.set(2.5f);
+        gen->compiletime_factor.init(2.5f);
 
         gen->apply(kRuntimeFactor, kRuntimeOffset);
 
