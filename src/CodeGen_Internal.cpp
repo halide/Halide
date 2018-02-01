@@ -195,6 +195,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
+        "halide_d3d12compute_initialize_kernels",
         "halide_get_gpu_device",
         "halide_upgrade_buffer_t",
         "halide_downgrade_buffer_t",
