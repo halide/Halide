@@ -14,6 +14,8 @@
 #include "printer.h"
 
 #if HALIDE_D3D12_TRACE
+    static char tracelogbuf [64*1024];
+    typedef Printer<BasicPrinter, sizeof(tracelogbuf)> tracer;
     static const char indent_pattern [] = "   ";
     static char  indent [128] = { };
     static int   indent_end   = 0;
@@ -31,7 +33,7 @@
         }
     };
     #define TRACEINDENT     ((const char*)indent)
-    #define TRACEPRINT(msg) debug(user_context) << TRACEINDENT << msg;
+    #define TRACEPRINT(msg) tracer(user_context, tracelogbuf) << TRACEINDENT << msg;
     #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
 #else
     #define TRACEINDENT ""
@@ -443,6 +445,7 @@ WEAK int wrap_buffer(void* user_context, struct halide_buffer_t* buf, d3d12_buff
 
 WEAK d3d12_device* device = NULL;
 WEAK d3d12_command_queue* queue = NULL;
+WEAK ID3D12RootSignature* rootSignature = NULL;
 
 WEAK d3d12_buffer upload   = { };   // staging buffer to transfer data to the device
 WEAK d3d12_buffer readback = { };   // staging buffer to retrieve data from the device
@@ -679,12 +682,84 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     if (D3DError(result, device, user_context, "Unable to create the Direct3D 12 device"))
         return(NULL);
 
-    TRACEPRINT("[[ delay for setting up PIX... ]]\n");
+    //TRACEPRINT("[[ delay for setting up PIX... ]]\n");
     //volatile int x = 2000000000;
     //while (x > 0)
     //    --x;
 
     return(reinterpret_cast<d3d12_device*>(device));
+}
+
+ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
+{
+    TRACELOG;
+
+    // A single "master" root signature is suitable for all Halide kernels:
+
+    D3D12_ROOT_PARAMETER rootParameterTables [NumSlots] = { };
+    // UAVs: read-only, write-only and read-write buffers:
+        D3D12_ROOT_PARAMETER& RootTableUAV = rootParameterTables[UAV];
+        RootTableUAV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        RootTableUAV.DescriptorTable.NumDescriptorRanges = 1;
+            D3D12_DESCRIPTOR_RANGE UAVs = { };
+                UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                UAVs.NumDescriptors = -1;   // unbounded size
+                UAVs.BaseShaderRegister = 0;
+                UAVs.RegisterSpace = 0;
+                UAVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        RootTableUAV.DescriptorTable.pDescriptorRanges = &UAVs;
+        RootTableUAV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
+    // CBVs: read-only uniform/coherent/broadcast buffers:
+        D3D12_ROOT_PARAMETER& RootTableCBV = rootParameterTables[CBV];
+        RootTableCBV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        RootTableCBV.DescriptorTable.NumDescriptorRanges = 1;
+            D3D12_DESCRIPTOR_RANGE CBVs = { };
+                CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+                CBVs.NumDescriptors = -1;   // unbounded size
+                CBVs.BaseShaderRegister = 0;
+                CBVs.RegisterSpace = 0;
+                CBVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        RootTableCBV.DescriptorTable.pDescriptorRanges = &CBVs;
+        RootTableCBV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
+    // SRVs: textures and read-only buffers:
+        D3D12_ROOT_PARAMETER& RootTableSRV = rootParameterTables[SRV];
+        RootTableSRV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        RootTableSRV.DescriptorTable.NumDescriptorRanges = 1;
+            D3D12_DESCRIPTOR_RANGE SRVs = { };
+                SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                SRVs.NumDescriptors = -1;   // unbounded size
+                SRVs.BaseShaderRegister = 0;
+                SRVs.RegisterSpace = 0;
+                SRVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        RootTableSRV.DescriptorTable.pDescriptorRanges = &SRVs;
+        RootTableSRV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
+
+    D3D12_ROOT_SIGNATURE_DESC rsd = { };
+        rsd.NumParameters = NumSlots;
+        rsd.pParameters = rootParameterTables;
+        rsd.NumStaticSamplers = 0;
+        rsd.pStaticSamplers = NULL;
+        rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+    D3D_ROOT_SIGNATURE_VERSION Version = D3D_ROOT_SIGNATURE_VERSION_1;
+    ID3DBlob* pSignBlob  = NULL;
+    ID3DBlob* pSignError = NULL;
+    HRESULT result = D3D12SerializeRootSignature(&rsd, Version, &pSignBlob, &pSignError);
+    if (D3DError(result, pSignBlob, NULL, "Unable to serialize the Direct3D 12 root signature"))
+    {
+        halide_assert(user_context, pSignError);
+        error(user_context) << (const char*)pSignError->GetBufferPointer();
+        return(NULL);
+    }
+
+    ID3D12RootSignature* rootSignature = NULL;
+    UINT nodeMask = 0;
+    const void* pBlobWithRootSignature = pSignBlob->GetBufferPointer();
+    SIZE_T blobLengthInBytes = pSignBlob->GetBufferSize();
+    result = device->CreateRootSignature(nodeMask, pBlobWithRootSignature, blobLengthInBytes, IID_PPV_ARGS(&rootSignature));
+    if (D3DError(result, rootSignature, NULL, "Unable to create the Direct3D 12 root signature"))
+        return(NULL);
+
+    return(rootSignature);
 }
 
 WEAK void dispatch_threadgroups(d3d12_compute_command_list* cmdList,
@@ -1187,8 +1262,8 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
     //flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
 #endif
-    // NOTE(marcos): for some reason, this prints the source code truncated...
-    //TRACEPRINT("-------------- source code: \n" << source << "||||\n");
+
+    TRACEPRINT(">>> HLSL shader source dump <<< \n" << source);
 
     HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
 
@@ -1214,77 +1289,12 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
         debug(user_context) << TRACEINDENT << "D3DCompiler warnings:\n" << errorMessage << "\n";
     }
 
-    // TODO(marcos): since a single "uber" root signature can fit all kernels,
-    // the root signature should be created/serialized at device creation time
-    // unbounded descriptor tables to accommodate all buffers:
-    D3D12_ROOT_PARAMETER rootParameterTables [NumSlots] = { };
-    // UAVs: read-only, write-only and read-write buffers:
-        D3D12_ROOT_PARAMETER& RootTableUAV = rootParameterTables[UAV];
-        RootTableUAV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootTableUAV.DescriptorTable.NumDescriptorRanges = 1;
-            D3D12_DESCRIPTOR_RANGE UAVs = { };
-                UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-                UAVs.NumDescriptors = -1;   // unbounded size
-                UAVs.BaseShaderRegister = 0;
-                UAVs.RegisterSpace = 0;
-                UAVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-        RootTableUAV.DescriptorTable.pDescriptorRanges = &UAVs;
-        RootTableUAV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
-    // CBVs: read-only uniform/coherent/broadcast buffers:
-        D3D12_ROOT_PARAMETER& RootTableCBV = rootParameterTables[CBV];
-        RootTableCBV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootTableCBV.DescriptorTable.NumDescriptorRanges = 1;
-            D3D12_DESCRIPTOR_RANGE CBVs = { };
-                CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-                CBVs.NumDescriptors = -1;   // unbounded size
-                CBVs.BaseShaderRegister = 0;
-                CBVs.RegisterSpace = 0;
-                CBVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-        RootTableCBV.DescriptorTable.pDescriptorRanges = &CBVs;
-        RootTableCBV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
-    // SRVs: textures and read-only buffers:
-        D3D12_ROOT_PARAMETER& RootTableSRV = rootParameterTables[SRV];
-        RootTableSRV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootTableSRV.DescriptorTable.NumDescriptorRanges = 1;
-            D3D12_DESCRIPTOR_RANGE SRVs = { };
-                SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                SRVs.NumDescriptors = -1;   // unbounded size
-                SRVs.BaseShaderRegister = 0;
-                SRVs.RegisterSpace = 0;
-                SRVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-        RootTableSRV.DescriptorTable.pDescriptorRanges = &SRVs;
-        RootTableSRV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
-
-    D3D12_ROOT_SIGNATURE_DESC rsd = { };
-        rsd.NumParameters = NumSlots;
-        rsd.pParameters = rootParameterTables;
-        rsd.NumStaticSamplers = 0;
-        rsd.pStaticSamplers = NULL;
-        rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
-    D3D_ROOT_SIGNATURE_VERSION Version = D3D_ROOT_SIGNATURE_VERSION_1;
-    ID3DBlob* pSignBlob  = NULL;
-    ID3DBlob* pSignError = NULL;
-    result = D3D12SerializeRootSignature(&rsd, Version, &pSignBlob, &pSignError);
-    if (D3DError(result, pSignBlob, NULL, "Unable to serialize the Direct3D 12 root signature"))
-    {
-        halide_assert(user_context, pSignError);
-        error(user_context) << (const char*)pSignError->GetBufferPointer();
-        return(NULL);
-    }
-
-    ID3D12RootSignature* rootSignature = NULL;
-    UINT nodeMask = 0;
-    const void* pBlobWithRootSignature = pSignBlob->GetBufferPointer();
-    SIZE_T blobLengthInBytes = pSignBlob->GetBufferSize();
-    result = (*device)->CreateRootSignature(nodeMask, pBlobWithRootSignature, blobLengthInBytes, IID_PPV_ARGS(&rootSignature));
-    if (D3DError(result, rootSignature, NULL, "Unable to create the Direct3D 12 root signature"))
-        return(NULL);
-
     d3d12_function* function = malloct<d3d12_function>();
     function->status     = result;
     function->shaderBlob = shaderBlob;
     function->errorMsgs  = errorMsgs;
     function->rootSignature = rootSignature;
+    rootSignature->AddRef();
 
     return(function);
 }
@@ -1513,16 +1523,32 @@ WEAK int halide_d3d12compute_acquire_context(void* user_context, halide_d3d12com
             __sync_lock_release(&thread_lock);
             return -1;
         }
-        debug(user_context) << TRACEINDENT << "D3D12Compute - Allocating: new_command_queue\n";
-        queue = new_command_queue(device);
-        if (NULL == queue)
+
+        debug(user_context) << TRACEINDENT << "D3D12Compute - Allocating: master root signature\n";
+        halide_assert(user_context, (NULL == rootSignature));
+        rootSignature = D3D12CreateMasterRootSignature((*device));
+        if (NULL == rootSignature)
         {
-            error(user_context) << TRACEINDENT << "D3D12Compute: cannot allocate command queue.\n";
+            error(user_context) << TRACEINDENT << "D3D12Compute: unable to create master root signature.\n";
             release_object(device);
             device = NULL;
             __sync_lock_release(&thread_lock);
             return -1;
         }
+
+        halide_assert(user_context, (NULL == queue));
+        debug(user_context) << TRACEINDENT << "D3D12Compute - Allocating: command queue\n";
+        queue = new_command_queue(device);
+        if (NULL == queue)
+        {
+            error(user_context) << TRACEINDENT << "D3D12Compute: cannot allocate command queue.\n";
+            Release_ID3D12Object(rootSignature);
+            release_object(device);
+            device = NULL;
+            __sync_lock_release(&thread_lock);
+            return -1;
+        }
+
         size_t heap_size = 64 * 1024 * 1024;
         upload = new_upload_buffer(device, heap_size);
         readback = new_readback_buffer(device, heap_size);
@@ -1845,7 +1871,11 @@ WEAK int halide_d3d12compute_device_release(void* user_context)
             d3d12_buffer empty = { };
             upload = readback = empty;
 
-            debug(user_context) <<  "D3D12Compute - Releasing: new_command_queue " << queue << "\n";
+            debug(user_context) << "D3D12Compute - Releasing: master root signature " << rootSignature << "\n";
+            Release_ID3D12Object(rootSignature);
+            rootSignature = NULL;
+
+            debug(user_context) <<  "D3D12Compute - Releasing: command queue " << queue << "\n";
             release_object(queue);
             queue = NULL;
 
@@ -2057,6 +2087,17 @@ WEAK int halide_d3d12compute_run(void *user_context,
             memcpy(&args_ptr[offset], args[i], arg_sizes[i]);
             offset = (offset + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
             offset += arg_sizes[i];
+#if 0   // dump constants:
+            switch (arg_sizes[i])
+            {
+                case 4 :
+                    TRACEPRINT("args[" << (int)i << "] = float(" << *(float*)(args[i]) << ") or int32(" << *(int32_t*)(args[i]) << ")\n");
+                    break;
+                default :
+                    TRACEPRINT("args[" << (int)i << "] is a constant argument of size " << (int)arg_sizes[i] << "\n");
+                    break;
+            }
+#endif
         }
         halide_assert(user_context, offset == total_args_size);
     }
