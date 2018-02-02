@@ -244,10 +244,10 @@ struct Group {
         Function func;
 
         // The current bounds
-        vector<std::pair<int, int>> store_bounds, compute_bounds;
+        vector<std::pair<int, int>> store_bounds, compute_bounds, root_bounds;
 
         // The current compute cost, given these bounds
-        double compute;
+        double compute, root_compute;
 
         // The current memory cost for loading from this func, given these bounds.
         double memory;
@@ -283,6 +283,10 @@ struct Group {
     bool may_partition;
     // Everything in this group is inlined into the sole output
     bool inlined;
+
+    // Lower bound on the cost of optimally scheduling this group,
+    // given the decisions already made.
+    double heuristic = 0;
 
     bool fully_scheduled() const {
         return inlined || funcs.size() == 1;
@@ -332,6 +336,8 @@ struct Group {
             return eval_bound(simplify(substitute(concrete_bounds, e)), concrete_bounds);
         }
     }
+
+    void compute_heuristic(const FunctionDAG &dag);
 
     void compute_bounds_and_costs(const FunctionDAG &dag) {
         map<Function, size_t, Function::Compare> group_members;
@@ -450,13 +456,15 @@ struct Group {
 
 struct State {
     vector<std::shared_ptr<Group>> groups;
-    double redundant_compute_cost, essential_compute_cost, memory_cost;
+    double cost = 0; // The costs incurred so far by scheduling decisions that have been finalized
+    double heuristic = 0; // An underestimate of possible future cost. Just the sum of the heuristics of the groups.
 
-    bool last_action_was_fuse;
-    int last_fuse_dim;
+    bool last_action_was_fuse = false;
+    int last_fuse_dim = 0;
 
     bool cheaper_than(const State &other) {
-        return (redundant_compute_cost + memory_cost) < (other.redundant_compute_cost + other.memory_cost);
+        // A* ordering
+        return (cost + heuristic) < (other.cost + other.heuristic);
     }
 
     uint64_t hash() const {
@@ -557,12 +565,13 @@ struct State {
         }
         debug(0) << "State: \n";
         int counter = 0;
-        debug(0) << "  memory cost: " << memory_cost << "\n";
+        // debug(0) << "  memory cost: " << memory_cost << "\n";
         debug(0) << "  total compute: " << total_compute << "\n";
-        debug(0) << "  essential compute: " << (total_compute - redundant_compute_cost) << "\n";
-        debug(0) << "  redundant compute: " << redundant_compute_cost << "\n";
-        debug(0) << "  total cost: " << (redundant_compute_cost + memory_cost) << "\n";
-        debug(0) << "  compute multiplier: " << (1 + redundant_compute_cost / (total_compute - redundant_compute_cost)) << "\n";
+        //debug(0) << "  essential compute: " << (total_compute - redundant_compute_cost) << "\n";
+        //debug(0) << "  redundant compute: " << redundant_compute_cost << "\n";
+        debug(0) << "  incurred cost: " << cost << "\n";
+        debug(0) << "  heuristic: " << heuristic << "\n";
+        // debug(0) << "  compute multiplier: " << (1 + redundant_compute_cost / (total_compute - redundant_compute_cost)) << "\n";
         for (const auto &g : groups) {
             debug(0) << "  Group " << counter++ << ":\n"
                      << "    parallelism: " << g->parallelism << "\n"
@@ -658,7 +667,6 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
             num_outputs += fs.is_output;
         }
 
-
         // Try inlining the group
         if (num_outputs == 1) {
             std::shared_ptr<Group> new_group(new Group(group));
@@ -679,22 +687,16 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
             }
             new_compute *= new_group->compute_instances;
 
-            // Inlining may often be absurdly bad. Don't clutter the beam.
-            if (true || new_compute < 2*old_compute) {
+            double redundant_recompute = new_compute - old_compute;
+
+            {
                 std::shared_ptr<State> child(new State(state));
-                child->redundant_compute_cost += new_compute - old_compute;
+                child->cost += redundant_recompute;
+                child->heuristic -= group.heuristic; // This is a terminal state for this group
                 child->groups[group_idx] = new_group;
                 child->last_action_was_fuse = false;
                 result.emplace_back(std::move(child));
 
-                if (new_group->funcs.size() == 2 &&
-                    new_group->funcs[0].func.name() == "output") {
-                    // if (new_compute < old_compute) {
-                    debug(0) << "OLD:\n";
-                    state.dump();
-                    debug(0) << "NEW:\n";
-                    result.back()->dump();
-                }
                 internal_assert(new_compute >= old_compute) << "Inlining reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
             }
 
@@ -815,6 +817,7 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
 
                     // Recompute bounds and arithmetic cost up the pipeline
                     new_group->compute_bounds_and_costs(dag);
+                    new_group->compute_heuristic(dag);
 
                     // Should not have updated the bounds of the group output
                     internal_assert(max == min + split - 1);
@@ -856,7 +859,9 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
 
                     std::shared_ptr<State> child(new State(state));
                     //internal_assert(new_compute >= old_compute) << "Fusing reduced total amount of work: " << old_compute << " -> " << new_compute << "\n";
-                    child->redundant_compute_cost += new_compute - old_compute;
+                    child->heuristic -= group.heuristic;
+                    child->heuristic += new_group->heuristic;
+                    // child->cost += recompute;
                     child->groups[group_idx] = new_group;
                     child->last_action_was_fuse = true;
                     child->last_fuse_dim = dim;
@@ -931,12 +936,21 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
                     // This is a broken edge
 
                     // Incur a memory cost
-                    child->memory_cost += A->funcs[producer_in_A->second].memory * A->compute_instances;
+                    child->cost += A->funcs[producer_in_A->second].memory * A->compute_instances;
 
                     // Update the output flags
                     A->funcs[producer_in_A->second].is_output = true;
                 }
             }
+
+            // Update the heuristic
+            A->compute_heuristic(dag);
+            B->compute_heuristic(dag);
+            child->heuristic -= group.heuristic;
+            child->heuristic += A->heuristic + B->heuristic;
+
+            // TODO: If A or B have a single Func, we need to bill the recompute costs now
+
 
             // If there are multiple outputs, our only possible next
             // move is a partition, so don't bother - we could have
@@ -983,16 +997,128 @@ vector<std::shared_ptr<State>> make_children(const State &state, const FunctionD
     return result;
 }
 
+
+struct CompareStates {
+    bool operator()(const std::shared_ptr<State> &a, const std::shared_ptr<State> &b) const {
+        return b->cheaper_than(*a);
+    }
+};
+
+
+// Returns an underestimate of the optimal cost of a single group at a fixed output size
+void Group::compute_heuristic(const FunctionDAG &dag) {
+    // Start with a heuristic of zero redundant recompute and zero memory traffic
+    heuristic = 0;
+
+    // One heuristic is just the amount of recompute done if
+    // everything were compute_root here. We'll take the max of this
+    // and a more complex heuristic.
+    double recompute_heuristic = 0;
+    for (auto &fs : funcs) {
+        recompute_heuristic += fs.compute * compute_instances - fs.root_compute;
+    }
+
+    if (funcs.size() == 1) {
+        heuristic = recompute_heuristic;
+        return;
+    }
+
+    std::ostringstream subproblem_name;
+
+    // Cache results. Cache stores the cost per output pixel.
+    // A static is a lousy place for this...
+    static std::map<uint64_t, double> cache;
+    static std::set<uint64_t> pending;
+    uint64_t key = 0;
+    for (auto &fs : funcs) {
+        key ^= (uint64_t)((uintptr_t)(fs.func.get_contents().get()));
+        subproblem_name << fs.func.name() << ' ';
+    }
+    vector<pair<int, int>> rounded_output_size;
+    uint64_t compute_values = compute_instances, root_values = 1;
+    for (size_t i = 0; i < funcs[0].compute_bounds.size(); i++) {
+        // Use the bounds as if it were compute root, and scale down
+        // the cost afterwards. Assumes costs are sublinear in size
+        // (if they weren't you could just slice up the output domain
+        // into k slices and run it k times, and it would be cheaper).
+        auto r = funcs[0].root_bounds[i];
+        auto c = funcs[0].compute_bounds[i];
+        uint64_t root_extent = (r.second - r.first + 1);
+        uint64_t compute_extent = (c.second - c.first + 1);
+        compute_values *= compute_extent;
+        root_values *= root_extent;
+        key *= 123457;
+        key ^= root_extent;
+        subproblem_name << root_extent << ' ';
+    }
+
+    if (cache.count(key)) {
+        heuristic = std::max(recompute_heuristic, cache[key] * compute_values);
+        return;
+    }
+
+    if (pending.count(key)) {
+        heuristic = recompute_heuristic;
+        return;
+    }
+    pending.insert(key);
+
+    debug(0) << subproblem_name.str() << "\n";
+    // debug(0) << cache.size() << "\n";
+
+    // Solve this conservatively as an isolated sub-problem
+    State initial;
+    initial.groups.emplace_back(std::shared_ptr<Group>(new Group(*this)));
+    initial.groups[0]->compute_instances = 1;
+    initial.groups[0]->funcs[0].compute_bounds = initial.groups[0]->funcs[0].root_bounds;
+    initial.compute_bounds_and_costs(dag);
+
+    std::priority_queue<std::shared_ptr<State>,
+                        std::vector<std::shared_ptr<State>>,
+                        CompareStates> queue;
+    queue.emplace(new State(std::move(initial)));
+
+    std::set<uint64_t> visited;
+    double result = 0;
+    for (int i = 0;; i++) {
+        internal_assert(!queue.empty());
+
+        auto state = queue.top();
+        queue.pop();
+
+        if (state->fully_scheduled() || i >= 1000000) {
+            // We either hit a leaf, or the iteration limit.  This is
+            // best-first search, and we hit a leaf, so it must be the
+            // best leaf.  If we hit the iteration limit, we use the
+            // A* heuristic from the sub-problem.
+            result = state->cost + state->heuristic;
+            break;
+        }
+
+        auto children = make_children(*state, dag);
+        for (auto &c : children) {
+            uint64_t h = c->hash();
+            if (visited.count(h)) {
+                continue;
+            }
+            visited.insert(h);
+            queue.emplace(std::move(c));
+        }
+    }
+
+    heuristic = std::max(recompute_heuristic, (result * compute_values) / root_values);
+
+    internal_assert(heuristic >= 0);
+
+    cache[key] = heuristic / compute_values;
+    pending.erase(key);
+}
+
 // Returns optimal schedule
 State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const MachineParams &params, size_t beam_size) {
     std::set<uint64_t> visited;
     State initial;
     {
-        initial.redundant_compute_cost = 0;
-        initial.memory_cost = 0;
-        initial.last_action_was_fuse = false;
-        initial.last_fuse_dim = 0;
-
         std::shared_ptr<Group> group(new Group);
         group->parallelism = params.parallelism;
         group->compute_instances = 1;
@@ -1029,21 +1155,30 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
             f.splits.resize(f.func.dimensions());
             f.store_depth = 0;
             f.compute_depth = 0;
-
             group->funcs.emplace_back(std::move(f));
         }
-
         initial.groups.emplace_back(std::move(group));
 
         initial.compute_bounds_and_costs(dag);
 
+        // Set the bounds-at-root
+        for (auto &f : initial.groups[0]->funcs) {
+            f.root_bounds = f.compute_bounds;
+            f.root_compute = f.compute;
+        }
+
+        initial.groups[0]->compute_heuristic(dag);
+        initial.heuristic = initial.groups[0]->heuristic;
+
         // Record our initial underestimate of compute cost
+        /*
         initial.essential_compute_cost = 0;
         for (auto &g : initial.groups) {
             for (auto &f : g->funcs) {
                 initial.essential_compute_cost += f.compute;
             }
         }
+        */
     }
 
     for (auto &g : initial.groups) {
@@ -1064,19 +1199,13 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
     // to zero. There's a quadratic cost in the final tile/subtile
     // size that has a computable minimum over all tile/subtile sizes.
 
-    struct CompareStates {
-        bool operator()(const std::shared_ptr<State> &a, const std::shared_ptr<State> &b) const {
-            return b->cheaper_than(*a);
-        }
-    };
-
     std::priority_queue<std::shared_ptr<State>,
                         std::vector<std::shared_ptr<State>>,
                         CompareStates> queue;
     queue.emplace(new State(std::move(initial)));
 
     for (int i = 0;; i++) {
-        bool report = (i % 1024 == 0);
+        bool report = (i % 100 == 0);
 
         // Limit the size of the queue
         if (queue.size() > beam_size) {
@@ -1108,12 +1237,27 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
 
         if (state->fully_scheduled()) {
             // This is best-first search, and we hit a leaf, so it must be the best leaf.
-            debug(0) << "Found completed schedule with cost " << state->memory_cost << " " << state->redundant_compute_cost << " " << state->essential_compute_cost << "\n";
+            debug(0) << "Found completed schedule with cost " << (state->cost + state->heuristic) << "\n";
+
+            // Check the resulting cost tallies up
+            if (1) {
+                state->compute_bounds_and_costs(dag);
+                double recompute_cost = 0, memory_cost = 0;
+                for (auto &g : state->groups) {
+                    for (auto &f : g->funcs) {
+                        recompute_cost += f.compute * g->compute_instances - f.root_compute;
+                        memory_cost += f.memory * g->compute_instances * dag.outgoing_edges.at(f.func).size();
+                    }
+                }
+                debug(0) << "Actual cost: " << recompute_cost << ", " << memory_cost << ": " << (recompute_cost + memory_cost) << "\n";
+            }
+
             return *state;
         }
 
-        if (report) debug(0) << "Considering partial schedule with cost " << state->groups.size() << " " << state->memory_cost << " " << state->redundant_compute_cost << " " << state->essential_compute_cost << "\n";
-        //state.dump();
+        if (report) debug(0) << "Considering partial schedule with value " << (state->cost + state->heuristic)
+                             << " cost " << state->cost
+                             << " heuristic " << state->heuristic << "\n";
 
         auto children = make_children(*state, dag);
         for (auto &c : children) {
@@ -1123,12 +1267,7 @@ State optimal_schedule(const FunctionDAG &dag, vector<Function> outputs, const M
                 continue;
             }
             visited.insert(h);
-            if (c->redundant_compute_cost * 10 > c->essential_compute_cost) {
-                //debug(0) << "Rejecting child with costs: " << c->groups.size() << " " << c->memory_cost << " " << c->redundant_compute_cost << " " << c->essential_compute_cost << "\n";
-            } else {
-                //debug(0) << "Accepting child with costs: " << c->groups.size() << " " << c->memory_cost << " " << c->redundant_compute_cost << " " << c->essential_compute_cost << "\n";
-                queue.emplace(std::move(c));
-            }
+            queue.emplace(std::move(c));
         }
     }
 
@@ -1265,7 +1404,7 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
 
 void autoschedule_test() {
     MachineParams params(8, 16 * 1024 * 1024, 40);
-    size_t beam_size = 1000;
+    size_t beam_size = 1000000;
     Target target("host");
 
     Var x, y;
@@ -1285,7 +1424,7 @@ void autoschedule_test() {
 
         optimal.dump();
 
-        internal_assert(optimal.redundant_compute_cost == 0); // No redundant recompute
+        // internal_assert(optimal.redundant_compute_cost == 0); // No redundant recompute
 
         internal_assert(optimal.groups.size() == 1); // This should have been inlined into a single group
         for (const auto &g : optimal.groups) {
@@ -1330,7 +1469,7 @@ void autoschedule_test() {
 
         optimal.dump();
 
-        internal_assert(optimal.redundant_compute_cost == 0); // No redundant recompute
+        // internal_assert(optimal.redundant_compute_cost == 0); // No redundant recompute
         for (const auto &g : optimal.groups) {
             // Check some invariants
             internal_assert(g->funcs.size() == 1);
@@ -1398,8 +1537,8 @@ void autoschedule_test() {
         }
 
         // Some redundant recompute, but small as a fraction of the total amount of work
-        internal_assert(optimal.redundant_compute_cost > 0);
-        internal_assert(optimal.redundant_compute_cost < 0.1 * total_compute);
+        // internal_assert(optimal.redundant_compute_cost > 0);
+        // internal_assert(optimal.redundant_compute_cost < 0.1 * total_compute);
 
     }
 
@@ -1451,8 +1590,8 @@ void autoschedule_test() {
         }
 
         // Some redundant recompute, but small as a fraction of the total amount of work
-        internal_assert(optimal.redundant_compute_cost > 0);
-        internal_assert(optimal.redundant_compute_cost < 0.1 * total_compute);
+        // internal_assert(optimal.redundant_compute_cost > 0);
+        // internal_assert(optimal.redundant_compute_cost < 0.1 * total_compute);
 
     }
 
