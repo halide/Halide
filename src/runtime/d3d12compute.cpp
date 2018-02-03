@@ -824,7 +824,8 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12
             InitialResourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
             break;
         default :
-            TRACEPRINT("UNSUPPORTED D3D12 BUFFER HEAP TYPE: " << (int)heaptype << "\n"); halide_assert(user_context, false);
+            TRACEPRINT("UNSUPPORTED D3D12 BUFFER HEAP TYPE: " << (int)heaptype << "\n");
+            halide_assert(user_context, false);
             break;
     }
 
@@ -1260,6 +1261,7 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     flags1 |= D3DCOMPILE_DEBUG;
     flags1 |= D3DCOMPILE_SKIP_OPTIMIZATION;
     flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
+    //flags1 |= D3DCOMPILE_RESOURCES_MAY_ALIAS;
     //flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
 #endif
 
@@ -2062,8 +2064,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
         // Assert arg_size is exactly a power of two and adjust size to start
         // on the next multiple of that power of two.
         halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-        total_args_size = (total_args_size + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
-        total_args_size += arg_sizes[i];
+        halide_assert(user_context, arg_sizes[i] <= 4);
+        size_t argsize = 4;
+        total_args_size = (total_args_size + argsize - 1) & ~(argsize - 1);
+        total_args_size += argsize;
     }
     d3d12_buffer args_buffer = { };
     int32_t buffer_index = 0;
@@ -2084,19 +2088,30 @@ WEAK int halide_d3d12compute_run(void *user_context,
         {
             if (arg_is_buffer[i])
                 continue;
-            memcpy(&args_ptr[offset], args[i], arg_sizes[i]);
-            offset = (offset + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
-            offset += arg_sizes[i];
-#if 0   // dump constants:
+            halide_assert(user_context, arg_sizes[i] <= 4);
+            union
+            {
+                void*     p;
+                float*    f;
+                uint8_t*  b;
+                uint16_t* s;
+                uint32_t* i;
+            } arg;
+            arg.p = args[i];
+            size_t argsize = 4;
+            uint32_t val = 0;
             switch (arg_sizes[i])
             {
-                case 4 :
-                    TRACEPRINT("args[" << (int)i << "] = float(" << *(float*)(args[i]) << ") or int32(" << *(int32_t*)(args[i]) << ")\n");
-                    break;
-                default :
-                    TRACEPRINT("args[" << (int)i << "] is a constant argument of size " << (int)arg_sizes[i] << "\n");
-                    break;
+                case 1 : val = *arg.b; break;
+                case 2 : val = *arg.s; break;
+                case 4 : val = *arg.i; break;
+                default: halide_assert(user_context, false); break;
             }
+            memcpy(&args_ptr[offset], &val, argsize);
+            offset = (offset + argsize - 1) & ~(argsize - 1);
+            offset += argsize;
+#if 1   // dump constants:
+            TRACEPRINT("arg " << (int)i << " has size " << (int)arg_sizes[i] << " : float(" << *arg.f << ") or int32(" << *arg.i << ")\n");
 #endif
         }
         halide_assert(user_context, offset == total_args_size);
@@ -2176,30 +2191,33 @@ WEAK int halide_d3d12compute_run(void *user_context,
     return 0;
 }
 
-WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
+WEAK int halide_d3d12compute_device_and_host_malloc(void* user_context, struct halide_buffer_t* buffer)
+{
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_and_host_malloc called.\n";
 
-    // TODO(marcos): this function is not properly implemented as of yet...
-    halide_assert(user_context, false);
-
     int result = halide_d3d12compute_device_malloc(user_context, buffer);
-    if (result == 0) {
-        d3d12_buffer *metal_buffer = (d3d12_buffer *)(buffer->device);
-        buffer->host = (uint8_t *)buffer_contents(metal_buffer);
+    if (result == 0)
+    {
+        d3d12_buffer* dev_buffer = (d3d12_buffer*)(buffer->device);
+        // NOTE(marcos): maybe keep a dedicated upload heap for this buffer?
+        //buffer->host = (uint8_t *)buffer_contents(dev_buffer);
+        buffer->host = (uint8_t*)malloc(buffer->size_in_bytes());
         debug(user_context) << TRACEINDENT 
                             << "halide_d3d12compute_device_and_host_malloc"
                             << " device = " << (void*)buffer->device
-                            << " metal_buffer = " << metal_buffer
+                            << " d3d12_buffer = " << dev_buffer
                             << " host = " << buffer->host << "\n";
     }
     return result;
 }
 
-WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
+WEAK int halide_d3d12compute_device_and_host_free(void* user_context, struct halide_buffer_t* buffer)
+{
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_and_host_free called.\n";
     halide_d3d12compute_device_free(user_context, buffer);
+    free(buffer->host);
     buffer->host = NULL;
     return 0;
 }
