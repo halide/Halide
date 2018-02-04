@@ -13,9 +13,22 @@
 #include "Closure.h"
 #include "IR.h"
 #include "IRVisitor.h"
-#include "LLVM_Headers.h"
 #include "Scope.h"
 #include "Target.h"
+
+namespace llvm {
+class ConstantFolder;
+class Function;
+class IRBuilderDefaultInserter;
+class LLVMContext;
+class Module;
+class StructType;
+class TargetMachine;
+class TargetOptions;
+class Type;
+class Value;
+template<typename, typename> class IRBuilder;
+}
 
 namespace Halide {
 namespace Internal {
@@ -32,7 +45,7 @@ void pack_closure(llvm::StructType *type,
                   const Closure& closure,
                   const Scope<llvm::Value *> &src,
                   llvm::StructType *buffer_t,
-                  llvm::IRBuilder<> *builder);
+                  llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
 /** Emit code that unpacks a struct containing all the externally
  * referenced state into a symbol table. Requires you to pass it a
@@ -42,7 +55,7 @@ void unpack_closure(const Closure& closure,
                     Scope<llvm::Value *> &dst,
                     llvm::StructType *type,
                     llvm::Value *src,
-                    llvm::IRBuilder<> *builder);
+                    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
