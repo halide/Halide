@@ -119,13 +119,13 @@ struct ModuleContents {
 };
 
 template<>
-RefCount &ref_count<ModuleContents>(const ModuleContents *f) {
-    return f->ref_count;
+RefCount &ref_count<ModuleContents>(const ModuleContents *t) {
+    return t->ref_count;
 }
 
 template<>
-void destroy<ModuleContents>(const ModuleContents *f) {
-    delete f;
+void destroy<ModuleContents>(const ModuleContents *t) {
+    delete t;
 }
 
 LoweredFunc::LoweredFunc(const std::string &name,

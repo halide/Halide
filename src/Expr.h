@@ -99,10 +99,10 @@ struct IRNode {
 };
 
 template<>
-inline RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
+inline RefCount &ref_count<IRNode>(const IRNode *t) {return t->ref_count;}
 
 template<>
-inline void destroy<IRNode>(const IRNode *n) {delete n;}
+inline void destroy<IRNode>(const IRNode *t) {delete t;}
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
