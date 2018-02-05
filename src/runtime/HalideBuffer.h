@@ -110,7 +110,7 @@ class Buffer {
     halide_buffer_t buf = {0};
 
     /** Some in-class storage for shape of the dimensions. */
-    halide_dimension_t shape[D] = {};
+    halide_dimension_t shape[D];
 
     /** The allocation owned by this Buffer. NULL if the Buffer does not
      * own the memory. */
@@ -525,7 +525,7 @@ public:
         return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
-    Buffer() {
+    Buffer() : shape() {
         buf.type = static_halide_type();
         make_shape_storage();
     }
