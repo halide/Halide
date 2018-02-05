@@ -1798,7 +1798,7 @@ private:
             return expr;
         }
 
-        int64_t ia = 0, ib = 0, ic = 0, id = 0;
+        int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
 
@@ -1909,18 +1909,24 @@ private:
             return mutate(Ramp::make(ramp_a->base / broadcast_b->value,
                                      IntImm::make(t, div_imp(ia, ib)),
                                      ramp_a->lanes));
-        } else if (ramp_a &&
-                   no_overflow_scalar_int(ramp_a->base.type()) &&
-                   const_int(ramp_a->stride, &ia) &&
-                   broadcast_b &&
-                   const_int(broadcast_b->value, &ib) &&
-                   ib != 0 &&
-                   (ic = gcd(mod_rem.modulus, ib)) > 1 &&
-                   div_imp((int64_t)mod_rem.remainder, ic) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ic)) {
-            // ramp(k*(a*c) + x, y, w) / (b*c) = broadcast(k/b, w) if x/c == (x + (w-1)*y)/c
-            // The ramp lanes can't actually change the result, so we
-            // can just divide the base and broadcast it.
-            return mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->lanes));
+
+        // TODO: temporarily disabled because it breaks some pattern-matching in Hexagon,
+        // as well as making some fold-storage calculations a little too conservative.
+        // Both of these need to fixed (and this re-enabled), but disabling this gives
+        // us time to investigate a proper fix without breaking downstream users.
+        //
+        // } else if (ramp_a &&
+        //            no_overflow_scalar_int(ramp_a->base.type()) &&
+        //            const_int(ramp_a->stride, &ia) &&
+        //            broadcast_b &&
+        //            const_int(broadcast_b->value, &ib) &&
+        //            ib != 0 &&
+        //            (ic = gcd(mod_rem.modulus, ib)) > 1 &&
+        //            div_imp((int64_t)mod_rem.remainder, ic) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ic)) {
+        //     // ramp(k*(a*c) + x, y, w) / (b*c) = broadcast(k/b, w) if x/c == (x + (w-1)*y)/c
+        //     // The ramp lanes can't actually change the result, so we
+        //     // can just divide the base and broadcast it.
+        //     return mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->lanes));
         } else if (no_overflow(op->type) &&
                    div_a &&
                    const_int(div_a->b, &ia) &&
@@ -2094,20 +2100,26 @@ private:
             // (y + 8) / 2 -> y/2 + 4
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             return mutate((add_a->a / b) + ratio);
-        } else if (no_overflow(op->type) &&
-                   add_a &&
-                   const_int(add_a->b, &ib) &&
-                   mul_a_a &&
-                   const_int(mul_a_a->b, &ia) &&
-                   const_int(b, &ic) &&
-                   ic > 0 &&
-                   (id = gcd(ia, ic)) != 1) {
-            // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
-            // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
-            ia = div_imp(ia, id);
-            ib = div_imp(ib, id);
-            ic = div_imp(ic, id);
-            return mutate((mul_a_a->a * make_const(op->type, ia) + make_const(op->type, ib)) / make_const(op->type, ic));
+
+        // TODO: temporarily disabled because it breaks some pattern-matching in Hexagon,
+        // as well as making some fold-storage calculations a little too conservative.
+        // Both of these need to fixed (and this re-enabled), but disabling this gives
+        // us time to investigate a proper fix without breaking downstream users.
+        //
+        // } else if (no_overflow(op->type) &&
+        //            add_a &&
+        //            const_int(add_a->b, &ib) &&
+        //            mul_a_a &&
+        //            const_int(mul_a_a->b, &ia) &&
+        //            const_int(b, &ic) &&
+        //            ic > 0 &&
+        //            (id = gcd(ia, ic)) != 1) {
+        //     // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
+        //     // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
+        //     ia = div_imp(ia, id);
+        //     ib = div_imp(ib, id);
+        //     ic = div_imp(ic, id);
+        //     return mutate((mul_a_a->a * make_const(op->type, ia) + make_const(op->type, ib)) / make_const(op->type, ic));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    equal(add_a->a, b)) {
