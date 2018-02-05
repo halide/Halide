@@ -525,7 +525,7 @@ public:
         return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
-    Buffer() {
+    Buffer() : shape() {
         buf.type = static_halide_type();
         make_shape_storage();
     }
