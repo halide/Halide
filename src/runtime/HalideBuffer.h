@@ -110,7 +110,7 @@ class Buffer {
     halide_buffer_t buf = {0};
 
     /** Some in-class storage for shape of the dimensions. */
-    halide_dimension_t shape[D];
+    halide_dimension_t shape[D] = {};
 
     /** The allocation owned by this Buffer. NULL if the Buffer does not
      * own the memory. */
