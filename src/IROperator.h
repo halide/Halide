@@ -870,32 +870,7 @@ inline Expr absd(Expr a, Expr b) {
  * that it always evaluates all arguments. If the first argument is
  * true, then return the second, else return the third. Typically
  * vectorizes cleanly, but benefits from SSE41 or newer on x86. */
-inline Expr select(Expr condition, Expr true_value, Expr false_value) {
-
-    if (as_const_int(condition)) {
-        // Why are you doing this? We'll preserve the select node until constant folding for you.
-        condition = cast(Bool(), std::move(condition));
-    }
-
-    // Coerce int literals to the type of the other argument
-    if (as_const_int(true_value)) {
-        true_value = cast(false_value.type(), std::move(true_value));
-    }
-    if (as_const_int(false_value)) {
-        false_value = cast(true_value.type(), std::move(false_value));
-    }
-
-    user_assert(condition.type().is_bool())
-        << "The first argument to a select must be a boolean:\n"
-        << "  " << condition << " has type " << condition.type() << "\n";
-
-    user_assert(true_value.type() == false_value.type())
-        << "The second and third arguments to a select do not have a matching type:\n"
-        << "  " << true_value << " has type " << true_value.type() << "\n"
-        << "  " << false_value << " has type " << false_value.type() << "\n";
-
-    return Internal::Select::make(std::move(condition), std::move(true_value), std::move(false_value));
-}
+Expr select(Expr condition, Expr true_value, Expr false_value);
 
 /** A multi-way variant of select similar to a switch statement in C,
  * which can accept multiple conditions and values in pairs. Evaluates
@@ -909,25 +884,8 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args&&... args) {
 /** Equivalent of ternary select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
-inline Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
-    user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
-        << "tuple_select() requires all Tuples to have identical sizes.";
-    Tuple result(std::vector<Expr>(condition.size()));
-    for (size_t i = 0; i < result.size(); i++) {
-        result[i] = select(condition[i], true_value[i], false_value[i]);
-    }
-    return result;
-}
-
-inline Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
-    user_assert(true_value.size() == false_value.size())
-        << "tuple_select() requires all Tuples to have identical sizes.";
-    Tuple result(std::vector<Expr>(true_value.size()));
-    for (size_t i = 0; i < result.size(); i++) {
-        result[i] = select(condition, true_value[i], false_value[i]);
-    }
-    return result;
-}
+Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 // @}
 
 /** Equivalent of multiway select(), but taking/returning tuples. If the condition is
