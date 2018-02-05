@@ -11,6 +11,7 @@
 
 #include "IR.h"
 #include "Util.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -900,11 +901,49 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
  * which can accept multiple conditions and values in pairs. Evaluates
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
-template<typename... Args,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type* = nullptr>
+template<typename... Args>
 inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args&&... args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
+
+/** Equivalent of ternary select(), but taking/returning tuples. If the condition is
+ * a Tuple, it must match the size of the true and false Tuples. */
+// @{
+inline Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
+    user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
+        << "tuple_select() requires all Tuples to have identical sizes.";
+    Tuple result(std::vector<Expr>(condition.size()));
+    for (size_t i = 0; i < result.size(); i++) {
+        result[i] = select(condition[i], true_value[i], false_value[i]);
+    }
+    return result;
+}
+
+inline Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
+    user_assert(true_value.size() == false_value.size())
+        << "tuple_select() requires all Tuples to have identical sizes.";
+    Tuple result(std::vector<Expr>(true_value.size()));
+    for (size_t i = 0; i < result.size(); i++) {
+        result[i] = select(condition, true_value[i], false_value[i]);
+    }
+    return result;
+}
+// @}
+
+/** Equivalent of multiway select(), but taking/returning tuples. If the condition is
+ * a Tuple, it must match the size of the true and false Tuples. */
+// @{
+template<typename... Args>
+inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args&&... args) {
+    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+}
+
+template<typename... Args>
+inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args&&... args) {
+    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+}
+// @}
+
 
 // TODO: Implement support for *_f16 external functions in various backends.
 // No backend supports these yet.
