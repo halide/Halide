@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
         gen->inner_compute_at.set(LoopLevel::root());
         gen->apply();
 
-        Func outer;
+        Func outer("outer");
         outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
         CheckLoopLevels::lower_and_check(outer,
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
         gen->inner_compute_at.set(inner_compute_at);
         gen->apply();
 
-        Func outer;
+        Func outer("outer");
         outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
         inner_compute_at.set({outer, x});
@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
         auto gen = context.create<Example>();
         gen->apply();
 
-        Func outer;
+        Func outer("outer");
         outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
         gen->inner_compute_at.set({outer, x});
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         auto gen = context.create<Example>();
         gen->apply();
 
-        Func outer;
+        Func outer("outer");
         outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
         LoopLevel inner_compute_at(LoopLevel::root());
