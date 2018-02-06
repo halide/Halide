@@ -525,7 +525,7 @@ public:
         return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
-    Buffer() {
+    Buffer() : shape() {
         buf.type = static_halide_type();
         make_shape_storage();
     }
@@ -874,7 +874,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
+        buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
     }
@@ -914,7 +914,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
+        buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
         initialize_shape(sizes);
     }
@@ -928,7 +928,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = d;
-        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
+        buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];

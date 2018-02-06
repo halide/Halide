@@ -120,7 +120,7 @@ public:
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
-    void compile(const Outputs &output_files) const;
+    void compile(const Outputs &output_files_arg) const;
 
     /** Compile a halide Module to in-memory object code. Currently
      * only supports LLVM based compilation, but should be extended to

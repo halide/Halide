@@ -1410,8 +1410,8 @@ GIOBase::GIOBase(size_t array_size,
                  const std::string &name,
                  IOKind kind,
                  const std::vector<Type> &types,
-                 int dimensions)
-    : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dimensions) {
+                 int dims)
+    : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
 }
 
 GIOBase::~GIOBase() {
