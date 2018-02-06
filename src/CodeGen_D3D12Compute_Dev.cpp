@@ -276,13 +276,31 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     bool type_cast_needed = !(allocations.contains(op->name) &&
                               allocations.get(op->name).type == op->type);
     ostringstream rhs;
-    if (type_cast_needed) {
-        rhs << print_storage_type(op->type)
-            << "("
-            << "(" << print_name(op->name) << ")";
-        rhs << "[" << id_index << "]";
-        rhs << ")";
-    } else {
+    if (type_cast_needed)
+    {
+        if (op->name == "__shared")
+        {
+            // __shared[x] is always uint(32): must pack/reinterpret bits...
+            if (op->type.is_float())
+                rhs << "asfloat";
+            else
+                rhs << print_storage_type(op->type);
+            rhs << "(";
+            rhs << print_name(op->name)
+                << "[" << id_index << "]";
+            rhs << ")";
+        }
+        else
+        {
+            rhs << print_storage_type(op->type)
+                << "("
+                << "(" << print_name(op->name) << ")";
+            rhs << "[" << id_index << "]";
+            rhs << ")";
+        }
+    }
+    else
+    {
         rhs << print_name(op->name);
         rhs << "[" << id_index << "]";
     }
@@ -322,13 +340,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
-    string id_value = print_expr(op->value);
-    Type t = op->value.type();
+    string value_expr = print_expr(op->value);
+    Type value_type = op->value.type();
 
     // If we're writing a contiguous ramp, store through a pointer of vector type.
     Expr ramp_base = is_ramp_one(op->index);
     if (ramp_base.defined()) {
-        internal_assert(op->value.type().is_vector());
+        internal_assert(value_type.is_vector());
 
         do_indent();
         stream << "("
@@ -336,39 +354,45 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                << " + "
                << print_expr(ramp_base)
                << ") = "
-               << id_value
+               << value_expr
                << ";\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
-        internal_assert(t.is_vector());
+        internal_assert(value_type.is_vector());
 
-        string id_index = print_expr(op->index);
+        string index_expr = print_expr(op->index);
 
-        for (int i = 0; i < t.lanes(); ++i) {
+        for (int i = 0; i < value_type.lanes(); ++i) {
             do_indent();
             stream << "("
                    << print_name(op->name)
                    << ")["
-                   << id_index << "[" << i << "]] = "
-                   << id_value << "[" << i << "];\n";
+                   << index_expr << "[" << i << "]] = "
+                   << value_expr << "[" << i << "];\n";
         }
     } else {
         bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
+                                  allocations.get(op->name).type == value_type);
 
-        string id_index = print_expr(op->index);
-        string id_value = print_expr(op->value);
         do_indent();
 
-        if (type_cast_needed) {
-            stream << "("
-                   << print_name(op->name)
-                   << ")";
-        } else {
-            stream << print_name(op->name);
+        // lhs:
+        string index_expr = print_expr(op->index);
+        stream << print_name(op->name);
+        stream << "[" << index_expr << "] = ";
+        // rhs:
+        if (type_cast_needed && (op->name == "__shared"))
+        {
+            // __shared[x] is always uint(32): must pack/reinterpret bits...
+            if (value_type.is_float())
+                stream << "asuint(" << value_expr << ");\n";
+            else
+                stream << value_expr << ";\n";
         }
-        stream << "[" << id_index << "] = "
-               << id_value << ";\n";
+        else
+        {
+            stream << value_expr << ";\n";
+        }
     }
 
     cache.clear();
@@ -553,15 +577,22 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     for (const Allocate* op : fsa.allocs)
     {
         internal_assert( op->extents.size() == 1  );
+        // The 'op->type' of shared memory allocations is always uint8 in Halide
+        // since shared storaged is considered a "byte buffer"... In D3D12 there
+        // is no uint8 type, so we'll have to emulate it with some 32bit type...
+        // This will also require pack/unpack logic with bit-masking and aliased
+        // type reinterpretation via asfloat()/asuint() in the shader code... :(
         stream << "groupshared"
-               << " "  << print_type(op->type)
+               << " "  << print_type(op->type)    // print_type(uint8) -> uint32
                << " "  << print_name(op->name);
         if (is_const(op->extents[0]))
         {
-            stream << " [" << op->extents[0] << "];\n";
+            stream << " [" << op->extents[0] << " / 4];\n";
         }
         else
         {
+            // fill-in __GROUPSHARED_SIZE_IN_BYTES later on when D3DCompile() is
+            // invoked in halide_d3d12compute_run()
             stream << " [__GROUPSHARED_SIZE_IN_BYTES / 4];\n";
         }
         Allocation alloc;
@@ -584,7 +615,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             internal_assert(is_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
-            numthreads[index] = 0;
+            // if 'numthreads' for a given dimension can't be determined at code
+            // generation time, emit code such that it can be patched some point
+            // later when calling D3DCompile() / halide_d3d12compute_run()
+            numthreads[index] = 0;  // <-- 0 indicates 'undetermined'
             const IntImm* int_limit = loop->extent.as<IntImm>();
             if (nullptr != int_limit)
             {
@@ -614,6 +648,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindThreadGroupSize ftg;
     s.accept(&ftg);
+    // for undetermined 'numthreads' dimensions, insert placeholders to the code
+    // such as '__NUM_TREADS_X' that will later be patched when D3DCompile() is
+    // invoked in halide_d3d12compute_run()
     stream << "[ numthreads(";
     (ftg.numthreads[0] > 0) ?
         (stream << " "  << ftg.numthreads[0]) :
