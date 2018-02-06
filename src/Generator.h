@@ -586,6 +586,8 @@ class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
 public:
     GeneratorParam_LoopLevel(const std::string &name, const LoopLevel &value) : GeneratorParamImpl<LoopLevel>(name, value) {}
 
+    using GeneratorParamImpl<LoopLevel>::set;
+
     void set(const LoopLevel &value) override {
         // Don't call check_value_writable(): It's OK to set a LoopLevel after generate().
         // check_value_writable();
