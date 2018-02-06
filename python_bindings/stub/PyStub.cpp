@@ -2,10 +2,9 @@
 // for a Python module. It assumes/requires that it is
 // linked with PyStubImpl.o to be useful.
 //
-// Note that this quite deliberately
-// doesn't include any PyBind11 headers; it is designed to
-// be compiled without PyBind11 being available at compile time,
-// to simplify build requirements some downstream environments.
+// Note that this quite deliberately doesn't include any PyBind11 headers;
+//it is designed to be compiled without PyBind11 being available at compile time,
+// to simplify build requirements in downstream environments.
 
 #include <memory>
 #include <Python.h>
