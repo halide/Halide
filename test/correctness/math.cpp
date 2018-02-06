@@ -29,6 +29,15 @@ bool relatively_equal(value_t a, value_t b) {
             return true;
         }
 
+        // try again with a lower error threshold in case the device target is
+        // using fast approximate trigonometric functions (HLSL):
+        if (relative_error < .001023) {
+            std::cout << "relatively_equal: relaxed threshold for (" << a << ", " << b << ") "
+                      << "with relative error " << relative_error
+                      << " (shader fast trig)" << std::endl;
+            return true;
+        }
+
         std::cerr
             << "relatively_equal failed for (" << a << ", " << b
             << ") with relative error " << relative_error << std::endl;
