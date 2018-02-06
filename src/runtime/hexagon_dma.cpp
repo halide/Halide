@@ -290,6 +290,9 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         return halide_error_code_device_buffer_copy_failed;
     }
 
+    // Allocation of L2 Cache for DMA Transfer
+    // Copy from Cache to temp buffer 
+    // To do This needs to be streamline
     int buf_size = dst->size_in_bytes();
     debug(user_context) << "cach buffer size " << buf_size << "\n";
     if (dev->cache_buf == 0) {
@@ -378,6 +381,10 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
         return halide_error_code_copy_to_host_failed;
     }
 
+    //Here we do Locked L2 allocation for DMA Transfer
+    //Since there is allocation of temporary buffer
+    //We copy from L2 to temp buffer
+    //To Do This needs to be streamline 
     int size = buf->size_in_bytes();
     if (dev->cache_buf == 0) {
         dev->cache_buf = HAP_cache_lock((sizeof(uint8_t) * size), 0);

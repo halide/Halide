@@ -18,9 +18,11 @@ int halide_host_cpu_count() {
     return 4;
 }
 
+//Wraooer that envelopes and init_flag for initialization 
 typedef struct {
-    uint64_t init_flag;
     qurt_mutex_t mutex;
+    uint64_t init_flag;
+    uint64_t _dummy[5]; 
 } qurt_mutex_wrapper_t;
 
 namespace {
@@ -72,7 +74,8 @@ WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
 
 WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
     qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
-    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG);             // check mutex is initialized
+    //check here if mutex is initialized 
+    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG); 
     qurt_mutex_lock((qurt_mutex_t *)&pmutex->mutex);
 }
 
@@ -117,7 +120,8 @@ extern "C" {
 WEAK int halide_do_par_for(void *user_context,
                            halide_task_t task,
                            int min, int size, uint8_t *closure) {
-    qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
+    // Do not initialize here. Initialize in constructor  
+    /*qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
     if (!work_queue.initialized) {
         // The thread pool asssumes that a zero-initialized mutex can
         // be locked. Not true on hexagon, and there doesn't seem to
@@ -125,8 +129,8 @@ WEAK int halide_do_par_for(void *user_context,
         // safe to assume that the first call to halide_do_par_for is
         // done by the main thread, so there's no race condition on
         // initializing this mutex.
-        qurt_mutex_init(mutex);
-    }
+       // qurt_mutex_init(mutex);
+    }*/
     return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
 }
 
