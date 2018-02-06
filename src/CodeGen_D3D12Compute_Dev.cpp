@@ -552,7 +552,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     s.accept(&fsa);
     for (const Allocate* op : fsa.allocs)
     {
-        internal_assert(op->extents.size() == 1 && is_const(op->extents[0]));
+        internal_assert( op->extents.size() == 1  );
+        user_assert(is_const(op->extents[0])) << "For D3D12Compute, 'groupshared' memory size must be known at compile time.\n";
         stream << "groupshared"
                << " "  << print_type(op->type)
                << " "  << print_name(op->name)
@@ -670,10 +671,10 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     // Write out the Halide math functions.
     src_stream 
              //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
-               << "#define float_from_bits asfloat \n"
                << "float nan_f32()     { return( 1.#IND); } \n" // Quiet NaN with minimum fractional value.
                << "float neg_inf_f32() { return(-1.#INF); } \n"
                << "float inf_f32()     { return(+1.#INF); } \n"
+               << "#define float_from_bits asfloat \n"
                << "#define sqrt_f32    sqrt   \n"
                << "#define sin_f32     sin    \n"
                << "#define cos_f32     cos    \n"

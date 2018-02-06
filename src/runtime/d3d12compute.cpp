@@ -13,9 +13,7 @@
 #include "device_interface.h"
 #include "printer.h"
 
-#if HALIDE_D3D12_TRACE
-    static char tracelogbuf [64*1024];
-    typedef Printer<BasicPrinter, sizeof(tracelogbuf)> tracer;
+#if HALIDE_D3D12_TRACE && (defined(DEBUG_RUNTIME) && DEBUG_RUNTIME)
     static const char indent_pattern [] = "   ";
     static char  indent [128] = { };
     static int   indent_end   = 0;
@@ -33,7 +31,7 @@
         }
     };
     #define TRACEINDENT     ((const char*)indent)
-    #define TRACEPRINT(msg) tracer(user_context, tracelogbuf) << TRACEINDENT << msg;
+    #define TRACEPRINT(msg) debug(user_context) << TRACEINDENT << msg;
     #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
 #else
     #define TRACEINDENT ""
@@ -1242,9 +1240,28 @@ static d3d12_library* new_library_with_source(d3d12_device* device, const char* 
     return(library);
 }
 
-static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_library* library, const char* name, size_t name_len)
+static void dump_shader(const char* source, ID3DBlob* compiler_msgs = NULL)
+{
+    char dumpbuffer [64*1024];
+    typedef Printer<BasicPrinter, sizeof(dumpbuffer)> dump;
+
+    const char* message = "<no error message reported>";
+    if (compiler_msgs)
+    {
+        message = (const char*)compiler_msgs->GetBufferPointer();
+    }
+
+    dump(user_context) << TRACEINDENT << "D3DCompile(): " << message << "\n";
+    dump(user_context) << TRACEINDENT << ">>> HSLS shader source dump <<<\n" << source << "\n";
+}
+
+static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_library* library, const char* name, size_t name_len, int shared_mem_bytes)
 {
     TRACELOG;
+
+    // TODO(marcos): handle 'shared_mem_bytes' when shared memory is determined
+    // dynamically (using a define/shader-macro?); in addition, should probably
+    // cache the compile function in the library to reduce the disptach delay
 
     const char* source = library->source;
     int source_size = library->source_length;
@@ -1252,7 +1269,7 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     const char* shaderName = name;  // only used for debug information
     ID3DInclude* includeHandler = NULL;
     const char* entryPoint = name;
-    const char* target = "cs_5_0";
+    const char* target = "cs_5_1";  // all d3d12 hardware support SM 5.1
     UINT flags1 = 0;
     UINT flags2 = 0;    // flags related to effects (.fx files)
     ID3DBlob* shaderBlob = NULL;
@@ -1265,20 +1282,16 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     //flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
 #endif
 
-    TRACEPRINT(">>> HLSL shader source dump <<< \n" << source);
+    //dump_shader(source);
 
     HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
 
     if (FAILED(result) || (NULL == shaderBlob))
     {
         debug(user_context) << TRACEINDENT << "Unable to compile D3D12 compute shader (HRESULT=" << (void*)(int64_t)result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n";
-        if (errorMsgs)
-        {
-            const char* errorMessage = (const char*)errorMsgs->GetBufferPointer();
-            debug(user_context) << TRACEINDENT << "D3D12Compute: ERROR: D3DCompiler: " << errorMessage << "\n";
-            Release_ID3D12Object(errorMsgs);
-        }
-        error(user_context) << TRACEINDENT << source << "\n" << "!!! HALT !!!";
+        dump_shader(source, errorMsgs);
+        Release_ID3D12Object(errorMsgs);
+        error(user_context) << "!!! HALT !!!";
         return(NULL);
     }
 
@@ -1287,8 +1300,8 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     // even though it was successful, there may have been warning messages emitted by the compiler:
     if (NULL != errorMsgs)
     {
-        const char* errorMessage = (const char*)errorMsgs->GetBufferPointer();
-        debug(user_context) << TRACEINDENT << "D3DCompiler warnings:\n" << errorMessage << "\n";
+        dump_shader(source, errorMsgs);
+        Release_ID3D12Object(errorMsgs);
     }
 
     d3d12_function* function = malloct<d3d12_function>();
@@ -2016,6 +2029,10 @@ WEAK int halide_d3d12compute_run(void *user_context,
 {
     TRACELOG;
 
+    static char logbug [64];
+    typedef Printer<BasicPrinter, sizeof(logbug)> logger;
+    logger(user_context) << "halide_d3d12compute_run()\n";
+
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
@@ -2048,7 +2065,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state*)state_ptr;
 
-    d3d12_function* function = new_function_with_name(device, state->library, entry_name, strlen(entry_name));
+    d3d12_function* function = new_function_with_name(device, state->library, entry_name, strlen(entry_name), shared_mem_bytes);
     halide_assert(user_context, function);
 
     // TODO(marcos): seems like a good place to create the descriptor heaps and tables...
@@ -2110,9 +2127,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
             memcpy(&args_ptr[offset], &val, argsize);
             offset = (offset + argsize - 1) & ~(argsize - 1);
             offset += argsize;
-#if 1   // dump constants:
-            TRACEPRINT("arg " << (int)i << " has size " << (int)arg_sizes[i] << " : float(" << *arg.f << ") or int32(" << *arg.i << ")\n");
-#endif
+            TRACEPRINT(">>> arg " << (int)i << " has size " << (int)arg_sizes[i] << " : float(" << *arg.f << ") or int32(" << *arg.i << ")\n");
         }
         halide_assert(user_context, offset == total_args_size);
     }
@@ -2227,17 +2242,18 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
                                          struct halide_buffer_t *dst) {
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop called.\n";
-    debug(user_context) << TRACEINDENT << "NOT YET IMPLEMENTED.\n";
-    halide_assert(user_context, false);
-/*
-    MetalContextHolder metal_context(user_context, true);
-    if (metal_context.error != 0) {
-        return metal_context.error;
-    }
+    error(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop() : NOT YET IMPLEMENTED.\n";
 
+    D3D12ContextHolder d3d12_context (user_context, true);
+    if (d3d12_context.error != 0)
+    {
+        return d3d12_context.error;
+    }
+/*
     dst->device_interface = src->device_interface;
     int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
+    for (int i = 0; i < src->dimensions; i++)
+    {
         offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
     }
     offset *= src->type.bytes();
@@ -2265,9 +2281,9 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
     debug(user_context) << TRACEINDENT 
                         << "halide_d3d12compute_device_release_crop called on buf "
                         << buf << " device is " << buf->device << "\n";
-    debug(user_context) << TRACEINDENT << "NOT YET IMPLEMENTED.\n";
-    halide_assert(user_context, false);
-    if (buf->device == 0) {
+    error(user_context) << TRACEINDENT << "halide_d3d12compute_device_release_crop() : NOT YET IMPLEMENTED.\n";
+    if (buf->device == 0)
+    {
         return 0;
     }
     /*
