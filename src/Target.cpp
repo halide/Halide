@@ -532,7 +532,9 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
             return has_feature(Target::CLDoubles);
         }
     } else if (device == DeviceAPI::D3D12Compute) {
-        // TODO(marcos): check for double support (I think it is mandatory on D3D12...)
+        // Shader Model 5.x can optionally support double-precision; 64-bit int
+        // types are not supported.
+        return( t.bits() < 64 );
     }
 
     return true;

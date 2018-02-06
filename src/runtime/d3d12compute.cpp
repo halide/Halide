@@ -438,7 +438,7 @@ WEAK int wrap_buffer(void* user_context, struct halide_buffer_t* buf, d3d12_buff
 {
     TRACELOG;
     uint64_t raw = reinterpret_cast<uint64_t>(d3d12_buf);
-    return(halide_d3d12compute_wrap_buffer(user_context, buf, raw));
+    return( halide_d3d12compute_wrap_buffer(user_context, buf, raw) );
 }
 
 WEAK d3d12_device* device = NULL;
@@ -1356,7 +1356,10 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             TRACEPRINT("UAV" "\n");
 
             DXGI_FORMAT Format = input_buffer->format;
-            halide_assert(NULL, DXGI_FORMAT_UNKNOWN != Format);
+            if (DXGI_FORMAT_UNKNOWN == Format)
+            {
+                error(user_context) << "unsupported buffer element type: " << input_buffer->halide->type << "\n";
+            }
 
             UINT NumElements = input_buffer->halide->number_of_elements();
 
@@ -2243,13 +2246,13 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop called.\n";
     error(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop() : NOT YET IMPLEMENTED.\n";
-
+/*
     D3D12ContextHolder d3d12_context (user_context, true);
     if (d3d12_context.error != 0)
     {
         return d3d12_context.error;
     }
-/*
+
     dst->device_interface = src->device_interface;
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++)
@@ -2282,11 +2285,12 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
                         << "halide_d3d12compute_device_release_crop called on buf "
                         << buf << " device is " << buf->device << "\n";
     error(user_context) << TRACEINDENT << "halide_d3d12compute_device_release_crop() : NOT YET IMPLEMENTED.\n";
+/*
     if (buf->device == 0)
     {
         return 0;
     }
-    /*
+
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
@@ -2300,7 +2304,7 @@ WEAK int halide_d3d12compute_device_release_crop(void *user_context,
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
-    */
+*/
     return 0;
 }
 
@@ -2319,6 +2323,11 @@ WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffe
 
     d3d12_buf->halide = halide_buf;
     d3d12_buf->format = FindD3D12FormatForHalideType(halide_buf->type);
+    if (DXGI_FORMAT_UNKNOWN == d3d12_buf->format)
+    {
+        error(user_context) << "unsupported buffer element type: " << halide_buf->type << "\n";
+        return(-3);
+    }
 
     halide_buf->device = device_buf_handle;
     halide_buf->device_interface = &d3d12compute_device_interface;
