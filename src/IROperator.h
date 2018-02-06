@@ -11,6 +11,7 @@
 
 #include "IR.h"
 #include "Util.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -869,32 +870,7 @@ inline Expr absd(Expr a, Expr b) {
  * that it always evaluates all arguments. If the first argument is
  * true, then return the second, else return the third. Typically
  * vectorizes cleanly, but benefits from SSE41 or newer on x86. */
-inline Expr select(Expr condition, Expr true_value, Expr false_value) {
-
-    if (as_const_int(condition)) {
-        // Why are you doing this? We'll preserve the select node until constant folding for you.
-        condition = cast(Bool(), std::move(condition));
-    }
-
-    // Coerce int literals to the type of the other argument
-    if (as_const_int(true_value)) {
-        true_value = cast(false_value.type(), std::move(true_value));
-    }
-    if (as_const_int(false_value)) {
-        false_value = cast(true_value.type(), std::move(false_value));
-    }
-
-    user_assert(condition.type().is_bool())
-        << "The first argument to a select must be a boolean:\n"
-        << "  " << condition << " has type " << condition.type() << "\n";
-
-    user_assert(true_value.type() == false_value.type())
-        << "The second and third arguments to a select do not have a matching type:\n"
-        << "  " << true_value << " has type " << true_value.type() << "\n"
-        << "  " << false_value << " has type " << false_value.type() << "\n";
-
-    return Internal::Select::make(std::move(condition), std::move(true_value), std::move(false_value));
-}
+Expr select(Expr condition, Expr true_value, Expr false_value);
 
 /** A multi-way variant of select similar to a switch statement in C,
  * which can accept multiple conditions and values in pairs. Evaluates
@@ -905,6 +881,28 @@ template<typename... Args,
 inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args&&... args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
+
+/** Equivalent of ternary select(), but taking/returning tuples. If the condition is
+ * a Tuple, it must match the size of the true and false Tuples. */
+// @{
+Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
+// @}
+
+/** Equivalent of multiway select(), but taking/returning tuples. If the condition is
+ * a Tuple, it must match the size of the true and false Tuples. */
+// @{
+template<typename... Args>
+inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args&&... args) {
+    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+}
+
+template<typename... Args>
+inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args&&... args) {
+    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+}
+// @}
+
 
 // TODO: Implement support for *_f16 external functions in various backends.
 // No backend supports these yet.
