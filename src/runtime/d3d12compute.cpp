@@ -1255,17 +1255,33 @@ static void dump_shader(const char* source, ID3DBlob* compiler_msgs = NULL)
     dump(user_context) << TRACEINDENT << ">>> HSLS shader source dump <<<\n" << source << "\n";
 }
 
-static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_library* library, const char* name, size_t name_len, int shared_mem_bytes)
+static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_library* library, const char* name, size_t name_len, int shared_mem_bytes, int threadsX, int threadsY, int threadsZ)
 {
     TRACELOG;
 
-    // TODO(marcos): handle 'shared_mem_bytes' when shared memory is determined
-    // dynamically (using a define/shader-macro?); in addition, should probably
-    // cache the compile function in the library to reduce the disptach delay
+    // TODO(marcos): cache the compiled function in the library to reduce the
+    // overhead on 'halide_d3d12compute_run' (the only caller)
+
+    // Round shared memory size up to a multiple of 16:
+    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
+    TRACEPRINT("groupshared memory size: " << shared_mem_bytes << " bytes.\n");
+    TRACEPRINT("numthreads( " << threadsX << ", " << threadsY << ", " << threadsZ << " )\n");
+    typedef Printer<StringStreamPrinter, 16> SS;
+    char strbuf0 [16] = { }; SS(NULL, strbuf0) << shared_mem_bytes;
+    char strbuf1 [16] = { }; SS(NULL, strbuf1) << threadsX;
+    char strbuf2 [16] = { }; SS(NULL, strbuf2) << threadsY;
+    char strbuf3 [16] = { }; SS(NULL, strbuf3) << threadsZ;
 
     const char* source = library->source;
     int source_size = library->source_length;
-    D3D_SHADER_MACRO pDefines [] = { { NULL, NULL } };
+    D3D_SHADER_MACRO pDefines [] =
+    {
+        { "__GROUPSHARED_SIZE_IN_BYTES", strbuf0 },
+        { "__NUM_TREADS_X", strbuf1 },
+        { "__NUM_TREADS_Y", strbuf2 },
+        { "__NUM_TREADS_Z", strbuf3 },
+        { NULL, NULL }
+    };
     const char* shaderName = name;  // only used for debug information
     ID3DInclude* includeHandler = NULL;
     const char* entryPoint = name;
@@ -1274,10 +1290,11 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     UINT flags2 = 0;    // flags related to effects (.fx files)
     ID3DBlob* shaderBlob = NULL;
     ID3DBlob* errorMsgs  = NULL;
+
+    flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 #if HALIDE_D3D12_DEBUG_SHADERS
     flags1 |= D3DCOMPILE_DEBUG;
     flags1 |= D3DCOMPILE_SKIP_OPTIMIZATION;
-    flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
     //flags1 |= D3DCOMPILE_RESOURCES_MAY_ALIAS;
     //flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
 #endif
@@ -1394,14 +1411,6 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             halide_assert(user_context, false);
             break;
     }
-}
-
-WEAK void set_threadgroup_memory_length(d3d12_compute_command_list* cmdList, uint32_t length, uint32_t index)
-{
-    TRACELOG;
-    TRACEPRINT("... ignoring ...\n");
-    // Direct3D 12 Compute kernels require groupshared memory to be  determined
-    // at compile-time...
 }
 
 static void commit_command_list(d3d12_compute_command_list* cmdList)
@@ -2068,7 +2077,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
     halide_assert(user_context, state_ptr);
     module_state *state = (module_state*)state_ptr;
 
-    d3d12_function* function = new_function_with_name(device, state->library, entry_name, strlen(entry_name), shared_mem_bytes);
+    d3d12_function* function = new_function_with_name(device, state->library, entry_name, strlen(entry_name),
+        shared_mem_bytes, threadsX, threadsY, threadsZ);
     halide_assert(user_context, function);
 
     // TODO(marcos): seems like a good place to create the descriptor heaps and tables...
@@ -2162,11 +2172,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
         return -1;
     }
     set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
-
-    // Round shared memory size up to a multiple of 16, as required by setThreadgroupMemoryLength.
-    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
-    debug(user_context) << TRACEINDENT << "Setting shared memory length to " << shared_mem_bytes << "\n";
-    set_threadgroup_memory_length(cmdList, shared_mem_bytes, 0);
 
     dispatch_threadgroups(cmdList,
                           blocksX, blocksY, blocksZ,

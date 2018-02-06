@@ -553,11 +553,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     for (const Allocate* op : fsa.allocs)
     {
         internal_assert( op->extents.size() == 1  );
-        user_assert(is_const(op->extents[0])) << "For D3D12Compute, 'groupshared' memory size must be known at compile time.\n";
         stream << "groupshared"
                << " "  << print_type(op->type)
-               << " "  << print_name(op->name)
-               << " [" << op->extents[0] << "];\n";
+               << " "  << print_name(op->name);
+        if (is_const(op->extents[0]))
+        {
+            stream << " [" << op->extents[0] << "];\n";
+        }
+        else
+        {
+            stream << " [__GROUPSHARED_SIZE_IN_BYTES / 4];\n";
+        }
         Allocation alloc;
         alloc.type = op->type;
         allocations.push(op->name, alloc);
@@ -578,10 +584,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             internal_assert(is_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
+            numthreads[index] = 0;
             const IntImm* int_limit = loop->extent.as<IntImm>();
-            user_assert(int_limit != nullptr) << "For D3D12Compute, 'numthreads[" << index << "]' must be a constant integer.\n";
-            numthreads[index] = int_limit->value;
-            user_assert(numthreads[index] > 0) << "For D3D12Compute, 'numthreads[" << index << "]' values must be greater than zero.\n";
+            if (nullptr != int_limit)
+            {
+                numthreads[index] = int_limit->value;
+                user_assert(numthreads[index] > 0) << "For D3D12Compute, 'numthreads[" << index << "]' values must be greater than zero.\n";
+            }
             debug(4) << "Thread group size for index " << index << " is " << numthreads[index] << "\n";
             loop->body.accept(this);
         }
@@ -605,11 +614,17 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindThreadGroupSize ftg;
     s.accept(&ftg);
-    stream << "[ numthreads("
-           << " "  << ftg.numthreads[0]
-           << ", " << ftg.numthreads[1]
-           << ", " << ftg.numthreads[2]
-           << " ) ]\n";
+    stream << "[ numthreads(";
+    (ftg.numthreads[0] > 0) ?
+        (stream << " "  << ftg.numthreads[0]) :
+        (stream << " __NUM_TREADS_X ");
+    (ftg.numthreads[1] > 0) ?
+        (stream << ", " << ftg.numthreads[1]) :
+        (stream << ", __NUM_TREADS_Y ");
+    (ftg.numthreads[2] > 0) ?
+        (stream << ", " << ftg.numthreads[2]) :
+        (stream << ", __NUM_TREADS_Z ");
+    stream << ") ]\n";
 
     stream << "void " << name << "(\n";
     stream << "uint3 tgroup_index  : SV_GroupID,\n"
