@@ -2717,7 +2717,7 @@ private:
     // Return our ParamInfo (lazy-initing as needed).
     ParamInfo &param_info();
 
-    Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name);
+    Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
     void check_scheduled(const char* m) const;
 
@@ -2730,9 +2730,21 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
+    // Return the Output<Func> or Output<Buffer> with the given name,
+    // which must be a singular (non-array) Func or Buffer output.
+    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
     Func get_output(const std::string &n);
-    std::vector<Func> get_output_vector(const std::string &n);
-    std::vector<std::vector<Func>> get_output_vector();
+
+    // Return the Output<Func[]> with the given name, which must be an
+    // array-of-Func output. If no such name exists (or is non-array), assert;
+    // this method never returns undefined Funcs.
+    std::vector<Func> get_array_output(const std::string &n);
+
+    // Return a vector of all Outputs of this Generator; non-array outputs are returned
+    // as a vector-of-size-1. This method is primarily useful for code that needs
+    // to iterate through the outputs of unknown, arbitrary Generators (e.g.,
+    // the Python bindings).
+    std::vector<std::vector<Func>> get_all_outputs();
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3119,12 +3131,12 @@ public:
         return T2(get_output(n), generator);
     }
 
-    std::vector<Func> get_output_vector(const std::string &n) const {
-        return generator->get_output_vector(n);
+    std::vector<Func> get_array_output(const std::string &n) const {
+        return generator->get_array_output(n);
     }
 
-    std::vector<std::vector<Func>> get_output_vector() const {
-        return generator->get_output_vector();
+    std::vector<std::vector<Func>> get_all_outputs() const {
+        return generator->get_all_outputs();
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {

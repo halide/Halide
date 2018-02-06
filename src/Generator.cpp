@@ -404,7 +404,7 @@ void StubEmitter::emit() {
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
-        if (output->is_array()) getter = "get_output_vector";
+        if (output->is_array()) getter = "get_array_output";
         else if (c_type == "Func") getter = "get_output";
         else getter = "get_output_buffer<" + c_type + ">";
         out_info.push_back({
@@ -1103,47 +1103,32 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
 
 Func GeneratorBase::get_output(const std::string &n) {
     check_min_phase(GenerateCalled);
-    // There usually are very few outputs, so a linear search is fine
-    ParamInfo &pi = param_info();
-    for (auto output : pi.filter_outputs) {
-        if (output->name() == n) {
-            user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
-            user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_output_vector()\n";
-            Func f = output->funcs().at(0);
-            user_assert(f.defined()) << "Output " << n << " was not defined.\n";
-            return f;
-        }
-    }
-    internal_error << "Output " << n << " not found.\n";
-    return Func();
+    auto *output = find_output_by_name(n);
+    user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
+    user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_array_output()\n";
+    Func f = output->funcs().at(0);
+    user_assert(f.defined()) << "Output " << n << " was not defined.\n";
+    return f;
 }
 
-std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
+std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
     check_min_phase(GenerateCalled);
-    // There usually are very few outputs, so a linear search is fine
-    ParamInfo &pi = param_info();
-    for (auto output : pi.filter_outputs) {
-        if (output->name() == n) {
-            user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
-            for (const auto &f : output->funcs()) {
-                user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
-            }
-            return output->funcs();
-        }
+    auto *output = find_output_by_name(n);
+    user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
+    for (const auto &f : output->funcs()) {
+        user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
     }
-    internal_error << "Output " << n << " not found.\n";
-    return {};
+    return output->funcs();
 }
 
-std::vector<std::vector<Func>> GeneratorBase::get_output_vector() {
+std::vector<std::vector<Func>> GeneratorBase::get_all_outputs() {
     std::vector<std::vector<Func>> v;
     check_min_phase(GenerateCalled);
-    // There usually are very few outputs, so a linear search is fine
     ParamInfo &pi = param_info();
     for (auto output : pi.filter_outputs) {
         const std::string &name = output->name();
         if (output->is_array()) {
-            v.push_back(get_output_vector(name));
+            v.push_back(get_array_output(name));
         } else {
             v.push_back(std::vector<Func>{get_output(name)});
         }
@@ -1151,12 +1136,17 @@ std::vector<std::vector<Func>> GeneratorBase::get_output_vector() {
     return v;
 }
 
-Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const std::string &name) {
+// Find output by name. If not found, assert-fail. Never returns null.
+GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
+    // There usually are very few outputs, so a linear search is fine
     ParamInfo &pi = param_info();
-    auto it = pi.generator_params_by_name.find(name);
-    user_assert(it != pi.generator_params_by_name.end()) << "Generator has no GeneratorParam named: " << name << "\n";
-    internal_assert(it->second != nullptr);
-    return *it->second;
+    for (GeneratorOutputBase *output : pi.filter_outputs) {
+        if (output->name() == name) {
+            return output;
+        }
+    }
+    internal_error << "Output " << name << " not found.";
+    return nullptr;  // not reached
 }
 
 void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {

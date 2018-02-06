@@ -115,7 +115,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
 
     stub.generate(generator_params, inputs);
 
-    const auto outputs = stub.get_output_vector();
+    const std::vector<std::vector<Func>> outputs = stub.get_all_outputs();
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {
         py::object o;
