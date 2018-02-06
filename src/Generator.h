@@ -2730,7 +2730,6 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    Func get_first_output();
     Func get_output(const std::string &n);
     std::vector<Func> get_output_vector(const std::string &n);
     std::vector<std::vector<Func>> get_output_vector();

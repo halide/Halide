@@ -1101,11 +1101,6 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-Func GeneratorBase::get_first_output() {
-    ParamInfo &pi = param_info();
-    return get_output(pi.filter_outputs[0]->name());
-}
-
 Func GeneratorBase::get_output(const std::string &n) {
     check_min_phase(GenerateCalled);
     // There usually are very few outputs, so a linear search is fine

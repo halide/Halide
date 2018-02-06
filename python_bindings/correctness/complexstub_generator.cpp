@@ -2,8 +2,6 @@
 
 namespace {
 
-enum class BagType { Paper, Plastic };
-
 template<typename Type, int size = 4, int dim = 1>
 Halide::Buffer<Type> make_image(int extra) {
     Halide::Buffer<Type> im(size, size, dim);
@@ -20,11 +18,6 @@ Halide::Buffer<Type> make_image(int extra) {
 class ComplexStub : public Halide::Generator<ComplexStub> {
 public:
     GeneratorParam<Type> untyped_buffer_output_type{ "untyped_buffer_output_type", Float(32) };
-    GeneratorParam<float> float_param{ "float_param", 3.1415926535f };
-    GeneratorParam<BagType> bag_type{ "bag_type",
-                                      BagType::Paper,
-                                      { { "paper", BagType::Paper },
-                                        { "plastic", BagType::Plastic } } };
     GeneratorParam<bool> vectorize{ "vectorize", true };
     GeneratorParam<LoopLevel> intermediate_level{ "intermediate_level", LoopLevel::root() };
 
