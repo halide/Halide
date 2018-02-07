@@ -225,11 +225,21 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Ramp *op) {
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op) {
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast* op)
+{
     string id_value = print_expr(op->value);
+    user_assert(op->value.type().lanes() == 1) << "Broadcast source must be 1-wide.\n";
 
     ostringstream rhs;
-    rhs << print_type(op->type.with_lanes(op->lanes)) << "(" << id_value << ")";
+    rhs << print_type(op->type.with_lanes(op->lanes))
+        << "(";
+    for (int i = 0; i < op->lanes; ++i)
+    {
+        rhs << id_value;
+        if (i < op->lanes-1)
+            rhs << ", ";
+    }
+    rhs << ")";
 
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
@@ -251,20 +261,32 @@ Expr is_ramp_one(Expr e) {
 }
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
+{
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
-    // If we're loading a contiguous ramp, load from a vector type pointer.
+    // If we're loading a contiguous ramp, "unroll" the ramp into loads:
     Expr ramp_base = is_ramp_one(op->index);
-    if (ramp_base.defined()) {
+    if (ramp_base.defined())
+    {
         internal_assert(op->type.is_vector());
 
         ostringstream rhs;
-        rhs << "("
-            << print_name(op->name)
-            << " + "
-            << print_expr(ramp_base)
-            << ")";
+        rhs << print_type(op->type)
+            << "(";
+        const int lanes = op->type.lanes();
+        for(int i = 0; i < lanes; ++i)
+        {
+            rhs << print_name(op->name)
+                << "["
+                << print_expr(ramp_base)
+                << "+" << i
+                << "]";
+            if (i < lanes-1)
+                rhs << ", ";
+        }
+        rhs << ")";
+
         print_assignment(op->type, rhs.str());
 
         return;
@@ -337,25 +359,34 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     }
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
+{
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     string value_expr = print_expr(op->value);
     Type value_type = op->value.type();
 
-    // If we're writing a contiguous ramp, store through a pointer of vector type.
+    // If we're writing a contiguous ramp, "unroll" the ramp into stores:
     Expr ramp_base = is_ramp_one(op->index);
     if (ramp_base.defined()) {
         internal_assert(value_type.is_vector());
 
-        do_indent();
-        stream << "("
-               << print_name(op->name)
-               << " + "
-               << print_expr(ramp_base)
-               << ") = "
-               << value_expr
-               << ";\n";
+        int lanes = value_type.lanes();
+        for (int i = 0; i < lanes; ++i)
+        {
+            // TODO(marcos): this indentation looks funny in the generated code
+            do_indent();
+            stream << print_name(op->name)
+                << "["
+                << print_expr(ramp_base)
+                << " + " << i
+                << "] = "
+                << value_expr
+                << "["
+                << i
+                << "]"
+                << ";\n";
+        }
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(value_type.is_vector());
