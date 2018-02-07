@@ -355,38 +355,38 @@ public:
 
     const std::string name;
 
-    // overload the set() function to call the right virtual method based on type.
-    // This allows us to attempt to set a GeneratorParam via a
+    // overload the init() function to call the right virtual method based on type.
+    // This allows us to attempt to init a GeneratorParam via a
     // plain C++ type, even if we don't know the specific templated
-    // subclass. Attempting to set the wrong type will assert.
+    // subclass. Attempting to init the wrong type will assert.
     // Notice that there is no typed setter for Enums, for obvious reasons;
-    // setting enums in an unknown type must fallback to using set_from_string.
+    // setting enums in an unknown type must fallback to using init_from_string.
     //
     // It's always a bit iffy to use macros for this, but IMHO it clarifies the situation here.
-#define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
-    virtual void set(const TYPE &new_value) = 0;
+#define HALIDE_GENERATOR_PARAM_TYPED_INIT(TYPE) \
+    virtual void init(const TYPE &new_value) = 0;
 
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int16_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int32_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int64_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint8_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint16_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint32_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(bool)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(float)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(double)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(MachineParams)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(Type)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(LoopLevel)
 
-#undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
+#undef HALIDE_GENERATOR_PARAM_TYPED_INIT
 
     // Add overloads for string and char*
-    void set(const std::string &new_value) { set_from_string(new_value); }
-    void set(const char *new_value) { set_from_string(std::string(new_value)); }
+    void init(const std::string &new_value) { init_from_string(new_value); }
+    void init(const char *new_value) { init_from_string(std::string(new_value)); }
 
 protected:
     friend class GeneratorBase;
@@ -396,7 +396,7 @@ protected:
     void check_value_writable() const;
 
     // All GeneratorParams are settable from string.
-    virtual void set_from_string(const std::string &value_string) = 0;
+    virtual void init_from_string(const std::string &value_string) = 0;
 
     virtual std::string call_to_string(const std::string &v) const = 0;
     virtual std::string get_c_type() const = 0;
@@ -456,37 +456,38 @@ public:
 
     operator Expr() const { return make_const(type_of<T>(), this->value()); }
 
-#define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
-    void set(const TYPE &new_value) override { typed_setter_impl<TYPE>(new_value, #TYPE); }
+#define HALIDE_GENERATOR_PARAM_TYPED_INIT(TYPE) \
+    void init(const TYPE &new_value) override { typed_init_impl<TYPE>(new_value, #TYPE); }
 
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int16_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int32_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int64_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint8_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint16_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint32_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(bool)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(int64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(uint64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(float)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(double)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(MachineParams)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(Type)
+    HALIDE_GENERATOR_PARAM_TYPED_INIT(LoopLevel)
 
-#undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
+#undef HALIDE_GENERATOR_PARAM_TYPED_INIT
 
 protected:
-    virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
+    virtual void init_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
 
-private:
+    // Allow LoopLevel to mutate it without check_value_writable()
     T value_;
 
+private:
     template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value &&
                                                   !std::is_same<T2, MachineParams>::value &&
                                                   !std::is_same<T2, LoopLevel>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
+    HALIDE_ALWAYS_INLINE void typed_init_impl(const T2 &value, const char * msg) {
         check_value_writable();
         // Arithmetic types must roundtrip losslessly.
         if (!std::is_same<T, T2>::value &&
@@ -502,20 +503,15 @@ private:
     }
 
     template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
+    HALIDE_ALWAYS_INLINE void typed_init_impl(const T2 &, const char *msg) {
         fail_wrong_type(msg);
     }
 
     template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
-                                                   std::is_same<T, MachineParams>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const MachineParams &value, const char *msg) {
+                                                   (std::is_same<T, MachineParams>::value || std::is_same<T, LoopLevel>::value)>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_init_impl(const T &value, const char *msg) {
+        check_value_writable();
         value_ = value;
-    }
-
-    template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
-                                                   std::is_same<T, LoopLevel>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const LoopLevel &value, const char *msg) {
-        value_.set(value);
     }
 };
 
@@ -529,8 +525,8 @@ class GeneratorParam_Target : public GeneratorParamImpl<T> {
 public:
     GeneratorParam_Target(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
 
-    void set_from_string(const std::string &new_value_string) override {
-        this->set(Target(new_value_string));
+    void init_from_string(const std::string &new_value_string) override {
+        this->init(Target(new_value_string));
     }
 
     std::string get_default_value() const override {
@@ -553,8 +549,8 @@ class GeneratorParam_MachineParams : public GeneratorParamImpl<T> {
 public:
     GeneratorParam_MachineParams(const std::string &name, const T &value) : GeneratorParamImpl<T>(name, value) {}
 
-    void set_from_string(const std::string &new_value_string) override {
-        this->set(MachineParams(new_value_string));
+    void init_from_string(const std::string &new_value_string) override {
+        this->init(MachineParams(new_value_string));
     }
 
     std::string get_default_value() const override {
@@ -576,11 +572,11 @@ class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
 public:
     GeneratorParam_LoopLevel(const std::string &name, const LoopLevel &value) : GeneratorParamImpl<LoopLevel>(name, value) {}
 
-    void set_from_string(const std::string &new_value_string) override {
+    void init_from_string(const std::string &new_value_string) override {
         if (new_value_string == "root") {
-            this->set(LoopLevel::root());
+            this->init(LoopLevel::root());
         } else if (new_value_string == "inlined") {
-            this->set(LoopLevel::inlined());
+            this->init(LoopLevel::inlined());
         } else {
             user_error << "Unable to parse " << this->name << ": " << new_value_string;
         }
@@ -620,6 +616,21 @@ public:
     bool is_looplevel_param() const override {
         return true;
     }
+
+    // calling init() vs set() on a LoopLevel can be a bit confusing:
+    // - calling init() re-initializes the GeneratorParam<Looplevel> so that
+    //   it refers to the same LoopLevel that is passed in (i.e., mutating
+    //   one effectively mutates the other); in C terms, it changes the pointer value.
+    //   init() can only be called on a GeneratorParam before its Generator's
+    //   generate()/build() method is called.
+    // - calling set() changes the contents of the LoopLevel to match the contents of the
+    //   argument value; in C terms, it is "*this = *that". It can be called at any time,
+    //   even after its Generator's generate()/build() method is called.
+    HALIDE_ALWAYS_INLINE void set(const LoopLevel &value) {
+        // Note that it's always OK to call LoopLevel::set(), even if no longer 'writable'.
+        // check_value_writable(); nope.
+        value_.set(value);
+    }
 };
 
 template<typename T>
@@ -630,21 +641,21 @@ public:
                               const T &min = std::numeric_limits<T>::lowest(),
                               const T &max = std::numeric_limits<T>::max())
         : GeneratorParamImpl<T>(name, value), min(min), max(max) {
-        // call set() to ensure value is clamped to min/max
-        this->set(value);
+        // call init() to ensure value is clamped to min/max
+        this->init(value);
     }
 
-    void set_impl(const T &new_value) override {
+    void init_impl(const T &new_value) override {
         user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
-        GeneratorParamImpl<T>::set_impl(new_value);
+        GeneratorParamImpl<T>::init_impl(new_value);
     }
 
-    void set_from_string(const std::string &new_value_string) override {
+    void init_from_string(const std::string &new_value_string) override {
         std::istringstream iss(new_value_string);
         T t;
         iss >> t;
         user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << new_value_string;
-        this->set(t);
+        this->init(t);
     }
 
     std::string get_default_value() const override {
@@ -692,16 +703,16 @@ class GeneratorParam_Bool : public GeneratorParam_Arithmetic<T> {
 public:
     GeneratorParam_Bool(const std::string &name, const T &value) : GeneratorParam_Arithmetic<T>(name, value) {}
 
-    void set_from_string(const std::string &new_value_string) override {
+    void init_from_string(const std::string &new_value_string) override {
         bool v = false;
-        if (new_value_string == "true") {
+        if (new_value_string == "true" || new_value_string == "True") {
             v = true;
-        } else if (new_value_string == "false") {
+        } else if (new_value_string == "false" || new_value_string == "False") {
             v = false;
         } else {
             user_assert(false) << "Unable to parse bool: " << new_value_string;
         }
-        this->set(v);
+        this->init(v);
     }
 
     std::string get_default_value() const override {
@@ -725,18 +736,18 @@ public:
     GeneratorParam_Enum(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
         : GeneratorParamImpl<T>(name, value), enum_map(enum_map) {}
 
-    // define a "set" that takes our specific enum (but don't hide the inherited virtual functions)
-    using GeneratorParamImpl<T>::set;
+    // define an "init" that takes our specific enum (but don't hide the inherited virtual functions)
+    using GeneratorParamImpl<T>::init;
 
     template <typename T2 = T, typename std::enable_if<!std::is_same<T2, Type>::value>::type * = nullptr>
-    void set(const T &e) {
-        this->set_impl(e);
+    void init(const T &e) {
+        this->init_impl(e);
     }
 
-    void set_from_string(const std::string &new_value_string) override {
+    void init_from_string(const std::string &new_value_string) override {
         auto it = enum_map.find(new_value_string);
         user_assert(it != enum_map.end()) << "Enumeration value not found: " << new_value_string;
-        this->set_impl(it->second);
+        this->init_impl(it->second);
     }
 
     std::string call_to_string(const std::string &v) const override {
@@ -2299,8 +2310,8 @@ std::vector<Type> parse_halide_type_list(const std::string &types);
 template<typename T>
 class GeneratorParam_Synthetic : public GeneratorParamImpl<T> {
 public:
-    void set_from_string(const std::string &new_value_string) override {
-        set_from_string_impl<T>(new_value_string);
+    void init_from_string(const std::string &new_value_string) override {
+        init_from_string_impl<T>(new_value_string);
     }
 
     std::string get_default_value() const override {
@@ -2329,13 +2340,13 @@ private:
     GeneratorParam_Synthetic(const std::string &name, GIOBase &gio, Which which) : GeneratorParamImpl<T>(name, T()), gio(gio), which(which) {}
 
     template <typename T2 = T, typename std::enable_if<std::is_same<T2, ::Halide::Type>::value>::type * = nullptr>
-    void set_from_string_impl(const std::string &new_value_string) {
+    void init_from_string_impl(const std::string &new_value_string) {
         internal_assert(which == Type);
         gio.types_ = parse_halide_type_list(new_value_string);
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_integral<T2>::value>::type * = nullptr>
-    void set_from_string_impl(const std::string &new_value_string) {
+    void init_from_string_impl(const std::string &new_value_string) {
         if (which == Dim) {
             gio.dims_ = parse_scalar<T2>(new_value_string);
         } else if (which == ArraySize) {
@@ -2448,9 +2459,9 @@ protected:
     GeneratorContext() : GeneratorContext(Target()) {}
 
     inline void init_from_context(const Halide::GeneratorContext &context) {
-        target.set(context.get_target());
-        auto_schedule.set(context.get_auto_schedule());
-        machine_params.set(context.get_machine_params());
+        target.init(context.get_target());
+        auto_schedule.init(context.get_auto_schedule());
+        machine_params.init(context.get_machine_params());
         value_tracker = context.get_value_tracker();
         externs_map = context.get_externs_map();
     }
@@ -2552,7 +2563,7 @@ public:
 
     virtual ~GeneratorBase();
 
-    void set_generator_param_values(const GeneratorParamsMap &params);
+    void init_generator_param_values(const GeneratorParamsMap &params);
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -3224,7 +3235,7 @@ namespace halide_register_generator {
             std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context); \
             std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context) { \
                 auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context); \
-                g->set_generator_param_values(__VA_ARGS__); \
+                g->init_generator_param_values(__VA_ARGS__); \
                 return g; \
             } \
         } \
