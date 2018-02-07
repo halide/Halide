@@ -40,9 +40,7 @@ namespace Internal {
 
 using std::vector;
 using std::string;
-using std::map;
 using std::pair;
-using std::set;
 
 namespace {
 
