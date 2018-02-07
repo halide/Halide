@@ -102,10 +102,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, Expr e) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, Expr e)
+{
     ostringstream oss;
-    // TODO(marcos): remove the 'lanes' suffix when printing the type here
-    oss << "as" << print_type(type) << "(" << print_expr(e) << ")";
+    oss << "as" << print_type(type.element_of()) << "(" << print_expr(e) << ")";
     return oss.str();
 }
 
@@ -351,8 +351,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
             do_indent();
             stream << id << "[" << i << "] = "
                    << print_type(op->type.element_of())
-                   << "(" << print_name(op->name) << ")"
-                   << "[" << id_index << "[" << i << "]];\n";
+                   << "("
+                   << print_name(op->name)
+                   << "[" << id_index << "[" << i << "]]"
+                   << ");\n";
         }
     } else {
         print_assignment(op->type, rhs.str());
