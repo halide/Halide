@@ -599,6 +599,11 @@ if (TARGET_PTX)
   list(APPEND LLVM_COMPONENTS NVPTX)
 endif()
 
+if (TARGET_AMDGPU)
+  target_compile_definitions(Halide PRIVATE "-DWITH_AMDGPU=1")
+  list(APPEND LLVM_COMPONENTS AMDGPU)
+endif()
+
 if (TARGET_OPENCL)
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
 endif()
