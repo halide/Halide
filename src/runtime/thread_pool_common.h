@@ -53,9 +53,9 @@ struct work_queue_t {
     bool shutdown, initialized;
 
     work_queue_t() {
-        // TODO: Print added here is not seen on 8996 but seen on 8998 and SDM 845
-        // No failures seen while running standard examples on 8996
-        // Investigation is still on regarding this on 8996  
+        // TODO: Cannot confirm if this constructor is getting called on 8996 or not, however the hexagon_benchmarks are passing;
+        // All other Hexagon targets are confirmed to call this constructor, including SDM845,msm8998. Confirmation is based on capturing a log message added here.
+        // Investigation is still ongoing regarding 8996 issue 
         halide_mutex_init(&mutex);
     }
 
