@@ -96,5 +96,7 @@ run-host: $(BIN)/host/AveragePool $(BIN)/host/DepthwiseConvolution $(BIN)/host/C
 	./MatrixMultiply.sh $(BIN)/host/MatrixMultiply
 	./MaxPool.sh $(BIN)/host/MaxPool
 
+test: run-host
+
 clean:
 	rm -rf $(BIN)
