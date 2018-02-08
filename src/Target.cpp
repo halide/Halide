@@ -248,6 +248,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"mingw", Target::MinGW},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"large_buffers", Target::LargeBuffers},
+    {"hexagon_dma", Target::HexagonDma},
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},

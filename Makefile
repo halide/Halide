@@ -613,6 +613,7 @@ RUNTIME_CPP_COMPONENTS = \
   gcd_thread_pool \
   gpu_device_selection \
   hexagon_cpu_features \
+  hexagon_dma \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -686,6 +687,7 @@ RUNTIME_LL_COMPONENTS = \
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
@@ -1033,7 +1035,7 @@ $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_in
 	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(ROOT_DIR)/src/runtime -o $@
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
-# this test should be usable without either. 
+# this test should be usable without either.
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -o $@
 
@@ -1414,8 +1416,8 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # The values in MachineParams are:
-# - the maximum level of parallelism available, 
-# - the size of the last-level cache (in KB), 
+# - the maximum level of parallelism available,
+# - the size of the last-level cache (in KB),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
