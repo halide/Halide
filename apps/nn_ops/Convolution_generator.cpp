@@ -31,44 +31,46 @@ class Convolution : public Generator<Convolution> {
 public:
     // Unsigned 8-bit input tensor, indexed by input_depth, input_x, input_y,
     // input_batch.
-    ImageParam input_{ UInt(8), 4, "input" };
+    Input<Buffer<uint8_t>> input_{"input", 4};
 
     // A 4D array of 8-bit filter coefficients indexed by filter_depth, filter_x,
     // filter_y, filter_batch (aka. output_depth).
-    ImageParam filter_{ UInt(8), 4, "filter" };
+    Input<Buffer<uint8_t>> filter_{"filter", 4};
 
     // A 1D array of 32-bit biases. The bias should be added to the depth
     // dimension of the output (i.e., # filter batches).
-    ImageParam bias_{ Int(32), 1, "bias" };
+    Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets and multipliers for the input, filter, and output.
-    Param<int16_t> input_offset_{ "input_offset", 0, -255, 0 };
-    Param<int16_t> filter_offset_{ "filter_offset", 0, -255, 0 };
+    Input<int16_t> input_offset_{ "input_offset", 0, -255, 0 };
+    Input<int16_t> filter_offset_{ "filter_offset", 0, -255, 0 };
 
     // For each x, y, batch, only the first input_depth_ elements can be non-zero.
     // All remaining elements are assigned byte_zero_. This value should be <=
     // input_.dim(0).extent()
-    Param<int> input_depth_{ "input_depth" };
+    Input<int> input_depth_{ "input_depth" };
 
     // The stride specifies how the input [x, y] is sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
     // spatially at [x * stride, y * stride]. The caller is responsible for
     // allocating the correct output memory.
-    Param<int> stride_{ "stride" };
-    Param<int> pad_width_{ "pad_width" };
-    Param<int> pad_height_{ "pad_height" };
+    Input<int> stride_{ "stride" };
+    Input<int> pad_width_{ "pad_width" };
+    Input<int> pad_height_{ "pad_height" };
     // byte_zero_ denotes the value padded at the input tensor boundary (in the x
     // and y dimensions). The name byte_zero_ follows tfmini convention.
-    Param<uint8_t> byte_zero_{ "byte_zero" };
+    Input<uint8_t> byte_zero_{ "byte_zero" };
 
     // Parameters for pointwise operations on the output.
-    Param<int> output_multiplier_{ "output_multiplier" };
-    Param<int> output_shift_{ "output_shift" };
-    Param<int> output_offset_{ "output_offset", 0, 0, 255 };
-    Param<uint8_t> output_min_{ "output_min" };
-    Param<uint8_t> output_max_{ "output_max" };
+    Input<int> output_multiplier_{ "output_multiplier" };
+    Input<int> output_shift_{ "output_shift" };
+    Input<int> output_offset_{ "output_offset", 0, 0, 255 };
+    Input<uint8_t> output_min_{ "output_min" };
+    Input<uint8_t> output_max_{ "output_max" };
 
-    Func build() {
+    Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void generate() {
         // The algorithm.
 
         // Some free variables, where x and y represent the spatial dimensions.
@@ -116,8 +118,7 @@ public:
             output_offset_;
 
         // Saturate and narrow the output.
-        Func output("output");
-        output(depth, x, y, batch) =
+        output_(depth, x, y, batch) =
             min(output_max_,
                 max(output_min_,
                     u8_sat(u16_sat(scaled_plus_offset(depth, x, y, batch)))));
@@ -130,7 +131,7 @@ public:
         // Hexagon), we have to omit the .hexagon() directive as we are already
         // running on Hexagon.
         if (use_hexagon && get_target().arch != Target::Hexagon) {
-            output.hexagon();
+            output_.hexagon();
         }
 
         // Schedule for CPU and HVX.
@@ -144,12 +145,10 @@ public:
         Expr can_vectorize_across_depth =
             filter_.dim(3).extent() >= vector_size_u8;
 
-        output.parallel(y)
+        output_.parallel(y)
             .specialize(can_vectorize_across_depth)
             .vectorize(depth, vector_size_u8);
-        shifted_input_with_offset.compute_at(output, batch);
-
-        return output;
+        shifted_input_with_offset.compute_at(output_, batch);
     }
 };
 

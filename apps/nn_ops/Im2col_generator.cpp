@@ -15,17 +15,19 @@ using Halide::BoundaryConditions::constant_exterior;
 class Im2col : public Generator<Im2col> {
 public:
     // Unsigned 8-bit input tensor, indexed by depth, x, y, batch.
-    ImageParam input_{ UInt(8), 4, "input" };
-    Param<int> stride_{ "stride" };
-    Param<int> pad_width_{ "pad_width" };
-    Param<int> pad_height_{ "pad_height" };
-    Param<int> filter_width_{ "filter_width" };
-    Param<int> filter_height_{ "filter_height" };
+    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<int> stride_{ "stride" };
+    Input<int> pad_width_{ "pad_width" };
+    Input<int> pad_height_{ "pad_height" };
+    Input<int> filter_width_{ "filter_width" };
+    Input<int> filter_height_{ "filter_height" };
     // byte_zero_ denotes the value padded at the input tensor boundary (in the x
     // and y dimensions).
-    Param<uint8_t> byte_zero_{ "byte_zero" };
+    Input<uint8_t> byte_zero_{ "byte_zero" };
 
-    Func build() {
+    Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void generate() {
         Expr input_depth = input_.dim(0).extent();
 
         // The algorithm.
@@ -44,8 +46,7 @@ public:
         Expr x_offset = element_location % filter_width_;
         Expr y_offset = element_location / filter_width_;
 
-        Func output("output");
-        output(d, x, y, b) =
+        output_(d, x, y, b) =
             input_padded(d % input_depth, x_ungated_start + x_offset,
                          y_ungated_start + y_offset, b);
 
@@ -60,17 +61,15 @@ public:
         const bool use_hexagon =
             get_target().features_any_of({ Target::HVX_64, Target::HVX_128 });
         if (use_hexagon) {
-            output.hexagon();
+            output_.hexagon();
         }
 
         Var yo("yo"), yi("yi"), tile_index("tile_index");
-        output.split(y, yo, yi, 2, TailStrategy::GuardWithIf)
+        output_.split(y, yo, yi, 2, TailStrategy::GuardWithIf)
             .fuse(x, yo, tile_index)
             .reorder(d, tile_index, b, yi)
             .vectorize(tile_index, vector_size_u8, TailStrategy::GuardWithIf)
             .parallel(yi);
-
-        return output;
     }
 };
 

@@ -19,8 +19,6 @@
 using Halide::Expr;
 using Halide::Func;
 using Halide::Generator;
-using Halide::ImageParam;
-using Halide::Param;
 using Halide::RDom;
 using Halide::TailStrategy;
 using Halide::Type;
@@ -31,7 +29,7 @@ using Halide::ConciseCasts::u8_sat;
 
 // Schedules the resampled input to be computed at the output, considering
 // the natural vector size, the depth multiplier, and the filter dimensions.
-void ScheduleResampledInput(const ImageParam &filter, const Func &output,
+void ScheduleResampledInput(const Func &output,
                             const Var &depth, const Var &y,
                             int depth_multiplier, int vector_size_u8,
                             Func *resampled_input) {
@@ -44,9 +42,11 @@ void ScheduleResampledInput(const ImageParam &filter, const Func &output,
 
 // Specialize for particular filter sizes and input strides, which enables the
 // compiler to optimize for these specific cases.
+template<typename InputBuffer, typename OutputBuffer>
 void SpecializeForFilterSizeAndInputStride(const RDom &filter_dom,
-                                           const Param<int> &stride,
-                                           ImageParam *filter, Func *output,
+                                           const Expr &stride,
+                                           InputBuffer *filter,
+                                           OutputBuffer *output,
                                            Func *convolved) {
     if (filter) {
         filter->dim(1).set_min(0).dim(2).set_min(0);
@@ -77,33 +77,35 @@ public:
     GeneratorParam<int> depth_multiplier_{ "depth_multiplier", 1, 1, 8 };
 
     // Unsigned 8-bit input tensor, indexed by depth, x, y, batch.
-    ImageParam input_{ UInt(8), 4, "input" };
+    Input<Buffer<uint8_t>> input_{"input", 4};
 
     // A 3D array of 8-bit filter coefficients indexed by depth, x, y.
-    ImageParam filter_{ UInt(8), 3, "filter" };
+    Input<Buffer<uint8_t>> filter_{"filter", 3};
 
     // A 1D array of 32-bit biases indexed by depth.
-    ImageParam bias_{ Int(32), 1, "bias" };
+    Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets and multipliers for the input, filter, and output.
-    Param<int16_t> input_offset_{ "input_offset", 0, -255, 0 };
-    Param<int16_t> filter_offset_{ "filter_offset", 0, -255, 0 };
-    Param<int> output_multiplier_{ "output_multiplier" };
-    Param<int> output_shift_{ "output_shift" };
-    Param<int> output_offset_{ "output_offset", 0, 0, 255 };
+    Input<int16_t> input_offset_{ "input_offset", 0, -255, 0 };
+    Input<int16_t> filter_offset_{ "filter_offset", 0, -255, 0 };
+    Input<int> output_multiplier_{ "output_multiplier" };
+    Input<int> output_shift_{ "output_shift" };
+    Input<int> output_offset_{ "output_offset", 0, 0, 255 };
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
     // spatially at [x * stride, y * stride]. The caller should ensure that
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Param<int> stride_{ "stride", 1, 1, 2 };
-    Param<int> pad_width_{ "pad_width" };
-    Param<int> pad_height_{ "pad_height" };
-    Param<uint8_t> output_min_{ "output_min" };
-    Param<uint8_t> output_max_{ "output_max" };
+    Input<int> stride_{ "stride", 1, 1, 2 };
+    Input<int> pad_width_{ "pad_width" };
+    Input<int> pad_height_{ "pad_height" };
+    Input<uint8_t> output_min_{ "output_min" };
+    Input<uint8_t> output_max_{ "output_max" };
 
-    Func build() {
+    Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void generate() {
         // The algorithm.
 
         // Some free variables, where x and y represent the spatial dimensions.
@@ -159,8 +161,7 @@ public:
             output_offset_;
 
         // Saturate and narrow the output.
-        Func output("output");
-        output(depth, x, y, batch) =
+        output_(depth, x, y, batch) =
             clamp(u8_sat(scaled_plus_offset(depth, x, y, batch)),
                   output_min_, output_max_);
 
@@ -179,10 +180,10 @@ public:
         // Hexagon), we have to omit the .hexagon() directive as we are already
         // running on Hexagon.
         if (use_hexagon && get_target().arch != Target::Hexagon) {
-            output.hexagon();
+            output_.hexagon();
         }
 
-        output.compute_root();
+        output_.compute_root();
 
         // We can't parallize batches, as we often have just a single batch to
         // process. Also, x and y dimensions are often fairly small (8x8, 16x16).
@@ -193,17 +194,17 @@ public:
         // output y extent.
         Expr y_split_factor = min(input_.dim(2).extent() / stride_, 4);
 
-        output.split(y, y, yi, y_split_factor).parallel(y);
-        output.vectorize(depth, vector_size_u8, TailStrategy::RoundUp);
+        output_.split(y, y, yi, y_split_factor).parallel(y);
+        output_.vectorize(depth, vector_size_u8, TailStrategy::RoundUp);
 
         if (use_hexagon) {
             // Scheduling specifics for Hexagon.
 
             if (depth_multiplier_ > 1) {
-                ScheduleResampledInput(filter_, output, depth, y, depth_multiplier_,
+                ScheduleResampledInput(output_, depth, y, depth_multiplier_,
                                        vector_size_u8, &resampled_input);
             }
-            output.prefetch(input_, yi);
+            output_.prefetch(input_, yi);
         } else {
             // Scheduling specifics for CPU.
 
@@ -213,14 +214,12 @@ public:
             // Internal error at third_party/halide/halide/src/Deinterleave.cpp:356
             // Condition failed: e.type().lanes() % 3 == 0
             if (depth_multiplier_ == 3) {
-                ScheduleResampledInput(filter_, output, depth, yi, depth_multiplier_,
+                ScheduleResampledInput(output_, depth, yi, depth_multiplier_,
                                        vector_size_u8, &resampled_input);
             }
         }
         SpecializeForFilterSizeAndInputStride(filter_dom, stride_, &filter_,
-                                              &output, &convolved);
-
-        return output;
+                                              &output_, &convolved);
     }
 };
 

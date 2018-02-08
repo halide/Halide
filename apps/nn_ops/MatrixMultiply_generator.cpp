@@ -14,7 +14,6 @@
 #include <Halide.h>
 
 using Halide::Generator;
-using Halide::OutputImageParam;
 using Halide::RVar;
 using Halide::ConciseCasts::i32;
 using Halide::ConciseCasts::u16;
@@ -24,22 +23,24 @@ using Halide::ConciseCasts::u8_sat;
 class MatrixMultiply : public Generator<MatrixMultiply> {
 public:
     // Two unsigned 8-bit input matrices, indexed by x, y.
-    ImageParam mat_a_{ UInt(8), 2, "mat_a" };
-    ImageParam mat_b_{ UInt(8), 2, "mat_b" };
+    Input<Buffer<uint8_t>> mat_a_{"mat_a", 2};
+    Input<Buffer<uint8_t>> mat_b_{"mat_b", 2};
 
     // A 1D array of 32-bit biases indexed by output width.
-    ImageParam bias_{ Int(32), 1, "bias" };
+    Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets and multipliers for the input, filter, and output.
-    Param<int16_t> mat_a_offset_{ "mat_a_offset", 0, -255, 0 };
-    Param<int16_t> mat_b_offset_{ "mat_b_offset", 0, -255, 0 };
-    Param<int> output_multiplier_{ "output_multiplier" };
-    Param<int> output_shift_{ "output_shift" };
-    Param<int> output_offset_{ "output_offset", 0, 0, 255 };
-    Param<uint8_t> output_min_{ "output_min" };
-    Param<uint8_t> output_max_{ "output_max" };
+    Input<int16_t> mat_a_offset_{ "mat_a_offset", 0, -255, 0 };
+    Input<int16_t> mat_b_offset_{ "mat_b_offset", 0, -255, 0 };
+    Input<int> output_multiplier_{ "output_multiplier" };
+    Input<int> output_shift_{ "output_shift" };
+    Input<int> output_offset_{ "output_offset", 0, 0, 255 };
+    Input<uint8_t> output_min_{ "output_min" };
+    Input<uint8_t> output_max_{ "output_max" };
 
-    Func build() {
+    Output<Buffer<uint8_t>> output_{ "output", 2 };
+
+    void generate() {
         // We take two 8 bit matrices as input.
         Var x("x"), y("y");
 
@@ -143,8 +144,7 @@ public:
             output_offset_;
 
         // Saturate and narrow the output.
-        Func output("output");
-        output(x, y) =
+        output_(x, y) =
             clamp(u8_sat(scaled_plus_offset(x, y)), output_min_, output_max_);
 
         // Specifying .hexagon() on a Func will generate an RPC to run this stage
@@ -152,7 +152,7 @@ public:
         // Hexagon), we have to omit the .hexagon() directive as we are already
         // running on Hexagon.
         if (use_hexagon && get_target().arch != Target::Hexagon) {
-            output.hexagon();
+            output_.hexagon();
         }
 
         constexpr int kTileSizeHeight = 4;
@@ -161,7 +161,7 @@ public:
 
             // Split the output into tiles, traversed in columns of tiles
             // that we parallelize over.
-            output.compute_root()
+            output_.compute_root()
                 .tile(x, y, xo, yo, x, y, vector_size_u8, kTileSizeHeight,
                       TailStrategy::RoundUp)
                 .reorder(yo, xo)
@@ -171,12 +171,12 @@ public:
                 .parallel(xo);
 
             // Compute the product at tiles of the output.
-            multiplied_no_offsets.compute_at(output, yo).vectorize(x).unroll(y);
+            multiplied_no_offsets.compute_at(output_, yo).vectorize(x).unroll(y);
 
             multiplied_no_offsets.update(0).reorder(x, y, rk).vectorize(x).unroll(y);
 
             // Lift the swizzling out of the inner loop.
-            mat_b_swizzled.compute_at(output, xo)
+            mat_b_swizzled.compute_at(output_, xo)
                 .reorder_storage(k, x, y)
                 .reorder(k, x, y)
                 .vectorize(x)
@@ -185,13 +185,13 @@ public:
             // Split the rows into chunks we can parallelize over, but prefetch
             // within.
             Var yi("yi");
-            row_sums_a.compute_at(output, Var::outermost())
+            row_sums_a.compute_at(output_, Var::outermost())
                 .split(y, y, yi, 32)
                 .parallel(y)
                 .prefetch(mat_a_, yi);
 
             Var xi("xi");
-            column_sums_b.compute_at(output, Var::outermost())
+            column_sums_b.compute_at(output_, Var::outermost())
                 .split(x, x, xi, vector_size_u8, TailStrategy::GuardWithIf)
                 .parallel(x)
                 .vectorize(xi);
@@ -204,7 +204,7 @@ public:
             constexpr int kBlockSize = 32;
             constexpr int kBlockSizeXi = 8;
 
-            output.compute_root()
+            output_.compute_root()
                 .tile(x, y, x, y, xi, yi, vector_size_u8, kTileSizeHeight,
                       TailStrategy::RoundUp)
                 .reorder(xi, yi, x, y)
@@ -249,16 +249,13 @@ public:
             .set_bounds(0, mat_b_.dim(1).extent())
             .set_stride(mat_b_.dim(1).stride());
 
-        OutputImageParam out = output.output_buffer();
-        out.dim(0)
-            .set_bounds(0, (out.dim(0).extent() / vector_dim_align) * vector_dim_align)
+        output_.dim(0)
+            .set_bounds(0, (output_.dim(0).extent() / vector_dim_align) * vector_dim_align)
             .dim(1)
-            .set_bounds(0, (out.dim(1).extent() / kMatAHeightAlign) * kMatAHeightAlign)
-            .set_stride((out.dim(1).stride() / kMatAHeightAlign) * kMatAHeightAlign);
+            .set_bounds(0, (output_.dim(1).extent() / kMatAHeightAlign) * kMatAHeightAlign)
+            .set_stride((output_.dim(1).stride() / kMatAHeightAlign) * kMatAHeightAlign);
 
         bias_.dim(0).set_bounds(0, bias_.dim(0).extent());
-
-        return output;
     }
 };
 

@@ -6,7 +6,6 @@
 using Halide::Expr;
 using Halide::Func;
 using Halide::Generator;
-using Halide::ImageParam;
 using Halide::Var;
 using Halide::BoundaryConditions::constant_exterior;
 using Halide::ConciseCasts::u8_sat;
@@ -14,7 +13,7 @@ using Halide::ConciseCasts::u8_sat;
 class AveragePool : public Generator<AveragePool> {
 public:
     // Unsigned 8-bit input tensor, indexed by depth, x, y, batch.
-    ImageParam input_{ UInt(8), 4, "input" };
+    Input<Buffer<uint8_t>> input_{"input", 4};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -22,17 +21,19 @@ public:
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Param<int> stride_{ "stride" };
-    Param<int> pad_width_{ "pad_width" };
-    Param<int> pad_height_{ "pad_height" };
+    Input<int> stride_{ "stride" };
+    Input<int> pad_width_{ "pad_width" };
+    Input<int> pad_height_{ "pad_height" };
 
-    Param<int> filter_width_{ "filter_width" };
-    Param<int> filter_height_{ "filter_height" };
+    Input<int> filter_width_{ "filter_width" };
+    Input<int> filter_height_{ "filter_height" };
 
-    Param<uint8_t> output_min_{ "output_min" };
-    Param<uint8_t> output_max_{ "output_max" };
+    Input<uint8_t> output_min_{ "output_min" };
+    Input<uint8_t> output_max_{ "output_max" };
 
-    Func build() {
+    Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void generate() {
         // The algorithm.
 
         // Some free variables, where x and y represent the spatial dimensions.
@@ -75,8 +76,7 @@ public:
             (sum(depth, x, y, batch) + filter_count / 2) / filter_count;
 
         // Saturate and narrow the output.
-        Func output("output");
-        output(depth, x, y, batch) =
+        output_(depth, x, y, batch) =
             min(output_max_, max(output_min_, u8_sat(average(depth, x, y, batch))));
 
         bool use_hexagon =
@@ -86,7 +86,7 @@ public:
         // Hexagon), we have to omit the .hexagon() directive as we are already
         // running on Hexagon.
         if (use_hexagon && get_target().arch != Target::Hexagon) {
-            output.hexagon();
+            output_.hexagon();
         }
 
         int vector_size_u8 = get_target().natural_vector_size<uint8_t>();
@@ -96,17 +96,17 @@ public:
             vector_size_u8 = 128;
         }
 
-        shifted_input_bounded.compute_at(output, batch);
+        shifted_input_bounded.compute_at(output_, batch);
 
         // We only perform vectorization when the depth >= vector size.
         Expr can_vectorize_across_depth =
-            output.output_buffer().dim(0).extent() >= vector_size_u8;
-        output.specialize(can_vectorize_across_depth)
+            output_.dim(0).extent() >= vector_size_u8;
+        output_.specialize(can_vectorize_across_depth)
             .vectorize(depth, vector_size_u8);
 
         Var yi("yi");
         constexpr int kSplitFactor = 4;
-        output.split(y, y, yi, kSplitFactor).parallel(y);
+        output_.split(y, y, yi, kSplitFactor).parallel(y);
 
         struct SpecialCase {
             int stride;
@@ -121,8 +121,6 @@ public:
                                    stride_ == special_case.stride);
             sum.update(0).specialize(params_matched).unroll(filter_dom.x);
         }
-
-        return output;
     }
 };
 
