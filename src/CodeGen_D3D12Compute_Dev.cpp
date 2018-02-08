@@ -1,5 +1,6 @@
 #include <sstream>
 #include <algorithm>
+#include <iomanip>
 
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_Internal.h"
@@ -497,31 +498,100 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
 {
     string value_expr = print_expr(op->value);
 
-    // special case for integer downcasting since HLSL does not have built-in
-    // support for 8bit and 16bit integers; we can go about this by masking
-    // the least significatn bits accordingly
     Type target_type = op->type;
     Type source_type = op->value.type();
-    bool isIntegerDowncast  = (target_type.code() <= halide_type_uint)
-                           && (source_type.code() <= halide_type_uint)
-                           && (target_type.bits() < source_type.bits());
-    if (isIntegerDowncast)
+
+    // casting to or from a float type? just use the language cast:
+    if (target_type.is_float() || source_type.is_float())
     {
-        switch (target_type.bits())
-        {
-            case 8  :
-                value_expr += " & 0xFF";
-                break;
-            case 16 :
-                value_expr += " & 0xFFFF";
-                break;
-            default :
-                user_error << "Unsupported integer downcast from " << source_type << " to " << target_type << "\n";
-                break;
-        }
+        print_assignment(target_type, print_type(target_type) + "(" + value_expr + ")");
+        return;
     }
 
-    print_assignment(op->type, print_type(op->type) + "(" + value_expr + ")");
+    // let the integer cast zoo begin...
+    internal_assert(!target_type.is_float());
+    internal_assert(!source_type.is_float());
+
+    // HLSL (SM 5.1) only supports 32bit integers (signed and unsigned)...
+    // integer downcasting-to (or upcasting-from) lower bit integers require
+    // some emulation in code...
+    internal_assert(target_type.bits() <= 32);
+    internal_assert(source_type.bits() <= 32);
+
+    // Case 1: source and target both have the same "signess"
+    bool same_signess = false;
+    same_signess |= target_type.is_int()  && source_type.is_int();
+    same_signess |= target_type.is_uint() && source_type.is_uint();
+    if (same_signess)
+    {
+        if (target_type.bits() >= source_type.bits())
+        {
+            // target has enough bits to fully acommodate the source:
+            // it's a no-op, but we print a cast for clarity:
+            print_assignment(target_type, print_type(target_type) + "(" + value_expr + ")");
+        }
+        else
+        {
+            // for signed types: shift-up then shift-down
+            // for unsigned types: mask the target LSB (but shift-up and down also works)
+            ostringstream ss;
+            ss << "("
+               << "(" << value_expr << ")"
+               << " << "
+               << "(" << (32 - target_type.bits()) << ")"   // 1. shift-up to MSB
+               << ")"
+               << " >> " << (32 - target_type.bits());      // 2. shift-down to LSB
+            print_assignment(target_type, ss.str());
+        }
+        return;
+    }
+
+    // Case 2: casting from a signed source to an unsigned target
+    if (source_type.is_int() && target_type.is_uint())
+    {
+        // reinterpret resulting bits as uint(32):
+        ostringstream ss;
+        ss << "asuint(";                                // reinterpret bits
+        if (target_type.bits() < 32)
+        {
+            ss << "(" << value_expr << ")"
+               << " & "
+               << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
+               << ((1 << target_type.bits()) - 1);      // mask target LSB
+        }
+        else
+        {
+            ss << value_expr;
+        }
+        ss << ")";
+        print_assignment(target_type, ss.str());
+        return;
+    }
+
+    // Case 3: casting from an unsigned source to a signed target
+    internal_assert(source_type.is_uint());
+    internal_assert(target_type.is_int());
+    if (target_type.bits() > source_type.bits())
+    {
+        // target has enough bits to fully accommodate the source:
+        // it's a no-op, but we print a cast for clarity:
+        print_assignment(target_type, print_type(target_type) + "(" + value_expr + ")");
+    }
+    else
+    {
+        // shift-up, reinterpret as int, then shift-down
+        ostringstream ss;
+        ss << "asint("                                  // 2. reinterpret bits
+           << "(" << value_expr << ")"
+           << " << "
+           << "(" << (32 - target_type.bits()) << ")"   // 1. shift-up to MSB
+           << ")"
+           << " >> " << (32 - target_type.bits())       // 3. shift-down to LSB
+           << ";\n";
+        print_assignment(target_type, ss.str());
+    }
+
+    return;
 }
 
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
@@ -615,12 +685,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         // is no uint8 type, so we'll have to emulate it with some 32bit type...
         // This will also require pack/unpack logic with bit-masking and aliased
         // type reinterpretation via asfloat()/asuint() in the shader code... :(
+        internal_assert( op->type == UInt(8) );
         stream << "groupshared"
                << " "  << print_type(op->type)    // print_type(uint8) -> uint32
                << " "  << print_name(op->name);
         if (is_const(op->extents[0]))
         {
-            stream << " [" << op->extents[0] << " / 4];\n";
+            stream << " [" << op->extents[0] << "];\n";
         }
         else
         {
