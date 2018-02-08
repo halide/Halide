@@ -44,7 +44,7 @@ static pdesc_pool dma_desc_pool = NULL;
 #define descriptor_size 64
 
 static void* desc_pool_get (void* user_context) {
-    //To do Add Mutex locking to gain safe access to dma_desc_pool
+    //TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
     pdesc_pool temp = dma_desc_pool;
     pdesc_pool prev = NULL;
     //Walk the list
@@ -98,7 +98,7 @@ static void desc_pool_put (void* user_context, void *desc) {
 }
 //2 descriptor at a time
 static void desc_pool_free (void* user_context) {
-    //To do Add Mutex locking to gain safe access to dma_desc_pool
+    //TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
     pdesc_pool temp = dma_desc_pool;
     while (temp != NULL) {
         pdesc_pool temp2 = temp;
@@ -291,8 +291,8 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     }
 
     // Allocation of L2 Cache for DMA Transfer
-    // Copy from Cache to temp buffer 
-    // To do This needs to be streamline
+    // Copy from Locked Cache to a temp DDR buffer 
+    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline 
     int buf_size = dst->size_in_bytes();
     debug(user_context) << "cach buffer size " << buf_size << "\n";
     if (dev->cache_buf == 0) {
@@ -337,7 +337,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     }
    
     void *dest = reinterpret_cast<void *>(dst->host);
-    // TODO: doing a manual copy from the cache to destination buffer
+    // TODO: Doing a manual copy from the DMA'ed Locked L2 cache to Halide destination DDR buffer
     // This should be removed once the cache locking is addressed inside Halide Pipeline 
     if (dest) { 
         memcpy(dest, dev->cache_buf, buf_size);
@@ -426,7 +426,7 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
         debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
         return halide_error_code_copy_to_host_failed;
     }
-    // TODO: doing a manual copy from the cache to destination buffer
+    // TODO: Doing a manual copy from the DMA'ed Locked L2 cache to Halide destination DDR buffer
     // This should be removed once the cache locking is addressed inside Halide Pipeline
     void *dest = reinterpret_cast<void *>(buf->host);
     if (dest) {
