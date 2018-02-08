@@ -186,37 +186,27 @@ class GERGenerator :
     Input<T>         a_ = {"a", 1};
     Input<Buffer<T>> x_ = {"x", 1};
     Input<Buffer<T>> y_ = {"y", 1};
-    Input<Buffer<T>> A_ = {"A", 2};
 
     Output<Buffer<T>> result_ = {"result", 2};
 
     void generate() {
-        assert(get_target().has_feature(Target::NoAsserts));
-        assert(get_target().has_feature(Target::NoBoundsQuery));
-
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
-        const int unroll_size = 4;
-
-        Expr num_rows = A_.width();
-        Expr num_cols = A_.height();
 
         Var i("i"), j("j");
-        result_(i, j) = A_(i, j) + a_ * x_(i) * y_(j);
+        result_(i, j) = undef<T>(); // in-place operation on the output
 
-        Var ii("ii"), ji("ji");
-        Var ti("ti"), tj("tj"), t("t");
-        result_.specialize(num_rows >= vec_size).vectorize(i, vec_size)
-                .specialize(num_cols >= unroll_size).unroll(j, unroll_size)
-                .specialize(num_rows >= block_size_ && num_cols >= block_size_)
-                .tile(i, j, ii, ji, block_size_ / vec_size, block_size_ / unroll_size)
-                .specialize(num_rows >= 2 * block_size_ && num_cols >= 2 * block_size_)
-                .tile(i, j, ti, tj, i, j, 2, 2).fuse(ti, tj, t).parallel(t);
+        result_(i, j) += (a_ * y_(j)) * x_(i);
 
-        A_.dim(0).set_min(0).dim(1).set_min(0);
-        x_.dim(0).set_bounds(0, A_.width());
-        y_.dim(0).set_bounds(0, A_.height());
+        if (vectorize_) {
+            result_.update().vectorize(i, vec_size * 4, TailStrategy::GuardWithIf);
+        }
+        if (parallel_) {
+            result_.update().parallel(j, 8, TailStrategy::GuardWithIf);
+        }
 
-        result_.dim(0).set_bounds(0, A_.width()).dim(1).set_bounds(0, A_.height());
+        x_.dim(0).set_min(0);
+        y_.dim(0).set_min(0);
+        result_.dim(0).set_bounds(0, x_.dim(0).extent()).dim(1).set_bounds(0, y_.dim(0).extent());
     }
 };
 
