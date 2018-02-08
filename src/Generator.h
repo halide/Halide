@@ -529,6 +529,7 @@ private:
     }
 };
 
+
 // Stubs for type-specific implementations of GeneratorParam, to avoid
 // many complex enable_if<> statements that were formerly spread through the
 // implementation. Note that not all of these need to be templated classes,
@@ -726,9 +727,9 @@ public:
 
     void set_from_string(const std::string &new_value_string) override {
         bool v = false;
-        if (new_value_string == "true") {
+        if (new_value_string == "true" || new_value_string == "True") {
             v = true;
-        } else if (new_value_string == "false") {
+        } else if (new_value_string == "false" || new_value_string == "False") {
             v = false;
         } else {
             user_assert(false) << "Unable to parse bool: " << new_value_string;
@@ -2749,7 +2750,7 @@ private:
     // Return our ParamInfo (lazy-initing as needed).
     ParamInfo &param_info();
 
-    Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name);
+    Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
     void check_scheduled(const char* m) const;
 
@@ -2762,9 +2763,21 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    Func get_first_output();
+    // Return the Output<Func> or Output<Buffer> with the given name,
+    // which must be a singular (non-array) Func or Buffer output.
+    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
     Func get_output(const std::string &n);
-    std::vector<Func> get_output_vector(const std::string &n);
+
+    // Return the Output<Func[]> with the given name, which must be an
+    // array-of-Func output. If no such name exists (or is non-array), assert;
+    // this method never returns undefined Funcs.
+    std::vector<Func> get_array_output(const std::string &n);
+
+    // Return a vector of all Outputs of this Generator; non-array outputs are returned
+    // as a vector-of-size-1. This method is primarily useful for code that needs
+    // to iterate through the outputs of unknown, arbitrary Generators (e.g.,
+    // the Python bindings).
+    std::vector<std::vector<Func>> get_all_outputs();
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3131,9 +3144,14 @@ public:
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
+                         GeneratorFactory generator_factory);
+
+    GeneratorStub(const GeneratorContext &context,
+                         GeneratorFactory generator_factory,
+                         const GeneratorParamsMap &generator_params,
+                         const std::vector<std::vector<Internal::StubInput>> &inputs);
+    void generate(const GeneratorParamsMap &generator_params,
+                         const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
@@ -3146,8 +3164,12 @@ public:
         return T2(get_output(n), generator);
     }
 
-    std::vector<Func> get_output_vector(const std::string &n) const {
-        return generator->get_output_vector(n);
+    std::vector<Func> get_array_output(const std::string &n) const {
+        return generator->get_array_output(n);
+    }
+
+    std::vector<std::vector<Func>> get_all_outputs() const {
+        return generator->get_all_outputs();
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -3169,6 +3191,11 @@ public:
         std::copy(v.begin(), v.end(), std::back_inserter(r));
         return r;
     }
+
+    struct Names {
+        std::vector<std::string> generator_params, inputs, outputs;
+    };
+    Names get_names() const;
 
     std::shared_ptr<GeneratorBase> generator;
 };
