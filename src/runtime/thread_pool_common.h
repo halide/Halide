@@ -53,6 +53,9 @@ struct work_queue_t {
     bool shutdown, initialized;
 
     work_queue_t() {
+        // TODO: Print added here is not seen on 8996 but seen on 8998 and SDM 845
+        // No failures seen while running standard examples on 8996
+        // Investigation is still on regarding this on 8996  
         halide_mutex_init(&mutex);
     }
 
