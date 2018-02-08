@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_boundary_conditions();
+void define_boundary_conditions(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

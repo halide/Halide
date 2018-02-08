@@ -18,7 +18,7 @@ bool has_likely_tag(Expr e);
 /** Partitions loop bodies into a prologue, a steady state, and an
  * epilogue. Finds the steady state by hunting for use of clamped
  * ramps, or the 'likely' intrinsic. */
-EXPORT Stmt partition_loops(Stmt s);
+Stmt partition_loops(Stmt s);
 
 }
 }

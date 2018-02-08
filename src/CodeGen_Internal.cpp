@@ -1,8 +1,9 @@
 #include "CodeGen_Internal.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "LLVM_Headers.h"
 
 namespace Halide {
 namespace Internal {

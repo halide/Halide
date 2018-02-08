@@ -114,12 +114,12 @@ struct PipelineContents {
 
 namespace Internal {
 template<>
-EXPORT RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
+RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<PipelineContents>(const PipelineContents *p) {
+void destroy<PipelineContents>(const PipelineContents *p) {
     delete p;
 }
 }
