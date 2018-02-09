@@ -216,18 +216,18 @@ void word_lock::unlock_full() {
         word_lock_queue_data *head = (word_lock_queue_data *)(expected & ~(uintptr_t)(queue_lock_bit | lock_bit));
         word_lock_queue_data *current = head;
         word_lock_queue_data *tail = current->tail;
-	int times_through = 0;
+        int times_through = 0;
         while (tail == NULL) {
             word_lock_queue_data *next = current->next;
-	    if (next == NULL) {
-		abort();
-	    }
+            if (next == NULL) {
+                abort();
+            }
             next->prev = current;
             current = next;
             tail = current->tail;
-	    times_through++;
+            times_through++;
         }
-	multi_spin++;
+        multi_spin++;
         head->tail = tail;
 
         // If the lock is now locked, unlock the queue and have the thread
@@ -514,11 +514,12 @@ uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
     size_t waiters = 0;
     queue_data *temp_list_storage[16];
     queue_data **temp_list = &temp_list_storage[0];
-    size_t max_waiters = sizeof(temp_list_storage);
+    size_t max_waiters = sizeof(temp_list_storage)/sizeof(temp_list_storage[0]);
 
     while (data != NULL) {
         uintptr_t cur_addr;
         __atomic_load(&data->sleep_address, &cur_addr, __ATOMIC_RELAXED);
+
         queue_data *next = data->next;
         if (cur_addr == addr) {
             *data_location = next;
@@ -526,8 +527,6 @@ uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
             if (bucket.tail == data) {
                 bucket.tail = prev;
             }
-
-            // TODO: set token thingy?
 
             if (waiters == max_waiters) {
               queue_data **temp = temp_list;
@@ -715,12 +714,12 @@ class fast_mutex {
             // TODO: consider handling fairness, timeout
             mutex_parking_control control(&state);
             uintptr_t result = park((uintptr_t)this, control);
-	    if (result == (uintptr_t)this) {
-	        return;
-	    }
+            if (result == (uintptr_t)this) {
+                return;
+            }
 
-	    spin_count = 40;
-	    __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+            spin_count = 40;
+            __atomic_load(&state, &expected, __ATOMIC_RELAXED);
         }
     }
 
