@@ -410,9 +410,7 @@ struct d3d12_library
 
 struct d3d12_function
 {
-    HRESULT   status;
     ID3DBlob* shaderBlob;
-    ID3DBlob* errorMsgs;
     ID3D12RootSignature* rootSignature;
 };
 
@@ -540,7 +538,6 @@ void release_d3d12_object<d3d12_function>(d3d12_function* function)
 {
     TRACELOG;
     Release_ID3D12Object(function->shaderBlob);
-    Release_ID3D12Object(function->errorMsgs);
     Release_ID3D12Object(function->rootSignature);
     free(function);
 }
@@ -1322,9 +1319,7 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     }
 
     d3d12_function* function = malloct<d3d12_function>();
-    function->status     = result;
     function->shaderBlob = shaderBlob;
-    function->errorMsgs  = errorMsgs;
     function->rootSignature = rootSignature;
     rootSignature->AddRef();
 
