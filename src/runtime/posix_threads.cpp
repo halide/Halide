@@ -62,6 +62,7 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
+#if 0
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
     pthread_mutex_lock(mutex);
 }
@@ -90,5 +91,6 @@ WEAK void halide_cond_broadcast(struct halide_cond *cond) {
 WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
     pthread_cond_wait(cond, mutex);
 }
+#endif
 
 } // extern "C"

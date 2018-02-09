@@ -1,4 +1,11 @@
 #include "HalideRuntime.h"
+#include "scoped_mutex_lock.h"
+
+// TODO: get rid of this
+#define MAX_THREADS 256
+
+#include"fast_mutex.h"
+
 #include "thread_pool_common.h"
 
 extern "C" {

@@ -643,7 +643,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
+#if 0
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
+#else
+                modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                modules.push_back(get_initmod_thread_pool(c, bits_64, debug));
+#endif
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));

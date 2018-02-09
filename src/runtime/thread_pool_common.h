@@ -13,7 +13,7 @@ struct work {
 };
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
-#define MAX_THREADS 64
+#define MAX_THREADS 256
 struct work_queue_t {
     // all fields are protected by this mutex.
     halide_mutex mutex;
