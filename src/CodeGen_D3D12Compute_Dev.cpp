@@ -260,11 +260,94 @@ Expr is_ramp_one(Expr e) {
 
     return Expr();
 }
+
+template<typename T>
+string hex_literal(T value)
+{
+    ostringstream hex;
+    hex << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
+        << value;
+    return(hex.str());
+}
+
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
 {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+
+    // __shared[x] is always uint(32): must reinterpret/unpack bits...
+    if (op->name == "__shared")
+    {
+        ostringstream rhs;
+        internal_assert(allocations.contains(op->name));
+        // no ramps when accessing shared memory...
+        Expr ramp_base = is_ramp_one(op->index);
+        internal_assert(!ramp_base.defined());
+        // shared memory in Halide is represented as a byte buffer
+        // but the 'op->index' is actually in terms of elements...
+        // to complicate things, HLSL (SM 5.1) only supports 32bit
+        // words (int/uint/float) as groupshared types...
+        internal_assert(allocations.get(op->name).type == UInt(8));
+        internal_assert(op->type.lanes() == 1);
+        if (op->type.bits() == 32)
+        {
+            // loading a 32bit word? great! just reinterpret as float/int/uint
+            rhs << "as" << print_type(op->type.element_of())
+                << "("
+                << print_name(op->name)
+                << "[" << print_expr(op->index) << "]"
+                << ")";
+        }
+        else
+        {
+            // not a 32bit word? hell ensues:
+            internal_assert(op->type.bits() < 32);
+            // must map element index to uint word array index:
+            ostringstream index;
+            auto bits = op->type.bits();
+            auto divisor = (32 / bits);
+            auto i = print_expr(op->index);
+            index << i << " / " << divisor;
+            ostringstream word;
+            word << print_name(op->name)
+                 << "[" + index.str() + "]";
+            // now mask the appropriate bits:
+            ostringstream mask;
+            mask << "("
+                 << hex_literal((1 << bits) - 1)
+                 << " << "
+                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
+                 << ")";
+            // extract the correct bits from the word
+            ostringstream cut;
+            cut << "("
+                << word.str()
+                << " & "
+                << mask.str()
+                << ")"
+                << " >> "
+                << "(" << bits << "*(" << i << " % " << divisor << " ))";
+            // if it is signed, need to propagate sign... shift-up then down:
+            if (op->type.is_int())
+            {
+                rhs << "asint"
+                    << "("
+                    << cut.str()
+                    << " << "
+                    << (32 - bits)
+                    << ")"
+                    << " >> "
+                    << (32 - bits);
+            }
+            else
+            {
+                rhs << cut.str();
+            }
+        }
+        print_assignment(op->type, rhs.str());
+        return;
+    }
 
     // If we're loading a contiguous ramp, "unroll" the ramp into loads:
     Expr ramp_base = is_ramp_one(op->index);
@@ -301,26 +384,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
     ostringstream rhs;
     if (type_cast_needed)
     {
-        if (op->name == "__shared")
-        {
-            // __shared[x] is always uint(32): must pack/reinterpret bits...
-            if (op->type.is_float())
-                rhs << "asfloat";
-            else
-                rhs << print_storage_type(op->type);
-            rhs << "(";
-            rhs << print_name(op->name)
+        ostringstream element;
+        element << print_name(op->name)
                 << "[" << id_index << "]";
-            rhs << ")";
-        }
-        else
-        {
-            rhs << print_storage_type(op->type)
-                << "("
-                << "(" << print_name(op->name) << ")";
-            rhs << "[" << id_index << "]";
-            rhs << ")";
-        }
+        Type target_type = op->type;
+        Type source_type = allocations.get(op->name).type;
+        rhs << print_cast(target_type, source_type, element.str());
     }
     else
     {
@@ -366,8 +435,55 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
 {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
-    string value_expr = print_expr(op->value);
     Type value_type = op->value.type();
+
+    // __shared[x] is always uint(32): must reinterpret/pack bits...
+    if (op->name == "__shared")
+    {
+        if (value_type.bits() == 32)
+        {
+            // storing a 32bit word? great! just reinterpret value to uint32:
+            stream << print_name(op->name)
+                    << "[" << print_expr(op->index) << "]"
+                    << " = "
+                    << print_reinterpret(UInt(32), op->value)
+                    << ";\n";
+        }
+        else
+        {
+            // nightmare:
+            internal_assert(value_type.bits() < 32);
+            // must map element index to uint word array index:
+            ostringstream index;
+            auto bits = value_type.bits();
+            auto divisor = (32 / bits);
+            auto i = print_expr(op->index);
+            index << i << " / " << divisor;
+            ostringstream word;
+            word << print_name(op->name)
+                 << "[" + index.str() + "]";
+            // now mask the appropriate bits:
+            ostringstream mask;
+            mask << "("
+                 << hex_literal((1 << bits) - 1)
+                 << " << "
+                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
+                 << ")";
+            // apply the mask to the rhs value:
+            ostringstream value;
+            value << "("
+                  << mask.str()
+                  << " & "
+                  << "(" << print_expr(op->value) << ")"
+                  << ")";
+
+            do_indent();
+            stream << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
+            do_indent();
+            stream << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
+        }
+        return;
+    }
 
     // If we're writing a contiguous ramp, "unroll" the ramp into stores:
     Expr ramp_base = is_ramp_one(op->index);
@@ -380,29 +496,29 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
             // TODO(marcos): this indentation looks funny in the generated code
             do_indent();
             stream << print_name(op->name)
-                << "["
-                << print_expr(ramp_base)
-                << " + " << i
-                << "] = "
-                << value_expr
-                << "["
-                << i
-                << "]"
-                << ";\n";
+                   << "["
+                   << print_expr(ramp_base)
+                   << " + " << i
+                   << "]"
+                   << " = "
+                   << print_expr(op->value)
+                   << "["
+                   << i
+                   << "]"
+                   << ";\n";
         }
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(value_type.is_vector());
 
-        string index_expr = print_expr(op->index);
-
         for (int i = 0; i < value_type.lanes(); ++i) {
             do_indent();
-            stream << "("
-                   << print_name(op->name)
-                   << ")["
-                   << index_expr << "[" << i << "]] = "
-                   << value_expr << "[" << i << "];\n";
+            stream << print_name(op->name)
+                   << "["
+                   << print_expr(op->index) << "[" << i << "]"
+                   << "]"
+                   << " = "
+                   << print_expr(op->value) << "[" << i << "];\n";
         }
     } else {
         bool type_cast_needed = !(allocations.contains(op->name) &&
@@ -410,23 +526,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
 
         do_indent();
 
-        // lhs:
-        string index_expr = print_expr(op->index);
-        stream << print_name(op->name);
-        stream << "[" << index_expr << "] = ";
-        // rhs:
-        if (type_cast_needed && (op->name == "__shared"))
-        {
-            // __shared[x] is always uint(32): must pack/reinterpret bits...
-            if (value_type.is_float())
-                stream << "asuint(" << value_expr << ");\n";
-            else
-                stream << value_expr << ";\n";
-        }
-        else
-        {
-            stream << value_expr << ";\n";
-        }
+        stream << print_name(op->name)
+                << "[" << print_expr(op->index) << "]"
+                << " = "
+                << print_expr(op->value)
+                << ";\n";
     }
 
     cache.clear();
@@ -494,18 +598,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
     }
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, string value_expr)
 {
-    string value_expr = print_expr(op->value);
-
-    Type target_type = op->type;
-    Type source_type = op->value.type();
-
     // casting to or from a float type? just use the language cast:
     if (target_type.is_float() || source_type.is_float())
     {
-        print_assignment(target_type, print_type(target_type) + "(" + value_expr + ")");
-        return;
+        string vanilla_cast = print_type(target_type) + "(" + value_expr + ")";
+        return(vanilla_cast);
     }
 
     // let the integer cast zoo begin...
@@ -524,26 +623,25 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
     same_signess |= target_type.is_uint() && source_type.is_uint();
     if (same_signess)
     {
+        ostringstream ss;
         if (target_type.bits() >= source_type.bits())
         {
-            // target has enough bits to fully acommodate the source:
-            // it's a no-op, but we print a cast for clarity:
-            print_assignment(target_type, print_type(target_type) + "(" + value_expr + ")");
+            // target has enough bits to fully accommodate the source:
+            // it's a no-op, but we print a vanilla cast for clarity:
+            ss << print_type(target_type) << "(" << value_expr << ")";
         }
         else
         {
             // for signed types: shift-up then shift-down
             // for unsigned types: mask the target LSB (but shift-up and down also works)
-            ostringstream ss;
             ss << "("
                << "(" << value_expr << ")"
                << " << "
                << "(" << (32 - target_type.bits()) << ")"   // 1. shift-up to MSB
                << ")"
                << " >> " << (32 - target_type.bits());      // 2. shift-down to LSB
-            print_assignment(target_type, ss.str());
         }
-        return;
+        return(ss.str());
     }
 
     // Case 2: casting from a signed source to an unsigned target
@@ -551,36 +649,34 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
     {
         // reinterpret resulting bits as uint(32):
         ostringstream ss;
-        ss << "asuint(";                                // reinterpret bits
+        ss << "asuint(";                                        // reinterpret bits
         if (target_type.bits() < 32)
         {
             ss << "(" << value_expr << ")"
                << " & "
-               << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
-               << ((1 << target_type.bits()) - 1);      // mask target LSB
+               << hex_literal((1 << target_type.bits()) - 1);   // mask target LSB
         }
         else
         {
             ss << value_expr;
         }
         ss << ")";
-        print_assignment(target_type, ss.str());
-        return;
+        return(ss.str());
     }
 
     // Case 3: casting from an unsigned source to a signed target
     internal_assert(source_type.is_uint());
     internal_assert(target_type.is_int());
+    ostringstream ss;
     if (target_type.bits() > source_type.bits())
     {
         // target has enough bits to fully accommodate the source:
-        // it's a no-op, but we print a cast for clarity:
-        print_assignment(target_type, print_type(target_type) + "(" + value_expr + ")");
+        // it's a no-op, but we print a vanilla cast for clarity:
+        ss << print_type(target_type) << "(" << value_expr << ")";
     }
     else
     {
         // shift-up, reinterpret as int, then shift-down
-        ostringstream ss;
         ss << "asint("                                  // 2. reinterpret bits
            << "(" << value_expr << ")"
            << " << "
@@ -588,10 +684,19 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
            << ")"
            << " >> " << (32 - target_type.bits())       // 3. shift-down to LSB
            << ";\n";
-        print_assignment(target_type, ss.str());
     }
+    return(ss.str());
+}
 
-    return;
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
+{
+    Type target_type = op->type;
+    Type source_type = op->value.type();
+    string value_expr = print_expr(op->value);
+
+    string cast_expr = print_cast( op->type, op->value.type(), print_expr(op->value) );
+
+    print_assignment(target_type, cast_expr);
 }
 
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
@@ -691,7 +796,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                << " "  << print_name(op->name);
         if (is_const(op->extents[0]))
         {
-            stream << " [" << op->extents[0] << "];\n";
+            stream << " [" << op->extents[0] << " / 4];\n";
         }
         else
         {
