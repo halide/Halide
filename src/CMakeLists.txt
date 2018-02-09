@@ -272,6 +272,7 @@ set(HEADER_FILES
   CodeGen_OpenGLCompute_Dev.h
   CodeGen_Posix.h
   CodeGen_PowerPC.h
+  CodeGen_AMDGPU_Dev.h
   CodeGen_PTX_Dev.h
   CodeGen_X86.h
   ConciseCasts.h
@@ -433,6 +434,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
   CodeGen_PowerPC.cpp
+  CodeGen_AMDGPU_Dev.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
   CodeGen_X86.cpp

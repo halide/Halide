@@ -57,6 +57,8 @@ struct Target {
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
         CUDACapability61 = halide_target_feature_cuda_capability61,
+        AMDGPUGFX900 = halide_target_feature_amdgpu_gfx900,
+        AMDGPUGFX803 = halide_target_feature_amdgpu_gfx803,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,

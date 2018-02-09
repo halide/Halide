@@ -337,6 +337,7 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_AMDGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -472,6 +473,7 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_AMDGPU_Dev.h \
   CodeGen_X86.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
