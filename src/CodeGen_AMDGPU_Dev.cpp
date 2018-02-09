@@ -15,14 +15,6 @@
 
 #include <fstream>
 
-/*
-// This is declared in NVAMDGPU.h, which is not exported. Ugly, but seems better than
-// hardcoding a path to the .h file.
-#ifdef WITH_AMDGPU
-namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
-#endif
-*/
-
 namespace Halide {
 namespace Internal {
 
@@ -259,7 +251,7 @@ void CodeGen_AMDGPU_Dev::visit(const Load *op) {
 }
 
 void CodeGen_AMDGPU_Dev::visit(const Store *op) {
-
+/*
     // Do aligned 4-wide 32-bit stores as a single i128 store.
     const Ramp *r = op->index.as<Ramp>();
     // TODO: lanes >= 4, not lanes == 4
@@ -273,7 +265,7 @@ void CodeGen_AMDGPU_Dev::visit(const Store *op) {
             return;
         }
     }
-
+*/
     CodeGen_LLVM::visit(op);
 }
 
