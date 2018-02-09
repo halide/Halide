@@ -290,6 +290,15 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
         // words (int/uint/float) as groupshared types...
         internal_assert(allocations.get(op->name).type == UInt(8));
         internal_assert(op->type.lanes() == 1);
+#if 1
+        internal_assert(op->type.bits() <= 32);
+        Type promoted = op->type.with_bits(32);
+        rhs << "as" << print_type(promoted)
+            << "("
+            << print_name(op->name)
+            << "[" << print_expr(op->index) << "]"
+            << ")";
+#else
         if (op->type.bits() == 32)
         {
             // loading a 32bit word? great! just reinterpret as float/int/uint
@@ -345,6 +354,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
                 rhs << cut.str();
             }
         }
+#endif
         print_assignment(op->type, rhs.str());
         return;
     }
@@ -440,6 +450,15 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
     // __shared[x] is always uint(32): must reinterpret/pack bits...
     if (op->name == "__shared")
     {
+#if 1
+        internal_assert(value_type.bits() <= 32);
+        Type promoted = value_type.with_bits(32);
+        stream << print_name(op->name)
+               << "[" << print_expr(op->index) << "]"
+               << " = "
+               << print_reinterpret(UInt(32), op->value)
+               << ";\n";
+#else
         if (value_type.bits() == 32)
         {
             // storing a 32bit word? great! just reinterpret value to uint32:
@@ -482,6 +501,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
             do_indent();
             stream << "InterlockedXor(" << word.str() << ", " << value.str() << ");\n";
         }
+#endif
         return;
     }
 
@@ -723,6 +743,7 @@ struct BufferSize {
 };
 }
 
+#pragma optimize ( "", off )
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
@@ -796,12 +817,28 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                << " "  << print_name(op->name);
         if (is_const(op->extents[0]))
         {
-            stream << " [" << op->extents[0] << " / 4];\n";
+            std::stringstream ss;
+            ss << op->extents[0];
+            size_t elements = 0;
+            ss >> elements;
+            size_t bytesize = elements * sizeof(uint32_t);
+            // SM 5.1: 32KB limit for shared memory...
+            size_t packing_factor = 1;
+            while (bytesize > 32 * 1024)
+            {
+                // must pack/unpack elements to/from shared memory...
+                elements /= 2;
+                bytesize /= 2;
+                packing_factor *= 2;
+            }
+            stream << " [" << elements << "];\n";
+            // smallest possible pack type is a byte (no nibbles)
+            internal_assert( packing_factor <= 4 );
         }
         else
         {
             // fill-in __GROUPSHARED_SIZE_IN_BYTES later on when D3DCompile() is
-            // invoked in halide_d3d12compute_run()
+            // invoked in halide_d3d12compute_run(); must divide by 4 since 
             stream << " [__GROUPSHARED_SIZE_IN_BYTES / 4];\n";
         }
         Allocation alloc;
@@ -921,6 +958,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
     return;
 }
+#pragma optimize ( "", on )
 
 void CodeGen_D3D12Compute_Dev::init_module() {
     debug(2) << "D3D12Compute device codegen init_module\n";
@@ -928,6 +966,15 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
+
+    // compiler control pragmas
+    src_stream
+        // warning X3078: 'i': loop control variable conflicts with a previous declaration in the outer scope; most recent declaration will be used
+        << "#pragma warning( disable : 3078 )" "\n"
+        // TODO(marcos): can we interchangeably replace ints by uints when we have modulo operations in the generated code?
+        // warning X3556 : integer modulus may be much slower, try using uints if possible
+        << "#pragma warning( disable : 3556 )" "\n"
+        << "\n";
 
     // Write out the Halide math functions.
     src_stream 
