@@ -743,7 +743,6 @@ struct BufferSize {
 };
 }
 
-#pragma optimize ( "", off )
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
@@ -958,7 +957,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
     return;
 }
-#pragma optimize ( "", on )
 
 void CodeGen_D3D12Compute_Dev::init_module() {
     debug(2) << "D3D12Compute device codegen init_module\n";
