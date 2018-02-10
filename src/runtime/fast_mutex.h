@@ -140,7 +140,6 @@ public:
             unlock_full();
         }
     }
-
 };
 
 void word_lock::lock_full() {
@@ -152,7 +151,8 @@ void word_lock::lock_full() {
     while (true) {
         if (!(expected & lock_bit)) {
             uintptr_t desired = expected | lock_bit;
-            if (!__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+
+            if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
                 return;
             }
             continue;
@@ -281,11 +281,10 @@ struct queue_data {
     uintptr_t sleep_address;
 
     queue_data *next;
-    queue_data *tail;
 
     uintptr_t unpark_info;
 
-    queue_data() : sleep_address(0), next(NULL), tail(NULL), unpark_info(0) {
+    queue_data() : sleep_address(0), next(NULL), unpark_info(0) {
     }
 };
 
