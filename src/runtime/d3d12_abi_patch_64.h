@@ -12,6 +12,7 @@ extern "C" {
     void Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(int64_t* descriptorheap, int64_t* gpuHandle);
     void Call_ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(ID3D12GraphicsCommandList* commandList, UINT RootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE* pBaseDescriptor);
     void Call_ID3D12Device_CreateConstantBufferView(ID3D12Device* device, D3D12_CONSTANT_BUFFER_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE* pDestDescriptor);
+    void Call_ID3D12Device_CreateShaderResourceView(ID3D12Device* device, ID3D12Resource* pResource, const D3D12_SHADER_RESOURCE_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE* pDestDescriptor);
 #ifdef __cplusplus
 }
 #endif
@@ -55,6 +56,13 @@ __attribute__((noinline))
 void Call_ID3D12Device_CreateConstantBufferView(ID3D12Device* device, D3D12_CONSTANT_BUFFER_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor)
 {
     Call_ID3D12Device_CreateConstantBufferView(device, pDesc, &DestDescriptor);
+}
+
+__attribute__((optnone))
+__attribute__((noinline))
+void Call_ID3D12Device_CreateShaderResourceView(ID3D12Device* device, ID3D12Resource* pResource, D3D12_SHADER_RESOURCE_VIEW_DESC* pDesc, D3D12_CPU_DESCRIPTOR_HANDLE DestDescriptor)
+{
+    Call_ID3D12Device_CreateShaderResourceView(device, pResource, pDesc, &DestDescriptor);
 }
 
 #endif // HALIDE_HALIDERUNTIMED3D12COMPUTE_ABIPATCH64_H

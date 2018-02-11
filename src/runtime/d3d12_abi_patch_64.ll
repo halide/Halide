@@ -128,3 +128,23 @@ define weak_odr void @Call_ID3D12Device_CreateConstantBufferView(i64* %device, i
     "~{rsp},~{rbp},~{rax},~{r8}"();
     ret void
 }
+
+define weak_odr void @Call_ID3D12Device_CreateShaderResourceView(i64* %device, i64* %pResource, i64* %pDesc, i64* %pDestDescriptor) naked nounwind uwtable
+{
+    call void asm sideeffect
+    inteldialect
+    "
+    push    rbp
+    mov     rbp, rsp
+    sub     rsp,  32
+    and     spl, -16
+    lea     rax, qword ptr [rcx]
+    mov     rax, qword ptr [rax]
+    mov     r9,  qword ptr [r9]
+    call    qword ptr [rax+90h]
+    leave
+    "
+    ,
+    "~{rsp},~{rbp},~{rax},~{r8}"();
+    ret void
+}
