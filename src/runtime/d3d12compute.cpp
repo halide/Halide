@@ -673,7 +673,8 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
 
     IDXGIAdapter1* dxgiAdapter = NULL;    // NULL -> default adapter
     ID3D12Device* device = NULL;
-    result = D3D12CreateDevice(dxgiAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
+    D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
+    result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
     if (D3DError(result, device, user_context, "Unable to create the Direct3D 12 device"))
         return(NULL);
 
@@ -690,6 +691,18 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
     TRACELOG;
 
     // A single "master" root signature is suitable for all Halide kernels:
+    // ideally, we would like to use "unbounded tables" for the descriptor
+    // binding, but "tier-1" d3d12 devices do not support this feature...
+
+    D3D12_ROOT_PARAMETER TableTemplate = { };
+        TableTemplate.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        TableTemplate.DescriptorTable.NumDescriptorRanges = 1;
+        TableTemplate.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // compute must use this
+    D3D12_DESCRIPTOR_RANGE RangeTemplate = { };
+        RangeTemplate.NumDescriptors = 14;      // tier-1 limit...
+        RangeTemplate.BaseShaderRegister = 0;
+        RangeTemplate.RegisterSpace = 0;
+        RangeTemplate.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
     D3D12_ROOT_PARAMETER rootParameterTables [NumSlots] = { };
     // UAVs: read-only, write-only and read-write buffers:
@@ -698,7 +711,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         RootTableUAV.DescriptorTable.NumDescriptorRanges = 1;
             D3D12_DESCRIPTOR_RANGE UAVs = { };
                 UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-                UAVs.NumDescriptors = -1;   // unbounded size
+                UAVs.NumDescriptors = 16;     // tier-1 limit: 16
                 UAVs.BaseShaderRegister = 0;
                 UAVs.RegisterSpace = 0;
                 UAVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -710,7 +723,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         RootTableCBV.DescriptorTable.NumDescriptorRanges = 1;
             D3D12_DESCRIPTOR_RANGE CBVs = { };
                 CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-                CBVs.NumDescriptors = -1;   // unbounded size
+                CBVs.NumDescriptors = 14;     // tier-1 limit: 14
                 CBVs.BaseShaderRegister = 0;
                 CBVs.RegisterSpace = 0;
                 CBVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -722,7 +735,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         RootTableSRV.DescriptorTable.NumDescriptorRanges = 1;
             D3D12_DESCRIPTOR_RANGE SRVs = { };
                 SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                SRVs.NumDescriptors = -1;   // unbounded size
+                SRVs.NumDescriptors = 25;     // tier-1 limit: 128
                 SRVs.BaseShaderRegister = 0;
                 SRVs.RegisterSpace = 0;
                 SRVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -1134,6 +1147,45 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
     binder->GPU[UAV].ptr = baseGPU.ptr +  0*descriptorSize;
     binder->GPU[CBV].ptr = baseGPU.ptr + 25*descriptorSize;
     binder->GPU[SRV].ptr = baseGPU.ptr + 50*descriptorSize;
+
+    // initialize everything with null descriptors...
+    for (int i = 0; i < 25; ++i)
+    {
+        D3D12_UNORDERED_ACCESS_VIEW_DESC NullDescUAV = { };
+            NullDescUAV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
+            NullDescUAV.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+            NullDescUAV.Buffer.FirstElement = 0;
+            NullDescUAV.Buffer.NumElements = 0;
+            NullDescUAV.Buffer.StructureByteStride = 0;
+            NullDescUAV.Buffer.CounterOffsetInBytes = 0;
+            NullDescUAV.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+        D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[UAV];
+        hCPU.ptr += i*descriptorSize;
+        (*device)->CreateUnorderedAccessView(NULL, NULL, &NullDescUAV, hCPU);
+    }
+    for (int i = 0; i < 25; ++i)
+    {
+        D3D12_CONSTANT_BUFFER_VIEW_DESC NullDescCBV = { };
+            NullDescCBV.BufferLocation = 0;
+            NullDescCBV.SizeInBytes = 0;
+        D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[CBV];
+        hCPU.ptr += i*descriptorSize;
+        Call_ID3D12Device_CreateConstantBufferView((*device), NULL, hCPU);
+    }
+    for (int i = 0; i < 25; ++i)
+    {
+        D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = { };
+            NullDescSRV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
+            NullDescSRV.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+            NullDescSRV.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            NullDescSRV.Buffer.FirstElement = 0;
+            NullDescSRV.Buffer.NumElements = 0;
+            NullDescSRV.Buffer.StructureByteStride = 0;
+            NullDescSRV.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+        D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[SRV];
+        hCPU.ptr += i*descriptorSize;
+        Call_ID3D12Device_CreateShaderResourceView((*device), NULL, &NullDescSRV, hCPU);
+    }
 
     return(binder);
 }
