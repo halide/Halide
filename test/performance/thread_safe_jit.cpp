@@ -88,6 +88,11 @@ void same_func_per_thread() {
     std::thread threads[16];
     test_func test;
 
+    // In this program, only one thread can call into the compiler
+    // at this point. The mutex guard is still included both to show that in
+    // general Halide compilation is not thread ssafe and also to keep
+    // the performance comparison slightly more equal by including
+    // (minimal) mutex cost on both paths.
     {
         std::lock_guard<std::mutex> lock(compiler_mutex);
 
