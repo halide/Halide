@@ -7,6 +7,8 @@
 #include "Debug.h"
 #include "IROperator.h"
 
+#define DEBUG_TYPES (0)
+
 namespace Halide {
 namespace Internal {
 
@@ -64,6 +66,9 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             case 32:
                 if (type.is_uint()) oss << 'u';
                 oss << "int";
+                #if DEBUG_TYPES
+                    oss << type.bits();
+                #endif
                 break;
             case 64:
                 user_error << "HLSL (SM 5.1) does not support 64-bit integers.\n";
@@ -79,7 +84,13 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         case 2:
         case 3:
         case 4:
-            oss << type.lanes();
+            #if DEBUG_TYPES
+                oss << "_(";
+            #endif
+                oss << type.lanes();
+            #if DEBUG_TYPES
+                oss << ")";
+            #endif
             break;
         case 8:
         case 16:
@@ -926,15 +937,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     stream << ") ]\n";
 
     stream << "void " << name << "(\n";
-    stream << "uint3 tgroup_index  : SV_GroupID,\n"
-           << "uint3 tid_in_tgroup : SV_GroupThreadID";
+    stream << ' ' << "uint3 tgroup_index  : SV_GroupID,\n"
+           << ' ' << "uint3 tid_in_tgroup : SV_GroupThreadID";
     for (auto& arg : args)
     {
+        stream << ",\n";
+        stream << ' ';
         if (arg.is_buffer)
         {
-            // NOTE(marcos): I guess there is no point in having "const" Buffer
-            // or const RWBuffer; storage type also does not make sense here...
-            stream << ",\n";
             // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
             // all buffers as UAVs since there is no way the runtime can know
             // if a given halide_buffer_t is read-only (SRV) or read-write...
@@ -949,13 +959,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
         else
         {
-            stream << ",\n"
-                   << "uniform"
+            stream << "uniform"
                    << " " << print_type(arg.type)
                    << " " << print_name(arg.name);
         }
     }
-
     stream << ")\n";
 
     open_scope();
@@ -994,6 +1002,25 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     // Write out the Halide math functions.
     src_stream 
              //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
+               #if DEBUG_TYPES
+               << "#define  int8   int\n"
+               << "#define  int16  int\n"
+               << "#define  int32  int\n"
+               << "#define uint8  uint\n"
+               << "#define uint16 uint\n"
+               << "#define uint32 uint\n"
+               << "\n"
+               << "#define  int8_(x)   int##x\n"
+               << "#define  int16_(x)  int##x\n"
+               << "#define  int32_(x)  int##x\n"
+               << "#define uint8_(x)  uint##x\n"
+               << "#define uint16_(x) uint##x\n"
+               << "#define uint32_(x) uint##x\n"
+               << "\n"
+               << "#define asint32  asint\n"
+               << "#define asuint32 asuint\n"
+               << "\n"
+               #endif
                << "float nan_f32()     { return( 1.#IND); } \n" // Quiet NaN with minimum fractional value.
                << "float neg_inf_f32() { return(-1.#INF); } \n"
                << "float inf_f32()     { return(+1.#INF); } \n"
