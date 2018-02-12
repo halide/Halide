@@ -7,7 +7,7 @@
 #include "Debug.h"
 #include "IROperator.h"
 
-#define DEBUG_TYPES (0)
+#define DEBUG_TYPES (1)
 
 namespace Halide {
 namespace Internal {
@@ -116,9 +116,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, Expr e)
 {
-    ostringstream oss;
-    oss << "as" << print_type(type.element_of()) << "(" << print_expr(e) << ")";
-    return oss.str();
+    return( print_reinterpret_cast(type, print_expr(e)) );
 }
 
 
@@ -646,22 +644,62 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
     }
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::reinforce_cast(Type type, string value_expr)
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string& rhs)
 {
-    internal_assert(!type.is_float());
+    string rhs2 = print_reinforced_cast(type, rhs);
+    return( CodeGen_C::print_assignment(type, rhs2) );
+}
+
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, string value_expr)
+{
     ostringstream ss;
+    ss << print_type(type) << "(" << value_expr << ")";
+    return(ss.str());
+}
+
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, string value_expr)
+{
+    if (type.is_float())
+    {
+        return( print_vanilla_cast(type, value_expr) );
+    }
+
     // for signed types: shift-up then shift-down
     // for unsigned types: mask the target LSB (but shift-up and down also works)
-    ss << "as"
-       << ((type.is_uint()) ? "u" : "")
-       << "int"
-       << "("                                // 2. reinterpret bits
-       << "(" << value_expr << ")"
+    ostringstream sl;
+    sl << "(" << value_expr << ")"
        << " << "
-       << "(" << (32 - type.bits()) << ")"   // 1. shift-up to MSB
-       << ")"
-       << " >> " << (32 - type.bits());      // 3. shift-down to LSB
-    return(ss.str());
+       << "(" << (32 - type.bits()) << ")";         // 1. shift-up to MSB
+    ostringstream rsr;
+    rsr << print_reinterpret_cast(type, sl.str())   // 2. reinterpret bits
+        << " >> " << (32 - type.bits());            // 3. shift-down to LSB
+    return(rsr.str());
+}
+
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, string value_expr)
+{
+    type = type.element_of();
+
+    string cast_expr;
+    cast_expr += "as";
+    switch (type.code())
+    {
+        case halide_type_uint :
+            cast_expr += "u";
+        case halide_type_int :
+            cast_expr += "int";
+            break;
+        case halide_type_float :
+            cast_expr += "float";
+            break;
+        case halide_type_handle :
+        default :
+            cast_expr = "BADCAST";
+            user_error << "Invalid reinterpret cast.\n";
+            break;
+    }
+    cast_expr += "(" + value_expr + ")";
+    return cast_expr;
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, string value_expr)
@@ -669,8 +707,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // casting to or from a float type? just use the language cast:
     if (target_type.is_float() || source_type.is_float())
     {
-        string vanilla_cast = print_type(target_type) + "(" + value_expr + ")";
-        return(vanilla_cast);
+        return( print_vanilla_cast(target_type, value_expr) );
     }
 
     // let the integer cast zoo begin...
@@ -694,8 +731,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
         {
             // target has enough bits to fully accommodate the source:
             // it's a no-op, but we print a vanilla cast for clarity:
-            value_expr = reinforce_cast(source_type, value_expr);
-            ss << "(" << print_type(target_type) << "(" << value_expr << "))";
+            ss << "(" << print_vanilla_cast(target_type, value_expr) << ")";
         }
         else
         {
@@ -715,20 +751,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     if (source_type.is_int() && target_type.is_uint())
     {
         // reinterpret resulting bits as uint(32):
-        ostringstream ss;
-        ss << "asuint(";                                        // reinterpret bits
+        string masked = value_expr;
         if (target_type.bits() < 32)
         {
-            ss << "(" << value_expr << ")"
-               << " & "
-               << hex_literal((1 << target_type.bits()) - 1);   // mask target LSB
+            masked = "(" + value_expr + ")"
+                   + " & "
+                   + hex_literal((1 << target_type.bits()) - 1);   // mask target LSB
         }
-        else
-        {
-            ss << value_expr;
-        }
-        ss << ")";
-        return(ss.str());
+        return( print_reinterpret_cast(target_type, masked) );
     }
 
     // Case 3: casting from an unsigned source to a signed target
@@ -739,19 +769,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     {
         // target has enough bits to fully accommodate the source:
         // it's a no-op, but we print a vanilla cast for clarity:
-        value_expr = reinforce_cast(source_type, value_expr);
-        ss << "(" << print_type(target_type) << "(" << value_expr << "))";
+        ss << "(" << print_vanilla_cast(target_type, value_expr) << ")";
     }
     else
     {
-        // shift-up, reinterpret as int, then shift-down
-        ss << "asint("                                  // 2. reinterpret bits
-           << "(" << value_expr << ")"
-           << " << "
-           << "(" << (32 - target_type.bits()) << ")"   // 1. shift-up to MSB
-           << ")"
-           << " >> " << (32 - target_type.bits())       // 3. shift-down to LSB
-           << ";\n";
+        // shift-up, reinterpret as int (target_type), then shift-down
+        ss << print_reinforced_cast(target_type, value_expr);
     }
     return(ss.str());
 }
@@ -1030,6 +1053,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
                << "#define uint16 uint\n"
                << "#define uint32 uint\n"
                << "\n"
+               << "#define  bool_(x)   bool##x\n"
                << "#define  int8_(x)   int##x\n"
                << "#define  int16_(x)  int##x\n"
                << "#define  int32_(x)  int##x\n"
