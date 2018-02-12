@@ -687,6 +687,7 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
         // TODO(marcos): find a strategy to select the best adapter available;
         // unfortunately, most of the adapter capabilities can only be queried
         // after a logical device for it is created...
+        // (see: ID3D12Device::CheckFeatureSupport)
         if (dxgiAdapter)
             dxgiAdapter->Release();
         dxgiAdapter = adapter;
@@ -738,7 +739,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         TableTemplate.DescriptorTable.NumDescriptorRanges = 1;
         TableTemplate.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // compute must use this
     D3D12_DESCRIPTOR_RANGE RangeTemplate = { };
-        RangeTemplate.NumDescriptors = 14;      // tier-1 limit...
+        RangeTemplate.NumDescriptors = 25;
         RangeTemplate.BaseShaderRegister = 0;
         RangeTemplate.RegisterSpace = 0;
         RangeTemplate.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -746,40 +747,25 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
     D3D12_ROOT_PARAMETER rootParameterTables [NumSlots] = { };
     // UAVs: read-only, write-only and read-write buffers:
         D3D12_ROOT_PARAMETER& RootTableUAV = rootParameterTables[UAV];
-        RootTableUAV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootTableUAV.DescriptorTable.NumDescriptorRanges = 1;
-            D3D12_DESCRIPTOR_RANGE UAVs = { };
+            RootTableUAV = TableTemplate;
+            D3D12_DESCRIPTOR_RANGE UAVs = RangeTemplate;
                 UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
                 UAVs.NumDescriptors = 16;     // tier-1 limit: 16 UAVs
-                UAVs.BaseShaderRegister = 0;
-                UAVs.RegisterSpace = 0;
-                UAVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-        RootTableUAV.DescriptorTable.pDescriptorRanges = &UAVs;
-        RootTableUAV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
+            RootTableUAV.DescriptorTable.pDescriptorRanges = &UAVs;
     // CBVs: read-only uniform/coherent/broadcast buffers:
         D3D12_ROOT_PARAMETER& RootTableCBV = rootParameterTables[CBV];
-        RootTableCBV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootTableCBV.DescriptorTable.NumDescriptorRanges = 1;
-            D3D12_DESCRIPTOR_RANGE CBVs = { };
+            RootTableCBV = TableTemplate;
+            D3D12_DESCRIPTOR_RANGE CBVs = RangeTemplate;
                 CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
                 CBVs.NumDescriptors = 14;     // tier-1 limit: 14 CBVs
-                CBVs.BaseShaderRegister = 0;
-                CBVs.RegisterSpace = 0;
-                CBVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-        RootTableCBV.DescriptorTable.pDescriptorRanges = &CBVs;
-        RootTableCBV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
+            RootTableCBV.DescriptorTable.pDescriptorRanges = &CBVs;
     // SRVs: textures and read-only buffers:
         D3D12_ROOT_PARAMETER& RootTableSRV = rootParameterTables[SRV];
-        RootTableSRV.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        RootTableSRV.DescriptorTable.NumDescriptorRanges = 1;
-            D3D12_DESCRIPTOR_RANGE SRVs = { };
+            RootTableSRV = TableTemplate;
+            D3D12_DESCRIPTOR_RANGE SRVs = RangeTemplate;
                 SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
                 SRVs.NumDescriptors = 25;     // tier-1 limit: 128 SRVs
-                SRVs.BaseShaderRegister = 0;
-                SRVs.RegisterSpace = 0;
-                SRVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-        RootTableSRV.DescriptorTable.pDescriptorRanges = &SRVs;
-        RootTableSRV.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // <- compute must use this
+            RootTableSRV.DescriptorTable.pDescriptorRanges = &SRVs;
 
     D3D12_ROOT_SIGNATURE_DESC rsd = { };
         rsd.NumParameters = NumSlots;
