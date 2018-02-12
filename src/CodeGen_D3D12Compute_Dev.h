@@ -64,6 +64,7 @@ protected:
         std::string print_reinterpret(Type type, Expr e);
         std::string print_extern_call(const Call *op);
 
+        std::string reinforce_cast(Type type, std::string value_expr);
         std::string print_cast(Type target_type, Type source_type, std::string value_expr);
 
         void visit(const Evaluate *op);

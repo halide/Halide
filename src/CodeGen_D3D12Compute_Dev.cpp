@@ -646,6 +646,24 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
     }
 }
 
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::reinforce_cast(Type type, string value_expr)
+{
+    internal_assert(!type.is_float());
+    ostringstream ss;
+    // for signed types: shift-up then shift-down
+    // for unsigned types: mask the target LSB (but shift-up and down also works)
+    ss << "as"
+       << ((type.is_uint()) ? "u" : "")
+       << "int"
+       << "("                                // 2. reinterpret bits
+       << "(" << value_expr << ")"
+       << " << "
+       << "(" << (32 - type.bits()) << ")"   // 1. shift-up to MSB
+       << ")"
+       << " >> " << (32 - type.bits());      // 3. shift-down to LSB
+    return(ss.str());
+}
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, string value_expr)
 {
     // casting to or from a float type? just use the language cast:
@@ -676,6 +694,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
         {
             // target has enough bits to fully accommodate the source:
             // it's a no-op, but we print a vanilla cast for clarity:
+            value_expr = reinforce_cast(source_type, value_expr);
             ss << "(" << print_type(target_type) << "(" << value_expr << "))";
         }
         else
@@ -720,6 +739,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     {
         // target has enough bits to fully accommodate the source:
         // it's a no-op, but we print a vanilla cast for clarity:
+        value_expr = reinforce_cast(source_type, value_expr);
         ss << "(" << print_type(target_type) << "(" << value_expr << "))";
     }
     else
