@@ -17,6 +17,8 @@ else
     FPIC=-fPIC
 ifeq ($(UNAME), Darwin)
     SHARED_EXT=dylib
+	# Note that Python on OSX won't load .dylib; it requires .so
+    SUFFIX=.so
 else
     SHARED_EXT=so
 endif
@@ -24,10 +26,22 @@ endif
 
 LIBHALIDE ?= $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
 
-ifndef PYBIND11_PATH
-    $(error PYBIND11_PATH is undefined)
+SUFFIX ?= .$(SHARED_EXT)
+ifeq ($(PYTHON), python3)
+    SUFFIX = $(shell $(PYTHON)-config --extension-suffix)
 endif
-PYBIND11_PATH ?= /path/to/pybind11
+
+# Discover PyBind path from `python3 -m pybind11 --includes`
+# if it is pip/conda installed, which is a common case.
+# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
+PYBIND11_CFLAGS = $(shell $(PYTHON) -m pybind11 --includes)
+ifeq ($(PYBIND11_CFLAGS),)
+    ifndef PYBIND11_PATH
+        $(error PYBIND11_PATH is undefined)
+    endif
+    PYBIND11_PATH ?= /path/to/pybind11
+    PYBIND11_CFLAGS = -I $(PYBIND11_PATH)/include
+endif
 
 OPTIMIZE ?= -O3
 
@@ -35,24 +49,24 @@ OPTIMIZE ?= -O3
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
 # Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) -I $(PYBIND11_PATH)/include -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE)
-LDFLAGS=$(shell $(PYTHON)-config --ldflags) -lz
-
-ifeq ($(UNAME), Darwin)
-	# Some Mac Python3 installs incorrectly include "-lintl" in --ldflags, 
-	# which isn't needed and may be missing. Just strip it.
-	LDFLAGS := $(filter-out -lintl,$(LDFLAGS))
-endif
-
+CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
+# DON'T link libpython* - leave those symbols to lazily resolve at load time
+# Cf. https://github.com/pybind/pybind11/blob/master/docs/compiling.rst#building-manually
+LDFLAGS=-lz
+ifeq ($(UNAME), Darwin)
+    # Keep OS X builds from complaining about missing libpython symbols
+    LDFLAGS += -undefined dynamic_lookup
+endif
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
 
-# Note that Python on OSX won't load .dylib; it requires .so
-$(BIN)/halide.so: $(PY_OBJS) $(LIBHALIDE)
+MODULE=$(BIN)/halide$(SUFFIX)
+
+$(MODULE): $(PY_OBJS) $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
@@ -93,7 +107,7 @@ TUTORIAL = $(shell ls $(ROOT_DIR)/tutorial/*.py)
 .PHONY: test_apps
 test_apps: $(APPS:$(ROOT_DIR)/apps/%.py=test_apps_%)
 
-test_apps_%: $(ROOT_DIR)/apps/%.py $(BIN)/halide.so
+test_apps_%: $(ROOT_DIR)/apps/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
@@ -102,7 +116,7 @@ test_apps_%: $(ROOT_DIR)/apps/%.py $(BIN)/halide.so
 .PHONY: test_correctness
 test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
 
-test_correctness_%: $(ROOT_DIR)/correctness/%.py $(BIN)/halide.so
+test_correctness_%: $(ROOT_DIR)/correctness/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $<
@@ -110,7 +124,7 @@ test_correctness_%: $(ROOT_DIR)/correctness/%.py $(BIN)/halide.so
 .PHONY: test_tutorial
 test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)
 
-test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(BIN)/halide.so
+test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
