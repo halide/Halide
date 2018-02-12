@@ -58,11 +58,6 @@ set(CMAKE_MACOSX_RPATH ON)
 # Export all symbols
 SET(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-# # Allow for the distribution directory to be explicitly specified
-# if (NOT DISTRIB_DIR)
-#   set(DISTRIB_DIR "${CMAKE_BINARY_DIR}/distrib")
-# endif()
-
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
