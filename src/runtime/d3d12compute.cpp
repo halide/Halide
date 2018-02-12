@@ -653,30 +653,68 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     d3d12Debug->EnableDebugLayer();
 #endif
 
-#if 0
     IDXGIFactory1* dxgiFactory = NULL;
     result = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
     if (D3DError(result, dxgiFactory, user_context, "Unable to create DXGI Factory (IDXGIFactory1)"))
         return(NULL);
 
     IDXGIAdapter1* dxgiAdapter = NULL;
-    result = dxgiFactory->EnumAdapters1(0, &dxgiAdapter);
-    if (D3DError(result, dxgiAdapter, user_context, "Unable to enumerate DXGI adapters (IDXGIAdapter1)"))
-        return(NULL);
+    for (int i = 0; ; ++i)
+    {
+        IDXGIAdapter1* adapter = NULL;
+        HRESULT result = dxgiFactory->EnumAdapters1(i, &adapter);
+        #define DXGI_ERROR_NOT_FOUND 0x887A0002
+        if (DXGI_ERROR_NOT_FOUND == result)
+            break;
+        if (D3DError(result, adapter, user_context, "Unable to enumerate DXGI adapter (IDXGIAdapter1)."))
+            return(NULL);
+        DXGI_ADAPTER_DESC1 desc = { };
+        if (FAILED(adapter->GetDesc1(&desc)))
+        {
+            error(user_context) << "Unable to retrieve information (DXGI_ADAPTER_DESC1) about adapter number #" << i;
+            return(NULL);
+        }
+        char Description [128];
+        for (int i = 0; i < 128; ++i)
+            Description[i] = desc.Description[i];
+        TRACEPRINT("-- Adapter #" << i << ": " << Description << "\n");
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+        {
+            TRACEPRINT("-- this is a software adapter (skipping)\n");
+            adapter->Release();
+            continue;
+        }
+        // TODO(marcos): find a strategy to select the best adapter available;
+        // unfortunately, most of the adapter capabilities can only be queried
+        // after a logical device for it is created...
+        if (dxgiAdapter)
+            dxgiAdapter->Release();
+        dxgiAdapter = adapter;
+        break;  // <- for now, just pick the first (non-software) adapter
+    }
 
-    // NOTE(marcos): ignoring IDXGIOutput setup since this is for compute only
+    if (NULL == dxgiAdapter)
+    {
+        error(user_context) << "Unable to find a suitable D3D12 Adapter.\n";
+        return(NULL);
+    }
+
+#if 0
+    // NOTE(marcos): ignoring IDXGIOutput setup since this back-end is compute only
     IDXGIOutput* dxgiDisplayOutput = NULL;
     result = dxgiAdapter->EnumOutputs(0, &dxgiDisplayOutput);
     if (D3DError(result, dxgiDisplayOutput, user_context, "Unable to enumerate DXGI outputs for adapter (IDXGIOutput)"))
         return(NULL);
 #endif
 
-    IDXGIAdapter1* dxgiAdapter = NULL;    // NULL -> default adapter
     ID3D12Device* device = NULL;
     D3D_FEATURE_LEVEL MinimumFeatureLevel = D3D_FEATURE_LEVEL_11_0;
     result = D3D12CreateDevice(dxgiAdapter, MinimumFeatureLevel, IID_PPV_ARGS(&device));
     if (D3DError(result, device, user_context, "Unable to create the Direct3D 12 device"))
         return(NULL);
+
+    dxgiAdapter->Release();
+    dxgiFactory->Release();
 
     //TRACEPRINT("[[ delay for setting up PIX... ]]\n");
     //volatile int x = 2000000000;
@@ -692,7 +730,8 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
 
     // A single "master" root signature is suitable for all Halide kernels:
     // ideally, we would like to use "unbounded tables" for the descriptor
-    // binding, but "tier-1" d3d12 devices do not support this feature...
+    // binding, but "tier-1" d3d12 devices (D3D12_RESOURCE_BINDING_TIER_1)
+    // do not support unbounded descriptor tables...
 
     D3D12_ROOT_PARAMETER TableTemplate = { };
         TableTemplate.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -711,7 +750,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         RootTableUAV.DescriptorTable.NumDescriptorRanges = 1;
             D3D12_DESCRIPTOR_RANGE UAVs = { };
                 UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-                UAVs.NumDescriptors = 16;     // tier-1 limit: 16
+                UAVs.NumDescriptors = 16;     // tier-1 limit: 16 UAVs
                 UAVs.BaseShaderRegister = 0;
                 UAVs.RegisterSpace = 0;
                 UAVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -723,7 +762,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         RootTableCBV.DescriptorTable.NumDescriptorRanges = 1;
             D3D12_DESCRIPTOR_RANGE CBVs = { };
                 CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-                CBVs.NumDescriptors = 14;     // tier-1 limit: 14
+                CBVs.NumDescriptors = 14;     // tier-1 limit: 14 CBVs
                 CBVs.BaseShaderRegister = 0;
                 CBVs.RegisterSpace = 0;
                 CBVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -735,7 +774,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         RootTableSRV.DescriptorTable.NumDescriptorRanges = 1;
             D3D12_DESCRIPTOR_RANGE SRVs = { };
                 SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                SRVs.NumDescriptors = 25;     // tier-1 limit: 128
+                SRVs.NumDescriptors = 25;     // tier-1 limit: 128 SRVs
                 SRVs.BaseShaderRegister = 0;
                 SRVs.RegisterSpace = 0;
                 SRVs.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
