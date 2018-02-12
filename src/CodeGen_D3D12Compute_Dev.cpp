@@ -291,12 +291,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
         internal_assert(allocations.get(op->name).type == UInt(8));
         internal_assert(op->type.lanes() == 1);
 #if 1
+        string id_index = print_expr(op->index);
+        //id_index = print_cast(op->type, op->index.type(), id_index);
         internal_assert(op->type.bits() <= 32);
         Type promoted = op->type.with_bits(32);
         rhs << "as" << print_type(promoted)
             << "("
             << print_name(op->name)
-            << "[" << print_expr(op->index) << "]"
+            << "[" << id_index << "]"
             << ")";
 #else
         if (op->type.bits() == 32)
@@ -387,10 +389,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
     }
 
     string id_index = print_expr(op->index);
+    //id_index = print_cast(op->type, op->index.type(), id_index);
 
     // Get the rhs just for the cache.
     bool type_cast_needed = !(allocations.contains(op->name) &&
                               allocations.get(op->name).type == op->type);
+    //Type buffer_type = (op->image.defined()) ? op->image.type() : op->type;
+    //type_cast_needed |= (buffer_type != op->type);
+
     ostringstream rhs;
     if (type_cast_needed)
     {
@@ -453,6 +459,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
 #if 1
         internal_assert(value_type.bits() <= 32);
         Type promoted = value_type.with_bits(32);
+        do_indent();
         stream << print_name(op->name)
                << "[" << print_expr(op->index) << "]"
                << " = "
@@ -541,15 +548,25 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
                    << print_expr(op->value) << "[" << i << "];\n";
         }
     } else {
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == value_type);
+        bool type_cast_needed = false;
+        //Type buffer_type = (op->param.defined()) ? op->param.type() : value_type;
+        //type_cast_needed |= (buffer_type != value_type);
+
+        ostringstream rhs;
+        if (type_cast_needed)
+        {
+            rhs << print_cast(allocations.get(op->name).type, value_type, print_expr(op->index));
+        }
+        else
+        {
+            rhs << print_expr(op->value);
+        }
 
         do_indent();
-
         stream << print_name(op->name)
                 << "[" << print_expr(op->index) << "]"
                 << " = "
-                << print_expr(op->value)
+                << rhs.str()
                 << ";\n";
     }
 
@@ -648,7 +665,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
         {
             // target has enough bits to fully accommodate the source:
             // it's a no-op, but we print a vanilla cast for clarity:
-            ss << print_type(target_type) << "(" << value_expr << ")";
+            ss << "(" << print_type(target_type) << "(" << value_expr << "))";
         }
         else
         {
@@ -692,7 +709,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     {
         // target has enough bits to fully accommodate the source:
         // it's a no-op, but we print a vanilla cast for clarity:
-        ss << print_type(target_type) << "(" << value_expr << ")";
+        ss << "(" << print_type(target_type) << "(" << value_expr << "))";
     }
     else
     {
