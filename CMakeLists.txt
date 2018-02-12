@@ -395,6 +395,7 @@ endif()
 # ------------------------------------------------
 # install
 
+file(GLOB FILES "${CMAKE_BINARY_DIR}/include/HalideRuntime*.h")
 install(FILES
         "${CMAKE_BINARY_DIR}/include/Halide.h"
         "${CMAKE_BINARY_DIR}/include/HalideBuffer.h"
