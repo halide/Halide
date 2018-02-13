@@ -47,10 +47,21 @@ std::string get_env_variable(char const *env_var_name) {
     }
 
     #ifdef _MSC_VER
-    char lvl[128];
+    // call getenv_s without a buffer to determine the correct string length:
+    size_t length = 0;
+    if (getenv_s(&length, NULL, 0, env_var_name) != 0)
+        return "";
+    if (0 == length)
+        return "";
+    // call it again to retrieve the value of the environment variable;
+    // not that 'length' already accounts for the null-terminator
+    std::string lvl (length-1, '@');
     size_t read = 0;
-    if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
-    if (read) return std::string(lvl);
+    if (getenv_s(&read, &lvl[0], length, env_var_name) != 0)
+        lvl.clear();
+    if (read != length)
+        lvl.clear();
+    return lvl;
     #else
     char *lvl = getenv(env_var_name);
     if (lvl) return std::string(lvl);
