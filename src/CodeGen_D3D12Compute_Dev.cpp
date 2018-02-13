@@ -646,8 +646,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string& rhs)
 {
-    string rhs2 = print_reinforced_cast(type, rhs);
-    return( CodeGen_C::print_assignment(type, rhs2) );
+    string rhs_modified = print_reinforced_cast(type, rhs);
+    return( CodeGen_C::print_assignment(type, rhs_modified) );
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, string value_expr)
@@ -662,6 +662,16 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     if (type.is_float())
     {
         return( print_vanilla_cast(type, value_expr) );
+    }
+
+    if (type.is_bool())
+    {
+        return( print_vanilla_cast(type, value_expr) );
+    }
+
+    if (type.bits() == 32)
+    {
+        return( print_reinterpret_cast(type, value_expr) );
     }
 
     // for signed types: shift-up then shift-down
@@ -710,6 +720,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
         return( print_vanilla_cast(target_type, value_expr) );
     }
 
+    // casting to or from a bool type? just use the language cast:
+    if (target_type.is_bool() || source_type.is_bool())
+    {
+        return( print_vanilla_cast(target_type, value_expr) );
+    }
+
     // let the integer cast zoo begin...
     internal_assert(!target_type.is_float());
     internal_assert(!source_type.is_float());
@@ -717,8 +733,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // HLSL (SM 5.1) only supports 32bit integers (signed and unsigned)...
     // integer downcasting-to (or upcasting-from) lower bit integers require
     // some emulation in code...
+    internal_assert(target_type.bits() >= 8);
+    internal_assert(source_type.bits() >= 8);
     internal_assert(target_type.bits() <= 32);
     internal_assert(source_type.bits() <= 32);
+    internal_assert(target_type.bits() % 8 == 0);
+    internal_assert(source_type.bits() % 8 == 0);
 
     // Case 1: source and target both have the same "signess"
     bool same_signess = false;
