@@ -355,6 +355,9 @@ struct d3d12_buffer
 {
     ID3D12Resource* resource;
     UINT sizeInBytes;
+    UINT offset;        // FirstElement
+    UINT elements;      // NumElements
+    UINT offsetInBytes;
     DXGI_FORMAT format;
     D3D12_RESOURCE_STATES state;
 
@@ -920,6 +923,8 @@ WEAK void* map_buffer(d3d12_buffer* buffer)
             break;
     }
 
+    TRACEPRINT("[ Begin: " << readRange.Begin << " , End: " << readRange.End << " ]\n");
+
     // If a resource contains a buffer, then it simply contains one subresource with an index of 0.
     ID3D12Resource* resource = buffer->resource;
     UINT Subresource = 0;
@@ -961,6 +966,8 @@ WEAK void unmap_buffer(d3d12_buffer* buffer)
             halide_assert(user_context, false);
             break;
     }
+
+    TRACEPRINT("[ Begin: " << writtenRange.Begin << " , End: " << writtenRange.End << " ]\n");
 
     ID3D12Resource* resource = buffer->resource;
     UINT Subresource = 0;
@@ -1259,6 +1266,7 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
         case d3d12_buffer::Upload :
             pDstBuffer = buffer->resource;
             pSrcBuffer = staging->buffer->resource;
+            DstOffset = buffer->offsetInBytes;
             halide_assert(user_context, staging->buffer->state == D3D12_RESOURCE_STATE_GENERIC_READ);
             barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
             break;
@@ -1266,6 +1274,7 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
             unmap_buffer(staging->buffer);
             pDstBuffer = staging->buffer->resource;
             pSrcBuffer = buffer->resource;
+            SrcOffset = buffer->offsetInBytes;
             halide_assert(user_context, staging->buffer->state == D3D12_RESOURCE_STATE_COPY_DEST);
             barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
             break;
@@ -1274,6 +1283,12 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
             halide_assert(user_context, false);
             break;
     }
+
+    TRACEPRINT("--- "
+        << (void*)buffer << " | " << (void*)buffer->halide << " | "
+        << SrcOffset << " : " << DstOffset << " : " << NumBytes
+        << "\n");
+
     (*cmdList)->ResourceBarrier(1, &barrier);
     (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
     swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
@@ -1450,7 +1465,16 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
                 error(user_context) << "unsupported buffer element type: " << input_buffer->halide->type << "\n";
             }
 
-            UINT NumElements = input_buffer->halide->number_of_elements();
+            UINT FirstElement = input_buffer->offset;
+            // for some reason, 'input_buffer->halide->number_of_elements()' is
+            // returning 1 for cropped buffers... ('size_in_bytes()' returns 0)
+            UINT NumElements = input_buffer->elements;
+            UINT SizeInBytes = input_buffer->sizeInBytes;
+
+            TRACEPRINT("--- "
+                << (void*)input_buffer << " | " << (void*)input_buffer->halide << " | "
+                << FirstElement << " : " << NumElements << " : " << SizeInBytes
+                << "\n");
 
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
             // Default Desc parameters cannot be used, as a Format must be supplied.
@@ -2077,16 +2101,14 @@ WEAK int halide_d3d12compute_copy_to_host(void* user_context, halide_buffer_t* b
     d3d12_buffer::staging_t staging = { };
         staging.buffer = &readback;
         staging.offset = 0;
-        staging.size = buffer->size_in_bytes();
+        staging.size   = dbuffer->sizeInBytes;
     dbuffer->staging = &staging;
     halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
 
     // 2. memcopy from staging memory to host
-
-    device_copy c = make_device_to_host_copy(buffer);
     void* src_data = buffer_contents(staging.buffer);
+    device_copy c = make_device_to_host_copy(buffer);
     c.src = reinterpret_cast<uint64_t>(src_data);
-
     copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
@@ -2212,7 +2234,12 @@ WEAK int halide_d3d12compute_run(void *user_context,
             memcpy(&args_ptr[offset], &val, argsize);
             offset = (offset + argsize - 1) & ~(argsize - 1);
             offset += argsize;
-            TRACEPRINT(">>> arg " << (int)i << " has size " << (int)arg_sizes[i] << " : float(" << *arg.f << ") or int32(" << *arg.i << ")\n");
+            TRACEPRINT(
+                ">>> arg " << (int)i << " has size " << (int)arg_sizes[i] << " : "
+                "float("  << *arg.f << ") or "
+                "uint32(" << *arg.i << ") or "
+                "int32("  << (int32_t&)*arg.i << ")\n"
+            );
         }
         halide_assert(user_context, offset == total_args_size);
     }
@@ -2322,67 +2349,59 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
                                          struct halide_buffer_t *dst) {
     TRACELOG;
     debug(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop called.\n";
-    error(user_context) << TRACEINDENT << "halide_d3d12compute_device_crop() : NOT YET IMPLEMENTED.\n";
-/*
+
     D3D12ContextHolder d3d12_context (user_context, true);
     if (d3d12_context.error != 0)
     {
         return d3d12_context.error;
     }
 
+    halide_assert(user_context, (NULL == dst->device_interface));
     dst->device_interface = src->device_interface;
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++)
     {
         offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
     }
-    offset *= src->type.bytes();
+    //offset *= src->type.bytes();
 
-    device_handle *new_handle = (device_handle *)malloc(sizeof(device_handle));
+    d3d12_buffer* new_handle = malloct<d3d12_buffer>();
     if (new_handle == NULL) {
-        error(user_context) << "halide_metal_device_crop: malloc failed making device handle.\n";
+        error(user_context) << "halide_d3d12compute_device_crop: malloc failed making device handle.\n";
         return halide_error_code_out_of_memory;
     }
 
-    retain_ns_object(((device_handle *)src->device)->buf);
-    new_handle->buf = ((device_handle *)src->device)->buf;
-    new_handle->offset = ((device_handle *)src->device)->offset + offset;
-    dst->device = (uint64_t)new_handle;
-*/
+    d3d12_buffer* old_handle = reinterpret_cast<d3d12_buffer*>(src->device);
+    *new_handle = *old_handle;
+    new_handle->resource->AddRef();
+    new_handle->halide = dst;
+    new_handle->offset = old_handle->offset + offset;
+    new_handle->offsetInBytes = new_handle->offset * dst->type.bytes() * dst->type.lanes;
+    // for some reason, 'dst->number_of_elements()' is always returning 1
+    // later on when 'set_input()' is called...
+    new_handle->elements = old_handle->elements - offset;
+    new_handle->sizeInBytes = dst->size_in_bytes();
+    new_handle->mallocd = true;
+    new_handle->staging = NULL;
+    //halide_assert(user_context, (NULL == new_handle->staging));
+    dst->device = reinterpret_cast<uint64_t>(new_handle);
+
+    TRACEPRINT("--- "
+        << (void*)old_handle  << " | " << (void*)old_handle->halide << " | "
+        << old_handle->offset << " : " << old_handle->elements << " : " << old_handle->sizeInBytes
+        << "   ->   "
+        << (void*)new_handle  << " | " << (void*)new_handle->halide << " | "
+        << new_handle->offset << " : " << new_handle->elements << " : " << new_handle->sizeInBytes
+        << "\n");
+
     return 0;
 }
 
-WEAK int halide_d3d12compute_device_release_crop(void *user_context,
-                                                 struct halide_buffer_t *buf) {
-    // Basically the same code as in halide_metal_device_free, but with
-    // enough differences to require separate code.
-
-    TRACELOG;
-    debug(user_context) << TRACEINDENT 
-                        << "halide_d3d12compute_device_release_crop called on buf "
-                        << buf << " device is " << buf->device << "\n";
-    error(user_context) << TRACEINDENT << "halide_d3d12compute_device_release_crop() : NOT YET IMPLEMENTED.\n";
-/*
-    if (buf->device == 0)
-    {
-        return 0;
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
-    device_handle *handle = (device_handle *)buf->device;
-    
-    release_object(handle->buf);
-    free(handle);
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
-*/
-    return 0;
+WEAK int halide_d3d12compute_device_release_crop(void* user_context,
+                                                 struct halide_buffer_t* buf)
+{
+    // for D3D12, this is exactly like halide_d3d12compute_device_free():
+    return( halide_d3d12compute_device_free(user_context, buf) );
 }
 
 WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffer_t* halide_buf, uint64_t device_buf_handle)
@@ -2399,6 +2418,9 @@ WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffe
     halide_assert(user_context, d3d12_buf->halide == 0);
 
     d3d12_buf->halide = halide_buf;
+    d3d12_buf->offset = 0;
+    d3d12_buf->elements = halide_buf->number_of_elements();
+    d3d12_buf->offsetInBytes = 0;
     d3d12_buf->format = FindD3D12FormatForHalideType(halide_buf->type);
     if (DXGI_FORMAT_UNKNOWN == d3d12_buf->format)
     {
