@@ -57,7 +57,7 @@ std::string get_env_variable(char const *env_var_name) {
     }
     // call it again to retrieve the value of the environment variable;
     // note that 'length' already accounts for the null-terminator
-    std::string lvl (length-1, '@');
+    std::string lvl(length-1, '@');
     size_t read = 0;
     if (getenv_s(&read, &lvl[0], length, env_var_name) != 0) {
         lvl.clear();
