@@ -1470,6 +1470,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             // returning 1 for cropped buffers... ('size_in_bytes()' returns 0)
             UINT NumElements = input_buffer->elements;
             UINT SizeInBytes = input_buffer->sizeInBytes;
+            UNUSED(SizeInBytes);
 
             TRACEPRINT("--- "
                 << (void*)input_buffer << " | " << (void*)input_buffer->halide << " | "
@@ -1481,7 +1482,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
             D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = { };
                 uavd.Format = Format;
                 uavd.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-                uavd.Buffer.FirstElement = 0;
+                uavd.Buffer.FirstElement = FirstElement;
                 uavd.Buffer.NumElements = NumElements;
                 uavd.Buffer.StructureByteStride = 0;
                 uavd.Buffer.CounterOffsetInBytes = 0;   // 0, since this is not an atomic counter
