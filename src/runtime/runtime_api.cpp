@@ -191,6 +191,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
     (void *)&halide_d3d12compute_acquire_context,
+    (void *)&halide_d3d12compute_device_interface,
     (void *)&halide_d3d12compute_initialize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
