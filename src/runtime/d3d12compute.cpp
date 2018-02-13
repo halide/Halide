@@ -5,6 +5,7 @@
 #define HALIDE_D3D12_TRACE          (1)
 #define HALIDE_D3D12_DEBUG_RUNTIME  (1)
 #define HALIDE_D3D12_DEBUG_SHADERS  (1)
+#define HALIDE_D3D12_PIX            (0)
 #define HALIDE_D3D12_RENDERDOC      (0)
 
 #include "HalideRuntimeD3D12Compute.h"
@@ -639,6 +640,17 @@ static void D3D12LoadDependencies(void* user_context)
 #endif
 }
 
+#if HALIDE_D3D12_PIX
+static void D3D12WaitForPix()
+{
+    TRACELOG;
+    TRACEPRINT("[[ delay for attaching to PIX... ]]\n");
+    volatile uint32_t x = (1 << 31);
+    while (--x > 0)
+        ;
+}
+#endif
+
 static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
 {
     TRACELOG;
@@ -720,10 +732,9 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     dxgiAdapter->Release();
     dxgiFactory->Release();
 
-    //TRACEPRINT("[[ delay for setting up PIX... ]]\n");
-    //volatile int x = 2000000000;
-    //while (x > 0)
-    //    --x;
+    #if HALIDE_D3D12_PIX
+    D3D12WaitForPix();
+    #endif
 
     return(reinterpret_cast<d3d12_device*>(device));
 }
@@ -1202,7 +1213,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
             NullDescCBV.SizeInBytes = 0;
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[CBV];
         hCPU.ptr += i*descriptorSize;
-        Call_ID3D12Device_CreateConstantBufferView((*device), NULL, hCPU);
+        Call_ID3D12Device_CreateConstantBufferView((*device), &NullDescCBV, hCPU);
     }
     for (int i = 0; i < 25; ++i)
     {
