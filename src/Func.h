@@ -15,6 +15,7 @@
 #include "JITModule.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "IROperator.h"
 #include "Module.h"
 #include "Pipeline.h"
 

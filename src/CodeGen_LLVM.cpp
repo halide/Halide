@@ -101,6 +101,12 @@ using std::stack;
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
+#ifdef WITH_AMDGPU
+#define InitializeAMDGPUTarget()	InitializeTarget(AMDGPU)
+#define InitializeAMDGPUAsmParser()	InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUAsmPrinter()	InitializeAsmParser(AMDGPU)
+#endif
+
 #ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
@@ -430,6 +436,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
+bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
 
 namespace {
 

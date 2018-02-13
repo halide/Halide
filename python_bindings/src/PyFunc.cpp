@@ -248,6 +248,8 @@ void define_func(py::module &m) {
         })
     ;
 
+    py::implicitly_convertible<ImageParam, Func>();
+
     // Note that overloads of FuncRef must come *before* Expr;
     // otherwise PyBind's automatic STL conversion machinery
     // can attempt to convert a FuncRef into a vector-of-size-1 Expr,

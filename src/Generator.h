@@ -480,44 +480,55 @@ public:
 protected:
     virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
 
-private:
+    // Needs to be protected to allow GeneratorParam<LoopLevel>::set() override
     T value_;
 
-    template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value &&
-                                                  !std::is_same<T2, MachineParams>::value &&
-                                                  !std::is_same<T2, LoopLevel>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
-        check_value_writable();
-        // Arithmetic types must roundtrip losslessly.
-        if (!std::is_same<T, T2>::value &&
-            std::is_arithmetic<T>::value &&
-            std::is_arithmetic<T2>::value) {
-            const T t = Convert<T2, T>::value(value);
-            const T2 t2 = Convert<T, T2>::value(t);
-            if (t2 != value) {
-                fail_wrong_type(msg);
-            }
-        }
-        value_ = Convert<T2, T>::value(value);
-    }
-
-    template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
+private:
+    // If FROM->T is not legal, fail
+    template <typename FROM, typename std::enable_if<
+        !std::is_convertible<FROM, T>::value
+    >::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const FROM &, const char *msg) {
         fail_wrong_type(msg);
     }
 
-    template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
-                                                   std::is_same<T, MachineParams>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const MachineParams &value, const char *msg) {
+    // If FROM and T are identical, just assign
+    template <typename FROM, typename std::enable_if<
+        std::is_same<FROM, T>::value
+    >::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const FROM &value, const char * msg) {
+        check_value_writable();
         value_ = value;
     }
 
-    template <typename T2, typename std::enable_if<std::is_same<T, T2>::value &&
-                                                   std::is_same<T, LoopLevel>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const LoopLevel &value, const char *msg) {
-        value_.set(value);
+    // If both FROM->T and T->FROM are legal, ensure it's lossless
+    template <typename FROM, typename std::enable_if<
+        !std::is_same<FROM, T>::value &&
+        std::is_convertible<FROM, T>::value &&
+        std::is_convertible<T, FROM>::value
+    >::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const FROM &value, const char * msg) {
+        check_value_writable();
+        const T t = Convert<FROM, T>::value(value);
+        const FROM value2 = Convert<T, FROM>::value(t);
+        if (value2 != value) {
+            fail_wrong_type(msg);
+        }
+        value_ = t;
+    }
+
+    // If FROM->T is legal but T->FROM is not, just assign
+    template <typename FROM, typename std::enable_if<
+        !std::is_same<FROM, T>::value &&
+        std::is_convertible<FROM, T>::value &&
+        !std::is_convertible<T, FROM>::value
+    >::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const FROM &value, const char * msg) {
+        check_value_writable();
+        value_ = value;
     }
 };
+
 
 // Stubs for type-specific implementations of GeneratorParam, to avoid
 // many complex enable_if<> statements that were formerly spread through the
@@ -575,6 +586,28 @@ public:
 class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
 public:
     GeneratorParam_LoopLevel(const std::string &name, const LoopLevel &value) : GeneratorParamImpl<LoopLevel>(name, value) {}
+
+    using GeneratorParamImpl<LoopLevel>::set;
+
+    void set(const LoopLevel &value) override {
+        // Don't call check_value_writable(): It's OK to set a LoopLevel after generate().
+        // check_value_writable();
+
+        // This looks odd, but is deliberate:
+
+        // First, mutate the existing contents to match the value passed in,
+        // so that any existing usage of the LoopLevel now uses the newer value.
+        // (Strictly speaking, this is really only necessary if this method
+        // is called after generate(): before generate(), there is no usage
+        // to be concerned with.)
+        value_.set(value);
+
+        // Then, reset the value itself so that it points to the same LoopLevelContents
+        // as the value passed in. (Strictly speaking, this is really only
+        // useful if this method is called before generate(): afterwards, it's
+        // too late to alter the code to refer to a different LoopLevelContents.)
+        value_ = value;
+    }
 
     void set_from_string(const std::string &new_value_string) override {
         if (new_value_string == "root") {
@@ -694,9 +727,9 @@ public:
 
     void set_from_string(const std::string &new_value_string) override {
         bool v = false;
-        if (new_value_string == "true") {
+        if (new_value_string == "true" || new_value_string == "True") {
             v = true;
-        } else if (new_value_string == "false") {
+        } else if (new_value_string == "false" || new_value_string == "False") {
             v = false;
         } else {
             user_assert(false) << "Unable to parse bool: " << new_value_string;
@@ -2717,7 +2750,7 @@ private:
     // Return our ParamInfo (lazy-initing as needed).
     ParamInfo &param_info();
 
-    Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name);
+    Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
     void check_scheduled(const char* m) const;
 
@@ -2730,9 +2763,21 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    Func get_first_output();
+    // Return the Output<Func> or Output<Buffer> with the given name,
+    // which must be a singular (non-array) Func or Buffer output.
+    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
     Func get_output(const std::string &n);
-    std::vector<Func> get_output_vector(const std::string &n);
+
+    // Return the Output<Func[]> with the given name, which must be an
+    // array-of-Func output. If no such name exists (or is non-array), assert;
+    // this method never returns undefined Funcs.
+    std::vector<Func> get_array_output(const std::string &n);
+
+    // Return a vector of all Outputs of this Generator; non-array outputs are returned
+    // as a vector-of-size-1. This method is primarily useful for code that needs
+    // to iterate through the outputs of unknown, arbitrary Generators (e.g.,
+    // the Python bindings).
+    std::vector<std::vector<Func>> get_all_outputs();
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3099,9 +3144,14 @@ public:
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                  GeneratorFactory generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
+                         GeneratorFactory generator_factory);
+
+    GeneratorStub(const GeneratorContext &context,
+                         GeneratorFactory generator_factory,
+                         const GeneratorParamsMap &generator_params,
+                         const std::vector<std::vector<Internal::StubInput>> &inputs);
+    void generate(const GeneratorParamsMap &generator_params,
+                         const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
@@ -3114,8 +3164,12 @@ public:
         return T2(get_output(n), generator);
     }
 
-    std::vector<Func> get_output_vector(const std::string &n) const {
-        return generator->get_output_vector(n);
+    std::vector<Func> get_array_output(const std::string &n) const {
+        return generator->get_array_output(n);
+    }
+
+    std::vector<std::vector<Func>> get_all_outputs() const {
+        return generator->get_all_outputs();
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -3137,6 +3191,11 @@ public:
         std::copy(v.begin(), v.end(), std::back_inserter(r));
         return r;
     }
+
+    struct Names {
+        std::vector<std::string> generator_params, inputs, outputs;
+    };
+    Names get_names() const;
 
     std::shared_ptr<GeneratorBase> generator;
 };
