@@ -1341,7 +1341,7 @@ static void dump_shader(const char* source, ID3DBlob* compiler_msgs = NULL)
     }
 
     dump(user_context) << TRACEINDENT << "D3DCompile(): " << message << "\n";
-    dump(user_context) << TRACEINDENT << ">>> HSLS shader source dump <<<\n" << source << "\n";
+    dump(user_context) << TRACEINDENT << ">>> HLSL shader source dump <<<\n" << source << "\n";
 }
 
 static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_library* library, const char* name, size_t name_len, int shared_mem_bytes, int threadsX, int threadsY, int threadsZ)
