@@ -14,6 +14,20 @@
 #include "device_interface.h"
 #include "printer.h"
 
+template<uint64_t length = 1024, int type = BasicPrinter>
+class StackPrinter : public Printer<type, length>
+{
+public:
+    StackPrinter(void* ctx = NULL) : Printer<type, length>(ctx, buffer) { }
+    StackPrinter& operator () (void* ctx = NULL)
+    {
+        this->user_context = ctx;
+        return(*this);
+    }
+private:
+    char buffer [length];
+};
+
 #if HALIDE_D3D12_TRACE && (defined(DEBUG_RUNTIME) && DEBUG_RUNTIME)
     static const char indent_pattern [] = "   ";
     static char  indent [128] = { };
@@ -1346,15 +1360,13 @@ static d3d12_library* new_library_with_source(d3d12_device* device, const char* 
 
 static void dump_shader(const char* source, ID3DBlob* compiler_msgs = NULL)
 {
-    char dumpbuffer [64*1024];
-    typedef Printer<BasicPrinter, sizeof(dumpbuffer)> dump;
-
     const char* message = "<no error message reported>";
     if (compiler_msgs)
     {
         message = (const char*)compiler_msgs->GetBufferPointer();
     }
 
+    StackPrinter<64*1024> dump;
     dump(user_context) << TRACEINDENT << "D3DCompile(): " << message << "\n";
     dump(user_context) << TRACEINDENT << ">>> HLSL shader source dump <<<\n" << source << "\n";
 }
@@ -1368,22 +1380,19 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
 
     // Round shared memory size up to a multiple of 16:
     shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
+
     TRACEPRINT("groupshared memory size: " << shared_mem_bytes << " bytes.\n");
     TRACEPRINT("numthreads( " << threadsX << ", " << threadsY << ", " << threadsZ << " )\n");
-    typedef Printer<StringStreamPrinter, 16> SS;
-    char strbuf0 [16] = { }; SS(NULL, strbuf0) << shared_mem_bytes;
-    char strbuf1 [16] = { }; SS(NULL, strbuf1) << threadsX;
-    char strbuf2 [16] = { }; SS(NULL, strbuf2) << threadsY;
-    char strbuf3 [16] = { }; SS(NULL, strbuf3) << threadsZ;
 
     const char* source = library->source;
     int source_size = library->source_length;
+    StackPrinter<16, StringStreamPrinter> SS [4];
     D3D_SHADER_MACRO pDefines [] =
     {
-        { "__GROUPSHARED_SIZE_IN_BYTES", strbuf0 },
-        { "__NUM_TREADS_X", strbuf1 },
-        { "__NUM_TREADS_Y", strbuf2 },
-        { "__NUM_TREADS_Z", strbuf3 },
+        { "__GROUPSHARED_SIZE_IN_BYTES", (SS[0] << shared_mem_bytes).str() },
+        { "__NUM_TREADS_X",              (SS[1] << threadsX).str()         },
+        { "__NUM_TREADS_Y",              (SS[2] << threadsY).str()         },
+        { "__NUM_TREADS_Z",              (SS[3] << threadsZ).str()         },
         { NULL, NULL }
     };
     const char* shaderName = name;  // only used for debug information
@@ -2167,10 +2176,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
                            int num_coords_dim1)
 {
     TRACELOG;
-
-    static char logbug [64];
-    typedef Printer<BasicPrinter, sizeof(logbug)> logger;
-    logger(user_context) << "halide_d3d12compute_run()\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
