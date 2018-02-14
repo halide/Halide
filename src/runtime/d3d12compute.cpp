@@ -2370,8 +2370,6 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
         return d3d12_context.error;
     }
 
-    halide_assert(user_context, (NULL == dst->device_interface));
-    dst->device_interface = src->device_interface;
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++)
     {
@@ -2400,6 +2398,12 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
     //halide_assert(user_context, (NULL == new_handle->staging));
     dst->device = reinterpret_cast<uint64_t>(new_handle);
 
+    halide_assert(user_context, (NULL == dst->device_interface));
+    dst->device_interface = src->device_interface;
+    // must increment the reference count for the module here because later on
+    // 'halide_d3d12compute_device_free' will end up indirectly decrementing it
+    dst->device_interface->impl->use_module();
+
     TRACEPRINT("--- "
         << (void*)old_handle  << " | " << (void*)old_handle->halide << " | "
         << old_handle->offset << " : " << old_handle->elements << " : " << old_handle->sizeInBytes
@@ -2414,6 +2418,7 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
 WEAK int halide_d3d12compute_device_release_crop(void* user_context,
                                                  struct halide_buffer_t* buf)
 {
+    TRACELOG;
     // for D3D12, this is exactly like halide_d3d12compute_device_free():
     return( halide_d3d12compute_device_free(user_context, buf) );
 }
@@ -2487,12 +2492,14 @@ WEAK uintptr_t halide_d3d12compute_get_buffer(void *user_context, struct halide_
 }
 
 WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interface() {
+    TRACELOG;
     return &d3d12compute_device_interface;
 }
 
 namespace {
 __attribute__((destructor))
 WEAK void halide_d3d12compute_cleanup() {
+    TRACELOG;
     halide_d3d12compute_device_release(NULL);
 }
 }
