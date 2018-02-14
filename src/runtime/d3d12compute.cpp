@@ -936,9 +936,9 @@ WEAK void* map_buffer(d3d12_buffer* buffer)
 
     TRACEPRINT("[ Begin: " << readRange.Begin << " , End: " << readRange.End << " ]\n");
 
-    // If a resource contains a buffer, then it simply contains one subresource with an index of 0.
+    // ID3D12Resource::Map never blocks, but will invalidate caches around the read range
     ID3D12Resource* resource = buffer->resource;
-    UINT Subresource = 0;
+    UINT Subresource = 0;   // buffers contain only one subresource (at index 0)
     const D3D12_RANGE* pReadRange = &readRange;
     void* pData = NULL;
     HRESULT result = resource->Map(Subresource, pReadRange, &pData);
@@ -980,8 +980,9 @@ WEAK void unmap_buffer(d3d12_buffer* buffer)
 
     TRACEPRINT("[ Begin: " << writtenRange.Begin << " , End: " << writtenRange.End << " ]\n");
 
+    // ID3D12Resource::Unmap will flush caches around the written range
     ID3D12Resource* resource = buffer->resource;
-    UINT Subresource = 0;
+    UINT Subresource = 0;   // buffers contain only one subresource (at index 0)
     const D3D12_RANGE* pWrittenRange = &writtenRange;
     resource->Unmap(Subresource, pWrittenRange);
     if (D3DError(/*S_OK*/HRESULT(0x0), (ID3D12MemoryMappedResource*)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory"))
@@ -1304,6 +1305,8 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
     (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
     swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
     (*cmdList)->ResourceBarrier(1, &barrier);
+
+    buffer->staging = NULL;
 }
 
 WEAK void compute_barrier(d3d12_copy_command_list* cmdList, d3d12_buffer* buffer)
@@ -2075,7 +2078,6 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t*
         did_modify_range(copy_dst, total_extent);
         halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
     }
-    copy_dst->staging = NULL;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
