@@ -362,6 +362,8 @@ struct d3d12_buffer
     DXGI_FORMAT format;
     D3D12_RESOURCE_STATES state;
 
+    volatile uint64_t ref_count;
+
     enum
     {
         Unknown = 0,
@@ -887,6 +889,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device* device, size_t length, D3D12
     buffer.type = d3d12_buffer::Unknown;
     buffer.format = DXGI_FORMAT_UNKNOWN;
     buffer.mallocd = false;
+    __atomic_store_n(&buffer.ref_count, 0, __ATOMIC_SEQ_CST);
 
     return(buffer);
 }
@@ -1305,8 +1308,6 @@ WEAK void synchronize_resource(d3d12_copy_command_list* cmdList, d3d12_buffer* b
     (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
     swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
     (*cmdList)->ResourceBarrier(1, &barrier);
-
-    buffer->staging = NULL;
 }
 
 WEAK void compute_barrier(d3d12_copy_command_list* cmdList, d3d12_buffer* buffer)
@@ -1929,9 +1930,10 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device* device, struc
     //d3d12_compute_command_list* blitCmdList = new_compute_command_list(device, sync_command_allocator);
     d3d12_command_allocator* sync_command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_DIRECT>(device);
     d3d12_compute_command_list* blitCmdList = new_command_list<D3D12_COMMAND_LIST_TYPE_DIRECT>(device, sync_command_allocator);
+    d3d12_buffer* dev_buffer = NULL;
     if (buffer != NULL)
     {
-        d3d12_buffer* dev_buffer = (struct d3d12_buffer*)buffer->device;
+        dev_buffer = (struct d3d12_buffer*)buffer->device;
         if (is_buffer_managed(dev_buffer))
         {
             synchronize_resource(blitCmdList, dev_buffer);
@@ -1939,6 +1941,17 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device* device, struc
     }
     commit_command_list(blitCmdList);
     wait_until_completed(blitCmdList);
+
+    if (dev_buffer != NULL)
+    {
+        if (dev_buffer->staging != NULL)
+        {
+            // for now, we expect to have been the only one with pending transfer on the staging buffer:
+            uint64_t use_count = __atomic_sub_fetch(&dev_buffer->staging->buffer->ref_count, 1, __ATOMIC_SEQ_CST);
+            halide_assert(user_context, (use_count == 0));
+            dev_buffer->staging = NULL;
+        }
+    }
 
     release_object(blitCmdList);
     release_object(sync_command_allocator);
@@ -2065,6 +2078,9 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t*
     halide_assert(user_context, (copy_dst->type == d3d12_buffer::ReadOnly) || (copy_dst->type == d3d12_buffer::ReadWrite));
     halide_assert(user_context, (upload.type == d3d12_buffer::Upload));
     halide_assert(user_context, (copy_dst->staging == NULL));
+    // for now, we expect no other transfers to be pending on the staging buffer:
+    uint64_t use_count = __atomic_add_fetch(&upload.ref_count, 1, __ATOMIC_SEQ_CST);
+    halide_assert(user_context, (use_count == 1));
     d3d12_buffer::staging_t staging = { };
         staging.buffer = &upload;
         staging.offset = 0;
@@ -2112,6 +2128,9 @@ WEAK int halide_d3d12compute_copy_to_host(void* user_context, halide_buffer_t* b
     d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
 
     // 1. issue copy command from device to staging memory
+    // for now, we expect no other transfers to be pending on the staging buffer:
+    uint64_t use_count = __atomic_add_fetch(&readback.ref_count, 1, __ATOMIC_SEQ_CST);
+    halide_assert(user_context, (use_count == 1));
     d3d12_buffer::staging_t staging = { };
         staging.buffer = &readback;
         staging.offset = 0;
