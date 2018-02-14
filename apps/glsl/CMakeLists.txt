@@ -1,4 +1,8 @@
 # Generators
+if (WIN32)
+    # TODO: Provide a version of halide_opengl_create_context for Windows
+    return()
+endif()
 find_package(OpenGL)
 if (OpenGL_FOUND)
 
