@@ -334,6 +334,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             int dim = (int)(i-1);
             Expr min = simplify(box[dim].min);
             Expr max = simplify(box[dim].max);
+            Expr extent = simplify(max - min + 1);
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
@@ -360,45 +361,42 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             bool max_monotonic_decreasing = !explicit_only &&
                 (is_monotonic(max, op->name) == Monotonic::Decreasing);
 
-            if (!min_monotonic_increasing && !max_monotonic_decreasing &&
-                explicit_factor.defined()) {
-                // If we didn't find a monotonic dimension, and we
-                // have an explicit fold factor, we need to
-                // dynamically check that the min/max do in fact
-                // monotonically increase/decrease. We'll allocate
-                // some stack space to store the valid footprint,
-                // update it outside produce nodes, and check it
-                // outside consume nodes.
-                dynamic_footprint = func.name() + "." + op->name + ".footprint";
+            if (explicit_factor.defined()) {
+                bool can_skip_dynamic_checks =
+                    ((min_monotonic_increasing || max_monotonic_decreasing) &&
+                     can_prove(extent <= explicit_factor));
+                if (!can_skip_dynamic_checks) {
+                    // If we didn't find a monotonic dimension, or
+                    // couldn't prove the extent was small enough, and we
+                    // have an explicit fold factor, we need to
+                    // dynamically check that the min/max do in fact
+                    // monotonically increase/decrease. We'll allocate
+                    // some stack space to store the valid footprint,
+                    // update it outside produce nodes, and check it
+                    // outside consume nodes.
+                    dynamic_footprint = func.name() + "." + op->name + ".footprint";
 
-                body = InjectFoldingCheck(func,
-                                          dynamic_footprint,
-                                          op->name,
-                                          dim,
-                                          storage_dim).mutate(body);
-                if (storage_dim.fold_forward) {
-                    min_monotonic_increasing = true;
-                } else {
-                    max_monotonic_decreasing = true;
+                    body = InjectFoldingCheck(func,
+                                              dynamic_footprint,
+                                              op->name,
+                                              dim,
+                                              storage_dim).mutate(body);
+                    if (storage_dim.fold_forward) {
+                        min_monotonic_increasing = true;
+                    } else {
+                        max_monotonic_decreasing = true;
+                    }
                 }
             }
 
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
             if (min_monotonic_increasing || max_monotonic_decreasing) {
-                Expr extent = simplify(max - min + 1);
                 Expr factor;
                 if (explicit_factor.defined()) {
-                    if (dynamic_footprint.empty()) {
-                        // We were able to prove monotonicity
-                        // statically, but we may need a runtime
-                        // assertion for maximum extent. In many cases
-                        // it will simplify away.
-                        Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                                {func.name(), storage_dim.var, explicit_factor, op->name, extent},
-                                                Call::Extern);
-                        body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
-                    }
+                    // We were either able to prove monotonicity
+                    // statically and sufficient-extent statically, or
+                    // we added dynamic checks for it already.
                     factor = explicit_factor;
                 } else {
                     // The max of the extent over all values of the loop variable must be a constant
