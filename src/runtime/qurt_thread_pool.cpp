@@ -120,17 +120,6 @@ extern "C" {
 WEAK int halide_do_par_for(void *user_context,
                            halide_task_t task,
                            int min, int size, uint8_t *closure) {
-    // Do not initialize here. Initialize in constructor  
-    /*qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
-    if (!work_queue.initialized) {
-        // The thread pool asssumes that a zero-initialized mutex can
-        // be locked. Not true on hexagon, and there doesn't seem to
-        // be an init_once mechanism either. In this shim binary, it's
-        // safe to assume that the first call to halide_do_par_for is
-        // done by the main thread, so there's no race condition on
-        // initializing this mutex.
-       // qurt_mutex_init(mutex);
-    }*/
     return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
 }
 

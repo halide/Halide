@@ -60,11 +60,13 @@ static void* desc_pool_get (void* user_context) {
     // We have to allocate two descriptors here
     temp = (pdesc_pool) malloc(sizeof(desc_pool_t));
     if (temp == NULL) {
+        error(user_context) << "malloc failed\n";  
         return NULL;
     }
     uint8_t* desc = (uint8_t *)HAP_cache_lock(sizeof(char)*descriptor_size*2, NULL);
     if (desc == NULL) {
         free(temp);
+        error(user_context) << "HAP_cache_lock failed\n";
         return NULL;
     }
     temp->descriptor = (void *)desc;
@@ -76,6 +78,10 @@ static void* desc_pool_get (void* user_context) {
         (temp->next)->descriptor = (void *)(desc+descriptor_size);
         (temp->next)->used = false;
         (temp->next)->next = NULL;
+    } else {
+        //no need to throw error since we allocate two descriptor at a time 
+        // but only use one
+        debug(user_context) << "malloc failed\n" ; 
     }
     
     if (prev != NULL) {
@@ -286,7 +292,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     // Return NULL if descriptor is not allocated
     void* desc_addr = desc_pool_get(user_context);
     if (desc_addr == NULL) {
-        debug(user_context) << "Hexagon: DMA descriptor allocation error \n";
+        error(user_context) << "Hexagon: DMA descriptor allocation error \n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
@@ -377,7 +383,7 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     // The descriptor allocation failure must return Error
     void* desc_addr = desc_pool_get(user_context);
     if (desc_addr == NULL) {
-        debug(user_context) << "Hexagon: DMA descriptor allocation error \n";
+        error(user_context) << "Hexagon: DMA descriptor allocation error \n";
         return halide_error_code_copy_to_host_failed;
     }
 
