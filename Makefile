@@ -654,7 +654,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_allocator \
   qurt_hvx \
   qurt_init_fini \
-  qurt_thread_pool \
+  qurt_threads \
   qurt_yield \
   runtime_api \
   ssp \
