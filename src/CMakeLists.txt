@@ -27,7 +27,6 @@ set(RUNTIME_CPP
   errors
   fake_thread_pool
   float16_t
-  gcd_thread_pool
   gpu_device_selection
   hexagon_cpu_features
   hexagon_host
