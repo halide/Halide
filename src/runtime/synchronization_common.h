@@ -379,12 +379,6 @@ struct parking_control {
     parking_control() : validate(parking_control_validate), before_sleep(parking_control_before_sleep),
         unpark(parking_control_unpark), requeue_callback(parking_control_requeue_callback) {
     }
-#if 0
-    virtual bool validate(validate_action &action) { return true; }
-    virtual void before_sleep() { };
-    virtual uintptr_t unpark(int unparked, bool more_waiters) { return 0; };
-    virtual void requeue_callback(const validate_action &action, bool one_to_wake, bool some_requeued) { };
-#endif
 };
 
 // TODO: Do we need a park_result thing here?
@@ -900,10 +894,6 @@ class fast_cond {
 
 extern "C" {
 
-WEAK void halide_mutex_init(halide_mutex *mutex) {
-    memset(mutex, 0, sizeof(*mutex));
-}
-
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
     Halide::Runtime::Internal::Synchronization::fast_mutex *fast_mutex =
         (Halide::Runtime::Internal::Synchronization::fast_mutex *)mutex;
@@ -914,22 +904,6 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex) {
     Halide::Runtime::Internal::Synchronization::fast_mutex *fast_mutex =
         (Halide::Runtime::Internal::Synchronization::fast_mutex *)mutex;
     fast_mutex->unlock();
-}
-
-WEAK void halide_mutex_destroy(halide_mutex *mutex) {
-    // TODO: Does this need to wait for the lock to be unlocked?
-    // could assert unlocked, no waiters.
-    memset(mutex, 0, sizeof(halide_mutex));
-}
-
-WEAK void halide_cond_init(struct halide_cond *cond) {
-    memset(cond, 0, sizeof(*cond));
-}
-
-WEAK void halide_cond_destroy(struct halide_cond *cond) {
-    // TODO: Does this need to wait for the lock to be unlocked?
-    // could assert no waiters.
-    memset(cond, 0, sizeof(halide_cond));
 }
 
 WEAK void halide_cond_broadcast(struct halide_cond *cond) {

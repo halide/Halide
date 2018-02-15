@@ -56,7 +56,7 @@ struct work_queue_t {
     }
 
 };
-WEAK work_queue_t work_queue;
+ WEAK work_queue_t work_queue;
 
 WEAK int clamp_num_threads(int desired_num_threads) {
     if (desired_num_threads > MAX_THREADS) {
@@ -188,9 +188,10 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
 
     if (!work_queue.initialized) {
         work_queue.shutdown = false;
-        halide_cond_init(&work_queue.wakeup_owners);
-        halide_cond_init(&work_queue.wakeup_a_team);
-        halide_cond_init(&work_queue.wakeup_b_team);
+        // TODO: Are these condvar initializations necessary? Can we assume static initialization?
+        work_queue.wakeup_owners = { 0 };
+        work_queue.wakeup_a_team = { 0 };
+        work_queue.wakeup_b_team = { 0 };
         work_queue.jobs = NULL;
 
         // Compute the desired number of threads to use. Other code
@@ -297,10 +298,6 @@ WEAK void halide_shutdown_thread_pool() {
     }
 
     // Tidy up
-    halide_mutex_destroy(&work_queue.mutex);
-    halide_cond_destroy(&work_queue.wakeup_owners);
-    halide_cond_destroy(&work_queue.wakeup_a_team);
-    halide_cond_destroy(&work_queue.wakeup_b_team);
     work_queue.initialized = false;
 }
 
