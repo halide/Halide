@@ -35,6 +35,7 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  linux_yield
   matlab
   metadata
   metal
@@ -54,6 +55,7 @@ set(RUNTIME_CPP
   osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
+  osx_yield
   posix_allocator
   posix_clock
   posix_error_handler
@@ -69,10 +71,10 @@ set(RUNTIME_CPP
   qurt_allocator
   qurt_hvx
   qurt_init_fini
-  qurt_thread_pool
+  qurt_threads
+  qurt_yield
   runtime_api
   ssp
-  thread_pool
   to_string
   tracing
   windows_clock
@@ -82,6 +84,7 @@ set(RUNTIME_CPP
   windows_opencl
   windows_tempfile
   windows_threads
+  windows_yield
   write_debug_image
   x86_cpu_features
 )
