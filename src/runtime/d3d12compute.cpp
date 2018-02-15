@@ -1,6 +1,6 @@
-#ifndef DEBUG_RUNTIME
-#define DEBUG_RUNTIME   1   // for debug(NULL) print to work...
-#endif//DEBUG_RUNTIME
+//#ifndef DEBUG_RUNTIME
+//#define DEBUG_RUNTIME   1   // for debug(NULL) print to work...
+//#endif//DEBUG_RUNTIME
 
 #define HALIDE_D3D12_TRACE          (1)
 #define HALIDE_D3D12_DEBUG_RUNTIME  (1)
