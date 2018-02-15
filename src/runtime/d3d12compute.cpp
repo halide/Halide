@@ -452,6 +452,26 @@ struct d3d12_binder
 
 struct d3d12_compile_options;
 
+static size_t number_of_elements(const halide_buffer_t* buffer)
+{
+    // halide_buffer_t::number_of_elements() does not necessarily map to D3D12
+    // Buffer View 'NumElements' since the former does not account for "hidden"
+    // elements in the stride regions.
+
+    size_t size_in_bytes = buffer->size_in_bytes();
+    halide_assert(NULL, (size_in_bytes > 0));
+
+    size_t element_size = 1;
+    element_size *= buffer->type.bytes();
+    element_size *= buffer->type.lanes;
+    halide_assert(NULL, (element_size > 0));
+
+    size_t elements = size_in_bytes / element_size;
+    halide_assert(NULL, (size_in_bytes % element_size) == 0);
+
+    return(elements);
+}
+
 WEAK int wrap_buffer(void* user_context, struct halide_buffer_t* buf, d3d12_buffer* d3d12_buf)
 {
     TRACELOG;
@@ -2462,7 +2482,7 @@ WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffe
 
     d3d12_buf->halide = halide_buf;
     d3d12_buf->offset = 0;
-    d3d12_buf->elements = halide_buf->number_of_elements();
+    d3d12_buf->elements = number_of_elements(halide_buf);
     d3d12_buf->offsetInBytes = 0;
     d3d12_buf->format = FindD3D12FormatForHalideType(halide_buf->type);
     if (DXGI_FORMAT_UNKNOWN == d3d12_buf->format)
