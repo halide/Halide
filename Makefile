@@ -777,8 +777,8 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 
 # Compile generic 32- or 64-bit code
 # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
-RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
+RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown-macho"
+RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown-macho"
 
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
