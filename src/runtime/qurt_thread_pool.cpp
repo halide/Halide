@@ -1,21 +1,14 @@
 #include "HalideRuntime.h"
 #include "mini_qurt.h"
 
+// TODO: consider getting rid of this
+#define MAX_THREADS 256
+
 using namespace Halide::Runtime::Internal::Qurt;
 
-
-extern "C" {
-extern void *memalign(size_t, size_t);
-
-} // extern C
 struct halide_thread {
     qurt_thread_t val;
 };
-
-int halide_host_cpu_count() {
-    // Assume a Snapdragon 820
-    return 4;
-}
 
 namespace {
 struct spawned_thread {
@@ -28,6 +21,15 @@ void spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
     t->f(t->closure);
 }
+}
+
+extern "C" {
+
+extern void *memalign(size_t, size_t);
+
+int halide_host_cpu_count() {
+    // Assume a Snapdragon 820
+    return 4;
 }
 
 #define STACK_SIZE 256*1024
@@ -55,69 +57,58 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_lock(halide_mutex *mutex) {
-    qurt_mutex_lock((qurt_mutex_t *)mutex);
-}
+} // extern "C"
 
-WEAK void halide_mutex_unlock(halide_mutex *mutex) {
-    qurt_mutex_unlock((qurt_mutex_t *)mutex);
-}
+namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK void halide_mutex_destroy(halide_mutex *mutex) {
-    qurt_mutex_destroy((qurt_mutex_t *)mutex);
-    memset(mutex, 0, sizeof(halide_mutex));
-}
+namespace Synchronization {
 
-WEAK void halide_cond_init(struct halide_cond *cond) {
-    qurt_cond_init((qurt_cond_t *)cond);
-}
+struct thread_parker {
+    qurt_mutex_t mutex;
+    qurt_cond_t condvar;
+    bool should_park;
 
-WEAK void halide_cond_destroy(struct halide_cond *cond) {
-    qurt_cond_destroy((qurt_cond_t *)cond);
-}
+    thread_parker(const thread_parker &) = delete;
 
-WEAK void halide_cond_broadcast(struct halide_cond *cond) {
-    qurt_cond_broadcast((qurt_cond_t *)cond);
-}
+    __attribute__((always_inline)) thread_parker() : should_park(false) {
+        qurt_mutex_init(&mutex);
+        qurt_cond_init(&condvar);
+        should_park = false;
+    }
 
-WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
-    qurt_cond_wait((qurt_cond_t *)cond, (qurt_mutex_t *)mutex);
-}
+    __attribute__((always_inline)) ~thread_parker() {
+        qurt_cond_destroy(&condvar);
+        qurt_mutex_destroy(&mutex);
+    }
+
+    __attribute__((always_inline)) void prepare_park() {
+        should_park = true;
+    }
+
+    __attribute__((always_inline)) void park() {
+        qurt_mutex_lock(&mutex);
+        while (should_park) {
+            qurt_cond_wait(&condvar, &mutex);
+        }
+        qurt_mutex_unlock(&mutex);
+    }
+
+    __attribute__((always_inline)) void unpark_start() {
+        qurt_mutex_lock(&mutex);
+    }
+
+    __attribute__((always_inline)) void unpark() {
+        should_park = false;
+        qurt_cond_signal(&condvar);
+    }
+
+    __attribute__((always_inline)) void unpark_finish() {
+        qurt_mutex_unlock(&mutex);
+    }
+};
+
+}}}} // namespace Halide::Runtime::Internal::Synchronization
+
+#include "synchronization_common.h"
 
 #include "thread_pool_common.h"
-
-extern "C" {
-
-// There are two locks at play: the thread pool lock and the hvx
-// context lock. To ensure there's no way anything could ever
-// deadlock, we never attempt to acquire one while holding the
-// other. CodeGen_Hexagon makes sure this is true by calling
-// halide_qurt_hvx_unlock before calling halide_do_par_for.
-WEAK int halide_do_par_for(void *user_context,
-                           halide_task_t task,
-                           int min, int size, uint8_t *closure) {
-    qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
-    if (!work_queue.initialized) {
-        // The thread pool asssumes that a zero-initialized mutex can
-        // be locked. Not true on hexagon, and there doesn't seem to
-        // be an init_once mechanism either. In this shim binary, it's
-        // safe to assume that the first call to halide_do_par_for is
-        // done by the main thread, so there's no race condition on
-        // initializing this mutex.
-        qurt_mutex_init(mutex);
-    }
-    return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
-}
-
-WEAK int halide_do_task(void *user_context, halide_task_t f,
-                        int idx, uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
-namespace {
-__attribute__((destructor))
-WEAK void halide_thread_pool_cleanup() {
-    halide_shutdown_thread_pool();
-}
-}
-}

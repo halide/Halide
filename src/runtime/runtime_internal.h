@@ -147,7 +147,6 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
 
-
 // Condition variables. Only available on some platforms (those that use the common thread pool).
 struct halide_cond {
     uint64_t _private[8];
@@ -218,6 +217,12 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
 }
 
 extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
+
+struct halide_thread_parker {
+    uint64_t _private[16];
+};
+
+void halide_thread_yield();
 
 }}}
 

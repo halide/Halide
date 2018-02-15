@@ -2,8 +2,6 @@
 #include "printer.h"
 #include "scoped_spin_lock.h"
 
-#include "system_threads.h"
-
 /* This provides an implementation of pthreads-like mutex and
  * condition variables with fast default case performance.  The code
  * is based on the "parking lot" design and specifically Amanieu
@@ -25,20 +23,31 @@
  * TODO: Add read/write lock and move SharedExclusiveSpinLock from tracing.cpp
  *        to this mechanism.
  * TODO: Add timeouts and optional fairness if needed.
- * TODO: Relying on system_cond has issues for very old versions of Windows
+ * TODO: Relying on condition variables has issues for old versions of Windows
  *       and likely has portability issues to some very bare bones embedded OSes.
  *       Doing an implementation using only semaphores or event counters should
  *       be doable.
  */
 
-// TODO remove this. Debugging only I think.
-#define FAST_MUTEX
-
-extern "C" void *pthread_self();
-
 namespace Halide { namespace Runtime { namespace Internal {
 
-namespace FastMutex {
+namespace Synchronization {
+
+class spin_control {
+    int spin_count{40}; // Everyone says this should be 40. Have not measured it.
+
+public:
+    bool should_spin() {
+        if (spin_count > 0) {
+            spin_count--;
+        }
+        return spin_count > 0;
+    }
+
+    void reset() {
+        spin_count = 40;
+    }
+};
 
 // Low order two bits are used for locking state,
 static constexpr uint8_t lock_bit = 0x01;
@@ -46,47 +55,8 @@ static constexpr uint8_t queue_lock_bit = 0x02;
 // On fast_mutex, this is called somethign else.
 static constexpr uint8_t parked_bit = 0x02;
 
-struct system_thread_parker {
-    system_mutex mutex;
-    system_cond condvar;
-    uintptr_t should_park;
-
-    system_thread_parker(const system_thread_parker &) = delete;
-
-    system_thread_parker() : should_park(false) {
-        system_mutex_init(&mutex);
-        system_cond_init(&condvar);
-        should_park = false;
-    }
-
-    void prepare_park() {
-        should_park = true;
-    }
-
-  __attribute__((always_inline)) void park() {
-        system_mutex_lock(&mutex);
-        while (should_park) {
-            system_cond_wait(&condvar, &mutex);
-        }
-        system_mutex_unlock(&mutex);
-    }
-
-    void unpark_start() {
-        system_mutex_lock(&mutex);
-    }
-
-    __attribute__((always_inline)) void unpark() {
-        should_park = false;
-        system_cond_signal(&condvar);
-    }
-
-    void unpark_finish() {
-        system_mutex_unlock(&mutex);
-    }
-};
-
 struct word_lock_queue_data {
-    system_thread_parker parker; // TODO: member or pointer?
+    thread_parker parker; // TODO: member or pointer?
 
     // This design is from the Rust parking lot implementation by Amanieu d'Antras.
     // Comment from original:
@@ -143,8 +113,7 @@ public:
 };
 
 void word_lock::lock_full() {
-    // Everyone says this should be 40. Have not measured it.
-    int spin_count = 40;
+    spin_control spinner;
     uintptr_t expected;
     __atomic_load(&state, &expected, __ATOMIC_RELAXED);
 
@@ -158,9 +127,8 @@ void word_lock::lock_full() {
             continue;
         }
 
-        if (((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) != 0) && spin_count >= 0) {
-            system_thread_yield();
-            spin_count--;
+        if (((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) != 0) && spinner.should_spin()) {
+            halide_thread_yield();
             __atomic_load(&state, &expected, __ATOMIC_RELAXED);
             continue;
         }
@@ -185,7 +153,7 @@ void word_lock::lock_full() {
         uintptr_t desired = ((uintptr_t)&node) | (expected & (queue_lock_bit | lock_bit));
         if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
             node.parker.park();
-            spin_count = 40;
+            spinner.reset();
             __atomic_load(&state, &expected, __ATOMIC_RELAXED);
         }
     }
@@ -211,7 +179,6 @@ void word_lock::unlock_full() {
         }
     }
 
-    int multi_spin = 0;
     while (true) {
         word_lock_queue_data *head = (word_lock_queue_data *)(expected & ~(uintptr_t)(queue_lock_bit | lock_bit));
         word_lock_queue_data *current = head;
@@ -227,7 +194,6 @@ void word_lock::unlock_full() {
             tail = current->tail;
             times_through++;
         }
-        multi_spin++;
         head->tail = tail;
 
         // If the lock is now locked, unlock the queue and have the thread
@@ -276,7 +242,7 @@ void word_lock::unlock_full() {
 }
 
 struct queue_data {
-    system_thread_parker parker; // TODO: member or pointer?
+    thread_parker parker; // TODO: member or pointer?
 
     uintptr_t sleep_address;
 
@@ -681,7 +647,7 @@ class fast_mutex {
 
     __attribute__((always_inline)) void lock_full() {
         // Everyone says this should be 40. Have not measured it.
-        int spin_count = 40;
+        spin_control spinner;
         uintptr_t expected;
         __atomic_load(&state, &expected, __ATOMIC_RELAXED);
 
@@ -695,9 +661,8 @@ class fast_mutex {
             }
 
             // If no one is parked, spin with spin count.
-            if ((expected & parked_bit) == 0 && spin_count >= 0) {
-                system_thread_yield();
-                spin_count--;
+            if ((expected & parked_bit) == 0 && spinner.should_spin()) {
+                halide_thread_yield();
                 __atomic_load(&state, &expected, __ATOMIC_RELAXED);
                 continue;
             }
@@ -717,7 +682,7 @@ class fast_mutex {
                 return;
             }
 
-            spin_count = 40;
+            spinner.reset();
             __atomic_load(&state, &expected, __ATOMIC_RELAXED);
         }
     }
@@ -935,35 +900,19 @@ class fast_cond {
 
 extern "C" {
 
-WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
-    spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
-    t->f = f;
-    t->closure = closure;
-    t->handle = 0;
-    pthread_create(&t->handle, NULL, spawn_thread_helper, t);
-    return (halide_thread *)t;
-}
-
-WEAK void halide_join_thread(struct halide_thread *thread_arg) {
-    spawned_thread *t = (spawned_thread *)thread_arg;
-    void *ret = NULL;
-    pthread_join(t->handle, &ret);
-    free(t);
-}
-
 WEAK void halide_mutex_init(halide_mutex *mutex) {
     memset(mutex, 0, sizeof(*mutex));
 }
 
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
-    Halide::Runtime::Internal::FastMutex::fast_mutex *fast_mutex =
-        (Halide::Runtime::Internal::FastMutex::fast_mutex *)mutex;
+    Halide::Runtime::Internal::Synchronization::fast_mutex *fast_mutex =
+        (Halide::Runtime::Internal::Synchronization::fast_mutex *)mutex;
     fast_mutex->lock();
 }
 
 WEAK void halide_mutex_unlock(halide_mutex *mutex) {
-    Halide::Runtime::Internal::FastMutex::fast_mutex *fast_mutex =
-        (Halide::Runtime::Internal::FastMutex::fast_mutex *)mutex;
+    Halide::Runtime::Internal::Synchronization::fast_mutex *fast_mutex =
+        (Halide::Runtime::Internal::Synchronization::fast_mutex *)mutex;
     fast_mutex->unlock();
 }
 
@@ -984,22 +933,22 @@ WEAK void halide_cond_destroy(struct halide_cond *cond) {
 }
 
 WEAK void halide_cond_broadcast(struct halide_cond *cond) {
-    Halide::Runtime::Internal::FastMutex::fast_cond *fast_cond =
-        (Halide::Runtime::Internal::FastMutex::fast_cond *)cond;
+    Halide::Runtime::Internal::Synchronization::fast_cond *fast_cond =
+        (Halide::Runtime::Internal::Synchronization::fast_cond *)cond;
     fast_cond->broadcast();
 }
 
 WEAK void halide_cond_signal(struct halide_cond *cond) {
-    Halide::Runtime::Internal::FastMutex::fast_cond *fast_cond =
-        (Halide::Runtime::Internal::FastMutex::fast_cond *)cond;
+    Halide::Runtime::Internal::Synchronization::fast_cond *fast_cond =
+        (Halide::Runtime::Internal::Synchronization::fast_cond *)cond;
     fast_cond->signal();
 }
 
 WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
-    Halide::Runtime::Internal::FastMutex::fast_cond *fast_cond =
-        (Halide::Runtime::Internal::FastMutex::fast_cond *)cond;
-    Halide::Runtime::Internal::FastMutex::fast_mutex *fast_mutex =
-        (Halide::Runtime::Internal::FastMutex::fast_mutex *)mutex;
+    Halide::Runtime::Internal::Synchronization::fast_cond *fast_cond =
+        (Halide::Runtime::Internal::Synchronization::fast_cond *)cond;
+    Halide::Runtime::Internal::Synchronization::fast_mutex *fast_mutex =
+        (Halide::Runtime::Internal::Synchronization::fast_mutex *)mutex;
    fast_cond->wait(fast_mutex);
 }
 
