@@ -49,11 +49,16 @@ public:
     }
 };
 
+#if __cpluspluc >= 201103L
 // Low order two bits are used for locking state,
 static constexpr uint8_t lock_bit = 0x01;
 static constexpr uint8_t queue_lock_bit = 0x02;
-// On fast_mutex, this is called somethign else.
 static constexpr uint8_t parked_bit = 0x02;
+#else
+#define lock_bit 0x01
+#define queue_lock_bit 0x02
+#define parked_bit 0x02
+#endif
 
 struct word_lock_queue_data {
     thread_parker parker; // TODO: member or pointer?
