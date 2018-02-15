@@ -56,7 +56,7 @@ struct work_queue_t {
     }
 
 };
- WEAK work_queue_t work_queue;
+WEAK work_queue_t work_queue;
 
 WEAK int clamp_num_threads(int desired_num_threads) {
     if (desired_num_threads > MAX_THREADS) {
