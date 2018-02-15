@@ -18,11 +18,10 @@ int halide_host_cpu_count() {
     return 4;
 }
 
-//Wraooer that envelopes and init_flag for initialization 
+//Wrapper that envelopes and init_flag for initialization 
 typedef struct {
     qurt_mutex_t mutex;
     uint64_t init_flag;
-    uint64_t _dummy[5]; 
 } qurt_mutex_wrapper_t;
 
 namespace {
