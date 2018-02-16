@@ -34,17 +34,20 @@ namespace Halide { namespace Runtime { namespace Internal {
 namespace Synchronization {
 
 class spin_control {
-    int spin_count{40}; // Everyone says this should be 40. Have not measured it.
+    int spin_count;
 
 public:
-    bool should_spin() {
+    // Everyone says this should be 40. Have not measured it.
+    __attribute__((always_inline)) spin_control() : spin_count(40) { }
+
+    __attribute__((always_inline)) bool should_spin() {
         if (spin_count > 0) {
             spin_count--;
         }
         return spin_count > 0;
     }
 
-    void reset() {
+    __attribute__((always_inline)) void reset() {
         spin_count = 40;
     }
 };
@@ -89,12 +92,13 @@ struct word_lock_queue_data {
 };
 
 class word_lock {
-    uintptr_t state{0};
+    uintptr_t state;
 
     void lock_full();
     void unlock_full();
 
 public:
+    word_lock();
     __attribute__((always_inline)) void lock() {
         uintptr_t expected = 0;
         uintptr_t desired = lock_bit;
@@ -116,6 +120,8 @@ public:
         }
     }
 };
+
+word_lock::word_lock() : state(0) { }
 
 void word_lock::lock_full() {
     spin_control spinner;
@@ -265,14 +271,20 @@ struct queue_data {
 struct hash_bucket {
     word_lock mutex;
     
-    queue_data *head{0}; // Is this queue_data or thread_data?
-    queue_data *tail{0}; // Is this queue_data or thread_data?
+    queue_data *head; // Is this queue_data or thread_data?
+    queue_data *tail; // Is this queue_data or thread_data?
 };
 
-WEAK struct hash_table {
+// The use of a #define here and table_storage is because if
+// a class with a constructor is used, clang generates a COMDAT
+// which cannot be lowered for Mac OS due to MachO. A better
+// solution is desired of course.
+#define HASH_TABLE_BITS 10
+struct hash_table {
     hash_bucket buckets[MAX_THREADS * LOAD_FACTOR];
-    uint32_t num_bits{10}; // prolly a constant here.
-} table;
+};
+WEAK char table_storage[sizeof(hash_table)];
+#define table (*(hash_table *)table_storage) 
 
 inline void check_hash(uintptr_t hash) {
     halide_assert(NULL, hash < sizeof(table.buckets)/sizeof(table.buckets[0]));
@@ -303,7 +315,7 @@ static inline uintptr_t addr_hash(uintptr_t addr, uint32_t bits) {
 }
 
 hash_bucket &lock_bucket(uintptr_t addr) {
-    uintptr_t hash = addr_hash(addr, table.num_bits);
+    uintptr_t hash = addr_hash(addr, HASH_TABLE_BITS);
 
     check_hash(hash);
 
@@ -322,8 +334,8 @@ struct bucket_pair {
 
 bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     // TODO: if resizing is implemented, loop, etc.
-    uintptr_t hash_from = addr_hash(addr_from, table.num_bits);
-    uintptr_t hash_to = addr_hash(addr_to, table.num_bits);
+    uintptr_t hash_from = addr_hash(addr_from, HASH_TABLE_BITS);
+    uintptr_t hash_to = addr_hash(addr_to, HASH_TABLE_BITS);
 
     check_hash(hash_from);
     check_hash(hash_to);
@@ -366,8 +378,10 @@ void unlock_bucket_pair(bucket_pair &buckets) {
 }
 
 struct validate_action {
-    bool unpark_one{false};
-    uintptr_t invalid_unpark_info{0};
+    bool unpark_one;
+    uintptr_t invalid_unpark_info;
+
+  __attribute__((always_inline)) validate_action() : unpark_one(false), invalid_unpark_info(0) { }
 };
 
 bool parking_control_validate(void *control, validate_action &action) { return true; };
@@ -856,9 +870,10 @@ wait_parking_control::wait_parking_control(uintptr_t *cond_state, fast_mutex *mu
 }
 
 class fast_cond {
-    uintptr_t state{0};
+    uintptr_t state;
 
  public:
+    __attribute__((always_inline)) fast_cond() : state(0) { }
 
     __attribute__((always_inline)) void signal() {
         uintptr_t val;
