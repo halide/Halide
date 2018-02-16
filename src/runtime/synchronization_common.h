@@ -52,7 +52,7 @@ public:
     }
 };
 
-#if __cpluspluc >= 201103L
+#if __cplusplus >= 201103L
 // Low order two bits are used for locking state,
 static constexpr uint8_t lock_bit = 0x01;
 static constexpr uint8_t queue_lock_bit = 0x02;
@@ -330,6 +330,8 @@ hash_bucket &lock_bucket(uintptr_t addr) {
 struct bucket_pair {
     hash_bucket &from;
     hash_bucket &to;
+
+    bucket_pair(hash_bucket &from, hash_bucket &to) : from(from), to(to) { }
 };
 
 bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
@@ -345,19 +347,19 @@ bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     if (hash_from == hash_to) {
         hash_bucket &first = table.buckets[hash_from];
         first.mutex.lock();
-        return { first, first };
+        return bucket_pair(first, first);
     } else if (hash_from < hash_to) {
         hash_bucket &first = table.buckets[hash_from];
         hash_bucket &second = table.buckets[hash_to];
         first.mutex.lock();
         second.mutex.lock();
-        return { first, second };
+        return bucket_pair(first, second);
     } else {
         hash_bucket &first = table.buckets[hash_to];
         hash_bucket &second = table.buckets[hash_from];
         first.mutex.lock();
         second.mutex.lock();
-        return { second, first };
+        return bucket_pair(second, first);
     }
 }
 

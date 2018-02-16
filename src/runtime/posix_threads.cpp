@@ -122,7 +122,9 @@ struct thread_parker {
 #endif
     bool should_park;
 
+#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
+#endif
 
     __attribute__((always_inline)) thread_parker() : should_park(false) {
  #if TLS_CACHING_PARKER

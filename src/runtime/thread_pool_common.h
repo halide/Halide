@@ -187,12 +187,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     halide_mutex_lock(&work_queue.mutex);
 
     if (!work_queue.initialized) {
-        work_queue.shutdown = false;
-        // TODO: Are these condvar initializations necessary? Can we assume static initialization?
-        work_queue.wakeup_owners = { 0 };
-        work_queue.wakeup_a_team = { 0 };
-        work_queue.wakeup_b_team = { 0 };
-        work_queue.jobs = NULL;
+        memset(&work_queue, 0, sizeof(work_queue));
 
         // Compute the desired number of threads to use. Other code
         // can also mess with this value, but only when the work queue

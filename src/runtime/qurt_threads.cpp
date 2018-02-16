@@ -68,7 +68,9 @@ struct thread_parker {
     qurt_cond_t condvar;
     bool should_park;
 
+#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
+#endif
 
     __attribute__((always_inline)) thread_parker() : should_park(false) {
         qurt_mutex_init(&mutex);

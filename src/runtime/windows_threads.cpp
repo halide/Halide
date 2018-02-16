@@ -84,7 +84,9 @@ struct thread_parker {
     ConditionVariable condvar;
     bool should_park;
 
+#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
+#endif
 
     __attribute__((always_inline)) thread_parker() : should_park(false) {
         InitializeCriticalSection(&critical_section);
