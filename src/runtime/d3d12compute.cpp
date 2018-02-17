@@ -714,7 +714,7 @@ static d3d12_device* D3D12CreateSystemDefaultDevice(void* user_context)
     {
         IDXGIAdapter1* adapter = NULL;
         HRESULT result = dxgiFactory->EnumAdapters1(i, &adapter);
-        #define DXGI_ERROR_NOT_FOUND 0x887A0002
+        #define DXGI_ERROR_NOT_FOUND  _HRESULT_TYPEDEF_(0x887a0002)
         if (DXGI_ERROR_NOT_FOUND == result)
             break;
         if (D3DError(result, adapter, user_context, "Unable to enumerate DXGI adapter (IDXGIAdapter1)."))
@@ -1370,7 +1370,7 @@ static d3d12_library* new_library_with_source(d3d12_device* device, const char* 
     const int blocksize = sizeof(d3d12_library) + source_len;
     d3d12_library* library = (d3d12_library*)malloc(blocksize);
     library->source_length = source_len;
-    for (int i = 0; i < source_len; ++i)
+    for (size_t i = 0; i < source_len; ++i)
     {
         library->source[i] = source[i];
     }
