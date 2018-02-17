@@ -235,6 +235,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_35", Target::CUDACapability35},
     {"cuda_capability_50", Target::CUDACapability50},
     {"cuda_capability_61", Target::CUDACapability61},
+    {"amdgpu_gfx900", Target::AMDGPUGFX900},
+    {"amdgpu_gfx803", Target::AMDGPUGFX803},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
@@ -504,6 +506,9 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#endif
+#if !defined(WITH_AMDGPU)
+    bad |= has_feature(Target::AMDGPUGFX900)
 #endif
     return !bad;
 }

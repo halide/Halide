@@ -179,7 +179,7 @@ struct Target {
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal) || has_feature(AMDGPUGFX900);
     }
 
     /** Does this target allow using a certain type. Generally all
