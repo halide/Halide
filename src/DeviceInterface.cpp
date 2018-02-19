@@ -131,6 +131,7 @@ Expr make_device_interface_call(DeviceAPI device_api) {
         break;
     case DeviceAPI::AMDGPU:
         interface_name = "halide_amdgpu_device_interface";
+        break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later
         interface_name = "halide_default_device_interface";
