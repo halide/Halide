@@ -534,7 +534,7 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
     } else if (device == DeviceAPI::D3D12Compute) {
         // Shader Model 5.x can optionally support double-precision; 64-bit int
         // types are not supported.
-        return( t.bits() < 64 );
+        return t.bits() < 64;
     }
 
     return true;

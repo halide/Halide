@@ -116,7 +116,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, Expr e)
 {
-    return( print_reinterpret_cast(type, print_expr(e)) );
+    return print_reinterpret_cast(type, print_expr(e));
 }
 
 
@@ -276,7 +276,7 @@ string hex_literal(T value)
     ostringstream hex;
     hex << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
         << value;
-    return(hex.str());
+    return hex.str();
 }
 
 }
@@ -647,31 +647,31 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string& rhs)
 {
     string rhs_modified = print_reinforced_cast(type, rhs);
-    return( CodeGen_C::print_assignment(type, rhs_modified) );
+    return CodeGen_C::print_assignment(type, rhs_modified);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, string value_expr)
 {
     ostringstream ss;
     ss << print_type(type) << "(" << value_expr << ")";
-    return(ss.str());
+    return ss.str();
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, string value_expr)
 {
     if (type.is_float())
     {
-        return( print_vanilla_cast(type, value_expr) );
+        return print_vanilla_cast(type, value_expr);
     }
 
     if (type.is_bool())
     {
-        return( print_vanilla_cast(type, value_expr) );
+        return print_vanilla_cast(type, value_expr);
     }
 
     if (type.bits() == 32)
     {
-        return( print_reinterpret_cast(type, value_expr) );
+        return print_reinterpret_cast(type, value_expr);
     }
 
     // for signed types: shift-up then shift-down
@@ -683,7 +683,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     ostringstream rsr;
     rsr << print_reinterpret_cast(type, sl.str())   // 2. reinterpret bits
         << " >> " << (32 - type.bits());            // 3. shift-down to LSB
-    return(rsr.str());
+    return rsr.str();
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, string value_expr)
@@ -717,13 +717,13 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // casting to or from a float type? just use the language cast:
     if (target_type.is_float() || source_type.is_float())
     {
-        return( print_vanilla_cast(target_type, value_expr) );
+        return print_vanilla_cast(target_type, value_expr);
     }
 
     // casting to or from a bool type? just use the language cast:
     if (target_type.is_bool() || source_type.is_bool())
     {
-        return( print_vanilla_cast(target_type, value_expr) );
+        return print_vanilla_cast(target_type, value_expr);
     }
 
     // let the integer cast zoo begin...
@@ -764,7 +764,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
                << ")"
                << " >> " << (32 - target_type.bits());      // 2. shift-down to LSB
         }
-        return(ss.str());
+        return ss.str();
     }
 
     // Case 2: casting from a signed source to an unsigned target
@@ -778,7 +778,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
                    + " & "
                    + hex_literal((1 << target_type.bits()) - 1);   // mask target LSB
         }
-        return( print_reinterpret_cast(target_type, masked) );
+        return print_reinterpret_cast(target_type, masked);
     }
 
     // Case 3: casting from an unsigned source to a signed target
@@ -796,7 +796,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
         // shift-up, reinterpret as int (target_type), then shift-down
         ss << print_reinforced_cast(target_type, value_expr);
     }
-    return(ss.str());
+    return ss.str();
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
@@ -1055,7 +1055,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 
     // compiler control pragmas
     src_stream
-        // warning X3078: 'i': loop control variable conflicts with a previous declaration in the outer scope; most recent declaration will be used
+        // warning X3078 : loop control variable conflicts with a previous declaration in the outer scope; most recent declaration will be used
         << "#pragma warning( disable : 3078 )" "\n"
         // TODO(marcos): can we interchangeably replace ints by uints when we have modulo operations in the generated code?
         // warning X3556 : integer modulus may be much slower, try using uints if possible
@@ -1085,9 +1085,9 @@ void CodeGen_D3D12Compute_Dev::init_module() {
                << "#define asuint32 asuint\n"
                << "\n"
                #endif
-               << "float nan_f32()     { return( 1.#IND); } \n" // Quiet NaN with minimum fractional value.
-               << "float neg_inf_f32() { return(-1.#INF); } \n"
-               << "float inf_f32()     { return(+1.#INF); } \n"
+               << "float nan_f32()     { return  1.#IND; } \n" // Quiet NaN with minimum fractional value.
+               << "float neg_inf_f32() { return -1.#INF; } \n"
+               << "float inf_f32()     { return +1.#INF; } \n"
                << "#define float_from_bits asfloat \n"
                << "#define sqrt_f32    sqrt   \n"
                << "#define sin_f32     sin    \n"
