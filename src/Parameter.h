@@ -25,6 +25,8 @@ class Parameter {
     void check_is_buffer() const;
     void check_is_scalar() const;
     void check_dim_ok(int dim) const;
+    void register_if_needed();
+    void unregister_if_needed();
 
 public:
     /** Construct a new undefined handle */
