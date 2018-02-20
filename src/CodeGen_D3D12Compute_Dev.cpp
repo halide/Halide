@@ -7,7 +7,7 @@
 #include "Debug.h"
 #include "IROperator.h"
 
-#define DEBUG_TYPES (1)
+#define DEBUG_TYPES (0)
 
 namespace Halide {
 namespace Internal {
@@ -27,14 +27,15 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     ostringstream oss;
 
     // Storage uses packed vector types.
-    if (storage && type.lanes() != 1)
-    {
-        // TODO(marcos): HLSL has 'packoffset', which only applies to constant buffer fields (constant registers (c))
+    if (storage && type.lanes() != 1) {
+        // NOTE(marcos): HLSL has 'packoffset' but it only applies to constant
+        // buffer fields (constant registers (c)); because constant arguments
+        // are always converted to 32bit values by the runtime prior to kernel
+        // dispatch, there is no need to complicate things with packoffset.
     }
-    if (type.is_float())
-    {
-        switch (type.bits())
-        {
+
+    if (type.is_float()) {
+        switch (type.bits()) {
             case 16:
                 // 16-bit floating point value. This data type is provided only for language compatibility.
                 // Direct3D 10 shader targets map all half data types to float data types.
@@ -53,11 +54,8 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             default:
                 user_error << "Can't represent a float with this many bits in HLSL (SM 5.1): " << type << "\n";
         }
-    }
-    else
-    {
-        switch (type.bits())
-        {
+    } else {
+        switch (type.bits()) {
             case 1:
                 oss << "bool";
                 break;
@@ -77,8 +75,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
                 user_error << "Can't represent an integer with this many bits in HLSL (SM 5.1): " << type << "\n";
         }
     }
-    switch (type.lanes())
-    {
+    switch (type.lanes()) {
         case 1:
             break;
         case 2:
@@ -99,10 +96,11 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         default:
             user_error <<  "Unsupported vector width in HLSL (SM 5.1): " << type << "\n";
     }
-    if (space == AppendSpace)
-    {
+
+    if (space == AppendSpace) {
         oss << ' ';
     }
+
     return oss.str();
 }
 
@@ -143,7 +141,7 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
-}
+}   // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op) {
     if (is_const(op->value)) return;
@@ -198,8 +196,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Mod *op) {
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop)
 {
-    if (!is_gpu_var(loop->name))
-    {
+    if (!is_gpu_var(loop->name)) {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside D3D12Compute kernel\n";
         CodeGen_C::visit(loop);
         return;
@@ -235,7 +232,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Ramp *op) {
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast* op)
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op)
 {
     string id_value = print_expr(op->value);
     user_assert(op->value.type().lanes() == 1) << "Broadcast source must be 1-wide.\n";
@@ -243,8 +240,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast* op
     ostringstream rhs;
     rhs << print_type(op->type.with_lanes(op->lanes))
         << "(";
-    for (int i = 0; i < op->lanes; ++i)
-    {
+    for (int i = 0; i < op->lanes; ++i) {
         rhs << id_value;
         if (i < op->lanes-1)
             rhs << ", ";
@@ -279,15 +275,14 @@ string hex_literal(T value)
     return hex.str();
 }
 
-}
+}   // namespace
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op)
 {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // __shared[x] is always uint(32): must reinterpret/unpack bits...
-    if (op->name == "__shared")
-    {
+    if (op->name == "__shared") {
         ostringstream rhs;
         internal_assert(allocations.contains(op->name));
         // no ramps when accessing shared memory...
@@ -299,9 +294,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
         // words (int/uint/float) as groupshared types...
         internal_assert(allocations.get(op->name).type == UInt(8));
         internal_assert(op->type.lanes() == 1);
-#if 1
+
         string id_index = print_expr(op->index);
-        //id_index = print_cast(op->type, op->index.type(), id_index);
         internal_assert(op->type.bits() <= 32);
         Type promoted = op->type.with_bits(32);
         rhs << "as" << print_type(promoted)
@@ -309,18 +303,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
             << print_name(op->name)
             << "[" << id_index << "]"
             << ")";
-#else
-        if (op->type.bits() == 32)
-        {
+#if 0
+        // NOTE(marcos): let's keep this block of code here (disabled) , in case
+        // we need to "emulate" byte/short packing in shared memory (recall that
+        // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
+        if (op->type.bits() == 32) {
             // loading a 32bit word? great! just reinterpret as float/int/uint
             rhs << "as" << print_type(op->type.element_of())
                 << "("
                 << print_name(op->name)
                 << "[" << print_expr(op->index) << "]"
                 << ")";
-        }
-        else
-        {
+        } else {
             // not a 32bit word? hell ensues:
             internal_assert(op->type.bits() < 32);
             // must map element index to uint word array index:
@@ -349,8 +343,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
                 << " >> "
                 << "(" << bits << "*(" << i << " % " << divisor << " ))";
             // if it is signed, need to propagate sign... shift-up then down:
-            if (op->type.is_int())
-            {
+            if (op->type.is_int()) {
                 rhs << "asint"
                     << "("
                     << cut.str()
@@ -359,9 +352,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
                     << ")"
                     << " >> "
                     << (32 - bits);
-            }
-            else
-            {
+            } else {
                 rhs << cut.str();
             }
         }
@@ -372,16 +363,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
 
     // If we're loading a contiguous ramp, "unroll" the ramp into loads:
     Expr ramp_base = is_ramp_one(op->index);
-    if (ramp_base.defined())
-    {
+    if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
 
         ostringstream rhs;
         rhs << print_type(op->type)
             << "(";
         const int lanes = op->type.lanes();
-        for(int i = 0; i < lanes; ++i)
-        {
+        for(int i = 0; i < lanes; ++i) {
             rhs << print_name(op->name)
                 << "["
                 << print_expr(ramp_base)
@@ -398,26 +387,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
     }
 
     string id_index = print_expr(op->index);
-    //id_index = print_cast(op->type, op->index.type(), id_index);
 
     // Get the rhs just for the cache.
     bool type_cast_needed = !(allocations.contains(op->name) &&
                               allocations.get(op->name).type == op->type);
-    //Type buffer_type = (op->image.defined()) ? op->image.type() : op->type;
-    //type_cast_needed |= (buffer_type != op->type);
 
     ostringstream rhs;
-    if (type_cast_needed)
-    {
+    if (type_cast_needed) {
         ostringstream element;
         element << print_name(op->name)
                 << "[" << id_index << "]";
         Type target_type = op->type;
         Type source_type = allocations.get(op->name).type;
         rhs << print_cast(target_type, source_type, element.str());
-    }
-    else
-    {
+    } else {
         rhs << print_name(op->name);
         rhs << "[" << id_index << "]";
     }
@@ -432,9 +415,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
         // If index is a vector, gather vector elements.
         internal_assert(op->type.is_vector());
 
-        // This has to be underscore as print_name prepends and
-        // underscore to names without one and that results in a name
-        // mismatch of a Load appears as the value of a Let.
+        // This has to be underscore as print_name prepends an underscore to
+        // names without one and that results in a name mismatch if a Load
+        // appears as the value of a Let
         id = unique_name('_');
         cache[rhs.str()] = id;
 
@@ -456,16 +439,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load* op)
     }
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
 {
     user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
     // __shared[x] is always uint(32): must reinterpret/pack bits...
-    if (op->name == "__shared")
-    {
-#if 1
+    if (op->name == "__shared") {
         internal_assert(value_type.bits() <= 32);
         Type promoted = value_type.with_bits(32);
         do_indent();
@@ -474,18 +455,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
                << " = "
                << print_reinterpret(promoted, op->value)
                << ";\n";
-#else
-        if (value_type.bits() == 32)
-        {
+#if 0
+        // NOTE(marcos): let's keep this block of code here (disabled) , in case
+        // we need to "emulate" byte/short packing in shared memory (recall that
+        // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
+        if (value_type.bits() == 32) {
             // storing a 32bit word? great! just reinterpret value to uint32:
             stream << print_name(op->name)
                     << "[" << print_expr(op->index) << "]"
                     << " = "
                     << print_reinterpret(UInt(32), op->value)
                     << ";\n";
-        }
-        else
-        {
+        } else {
             // nightmare:
             internal_assert(value_type.bits() < 32);
             // must map element index to uint word array index:
@@ -557,25 +538,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
                    << print_expr(op->value) << "[" << i << "];\n";
         }
     } else {
-        bool type_cast_needed = false;
-        //Type buffer_type = (op->param.defined()) ? op->param.type() : value_type;
-        //type_cast_needed |= (buffer_type != value_type);
-
-        ostringstream rhs;
-        if (type_cast_needed)
-        {
-            rhs << print_cast(allocations.get(op->name).type, value_type, print_expr(op->index));
-        }
-        else
-        {
-            rhs << print_expr(op->value);
-        }
-
         do_indent();
         stream << print_name(op->name)
                 << "[" << print_expr(op->index) << "]"
                 << " = "
-                << rhs.str()
+                << print_expr(op->value)
                 << ";\n";
     }
 
@@ -644,7 +611,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
     }
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string& rhs)
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string &rhs)
 {
     string rhs_modified = print_reinforced_cast(type, rhs);
     return CodeGen_C::print_assignment(type, rhs_modified);
@@ -659,23 +626,23 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, string value_expr)
 {
-    if (type.is_float())
-    {
+    if (type.is_float()) {
         return print_vanilla_cast(type, value_expr);
     }
 
-    if (type.is_bool())
-    {
+    if (type.is_bool()) {
         return print_vanilla_cast(type, value_expr);
     }
 
-    if (type.bits() == 32)
-    {
+    if (type.bits() == 32) {
         return print_reinterpret_cast(type, value_expr);
     }
 
-    // for signed types: shift-up then shift-down
-    // for unsigned types: mask the target LSB (but shift-up and down also works)
+    // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
+    // to be placed in 32bit integers, with special attention to signed integers
+    // that require propagation of the sign bit (MSB):
+    // a) for signed types: shift-up then shift-down
+    // b) for unsigned types: simply mask the LSB (but shift-up and down also works)
     ostringstream sl;
     sl << "(" << value_expr << ")"
        << " << "
@@ -692,8 +659,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(
 
     string cast_expr;
     cast_expr += "as";
-    switch (type.code())
-    {
+    switch (type.code()) {
         case halide_type_uint :
             cast_expr += "u";
         case halide_type_int :
@@ -715,14 +681,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, string value_expr)
 {
     // casting to or from a float type? just use the language cast:
-    if (target_type.is_float() || source_type.is_float())
-    {
+    if (target_type.is_float() || source_type.is_float()) {
         return print_vanilla_cast(target_type, value_expr);
     }
 
     // casting to or from a bool type? just use the language cast:
-    if (target_type.is_bool() || source_type.is_bool())
-    {
+    if (target_type.is_bool() || source_type.is_bool()) {
         return print_vanilla_cast(target_type, value_expr);
     }
 
@@ -744,17 +708,13 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     bool same_signess = false;
     same_signess |= target_type.is_int()  && source_type.is_int();
     same_signess |= target_type.is_uint() && source_type.is_uint();
-    if (same_signess)
-    {
+    if (same_signess) {
         ostringstream ss;
-        if (target_type.bits() >= source_type.bits())
-        {
+        if (target_type.bits() >= source_type.bits()) {
             // target has enough bits to fully accommodate the source:
             // it's a no-op, but we print a vanilla cast for clarity:
             ss << "(" << print_vanilla_cast(target_type, value_expr) << ")";
-        }
-        else
-        {
+        } else {
             // for signed types: shift-up then shift-down
             // for unsigned types: mask the target LSB (but shift-up and down also works)
             ss << "("
@@ -768,12 +728,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     }
 
     // Case 2: casting from a signed source to an unsigned target
-    if (source_type.is_int() && target_type.is_uint())
-    {
+    if (source_type.is_int() && target_type.is_uint()) {
         // reinterpret resulting bits as uint(32):
         string masked = value_expr;
-        if (target_type.bits() < 32)
-        {
+        if (target_type.bits() < 32) {
             masked = "(" + value_expr + ")"
                    + " & "
                    + hex_literal((1 << target_type.bits()) - 1);   // mask target LSB
@@ -785,21 +743,18 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     internal_assert(source_type.is_uint());
     internal_assert(target_type.is_int());
     ostringstream ss;
-    if (target_type.bits() > source_type.bits())
-    {
+    if (target_type.bits() > source_type.bits()) {
         // target has enough bits to fully accommodate the source:
         // it's a no-op, but we print a vanilla cast for clarity:
         ss << "(" << print_vanilla_cast(target_type, value_expr) << ")";
-    }
-    else
-    {
+    } else {
         // shift-up, reinterpret as int (target_type), then shift-down
         ss << print_reinforced_cast(target_type, value_expr);
     }
     return ss.str();
 }
 
-void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
+void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op)
 {
     Type target_type = op->type;
     Type source_type = op->value.type();
@@ -832,7 +787,7 @@ struct BufferSize {
         return size < r.size;
     }
 };
-}
+}   // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                                                     const string &name,
@@ -850,16 +805,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     // The last condition is handled via the preprocessor in the kernel
     // declaration.
     vector<BufferSize> constants;
-    auto isConstantBuffer = [&s](const DeviceArgument& arg)
+    auto isConstantBuffer = [&s](const DeviceArgument &arg)
     {
         return arg.is_buffer
             && CodeGen_GPU_Dev::is_buffer_constant(s, arg.name)
             && arg.size > 0;
     };
-    for (auto& arg : args)
-    {
-        if (isConstantBuffer(arg))
-        {
+    for (auto &arg : args) {
+        if (isConstantBuffer(arg)) {
             constants.push_back(BufferSize(arg.name, arg.size));
         }
     }
@@ -871,8 +824,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     sort(constants.begin(), constants.end());
 
     // Compute the cumulative sum of the constants.
-    for (size_t i = 1; i < constants.size(); i++)
-    {
+    for (size_t i = 1; i < constants.size(); i++) {
         constants[i].size += constants[i-1].size;
     }
 
@@ -880,11 +832,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     class FindSharedAllocations : public IRVisitor
     {
         using IRVisitor::visit;
-        void visit(const Allocate* op)
+        void visit(const Allocate *op)
         {
             op->body.accept(this);
-            if (starts_with(op->name, "__shared"))
-            {
+            if (starts_with(op->name, "__shared")) {
                 allocs.push_back(op);
             }
         }
@@ -893,8 +844,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindSharedAllocations fsa;
     s.accept(&fsa);
-    for (const Allocate* op : fsa.allocs)
-    {
+    for (const Allocate *op : fsa.allocs) {
         internal_assert( op->extents.size() == 1  );
         // The 'op->type' of shared memory allocations is always uint8 in Halide
         // since shared storaged is considered a "byte buffer"... In D3D12 there
@@ -905,8 +855,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         stream << "groupshared"
                << " "  << print_type(op->type)    // print_type(uint8) -> uint32
                << " "  << print_name(op->name);
-        if (is_const(op->extents[0]))
-        {
+        if (is_const(op->extents[0])) {
             std::stringstream ss;
             ss << op->extents[0];
             size_t elements = 0;
@@ -914,8 +863,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             size_t bytesize = elements * sizeof(uint32_t);
             // SM 5.1: 32KB limit for shared memory...
             size_t packing_factor = 1;
-            while (bytesize > 32 * 1024)
-            {
+            while (bytesize > 32 * 1024) {
                 // must pack/unpack elements to/from shared memory...
                 elements /= 2;
                 bytesize /= 2;
@@ -924,25 +872,24 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             stream << " [" << elements << "];\n";
             // smallest possible pack type is a byte (no nibbles)
             internal_assert( packing_factor <= 4 );
-        }
-        else
-        {
-            // fill-in __GROUPSHARED_SIZE_IN_BYTES later on when D3DCompile() is
-            // invoked in halide_d3d12compute_run(); must divide by 4 since 
-            stream << " [__GROUPSHARED_SIZE_IN_BYTES / 4];\n";
+        } else {
+            // fill-in __GROUPSHARED_SIZE_IN_BYTES later on when D3DCompile()
+            // is invoked in halide_d3d12compute_run(); must get divided by 4
+            // since groupshared memory elements have 32bit granularity:
+            stream << " [ ( __GROUPSHARED_SIZE_IN_BYTES + 3 ) / 4 ];\n";
         }
         Allocation alloc;
         alloc.type = op->type;
         allocations.push(op->name, alloc);
     }
 
-    // Emit the kernel function prototype
+    // Emit the kernel function preamble (numtreads):
 
     // Figure out the thread group size by traversing the stmt:
     class FindThreadGroupSize : public IRVisitor
     {
         using IRVisitor::visit;
-        void visit(const For* loop)
+        void visit(const For *loop)
         {
             if (!is_gpu_var(loop->name))
                 return loop->body.accept(this);
@@ -955,9 +902,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             // generation time, emit code such that it can be patched some point
             // later when calling D3DCompile() / halide_d3d12compute_run()
             numthreads[index] = 0;  // <-- 0 indicates 'undetermined'
-            const IntImm* int_limit = loop->extent.as<IntImm>();
-            if (nullptr != int_limit)
-            {
+            const IntImm *int_limit = loop->extent.as<IntImm>();
+            if (nullptr != int_limit) {
                 numthreads[index] = int_limit->value;
                 user_assert(numthreads[index] > 0) << "For D3D12Compute, 'numthreads[" << index << "]' values must be greater than zero.\n";
             }
@@ -970,10 +916,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                              ".__thread_id_y",
                              ".__thread_id_z",
                              ".__thread_id_w" };
-            for (auto& id : ids)
-            {
-                if (ends_with(name, id))
-                {
+            for (auto &id : ids) {
+                if (ends_with(name, id)) {
                     return (&id - ids);
                 }
             }
@@ -999,29 +943,26 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         (stream << ", __NUM_TREADS_Z ");
     stream << ") ]\n";
 
+    // Emit the kernel function prototype:
+
     stream << "void " << name << "(\n";
     stream << ' ' << "uint3 tgroup_index  : SV_GroupID,\n"
            << ' ' << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (auto& arg : args)
-    {
+    for (auto &arg : args) {
         stream << ",\n";
         stream << ' ';
-        if (arg.is_buffer)
-        {
+        if (arg.is_buffer) {
             // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
             // all buffers as UAVs since there is no way the runtime can know
             // if a given halide_buffer_t is read-only (SRV) or read-write...
-            //if (arg.write) stream << "RW";
-            //stream << "Buffer"
-            stream << "RWBuffer"
+            stream << "RW"
+                   << "Buffer"
                    << "<" << print_type(arg.type) << ">"
                    << " " << print_name(arg.name);
             Allocation alloc;
             alloc.type = arg.type;
             allocations.push(arg.name, alloc);
-        }
-        else
-        {
+        } else {
             stream << "uniform"
                    << " " << print_type(arg.type)
                    << " " << print_name(arg.name);
@@ -1029,8 +970,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     }
     stream << ")\n";
 
-    open_scope();
+    // Emit the kernel code:
 
+    open_scope();
     print(s);
     close_scope("kernel " + name);
 
@@ -1110,7 +1052,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
                << "#define cosh_f32    cosh   \n"
                << "#define acosh_f32   acosh  \n"
                << "#define tanh_f32    tanh   \n"
-             //<< "#define atanh_f32 atanh \n"
+               << "#define atanh_f32(x) (log_f32((1+x)/(1-x))/2) \n"
                << "#define fast_inverse_f32      rcp   \n"
                << "#define fast_inverse_sqrt_f32 rsqrt \n"
              // Halide only ever needs threadgroup memory fences:
@@ -1151,4 +1093,4 @@ std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}}  // namespace Halide::Internal
