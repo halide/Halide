@@ -335,6 +335,7 @@ SOURCE_FILES = \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
+  CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
@@ -470,6 +471,7 @@ HEADER_FILES = \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_MIPS.h \
+  CodeGen_D3D12Compute_Dev.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenGL_Dev.h \
@@ -678,6 +680,7 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
+  d3d12_abi_patch_64 \
   hvx_64 \
   hvx_128 \
   mips \
@@ -691,6 +694,7 @@ RUNTIME_LL_COMPONENTS = \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
+                            $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \

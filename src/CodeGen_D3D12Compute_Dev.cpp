@@ -472,7 +472,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store* op)
         stream << print_name(op->name)
                << "[" << print_expr(op->index) << "]"
                << " = "
-               << print_reinterpret(UInt(32), op->value)
+               << print_reinterpret(promoted, op->value)
                << ";\n";
 #else
         if (value_type.bits() == 32)
@@ -805,7 +805,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast* op)
     Type source_type = op->value.type();
     string value_expr = print_expr(op->value);
 
-    string cast_expr = print_cast( op->type, op->value.type(), print_expr(op->value) );
+    string cast_expr = print_cast( target_type, source_type, print_expr(op->value) );
 
     print_assignment(target_type, cast_expr);
 }

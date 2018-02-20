@@ -102,9 +102,9 @@ using std::stack;
 #endif
 
 #ifdef WITH_AMDGPU
-#define InitializeAMDGPUTarget()	InitializeTarget(AMDGPU)
-#define InitializeAMDGPUAsmParser()	InitializeAsmParser(AMDGPU)
-#define InitializeAMDGPUAsmPrinter()	InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUTarget()        InitializeTarget(AMDGPU)
+#define InitializeAMDGPUAsmParser()     InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUAsmPrinter()    InitializeAsmParser(AMDGPU)
 #endif
 
 #ifdef WITH_AARCH64
