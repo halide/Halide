@@ -222,6 +222,7 @@ list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
 set(RUNTIME_HEADER_FILES
   HalideRuntime.h
   HalideRuntimeCuda.h
+  HalideRuntimeAMDGPU.h
   HalideRuntimeHexagonHost.h
   HalideRuntimeOpenCL.h
   HalideRuntimeMetal.h

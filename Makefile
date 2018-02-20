@@ -208,9 +208,18 @@ TEST_METAL = 1
 endif
 endif
 
+ifneq ($(WITH_AMDGPU), )
+ifneq (,$(findstring amdgpu,$(HL_TARGET)))
+TEST_AMDGPU = 1
+endif
+endif
+
 ifeq ($(UNAME), Linux)
 ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
+endif
+ifneq ($(TEST_AMDGPU), )
+AMDGPU_LD_FLAGS ?= -L/opt/rocm/hip/lib -lhip_hcc
 endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
@@ -244,6 +253,10 @@ endif
 
 ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
+endif
+
+ifneq ($(TEST_AMDGPU), )
+TEST_CXX_FLAGS += -DTEST_AMDGPU
 endif
 
 # Compiling the tutorials requires libpng
@@ -688,6 +701,7 @@ RUNTIME_LL_COMPONENTS = \
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
+                            $(INCLUDE_DIR)/HalideRuntimeAMDGPU.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
@@ -1325,11 +1339,11 @@ $(BIN_DIR)/$(TARGET)/generator_aot_gpu_object_lifetime: $(ROOT_DIR)/test/generat
 # acquire_release explicitly uses CUDA/OpenCL APIs, so link those here.
 $(BIN_DIR)/$(TARGET)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.a $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) $(AMDGPU_LD_FLAGS) -o $@
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.cpp $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) $(AMDGPU_LD_FLAGS) -o $@
 
 # define_extern_opencl explicitly uses OpenCL APIs, so link those here.
 $(BIN_DIR)/$(TARGET)/generator_aot_define_extern_opencl: $(ROOT_DIR)/test/generator/define_extern_opencl_aottest.cpp $(FILTERS_DIR)/define_extern_opencl.a $(FILTERS_DIR)/define_extern_opencl.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a

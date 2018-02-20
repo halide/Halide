@@ -30,6 +30,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeAMDGPU_h[];
 
 namespace {
 
@@ -294,6 +295,9 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGL)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+            }
+            if (target.has_feature(Target::AMDGPUGFX900)) { // Add GFX803 later
+                stream << halide_internal_runtime_header_HalideRuntimeAMDGPU_h << '\n';
             }
         }
         stream << "#endif\n";

@@ -7,6 +7,7 @@
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_AMDGPU_Dev.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IROperator.h"
@@ -119,6 +120,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
         cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
+    }
+    if (target.has_feature(Target::AMDGPUGFX900)) { // Add GFX803 later
+        debug(1) << "Constructing AMDGPU device codegen\n";
+        cgdev[DeviceAPI::AMDGPU] = new CodeGen_AMDGPU_Dev(target);
     }
 
     if (cgdev.empty()) {
