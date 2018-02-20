@@ -69,7 +69,7 @@ protected:
         std::string print_cast(Type target_type, Type source_type, std::string value_expr);
         std::string print_reinterpret_cast(Type type, std::string value_expr);
 
-        virtual std::string print_assignment(Type t, const std::string &rhs) override;
+        virtual std::string print_assignment(Type t, const std::string &rhs);
 
         void visit(const Evaluate *op);
 
