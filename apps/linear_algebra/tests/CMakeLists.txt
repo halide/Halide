@@ -22,3 +22,4 @@ target_link_libraries(test_halide_blas
    cblas # XXX fragile
    Halide
 )
+

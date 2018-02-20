@@ -402,6 +402,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   DEPENDS build_halide_h ${HEADER_FILES})
 add_custom_target(
     HalideIncludes
+    ALL
     DEPENDS "${CMAKE_BINARY_DIR}/include/Halide.h")
 
 foreach (i ${RUNTIME_HEADER_FILES})
@@ -655,7 +656,11 @@ if (MSVC)
   endif()
 else()
   if (NOT HALIDE_ENABLE_RTTI)
-    target_compile_options(Halide PUBLIC "-fno-rtti")
+    if (NOT MSVC)
+      target_compile_options(Halide PUBLIC "-fno-rtti")
+    else()
+      target_compile_options(Halide PUBLIC "/GR-")
+    endif()
   endif()
 endif()
 
@@ -677,4 +682,12 @@ if (NOT MSVC)
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
+endif()
+
+install(TARGETS Halide
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION bin
+        ARCHIVE DESTINATION lib)
+if (APPLE AND "${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
+  install(CODE "execute_process(COMMAND install_name_tool $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide> $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide>)")
 endif()

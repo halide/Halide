@@ -53,8 +53,8 @@ void halide_profiler_pipeline_end(void *, void *);
 }
 
 #ifdef _WIN32
-float roundf(float);
-double round(double);
+__declspec(dllimport) float __cdecl roundf(float);
+__declspec(dllimport) double __cdecl round(double);
 #else
 inline float asinh_f32(float x) {return asinhf(x);}
 inline float acosh_f32(float x) {return acoshf(x);}
@@ -142,7 +142,7 @@ public:
     ~HalideFreeHelper() { free(); }
     void free() {
         if (p) {
-            // TOOD: do all free_functions guarantee to ignore a null ptr?
+            // TODO: do all free_functions guarantee to ignore a nullptr?
             free_function(user_context, p);
             p = nullptr;
         }
@@ -151,7 +151,6 @@ public:
 } // namespace
 
 )INLINE_CODE";
-
 }
 
 class TypeInfoGatherer : public IRGraphVisitor {
