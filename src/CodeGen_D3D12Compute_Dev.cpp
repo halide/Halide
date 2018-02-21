@@ -46,9 +46,11 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
                 oss << "float";
                 break;
             case 64:
-                // 64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
-                // To pass double precision values between shaders, declare each double as a pair of uint data types.
-                // Then, use the asdouble function to pack each double into the pair of uints and the asuint function to unpack the pair of uints back into the double.
+                // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
+                //  To pass double precision values between shaders, declare each double as a pair of uint data types.
+                //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
+                //  unpack the pair of uints back into the double."
+                user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
                 oss << "double";
                 break;
             default:
