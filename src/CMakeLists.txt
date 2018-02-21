@@ -22,6 +22,7 @@ set(RUNTIME_CPP
   cache
   can_use_target
   cuda
+  amdgpu
   destructors
   device_interface
   errors

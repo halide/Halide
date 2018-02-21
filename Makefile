@@ -620,6 +620,7 @@ RUNTIME_CPP_COMPONENTS = \
   cache \
   can_use_target \
   cuda \
+  amdgpu \
   destructors \
   device_interface \
   errors \
