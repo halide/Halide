@@ -6,27 +6,33 @@
 
 ; anatomy of the trampoline/stub routine:
 ;
+;    ; all assembly routines start with some bookkeeping prologue:
 ;    push    rbp         ; setup stack frame for this routine
 ;    mov     rbp, rsp    ;
 ;
 ;    sub     rsp, 32     ; allocate shadow space for internal subroutine calls
 ;    and     spl, -16    ; align stack at 16 byte boundary
 ;
-;    ; whoever called this trampoline must adhere to the Windows x64 calling convention!
-;    ; in particular, the following is expected:
-;    ; rcx is assumed to contain 'descriptorHeap'
-;    ; rdx is assumed to contain a pointer to the struct to be returned:
-;    ;     struct D3D12_DESCRIPTOR_HEAP_DESC  for descriptorHeap->GetDesc()
-;    ;     struct D3D12_CPU_DESCRIPTOR_HANDLE for descriptorHeap->GetCPUDescriptorHandleForHeapStart()
-;    ;     struct D3D12_GPU_DESCRIPTOR_HANDLE for descriptorHeap->GetGPUDescriptorHandleForHeapStart()
-;
+;    ; rcx is expected to contain a pointer to a D3D12 object
+;    ;     (such as a descriptorHeap, a commandList or a device)
+;    ; the vtable of such D3D12 object is accessed as follows:
 ;    lea     rax, qword ptr [rcx]    ; rax := descriptorHeap
 ;    mov     rax, qword ptr [rax]    ; rax := descriptorHeap->lpVtbl
 ;
+;    ; a method in the vtable is invoked as such:
 ;    call    qword ptr [rax+40h]     ; for descriptorHeap->lpVtbl->GetDesc()
 ;    call    qword ptr [rax+48h]     ; for descriptorHeap->lpVtbl->GetCPUDescriptorHandleForHeapStart()
 ;    call    qword ptr [rax+50h]     ; for descriptorHeap->lpVtbl->GetGPUDescriptorHandleForHeapStart()
+;    call    qword ptr [rax+0F8h]    ; for commandList->lpVtbl->SetComputeRootDescriptorTable()
+;    call    qword ptr [rax+88h]     ; for device->lpVtbl->CreateConstantBufferView()
+;    call    qword ptr [rax+90h]     ; for device->lpVtbl->CreateShaderResourceView()
 ;
+;    ; all other routine parameters are expected to have been passed through
+;    ; registers rdx, r8 and r9 (in this order).
+;    ; note that further register data transformations might be needed prior
+;    ; to calling the target vtable function.
+;
+;    ; all assembly routines end with the following epilogue:
 ;    leave               ; restore stack (rsp) and frame pointer (rbp)
 ;    ret
 
