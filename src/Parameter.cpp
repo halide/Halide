@@ -333,6 +333,17 @@ RegisteredParameter& RegisteredParameter::operator=(const Parameter& param) {
     return *this;
 }
 
+RegisteredParameter::RegisteredParameter(const RegisteredParameter& param) : Parameter(param) {
+    register_if_needed();
+}
+
+RegisteredParameter& RegisteredParameter::operator=(const RegisteredParameter& param) {
+    unregister_if_needed();
+    Parameter::operator=(param);
+    register_if_needed();
+    return *this;
+}
+
 RegisteredParameter::RegisteredParameter(RegisteredParameter&& that) {
     that.unregister_if_needed();
     this->contents = std::move(that.contents);

@@ -180,6 +180,9 @@ public:
     RegisteredParameter(const Parameter&);
     RegisteredParameter& operator=(const Parameter&);
 
+    RegisteredParameter(const RegisteredParameter&);
+    RegisteredParameter& operator=(const RegisteredParameter&);
+
     // Can only move from RegisteredParameter
     RegisteredParameter(RegisteredParameter&&);
     RegisteredParameter& operator=(RegisteredParameter&&);
