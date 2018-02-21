@@ -1178,8 +1178,8 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_) {}
-    StubInput(const Func &f) : kind_(IOKind::Function), func_(f) {}
-    StubInput(const Expr &e) : kind_(IOKind::Scalar), expr_(e) {}
+    StubInput(const Func &f) : kind_(IOKind::Function), parameter_(), func_(f) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), parameter_(), expr_(e) {}
 
 private:
     friend class GeneratorInputBase;
@@ -2721,7 +2721,7 @@ private:
         // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
         // Must be empty if the Generator has a build() method rather than generate()/schedule().
         // Only one of filter_inputs and filter_params may be nonempty.
-        std::vector<Internal::Parameter *> filter_params;
+        std::vector<Internal::RegisteredParameter *> filter_params;
 
         // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
