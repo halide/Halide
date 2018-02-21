@@ -66,7 +66,7 @@ public:
     ParamMap(const std::initializer_list<ParamMapping> &init);
 
     template <typename T> void set(const Param<T> &p, T val) {
-        Internal::Parameter v(p.type(), false, 0, p.name(), p.is_explicit_name(), false);
+        Internal::Parameter v(p.type(), false, 0, p.name(), p.is_explicit_name());
         v.set_scalar<T>(val);
         ParamArg pa;
         pa.mapped_param = v;
