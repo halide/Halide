@@ -2721,7 +2721,7 @@ private:
         // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
         // Must be empty if the Generator has a build() method rather than generate()/schedule().
         // Only one of filter_inputs and filter_params may be nonempty.
-        std::vector<Internal::Parameter *> filter_params;
+        std::vector<Internal::RegisteredParameter *> filter_params;
 
         // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;

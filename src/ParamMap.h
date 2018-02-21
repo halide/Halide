@@ -29,7 +29,7 @@ public:
 
         ParamMapping(const ImageParam &p, Buffer<> &buf) : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
-        
+
         template <typename T>
         ParamMapping(const ImageParam &p, Buffer<T> &buf) : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
@@ -49,7 +49,7 @@ private:
 
         ParamArg() : buf_out_param(nullptr) { }
         ParamArg(const ParamMapping &pm)
-            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name(), pm.parameter->is_explicit_name(), false),
+            : mapped_param(pm.parameter->type(), false, 0, pm.parameter->name(), pm.parameter->is_explicit_name()),
                buf_out_param(nullptr) {
               mapped_param.set_scalar(pm.parameter->type(), pm.value);
         }
