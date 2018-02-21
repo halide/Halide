@@ -2773,12 +2773,6 @@ private:
     // this method never returns undefined Funcs.
     std::vector<Func> get_array_output(const std::string &n);
 
-    // Return a vector of all Outputs of this Generator; non-array outputs are returned
-    // as a vector-of-size-1. This method is primarily useful for code that needs
-    // to iterate through the outputs of unknown, arbitrary Generators (e.g.,
-    // the Python bindings).
-    std::vector<std::vector<Func>> get_all_outputs();
-
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
     static void check_input_is_singular(Internal::GeneratorInputBase *in);
@@ -3150,7 +3144,7 @@ public:
                          GeneratorFactory generator_factory,
                          const GeneratorParamsMap &generator_params,
                          const std::vector<std::vector<Internal::StubInput>> &inputs);
-    void generate(const GeneratorParamsMap &generator_params,
+    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
                          const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
@@ -3166,10 +3160,6 @@ public:
 
     std::vector<Func> get_array_output(const std::string &n) const {
         return generator->get_array_output(n);
-    }
-
-    std::vector<std::vector<Func>> get_all_outputs() const {
-        return generator->get_all_outputs();
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
