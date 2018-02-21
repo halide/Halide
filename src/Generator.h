@@ -1178,8 +1178,8 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_) {}
-    StubInput(const Func &f) : kind_(IOKind::Function), func_(f) {}
-    StubInput(const Expr &e) : kind_(IOKind::Scalar), expr_(e) {}
+    StubInput(const Func &f) : kind_(IOKind::Function), parameter_(), func_(f) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), parameter_(), expr_(e) {}
 
 private:
     friend class GeneratorInputBase;
