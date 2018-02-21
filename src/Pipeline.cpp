@@ -872,10 +872,12 @@ void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_m
     // user_context is just a pointer to a JITUserContext, which is a
     // member of the JITFuncCallContext which we will declare now:
 
-    JITFuncCallContext jit_context(jit_handlers());
-    void *user_context_storage = &jit_context.jit_context;
+    void *user_context_storage = nullptr;
     vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map,
                                                            &user_context_storage, false);
+    // This has to happen after a runtime has been compiled.
+    JITFuncCallContext jit_context(jit_handlers());
+    user_context_storage = &jit_context.jit_context;
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -941,10 +943,12 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
 
     Target target = get_jit_target_from_environment();
 
-    JITFuncCallContext jit_context(jit_handlers());
-    void *user_context_storage = &jit_context.jit_context;
+    void *user_context_storage = nullptr;
     vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map,
                                                            &user_context_storage, true);
+    // This has to happen after a runtime has been compiled.
+    JITFuncCallContext jit_context(jit_handlers());
+    user_context_storage = &jit_context.jit_context;
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
