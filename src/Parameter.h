@@ -172,7 +172,7 @@ public:
     RegisteredParameter() = default;
 
     RegisteredParameter(Type t, bool is_buffer, int dimensions,
-                        const std::string &name, bool is_explicit_name);
+                        const std::string &name, bool is_explicit_name = false);
 
     ~RegisteredParameter() override;
 
