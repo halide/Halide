@@ -893,7 +893,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
         }
         if (t.has_feature(Target::D3D12Compute)) {
-            // TODO(marcos) : I think there's more to be done here...
+            user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
+            user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
             modules.push_back(get_initmod_d3d12_abi_patch_64_ll(c));
             modules.push_back(get_initmod_d3d12compute(c, bits_64, debug));
         }
