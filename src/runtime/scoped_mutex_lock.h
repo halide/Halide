@@ -10,7 +10,6 @@ struct ScopedMutexLock {
     halide_mutex *mutex;
 
     ScopedMutexLock(halide_mutex *mutex) __attribute__((always_inline)) : mutex(mutex) {
-        halide_mutex_init(mutex);
         halide_mutex_lock(mutex);
     }
 

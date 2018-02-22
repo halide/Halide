@@ -52,13 +52,6 @@ struct work_queue_t {
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
 
-    work_queue_t() {
-        // TODO: Cannot confirm if this constructor is getting called on 8996 or not, however the hexagon_benchmarks are passing;
-        // All other Hexagon targets are confirmed to call this constructor, including SDM845,msm8998. Confirmation is based on capturing a log message added here.
-        // Investigation is still ongoing regarding 8996 issue 
-        halide_mutex_init(&mutex);
-    }
-
     bool running() {
         return !shutdown;
     }

@@ -3,8 +3,6 @@
 
 using namespace Halide::Runtime::Internal::Qurt;
 
-#define QURT_MUTEX_INIT_FLAG   0xFACEFACEFACEFACE         // some pattern value
-
 extern "C" {
 extern void *memalign(size_t, size_t);
 
@@ -21,7 +19,7 @@ int halide_host_cpu_count() {
 //Wrapper that envelopes and init_flag for initialization 
 typedef struct {
     qurt_mutex_t mutex;
-    uint64_t init_flag;
+    volatile int lock;
 } qurt_mutex_wrapper_t;
 
 namespace {
@@ -62,32 +60,24 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
-    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
-    //TODO: not thread safe unless there is std::call_once type support
-    if( pmutex->init_flag != QURT_MUTEX_INIT_FLAG) {
-        pmutex->init_flag = QURT_MUTEX_INIT_FLAG;
-        qurt_mutex_init(&pmutex->mutex);
-    }
-}
-
 WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
     qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
     //check here if mutex is initialized 
-    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG); 
+    if (!(__sync_lock_test_and_set(&pmutex->lock, 1))) {
+        qurt_mutex_init((qurt_mutex_t *)&pmutex->mutex);
+    }
     qurt_mutex_lock((qurt_mutex_t *)&pmutex->mutex);
 }
 
 WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
     qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
-    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG);
     qurt_mutex_unlock((qurt_mutex_t *)&pmutex->mutex);
 }
 
 WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
     qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
-    halide_assert(0, pmutex->init_flag == QURT_MUTEX_INIT_FLAG);
     qurt_mutex_destroy((qurt_mutex_t *)&pmutex->mutex);
+    __sync_lock_release(&pmutex->lock);
     memset(mutex_arg, 0, sizeof(halide_mutex));
 }
 
