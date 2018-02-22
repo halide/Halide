@@ -99,7 +99,7 @@ PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevic
 
 AMDGPU_CXX_FLAGS=$(if $(WITH_AMDGPU), -DWITH_AMDGPU=1, )
 AMDGPU_LLVM_CONFIG_LIB=$(if $(WITH_AMDGPU), amdgpu, )
-# TODO add bitcode files
+AMDGPU_DEVICE_INITIAL_MODULES=$(if $(WITH_AMDGPU), rocdl.gfx900.bc rocdl.gfx803.bc, )
 
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
@@ -694,6 +694,7 @@ RUNTIME_LL_COMPONENTS = \
   posix_math \
   powerpc \
   ptx_dev \
+  amdgpu_dev \
   win32_math \
   x86 \
   x86_avx \
@@ -718,7 +719,8 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_EXPORTED_INCLUDES:$(INCLUDE_DIR)/%.h=$(BUILD_DIR)/initmod.%_h.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
-                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
+                  $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o) \
+									$(AMDGPU_DEVICE_INITIAL_MODULES:rocdl.%.bc=$(BUILD_DIR)/initmod_amdgpu.%_ll.o)
 
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
@@ -844,6 +846,9 @@ $(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/buf
 
 $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
 	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+
+$(BUILD_DIR)/initmod_amdgpu.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/amdgpu_rocdl_bitcode/rocdl.%.bc
+	./$(BIN_DIR)/binary2cpp halide_internal_initmod_amdgpu_$(basename $*)_ll < $(SRC_DIR)/runtime/amdgpu_rocdl_bitcode/rocdl.$*.bc > $@
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)
@@ -1050,7 +1055,7 @@ $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_in
 	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(ROOT_DIR)/src/runtime -o $@
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
-# this test should be usable without either. 
+# this test should be usable without either.
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -o $@
 
@@ -1431,8 +1436,8 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # The values in MachineParams are:
-# - the maximum level of parallelism available, 
-# - the size of the last-level cache (in KB), 
+# - the maximum level of parallelism available,
+# - the size of the last-level cache (in KB),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
@@ -1808,4 +1813,3 @@ $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(ROOT_DIR)/util/
 
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
-
