@@ -79,9 +79,6 @@ WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
     }
 }
 
-WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
-}
-
 WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
     windows_mutex *mutex = (windows_mutex *)mutex_arg;
     InitOnceExecuteOnce(&mutex->once, init_mutex, mutex, NULL);

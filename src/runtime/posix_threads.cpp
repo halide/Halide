@@ -62,9 +62,6 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_init(halide_mutex *mutex) {
-}
-
 WEAK void halide_mutex_lock(halide_mutex *mutex) {
     pthread_mutex_lock(mutex);
 }
