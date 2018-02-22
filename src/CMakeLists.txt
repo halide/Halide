@@ -96,6 +96,7 @@ set (RUNTIME_LL
   mips
   posix_math
   powerpc
+  amdgpu_dev
   ptx_dev
   win32_math
   x86
@@ -108,6 +109,11 @@ set (RUNTIME_BC
   compute_20
   compute_30
   compute_35
+)
+
+set (RUNTIME_AMDGPU_BC
+  gfx900
+  gfx803
 )
 
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
@@ -210,6 +216,15 @@ foreach (i ${RUNTIME_BC} )
   add_custom_command(OUTPUT "${INITMOD}"
                      COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
                      COMMENT "Building initial module ptx_${i}..."
+                     VERBATIM)
+  list(APPEND INITIAL_MODULES "${INITMOD}")
+endforeach()
+
+foreach (i ${RUNTIME_AMDGPU_BC} )
+  set(INITMOD "${INITMOD_PREFIX}amdgpu_${i}.cpp")
+  add_custom_command(OUTPUT "${INITMOD}"
+                     COMMAND binary2cpp "halide_internal_initmod_amdgpu_${i}_ll" < "${NATIVE_RUNTIME_DIR}amdgpu_rocdl_bitcode/rocdl.${i}.bc" > "${INITMOD}"
+                     COMMENT "Building initial module amdgpu_${i}..."
                      VERBATIM)
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()

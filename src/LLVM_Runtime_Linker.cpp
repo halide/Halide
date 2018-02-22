@@ -136,6 +136,7 @@ DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(amdgpu_dev)
 
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
@@ -179,6 +180,11 @@ DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif  // WITH_PTX
+
+#ifdef WITH_AMDGPU
+DECLARE_LL_INITMOD(amdgpu_gfx900)
+DECLARE_LL_INITMOD(amdgpu_gfx803)
+#endif  // WITH_AMDGPU
 
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx2)
@@ -978,6 +984,61 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     return std::move(modules[0]);
 }
 #endif
+
+#ifdef WITH_AMDGPU
+std::unique_ptr<llvm::Module> get_initial_module_for_amdgpu_device(Target target, llvm::LLVMContext *c) {
+    std::vector<std::unique_ptr<llvm::Module>> modules;
+    modules.push_back(get_initmod_amdgpu_dev_ll(c));
+
+    std::unique_ptr<llvm::Module> module;
+
+    // This table is based on the guidance at:
+    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
+    if (target.has_feature(Target::AMDGPUGFX900)) {
+        module = get_initmod_amdgpu_gfx900_ll(c);
+    } else {
+        module = get_initmod_amdgpu_gfx900_ll(c); // TODO convert to gfx803
+    }
+    modules.push_back(std::move(module));
+
+    link_modules(modules, target);
+
+    // For now, the PTX backend does not handle calling functions. So mark all functions
+    // AvailableExternally to ensure they are inlined or deleted.
+    for (llvm::Module::iterator iter = modules[0]->begin(); iter != modules[0]->end(); iter++) {
+        llvm::Function &f = *iter;
+
+        // This is intended to set all definitions (not extern declarations)
+        // to "available externally" which should guarantee they do not exist
+        // after the resulting module is finalized to code. That is they must
+        // be inlined to be used.
+        //
+        // However libdevice has a few routines that are marked
+        // "noinline" which must either be changed to alow inlining or
+        // preserved in generated code. This preserves the intent of
+        // keeping these routines out-of-line and hence called by
+        // not marking them AvailableExternally.
+
+        if (!f.isDeclaration() && !f.hasFnAttribute(llvm::Attribute::NoInline)) {
+            f.setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
+        }
+
+        // Also mark the halide_gpu_thread_barrier as noduplicate.
+        if (f.getName() == "halide_gpu_thread_barrier") {
+            f.addFnAttr(llvm::Attribute::NoDuplicate);
+        }
+    }
+
+    llvm::Triple triple("amdgcn-amd-amdhsa-amdgizcl");
+    modules[0]->setTargetTriple(triple.str());
+
+    llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
+    modules[0]->setDataLayout(dl);
+
+    return std::move(modules[0]);
+}
+#endif
+
 
 void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
                            const std::vector<uint8_t> &bitcode, const std::string &name) {

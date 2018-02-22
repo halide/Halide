@@ -25,10 +25,9 @@ using namespace llvm;
 
 CodeGen_AMDGPU_Dev::CodeGen_AMDGPU_Dev(Target host) : CodeGen_LLVM(host) {
     #if !(WITH_AMDGPU)
-    user_error << "ptx not enabled for this build of Halide.\n";
+    user_error << "amdgpu not enabled for this build of Halide.\n";
     #endif
-    user_assert(llvm_AMDGPU_enabled) << "llvm build not configured with nvptx target enabled\n.";
-
+    user_assert(llvm_AMDGPU_enabled) << "llvm build not configured with amdgpu target enabled\n.";
     context = new llvm::LLVMContext();
 }
 
@@ -45,9 +44,10 @@ CodeGen_AMDGPU_Dev::~CodeGen_AMDGPU_Dev() {
 void CodeGen_AMDGPU_Dev::add_kernel(Stmt stmt,
                                  const std::string &name,
                                  const std::vector<DeviceArgument> &args) {
+    debug(1)<<"Calling CodeGen_AMDGPU_Dev::add_kernel"<<"\n";
+
     internal_assert(module != nullptr);
 
-    debug(2) << "In CodeGen_AMDGPU_Dev::add_kernel\n";
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -147,13 +147,14 @@ void CodeGen_AMDGPU_Dev::add_kernel(Stmt stmt,
 
 void CodeGen_AMDGPU_Dev::init_module() {
     init_context();
-
+    debug(1) << "Inside CodeGen_AMDGPU_Dev::init_module"<<"\n";
     #ifdef WITH_AMDGPU
-    module = get_initial_module_for_ptx_device(target, context);
+    module = get_initial_module_for_amdgpu_device(target, context);
     #endif
 }
 
 string CodeGen_AMDGPU_Dev::simt_intrinsic(const string &name) {
+    debug(1) << "Inside CodeGen_AMDGPU_Dev::simt_intrinsic"<<"\n";
     if (ends_with(name, ".__thread_id_x")) {
         return "llvm.amdgcn.workitem.id.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -176,6 +177,7 @@ string CodeGen_AMDGPU_Dev::simt_intrinsic(const string &name) {
 }
 
 void CodeGen_AMDGPU_Dev::visit(const For *loop) {
+    debug(1) << "Inside CodeGen_AMDGPU_Dev::visit"<<"\n";
     if (is_gpu_var(loop->name)) {
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         internal_assert(is_zero(loop->min));
@@ -188,6 +190,7 @@ void CodeGen_AMDGPU_Dev::visit(const For *loop) {
 }
 
 void CodeGen_AMDGPU_Dev::visit(const Allocate *alloc) {
+    debug(1) << "Inside CodeGen_AMDGPU_Dev::visit"<<"\n";
     user_assert(!alloc->new_expr.defined()) << "Allocate node inside AMDGPU kernel has custom new expression.\n" <<
         "(Memoization is not supported inside GPU kernels at present.)\n";
     if (alloc->name == "__shared") {
