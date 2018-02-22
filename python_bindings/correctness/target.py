@@ -11,7 +11,7 @@ def test_target():
     t1 = hl.Target()
     ts = t1.to_string()
     assert ts == "arch_unknown-0-os_unknown"
-    assert hl.validate_target_string(ts)
+    assert hl.Target.validate_target_string(ts)
     t2 = hl.Target(ts)
 
     # equality
@@ -29,13 +29,13 @@ def test_target():
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [ hl.TargetFeature.SSE41 ])
     ts = t1.to_string()
     assert ts == "x86-32-linux-sse41"
-    assert hl.validate_target_string(ts)
+    assert hl.Target.validate_target_string(ts)
 
     # Full specification (without features) round-trip:
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32)
     ts = t1.to_string()
     assert ts == "x86-32-linux"
-    assert hl.validate_target_string(ts)
+    assert hl.Target.validate_target_string(ts)
 
     # Full specification round-trip, crazy features
     t1 = hl.Target(hl.TargetOS.Android, hl.TargetArch.ARM, 32,
@@ -44,26 +44,26 @@ def test_target():
                  hl.TargetFeature.Debug])
     ts = t1.to_string()
     assert ts == "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-sse41"
-    assert hl.validate_target_string(ts)
+    assert hl.Target.validate_target_string(ts)
 
     # Expected failures:
     ts = "host-unknowntoken"
-    assert not hl.validate_target_string(ts)
+    assert not hl.Target.validate_target_string(ts)
 
     ts = "x86-23"
-    assert not hl.validate_target_string(ts)
+    assert not hl.Target.validate_target_string(ts)
 
     # bits == 0 is allowed only if arch_unknown and os_unknown are specified,
     # and no features are set
     ts = "x86-0"
-    assert not hl.validate_target_string(ts)
+    assert not hl.Target.validate_target_string(ts)
 
     ts = "0-arch_unknown-os_unknown-sse41"
-    assert not hl.validate_target_string(ts)
+    assert not hl.Target.validate_target_string(ts)
 
     # "host" is only supported as the first token
     ts = "opencl-host"
-    assert not hl.validate_target_string(ts)
+    assert not hl.Target.validate_target_string(ts)
 
     # set_feature
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41])
@@ -144,7 +144,7 @@ def test_target():
     try:
         t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [ "this is a string" ])
     except TypeError as e:
-        assert str(e) == "No registered converter was able to produce a C++ rvalue of type Halide::Target::Feature from this Python object of type str"
+        assert "incompatible constructor arguments" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 

@@ -33,8 +33,6 @@ def main():
     assert os.path.isfile("f_all.h")
     assert os.path.isfile("f_all.o")
 
-    print("Success!")
-
     return 0
 
 if __name__ == "__main__":

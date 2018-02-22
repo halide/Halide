@@ -41,12 +41,12 @@ struct LoopLevelContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
+RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
+void destroy<LoopLevelContents>(const LoopLevelContents *p) {
     delete p;
 }
 
@@ -213,10 +213,11 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     bool memoized;
+    MemoryType memory_type;
 
     FuncScheduleContents() :
         store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-        memoized(false) {};
+        memoized(false), memory_type(MemoryType::Auto) {};
 
     // Pass an IRMutator2 through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator2 *mutator) {
@@ -252,12 +253,12 @@ struct FuncScheduleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
+RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
+void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
 
@@ -303,12 +304,12 @@ struct StageScheduleContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
+RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
+void destroy<StageScheduleContents>(const StageScheduleContents *p) {
     delete p;
 }
 
@@ -326,6 +327,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
     copy.contents->memoized = contents->memoized;
+    copy.contents->memory_type = contents->memory_type;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -343,6 +345,14 @@ bool &FuncSchedule::memoized() {
 
 bool FuncSchedule::memoized() const {
     return contents->memoized;
+}
+
+MemoryType FuncSchedule::memory_type() const {
+    return contents->memory_type;
+}
+
+MemoryType &FuncSchedule::memory_type() {
+    return contents->memory_type;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

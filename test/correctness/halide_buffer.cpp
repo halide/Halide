@@ -144,6 +144,29 @@ int main(int argc, char **argv) {
         // assert(d.all_equal(42));
     }
 
+    {
+        int data[4] = { 42, 42, 42, 42 };
+
+        // Check that copy() works with const
+        Buffer<const int> a(data, 2, 2);
+
+        Buffer<const int> b = a.copy();
+        assert(b.all_equal(42));
+    }
+
+    {
+        // Check the fields get zero-initialized with the default constructor.
+        uint8_t buf[sizeof(Halide::Runtime::Buffer<float>)];
+        memset(&buf, 1, sizeof(buf));
+        new (&buf) Halide::Runtime::Buffer<float>();
+        // The dim and type fields should be non-zero, but the other
+        // fields should all be zero. We'll just check the ones after
+        // the halide_buffer_t.
+        for (size_t i = sizeof(halide_buffer_t); i < sizeof(buf); i++) {
+            assert(!buf[i]);
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

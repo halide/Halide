@@ -557,7 +557,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 
 namespace Internal {
 
-EXPORT void target_test() {
+void target_test() {
     Target t;
     for (const auto &feature : feature_name_map) {
         t.set_feature(feature.second);

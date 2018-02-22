@@ -64,6 +64,8 @@ WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+# AMDGPU target is WIP
+WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
@@ -73,6 +75,7 @@ else
     WITH_INTROSPECTION ?= not-empty
 endif
 WITH_EXCEPTIONS ?=
+WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
@@ -94,6 +97,10 @@ PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
 
+AMDGPU_CXX_FLAGS=$(if $(WITH_AMDGPU), -DWITH_AMDGPU=1, )
+AMDGPU_LLVM_CONFIG_LIB=$(if $(WITH_AMDGPU), amdgpu, )
+# TODO add bitcode files
+
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
@@ -111,8 +118,12 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON=1, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
+LLVM_HAS_NO_RTTI = $(findstring -fno-rtti, $(LLVM_CXX_FLAGS))
+WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
+RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
+
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
-CXX_FLAGS = $(CXX_WARNING_FLAGS) -fno-rtti -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE -fvisibility=hidden
+CXX_FLAGS = $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
 
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -127,6 +138,7 @@ CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
+CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -141,7 +153,14 @@ print-%:
 # support.
 LLVM_LINK_STATIC_FLAG = $(shell $(LLVM_CONFIG) --link-static 2>/dev/null && echo " --link-static")
 
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
+
+# Add a rpath to the llvm used for linking, in case multiple llvms are
+# installed. Bakes a path on the build system into the .so, so don't
+# use this config for distributions.
+LLVM_SHARED_LIBS = -Wl,-rpath=$(LLVM_LIBDIR) -L $(LLVM_LIBDIR) -lLLVM
+
+LLVM_LIBS_FOR_SHARED_LIBHALIDE=$(if $(WITH_LLVM_INSIDE_SHARED_LIBHALIDE),$(LLVM_STATIC_LIBS),$(LLVM_SHARED_LIBS))
 
 LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 
@@ -165,6 +184,10 @@ endif
 
 ifeq ($(UNAME), Linux)
 TEST_LD_FLAGS += -rdynamic -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
+endif
+
+ifeq ($(WITH_LLVM_INSIDE_SHARED_LIBHALIDE), )
+TEST_LD_FLAGS += -Wl,--rpath=$(LLVM_LIBDIR)
 endif
 
 ifneq ($(WITH_PTX), )
@@ -256,6 +279,15 @@ IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 SRC_DIR  = $(ROOT_DIR)/src
+
+# Allow the user to specify PYBIND11_PATH as a relative path,
+# but canonicalize it to an absolute path since the sub-makefile
+# we call may have a different working dir.
+ifdef PYBIND11_PATH
+	REAL_PYBIND11_PATH = $(realpath $(PYBIND11_PATH))
+else
+	REAL_PYBIND11_PATH = /PYBIND11_PATH/is/undefined
+endif
 
 TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 
@@ -357,6 +389,7 @@ SOURCE_FILES = \
   LLVM_Runtime_Linker.cpp \
   LoopCarry.cpp \
   Lower.cpp \
+  LowerWarpShuffles.cpp \
   MatlabWrapper.cpp \
   Memoization.cpp \
   Module.cpp \
@@ -433,6 +466,7 @@ HEADER_FILES = \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \
   CodeGen_GPU_Host.h \
+  CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
@@ -500,6 +534,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
   Lower.h \
+  LowerWarpShuffles.h \
   MainPage.h \
   MatlabWrapper.h \
   Memoization.h \
@@ -717,7 +752,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LD_FLAGS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_LD_FLAGS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -753,7 +788,7 @@ RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 
-RUNTIME_CXX_FLAGS = -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables
+RUNTIME_CXX_FLAGS = -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic
 $(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
@@ -1003,7 +1038,7 @@ $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_in
 	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(ROOT_DIR)/src/runtime -o $@
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
-# this test should be usable without either. 
+# this test should be usable without either.
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -o $@
 
@@ -1384,8 +1419,8 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # The values in MachineParams are:
-# - the maximum level of parallelism available, 
-# - the size of the last-level cache (in KB), 
+# - the maximum level of parallelism available,
+# - the size of the last-level cache (in KB),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
@@ -1532,13 +1567,25 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	CC=`echo ${CC} | sed 's/ccache //'` \
 	bazel build --verbose_failures :all
 
+.PHONY: test_python2
+test_python2: distrib
+	make -C $(ROOT_DIR)/python_bindings \
+		-f $(ROOT_DIR)/python_bindings/Makefile \
+		test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
+		PYTHON=python \
+		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
+
 .PHONY: test_python
 test_python: distrib
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python_bindings
+		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		PYTHON=python3 \
+		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
@@ -1591,7 +1638,7 @@ LLVM_OK=yes
 endif
 
 ifneq ($(LLVM_OK), )
-$(BUILD_DIR)/llvm_ok:
+$(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
@@ -1600,6 +1647,26 @@ $(BUILD_DIR)/llvm_ok:
 	@echo "Can't find llvm or version of llvm too old (we need 3.7 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
+	@exit 1
+endif
+
+ifneq ($(WITH_RTTI), )
+ifneq ($(LLVM_HAS_NO_RTTI), )
+else
+RTTI_OK=yes # Enabled in Halide and LLVM
+endif
+else
+RTTI_OK=yes # Enabled in LLVM but not in Halide
+endif
+
+ifneq ($(RTTI_OK), )
+$(BUILD_DIR)/rtti_ok:
+	mkdir -p $(BUILD_DIR)
+	touch $(BUILD_DIR)/rtti_ok
+else
+$(BUILD_DIR)/rtti_ok:
+	@echo "Can't enable RTTI - llvm was compiled without it."
+	@echo "LLVM c++ flags: " $(LLVM_CXX_FLAGS)
 	@exit 1
 endif
 
@@ -1656,7 +1723,7 @@ install_qc: install $(HEXAGON_RUNTIME_LIBS)
 # we include in our distribution.
 $(BUILD_DIR)/halide_config.%: $(ROOT_DIR)/tools/halide_config.%.tpl
 	@mkdir -p $(@D)
-	cat $< | sed -e 's/$${LLVM_SYSTEM_LIBS}/${LLVM_SYSTEM_LIBS}/g' > $@
+	cat $< | sed -e 's/@HALIDE_SYSTEM_LIBS_RAW@/${LLVM_SYSTEM_LIBS}/g' > $@
 
 $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(BIN_DIR)/libHalide.$(SHARED_EXT) \

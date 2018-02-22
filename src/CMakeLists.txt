@@ -263,6 +263,7 @@ set(HEADER_FILES
   CodeGen_C.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
+  CodeGen_Internal.h
   CodeGen_LLVM.h
   CodeGen_MIPS.h
   CodeGen_OpenCL_Dev.h
@@ -330,6 +331,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   LoopCarry.h
   Lower.h
+  LowerWarpShuffles.h
   MainPage.h
   MatlabWrapper.h
   Memoization.h
@@ -397,6 +399,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   DEPENDS build_halide_h ${HEADER_FILES})
 add_custom_target(
     HalideIncludes
+    ALL
     DEPENDS "${CMAKE_BINARY_DIR}/include/Halide.h")
 
 foreach (i ${RUNTIME_HEADER_FILES})
@@ -483,6 +486,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LICM.cpp
   LoopCarry.cpp
   Lower.cpp
+  LowerWarpShuffles.cpp
   MatlabWrapper.cpp
   Memoization.cpp
   Module.cpp
@@ -541,9 +545,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 )
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
-# Default to not exporting symbols from libHalide
-set_target_properties(Halide PROPERTIES CXX_VISIBILITY_PRESET hidden)
-set_target_properties(Halide PROPERTIES VISIBILITY_INLINES_HIDDEN 1)
 # Ensure that these tools are build first
 add_dependencies(Halide
   binary2cpp
@@ -601,6 +602,11 @@ if (TARGET_PTX)
   list(APPEND LLVM_COMPONENTS NVPTX)
 endif()
 
+if (TARGET_AMDGPU)
+  target_compile_definitions(Halide PRIVATE "-DWITH_AMDGPU=1")
+  list(APPEND LLVM_COMPONENTS AMDGPU)
+endif()
+
 if (TARGET_OPENCL)
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENCL=1")
 endif()
@@ -642,7 +648,13 @@ if (MSVC)
     target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
   endif()
 else()
-  target_compile_options(Halide PUBLIC "-fno-rtti")
+  if (NOT HALIDE_ENABLE_RTTI)
+    if (NOT MSVC)
+      target_compile_options(Halide PUBLIC "-fno-rtti")
+    else()
+      target_compile_options(Halide PUBLIC "/GR-")
+    endif()
+  endif()
 endif()
 
 # Get the LLVM libraries we need
@@ -663,4 +675,12 @@ if (NOT MSVC)
   string(REPLACE "\n" "" EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
+endif()
+
+install(TARGETS Halide
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION bin
+        ARCHIVE DESTINATION lib)
+if (APPLE AND "${HALIDE_LIBRARY_TYPE}" STREQUAL "SHARED")
+  install(CODE "execute_process(COMMAND install_name_tool $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide> $<INSTALL_PREFIX>/bin/$<TARGET_FILE_NAME:Halide>)")
 endif()

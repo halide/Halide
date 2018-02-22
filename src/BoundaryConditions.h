@@ -81,10 +81,10 @@ inline NO_INLINE Func func_like_to_func(const T &func_like) {
  *  to bound.
  */
 // @{
-EXPORT Func constant_exterior(const Func &source, Tuple value,
-                              const std::vector<std::pair<Expr, Expr>> &bounds);
-EXPORT Func constant_exterior(const Func &source, Expr value,
-                              const std::vector<std::pair<Expr, Expr>> &bounds);
+Func constant_exterior(const Func &source, Tuple value,
+                       const std::vector<std::pair<Expr, Expr>> &bounds);
+Func constant_exterior(const Func &source, Expr value,
+                       const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
 inline NO_INLINE Func constant_exterior(const T &func_like, Tuple value) {
@@ -129,8 +129,8 @@ inline NO_INLINE Func constant_exterior(const T &func_like, Expr value,
  *  to bound.
  */
 // @{
-EXPORT Func repeat_edge(const Func &source,
-                        const std::vector<std::pair<Expr, Expr>> &bounds);
+Func repeat_edge(const Func &source,
+                 const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
 inline NO_INLINE Func repeat_edge(const T &func_like) {
@@ -165,8 +165,8 @@ inline NO_INLINE Func repeat_edge(const T &func_like, Bounds&&... bounds) {
  *  to bound.
  */
 // @{
-EXPORT Func repeat_image(const Func &source,
-                         const std::vector<std::pair<Expr, Expr>> &bounds);
+Func repeat_image(const Func &source,
+                  const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
 inline NO_INLINE Func repeat_image(const T &func_like) {
@@ -200,8 +200,8 @@ inline NO_INLINE Func repeat_image(const T &func_like, Bounds&&... bounds) {
  *  to bound.
  */
 // @{
-EXPORT Func mirror_image(const Func &source,
-                         const std::vector<std::pair<Expr, Expr>> &bounds);
+Func mirror_image(const Func &source,
+                  const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
 inline NO_INLINE Func mirror_image(const T &func_like) {
@@ -238,8 +238,8 @@ inline NO_INLINE Func mirror_image(const T &func_like, Bounds&&... bounds) {
  *  to bound.
  */
 // @{
-EXPORT Func mirror_interior(const Func &source,
-                            const std::vector<std::pair<Expr, Expr>> &bounds);
+Func mirror_interior(const Func &source,
+                     const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
 inline NO_INLINE Func mirror_interior(const T &func_like) {

@@ -404,7 +404,7 @@ void StubEmitter::emit() {
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
-        if (output->is_array()) getter = "get_output_vector";
+        if (output->is_array()) getter = "get_array_output";
         else if (c_type == "Func") getter = "get_output";
         else getter = "get_output_buffer<" + c_type + ">";
         out_info.push_back({
@@ -637,14 +637,38 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
+                             GeneratorFactory generator_factory)
+    : generator(generator_factory(context)) {}
+
+GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
-    : generator(generator_factory(context)) {
+    : GeneratorStub(context, generator_factory) {
+    generate(generator_params, inputs);
+}
+
+void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
+                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
     generator->call_generate();
     generator->call_schedule();
+}
+
+GeneratorStub::Names GeneratorStub::get_names() const {
+    auto &pi = generator->param_info();
+    Names names;
+    for (auto o : pi.generator_params) {
+        names.generator_params.push_back(o->name);
+    }
+    for (auto o : pi.filter_inputs) {
+        names.inputs.push_back(o->name());
+    }
+    for (auto o : pi.filter_outputs) {
+        names.outputs.push_back(o->name());
+    }
+    return names;
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {
@@ -984,13 +1008,13 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
     std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::FilterParam);
     for (auto v : vf) {
-        auto param = static_cast<Parameter *>(v);
-        internal_assert(param != nullptr);
-        user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
-        user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-        user_assert(!names.count(param->name())) << "Duplicate Param name: " << param->name();
-        names.insert(param->name());
-        filter_params.push_back(param);
+        auto rp = static_cast<RegisteredParameter *>(v);
+        internal_assert(rp != nullptr && rp->defined());
+        user_assert(rp->is_explicit_name()) << "Params in Generators must have explicit names: " << rp->name();
+        user_assert(is_valid_name(rp->name())) << "Invalid Param name: " << rp->name();
+        user_assert(!names.count(rp->name())) << "Duplicate Param name: " << rp->name();
+        names.insert(rp->name());
+        filter_params.push_back(rp);
     }
 
     const auto add_synthetic_params = [this](GIOBase *gio) {
@@ -1077,51 +1101,52 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-Func GeneratorBase::get_first_output() {
-    ParamInfo &pi = param_info();
-    return get_output(pi.filter_outputs[0]->name());
-}
-
 Func GeneratorBase::get_output(const std::string &n) {
     check_min_phase(GenerateCalled);
-    // There usually are very few outputs, so a linear search is fine
-    ParamInfo &pi = param_info();
-    for (auto output : pi.filter_outputs) {
-        if (output->name() == n) {
-            user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
-            user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_output_vector()\n";
-            Func f = output->funcs().at(0);
-            user_assert(f.defined()) << "Output " << n << " was not defined.\n";
-            return f;
-        }
-    }
-    internal_error << "Output " << n << " not found.\n";
-    return Func();
+    auto *output = find_output_by_name(n);
+    user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
+    user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_array_output()\n";
+    Func f = output->funcs().at(0);
+    user_assert(f.defined()) << "Output " << n << " was not defined.\n";
+    return f;
 }
 
-std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
+std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
     check_min_phase(GenerateCalled);
-    // There usually are very few outputs, so a linear search is fine
-    ParamInfo &pi = param_info();
-    for (auto output : pi.filter_outputs) {
-        if (output->name() == n) {
-            user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
-            for (const auto &f : output->funcs()) {
-                user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
-            }
-            return output->funcs();
-        }
+    auto *output = find_output_by_name(n);
+    user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
+    for (const auto &f : output->funcs()) {
+        user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
     }
-    internal_error << "Output " << n << " not found.\n";
-    return {};
+    return output->funcs();
 }
 
-Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const std::string &name) {
+std::vector<std::vector<Func>> GeneratorBase::get_all_outputs() {
+    std::vector<std::vector<Func>> v;
+    check_min_phase(GenerateCalled);
     ParamInfo &pi = param_info();
-    auto it = pi.generator_params_by_name.find(name);
-    user_assert(it != pi.generator_params_by_name.end()) << "Generator has no GeneratorParam named: " << name << "\n";
-    internal_assert(it->second != nullptr);
-    return *it->second;
+    for (auto output : pi.filter_outputs) {
+        const std::string &name = output->name();
+        if (output->is_array()) {
+            v.push_back(get_array_output(name));
+        } else {
+            v.push_back(std::vector<Func>{get_output(name)});
+        }
+    }
+    return v;
+}
+
+// Find output by name. If not found, assert-fail. Never returns null.
+GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
+    // There usually are very few outputs, so a linear search is fine
+    ParamInfo &pi = param_info();
+    for (GeneratorOutputBase *output : pi.filter_outputs) {
+        if (output->name() == name) {
+            return output;
+        }
+    }
+    internal_error << "Output " << name << " not found.";
+    return nullptr;  // not reached
 }
 
 void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
@@ -1318,8 +1343,8 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
     ParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
-    for (auto param : pi.filter_params) {
-        filter_arguments.push_back(to_argument(*param));
+    for (auto rp : pi.filter_params) {
+        filter_arguments.push_back(to_argument(*rp));
     }
     for (auto input : pi.filter_inputs) {
         for (const auto &p : input->parameters_) {
@@ -1385,8 +1410,8 @@ GIOBase::GIOBase(size_t array_size,
                  const std::string &name,
                  IOKind kind,
                  const std::vector<Type> &types,
-                 int dimensions)
-    : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dimensions) {
+                 int dims)
+    : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
 }
 
 GIOBase::~GIOBase() {
@@ -1568,7 +1593,7 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
-        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name, true, false);
+        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name, true);
         auto &p = parameters_[i];
         if (kind() != IOKind::Scalar) {
             internal_assert(dims() == p.dimensions());
@@ -1596,7 +1621,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
             auto f = in.func();
             check_matching_type_and_dim(f.output_types(), f.dimensions());
             funcs_.push_back(f);
-            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true, false);
+            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true);
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
             check_matching_type_and_dim({p.type()}, p.dimensions());
@@ -1606,7 +1631,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
             auto e = in.expr();
             check_matching_type_and_dim({e.type()}, 0);
             exprs_.push_back(e);
-            parameters_.emplace_back(e.type(), false, 0, array_name(i), true, false);
+            parameters_.emplace_back(e.type(), false, 0, array_name(i), true);
         }
     }
 

@@ -47,8 +47,7 @@ class AllocationInference : public IRMutator2 {
         }
 
         Stmt new_body = mutate(op->body);
-
-        Stmt stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
+        Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
 
         internal_assert(b.size() == op->bounds.size());
 

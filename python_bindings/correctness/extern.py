@@ -24,15 +24,10 @@ def test_extern():
 
     input = hl.ImageParam(hl.Float(64), 1, "input_data")
 
-    p1 = hl.ExternFuncArgument(input) # data
-    params = [p1]
-
-    output_types = hl.TypesVector()
-    output_types.append(hl.Int(32))
-
-    dimensionality = 1
-
     extern_name = "the_sort_func"
+    params = [hl.ExternFuncArgument(input)]
+    output_types = [hl.Int(32)]
+    dimensionality = 1
     sort_func.define_extern(extern_name, params, output_types, dimensionality)
 
     try:
@@ -67,7 +62,7 @@ def test_extern():
     input.set(data)
     sort_func.realize(output_data)
 
-    assert numpy.isclose(expected_result, output_data)
+    assert np.isclose(expected_result, output_data)
 
     return
 

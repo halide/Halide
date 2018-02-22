@@ -1,4 +1,10 @@
-list(APPEND VARIANTS 
+if(WIN32)
+    # Building this app for x86 in VS seems to have issues
+    # https://github.com/halide/Halide/pull/2740
+    return()
+endif()
+
+list(APPEND VARIANTS
     box_float32_up
     box_float32_down
     box_uint16_up

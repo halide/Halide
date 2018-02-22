@@ -444,7 +444,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                             }
                             Stmt init_min = Store::make(dynamic_footprint, init_val, 0, Parameter(), const_true());
                             stmt = Block::make(init_min, stmt);
-                            stmt = Allocate::make(dynamic_footprint, Int(32), {}, const_true(), stmt);
+                            stmt = Allocate::make(dynamic_footprint, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                         }
                         return;
                     } else {
@@ -508,7 +508,7 @@ class StorageFolding : public IRMutator {
         if (body.same_as(op->body)) {
             stmt = op;
         } else if (folder.dims_folded.empty()) {
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {
             Region bounds = op->bounds;
 
@@ -521,7 +521,7 @@ class StorageFolding : public IRMutator {
                 bounds[d] = Range(0, f);
             }
 
-            stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
         }
     }
 

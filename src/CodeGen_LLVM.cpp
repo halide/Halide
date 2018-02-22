@@ -3,28 +3,28 @@
 #include <sstream>
 #include <mutex>
 
-#include "IRPrinter.h"
 #include "CodeGen_LLVM.h"
-#include "CPlusPlusMangle.h"
-#include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
-#include "Simplify.h"
-#include "JITModule.h"
-#include "CodeGen_Internal.h"
-#include "Lerp.h"
-#include "Util.h"
-#include "LLVM_Runtime_Linker.h"
-#include "MatlabWrapper.h"
-#include "IntegerDivisionTable.h"
-#include "CSE.h"
-
-#include "CodeGen_X86.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_Hexagon.h"
+#include "CodeGen_Internal.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
-#include "CodeGen_Hexagon.h"
+#include "CodeGen_X86.h"
+#include "CPlusPlusMangle.h"
+#include "CSE.h"
+#include "Debug.h"
+#include "Deinterleave.h"
+#include "IntegerDivisionTable.h"
+#include "IRPrinter.h"
+#include "IROperator.h"
+#include "JITModule.h"
+#include "Lerp.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
+#include "MatlabWrapper.h"
+#include "Simplify.h"
+#include "Util.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -99,6 +99,12 @@ using std::stack;
 #define InitializeNVPTXTarget()       InitializeTarget(NVPTX)
 #define InitializeNVPTXAsmParser()    InitializeAsmParser(NVPTX)
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
+#endif
+
+#ifdef WITH_AMDGPU
+#define InitializeAMDGPUTarget()	InitializeTarget(AMDGPU)
+#define InitializeAMDGPUAsmParser()	InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUAsmPrinter()	InitializeAsmParser(AMDGPU)
 #endif
 
 #ifdef WITH_AARCH64
@@ -449,6 +455,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
+bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
 
 namespace {
 

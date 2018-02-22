@@ -384,7 +384,7 @@ private:
 
                 debug(3) << "Done guarding computation for " << op->name << "\n";
 
-                return Realize::make(op->name, op->types, op->bounds,
+                return Realize::make(op->name, op->types, op->memory_type, op->bounds,
                                      alloc_predicate, body);
             } else {
                 return IRMutator2::visit(op);
