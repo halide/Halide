@@ -32,6 +32,7 @@
 #include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
+#include "hashmap.h"
 
 template<uint64_t length = 1024, int type = BasicPrinter>
 class StackPrinter : public Printer<type, length>
@@ -125,7 +126,6 @@ static const char* d3d12typename(ID3D12T*)
 {
     return("UNKNOWN");
 }
-//
 #define D3D12TYPENAME(T) static const char* d3d12typename(T*) { return(#T); }
 // d3d12.h
 D3D12TYPENAME(ID3D12Device)
@@ -428,6 +428,7 @@ typedef d3d12_pipeline_state d3d12_compute_pipeline_state;
 
 struct d3d12_library
 {
+    HashMap<char*, struct d3d12_function*> cache;
     int source_length;
     char source [1];
 };
@@ -574,6 +575,7 @@ template<>
 void release_d3d12_object<d3d12_library>(d3d12_library* library)
 {
     TRACELOG;
+    library->cache.cleanup();
     free(library);
 }
 
@@ -1374,6 +1376,8 @@ static d3d12_library* new_library_with_source(d3d12_device* device, const char* 
     // the entry point is known since D3DCompile() requires the entry point name
     const int blocksize = sizeof(d3d12_library) + source_len;
     d3d12_library* library = (d3d12_library*)malloc(blocksize);
+    library->cache.inited = false;
+    library->cache.init();
     library->source_length = source_len;
     for (size_t i = 0; i < source_len; ++i)
     {
@@ -1400,14 +1404,25 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
 {
     TRACELOG;
 
-    // TODO(marcos): cache the compiled function in the library to reduce the
-    // overhead on 'halide_d3d12compute_run' (the only caller)
-
     // Round shared memory size up to a multiple of 16:
     shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
-
     TRACEPRINT("groupshared memory size: " << shared_mem_bytes << " bytes.\n");
     TRACEPRINT("numthreads( " << threadsX << ", " << threadsY << ", " << threadsZ << " )\n");
+
+    // consult the compiled function cache in the library first:
+    d3d12_function* function = NULL;
+    StackPrinter<256, StringStreamPrinter> key;
+    key << name << "_(" << threadsX << "," << threadsY << "," << threadsZ << ")_[" << shared_mem_bytes << "]";
+    halide_assert(user_context, (key.size() < 256));    // make sure key fits into the stream
+    int not_found = library->cache.lookup(user_context, (const uint8_t*)key.str(), key.size(), &function);
+    if (!not_found) {
+        halide_assert(user_context, (function != NULL));
+        TRACEPRINT("-- function has been found in the cache!\n");
+        return(function);
+    }
+
+    // function has not been cached yet: must compile it
+    halide_assert(user_context, (function == NULL));
 
     const char* source = library->source;
     int source_size = library->source_length;
@@ -1459,10 +1474,13 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
         Release_ID3D12Object(errorMsgs);
     }
 
-    d3d12_function* function = malloct<d3d12_function>();
+    function = malloct<d3d12_function>();
     function->shaderBlob = shaderBlob;
     function->rootSignature = rootSignature;
     rootSignature->AddRef();
+
+    // cache the compiled function for future use:
+    library->cache.store(user_context, (const uint8_t*)key.str(), key.size(), &function);
 
     return(function);
 }
