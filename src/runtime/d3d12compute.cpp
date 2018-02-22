@@ -48,24 +48,34 @@ private:
     char buffer [length];
 };
 
+// v trace and logging utilities for debugging v
+// ! definitely not super thread-safe stuff... !
+// in case there's no 'user_context' available in the scope of a function:
+static void* const user_context = NULL;
+//
 #if HALIDE_D3D12_TRACE
     #ifndef DEBUG_RUNTIME
     #define debug(x) Printer<BasicPrinter>(x)
     #endif//DEBUG_RUNTIME
+    static volatile int indent_lock = 0;
     static const char indent_pattern [] = "   ";
-    static char  indent [128] = { };
+    static char  indent [2048] = { };
     static int   indent_end   = 0;
     struct TraceLogScope
     {
         TraceLogScope()
         {
+            while (__sync_lock_test_and_set(&indent_lock, 1)) {}
             for (const char* p = indent_pattern; *p; ++p)
                 indent[indent_end++] = *p;
+            __sync_lock_release(&indent_lock);
         }
         ~TraceLogScope()
         {
+            while (__sync_lock_test_and_set(&indent_lock, 1)) {}
             for (const char* p = indent_pattern; *p; ++p)
                 indent[--indent_end] = '\0';
+            __sync_lock_release(&indent_lock);
         }
     };
     #define TRACEINDENT     ((const char*)indent)
@@ -76,8 +86,9 @@ private:
     #define TRACEPRINT(msg)
     #define TRACELOG
 #endif
-
+//
 #define ERRORLOG    error(user_context) << TRACEINDENT
+// ^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^
 
 #define d3d12_load_library          halide_load_library
 #define d3d12_get_library_symbol    halide_get_library_symbol
@@ -97,8 +108,6 @@ private:
 #define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
 #include "mini_d3d12.h"
 #include "d3d12_abi_patch_64.h"
-
-static void* const user_context = NULL;   // in case there's no user context available in the scope of a function
 
 #if HALIDE_D3D12_RENDERDOC && HALIDE_D3D12_DEBUG_LAYER
     #pragma message "RenderDoc might now work well along with the Dirct3D debug layers..."
@@ -2371,7 +2380,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     release_object(&args_buffer);
     release_object(pipeline_state);
     release_object(binder);
-    release_object(function);
+    //release_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
