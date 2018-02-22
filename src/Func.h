@@ -2038,6 +2038,8 @@ public:
     // @{
     Func &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
     Func &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
+    Func &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    Func &compute_with(LoopLevel loop_level, LoopAlignStrategy align = LoopAlignStrategy::Auto);
 
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :

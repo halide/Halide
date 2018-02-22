@@ -2369,6 +2369,18 @@ Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
     return *this;
 }
 
+Func &Func::compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    return *this;
+}
+
+Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    return *this;
+}
+
 Func &Func::compute_root() {
     return compute_at(LoopLevel::root());
 }
