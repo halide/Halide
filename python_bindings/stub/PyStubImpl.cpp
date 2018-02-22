@@ -65,6 +65,8 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
         return factory(context);
     });
     auto names = stub.get_names();
+    _halide_user_assert(!(names.inputs.empty() && names.outputs.empty()))
+        << "Generators that use ImageParam/Param (instead of Input<>) are not supported in the Python bindings.";
     std::map<std::string, size_t> input_name_to_pos;
     for (size_t i = 0; i < names.inputs.size(); ++i) {
         input_name_to_pos[names.inputs[i]] = i;
@@ -113,9 +115,8 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
             << "Generator Input named '" << names.inputs[i] << "' was not specified.";
     }
 
-    stub.generate(generator_params, inputs);
+    const std::vector<std::vector<Func>> outputs =  stub.generate(generator_params, inputs);
 
-    const std::vector<std::vector<Func>> outputs = stub.get_all_outputs();
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {
         py::object o;
