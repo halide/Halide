@@ -86,6 +86,12 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
         // vector. If not, stick it in the GeneratorParamsMap (if it's invalid,
         // an error will be reported further downstream).
         std::string key = kw.first.cast<std::string>();
+        // 'synthetic' GeneratorParams (e.g., some_buffer.type) have a period
+        // in the name, which isn't legal syntax for a Python named argument.
+        // Since GeneratorParams explicitly forbid a double-underscore as part of a legal
+        // name, we'll use that as a substitute, to allow these to be specified
+        // in Python (thus, "some_buffer.type" -> "some_buffer__type")
+        key = Internal::replace_all(key, "__", ".");
         py::handle value = kw.second;
         auto it = input_name_to_pos.find(key);
         if (it != input_name_to_pos.end()) {

@@ -9,7 +9,7 @@ from complexstub import generate as complexstub
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
     f.realize(b)
-    
+
     assert b[0, 0] == 3.5 + offset + 123
     assert b[0, 1] == 4.5 + offset + 123
     assert b[1, 0] == 4.5 + offset + 123
@@ -154,23 +154,23 @@ def test_complexstub():
     float_arg = 1.25
     int_arg = 33
 
-    r = complexstub(target, 
+    r = complexstub(target,
                     typed_buffer_input=constant_image,
                     untyped_buffer_input=constant_image,
                     simple_input=input,
                     array_input=[ input, input ],
                     float_arg=float_arg,
                     int_arg=[ int_arg, int_arg ],
-                    untyped_buffer_output_type="uint8",
+                    untyped_buffer_output__type="uint8",
                     vectorize=True)
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
-    (simple_output, 
-        tuple_output, 
-        array_output, 
-        typed_buffer_output, 
-        untyped_buffer_output, 
+    (simple_output,
+        tuple_output,
+        array_output,
+        typed_buffer_output,
+        untyped_buffer_output,
         static_compiled_buffer_output) = r
 
     b = simple_output.realize(32, 32, 3, target)
