@@ -131,7 +131,7 @@ WEAK bool HashMap::init(copy_value_func _copy_value, destroy_value_func _destroy
     kDefaultCacheSize   = 1 << 20;
     max_cache_size      = kDefaultCacheSize;
     current_cache_size  = 0;
-    for (int i = 0; i < kHashTableSize; ++i) {
+    for (size_t i = 0; i < kHashTableSize; ++i) {
         cache_entries[i] = NULL;
     }
     halide_assert(NULL, _copy_value);
