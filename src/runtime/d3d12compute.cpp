@@ -109,6 +109,8 @@ static void* const user_context = NULL;
 #include "mini_d3d12.h"
 #include "d3d12_abi_patch_64.h"
 
+#define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_COMPUTE
+
 #if HALIDE_D3D12_RENDERDOC && HALIDE_D3D12_DEBUG_LAYER
     #pragma message "RenderDoc might now work well along with the Dirct3D debug layers..."
 #endif
@@ -121,6 +123,9 @@ static void* const user_context = NULL;
 #define RENDERDOC_NO_STDINT
 #define RENDERDOC_AUTOINIT              (0)
 #include "renderdoc/RenderDocGlue.h"
+// RenderDoc can only intercept commands in the graphics queue:
+#undef  HALIDE_D3D12_COMMAND_LIST_TYPE
+#define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
 #endif
 
 template<typename T>
@@ -1090,8 +1095,7 @@ WEAK d3d12_command_queue* new_command_queue(d3d12_device* device)
     ID3D12CommandQueue* commandQueue = NULL;
     {
         D3D12_COMMAND_QUEUE_DESC cqDesc = { };
-            //cqDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
-            cqDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+            cqDesc.Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
             cqDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
             cqDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
             cqDesc.NodeMask = 0;    // 0, for single GPU operation
@@ -1159,7 +1163,7 @@ static d3d12_command_list* new_command_list(d3d12_device* device, d3d12_command_
 static d3d12_command_list* new_compute_command_list(d3d12_device* device, d3d12_command_allocator* allocator)
 {
     TRACELOG;
-    return new_command_list<D3D12_COMMAND_LIST_TYPE_COMPUTE>(device, allocator);
+    return new_command_list<HALIDE_D3D12_COMMAND_LIST_TYPE>(device, allocator);
 }
 
 static d3d12_copy_command_list* new_copy_command_list(d3d12_device* device, d3d12_command_allocator* allocator)
@@ -1980,10 +1984,8 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device* device, struc
     //d3d12_command_allocator* sync_command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_COPY>(device);
     //d3d12_copy_command_list* blitCmdList = new_copy_command_list(device, sync_command_allocator);
 
-    //d3d12_command_allocator* sync_command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_COMPUTE>(device);
-    //d3d12_compute_command_list* blitCmdList = new_compute_command_list(device, sync_command_allocator);
-    d3d12_command_allocator* sync_command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_DIRECT>(device);
-    d3d12_compute_command_list* blitCmdList = new_command_list<D3D12_COMMAND_LIST_TYPE_DIRECT>(device, sync_command_allocator);
+    d3d12_command_allocator* sync_command_allocator = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
+    d3d12_compute_command_list* blitCmdList = new_compute_command_list(device, sync_command_allocator);
     d3d12_buffer* dev_buffer = NULL;
     if (buffer != NULL)
     {
@@ -2232,15 +2234,13 @@ WEAK int halide_d3d12compute_run(void *user_context,
     StartCapturingGPUActivity();
     #endif
 
-    //d3d12_command_allocator* command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_COMPUTE>(device);
-    d3d12_command_allocator* command_allocator = new_command_allocator<D3D12_COMMAND_LIST_TYPE_DIRECT>(device);
+    d3d12_command_allocator* command_allocator = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
     if (command_allocator == 0) {
         ERRORLOG << "D3D12Compute: Could not create compute command allocator.\n";
         return -1;
     }
 
-    //d3d12_compute_command_list* cmdList = new_compute_command_list(device, command_allocator);
-    d3d12_compute_command_list* cmdList = new_command_list<D3D12_COMMAND_LIST_TYPE_DIRECT>(device, command_allocator);
+    d3d12_compute_command_list* cmdList = new_compute_command_list(device, command_allocator);
     if (cmdList == 0) {
         ERRORLOG << "D3D12Compute: Could not create compute command list.\n";
         return -1;
