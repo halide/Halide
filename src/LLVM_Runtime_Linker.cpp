@@ -76,6 +76,7 @@ DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
+DECLARE_CPP_INITMOD(amdgpu)
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
@@ -851,6 +852,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_cuda(c, bits_64, debug));
             }
         }
+        if (t.has_feature(Target::AMDGPUGFX900)) {
+            if(t.os == Target::Linux) {
+                modules.push_back(get_initmod_amdgpu(c, bits_64, debug));
+            }
+        }
         if (t.has_feature(Target::OpenCL)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
@@ -990,16 +996,16 @@ std::unique_ptr<llvm::Module> get_initial_module_for_amdgpu_device(Target target
     std::vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(get_initmod_amdgpu_dev_ll(c));
 
+/* TODO adityaatluri - enable linking bitcode files later
     std::unique_ptr<llvm::Module> module;
 
-    // This table is based on the guidance at:
-    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
     if (target.has_feature(Target::AMDGPUGFX900)) {
         module = get_initmod_amdgpu_gfx900_ll(c);
     } else {
         module = get_initmod_amdgpu_gfx900_ll(c); // TODO convert to gfx803
     }
     modules.push_back(std::move(module));
+*/
 
     link_modules(modules, target);
 

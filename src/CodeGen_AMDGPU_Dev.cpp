@@ -62,6 +62,7 @@ void CodeGen_AMDGPU_Dev::add_kernel(Stmt stmt,
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
+    function->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
     set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
@@ -290,8 +291,16 @@ vector<char> CodeGen_AMDGPU_Dev::compile_to_src() {
 
     llvm::Triple triple(module->getTargetTriple());
 
+/* TODO adityaatluri, remove after debugging
+    llvm::SmallString<8> datall;
+    llvm::raw_svector_ostream destll(datall);
+    destll.SetUnbuffered();
+    module->print(destll, nullptr);
+    std::string ll(datall.begin(), datall.end());
+*/
     // Allocate target machine
 
+    std::cout<<triple.str()<<std::endl;
     std::string err_str;
     const llvm::Target *target = TargetRegistry::lookupTarget(triple.str(), err_str);
     internal_assert(target) << err_str << "\n";
@@ -372,6 +381,8 @@ vector<char> CodeGen_AMDGPU_Dev::compile_to_src() {
     }
     #endif
 */
+
+
     PassManagerBuilder b;
     b.OptLevel = 3;
 #if LLVM_VERSION >= 50

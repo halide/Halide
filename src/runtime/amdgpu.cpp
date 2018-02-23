@@ -71,3 +71,41 @@ volatile int WEAK context_lock = 0;
 
 using namespace Halide::Runtime::Internal;
 using namespace Halide::Runtime::Internal::Amdgpu;
+
+extern "C" {
+WEAK int halide_amdgpu_acquire_context(void *user_context, hipCtx_t *ctx, bool create = true) {
+    // TODO: Should we use a more "assertive" assert? these asserts do
+    // not block execution on failure.
+    halide_assert(user_context, ctx != NULL);
+
+    // If the context has not been initialized, initialize it now.
+    halide_assert(user_context, &context != NULL);
+
+    hipCtx_t local_val;
+    __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+    if (local_val == NULL) {
+        if (!create) {
+            *ctx = NULL;
+            return 0;
+        }
+
+        {
+            ScopedSpinLock spinlock(&context_lock);
+
+            __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+            if (local_val == NULL) {
+                hipError_t error = create_amdgpu_context(user_context, &local_val);
+                if (error != hipSuccess) {
+                    __sync_lock_release(&context_lock);
+                    return error;
+                }
+            }
+            __atomic_store(&context, &local_val, __ATOMIC_RELEASE);
+        }  // spinlock
+    }
+
+    *ctx = local_val;
+    return 0;
+}
+
+}

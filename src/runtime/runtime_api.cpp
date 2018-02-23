@@ -1,5 +1,6 @@
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
+#include "HalideRuntimeAMDGPU.h"
 #include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeOpenCL.h"
@@ -33,6 +34,12 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_cuda_initialize_kernels,
     (void *)&halide_cuda_run,
     (void *)&halide_cuda_wrap_device_ptr,
+    (void *)&halide_amdgpu_detach_device_ptr,
+    (void *)&halide_amdgpu_device_interface,
+    (void *)&halide_amdgpu_get_device_ptr,
+    (void *)&halide_amdgpu_initialize_kernels,
+    (void *)&halide_amdgpu_run,
+    (void *)&halide_amdgpu_wrap_device_ptr,
     (void *)&halide_current_time_ns,
     (void *)&halide_debug_to_file,
     (void *)&halide_default_can_use_target_features,
