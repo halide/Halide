@@ -108,4 +108,8 @@ WEAK int halide_amdgpu_acquire_context(void *user_context, hipCtx_t *ctx, bool c
     return 0;
 }
 
+WEAK const halide_device_interface_t *halide_amdgpu_device_interface() {
+    return &amdgpu_device_interface;
+}
+
 }

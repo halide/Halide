@@ -101,12 +101,6 @@ using std::stack;
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
-#ifdef WITH_AMDGPU
-#define InitializeAMDGPUTarget()	InitializeTarget(AMDGPU)
-#define InitializeAMDGPUAsmParser()	InitializeAsmParser(AMDGPU)
-#define InitializeAMDGPUAsmPrinter()	InitializeAsmParser(AMDGPU)
-#endif
-
 #ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)

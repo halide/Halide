@@ -21,13 +21,31 @@ namespace Internal {
 using std::vector;
 using std::string;
 
+extern "C" void LLVMInitializeAMDGPUTargetInfo();
+extern "C" void LLVMInitializeAMDGPUTargetInfo();
+extern "C" void LLVMInitializeAMDGPUTarget();
+extern "C" void LLVMInitializeAMDGPUTargetMC();
+extern "C" void LLVMInitializeAMDGPUAsmParser();
+extern "C" void LLVMInitializeAMDGPUAsmPrinter();
+
 using namespace llvm;
 
 CodeGen_AMDGPU_Dev::CodeGen_AMDGPU_Dev(Target host) : CodeGen_LLVM(host) {
     #if !(WITH_AMDGPU)
     user_error << "amdgpu not enabled for this build of Halide.\n";
     #endif
+
+    #if WITH_AMDGPU
+    LLVMInitializeAMDGPUTargetInfo();
+    LLVMInitializeAMDGPUTarget();
+    LLVMInitializeAMDGPUTargetMC();
+    LLVMInitializeAMDGPUAsmParser();
+    LLVMInitializeAMDGPUAsmPrinter();
+    llvm_AMDGPU_enabled = true;
+    #endif
+
     user_assert(llvm_AMDGPU_enabled) << "llvm build not configured with amdgpu target enabled\n.";
+
     context = new llvm::LLVMContext();
 }
 
@@ -300,7 +318,6 @@ vector<char> CodeGen_AMDGPU_Dev::compile_to_src() {
 */
     // Allocate target machine
 
-    std::cout<<triple.str()<<std::endl;
     std::string err_str;
     const llvm::Target *target = TargetRegistry::lookupTarget(triple.str(), err_str);
     internal_assert(target) << err_str << "\n";
