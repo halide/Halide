@@ -165,8 +165,8 @@ Func Pipeline::get_func(size_t index) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
-    // Compute a realization order
-    vector<string> order = realization_order(contents->outputs, env).first;
+    // Compute a topological order
+    vector<string> order = topological_order(contents->outputs, env);
 
     user_assert(index < order.size())
         << "Index value passed is " << index << "; however, there are only "

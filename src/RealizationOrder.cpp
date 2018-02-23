@@ -316,5 +316,35 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     return {order, group_order};
 }
 
+vector<string> topological_order(const vector<Function> &outputs,
+                                 const map<string, Function> &env) {
+
+    // Make a DAG representing the pipeline. Each function maps to the
+    // set describing its inputs.
+    map<string, vector<string>> graph;
+
+    for (const pair<string, Function> &caller : env) {
+        vector<string> s;
+        for (const pair<string, Function> &callee : find_direct_calls(caller.second)) {
+            if ((callee.first != caller.first) && // Skip calls to itself (i.e. update stages)
+                (std::find(s.begin(), s.end(), callee.first) == s.end())) {
+                s.push_back(callee.first);
+            }
+        }
+        graph.emplace(caller.first, s);
+    }
+
+    vector<string> order;
+    set<string> result_set;
+    set<string> visited;
+    for (Function f : outputs) {
+        if (visited.find(f.name()) == visited.end()) {
+            realization_order_dfs(f.name(), graph, visited, result_set, order);
+        }
+    }
+
+    return order;
+}
+
 }
 }
