@@ -620,8 +620,9 @@ WEAK int wrap_buffer(struct halide_buffer_t* hbuffer, d3d12_buffer* dbuffer)
 
     halide_assert(user_context, (dbuffer->resource != NULL));
     halide_assert(user_context, (dbuffer->halide == NULL));
-    halide_assert(user_context, (hbuffer->device == 0));
 
+    dbuffer->offset = 0;
+    dbuffer->offsetInBytes = 0;
     dbuffer->sizeInBytes = hbuffer->size_in_bytes();
     dbuffer->elements = number_of_elements(hbuffer);
     dbuffer->format = FindD3D12FormatForHalideType(hbuffer->type);
@@ -649,7 +650,7 @@ WEAK int unwrap_buffer(struct halide_buffer_t* buf)
 
     d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
     halide_assert(user_context, (dbuffer->halide != NULL));
-    //halide_assert(user_context, (dbuffer->halide == buf));    // <- this assert is too strong for device_crop buffers...
+    //halide_assert(user_context, (dbuffer->halide == buf));    // <- this assert appears to be too strong for device_crop buffers...
     halide_assert(user_context, (buf->device_interface == &d3d12compute_device_interface));
 
     dbuffer->halide = NULL;
@@ -2481,34 +2482,26 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
     }
     //offset *= src->type.bytes();  // D3D12 buffer views are element-based, not byte-based
 
-    d3d12_buffer* new_handle = malloct<d3d12_buffer>();
-    if (new_handle == NULL) {
-        ERRORLOG << "halide_d3d12compute_device_crop: malloc failed making device handle.\n";
-        return halide_error_code_out_of_memory;
+    d3d12_buffer* old_handle = reinterpret_cast<d3d12_buffer*>(src->device);
+    ID3D12Resource* pResource = old_handle->resource;
+    uint64_t opaqued = reinterpret_cast<uint64_t>(pResource);
+
+    int ret = halide_d3d12compute_wrap_buffer(user_context, dst, opaqued);
+    if (ret != 0) {
+        ERRORLOG << "halide_d3d12compute_device_crop: failed when wrapping buffer.\n";
+        return ret;
     }
 
-    // TODO(marcos): can we leverage 'halide_d3d12compute_wrap_buffer()' here?
+    d3d12_buffer* new_handle = reinterpret_cast<d3d12_buffer*>(dst->device);
+    halide_assert(user_context, (new_handle != NULL));
+    halide_assert(user_context, (new_handle->halide == dst));
+    halide_assert(user_context, (src->device_interface == dst->device_interface));
 
-    d3d12_buffer* old_handle = reinterpret_cast<d3d12_buffer*>(src->device);
-    *new_handle = *old_handle;
-    new_handle->resource->AddRef();
-    new_handle->halide = dst;
     new_handle->offset = old_handle->offset + offset;
     new_handle->offsetInBytes = new_handle->offset * dst->type.bytes() * dst->type.lanes;
     // for some reason, 'dst->number_of_elements()' is always returning 1
     // later on when 'set_input()' is called...
     new_handle->elements = old_handle->elements - offset;
-    new_handle->sizeInBytes = dst->size_in_bytes();
-    new_handle->mallocd = true;
-    new_handle->staging = NULL;
-    //halide_assert(user_context, (NULL == new_handle->staging));
-    dst->device = reinterpret_cast<uint64_t>(new_handle);
-
-    halide_assert(user_context, (NULL == dst->device_interface));
-    dst->device_interface = src->device_interface;
-    // must increment the reference count for the module here because later on
-    // 'halide_d3d12compute_device_free' will end up indirectly decrementing it
-    dst->device_interface->impl->use_module();
 
     TRACEPRINT("--- "
         << (void*)old_handle  << " | " << (void*)old_handle->halide << " | "
