@@ -135,6 +135,13 @@ static T* malloct()
     return(p);
 }
 
+template<typename T>
+static T zero_struct()
+{
+    T zero = { };
+    return(zero);
+}
+
 template<typename ID3D12T>
 static const char* d3d12typename(ID3D12T*)
 {
@@ -373,11 +380,7 @@ struct halide_d3d12_deep_wrapper
 };
 
 struct halide_d3d12compute_device : public halide_d3d12_wrapper<ID3D12Device> { };
-struct halide_d3d12compute_command_queue : public halide_d3d12_deep_wrapper<ID3D12CommandQueue>
-{
-    ID3D12Fence* fence;
-    volatile uint64_t last_signal;
-};
+struct halide_d3d12compute_command_queue : public halide_d3d12_wrapper<ID3D12CommandQueue> { };
 
 namespace Halide { namespace Runtime { namespace Internal { namespace D3D12Compute {
 
@@ -491,16 +494,12 @@ static size_t number_of_elements(const halide_buffer_t* buffer)
     return(elements);
 }
 
-WEAK int wrap_buffer(void* user_context, struct halide_buffer_t* buf, d3d12_buffer* d3d12_buf)
-{
-    TRACELOG;
-    uint64_t raw = reinterpret_cast<uint64_t>(d3d12_buf);
-    return( halide_d3d12compute_wrap_buffer(user_context, buf, raw) );
-}
-
 WEAK d3d12_device* device = NULL;
 WEAK d3d12_command_queue* queue = NULL;
+WEAK ID3D12Fence* queue_fence = NULL;
+WEAK volatile uint64_t queue_last_signal = 0;
 WEAK ID3D12RootSignature* rootSignature = NULL;
+
 
 WEAK d3d12_buffer upload   = { };   // staging buffer to transfer data to the device
 WEAK d3d12_buffer readback = { };   // staging buffer to retrieve data from the device
@@ -547,9 +546,9 @@ template<>
 void release_d3d12_object<d3d12_command_queue>(d3d12_command_queue* queue)
 {
     TRACELOG;
-    Release_ID3D12Object(queue->p);
-    Release_ID3D12Object(queue->fence);
-    free(queue);
+    ID3D12CommandQueue* p = (*queue);
+    Release_ID3D12Object(p);
+    Release_ID3D12Object(queue_fence);
 }
 
 template<>
@@ -608,6 +607,56 @@ void release_d3d12_object<d3d12_compute_pipeline_state>(d3d12_compute_pipeline_s
     TRACELOG;
     ID3D12PipelineState* p = *(pso);
     Release_ID3D12Object(p);
+}
+
+extern WEAK halide_device_interface_t d3d12compute_device_interface;
+
+WEAK int wrap_buffer(struct halide_buffer_t* hbuffer, d3d12_buffer* dbuffer)
+{
+    halide_assert(user_context, (hbuffer->device == 0));
+    if (hbuffer->device != 0) {
+        return -2;
+    }
+
+    halide_assert(user_context, (dbuffer->resource != NULL));
+    halide_assert(user_context, (dbuffer->halide == NULL));
+    halide_assert(user_context, (hbuffer->device == 0));
+
+    dbuffer->sizeInBytes = hbuffer->size_in_bytes();
+    dbuffer->elements = number_of_elements(hbuffer);
+    dbuffer->format = FindD3D12FormatForHalideType(hbuffer->type);
+    if (DXGI_FORMAT_UNKNOWN == dbuffer->format) {
+        ERRORLOG << "unsupported buffer element type: " << hbuffer->type << "\n";
+        return -3;
+    }
+
+    dbuffer->halide = hbuffer;
+    hbuffer->device = reinterpret_cast<uint64_t>(dbuffer);
+    hbuffer->device_interface = &d3d12compute_device_interface;
+    hbuffer->device_interface->impl->use_module();
+
+    return 0;
+}
+
+WEAK int unwrap_buffer(struct halide_buffer_t* buf)
+{
+    TRACELOG;
+
+    if (buf->device == 0)
+    {
+        return 0;
+    }
+
+    d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
+    halide_assert(user_context, (dbuffer->halide == buf));
+    halide_assert(user_context, (buf->device_interface == &d3d12compute_device_interface));
+
+    dbuffer->halide = NULL;
+    buf->device_interface->impl->release_module();
+    buf->device_interface = NULL;
+    buf->device = 0;
+
+    return 0;
 }
 
 static void D3D12LoadDependencies(void* user_context)
@@ -1111,12 +1160,10 @@ WEAK d3d12_command_queue* new_command_queue(d3d12_device* device)
             return(NULL);
     }
 
-    d3d12_command_queue* q = malloct<d3d12_command_queue>();
-    q->p = commandQueue;
-    q->fence = fence;
-    __atomic_store_n(&q->last_signal, 0, __ATOMIC_SEQ_CST);
+    queue_fence = fence;
+    __atomic_store_n(&queue_last_signal, 0, __ATOMIC_SEQ_CST);
 
-    return(q);
+    return(reinterpret_cast<d3d12_command_queue*>(commandQueue));
 }
 
 template<D3D12_COMMAND_LIST_TYPE Type>
@@ -1569,6 +1616,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
                 uavd.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
             // TODO(marcos): should probably use the "index" input argument here somewhere...
+            halide_assert(user_context, (index < 25));  // arbitrary limit imposed by 'new_descriptor_binder()'...
             D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
             binder->CPU[UAV].ptr += binder->descriptorSize;
 
@@ -1596,8 +1644,8 @@ static void commit_command_list(d3d12_compute_command_list* cmdList)
     end_recording(cmdList);
     ID3D12CommandList* lists [] = { (*cmdList) };
     (*queue)->ExecuteCommandLists(1, lists);
-    cmdList->signal = __atomic_add_fetch(&queue->last_signal, 1, __ATOMIC_SEQ_CST); // ++last_signal
-    (*queue)->Signal(queue->fence, cmdList->signal);
+    cmdList->signal = __atomic_add_fetch(&queue_last_signal, 1, __ATOMIC_SEQ_CST); // ++last_signal
+    (*queue)->Signal(queue_fence, cmdList->signal);
 }
 
 static void wait_until_completed(d3d12_compute_command_list* cmdList)
@@ -1612,7 +1660,7 @@ static void wait_until_completed(d3d12_compute_command_list* cmdList)
 
     HRESULT result_before = (*device)->GetDeviceRemovedReason();
 
-    while (queue->fence->GetCompletedValue() < cmdList->signal)
+    while (queue_fence->GetCompletedValue() < cmdList->signal)
         ;
 
     HRESULT result_after = (*device)->GetDeviceRemovedReason();
@@ -1674,8 +1722,6 @@ static void* buffer_contents(d3d12_buffer* buffer)
     return(pData);
 }
 
-extern WEAK halide_device_interface_t d3d12compute_device_interface;
-
 volatile int WEAK thread_lock = 0;
 
 // Structure to hold the state of a module attached to the context.
@@ -1704,8 +1750,8 @@ extern "C" {
 // - A call to halide_acquire_d3d12compute_context is followed by a matching call to
 //   halide_release_d3d12compute_context. halide_acquire_d3d12compute_context should block while a
 //   previous call (if any) has not yet been released via halide_release_d3d12compute_context.
-WEAK int halide_d3d12compute_acquire_context(void* user_context, halide_d3d12compute_device** device_ret,
-                                      halide_d3d12compute_command_queue** queue_ret, bool create)
+WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12compute_device **device_ret,
+                                             halide_d3d12compute_command_queue **queue_ret, bool create)
 {
     TRACELOG;
 
@@ -1879,7 +1925,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t* 
         return -1;
     }
 
-    if (0 != wrap_buffer(user_context, buf, d3d12_buf))
+    if (0 != wrap_buffer(buf, d3d12_buf))
     {
         ERRORLOG << "D3D12: unable to wrap halide buffer and D3D12 buffer.\n";
         return -1;
@@ -1908,10 +1954,9 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t* bu
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    d3d12_buffer *d3d12_buf = (d3d12_buffer *)buf->device;
-    release_object(d3d12_buf);
-
-    halide_d3d12compute_detach_buffer(user_context, buf);
+    d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
+    unwrap_buffer(buf);
+    release_d3d12_object(dbuffer);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -2354,7 +2399,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
                           threadsX, threadsY, threadsZ);
 
     // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
-    // in addition, only buffers written by the dispatch need barriers...
+    // in addition, only buffers written by the dispatch will need barriers, and
+    // only they are bound for read later.
     for (size_t i = 0; arg_sizes[i] != 0; i++)
     {
         if (!arg_is_buffer[i])
@@ -2482,38 +2528,34 @@ WEAK int halide_d3d12compute_device_release_crop(void* user_context,
     return( halide_d3d12compute_device_free(user_context, buf) );
 }
 
-WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffer_t* halide_buf, uint64_t device_buf_handle)
+WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffer_t* halide_buf, uint64_t d3d12_resource)
 {
     TRACELOG;
 
-    halide_assert(user_context, halide_buf->device == 0);
-    if (halide_buf->device != 0)
-    {
-        return -2;
+    ID3D12Resource* pResource = reinterpret_cast<ID3D12Resource*>(d3d12_resource);
+    halide_assert(user_context, (pResource != NULL));
+
+    d3d12_buffer sbuffer = { };
+    sbuffer.resource = pResource;
+    sbuffer.type = d3d12_buffer::ReadWrite;
+    sbuffer.state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    int ret = wrap_buffer(halide_buf, &sbuffer);
+    if (ret != 0) {
+        return ret;
     }
 
-    d3d12_buffer* d3d12_buf = reinterpret_cast<d3d12_buffer*>(device_buf_handle);
-    halide_assert(user_context, d3d12_buf->halide == 0);
-
-    d3d12_buf->halide = halide_buf;
-    d3d12_buf->offset = 0;
-    d3d12_buf->elements = number_of_elements(halide_buf);
-    d3d12_buf->offsetInBytes = 0;
-    d3d12_buf->format = FindD3D12FormatForHalideType(halide_buf->type);
-    if (DXGI_FORMAT_UNKNOWN == d3d12_buf->format)
-    {
-        ERRORLOG << "unsupported buffer element type: " << halide_buf->type << "\n";
-        return(-3);
+    d3d12_buffer* dbuffer = malloct<d3d12_buffer>();
+    if (dbuffer == NULL) {
+        unwrap_buffer(halide_buf);
+        ERRORLOG << "halide_d3d12compute_wrap_buffer: malloc failed making device handle.\n";
+        return halide_error_code_out_of_memory;
     }
 
-    halide_buf->device = device_buf_handle;
-    halide_buf->device_interface = &d3d12compute_device_interface;
-    halide_buf->device_interface->impl->use_module();
-
-    if (halide_buf->device == 0)
-    {
-        return -1;
-    }
+    *dbuffer = sbuffer;
+    dbuffer->mallocd = true;
+    __atomic_store_n(&dbuffer->ref_count, 0, __ATOMIC_SEQ_CST);
+    halide_buf->device = reinterpret_cast<uint64_t>(dbuffer);
 
     return 0;
 }
@@ -2527,16 +2569,12 @@ WEAK int halide_d3d12compute_detach_buffer(void* user_context, struct halide_buf
         return 0;
     }
 
-    uint64_t device_buf_handle = buf->device;
-    d3d12_buffer* d3d12_buf = reinterpret_cast<d3d12_buffer*>(device_buf_handle);
-    halide_assert(user_context, d3d12_buf->halide != NULL);
-    d3d12_buf->halide = NULL;
+    d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
+    unwrap_buffer(buf);
 
-    halide_assert(user_context, buf->device_interface != 0);
-    halide_assert(user_context, buf->device_interface == &d3d12compute_device_interface);
-    buf->device_interface->impl->release_module();
-    buf->device_interface = NULL;
-    buf->device = 0;
+    // we don't want to release the user-managed ID3D12Resource:
+    dbuffer->resource = NULL;
+    release_d3d12_object(dbuffer);
 
     return 0;
 }
@@ -2546,8 +2584,11 @@ WEAK uintptr_t halide_d3d12compute_get_buffer(void *user_context, struct halide_
     if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, buf->device_interface == &d3d12compute_device_interface);
-    return (uintptr_t)(buf->device);
+    halide_assert(user_context, (buf->device_interface == &d3d12compute_device_interface));
+    d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
+    ID3D12Resource* pResource = dbuffer->resource;
+    uintptr_t opaqued = reinterpret_cast<uintptr_t>(pResource);
+    return opaqued;
 }
 
 WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interface() {

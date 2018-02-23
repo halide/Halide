@@ -495,6 +495,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
                   << "(" << print_expr(op->value) << ")"
                   << ")";
 
+            // the performance impact of atomic operations on shared memory is
+            // not well documented... here is something:
+            // https://stackoverflow.com/a/19548723
             do_indent();
             stream << "InterlockedAnd(" << word.str() << ", " << "~" << mask.str() << ");\n";
             do_indent();
