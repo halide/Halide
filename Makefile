@@ -720,7 +720,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o) \
-		    $(AMDGPU_DEVICE_INITIAL_MODULES:rocdl.%.bc=$(BUILD_DIR)/initmod_amdgpu.%_ll.o)
+		  $(AMDGPU_DEVICE_INITIAL_MODULES:rocdl.%.bc=$(BUILD_DIR)/initmod_amdgpu.%_ll.o)
 
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
@@ -855,6 +855,9 @@ $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	$(CXX) $< -o $@
 
 $(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
+	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
+
+$(BUILD_DIR)/initmod_amdgpu.%_ll.o: $(BUILD_DIR)/initmod_amdgpu.%_ll.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
