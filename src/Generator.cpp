@@ -648,12 +648,34 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
     generate(generator_params, inputs);
 }
 
-void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
-                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
+// Return a vector of all Outputs of this Generator; non-array outputs are returned
+// as a vector-of-size-1. This method is primarily useful for code that needs
+// to iterate through the outputs of unknown, arbitrary Generators (e.g.,
+// the Python bindings).
+std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
+                                                       const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
-    generator->call_generate();
-    generator->call_schedule();
+    Pipeline p = generator->build_pipeline();
+
+    std::vector<std::vector<Func>> v;
+    GeneratorBase::ParamInfo &pi = generator->param_info();
+    if (!pi.filter_outputs.empty()) {
+      for (auto output : pi.filter_outputs) {
+          const std::string &name = output->name();
+          if (output->is_array()) {
+              v.push_back(get_array_output(name));
+          } else {
+              v.push_back(std::vector<Func>{get_output(name)});
+          }
+      }
+    } else {
+      // Generators with build() method can't have Output<>, hence can't have array outputs
+      for (auto output : p.outputs()) {
+          v.push_back(std::vector<Func>{output});
+      }
+    }
+    return v;
 }
 
 GeneratorStub::Names GeneratorStub::get_names() const {
@@ -661,6 +683,9 @@ GeneratorStub::Names GeneratorStub::get_names() const {
     Names names;
     for (auto o : pi.generator_params) {
         names.generator_params.push_back(o->name);
+    }
+    for (auto o : pi.filter_params) {
+        names.filter_params.push_back(o->name());
     }
     for (auto o : pi.filter_inputs) {
         names.inputs.push_back(o->name());
@@ -1119,21 +1144,6 @@ std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
         user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
     }
     return output->funcs();
-}
-
-std::vector<std::vector<Func>> GeneratorBase::get_all_outputs() {
-    std::vector<std::vector<Func>> v;
-    check_min_phase(GenerateCalled);
-    ParamInfo &pi = param_info();
-    for (auto output : pi.filter_outputs) {
-        const std::string &name = output->name();
-        if (output->is_array()) {
-            v.push_back(get_array_output(name));
-        } else {
-            v.push_back(std::vector<Func>{get_output(name)});
-        }
-    }
-    return v;
 }
 
 // Find output by name. If not found, assert-fail. Never returns null.
