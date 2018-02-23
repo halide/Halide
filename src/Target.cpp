@@ -264,7 +264,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
-    { "d3d12compute", Target::D3D12Compute },
+    {"d3d12compute", Target::D3D12Compute},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
