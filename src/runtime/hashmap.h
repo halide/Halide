@@ -12,7 +12,17 @@ WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) 
     return memcmp(key1, key2, key_size) == 0;
 }
 
-template<typename ValueType>
+WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size) {
+    uint32_t h = 5381;
+    for (size_t i = 0; i < key_size; i++) {
+      h = (h << 5) + h + key[i];
+    }
+    return h;
+}
+
+typedef void(*copy_value_func)(uint8_t *dst, const uint8_t *src, size_t size);
+typedef void(*destroy_value_func)(uint8_t *value, size_t size);
+
 struct CacheEntry {
     CacheEntry *next;
     CacheEntry *more_recent;
@@ -24,39 +34,20 @@ struct CacheEntry {
     uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
 
     // The actual stored data.
-    ValueType* value;
+    size_t   value_size;
+    uint8_t* value;
 
     bool init(const uint8_t *cache_key, size_t cache_key_size,
-              uint32_t key_hash, ValueType* value);
-    void destroy();
+              uint32_t key_hash,
+              const uint8_t* cache_value, size_t cache_value_size,
+              copy_value_func copy_value);
+    void destroy(destroy_value_func destroy_value);
 };
 
-template<typename ValueType>
-struct CacheBlockHeader {
-    CacheEntry<ValueType> *entry;
-    uint32_t hash;
-};
-
-// Each host block has extra space to store a header just before the
-// contents. This block must respect the same alignment as
-// halide_malloc, because it offsets the return value from
-// halide_malloc. The header holds the cache key hash and pointer to
-// the hash entry.
-template<typename ValueType>
-WEAK __attribute((always_inline)) size_t header_bytes() {
-    size_t s = sizeof(CacheBlockHeader<ValueType>);
-    size_t mask = halide_malloc_alignment() - 1;
-    return (s + mask) & ~mask;
-}
-
-template<typename ValueType>
-WEAK CacheBlockHeader<ValueType> *get_pointer_to_header(uint8_t * host) {
-    return (CacheBlockHeader<ValueType> *)(host - header_bytes<ValueType>());
-}
-
-template<typename ValueType>
-WEAK bool CacheEntry<ValueType>::init(const uint8_t *cache_key, size_t cache_key_size,
-                                      uint32_t key_hash, ValueType* cache_value) {
+WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
+                           uint32_t key_hash,
+                           const uint8_t* cache_value, size_t cache_value_size,
+                           copy_value_func copy_value) {
     next = NULL;
     more_recent = NULL;
     less_recent = NULL;
@@ -68,7 +59,7 @@ WEAK bool CacheEntry<ValueType>::init(const uint8_t *cache_key, size_t cache_key
     size_t storage_bytes = 0;
 
     // First storage for value:
-    storage_bytes += sizeof(ValueType);
+    storage_bytes += cache_value_size;
 
     // NOTE(marcos): maybe enforce some alignment between value and key?
     //storage_bytes = (storage_bytes + 7) / 8;
@@ -84,7 +75,7 @@ WEAK bool CacheEntry<ValueType>::init(const uint8_t *cache_key, size_t cache_key
     }
 
     // Set up the pointers into the allocated metadata space
-    value = (ValueType*)metadata_storage;
+    value = metadata_storage;
     key = metadata_storage + key_offset;
 
     // Copy over the key
@@ -93,83 +84,79 @@ WEAK bool CacheEntry<ValueType>::init(const uint8_t *cache_key, size_t cache_key
     }
 
     // Copy the value:
-    *value = *cache_value;
+    copy_value(value, cache_value, cache_value_size);
+    value_size = cache_value_size;
 
     return true;
 }
 
-template<typename ValueType>
-WEAK void CacheEntry<ValueType>::destroy() {
-    value->~ValueType();
+WEAK void CacheEntry::destroy(destroy_value_func destroy_value) {
+    destroy_value(value, value_size);
     halide_free(NULL, metadata_storage);
 }
 
-WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
-    uint32_t h = 5381;
-    for (size_t i = 0; i < key_size; i++) {
-      h = (h << 5) + h + key[i];
-    }
-    return h;
-}
-
-template<typename KeyType, typename ValueType>
-struct HashMap
-{
+struct HashMap {
     halide_mutex memoization_lock;
 
     static const size_t kHashTableSize = 256;
 
-    CacheEntry<ValueType> *cache_entries[kHashTableSize];
+    CacheEntry *cache_entries[kHashTableSize];
 
-    CacheEntry<ValueType> *most_recently_used;
-    CacheEntry<ValueType> *least_recently_used;
+    CacheEntry *most_recently_used;
+    CacheEntry *least_recently_used;
 
     uint64_t kDefaultCacheSize;
     int64_t max_cache_size;
     int64_t current_cache_size;
 
+    copy_value_func copy_value;
+    destroy_value_func destroy_value;
+
     bool inited;
 
-    bool init()
-    {
-        memset(&memoization_lock, 0, sizeof(halide_mutex));
-        halide_assert(NULL, !inited);
-        most_recently_used  = NULL;
-        least_recently_used = NULL;
-        kDefaultCacheSize   = 1 << 20;
-        max_cache_size      = kDefaultCacheSize;
-        current_cache_size  = 0;
-        for (int i = 0; i < kHashTableSize; ++i) {
-            cache_entries[i] = NULL;
-        }
-        inited = true;
-        return true;
-    }
-
+    bool init(copy_value_func copy_value, destroy_value_func destroy_value);
     void prune();
     void set_size(int64_t size);
-    int lookup(void *user_context, const uint8_t *cache_key, int32_t size, ValueType* cache_value);
-    int store (void *user_context, const uint8_t *cache_key, int32_t size, ValueType* cache_value);
+    int lookup(void *user_context, const uint8_t *cache_key, int32_t size, uint8_t *cache_value, size_t cache_value_size);
+    int store (void *user_context, const uint8_t *cache_key, int32_t size, const uint8_t *cache_value, size_t cache_value_size);
     void release(void *user_context, void *host);
     void cleanup();
 };
 
-template<typename KeyType, typename ValueType>
-WEAK void HashMap<KeyType, ValueType>::prune() {
+WEAK bool HashMap::init(copy_value_func _copy_value, destroy_value_func _destroy_value) {
+    memset(&memoization_lock, 0, sizeof(halide_mutex));
+    halide_assert(NULL, !inited);
+    most_recently_used  = NULL;
+    least_recently_used = NULL;
+    kDefaultCacheSize   = 1 << 20;
+    max_cache_size      = kDefaultCacheSize;
+    current_cache_size  = 0;
+    for (int i = 0; i < kHashTableSize; ++i) {
+        cache_entries[i] = NULL;
+    }
+    halide_assert(NULL, _copy_value);
+    halide_assert(NULL, _destroy_value);
+    this->copy_value = _copy_value;
+    this->destroy_value = _destroy_value;
+    inited = true;
+    return true;
+}
+
+WEAK void HashMap::prune() {
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
-    CacheEntry<ValueType> *prune_candidate = least_recently_used;
+    CacheEntry *prune_candidate = least_recently_used;
     while (current_cache_size > max_cache_size &&
            prune_candidate != NULL) {
-        CacheEntry<ValueType> *more_recent = prune_candidate->more_recent;
+        CacheEntry *more_recent = prune_candidate->more_recent;
 
         if (prune_candidate->in_use_count == 0) {
             uint32_t h = prune_candidate->hash;
             uint32_t index = h % kHashTableSize;
 
             // Remove from hash table
-            CacheEntry<ValueType> *prev_hash_entry = cache_entries[index];
+            CacheEntry *prev_hash_entry = cache_entries[index];
             if (prev_hash_entry == prune_candidate) {
                 cache_entries[index] = prune_candidate->next;
             } else {
@@ -197,10 +184,10 @@ WEAK void HashMap<KeyType, ValueType>::prune() {
             }
 
             // Decrease cache used amount.
-            current_cache_size -= sizeof(ValueType);
+            current_cache_size -= prune_candidate->value_size;
 
             // Deallocate the entry.
-            prune_candidate->destroy();
+            prune_candidate->destroy(destroy_value);
             halide_free(NULL, prune_candidate);
         }
 
@@ -211,8 +198,7 @@ WEAK void HashMap<KeyType, ValueType>::prune() {
 #endif
 }
 
-template<typename KeyType, typename ValueType>
-WEAK void HashMap<KeyType, ValueType>::set_size(int64_t size) {
+WEAK void HashMap::set_size(int64_t size) {
     if (size == 0) {
         size = kDefaultCacheSize;
     }
@@ -223,10 +209,10 @@ WEAK void HashMap<KeyType, ValueType>::set_size(int64_t size) {
     prune();
 }
 
-template<typename KeyType, typename ValueType>
-WEAK int HashMap<KeyType, ValueType>::lookup(void *user_context,
-                                             const uint8_t *cache_key, int32_t size,
-                                             ValueType* cache_value) {
+
+WEAK int HashMap::lookup(void *user_context,
+                         const uint8_t *cache_key, int32_t size,
+                         uint8_t *cache_value, size_t cache_value_size) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -245,7 +231,7 @@ WEAK int HashMap<KeyType, ValueType>::lookup(void *user_context,
     }
 #endif
 
-    CacheEntry<ValueType> *entry = cache_entries[index];
+    CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
@@ -269,7 +255,8 @@ WEAK int HashMap<KeyType, ValueType>::lookup(void *user_context,
                     most_recently_used = entry;
                 }
 
-                *cache_value = *entry->value;
+                halide_assert(user_context, (cache_value_size == entry->value_size))
+                copy_value(cache_value, entry->value, entry->value_size);
 
                 entry->in_use_count += 1;
 
@@ -285,10 +272,9 @@ WEAK int HashMap<KeyType, ValueType>::lookup(void *user_context,
     return 1;
 }
 
-template<typename KeyType, typename ValueType>
-WEAK int HashMap<KeyType, ValueType>::store(void *user_context,
-                                            const uint8_t *cache_key, int32_t size,
-                                            ValueType* cache_value) {
+WEAK int HashMap::store(void *user_context,
+                        const uint8_t *cache_key, int32_t size,
+                        const uint8_t *cache_value, size_t cache_value_size) {
     debug(user_context) << "halide_memoization_cache_store\n";
 
     uint32_t h = djb_hash(cache_key, size);
@@ -310,23 +296,24 @@ WEAK int HashMap<KeyType, ValueType>::store(void *user_context,
 #endif
 
     // key is already present in the hashmap: overwrite value
-    for (CacheEntry<ValueType> *entry = cache_entries[index];
+    for (CacheEntry *entry = cache_entries[index];
          entry != NULL;
          entry = entry->next) {
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
-                // TODO(marcos): release old value
-                entry->value = cache_value;
+                halide_assert(user_context, (cache_value_size == entry->value_size));
+                destroy_value(entry->value, entry->value_size);
+                copy_value(entry->value, cache_value, entry->value_size);
                 return(0);
         }
     }
 
     // key not found: create new entry
-    CacheEntry<ValueType> *new_entry = (CacheEntry<ValueType>*)halide_malloc(NULL, sizeof(CacheEntry<ValueType>));
-    bool inited = new_entry->init(cache_key, size, h, cache_value);
+    CacheEntry *new_entry = (CacheEntry*)halide_malloc(NULL, sizeof(CacheEntry));
+    bool inited = new_entry->init(cache_key, size, h, cache_value, cache_value_size, copy_value);
     halide_assert(user_context, inited);
 
-    uint64_t added_size = sizeof(ValueType);
+    uint64_t added_size = cache_value_size;
     current_cache_size += added_size;
     prune();
 
@@ -351,36 +338,21 @@ WEAK int HashMap<KeyType, ValueType>::store(void *user_context,
     return 0;
 }
 
-template<typename KeyType, typename ValueType>
-WEAK void HashMap<KeyType, ValueType>::release(void *user_context, void *host) {
-    CacheBlockHeader<ValueType> *header = get_pointer_to_header<ValueType>((uint8_t *)host);
+WEAK void HashMap::release(void *user_context, void *host) {
     debug(user_context) << "halide_memoization_cache_release\n";
-    CacheEntry<ValueType> *entry = header->entry;
-
-    if (entry == NULL) {
-        halide_free(user_context, header);
-    } else {
-        ScopedMutexLock lock(&memoization_lock);
-
-        halide_assert(user_context, entry->in_use_count > 0);
-        entry->in_use_count--;
-#if CACHE_DEBUGGING
-        validate_cache();
-#endif
-    }
-
+    // TODO(marcos): this method does not make sense on a generic hashmap... remove it?
+    halide_assert(user_context, false);
     debug(user_context) << "Exited halide_memoization_cache_release.\n";
 }
 
-template<typename KeyType, typename ValueType>
-WEAK void HashMap<KeyType, ValueType>::cleanup() {
+WEAK void HashMap::cleanup() {
     debug(NULL) << "halide_memoization_cache_cleanup\n";
     for (size_t i = 0; i < kHashTableSize; i++) {
-        CacheEntry<ValueType> *entry = cache_entries[i];
+        CacheEntry *entry = cache_entries[i];
         cache_entries[i] = NULL;
         while (entry != NULL) {
-            CacheEntry<ValueType> *next = entry->next;
-            entry->destroy();
+            CacheEntry *next = entry->next;
+            entry->destroy(destroy_value);
             halide_free(NULL, entry);
             entry = next;
         }
@@ -390,6 +362,43 @@ WEAK void HashMap<KeyType, ValueType>::cleanup() {
     least_recently_used = NULL;
     halide_mutex_destroy(&memoization_lock);
 }
+
+
+// THashMap: a convenience class for using HashMap with actual types
+template<typename KeyType, typename ValueType>
+struct THashMap : public HashMap {
+
+    // TODO(marcos): perhaps use KeyType for something useful...
+    // with some generalized interface for keys, we should be able to get rid of
+    // "const uint8_t *cache_key, int32_t key_size" in the 'lookup' and 'store'
+    // member functions below...
+
+    static void copy_value_func(uint8_t *dst, const uint8_t *src, size_t size) {
+        halide_assert(NULL, sizeof(ValueType) == size);
+        ValueType *D = reinterpret_cast<ValueType*>(dst);
+        const ValueType *S = reinterpret_cast<const ValueType*>(src);
+        *D = *S;
+    }
+
+    static void destroy_value_func(uint8_t *value, size_t size) {
+        halide_assert(NULL, sizeof(ValueType) == size);
+        ValueType *V = reinterpret_cast<ValueType*>(value);
+        V->~ValueType();
+    }
+
+    bool init() {
+        return HashMap::init(copy_value_func, destroy_value_func);
+    }
+
+    int lookup(void *user_context, const uint8_t *cache_key, int32_t key_size, ValueType *cache_value) {
+        return HashMap::lookup(user_context, cache_key, key_size, (uint8_t*)cache_value, sizeof(ValueType));
+    }
+
+    int store(void *user_context, const uint8_t *cache_key, int32_t key_size, const ValueType *cache_value) {
+        return HashMap::store(user_context, cache_key, key_size, (const uint8_t*)cache_value, sizeof(ValueType));
+    }
+
+};
 
 }}}
 

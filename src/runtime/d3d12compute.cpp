@@ -437,7 +437,7 @@ typedef d3d12_pipeline_state d3d12_compute_pipeline_state;
 
 struct d3d12_library
 {
-    HashMap<char*, struct d3d12_function*> cache;
+    THashMap<char*, struct d3d12_function*> cache;
     int source_length;
     char source [1];
 };
