@@ -648,7 +648,8 @@ WEAK int unwrap_buffer(struct halide_buffer_t* buf)
     }
 
     d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
-    halide_assert(user_context, (dbuffer->halide == buf));
+    halide_assert(user_context, (dbuffer->halide != NULL));
+    //halide_assert(user_context, (dbuffer->halide == buf));    // <- this assert is too strong for device_crop buffers...
     halide_assert(user_context, (buf->device_interface == &d3d12compute_device_interface));
 
     dbuffer->halide = NULL;
@@ -1954,9 +1955,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t* bu
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
-    unwrap_buffer(buf);
-    release_d3d12_object(dbuffer);
+    halide_d3d12compute_detach_buffer(user_context, buf);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -2488,6 +2487,8 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
         return halide_error_code_out_of_memory;
     }
 
+    // TODO(marcos): can we leverage 'halide_d3d12compute_wrap_buffer()' here?
+
     d3d12_buffer* old_handle = reinterpret_cast<d3d12_buffer*>(src->device);
     *new_handle = *old_handle;
     new_handle->resource->AddRef();
@@ -2557,6 +2558,11 @@ WEAK int halide_d3d12compute_wrap_buffer(void* user_context, struct halide_buffe
     __atomic_store_n(&dbuffer->ref_count, 0, __ATOMIC_SEQ_CST);
     halide_buf->device = reinterpret_cast<uint64_t>(dbuffer);
 
+    // increment the reference count of the resource here such that we can then
+    // safely call release_d3d12_object() later without actually releasing the
+    // user-managed resource object:
+    pResource->AddRef();
+
     return 0;
 }
 
@@ -2572,8 +2578,12 @@ WEAK int halide_d3d12compute_detach_buffer(void* user_context, struct halide_buf
     d3d12_buffer* dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
     unwrap_buffer(buf);
 
-    // we don't want to release the user-managed ID3D12Resource:
-    dbuffer->resource = NULL;
+    // it is safe to simply call release_d3d12_object() here:
+    // if 'buf' holds an user resource (from halide_d3d12compute_wrap_buffer),
+    // the reference count of the resource will just get decremented without
+    // actually freeing the underlying resource object;
+    // if 'buf' holds an internally managed resource, it will either be freed
+    // or have its reference count decreased (when 'buf' is a device_crop).
     release_d3d12_object(dbuffer);
 
     return 0;
