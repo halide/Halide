@@ -1008,13 +1008,13 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
     std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::FilterParam);
     for (auto v : vf) {
-        auto param = static_cast<Parameter *>(v);
-        internal_assert(param != nullptr);
-        user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
-        user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-        user_assert(!names.count(param->name())) << "Duplicate Param name: " << param->name();
-        names.insert(param->name());
-        filter_params.push_back(param);
+        auto rp = static_cast<RegisteredParameter *>(v);
+        internal_assert(rp != nullptr && rp->defined());
+        user_assert(rp->is_explicit_name()) << "Params in Generators must have explicit names: " << rp->name();
+        user_assert(is_valid_name(rp->name())) << "Invalid Param name: " << rp->name();
+        user_assert(!names.count(rp->name())) << "Duplicate Param name: " << rp->name();
+        names.insert(rp->name());
+        filter_params.push_back(rp);
     }
 
     const auto add_synthetic_params = [this](GIOBase *gio) {
@@ -1343,8 +1343,8 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
     ParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
-    for (auto param : pi.filter_params) {
-        filter_arguments.push_back(to_argument(*param));
+    for (auto rp : pi.filter_params) {
+        filter_arguments.push_back(to_argument(*rp));
     }
     for (auto input : pi.filter_inputs) {
         for (const auto &p : input->parameters_) {
@@ -1593,7 +1593,7 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
-        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name, true, false);
+        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name, true);
         auto &p = parameters_[i];
         if (kind() != IOKind::Scalar) {
             internal_assert(dims() == p.dimensions());
@@ -1621,7 +1621,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
             auto f = in.func();
             check_matching_type_and_dim(f.output_types(), f.dimensions());
             funcs_.push_back(f);
-            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true, false);
+            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true);
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
             check_matching_type_and_dim({p.type()}, p.dimensions());
@@ -1631,7 +1631,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
             auto e = in.expr();
             check_matching_type_and_dim({e.type()}, 0);
             exprs_.push_back(e);
-            parameters_.emplace_back(e.type(), false, 0, array_name(i), true, false);
+            parameters_.emplace_back(e.type(), false, 0, array_name(i), true);
         }
     }
 
