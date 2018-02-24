@@ -44,6 +44,7 @@ public:
         this->user_context = ctx;
         return(*this);
     }
+    int capacity() const { return length; }
 private:
     char buffer [length];
 };
@@ -464,6 +465,14 @@ enum ResourceBindingSlots
     NumSlots
 };
 
+// These are "tier-1" d3d12 device limits (D3D12_RESOURCE_BINDING_TIER_1):
+static const int ResourceBindingLimits [NumSlots] =
+{
+    16, // UAV
+    14, // CBV
+    25, // SRV (the actual limit is 128, but will allow only 25 for now)
+};
+
 struct d3d12_binder
 {
     ID3D12DescriptorHeap* descriptorHeap;
@@ -678,25 +687,18 @@ static void D3D12LoadDependencies(void* user_context)
     };
     for (size_t i = 0; i < num_libs; i++)
     {
-        // Only try to load the library if the library isn't already
-        // loaded, or we can't load the symbol from the process already.
+        // Only attempt to load a library if the it has not been loaded already
         void*& lib = *(lib_handles[i]);
-        if (lib)
-        {
+        if (lib) {
             continue;
         }
         lib = d3d12_load_library(lib_names[i]);
-        if (lib)
-        {
+        if (lib) {
             TRACEPRINT("Loaded runtime library '" << lib_names[i] << "' at location " << lib << "\n");
-        }
-        else
-        {
+        } else {
             ERRORLOG << "Unable to load runtime library: " << lib_names[i] << "\n";
         }
     }
-
-    PFN_D3D12_CREATE_DEVICE D3D12CreateDevice1 = LibrarySymbol::get(user_context, lib_d3d12, "D3D12CreateDevice"); UNUSED(D3D12CreateDevice1);
 
     #if HALIDE_D3D12_RENDERDOC
         #if !RENDERDOC_AUTOINIT
@@ -861,7 +863,7 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
         TableTemplate.DescriptorTable.NumDescriptorRanges = 1;
         TableTemplate.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // compute must use this
     D3D12_DESCRIPTOR_RANGE RangeTemplate = { };
-        RangeTemplate.NumDescriptors = 25;
+        RangeTemplate.NumDescriptors = -1;      // -1 for unlimited/unbounded tables
         RangeTemplate.BaseShaderRegister = 0;
         RangeTemplate.RegisterSpace = 0;
         RangeTemplate.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -872,21 +874,21 @@ ID3D12RootSignature* D3D12CreateMasterRootSignature(ID3D12Device* device)
             RootTableUAV = TableTemplate;
             D3D12_DESCRIPTOR_RANGE UAVs = RangeTemplate;
                 UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-                UAVs.NumDescriptors = 16;     // tier-1 limit: 16 UAVs
+                UAVs.NumDescriptors = ResourceBindingLimits[UAV];
             RootTableUAV.DescriptorTable.pDescriptorRanges = &UAVs;
     // CBVs: read-only uniform/coherent/broadcast buffers:
         D3D12_ROOT_PARAMETER& RootTableCBV = rootParameterTables[CBV];
             RootTableCBV = TableTemplate;
             D3D12_DESCRIPTOR_RANGE CBVs = RangeTemplate;
                 CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-                CBVs.NumDescriptors = 14;     // tier-1 limit: 14 CBVs
+                CBVs.NumDescriptors = ResourceBindingLimits[CBV];
             RootTableCBV.DescriptorTable.pDescriptorRanges = &CBVs;
     // SRVs: textures and read-only buffers:
         D3D12_ROOT_PARAMETER& RootTableSRV = rootParameterTables[SRV];
             RootTableSRV = TableTemplate;
             D3D12_DESCRIPTOR_RANGE SRVs = RangeTemplate;
                 SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                SRVs.NumDescriptors = 25;     // tier-1 limit: 128 SRVs
+                SRVs.NumDescriptors = ResourceBindingLimits[SRV];
             RootTableSRV.DescriptorTable.pDescriptorRanges = &SRVs;
 
     D3D12_ROOT_SIGNATURE_DESC rsd = { };
@@ -1269,10 +1271,10 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
     ID3D12DescriptorHeap* descriptorHeap = NULL;
     D3D12_DESCRIPTOR_HEAP_DESC dhd = { };
         dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        dhd.NumDescriptors  = 0;    // TODO(marcos): replace this arbitrary descriptor count...
-        dhd.NumDescriptors += 25;   // have some descriptors for the unbounded UAV table
-        dhd.NumDescriptors += 25;   // then some for the unbounded CBV table
-        dhd.NumDescriptors += 25;   // then some for the unbounded SRV table
+        dhd.NumDescriptors  = 0;
+        dhd.NumDescriptors += ResourceBindingLimits[UAV];
+        dhd.NumDescriptors += ResourceBindingLimits[CBV];
+        dhd.NumDescriptors += ResourceBindingLimits[SRV];
         dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         dhd.NodeMask = 0;
     HRESULT result = (*device)->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(&descriptorHeap));
@@ -1288,18 +1290,18 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
 
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = Call_ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(descriptorHeap);
     TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << "\n");
-    binder->CPU[UAV].ptr = baseCPU.ptr +  0*descriptorSize;
-    binder->CPU[CBV].ptr = baseCPU.ptr + 25*descriptorSize;
-    binder->CPU[SRV].ptr = baseCPU.ptr + 50*descriptorSize;
+    binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
+    binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
+    binder->CPU[SRV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     D3D12_GPU_DESCRIPTOR_HANDLE baseGPU = Call_ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(descriptorHeap);
     TRACEPRINT("descriptor heap base for GPU: " << baseGPU.ptr << "\n");
-    binder->GPU[UAV].ptr = baseGPU.ptr +  0*descriptorSize;
-    binder->GPU[CBV].ptr = baseGPU.ptr + 25*descriptorSize;
-    binder->GPU[SRV].ptr = baseGPU.ptr + 50*descriptorSize;
+    binder->GPU[UAV].ptr = (baseGPU.ptr += descriptorSize * 0);
+    binder->GPU[CBV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
+    binder->GPU[SRV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     // initialize everything with null descriptors...
-    for (int i = 0; i < 25; ++i)
+    for (int i = 0; i < ResourceBindingLimits[UAV]; ++i)
     {
         D3D12_UNORDERED_ACCESS_VIEW_DESC NullDescUAV = { };
             NullDescUAV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
@@ -1313,7 +1315,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
         hCPU.ptr += i*descriptorSize;
         (*device)->CreateUnorderedAccessView(NULL, NULL, &NullDescUAV, hCPU);
     }
-    for (int i = 0; i < 25; ++i)
+    for (int i = 0; i < ResourceBindingLimits[CBV]; ++i)
     {
         D3D12_CONSTANT_BUFFER_VIEW_DESC NullDescCBV = { };
             NullDescCBV.BufferLocation = 0;
@@ -1322,7 +1324,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
         hCPU.ptr += i*descriptorSize;
         Call_ID3D12Device_CreateConstantBufferView((*device), &NullDescCBV, hCPU);
     }
-    for (int i = 0; i < 25; ++i)
+    for (int i = 0; i < ResourceBindingLimits[SRV]; ++i)
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = { };
             NullDescSRV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
@@ -1475,7 +1477,7 @@ static d3d12_function* new_function_with_name(d3d12_device* device, d3d12_librar
     d3d12_function* function = NULL;
     StackPrinter<256, StringStreamPrinter> key;
     key << name << "_(" << threadsX << "," << threadsY << "," << threadsZ << ")_[" << shared_mem_bytes << "]";
-    halide_assert(user_context, (key.size() < 256));    // make sure key fits into the stream
+    halide_assert(user_context, (key.size() < key.capacity()-1));    // make sure key fits into the stream
     int not_found = library->cache.lookup(user_context, (const uint8_t*)key.str(), key.size(), &function);
     if (!not_found) {
         halide_assert(user_context, (function != NULL));
@@ -1618,7 +1620,7 @@ WEAK void set_input_buffer(d3d12_compute_command_list* cmdList, d3d12_binder* bi
                 uavd.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
             // TODO(marcos): should probably use the "index" input argument here somewhere...
-            halide_assert(user_context, (index < 25));  // arbitrary limit imposed by 'new_descriptor_binder()'...
+            halide_assert(user_context, (index < ResourceBindingLimits[UAV]));
             D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
             binder->CPU[UAV].ptr += binder->descriptorSize;
 
@@ -2300,18 +2302,22 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     d3d12_binder* binder = new_descriptor_binder(device);
 
-    // pack all non-buffer arguments into a single allocation block:
+    // pack all non-buffer arguments into a single "constant" allocation block:
     size_t total_args_size = 0;
     for (size_t i = 0; arg_sizes[i] != 0; i++)
     {
         if (arg_is_buffer[i])
             continue;
-        // Metal requires natural alignment for all types in structures.
-        // Assert arg_size is exactly a power of two and adjust size to start
-        // on the next multiple of that power of two.
+        // Here, it's safe to mimic the Metal back-end behavior which enforces
+        // natural alignment for all types in structures: each arg_sizes[i] has
+        // to be a power-of-two and have the subsequent field start on the next
+        // multiple of that power-of-two.
         halide_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
+        // We can ignore vector arguments since they never show up in constant
+        // blocks. Having to worry about scalar parameters only is convenient
+        // since in HLSL SM 5.1 all scalar types are 32bit:
         halide_assert(user_context, arg_sizes[i] <= 4);
-        size_t argsize = 4;
+        size_t argsize = 4;     // force argument to 32bit
         total_args_size = (total_args_size + argsize - 1) & ~(argsize - 1);
         total_args_size += argsize;
     }
@@ -2426,7 +2432,6 @@ WEAK int halide_d3d12compute_run(void *user_context,
     release_object(&args_buffer);
     release_object(pipeline_state);
     release_object(binder);
-    //release_object(function);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -2468,12 +2473,6 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
                                          const struct halide_buffer_t *src,
                                          struct halide_buffer_t *dst) {
     TRACELOG;
-
-    D3D12ContextHolder d3d12_context (user_context, true);
-    if (d3d12_context.error != 0)
-    {
-        return d3d12_context.error;
-    }
 
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++)
