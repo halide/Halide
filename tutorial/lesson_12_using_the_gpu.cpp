@@ -27,7 +27,7 @@ using namespace Halide::Tools;
 // Include a clock to do performance testing.
 #include "clock.h"
 
-#pragma optimize ( "" , off )
+Target find_gpu_target();
 
 // Define some Vars to use.
 Var x, y, c, i, ii, xo, yo, xi, yi;
@@ -107,7 +107,6 @@ public:
 
     // Now a schedule that uses CUDA or OpenCL.
     bool schedule_for_gpu() {
-        Target find_gpu_target();   // forward declaration (see file tail)
         Target target = find_gpu_target();
         if (!target.has_gpu_feature()) {
             return false;
