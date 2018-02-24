@@ -182,7 +182,7 @@ Func kahan_sum(int vectorize) {
 
 float eval(Func f, const Target &t, const std::string &name, const std::string &suffix, float expected) {
     float val = ((Buffer<float>)f.realize(t))();
-    std::cout << "        " << name << ": " << val << " (" << std::hexfloat << val << ")" << std::defaultfloat;;
+    std::cout << "        " << name << ": " << val;
     if (expected != 0.0f) {
         std::cout << " error: " << val - expected;
     }
@@ -208,22 +208,22 @@ void run_one_condition(const Target &t, FloatStrictness strictness, Buffer<float
 
 #ifdef __SSE2__
     float vec_dot_prod_4 = no_fma_dot_prod_sse(&vals(0), vals.width());
-    std::cout << "        four wide no fma: " << vec_dot_prod_4 << "(" << std::hexfloat << vec_dot_prod_4 << ")" << std::defaultfloat << " error: " << vec_dot_prod_4 - simple_double << "\n";
+    std::cout << "        four wide no fma: " << vec_dot_prod_4 << " error: " << vec_dot_prod_4 - simple_double << "\n";
 #endif
 
 #if defined(__SSE2__) && defined(__FMA__)
     float fma_dot_prod_4 = fma_dot_prod_sse(&vals(0), vals.width());
-    std::cout << "        four wide fma: " << fma_dot_prod_4 << "(" << std::hexfloat << fma_dot_prod_4 << ")" << std::defaultfloat << " error: " << fma_dot_prod_4 - simple_double << "\n";
+    std::cout << "        four wide fma: " << fma_dot_prod_4 << " error: " << fma_dot_prod_4 - simple_double << "\n";
 #endif
 
 #if defined(__AVX__)
     float vec_dot_prod_8 = no_fma_dot_prod_avx(&vals(0), vals.width());
-    std::cout << "        eight wide no fma: " << vec_dot_prod_8 << "(" << std::hexfloat << vec_dot_prod_8 << ")" << std::defaultfloat << " error: " << vec_dot_prod_8 - simple_double << "\n";
+    std::cout << "        eight wide no fma: " << vec_dot_prod_8 << " error: " << vec_dot_prod_8 - simple_double << "\n";
 #endif
 
 #if defined(__AVX__) && defined(__FMA__)
     float fma_dot_prod_8 = fma_dot_prod_avx(&vals(0), vals.width());
-    std::cout << "        eight wide fma: " << fma_dot_prod_8 << "(" << std::hexfloat << fma_dot_prod_8 << ")" << std::defaultfloat << " error: " << fma_dot_prod_8 - simple_double << "\n";
+    std::cout << "        eight wide fma: " << fma_dot_prod_8 << " error: " << fma_dot_prod_8 - simple_double << "\n";
 #endif
 
     if (strictness == FloatStrictness::Strict) {
