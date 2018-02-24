@@ -1002,11 +1002,20 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 
     // compiler control pragmas
     src_stream
+        // Disable innocent warnings:
         // warning X3078 : loop control variable conflicts with a previous declaration in the outer scope; most recent declaration will be used
         << "#pragma warning( disable : 3078 )" "\n"
-        // TODO(marcos): can we interchangeably replace ints by uints when we have modulo operations in the generated code?
+        // warning X3557: loop only executes for 1 iteration(s), forcing loop to unroll
+        << "#pragma warning( disable : 3557 )" "\n"
+        // Disable more serious warnings:
+        // TODO(marcos): should revisit the warnings below, as they are likely to impact performance (and possibly correctness too)
         // warning X3556 : integer modulus may be much slower, try using uints if possible
+        // TODO(marcos): can we interchangeably replace ints by uints when we have modulo operations in the generated code?
         << "#pragma warning( disable : 3556 )" "\n"
+        // warning X3571 : pow(f, e) will not work for negative f, use abs(f) or conditionally handle negative values if you expect them
+        << "#pragma warning( disable : 3571 )" "\n"
+        // warning X4714 : sum of temp registers and indexable temp registers times 256 threads exceeds the recommended total 16384.  Performance may be reduced
+        << "#pragma warning( disable : 4714 )" "\n"
         << "\n";
 
     // Write out the Halide math functions.
