@@ -466,7 +466,7 @@ enum ResourceBindingSlots
 };
 
 // These are "tier-1" d3d12 device limits (D3D12_RESOURCE_BINDING_TIER_1):
-static const int ResourceBindingLimits [NumSlots] =
+static const uint32_t ResourceBindingLimits [NumSlots] =
 {
     16, // UAV
     14, // CBV
@@ -1301,7 +1301,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
     binder->GPU[SRV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     // initialize everything with null descriptors...
-    for (int i = 0; i < ResourceBindingLimits[UAV]; ++i)
+    for (uint32_t i = 0; i < ResourceBindingLimits[UAV]; ++i)
     {
         D3D12_UNORDERED_ACCESS_VIEW_DESC NullDescUAV = { };
             NullDescUAV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
@@ -1315,7 +1315,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
         hCPU.ptr += i*descriptorSize;
         (*device)->CreateUnorderedAccessView(NULL, NULL, &NullDescUAV, hCPU);
     }
-    for (int i = 0; i < ResourceBindingLimits[CBV]; ++i)
+    for (uint32_t i = 0; i < ResourceBindingLimits[CBV]; ++i)
     {
         D3D12_CONSTANT_BUFFER_VIEW_DESC NullDescCBV = { };
             NullDescCBV.BufferLocation = 0;
@@ -1324,7 +1324,7 @@ static d3d12_binder* new_descriptor_binder(d3d12_device* device)
         hCPU.ptr += i*descriptorSize;
         Call_ID3D12Device_CreateConstantBufferView((*device), &NullDescCBV, hCPU);
     }
-    for (int i = 0; i < ResourceBindingLimits[SRV]; ++i)
+    for (uint32_t i = 0; i < ResourceBindingLimits[SRV]; ++i)
     {
         D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = { };
             NullDescSRV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
