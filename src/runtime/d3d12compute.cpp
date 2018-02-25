@@ -44,7 +44,7 @@ public:
         this->user_context = ctx;
         return(*this);
     }
-    int capacity() const { return length; }
+    uint64_t capacity() const { return length; }
 private:
     char buffer [length];
 };
