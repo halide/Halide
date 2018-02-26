@@ -243,7 +243,7 @@ struct FuseLoopLevel {
      */
     std::map<std::string, LoopAlignStrategy> align;
 
-    FuseLoopLevel() : level(LoopLevel::inlined()) {}
+    FuseLoopLevel() : level(LoopLevel::inlined().lock()) {}
     FuseLoopLevel(const LoopLevel &level, const std::map<std::string, LoopAlignStrategy> &align)
         : level(level), align(align) {}
 };
