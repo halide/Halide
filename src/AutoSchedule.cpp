@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdlib>
 #include <regex>
 
 #include "AutoSchedule.h"
@@ -967,6 +968,21 @@ struct Partitioner {
 
             return stream;
         }
+
+        // Return number of unique functions in the group including inlined functions.
+        size_t num_of_funcs() const {
+            set<string> funcs;
+            for (const auto &s : members) {
+                funcs.insert(s.func.name());
+            }
+            return funcs.size();
+        }
+
+        size_t num_of_non_inlined_funcs() const {
+            size_t total = num_of_funcs();
+            internal_assert(total > inlined.size());
+            return total - inlined.size();
+        }
     };
 
     // Result of the analysis of a group.
@@ -1049,8 +1065,17 @@ struct Partitioner {
     RegionCosts &costs;
     // Output functions of the pipeline.
     const vector<Function> &outputs;
+    // Target architecture and other flags for auto-scheduler.
+    const Target &target;
+    // How many times group fusion happened
+    size_t num_inline_fusion;
+    size_t num_fast_mem_fusion;
+    size_t total_fusion;
+    // Evolution of the total costs per step
+    vector<Cost> evolution;
 
-    Partitioner(const map<string, Box> &_pipeline_bounds,
+    Partitioner(const Target &_target,
+                const map<string, Box> &_pipeline_bounds,
                 const MachineParams &_arch_params,
                 const vector<Function> &_outputs,
                 DependenceAnalysis &_dep_analysis,
@@ -1162,12 +1187,12 @@ struct Partitioner {
     // visible to the user. Additionally, functions like sum and maximum are not
     // user visible. More thought needs to go into interaction between the user and
     // auto scheduling.
-    void generate_cpu_schedule(const Target &t, AutoSchedule &sched);
+    void generate_cpu_schedule(AutoSchedule &sched);
 
     // Same as \ref Partitioner::generate_cpu_schedule, but this generates and
     // applies schedules for a group of function stages.
 
-    void generate_group_cpu_schedule(const Group &g, const Target &t,
+    void generate_group_cpu_schedule(const Group &g,
                                      const map<FStage, DimBounds> &group_loop_bounds,
                                      const map<string, Box> &group_storage_bounds,
                                      const set<string> &inlines,
@@ -1185,7 +1210,7 @@ struct Partitioner {
     // and vectorize the first pure dimension encountered.
     void vectorize_stage(
         const Group &g, Stage f_handle, int stage_num, Definition def,
-        Function func, bool is_group_output, const Target &t, set<string> &rvars,
+        Function func, bool is_group_output, set<string> &rvars,
         map<string, Expr> &estimates, AutoSchedule &sched);
 
     // Reorder the dimensions to preserve spatial locality. This function
@@ -1200,6 +1225,7 @@ struct Partitioner {
     void disp_pipeline_bounds();
     void disp_pipeline_graph();
     void disp_grouping();
+    void disp_stats();
 };
 
 void Partitioner::disp_grouping() {
@@ -1235,6 +1261,24 @@ void Partitioner::disp_pipeline_bounds() {
     debug(0) << "================" << '\n';
     disp_regions(pipeline_bounds);
     debug(0) << "===============" << '\n';
+}
+
+void Partitioner::disp_stats() {
+    Cost total_cost = get_pipeline_cost();
+    debug(0) << "// MachineParams: " << arch_params.to_string() << '\n';
+    debug(0) << "Env size: " << dep_analysis.env.size() << "\n";
+    debug(0) << "Total: " << simplify(total_cost.arith + total_cost.memory)
+             << ", arith: " << total_cost.arith << ", mem: " << total_cost.memory << '\n';
+    debug(0) << "# of groups: " << groups.size() << '\n';
+    debug(0) << "# inline fusion: " << num_inline_fusion << '\n';
+    debug(0) << "# fast-mem fusion: " << num_fast_mem_fusion << '\n';
+    debug(0) << "# total fusion: " << total_fusion << '\n';
+    debug(0) << "Cost evolution:\n";
+    for (const auto &cost : evolution) {
+        debug(0) << "\ttotal: " << simplify(cost.arith + cost.memory)
+                 << ", arith: " << cost.arith << ", mem: " << cost.memory << "\n";
+    }
+    debug(0) << "\n";
 }
 
 Cost Partitioner::get_pipeline_cost() {
@@ -1290,13 +1334,16 @@ void Partitioner::disp_pipeline_costs() {
 
 // Construct a partitioner and build the pipeline graph on which the grouping
 // algorithm operates.
-Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
+Partitioner::Partitioner(const Target &_target,
+                         const map<string, Box> &_pipeline_bounds,
                          const MachineParams &_arch_params,
                          const vector<Function> &_outputs,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs)
         : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
-          dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs) {
+          dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs),
+          target(_target), num_inline_fusion(0), num_fast_mem_fusion(0),
+          total_fusion(0) {
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
@@ -1434,7 +1481,22 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         debug(3) << "Candidate benefit: " << overall_benefit << '\n';
         // TODO: The grouping process can be non-deterministic when the costs
         // of two choices are equal
-        if (overall_benefit.defined() && can_prove(best_benefit < overall_benefit)) {
+        bool replace = best_benefit.defined() && overall_benefit.defined() &&
+                       can_prove(best_benefit < overall_benefit);
+        if (target.has_feature(Target::AutoScheduleRandomGrouping)) {
+            const int val = rand() % 100;
+            bool flip = val > 70;
+            if (flip) {
+                replace = !replace;
+            }
+            debug(0) << "...Random replacement, val: " << val << ", flip? " << flip << ", replace? " << replace;
+            if (level == Partitioner::Level::Inline) {
+                debug(0) << ", level? inline \n";
+            } else {
+                debug(0) << ", level? fast-mem \n";
+            }
+        }
+        if (replace) {
             best_grouping = grouping;
             best_benefit = overall_benefit;
         }
@@ -1613,6 +1675,7 @@ void Partitioner::group(Partitioner::Level level) {
     bool fixpoint = false;
     while (!fixpoint) {
         Cost pre_merge = get_pipeline_cost();
+        evolution.push_back(pre_merge);
 
         fixpoint = true;
         vector<pair<string, string>> cand;
@@ -1674,6 +1737,16 @@ void Partitioner::group(Partitioner::Level level) {
         } else {
             fixpoint = false;
         }
+
+        if (level == Partitioner::Level::Inline) {
+            num_inline_fusion += 1;
+        } else {
+            num_fast_mem_fusion += 1;
+        }
+        total_fusion += 1;
+        internal_assert(total_fusion <= dep_analysis.env.size())
+         << "Total fusion (" << total_fusion << ") is larger than number of "
+         << "funcs in env (" << dep_analysis.env.size() << ")\n";
 
         // The following code makes the assumption that all the stages of a function
         // will be in the same group. 'choose_candidate_grouping' ensures that the
@@ -2425,7 +2498,7 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
 
 void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
                                   Definition def, Function func, bool is_group_output,
-                                  const Target &t, set<string> &rvars,
+                                  set<string> &rvars,
                                   map<string, Expr> &estimates, AutoSchedule &sched) {
     vector<Dim> &dims = def.schedule().dims();
     int vec_dim_index = -1;
@@ -2434,7 +2507,7 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
     // values produced by the function.
     int vec_len = 0;
     for (const auto &type : func.output_types()) {
-        vec_len = std::max(vec_len, t.natural_vector_size(type));
+        vec_len = std::max(vec_len, target.natural_vector_size(type));
     }
 
     for (int d = 0; d < (int) dims.size() - 1; d++) {
@@ -2625,7 +2698,7 @@ public :
 };
 
 void Partitioner::generate_group_cpu_schedule(
-        const Group &g, const Target &t,
+        const Group &g,
         const map<FStage, DimBounds> &group_loop_bounds,
         const map<string, Box> &group_storage_bounds,
         const set<string> &inlines,
@@ -2751,7 +2824,7 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
-    vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
+    vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true,
                     rvars, stg_estimates, sched);
 
     // Parallelize definition
@@ -2879,11 +2952,11 @@ void Partitioner::generate_group_cpu_schedule(
         }
 
         vectorize_stage(g, mem_handle, mem.stage_num, mem_def, mem.func, false,
-                        t, mem_rvars, mem_estimates, sched);
+                        mem_rvars, mem_estimates, sched);
     }
 }
 
-void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
+void Partitioner::generate_cpu_schedule(AutoSchedule &sched) {
     // Grab the group bounds early as they rely on the dimensions of the group
     // outputs which will be altered by modifying schedules.
     map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
@@ -2907,7 +2980,7 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
 
     // Realize schedule for each group in the pipeline.
     for (const auto &g : groups) {
-        generate_group_cpu_schedule(g.second, t, get_element(loop_bounds, g.first),
+        generate_group_cpu_schedule(g.second, get_element(loop_bounds, g.first),
                                     get_element(storage_bounds, g.first), inlines, sched);
     }
 }
@@ -3318,6 +3391,8 @@ bool inline_unbounded(const vector<Function> &outputs,
 // the schedules. The target architecture is specified by 'target'.
 string generate_schedules(const vector<Function> &outputs, const Target &target,
                           const MachineParams &arch_params) {
+    srand(time(NULL));
+
     // Make an environment map which is used throughout the auto scheduling process.
     map<string, Function> env;
     for (Function f : outputs) {
@@ -3451,7 +3526,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     debug(2) << "Initializing partitioner...\n";
-    Partitioner part(pipeline_bounds, arch_params, outputs, dep_analysis, costs);
+    Partitioner part(target, pipeline_bounds, arch_params, outputs, dep_analysis, costs);
 
     // Compute and display reuse
     /* TODO: Use the reuse estimates to reorder loops
@@ -3497,11 +3572,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_grouping();
         part.disp_pipeline_graph();
     }
+    part.disp_stats();
 
     debug(2) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, full_order);
     debug(2) << "Generating CPU schedule...\n";
-    part.generate_cpu_schedule(target, sched);
+    part.generate_cpu_schedule(sched);
 
     std::ostringstream oss;
     oss << "// Target: " << target.to_string() << "\n";
@@ -3523,7 +3599,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 MachineParams MachineParams::generic() {
-  return MachineParams(16, 16 * 1024 * 1024, 40);
+  return MachineParams(16, 16 * 1024 * 1024, 40, -1);
 }
 
 std::string MachineParams::to_string() const {
@@ -3531,16 +3607,17 @@ std::string MachineParams::to_string() const {
                     last_level_cache_size.type().is_int() &&
                     balance.type().is_int());
     std::ostringstream o;
-    o << parallelism << "," << last_level_cache_size << "," << balance;
+    o << parallelism << "," << last_level_cache_size << "," << balance << "," << max_group_size;
     return o.str();
 }
 
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
+    user_assert(v.size() == 4) << "Unable to parse MachineParams: " << s;
     parallelism = Internal::string_to_int(v[0]);
     last_level_cache_size = Internal::string_to_int(v[1]);
     balance = Internal::string_to_int(v[2]);
+    max_group_size = Internal::string_to_int(v[3]);
 }
 
 }

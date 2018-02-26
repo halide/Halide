@@ -21,9 +21,11 @@ struct MachineParams {
     /** Indicates how much more expensive is the cost of a load compared to
      * the cost of an arithmetic operation at last level cache. */
     Expr balance;
+    Expr max_group_size;
 
-    explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
+    explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance, int32_t max_group_size)
+        : parallelism(parallelism), last_level_cache_size(llc), balance(balance)
+        , max_group_size(max_group_size) {}
 
     /** Default machine parameters for generic CPU architecture. */
     static MachineParams generic();

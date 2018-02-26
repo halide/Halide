@@ -1072,7 +1072,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
-    halide_target_feature_end = 50, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_auto_schedule_random_grouping = 50,  ///< Randomize the grouping decision by auto-scheduler.
+    halide_target_feature_end = 51, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
