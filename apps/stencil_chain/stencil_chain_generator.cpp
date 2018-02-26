@@ -35,12 +35,14 @@ public:
         output(x, y) = stages.back()(x, y);
 
         if (auto_schedule) {
+            const int width = 1536;
+            const int height = 2560;
             // Provide estimates on the input image
-            input.dim(0).set_bounds_estimate(0, 1536);
-            input.dim(1).set_bounds_estimate(0, 2560);
+            input.dim(0).set_bounds_estimate(0, width);
+            input.dim(1).set_bounds_estimate(0, height);
             // Provide estimates on the pipeline output
-            output.estimate(x, 32, 1536 - 64)
-                .estimate(y, 32, 2560 - 64);
+            output.estimate(x, 32, width - 64)
+                .estimate(y, 32, height - 64);
         } else {
             // CPU schedule. No fusion.
             Var yi, yo, xo, xi, t;
