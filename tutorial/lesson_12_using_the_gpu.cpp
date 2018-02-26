@@ -117,7 +117,7 @@ public:
         // This is helpful for figuring out which stages are slow, or when
         // CPU -> GPU copies happen. It hurts performance though, so we'll
         // leave it commented out.
-        //target.set_feature(Target::Debug);
+        target.set_feature(Target::Debug);
 
         // We make the decision about whether to use the GPU for each
         // Func independently. If you have one Func computed on the
@@ -246,7 +246,7 @@ public:
 
 int main(int argc, char **argv) {
     // Load an input image.
-    Buffer<uint8_t> input = load_image("images/rgb.ppm");
+    Buffer<uint8_t> input = load_image("images/rgb.png");
 
     // Allocated an image that will store the correct output
     Buffer<uint8_t> reference_output(input.width(), input.height(), input.channels());
@@ -265,6 +265,8 @@ int main(int argc, char **argv) {
     } else {
         printf("No GPU target available on the host\n");
     }
+
+    return 0;   // don't care about performance for now...
 
     printf("Testing performance on CPU:\n");
     p1.test_performance();
