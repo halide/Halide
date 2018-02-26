@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
         // Autoscheduled
         normalize.estimate(x, 0, in_png.width())
             .estimate(y, 0, in_png.height())
-            .estimate(c, 0, 4);
+            .estimate(c, 0, 3);
 
 
         input.dim(0).set_bounds_estimate(0, in_png.width());

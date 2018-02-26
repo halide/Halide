@@ -10,15 +10,15 @@ $(BIN)/stencil_chain_exec: stencil_chain_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/stencil_chain.a: $(BIN)/stencil_chain_exec
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain target=$(HL_TARGET) auto_schedule=false stencils=16
+	$^ -g stencil_chain -o $(BIN) -f stencil_chain target=$(HL_TARGET) auto_schedule=false stencils=32
 
 $(BIN)/stencil_chain_auto_schedule_old.a: $(BIN)/stencil_chain_exec
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule_old target=$(HL_TARGET)-auto_schedule_old-no_runtime auto_schedule=true stencils=8
+	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule_old target=$(HL_TARGET)-auto_schedule_old-no_runtime auto_schedule=true stencils=32
 
 $(BIN)/stencil_chain_auto_schedule.a: $(BIN)/stencil_chain_exec
 	@mkdir -p $(@D)
-	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime-auto_schedule_top_down auto_schedule=true stencils=8
+	$^ -g stencil_chain -o $(BIN) -f stencil_chain_auto_schedule target=$(HL_TARGET)-no_runtime-auto_schedule_top_down auto_schedule=true stencils=32
 
 $(BIN)/process: process.cpp $(BIN)/stencil_chain.a $(BIN)/stencil_chain_auto_schedule_old.a $(BIN)/stencil_chain_auto_schedule.a
 	@mkdir -p $(@D)

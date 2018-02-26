@@ -40,8 +40,8 @@ public:
             input.dim(0).set_bounds_estimate(0, 1536);
             input.dim(1).set_bounds_estimate(0, 2560);
             // Provide estimates on the pipeline output
-            output.estimate(x, 32, 1536 - 64)
-                .estimate(y, 32, 2560 - 64);
+            output.estimate(x, 64, 1536 - 128)
+                .estimate(y, 64, 2560 - 128);
             // Auto schedule the pipeline: this calls auto_schedule() for
             // all of the Outputs in this Generator
             auto_schedule_outputs();

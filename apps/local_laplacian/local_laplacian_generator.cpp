@@ -16,6 +16,14 @@ public:
 
     Output<Buffer<uint16_t>> output{"output", 3};
 
+    std::vector<Func> make_func_array(int size, const std::string &prefix) {
+        std::vector<Func> result;
+        for (int i = 0; i < size; i++) {
+            result.emplace_back(prefix + "[" + std::to_string(i) + "]");
+        }
+        return result;
+    }
+
     void generate() {
         /* THE ALGORITHM */
         const int J = pyramid_levels;
@@ -37,7 +45,7 @@ public:
         gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
         // Make the processed Gaussian pyramid.
-        Func gPyramid[maxJ];
+        auto gPyramid = make_func_array(maxJ, "gPyramid");
         // Do a lookup into a lut with 256 entires per intensity level
         Expr level = k * (1.0f / (levels - 1));
         Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
@@ -48,21 +56,21 @@ public:
         }
 
         // Get its laplacian pyramid
-        Func lPyramid[maxJ];
+        auto lPyramid = make_func_array(maxJ, "lPyramid");
         lPyramid[J-1](x, y, k) = gPyramid[J-1](x, y, k);
         for (int j = J-2; j >= 0; j--) {
             lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);
         }
 
         // Make the Gaussian pyramid of the input
-        Func inGPyramid[maxJ];
+        auto inGPyramid = make_func_array(maxJ, "inGPyramid");
         inGPyramid[0](x, y) = gray(x, y);
         for (int j = 1; j < J; j++) {
             inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
         }
 
         // Make the laplacian pyramid of the output
-        Func outLPyramid[maxJ];
+        auto outLPyramid = make_func_array(maxJ, "outLPyramid");
         for (int j = 0; j < J; j++) {
             // Split input pyramid value into integer and floating parts
             Expr level = inGPyramid[j](x, y) * cast<float>(levels-1);
@@ -73,7 +81,7 @@ public:
         }
 
         // Make the Gaussian pyramid of the output
-        Func outGPyramid[maxJ];
+        auto outGPyramid = make_func_array(maxJ, "outGPyramid");
         outGPyramid[J-1](x, y) = outLPyramid[J-1](x, y);
         for (int j = J-2; j >= 0; j--) {
             outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
@@ -152,16 +160,16 @@ private:
     // Downsample with a 1 3 3 1 filter
     Func downsample(Func f) {
         using Halide::_;
-        Func downx, downy;
-        downx(x, y, _) = (f(2*x-1, y, _) + 3.0f * (f(2*x, y, _) + f(2*x+1, y, _)) + f(2*x+2, y, _)) / 8.0f;
-        downy(x, y, _) = (downx(x, 2*y-1, _) + 3.0f * (downx(x, 2*y, _) + downx(x, 2*y+1, _)) + downx(x, 2*y+2, _)) / 8.0f;
-        return downy;
+        Func downx("downx"), downy("downy");
+        downy(x, y, _) = (f(x, 2*y-1, _) + 3.0f * (f(x, 2*y, _) + f(x, 2*y+1, _)) + f(x, 2*y+2, _)) / 8.0f;
+        downx(x, y, _) = (downy(2*x-1, y, _) + 3.0f * (downy(2*x, y, _) + downy(2*x+1, y, _)) + downy(2*x+2, y, _)) / 8.0f;
+        return downx;
     }
 
     // Upsample using bilinear interpolation
     Func upsample(Func f) {
         using Halide::_;
-        Func upx, upy;
+        Func upx("upx"), upy("upy");
         upx(x, y, _) = 0.25f * f((x/2) - 1 + 2*(x % 2), y, _) + 0.75f * f(x/2, y, _);
         upy(x, y, _) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2), _) + 0.75f * upx(x, y/2, _);
         return upy;

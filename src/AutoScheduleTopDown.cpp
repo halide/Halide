@@ -128,6 +128,10 @@ struct FunctionDAG {
                 void visit(const Call *op) override {
                     IRVisitor::visit(op);
                     calls[op->name]++;
+                    // There's a bunch of implied math in the
+                    // addressing if it's a Halide or Image call, and
+                    // in the actual function call if it's not.
+                    leaves += op->args.size();
                 }
             public:
                 int leaves = 0;
@@ -143,9 +147,13 @@ struct FunctionDAG {
             for (const auto &e : exprs_vector) {
                 bytes_per_element += e.type().bytes();
             }
-            node.memory = bytes_per_element * bytes_per_element;
+            // Assume things vectorize OK, so bill more for wider types that have lower vector throughput
+            node.compute *= bytes_per_element;
+            node.compute_if_inlined *= bytes_per_element;
+
+            node.memory = bytes_per_element;
             node.memory *= params.balance;
-            node.memory /= params.last_level_cache_size;
+            node.memory /= std::log(params.last_level_cache_size);
 
             // Set parameter estimates (we could also do this in compute_bounds_and_costs)
             class ApplyParamEstimates : public IRMutator {
@@ -249,13 +257,19 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d) {
                     is_full &= (t[i] == s[i]);
                 }
             }
-            t.push_back(s[d]);
-            if (!is_full) {
+            t.push_back(0);
+            for (int outer = 1; outer < s[d]; outer *= 2) {
+                int inner = (s[d] + outer - 1) / outer;
+                if (is_one && outer == 1) continue;
+                if (outer > inner || (d == 0 && inner < 16)) break; // TODO 16 should be a param
+                t.back() = outer;
                 result.push_back(t);
             }
-            for (int i = 1; i < 32 && i < s[d]; i *= 2) {
-                if (is_one && i == 1) continue;
-                t.back() = i;
+            for (int inner = 1; inner < s[d]; inner *= 2) {
+                int outer = (s[d] + inner - 1) / inner;
+                if (is_full && inner == 1) continue;
+                if (inner > outer) break;
+                t.back() = outer;
                 result.push_back(t);
             }
         }
@@ -287,7 +301,11 @@ struct PartialScheduleNode {
     // Funcs inlined into this inner loop, and the number of times they are called. Only valid if children is empty.
     map<Function, int64_t, Function::Compare> inlined;
 
-    double cost(const FunctionDAG &dag, std::set<Function, Function::Compare> in_realization, int64_t instances, const PartialScheduleNode *parent) {
+    double cost(const FunctionDAG &dag, std::set<Function, Function::Compare> in_realization, int64_t instances, const PartialScheduleNode *parent,
+                map<const FunctionDAG::Node *, double> *node_costs = nullptr,
+                map<const FunctionDAG::Edge *, double> *edge_costs = nullptr,
+                set<Function, Function::Compare> *inlined_funcs = nullptr) {
+
         double result = 0;
 
         const FunctionDAG::Node *node = is_root() ? nullptr : dag.node_map.at(func);
@@ -297,6 +315,10 @@ struct PartialScheduleNode {
             subinstances *= i;
         }
         if (innermost) {
+            // Assume vectorization by 16 across the innermost dimension
+            subinstances /= size[0];
+            subinstances *= ((size[0] + 15) / 16) * 16;
+
             // Apply the compute cost
             result += node->compute * subinstances;
 
@@ -304,7 +326,12 @@ struct PartialScheduleNode {
 
             // Apply the compute cost of any inlined functions
             for (auto p : inlined) {
-                result += dag.node_map.at(p.first)->compute_if_inlined * subinstances * p.second;
+                double c = dag.node_map.at(p.first)->compute_if_inlined * subinstances * p.second;
+                // debug(0) << "Inlined Func " << p.first.name() << " has compute cost " << c << "\n";
+                result += c;
+                if (inlined_funcs) {
+                    inlined_funcs->insert(p.first);
+                }
             }
 
             // Add some loop overhead to encourage larger inner
@@ -314,14 +341,18 @@ struct PartialScheduleNode {
             for (size_t i = 1; i < size.size(); i++) {
                 loop_overhead *= size[i];
             }
-            result += loop_overhead;
+            result += loop_overhead * 100; // TODO: Make this scale factor a parameter
+
+            if (node_costs) {
+                (*node_costs)[dag.node_map.at(func)] = result;
+            }
         }
 
         if (!is_root() &&
             !in_realization.count(func)) {
             in_realization.insert(func);
             for (auto c : children) {
-                result += c->cost(dag, in_realization, subinstances, this);
+                result += c->cost(dag, in_realization, subinstances, this, node_costs, edge_costs, inlined_funcs);
             }
             in_realization.erase(func);
 
@@ -332,12 +363,16 @@ struct PartialScheduleNode {
                 points *= p.second - p.first + 1;
                 // debug(0) << "  " << p.first << ", " << p.second << "\n";
             }
-            double mem_cost = node->memory * instances * points * points * dag.outgoing_edges.at(func).size();
-            result += mem_cost;
-            // debug(0) << "Memory cost for " << func.name() << ": " << mem_cost << "\n";
+            double mem_cost = node->memory * instances * points * std::log(points);
+            for (const auto *e : dag.outgoing_edges.at(func)) {
+                result += mem_cost;
+                if (edge_costs) {
+                    (*edge_costs)[e] = mem_cost;
+                }
+            }
         } else {
             for (auto c : children) {
-                result += c->cost(dag, in_realization, subinstances, this);
+                result += c->cost(dag, in_realization, subinstances, this, node_costs, edge_costs, inlined_funcs);
             }
         }
 
@@ -351,8 +386,10 @@ struct PartialScheduleNode {
     struct Bound {
         // The box over which something is touched
         vector<pair<int64_t, int64_t>> region;
-        // The minimum number of points which must be evaluated
+        // The minimum possible number of points evaluated.
         int64_t min_points;
+        // The minimum possible compute cost
+        double min_cost;
     };
 
     // The total bounds required of the given Func for one representative iteration of this loop. Computed lazily and cached.
@@ -380,6 +417,7 @@ struct PartialScheduleNode {
                     << "Need an estimate on dimension " << i << " of \"" << f.name() << "\"";
                 bound.region.push_back(it->second);
             }
+            bound.min_cost = bound.min_points * dag.node_map.at(f)->compute;
         } else {
             internal_assert(!dag.outgoing_edges.at(f).empty())
                 << "No consumers of " << f.name()
@@ -416,6 +454,8 @@ struct PartialScheduleNode {
                 points_if_realized *= (bound.region[i].second - bound.region[i].first + 1);
             }
             bound.min_points = std::min(points_if_realized, calls_if_inlined);
+            const auto *n = dag.node_map.at(f);
+            bound.min_cost = std::min(points_if_realized * n->compute, calls_if_inlined * n->compute_if_inlined);
             internal_assert(!bound.region.empty()) << is_root() << " " << f.name() << "\n";
         }
         bounds[f] = std::move(bound);
@@ -423,7 +463,10 @@ struct PartialScheduleNode {
     }
 
     void dump(string prefix) const {
-        debug(0) << prefix << (is_root() ? "root" : func.name());
+        if (!is_root()) {
+            debug(0) << prefix << func.name();
+            prefix += " ";
+        }
         for (auto s : size) {
             debug(0) << " " << s;
         }
@@ -432,12 +475,11 @@ struct PartialScheduleNode {
         } else {
             debug(0) << "\n";
         }
-        prefix += " ";
-        for (auto c : children) {
-            c->dump(prefix);
+        for (size_t i = children.size(); i > 0; i--) {
+            children[i-1]->dump(prefix);
         }
         for (auto p : inlined) {
-            debug(0) << prefix << " inlined: " << p.first.name() << "\n";
+            debug(0) << prefix << " inlined: " << p.first.name() << " " << p.second << "\n";
         }
     }
 
@@ -502,6 +544,7 @@ struct PartialScheduleNode {
         node->innermost = true;
         Bound single_point;
         single_point.min_points = 1;
+        single_point.min_cost = dag.node_map.at(f)->compute;
         for (int i = 0; i < f.dimensions(); i++) {
             // Initialize the loop nest to cover the desired bounds
             node->size.push_back(bounds.region[i].second - bounds.region[i].first + 1);
@@ -544,6 +587,15 @@ struct PartialScheduleNode {
             auto tilings = generate_tilings(size, (int)(size.size() - 1));
 
             for (auto t : tilings) {
+                if (parent->is_root()) {
+                    // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
+                    int total = 1;
+                    for (auto s : t) {
+                        total *= s;
+                    }
+                    if (total < 16) continue; // TODO: This should come from the params
+                }
+
                 // Tile this loop and place the computation at some coarser granularity
                 PartialScheduleNode outer = *this;
 
@@ -571,7 +623,7 @@ struct PartialScheduleNode {
                     int64_t extent = parent_bounds.region[i].second - min + 1;
                     extent = (extent + factor - 1) / factor;
                     outer.bounds[func].region[i] = {min, min + extent - 1};
-                    // TODO: min_points?
+                    // TODO: min_points, min_compute?
                 }
 
                 outer.children.push_back(inner);
@@ -595,6 +647,99 @@ struct PartialScheduleNode {
         return result;
     }
 
+    void apply(LoopLevel here, const FunctionDAG &dag,
+               map<Function, vector<VarOrRVar>, Function::Compare> &vars_map,
+               double num_cores) {
+        if (is_root()) {
+            for (auto &c : children) {
+                Func(c->func).compute_root();
+                c->apply(LoopLevel::root(), dag, vars_map, num_cores);
+            }
+        } else {
+            auto &vars = vars_map[func];
+
+            if (vars.empty()) {
+                for (Var v : Func(func).args()) {
+                    vars.push_back(v);
+                }
+            }
+
+            if (innermost) {
+                Var v = vars[0].var;
+                here = LoopLevel(func, v);
+                if (size[0] >= 16) {
+                    Func(func).vectorize(v, 16);
+                } else if (size[0] >= 8) {
+                    Func(func).vectorize(v, 8);
+                } else if (size[0] >= 4) {
+                    Func(func).vectorize(v, 4);
+                }
+                if ((int)vars.size() > func.dimensions()) {
+                    // If we've split in the innermost dimension, we
+                    // know the size for sure. TODO: We also know the
+                    // size of the innermost dimension exactly in
+                    // other circumstances (e.g. producers for a tiled
+                    // stencil consumer).
+                    if (size[0] <= 32) {
+                        Func(func).unroll(v);
+                    }
+                }
+                if (num_cores > 1) {
+                    double task_size = size.back() / num_cores;
+                    if (task_size > 1) {
+                        Func(func).parallel(vars[func.dimensions() - 1], (int)std::ceil(task_size));
+                    } else {
+                        Func(func).parallel(vars[func.dimensions() - 1]);
+                    }
+                }
+            } else {
+                // Do the implied splits
+                auto b = get_bounds(func, dag);
+                vector<VarOrRVar> new_inner;
+                for (size_t i = 0; i < b.region.size(); i++) {
+                    auto p = b.region[i];
+                    int extent = p.second - p.first + 1;
+                    Var old = vars[i].var;
+                    Var outer(old.name() + "o"), inner(old.name() + "i");
+                    Func(func).split(old, outer, inner, extent);
+                    vars[i] = outer;
+                    new_inner.push_back(inner);
+                }
+                // parallelize the outer vars
+                if (num_cores > 1) {
+                    int innermost_parallel_dimension;
+                    int num_parallel_dimensions = 0;
+                    for (int i = func.dimensions() - 1; num_cores > 1 && i >= 0; i--) {
+                        Func(func).parallel(vars[i]);
+                        num_parallel_dimensions++;
+                        num_cores /= size[i];
+                        innermost_parallel_dimension = i;
+                    }
+                    // We parallelizes outer loop dimensions i + 1
+                    // through func.dimensions() - 1. Fuse them into
+                    // one parallel loop to minimize the amount of
+                    // nested parallelism.
+                    for (int i = 0; i < num_parallel_dimensions - 1; i++) {
+                        Var inner = vars[innermost_parallel_dimension].var;
+                        Var outer = vars[innermost_parallel_dimension + 1].var;
+                        Var fused(inner.name() + "_" + outer.name());
+                        Func(func).fuse(inner, outer, fused);
+                        vars[innermost_parallel_dimension] = fused;
+                        vars.erase(vars.begin() + innermost_parallel_dimension + 1);
+                    }
+                }
+                here = LoopLevel(func, vars[0]);
+                vars.insert(vars.begin(), new_inner.begin(), new_inner.end());
+            }
+            for (auto &c : children) {
+                if (!c->func.same_as(func)) {
+                    Func(c->func).compute_at(here);
+                }
+                c->apply(here, dag, vars_map, num_cores);
+            }
+        }
+    }
+
 };
 
 struct State {
@@ -607,6 +752,22 @@ struct State {
     void calculate_cost(const FunctionDAG &dag) {
         std::set<Function, Function::Compare> in_realization;
         cost = root.cost(dag, in_realization, 1, nullptr);
+
+        /*
+        debug(0) << "Calculating cost for: \n";
+        dump();
+        debug(0) << "Total cost: " << cost << "\n";
+        */
+
+        // Subtract the essential compute cost of the funcs scheduled so far.
+        for (int i = 0; i < num_funcs_scheduled; i++) {
+            const FunctionDAG::Node &n = dag.nodes[i];
+            double c = root.get_bounds(n.func, dag).min_cost;
+            //debug(0) << "Func " << n.func.name() << " has minimum cost " << c << "\n";
+            cost -= c;
+        }
+
+        // debug(0) << "Redundant cost: " << cost << "\n";
     }
 
     void generate_children(const FunctionDAG &dag, std::function<void(State *)> &accept_child) {
@@ -623,8 +784,6 @@ struct State {
                 << "Partially scheduled code doesn't compute " << e->consumer.name()
                 << ", which is one of the consumers of " << f.name();
         }
-
-        debug(0) << "Scheduling " << f.name() << "\n";
 
         // 1) Inline it
         if (!dag.outgoing_edges.at(f).empty()) {
@@ -650,7 +809,48 @@ struct State {
 
     void dump() const {
         debug(0) << "State with cost " << cost << ":\n";
-        root.dump(" ");
+        root.dump("");
+    }
+
+    void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
+        map<Function, vector<VarOrRVar>, Function::Compare> vars_map;
+        root.apply(LoopLevel::root(), dag, vars_map, params.parallelism);
+        // Do all the reorders
+        for (auto &p : vars_map) {
+            Func(p.first).reorder(p.second);
+        }
+    }
+
+    void print_predicted_runtimes(const FunctionDAG &dag, const MachineParams &params) {
+        std::set<Function, Function::Compare> in_realization, inlined;
+        std::map<const FunctionDAG::Node *, double> node_costs;
+        std::map<const FunctionDAG::Edge *, double> edge_costs;
+        root.cost(dag, in_realization, 1, nullptr, &node_costs, &edge_costs, &inlined);
+
+
+        for (size_t i = dag.nodes.size(); i > 0; i--) {
+            Function f = dag.nodes[i-1].func;
+            if (inlined.count(f)) {
+                double c = 0;
+                for (const auto *e1 : dag.incoming_edges.at(f)) {
+                    c += edge_costs[e1];
+                }
+                for (const auto *e2 : dag.outgoing_edges.at(f)) {
+                    edge_costs[e2] += c;
+                }
+            }
+        }
+
+        for (auto n : node_costs) {
+            double compute_cost = n.second;
+            double mem_cost = 0;
+            for (const auto *e : dag.incoming_edges.at(n.first->func)) {
+                mem_cost += edge_costs[e];
+            }
+            debug(0) << "Func " << n.first->func.name() << " has costs: "
+                     << (compute_cost + mem_cost) << " = "
+                     << compute_cost << " + " << mem_cost << "\n";
+        }
     }
 };
 
@@ -685,21 +885,43 @@ State optimal_schedule(FunctionDAG &dag, vector<Function> outputs, const Machine
             q.swap(trimmed);
         }
 
-        internal_assert(!q.empty());
-        auto state = q.top();
-        q.pop();
+        decltype(q) pending;
+        q.swap(pending);
+        while (!pending.empty()) {
+            auto state = pending.top();
+            pending.pop();
 
+            double progress = (double)(state->num_funcs_scheduled) / dag.nodes.size();
+            progress *= 78;
+            debug(0) << '[';
+            for (int j = 0; j < 78; j++) {
+                if (j < progress) {
+                    debug(0) << '.';
+                } else if (j - 1 < progress) {
+                    debug(0) << "/-\\|"[i % 4];
+                } else {
+                    debug(0) << ' ';
+                }
+            }
+            debug(0) << ']';
+            for (int j = 0; j < 80; j++) {
+                debug(0) << '\b';
+            }
 
-        if (true || i % 1000 == 0) {
-            debug(0) << "** Queue top: ";
-            state->dump();
+            /*
+              if (true || i % 1000 == 0) {
+              debug(0) << "** Queue top: ";
+              state->dump();
+              }
+            */
+
+            if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
+                debug(0) << '\n';
+                return *state;
+            }
+
+            state->generate_children(dag, enqueue_new_children);
         }
-
-        if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
-            return *state;
-        }
-
-        state->generate_children(dag, enqueue_new_children);
     }
 }
 
@@ -709,7 +931,7 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
                                         const Target &target,
                                         const MachineParams &params) {
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    size_t beam_size = 1000;
+    size_t beam_size = 1;
     if (!beam_size_str.empty()) {
         beam_size = atoi(beam_size_str.c_str());
     }
@@ -748,18 +970,25 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
     debug(0) << "Optimal schedule:\n";
     optimal.dump();
 
+    // Just to get the debugging prints to fire
+    optimal.calculate_cost(dag);
+
     // Apply the schedules
+    optimal.apply_schedule(dag, params);
+
+    // Print out the predicted runtime of each Func, so we can compare them to a profile
+    optimal.print_predicted_runtimes(dag, params);
 
 
     return "";
 }
 
 void autoschedule_test() {
-    MachineParams params(8, 16 * 1024 * 1024, 40);
-    size_t beam_size = 1000000;
+    MachineParams params(8, 16 * 1024 * 1024, 100);
+    size_t beam_size = 1;
     Target target("host");
 
-    Var x, y;
+    Var x("x"), y("y");
 
     {
         // In a point-wise pipeline, everything should be fully fused.
@@ -774,8 +1003,12 @@ void autoschedule_test() {
         FunctionDAG dag(outputs, params);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
+        debug(0) << "Optimal schedule:\n";
         optimal.dump();
         debug(0) << "\n";
+
+        optimal.apply_schedule(dag, params);
+        h.realize(1000, 1000);
 
     }
 
@@ -803,8 +1036,12 @@ void autoschedule_test() {
         FunctionDAG dag(outputs, cheap_memory);
         State optimal = optimal_schedule(dag, outputs, cheap_memory, beam_size);
 
+        debug(0) << "Optimal schedule:\n";
         optimal.dump();
         debug(0) << "\n";
+
+        optimal.apply_schedule(dag, params);
+        h.realize(1000, 1000);
     }
 
     {
@@ -819,8 +1056,12 @@ void autoschedule_test() {
         FunctionDAG dag(outputs, params);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
+        debug(0) << "Optimal schedule:\n";
         optimal.dump();
         debug(0) << "\n";
+
+        optimal.apply_schedule(dag, params);
+        h.realize(2048, 2048);
     }
 
     // Smaller footprint stencil -> smaller tiles
@@ -835,8 +1076,12 @@ void autoschedule_test() {
         FunctionDAG dag(outputs, params);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
+        debug(0) << "Optimal schedule:\n";
         optimal.dump();
         debug(0) << "\n";
+
+        optimal.apply_schedule(dag, params);
+        h.realize(2048, 2048);
     }
 
     // A stencil chain
@@ -857,9 +1102,12 @@ void autoschedule_test() {
         vector<Function> outputs = {f[N-1].function()};
         FunctionDAG dag(outputs, params);
         State optimal = optimal_schedule(dag, outputs, params, 1);
+        debug(0) << "Optimal schedule:\n";
         optimal.dump();
         debug(0) << "\n";
 
+        optimal.apply_schedule(dag, params);
+        f[N-1].realize(2048, 2048);
     }
 }
 
