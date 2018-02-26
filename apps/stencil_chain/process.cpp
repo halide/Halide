@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     #ifndef NO_AUTO_SCHEDULE
     // Auto-scheduled version
     double best_auto = benchmark(timing, 1, [&]() {
-        stencil_chain(input, output);
+        stencil_chain_auto_schedule(input, output);
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
     #endif
