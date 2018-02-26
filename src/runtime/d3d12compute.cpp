@@ -553,8 +553,9 @@ template<>
 void release_d3d12_object<d3d12_buffer>(d3d12_buffer *buffer) {
     TRACELOG;
     Release_ID3D12Object(buffer->resource);
-    if (buffer->mallocd)
+    if (buffer->mallocd) {
         free(buffer);
+    }
 }
 
 template<>
@@ -707,8 +708,7 @@ static void D3D12WaitForPix() {
     TRACELOG;
     TRACEPRINT("[[ delay for attaching to PIX... ]]\n");
     volatile uint32_t x = (1 << 31);
-    while (--x > 0)
-        ;
+    while (--x > 0) { }
 }
 #endif
 
@@ -973,8 +973,9 @@ D3D12TYPENAME(ID3D12MemoryMappedResource)
 WEAK void *map_buffer(d3d12_buffer *buffer) {
     TRACELOG;
 
-    if (buffer->mapped)
+    if (buffer->mapped) {
         return buffer->mapped;
+    }
 
     D3D12_RANGE readRange = { };
     switch (buffer->type) {
@@ -1586,8 +1587,7 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
 
     HRESULT result_before = (*device)->GetDeviceRemovedReason();
 
-    while (queue_fence->GetCompletedValue() < cmdList->signal)
-        ;
+    while (queue_fence->GetCompletedValue() < cmdList->signal) { }
 
     HRESULT result_after = (*device)->GetDeviceRemovedReason();
     if (FAILED(result_after)) {
