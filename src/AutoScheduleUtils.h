@@ -41,13 +41,37 @@ public:
 };
 
 
+namespace {
+int string_to_int(const std::string &s) {
+    std::istringstream iss(s);
+    int i;
+    iss >> i;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
+    return i;
+}
+} // anonymous namespace
+
 /** Substitute every variable with its estimate if specified. */
 class SubstituteVarEstimates: public IRMutator2 {
     using IRMutator2::visit;
 
     Expr visit(const Variable *var) override {
-        if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
+        if (var->param.defined() && var->param.is_buffer()) {
+            std::vector<std::string> v = Internal::split_string(var->name, ".");
+            user_assert(v.size() >= 3) << "Buffer name: " << var->name << "\n";
+            int d = Internal::string_to_int(v[v.size()-1]);
+            // TODO(psuriana): Is there a better way to get the estimate for
+            // buffer min/extent instead of relying on the name?
+            if (v[v.size()-2] == "min") {
+                return var->param.min_constraint_estimate(d);
+            } else if (v[v.size()-2] == "extent") {
+                return var->param.extent_constraint_estimate(d);
+            } else {
+                internal_assert(false); // Shouldn't have reached here
+                return Expr();
+            }
+        } else if (var->param.defined() && !var->param.is_buffer() &&
+                   var->param.estimate().defined()) {
             return var->param.estimate();
         } else {
             return var;

@@ -151,6 +151,15 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+string Pipeline::auto_schedule(const Target &target) {
+    string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (!params.empty()) {
+        return generate_schedules(contents->outputs, target, MachineParams(params));
+    } else {
+        return generate_schedules(contents->outputs, target, MachineParams::generic());
+    }
+}
+
 string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)

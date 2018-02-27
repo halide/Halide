@@ -28,25 +28,25 @@ Func upsample(Func f) {
 double run_test(bool auto_schedule) {
     int H = 1536;
     int W = 2560;
-    Buffer<uint8_t> left_im(H, W, 3);
-    Buffer<uint8_t> right_im(H, W, 3);
+    Buffer<uint8_t> left_img(H, W, 3);
+    Buffer<uint8_t> right_img(H, W, 3);
 
-    for (int y = 0; y < left_im.height(); y++) {
-        for (int x = 0; x < left_im.width(); x++) {
+    for (int y = 0; y < left_img.height(); y++) {
+        for (int x = 0; x < left_img.width(); x++) {
             for (int c = 0; c < 3; c++) {
-                left_im(x, y, c) = rand() & 0xfff;
-                right_im(x, y, c) = rand() & 0xfff;
+                left_img(x, y, c) = rand() & 0xfff;
+                right_img(x, y, c) = rand() & 0xfff;
             }
         }
     }
 
-    //ImageParam left_im(UInt(8), 3, "left_im");
-    //ImageParam right_im(UInt(8), 3, "right_im");
+    ImageParam left_im(UInt(8), 3, "left_im");
+    ImageParam right_im(UInt(8), 3, "right_im");
 
     // The number of displacements to consider
-    //const int slices = 32;
-    Param<int> slices;
-    slices.set_range(1, 256);
+    const int slices = 32;
+    /*Param<int> slices;
+    slices.set_range(1, 256);*/
 
     // The depth to focus on
     const int focus_depth = 13;
@@ -58,7 +58,7 @@ double run_test(bool auto_schedule) {
     const int aperture_samples = 32;
 
     Expr maximum_blur_radius =
-        cast<int>(max(slices - focus_depth, focus_depth) * blur_radius_scale);
+        cast<int>(std::max(slices - focus_depth, focus_depth) * blur_radius_scale);
 
     Func left = BoundaryConditions::repeat_edge(left_im);
     Func right = BoundaryConditions::repeat_edge(right_im);
@@ -281,35 +281,37 @@ double run_test(bool auto_schedule) {
             // At this point, I think I've converged.
         }
     } else {
-        /*left_im.dim(0).set_bounds_estimate(0, left_img.width());
+        left_im.dim(0).set_bounds_estimate(0, left_img.width());
         left_im.dim(1).set_bounds_estimate(0, left_img.height());
         left_im.dim(2).set_bounds_estimate(0, 3);
 
         right_im.dim(0).set_bounds_estimate(0, right_img.width());
         right_im.dim(1).set_bounds_estimate(0, right_img.height());
-        right_im.dim(2).set_bounds_estimate(0, 3);*/
+        right_im.dim(2).set_bounds_estimate(0, 3);
 
-        final.estimate(x, 0, left_im.width())
-            .estimate(y, 0, left_im.height())
+        //slices.set_estimate(32);
+
+        final.estimate(x, 0, left_img.width())
+            .estimate(y, 0, left_img.height())
             .estimate(c, 0, 3);
         p.auto_schedule(target);
     }
 
     if (auto_schedule) {
-        p.compile_to_lowered_stmt("lens_blur.html", {left_im, right_im, slices}, HTML, target);
+        p.compile_to_lowered_stmt("lens_blur.html", {left_im, right_im}, HTML, target);
     } else {
-        p.compile_to_lowered_stmt("lens_blur_manual.html", {left_im, right_im, slices}, HTML, target);
+        p.compile_to_lowered_stmt("lens_blur_manual.html", {left_im, right_im}, HTML, target);
     }
     // Inspect the schedule
     //final.print_loop_nest();
 
-    //left_im.set(left_img);
-    //right_im.set(right_img);
+    left_im.set(left_img);
+    right_im.set(right_img);
 
-    slices.set(32);
+    //slices.set(32);
 
     // Run the schedule
-    Buffer<float> out(left_im.width(), left_im.height(), 3);
+    Buffer<float> out(left_img.width(), left_img.height(), 3);
     double t = benchmark(3, 10, [&]() {
         p.realize(out);
     });
@@ -318,7 +320,7 @@ double run_test(bool auto_schedule) {
 }
 
 int main(int argc, char **argv) {
-    /*double manual_time = run_test(false);
+    double manual_time = run_test(false);
     double auto_time = run_test(true);
 
     std::cout << "======================" << std::endl;
@@ -326,7 +328,7 @@ int main(int argc, char **argv) {
     std::cout << "Auto time: " << auto_time << "ms" << std::endl;
     std::cout << "======================" << std::endl;
 
-    if (!get_target_from_environment().has_gpu_feature() &&
+    /*if (!get_target_from_environment().has_gpu_feature() &&
         (auto_time > manual_time * 2)) {
         printf("Auto-scheduler is much much slower than it should be.\n");
         return -1;

@@ -29,14 +29,6 @@ using std::make_pair;
 
 namespace {
 
-int string_to_int(const std::string &s) {
-    std::istringstream iss(s);
-    int i;
-    iss >> i;
-    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
-    return i;
-}
-
 // Return true if any of the box dimension is unbounded.
 bool is_box_unbounded(const Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
@@ -1067,6 +1059,9 @@ struct Partitioner {
     const vector<Function> &outputs;
     // Target architecture and other flags for auto-scheduler.
     const Target &target;
+    // Flip the grouping decision if bigger than threshold (between 0 to 99).
+    // If value is -1, do not flip.
+    int flip_threshold;
     // How many times group fusion happened
     size_t num_inline_fusion;
     size_t num_fast_mem_fusion;
@@ -1342,8 +1337,17 @@ Partitioner::Partitioner(const Target &_target,
                          RegionCosts &_costs)
         : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
           dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs),
-          target(_target), num_inline_fusion(0), num_fast_mem_fusion(0),
-          total_fusion(0) {
+          target(_target), flip_threshold(-1), num_inline_fusion(0),
+          num_fast_mem_fusion(0), total_fusion(0) {
+
+    string prob_str = Internal::get_env_variable("HL_AUTO_SCHEDULE_RANDOM");
+    if (!prob_str.empty()) {
+        flip_threshold = Internal::string_to_int(prob_str);
+        user_assert(flip_threshold >= 0 && flip_threshold <= 100)
+            << "Flip threshold should be between 0 and 100, got "
+            << flip_threshold << " instead\n";
+    }
+
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
@@ -1483,18 +1487,18 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         // of two choices are equal
         bool replace = best_benefit.defined() && overall_benefit.defined() &&
                        can_prove(best_benefit < overall_benefit);
-        if (target.has_feature(Target::AutoScheduleRandomGrouping)) {
+        if ((level == Partitioner::Level::FastMem) && (flip_threshold != -1)) {
             const int val = rand() % 100;
-            bool flip = val > 70;
+            bool flip = val > flip_threshold;
             if (flip) {
                 replace = !replace;
             }
-            debug(0) << "...Random replacement, val: " << val << ", flip? " << flip << ", replace? " << replace;
+            /*debug(0) << "...Random replacement, threshold: " << flip_threshold << ", val: " << val << ", flip? " << flip << ", replace? " << replace;
             if (level == Partitioner::Level::Inline) {
                 debug(0) << ", level? inline \n";
             } else {
                 debug(0) << ", level? fast-mem \n";
-            }
+            }*/
         }
         if (replace) {
             best_grouping = grouping;
@@ -1675,7 +1679,19 @@ void Partitioner::group(Partitioner::Level level) {
     bool fixpoint = false;
     while (!fixpoint) {
         Cost pre_merge = get_pipeline_cost();
-        evolution.push_back(pre_merge);
+
+        if ((level == Partitioner::Level::Inline) && (arch_params.max_inline_fusion != -1) &&
+            ((int)num_inline_fusion >= arch_params.max_inline_fusion)) {
+            debug(0) << "Number of inline fusions (" << num_inline_fusion << ") exceeds the maximum allowed ("
+                     << arch_params.max_inline_fusion << ")\n";
+            return;
+        }
+        if ((level == Partitioner::Level::FastMem) && (arch_params.max_fast_mem_fusion != -1) &&
+            ((int)num_fast_mem_fusion >= arch_params.max_fast_mem_fusion)) {
+            debug(0) << "Number of fast-mem fusions (" << num_fast_mem_fusion << ") exceeds the maximum allowed ("
+                     << arch_params.max_fast_mem_fusion << ")\n";
+            return;
+        }
 
         fixpoint = true;
         vector<pair<string, string>> cand;
@@ -1745,8 +1761,8 @@ void Partitioner::group(Partitioner::Level level) {
         }
         total_fusion += 1;
         internal_assert(total_fusion <= dep_analysis.env.size())
-         << "Total fusion (" << total_fusion << ") is larger than number of "
-         << "funcs in env (" << dep_analysis.env.size() << ")\n";
+            << "Total fusion (" << total_fusion << ") is larger than number of "
+            << "funcs in env (" << dep_analysis.env.size() << ")\n";
 
         // The following code makes the assumption that all the stages of a function
         // will be in the same group. 'choose_candidate_grouping' ensures that the
@@ -1801,6 +1817,7 @@ void Partitioner::group(Partitioner::Level level) {
         }
 
         Cost post_merge = get_pipeline_cost();
+        evolution.push_back(post_merge);
         if (debug::debug_level() >= 3) {
             disp_pipeline_costs();
         }
@@ -3558,6 +3575,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_pipeline_costs();
     }
 
+    // Initial cost of the pipeline before doing anything
+    part.evolution.push_back(part.get_pipeline_cost());
+
     debug(2) << "Partitioner computing inline group...\n";
     part.group(Partitioner::Level::Inline);
     if (debug::debug_level() >= 3) {
@@ -3574,9 +3594,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
     part.disp_stats();
 
-    debug(2) << "Initializing AutoSchedule...\n";
+    debug(0) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, full_order);
-    debug(2) << "Generating CPU schedule...\n";
+    debug(0) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(sched);
 
     std::ostringstream oss;
@@ -3599,7 +3619,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 MachineParams MachineParams::generic() {
-  return MachineParams(16, 16 * 1024 * 1024, 40, -1);
+  return MachineParams(16, 16 * 1024 * 1024, 40, -1, -1);
 }
 
 std::string MachineParams::to_string() const {
@@ -3607,17 +3627,19 @@ std::string MachineParams::to_string() const {
                     last_level_cache_size.type().is_int() &&
                     balance.type().is_int());
     std::ostringstream o;
-    o << parallelism << "," << last_level_cache_size << "," << balance << "," << max_group_size;
+    o << parallelism << "," << last_level_cache_size << "," << balance << ","
+      << max_inline_fusion << "," << max_fast_mem_fusion;
     return o.str();
 }
 
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 4) << "Unable to parse MachineParams: " << s;
+    user_assert(v.size() == 5) << "Unable to parse MachineParams: " << s;
     parallelism = Internal::string_to_int(v[0]);
     last_level_cache_size = Internal::string_to_int(v[1]);
     balance = Internal::string_to_int(v[2]);
-    max_group_size = Internal::string_to_int(v[3]);
+    max_inline_fusion = Internal::string_to_int(v[3]);
+    max_fast_mem_fusion = Internal::string_to_int(v[4]);
 }
 
 }
