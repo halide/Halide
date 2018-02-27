@@ -730,8 +730,8 @@ struct AutoSchedule {
 
     const map<string, Function> &env;
 
-    // Contain maps from function name to realization order.
-    map<string, size_t> realization_order;
+    // Contain maps from function name to the topological order of the pipeline.
+    map<string, size_t> topological_order;
 
     // Cache for storing all internal vars/rvars that have been declared during
     // the course of schedule generation, to ensure that we don't introduce any
@@ -748,7 +748,7 @@ struct AutoSchedule {
 
     AutoSchedule(const map<string, Function> &env, const vector<string> &order) : env(env) {
         for (size_t i = 0; i < order.size(); ++i) {
-            realization_order.emplace(order[i], i);
+            topological_order.emplace(order[i], i);
         }
         // Allocate a slot in 'used_vars' for each function stages in the pipeline
         for (const auto &iter : env) {
@@ -761,7 +761,7 @@ struct AutoSchedule {
     // Given a function name, return a string representation of getting the
     // function handle
     string get_func_handle(const string &name) const {
-        size_t index = get_element(realization_order, name);
+        size_t index = get_element(topological_order, name);
         return "pipeline.get_func(" + std::to_string(index) + ")";
     }
 
@@ -3330,12 +3330,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         iter.second.lock_loop_levels();
     }
 
-    // Compute the realization order, before any trivial inlining (i.e. before
-    // we remove any functions from 'env'). We need the full realization
+    // Compute the topological order, before any trivial inlining (i.e. before
+    // we remove any functions from 'env'). We need the full topological
     // order to pass to get_func() when generating the string representation
     // of the schedule.
-    debug(2) << "Computing full realization order...\n";
-    vector<string> full_order = realization_order(outputs, env).first;
+    debug(2) << "Computing topological order...\n";
+    vector<string> top_order = topological_order(outputs, env);
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
@@ -3353,7 +3353,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // computing a Func is about the same as calling that Func, we should
     // just inline it).
     debug(2) << "Inlining all trivial functions...\n";
-    if (inline_all_trivial_functions(outputs, full_order, env)) {
+    if (inline_all_trivial_functions(outputs, top_order, env)) {
         // If any of the Funcs is inlined, we need to recompute 'env', since some
         // of the Funcs are no longer used and need to be removed from 'env'.
         //
@@ -3499,7 +3499,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     debug(2) << "Initializing AutoSchedule...\n";
-    AutoSchedule sched(env, full_order);
+    AutoSchedule sched(env, top_order);
     debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(target, sched);
 
