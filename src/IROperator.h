@@ -1906,16 +1906,6 @@ Expr saturating_cast(Expr e) {
  * maximum values of the result type. */
 Expr saturating_cast(Type t, Expr e);
 
-/** Prevents the simplifier from changing floating-point operations
- * within the argument expression while returning the argument as its result.
- * Can be used to ensure stricter floating-point semantics but does not by itself
- * affect lower-level code generation. Mostly provided for debugging. */
-inline Expr no_float_simplify(Expr e) {
-    Type t = e.type();
-    return Internal::Call::make(t, Internal::Call::no_float_simplify,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
-}
-
 /** Makes a best effort attempt to preserve IEEE floating-point semantics
  * in evaluating an expression. Equivalent to no_float_simplify plus
  * turning on the StrictFloat target flag within a certain scope.

@@ -92,23 +92,18 @@ Expr term(Expr index) {
 
 enum class FloatStrictness {
   Default,
-  NoSimplify,
   Strict
 } global_strictness = FloatStrictness::Default;
 
 std::string strictness_to_string(FloatStrictness strictness) {
-    if (strictness == FloatStrictness::NoSimplify) {
-        return "no_float_simplify";
-    } else if (strictness == FloatStrictness::Strict) {
+    if (strictness == FloatStrictness::Strict) {
         return "strict_float";
     }
     return "default";
 }
 
 Expr apply_strictness(Expr x) {
-    if (global_strictness == FloatStrictness::NoSimplify) {
-        return no_float_simplify(x);
-    } else if (global_strictness == FloatStrictness::Strict) {
+    if (global_strictness == FloatStrictness::Strict) {
         return strict_float(x);
     }
     return x;
@@ -245,8 +240,6 @@ void run_all_conditions(const char *name, Buffer<float> &vals) {
   
     run_one_condition(loose, FloatStrictness::Default, vals);
     run_one_condition(strict, FloatStrictness::Default, vals);
-    run_one_condition(loose, FloatStrictness::NoSimplify, vals);
-    run_one_condition(strict, FloatStrictness::NoSimplify, vals);
     run_one_condition(loose, FloatStrictness::Strict, vals);
     run_one_condition(strict, FloatStrictness::Strict, vals);
 }

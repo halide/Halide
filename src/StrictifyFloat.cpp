@@ -10,7 +10,6 @@ class StrictifyFloat : public IRMutator2 {
     bool strict_float_allowed;
     enum Strictness {
         FastMath,
-        NoFloatSimplify,
         StrictFloat,
     } strictness;
 
@@ -23,8 +22,6 @@ class StrictifyFloat : public IRMutator2 {
             user_assert(strict_float_allowed) << "strict_float intrinsic is not allowed unless target has feature 'allow_strict_float' or 'force_strict_float'\n";
             new_strictness = StrictFloat;
             any_strict_float |= true;
-        } else if (call->is_intrinsic(Call::no_float_simplify) && new_strictness != StrictFloat) {
-            new_strictness = NoFloatSimplify;
         }
 
         ScopedValue<Strictness> save_strictness(strictness, new_strictness);
@@ -43,9 +40,6 @@ class StrictifyFloat : public IRMutator2 {
             switch (strictness) {
             case FastMath:
                 return e;
-                break;
-            case NoFloatSimplify:
-                return no_float_simplify(e);
                 break;
             case StrictFloat:
                 return strict_float(e);

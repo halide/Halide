@@ -102,9 +102,9 @@ using std::stack;
 #endif
 
 #ifdef WITH_AMDGPU
-#define InitializeAMDGPUTarget()	InitializeTarget(AMDGPU)
-#define InitializeAMDGPUAsmParser()	InitializeAsmParser(AMDGPU)
-#define InitializeAMDGPUAsmPrinter()	InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUTarget()        InitializeTarget(AMDGPU)
+#define InitializeAMDGPUAsmParser()     InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUAsmPrinter()    InitializeAsmParser(AMDGPU)
 #endif
 
 #ifdef WITH_AARCH64
@@ -2684,9 +2684,6 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
-    } else if (op->is_intrinsic(Call::no_float_simplify)) {
-        internal_assert(op->args.size() == 1);
-        value = codegen(op->args[0]);
     } else if (op->is_intrinsic(Call::strict_float)) {
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;

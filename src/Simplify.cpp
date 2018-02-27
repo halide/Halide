@@ -4496,8 +4496,7 @@ private:
             found_buffer_reference(op->name, op->args.size());
         }
 
-        if (op->is_intrinsic(Call::no_float_simplify) ||
-            op->is_intrinsic(Call::strict_float)) {
+        if (op->is_intrinsic(Call::strict_float)) {
             ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
             return IRMutator2::visit(op);
         } else if (op->is_intrinsic(Call::shift_left) ||

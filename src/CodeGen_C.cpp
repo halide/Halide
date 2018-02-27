@@ -2137,8 +2137,7 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
-    } else if (op->is_intrinsic(Call::no_float_simplify) ||
-               op->is_intrinsic(Call::strict_float)) {
+    } else if (op->is_intrinsic(Call::strict_float)) {
         internal_assert(op->args.size() == 1);
         string arg0 = print_expr(op->args[0]);
         rhs << "(" << arg0 << ")";
