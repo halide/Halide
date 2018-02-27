@@ -24,7 +24,7 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     zi = hl.Var("zi")
 
     # Add a boundary condition
-    clamped = hl.repeat_edge(input)
+    clamped = hl.BoundaryConditions.repeat_edge(input)
 
     # Construct the bilateral grid
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
