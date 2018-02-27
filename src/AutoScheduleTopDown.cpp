@@ -1020,6 +1020,9 @@ State optimal_schedule(FunctionDAG &dag, vector<Function> outputs, const Machine
 
     for (int i = 0; ; i++) {
 
+        // Random dropout
+        // while (q.size() > 1 && (rand() & 3)) q.pop();
+
         if (q.size() > (size_t)beam_size) {
             decltype(q) trimmed;
             for (int i = 0; i < beam_size; i++) {
@@ -1057,6 +1060,9 @@ State optimal_schedule(FunctionDAG &dag, vector<Function> outputs, const Machine
 std::string generate_schedules_top_down(const std::vector<Function> &outputs,
                                         const Target &target,
                                         const MachineParams &params) {
+
+    srand(time(NULL));
+
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
     size_t beam_size = 1;
     if (!beam_size_str.empty()) {
