@@ -405,6 +405,7 @@ struct d3d12_buffer {
     } *staging;
 
     bool mallocd;
+    void *host_mirror;
 
     operator bool() const { return NULL != resource; }
 };
@@ -553,7 +554,12 @@ template<>
 void release_d3d12_object<d3d12_buffer>(d3d12_buffer *buffer) {
     TRACELOG;
     Release_ID3D12Object(buffer->resource);
+    if (buffer->host_mirror != NULL) {
+        TRACEPRINT("freeing host memory " << buffer->host_mirror << "\n");
+        free(buffer->host_mirror);
+    }
     if (buffer->mallocd) {
+        TRACEPRINT("freeing data structure " << buffer << "\n");
         free(buffer);
     }
 }
@@ -951,6 +957,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
     buffer.type = d3d12_buffer::Unknown;
     buffer.format = DXGI_FORMAT_UNKNOWN;
     buffer.mallocd = false;
+    buffer.host_mirror = NULL;
     __atomic_store_n(&buffer.ref_count, 0, __ATOMIC_SEQ_CST);
 
     return buffer;
@@ -1924,7 +1931,7 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struc
     d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
     d3d12_buffer *dev_buffer = NULL;
     if (buffer != NULL) {
-        dev_buffer = (struct d3d12_buffer*)buffer->device;
+        dev_buffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
         if (is_buffer_managed(dev_buffer)) {
             synchronize_resource(blitCmdList, dev_buffer);
         }
@@ -2259,7 +2266,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
         halide_buffer_t *hbuffer = (halide_buffer_t*)args[i];
         uint64_t handle = hbuffer->device;
-        d3d12_buffer *buffer = (d3d12_buffer*)handle;
+        d3d12_buffer *buffer = reinterpret_cast<d3d12_buffer*>(handle);
         set_input_buffer(cmdList, binder, buffer, buffer_index);
         buffer_index++;
     }
@@ -2285,7 +2292,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         }
         halide_buffer_t *hbuffer = (halide_buffer_t*)args[i];
         uint64_t handle = hbuffer->device;
-        d3d12_buffer *buffer = (d3d12_buffer*)handle;
+        d3d12_buffer *buffer = reinterpret_cast<d3d12_buffer*>(handle);
         compute_barrier(cmdList, buffer);
     }
 
@@ -2317,10 +2324,14 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     TRACELOG;
     int result = halide_d3d12compute_device_malloc(user_context, buffer);
     if (result == 0) {
-        d3d12_buffer *dev_buffer = (d3d12_buffer*)(buffer->device);
+        d3d12_buffer *dev_buffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
+        halide_assert(user_context, (buffer->host == NULL));
+        halide_assert(user_context, (dev_buffer->host_mirror == NULL));
         // NOTE(marcos): maybe keep a dedicated d3d12 upload heap for this buffer
         // to avoid a copy to the main upload staging buffer?
-        buffer->host = (uint8_t*)malloc(buffer->size_in_bytes());
+        void *host = malloc(buffer->size_in_bytes());
+        buffer->host = (uint8_t*)host;
+        dev_buffer->host_mirror = host;
         debug(user_context) << TRACEINDENT 
                             << "halide_d3d12compute_device_and_host_malloc"
                             << " device = " << (void*)buffer->device
@@ -2332,11 +2343,11 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
 
 WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
+    d3d12_buffer *dev_buffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
+    halide_assert(user_context, (dev_buffer->host_mirror != NULL));
+    halide_assert(user_context, (dev_buffer->host_mirror == (void*)buffer->host));
     halide_d3d12compute_device_free(user_context, buffer);
-    // TODO: maybe have a 'ownHostMemory' flag in d3d12_buffer and free the host
-    // memory during release_object(d3d12_buffer)?
-    free(buffer->host);
-    buffer->host = NULL;
+    buffer->host = NULL;    // <- Halide expects this to be null upon return
     return 0;
 }
 
