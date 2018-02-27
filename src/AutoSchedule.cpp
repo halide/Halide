@@ -1278,18 +1278,23 @@ void Partitioner::disp_pipeline_bounds() {
 void Partitioner::disp_stats() {
     Cost total_cost = get_pipeline_cost();
     debug(0) << "// MachineParams: " << arch_params.to_string() << '\n';
-    debug(0) << "Env size: " << dep_analysis.env.size() << "\n";
-    debug(0) << "Total: " << simplify(total_cost.arith + total_cost.memory)
-             << ", arith: " << total_cost.arith << ", mem: " << total_cost.memory << '\n';
+    //debug(0) << "// Env size: " << dep_analysis.env.size() << "\n";
+
+    const int64_t *arith = as_const_int(total_cost.arith);
+    const int64_t *memory = as_const_int(total_cost.memory);
+    internal_assert(arith && memory);
+    debug(0) << "Total: " << (*arith + *memory) << ", arith: " << *arith
+             << ", mem: " << *memory << '\n';
     debug(0) << "# of groups: " << groups.size() << '\n';
+
     debug(0) << "# inline fusion: " << num_inline_fusion << '\n';
     debug(0) << "# fast-mem fusion: " << num_fast_mem_fusion << '\n';
     debug(0) << "# total fusion: " << total_fusion << '\n';
-    debug(0) << "Cost evolution:\n";
+    /*debug(0) << "Cost evolution:\n";
     for (const auto &cost : evolution) {
         debug(0) << "\ttotal: " << simplify(cost.arith + cost.memory)
                  << ", arith: " << cost.arith << ", mem: " << cost.memory << "\n";
-    }
+    }*/
     debug(0) << "\n";
 }
 
@@ -1361,6 +1366,7 @@ Partitioner::Partitioner(const Target &_target,
         string prob_str = Internal::get_env_variable("HL_AUTO_SCHEDULE_RANDOM_INLINE");
         if (!prob_str.empty()) {
             flip_threshold_inline = Internal::string_to_int(prob_str);
+            debug(2) << "...Flip threshold inline: " << flip_threshold_inline << "\n";
             user_assert(flip_threshold_inline >= 0 && flip_threshold_inline <= 100)
                 << "Flip threshold inline should be between 0 and 100, got "
                 << flip_threshold_inline << " instead\n";
@@ -1370,6 +1376,7 @@ Partitioner::Partitioner(const Target &_target,
         string prob_str = Internal::get_env_variable("HL_AUTO_SCHEDULE_RANDOM_FAST_MEM");
         if (!prob_str.empty()) {
             flip_threshold_fast_mem = Internal::string_to_int(prob_str);
+            debug(2) << "...Flip threshold fast-memt: " << flip_threshold_fast_mem << "\n";
             user_assert(flip_threshold_fast_mem >= 0 && flip_threshold_fast_mem <= 100)
                 << "Flip threshold inline should be between 0 and 100, got "
                 << flip_threshold_fast_mem << " instead\n";
@@ -1710,18 +1717,25 @@ void Partitioner::group(Partitioner::Level level) {
     bool fixpoint = false;
     while (!fixpoint) {
         Cost pre_merge = get_pipeline_cost();
-
-        if ((level == Partitioner::Level::Inline) && (arch_params.max_inline_fusion != -1) &&
-            ((int)num_inline_fusion >= arch_params.max_inline_fusion)) {
-            debug(0) << "Number of inline fusions (" << num_inline_fusion << ") exceeds the maximum allowed ("
-                     << arch_params.max_inline_fusion << ")\n";
-            return;
-        }
-        if ((level == Partitioner::Level::FastMem) && (arch_params.max_fast_mem_fusion != -1) &&
-            ((int)num_fast_mem_fusion >= arch_params.max_fast_mem_fusion)) {
-            debug(0) << "Number of fast-mem fusions (" << num_fast_mem_fusion << ") exceeds the maximum allowed ("
-                     << arch_params.max_fast_mem_fusion << ")\n";
-            return;
+        if (arch_params.max_total_fusion != -1) {
+            if ((int)total_fusion >= arch_params.max_total_fusion) {
+                debug(2) << "Number of total fusions (" << total_fusion << ") exceeds the maximum allowed ("
+                         << arch_params.max_total_fusion << ")\n";
+                return;
+            }
+        } else {
+            if ((level == Partitioner::Level::Inline) && (arch_params.max_inline_fusion != -1) &&
+                ((int)num_inline_fusion >= arch_params.max_inline_fusion)) {
+                debug(2) << "Number of inline fusions (" << num_inline_fusion << ") exceeds the maximum allowed ("
+                         << arch_params.max_inline_fusion << ")\n";
+                return;
+            }
+            if ((level == Partitioner::Level::FastMem) && (arch_params.max_fast_mem_fusion != -1) &&
+                ((int)num_fast_mem_fusion >= arch_params.max_fast_mem_fusion)) {
+                debug(2) << "Number of fast-mem fusions (" << num_fast_mem_fusion << ") exceeds the maximum allowed ("
+                         << arch_params.max_fast_mem_fusion << ")\n";
+                return;
+            }
         }
 
         fixpoint = true;
@@ -3650,7 +3664,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 MachineParams MachineParams::generic() {
-  return MachineParams(16, 16 * 1024 * 1024, 40, -1, -1);
+  return MachineParams(16, 16 * 1024 * 1024, 40, -1, -1, -1);
 }
 
 std::string MachineParams::to_string() const {
@@ -3659,18 +3673,20 @@ std::string MachineParams::to_string() const {
                     balance.type().is_int());
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance << ","
-      << max_inline_fusion << "," << max_fast_mem_fusion;
+      << max_inline_fusion << "," << max_fast_mem_fusion << ","
+      << max_total_fusion;
     return o.str();
 }
 
 MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 5) << "Unable to parse MachineParams: " << s;
+    user_assert(v.size() == 6) << "Unable to parse MachineParams: " << s;
     parallelism = Internal::string_to_int(v[0]);
     last_level_cache_size = Internal::string_to_int(v[1]);
     balance = Internal::string_to_int(v[2]);
     max_inline_fusion = Internal::string_to_int(v[3]);
     max_fast_mem_fusion = Internal::string_to_int(v[4]);
+    max_total_fusion = Internal::string_to_int(v[5]);
 }
 
 }

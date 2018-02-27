@@ -164,7 +164,15 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules(contents->outputs, target, arch_params);
+
+    // TODO(psuriana): A hack to bypass the generator. Need a better way to pass
+    // the flag to the Generator's machine_params
+    string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
+    if (!params.empty()) {
+        return generate_schedules(contents->outputs, target, MachineParams(params));
+    } else {
+        return generate_schedules(contents->outputs, target, arch_params);
+    }
 }
 
 Func Pipeline::get_func(size_t index) {

@@ -23,11 +23,20 @@ struct MachineParams {
     Expr balance;
     int32_t max_inline_fusion;
     int32_t max_fast_mem_fusion;
+    // If max_total_fusion is set (not -1), it will override both max_inline_fusion
+    // and  max_fast_mem_fusion.
+    int32_t max_total_fusion;
 
     explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance,
-                           int32_t max_inline_fusion, int32_t max_fast_mem_fusion)
+                           int32_t max_inline_fusion, int32_t max_fast_mem_fusion,
+                           int32_t max_total_fusion)
         : parallelism(parallelism), last_level_cache_size(llc), balance(balance)
-        , max_inline_fusion(max_inline_fusion), max_fast_mem_fusion(max_fast_mem_fusion) {}
+        , max_inline_fusion(max_inline_fusion), max_fast_mem_fusion(max_fast_mem_fusion)
+        , max_total_fusion (max_total_fusion) {
+            user_assert((max_inline_fusion == -1 || max_inline_fusion >= 0));
+            user_assert((max_fast_mem_fusion == -1 || max_fast_mem_fusion >= 0));
+            user_assert((max_total_fusion == -1 || max_total_fusion >= 0));
+        }
 
     /** Default machine parameters for generic CPU architecture. */
     static MachineParams generic();
