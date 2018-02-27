@@ -44,9 +44,9 @@ double run_test(bool auto_schedule) {
     ImageParam right_im(UInt(8), 3, "right_im");
 
     // The number of displacements to consider
-    const int slices = 32;
-    /*Param<int> slices;
-    slices.set_range(1, 256);*/
+    //const int slices = 32;
+    Param<int> slices;
+    slices.set_range(1, 256);
 
     // The depth to focus on
     const int focus_depth = 13;
@@ -58,7 +58,7 @@ double run_test(bool auto_schedule) {
     const int aperture_samples = 32;
 
     Expr maximum_blur_radius =
-        cast<int>(std::max(slices - focus_depth, focus_depth) * blur_radius_scale);
+        cast<int>(max(slices - focus_depth, focus_depth) * blur_radius_scale);
 
     Func left = BoundaryConditions::repeat_edge(left_im);
     Func right = BoundaryConditions::repeat_edge(right_im);
@@ -289,7 +289,7 @@ double run_test(bool auto_schedule) {
         right_im.dim(1).set_bounds_estimate(0, right_img.height());
         right_im.dim(2).set_bounds_estimate(0, 3);
 
-        //slices.set_estimate(32);
+        slices.set_estimate(32);
 
         final.estimate(x, 0, left_img.width())
             .estimate(y, 0, left_img.height())
@@ -298,9 +298,9 @@ double run_test(bool auto_schedule) {
     }
 
     if (auto_schedule) {
-        p.compile_to_lowered_stmt("lens_blur.html", {left_im, right_im}, HTML, target);
+        p.compile_to_lowered_stmt("lens_blur.html", {left_im, right_im, slices}, HTML, target);
     } else {
-        p.compile_to_lowered_stmt("lens_blur_manual.html", {left_im, right_im}, HTML, target);
+        p.compile_to_lowered_stmt("lens_blur_manual.html", {left_im, right_im, slices}, HTML, target);
     }
     // Inspect the schedule
     //final.print_loop_nest();
@@ -308,7 +308,7 @@ double run_test(bool auto_schedule) {
     left_im.set(left_img);
     right_im.set(right_img);
 
-    //slices.set(32);
+    slices.set(32);
 
     // Run the schedule
     Buffer<float> out(left_img.width(), left_img.height(), 3);

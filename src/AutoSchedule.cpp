@@ -29,6 +29,19 @@ using std::make_pair;
 
 namespace {
 
+void substitute_estimates_box(Box &region) {
+    for (auto &b : region.bounds) {
+        b.min = SubstituteVarEstimates().mutate(b.min);
+        b.max = SubstituteVarEstimates().mutate(b.max);
+    }
+}
+
+void substitute_estimates_region(map<string, Box> &region) {
+    for (auto &iter : region) {
+        substitute_estimates_box(iter.second);
+    }
+}
+
 // Return true if any of the box dimension is unbounded.
 bool is_box_unbounded(const Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
@@ -446,6 +459,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                             // to the queue.
                             Expr subs_arg = SubstituteVarEstimates().mutate(arg.expr);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
                                                     only_regions_computed, s.func.name(), visited);
                         } else if (arg.is_image_param() || arg.is_buffer()) {
@@ -489,6 +503,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         Expr subs_val = SubstituteVarEstimates().mutate(val);
                         map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
 
+                        // TODO(psuriana): quick fix to substitute the parameter estimate values
+                        substitute_estimates_region(curr_regions);
+
                         // Arguments to the definition may require regions of functions.
                         // For example, update definitions in histograms where the bin is
                         // based on the value of a function.
@@ -496,6 +513,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         for (const Expr &arg : def.args()) {
                             Expr subs_arg = SubstituteVarEstimates().mutate(arg);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
 
                             // Merge the regions with the regions found while looking at
                             // the values.
@@ -693,10 +711,8 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
         for (const pair<string, Function> &fpair : analysis.env) {
             prods.insert(fpair.first);
         }
-
         map<string, Box> regions = analysis.regions_required(out, pure_bounds, prods,
                                                              false, input_estimates);
-
         // Add the output region to the pipeline bounds as well.
         regions.emplace(out.name(), out_box);
 
@@ -1061,7 +1077,8 @@ struct Partitioner {
     const Target &target;
     // Flip the grouping decision if bigger than threshold (between 0 to 99).
     // If value is -1, do not flip.
-    int flip_threshold;
+    int flip_threshold_inline;
+    int flip_threshold_fast_mem;
     // How many times group fusion happened
     size_t num_inline_fusion;
     size_t num_fast_mem_fusion;
@@ -1337,15 +1354,26 @@ Partitioner::Partitioner(const Target &_target,
                          RegionCosts &_costs)
         : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
           dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs),
-          target(_target), flip_threshold(-1), num_inline_fusion(0),
-          num_fast_mem_fusion(0), total_fusion(0) {
+          target(_target), flip_threshold_inline(-1), flip_threshold_fast_mem(-1),
+          num_inline_fusion(0), num_fast_mem_fusion(0), total_fusion(0) {
 
-    string prob_str = Internal::get_env_variable("HL_AUTO_SCHEDULE_RANDOM");
-    if (!prob_str.empty()) {
-        flip_threshold = Internal::string_to_int(prob_str);
-        user_assert(flip_threshold >= 0 && flip_threshold <= 100)
-            << "Flip threshold should be between 0 and 100, got "
-            << flip_threshold << " instead\n";
+    {
+        string prob_str = Internal::get_env_variable("HL_AUTO_SCHEDULE_RANDOM_INLINE");
+        if (!prob_str.empty()) {
+            flip_threshold_inline = Internal::string_to_int(prob_str);
+            user_assert(flip_threshold_inline >= 0 && flip_threshold_inline <= 100)
+                << "Flip threshold inline should be between 0 and 100, got "
+                << flip_threshold_inline << " instead\n";
+        }
+    }
+    {
+        string prob_str = Internal::get_env_variable("HL_AUTO_SCHEDULE_RANDOM_FAST_MEM");
+        if (!prob_str.empty()) {
+            flip_threshold_fast_mem = Internal::string_to_int(prob_str);
+            user_assert(flip_threshold_fast_mem >= 0 && flip_threshold_fast_mem <= 100)
+                << "Flip threshold inline should be between 0 and 100, got "
+                << flip_threshold_fast_mem << " instead\n";
+        }
     }
 
     // Place each stage of a function in its own group. Each stage is
@@ -1487,13 +1515,16 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
         // of two choices are equal
         bool replace = best_benefit.defined() && overall_benefit.defined() &&
                        can_prove(best_benefit < overall_benefit);
-        if ((level == Partitioner::Level::FastMem) && (flip_threshold != -1)) {
+        int threshold = (level == Partitioner::Level::FastMem) ?
+                            flip_threshold_fast_mem : flip_threshold_inline;
+        if (threshold != -1) {
             const int val = rand() % 100;
-            bool flip = val > flip_threshold;
+            bool flip = val > threshold;
             if (flip) {
                 replace = !replace;
             }
-            /*debug(0) << "...Random replacement, threshold: " << flip_threshold << ", val: " << val << ", flip? " << flip << ", replace? " << replace;
+            /*debug(0) << "...Random replacement, threshold: " << threshold
+                     << ", val: " << val << ", flip? " << flip << ", replace? " << replace;
             if (level == Partitioner::Level::Inline) {
                 debug(0) << ", level? inline \n";
             } else {
@@ -3594,9 +3625,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
     part.disp_stats();
 
-    debug(0) << "Initializing AutoSchedule...\n";
+    debug(2) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, full_order);
-    debug(0) << "Generating CPU schedule...\n";
+    debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(sched);
 
     std::ostringstream oss;
