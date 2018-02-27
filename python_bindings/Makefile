@@ -84,11 +84,11 @@ $(BIN)/PyStubImpl.o: $(ROOT_DIR)/stub/PyStubImpl.cpp $(HALIDE_DISTRIB_PATH)/incl
 	$(CXX) $(CCFLAGS) -c $< -o $@
 
 # Produce a Python extension for the generator by compiling PyStub.cpp
-# (with HALIDE_PYSTUB_GENERATOR_NAME defined to the Generator's build name), 
+# (with HALIDE_PYSTUB_GENERATOR_NAME defined to the Generator's build name),
 # and linking with the generator's .o file, PyStubImpl.o, plus the same libHalide
-# being used by halide.so. 
+# being used by halide.so.
 #
-# You can optionally also define HALIDE_PYSTUB_MODULE_NAME if you want the Python 
+# You can optionally also define HALIDE_PYSTUB_MODULE_NAME if you want the Python
 # module name to be something other than the Generator build name.
 $(BIN)/%_PyStub.o: $(ROOT_DIR)/stub/PyStub.cpp
 	@mkdir -p $(@D)
@@ -98,7 +98,7 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
-test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so 
+test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)
