@@ -140,9 +140,11 @@ class ExprCost : public IRVisitor {
                 int64_t true_cost_arith = arith;
                 int64_t true_cost_memory = memory;
 
-                arith = current_arith + pred_cost_arith + std::max(true_cost_arith, false_cost_arith);
-                memory = current_memory + pred_cost_memory + std::max(true_cost_memory, false_cost_memory);
+                arith = pred_cost_arith + std::max(true_cost_arith, false_cost_arith);
+                memory = pred_cost_memory + std::max(true_cost_memory, false_cost_memory);
             }
+            arith += current_arith;
+            memory += current_memory;
             return;
         } else if (call->is_intrinsic(Call::return_second)) {
             // For return_second, since the first expr would usually either be a
