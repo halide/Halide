@@ -1853,6 +1853,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_at)
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
+    HALIDE_FORWARD_METHOD(Func, compute_with)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
@@ -1976,6 +1977,11 @@ public:
 
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     operator Func() const {
+        return get_values<ValueType>().at(0);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    operator Stage() const {
         return get_values<ValueType>().at(0);
     }
 
