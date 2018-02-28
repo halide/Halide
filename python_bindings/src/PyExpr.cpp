@@ -10,6 +10,7 @@ namespace PythonBindings {
 void define_expr(py::module &m) {
     auto expr_class =
         py::class_<Expr>(m, "Expr")
+            .def(py::init<>())
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())

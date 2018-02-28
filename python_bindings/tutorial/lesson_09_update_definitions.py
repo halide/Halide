@@ -637,7 +637,7 @@ def main():
         # hl.clamp-to-edge boundary condition:
 
         # First add the boundary condition.
-        clamped = hl.repeat_edge(input)
+        clamped = hl.BoundaryConditions.repeat_edge(input)
 
         # Define a 5x5 box that starts at (-2, -2)
         r = hl.RDom([(-2, 5), (-2, 5)])
