@@ -28,12 +28,19 @@ using std::make_pair;
 
 namespace {
 
-int string_to_int(const std::string &s) {
-    std::istringstream iss(s);
-    int i;
-    iss >> i;
-    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
-    return i;
+// Substitute parameter estimates into the exprs describing the box bounds.
+void substitute_estimates_box(Box &box) {
+    for (auto &b : box.bounds) {
+        b.min = SubstituteVarEstimates().mutate(b.min);
+        b.max = SubstituteVarEstimates().mutate(b.max);
+    }
+}
+
+// Substitute parameter estimates into the boxes in 'region'.
+void substitute_estimates_region(map<string, Box> &region) {
+    for (auto &iter : region) {
+        substitute_estimates_box(iter.second);
+    }
 }
 
 // Return true if any of the box dimension is unbounded.
@@ -453,6 +460,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                             // to the queue.
                             Expr subs_arg = SubstituteVarEstimates().mutate(arg.expr);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
                                                     only_regions_computed, s.func.name(), visited);
                         } else if (arg.is_image_param() || arg.is_buffer()) {
@@ -495,6 +503,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         // the regions required for the expression.
                         Expr subs_val = SubstituteVarEstimates().mutate(val);
                         map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
+                        substitute_estimates_region(curr_regions);
 
                         // Arguments to the definition may require regions of functions.
                         // For example, update definitions in histograms where the bin is
@@ -503,6 +512,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         for (const Expr &arg : def.args()) {
                             Expr subs_arg = SubstituteVarEstimates().mutate(arg);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
 
                             // Merge the regions with the regions found while looking at
                             // the values.

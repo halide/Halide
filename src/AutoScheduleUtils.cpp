@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "AutoScheduleUtils.h"
 #include "Inline.h"
 #include "Simplify.h"
@@ -10,6 +12,14 @@ using std::string;
 using std::map;
 using std::set;
 using std::vector;
+
+int string_to_int(const string &s) {
+    std::istringstream iss(s);
+    int i;
+    iss >> i;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
+    return i;
+}
 
 Expr get_extent(const Interval &i) {
     if (!i.is_bounded()) {
