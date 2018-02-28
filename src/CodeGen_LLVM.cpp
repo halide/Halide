@@ -1357,7 +1357,6 @@ void CodeGen_LLVM::visit(const Mod *op) {
 
     int bits;
     if (op->type.is_float()) {
-        // TODO: figure out what to do in strict_float, perhaps use the constrained frem intrinsic.
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (is_const_power_of_two_integer(op->b, &bits)) {
         value = codegen(op->a & (op->b - 1));
