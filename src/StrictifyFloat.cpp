@@ -40,10 +40,8 @@ class StrictifyFloat : public IRMutator2 {
             switch (strictness) {
             case FastMath:
                 return e;
-                break;
             case StrictFloat:
                 return strict_float(e);
-                break;
             }
         }
         return e;
