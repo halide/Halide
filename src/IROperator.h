@@ -1906,12 +1906,11 @@ Expr saturating_cast(Expr e) {
  * maximum values of the result type. */
 Expr saturating_cast(Type t, Expr e);
 
-/** Makes a best effort attempt to preserve IEEE floating-point semantics
- * in evaluating an expression. Equivalent to no_float_simplify plus
- * turning on the StrictFloat target flag within a certain scope.
- * May not be implemented for all backends. (E.g. it is difficult to do
- * this for C++ code generation as it depends on the compiler flags used to
- * compile the generated code. */
+/** Makes a best effort attempt to preserve IEEE floating-point
+ * semantics in evaluating an expression. May not be implemented for
+ * all backends. (E.g. it is difficult to do this for C++ code
+ * generation as it depends on the compiler flags used to compile the
+ * generated code. */
 inline Expr strict_float(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::strict_float,
