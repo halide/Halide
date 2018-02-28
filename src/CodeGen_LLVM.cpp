@@ -2711,12 +2711,16 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
 
-        /* This is fairly dubious, in that fast-math doesn't make much
-         * sense for anything to do with NaNs, but it seems like llvm
-         * suspends the nnan global option when generating this
-         * instruction, but if one places the flag directly on the
-         * instruction it is honored and then the compiler assumes the
-         * comparison always returns false. */
+        /* NaNs are not supposed to exist in "no NaNs" compilation
+         * mode, but it appears llvm special cases the unordered
+         * compare instruction when the global NoNaNsFPMath option is
+         * set and still checks for a NaN. However if the nnan flag is
+         * set on the instruction itself, llvm treats the comparison
+         * as always false. Thus we always turn off the per-instruction
+         * fast-math flags for this instruction. I.e. it is always
+         * treated as strict. Note that compilation may still be in
+         * fast-math mode due to global options, but that's ok due to
+         * the aforementioned special casing. */
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
         safe_flags.clear();
