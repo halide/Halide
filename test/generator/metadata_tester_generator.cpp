@@ -85,8 +85,6 @@ public:
             array_outputs2[i].compute_with(array_outputs[i], x);
         }
 
-        typed_output_buffer.specialize(typed_output_buffer.width() > 8).vectorize(x, 8);
-
         // Verify compute_with works for Output<Buffer>
         dim_only_output_buffer.compute_with(Func(typed_output_buffer), x);
     }
