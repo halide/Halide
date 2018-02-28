@@ -21,9 +21,6 @@ typedef std::map<std::string, Interval> DimBounds;
 
 const int64_t unknown = std::numeric_limits<int64_t>::min();
 
-/** Return an int representation of 's'. Throw an error on failure. */
-int string_to_int(const std::string &s);
-
 /** Visitor for keeping track of functions that are directly called and the
  * arguments with which they are called. */
 class FindAllCalls : public IRVisitor {
@@ -44,35 +41,15 @@ public:
 };
 
 
-/** Substitute every variable with its estimate if specified. */
-class SubstituteVarEstimates: public IRMutator2 {
-    using IRMutator2::visit;
+/** Return an int representation of 's'. Throw an error on failure. */
+int string_to_int(const std::string &s);
 
-    Expr visit(const Variable *var) override {
-        if (var->param.defined() && var->param.is_buffer()) {
-            // This is a var associated with an InputParam object. This
-            // should be something of the form XXX.min.[dim_index] or
-            // XXX.extent.[dim_index]
-            std::vector<std::string> v = split_string(var->name, ".");
-            user_assert(v.size() >= 3);
-            int d = string_to_int(v[v.size()-1]);
-            if (v[v.size()-2] == "min") {
-                Expr est = var->param.min_constraint_estimate(d);
-                return est.defined() ? est : var;
-            } else {
-                internal_assert(v[v.size()-2] == "extent");
-                Expr est = var->param.extent_constraint_estimate(d);
-                return est.defined() ? est : var;
-            }
-        } else if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
-            // This is a var from a Param object
-            return var->param.estimate();
-        } else {
-            return var;
-        }
-    }
-};
+/** Substitute every variable in an Expr or a Stmt with its estimate
+ * if specified. */
+//@{
+Expr subsitute_var_estimates(Expr e);
+Stmt subsitute_var_estimates(Stmt s);
+//@}
 
 /** Return the size of an interval. Return an undefined expr if the interval
  * is unbounded. */
