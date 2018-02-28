@@ -422,7 +422,9 @@ typedef HINSTANCE HMODULE;      /* HMODULEs can be used in place of HINSTANCEs *
 
 /* winerror.h */
 #define _HRESULT_TYPEDEF_(_sc) ((HRESULT)_sc)
+#define S_OK                             _HRESULT_TYPEDEF_(0x0L)
 #define E_UNEXPECTED                     _HRESULT_TYPEDEF_(0x8000FFFFL)
+#define DXGI_ERROR_NOT_FOUND             _HRESULT_TYPEDEF_(0x887a0002)
 #define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
 #define FAILED(hr) (((HRESULT)(hr)) < 0)
 

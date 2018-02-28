@@ -772,7 +772,6 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     for (int i = 0; ; ++i) {
         IDXGIAdapter1 *adapter = NULL;
         HRESULT result = dxgiFactory->EnumAdapters1(i, &adapter);
-#define DXGI_ERROR_NOT_FOUND  _HRESULT_TYPEDEF_(0x887a0002)
         if (DXGI_ERROR_NOT_FOUND == result) {
             break;
         }
@@ -918,10 +917,6 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
 }
 
 WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12_HEAP_TYPE heaptype) {
-    d3d12_buffer buffer = { };
-
-    ID3D12Resource *resource = NULL;
-
     D3D12_RESOURCE_DESC desc = { };
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
         desc.Alignment = 0;                             // 0 defaults to 64KB alignment, which is mandatory for buffers
@@ -967,7 +962,9 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
             break;
     }
 
-    // A commited resource manages its own private heap
+    d3d12_buffer buffer = { };
+    ID3D12Resource *resource = NULL;
+    // A commited resource manages its own private heap:
     HRESULT result = (*device)->CreateCommittedResource(pHeapProperties, HeapFlags, pDesc, InitialResourceState, pOptimizedClearValue, IID_PPV_ARGS(&resource));
     if (D3DError(result, resource, NULL, "Unable to create the Direct3D 12 buffer")) {
         return buffer;
@@ -1077,7 +1074,7 @@ WEAK void unmap_buffer(d3d12_buffer *buffer) {
     UINT Subresource = 0;   // buffers contain only one subresource (at index 0)
     const D3D12_RANGE *pWrittenRange = &writtenRange;
     resource->Unmap(Subresource, pWrittenRange);
-    if (D3DError(/*S_OK*/HRESULT(0x0), (ID3D12MemoryMappedResource*)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory")) {
+    if (D3DError(S_OK, (ID3D12MemoryMappedResource*)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory")) {
         return;
     }
 
@@ -1117,6 +1114,47 @@ WEAK d3d12_buffer *new_buffer(d3d12_device *device, size_t length) {
     *pBuffer = buffer;
     pBuffer->mallocd = true;
     return pBuffer;
+}
+
+WEAK size_t suballocate(d3d12_device *device, d3d12_buffer *staging, size_t num_bytes) {
+    TRACELOG;
+
+    // buffer not large enough for suballocation: must grow
+    if (staging->sizeInBytes < num_bytes) {
+        // ensure there are no pending transfers on this buffer
+        uint64_t use_count = __atomic_add_fetch(&staging->ref_count, 1, __ATOMIC_SEQ_CST);
+        halide_assert(user_context, (use_count == 1));
+        // find a new "ideal" size: e.g., using a cumulative 2x heuristic
+        size_t old_capacity = staging->sizeInBytes;
+        size_t new_capacity = 2 * (old_capacity + num_bytes);
+        TRACEPRINT("not enough storage: growing from " << (uintptr_t)old_capacity << " bytes to " << (uintptr_t)new_capacity << " bytes.\n");
+        // release the old storage
+        use_count = __atomic_sub_fetch(&staging->ref_count, 1, __ATOMIC_SEQ_CST);
+        halide_assert(user_context, (use_count == 0));
+        release_d3d12_object(staging);
+        // and allocate a new one
+        switch (staging->type) {
+            case d3d12_buffer::Upload :
+                halide_assert(user_context, (staging == &upload));
+                *staging = new_upload_buffer(device, new_capacity);
+                break;
+            case d3d12_buffer::ReadBack :
+                halide_assert(user_context, (staging == &readback));
+                *staging = new_readback_buffer(device, new_capacity);
+                break;
+            default :
+                TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)staging->type << "\n");
+                halide_assert(user_context, false);
+                break;
+        }
+    }
+
+    halide_assert(user_context, (staging->sizeInBytes >= num_bytes));
+    // ensure there are no pending transfers on this buffer
+    uint64_t use_count = __atomic_add_fetch(&staging->ref_count, 1, __ATOMIC_SEQ_CST);
+    halide_assert(user_context, (use_count == 1));
+    size_t byte_offset = 0; // always zero, for now
+    return byte_offset;
 }
 
 WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
@@ -1636,29 +1674,26 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     void *pData = NULL;
 
     switch (buffer->type) {
-        case d3d12_buffer::ReadOnly : {
+
+        case d3d12_buffer::ReadOnly :
             pData = buffer_contents(&readback);
             break;
-        }
 
-        case d3d12_buffer::WriteOnly : {
+        case d3d12_buffer::WriteOnly :
             pData = buffer_contents(&upload);
             break;
-        }
 
         case d3d12_buffer::Constant :
-        case d3d12_buffer::Upload   : {
+        case d3d12_buffer::Upload   :
             pData = buffer->mapped;
             break;
-        }
 
-        case d3d12_buffer::ReadBack : {
+        case d3d12_buffer::ReadBack :
             // on readback heaps, map/unmap as needed, since the results are only effectively
             // published after a Map() call, and should ideally be in an unmapped state prior
             // to the CopyBufferRegion() call
             pData = map_buffer(&readback);
             break;
-        }
 
         case d3d12_buffer::Unknown :
         case d3d12_buffer::ReadWrite :
@@ -1738,8 +1773,9 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
             return -1;
         }
 
-        // TODO(marcos): hard-coded heap size is only a temporary solution...
-        size_t heap_size = 64 * 1024 * 1024;
+        // NOTE(marcos): a small amount of hard-coded staging buffer storage is
+        // sufficient to get started as suballocations will grow them as needed
+        size_t heap_size = 4 * 1024 * 1024;
         upload = new_upload_buffer(device, heap_size);
         readback = new_readback_buffer(device, heap_size);
     }
@@ -2081,26 +2117,24 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     // 'memcpy' to staging buffer:
     size_t total_size = buffer->size_in_bytes();
     halide_assert(user_context, total_size > 0);
-    halide_assert(user_context, upload.sizeInBytes >= total_size);
-    void *staging_ptr = buffer_contents(&upload);
-    c.dst = reinterpret_cast<uint64_t>(staging_ptr);
+    d3d12_buffer *staging = &upload;
+    size_t byte_offset = suballocate(d3d12_context.device, staging, total_size);
+    void *staging_base = buffer_contents(staging);
+    c.dst = reinterpret_cast<uint64_t>(staging_base);
     copy_memory(c, user_context);
 
     // 2. issue a copy command from the upload buffer to the device buffer
     halide_assert(user_context, (copy_dst->type == d3d12_buffer::ReadOnly) || (copy_dst->type == d3d12_buffer::ReadWrite));
-    halide_assert(user_context, (upload.type == d3d12_buffer::Upload));
+    halide_assert(user_context, (staging->type == d3d12_buffer::Upload));
     halide_assert(user_context, (copy_dst->xfer == NULL));
-    // for now, we expect no other transfers to be pending on the staging buffer:
-    uint64_t use_count = __atomic_add_fetch(&upload.ref_count, 1, __ATOMIC_SEQ_CST);
-    halide_assert(user_context, (use_count == 1));
     d3d12_buffer::transfer_t xfer = { };
-        xfer.staging = &upload;
+        xfer.staging = staging;
         xfer.offset = 0;
         xfer.size = 0;
     copy_dst->xfer = &xfer;
     if (is_buffer_managed(copy_dst)) {
         NSRange total_extent;
-        total_extent.location = 0;
+        total_extent.location = byte_offset;
         total_extent.length = total_size;
         did_modify_range(copy_dst, total_extent);
         halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
@@ -2136,14 +2170,15 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
 
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
 
+    size_t total_size = dbuffer->sizeInBytes;
+    d3d12_buffer *staging = &readback;
+    size_t byte_offset = suballocate(d3d12_context.device, staging, total_size);
+
     // 1. issue copy command from device to staging memory
-    // for now, we expect no other transfers to be pending on the staging buffer:
-    uint64_t use_count = __atomic_add_fetch(&readback.ref_count, 1, __ATOMIC_SEQ_CST);
-    halide_assert(user_context, (use_count == 1));
     d3d12_buffer::transfer_t xfer = { };
-        xfer.staging = &readback;
-        xfer.offset = 0;
-        xfer.size   = dbuffer->sizeInBytes;
+        xfer.staging = staging;
+        xfer.offset = byte_offset;
+        xfer.size   = total_size;
     dbuffer->xfer = &xfer;
     halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
 
