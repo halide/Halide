@@ -7,6 +7,27 @@
 #include "Simplify.h"
 
 namespace Halide {
+
+GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
+                                   const MachineParams &machine_params)
+    : target("target", t),
+      auto_schedule("auto_schedule", auto_schedule),
+      machine_params("machine_params", machine_params),
+      externs_map(std::make_shared<ExternsMap>()),
+      value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+
+GeneratorContext::~GeneratorContext() {
+    // nothing
+}
+
+void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
+    target.set(context.get_target());
+    auto_schedule.set(context.get_auto_schedule());
+    machine_params.set(context.get_machine_params());
+    value_tracker = context.get_value_tracker();
+    externs_map = context.get_externs_map();
+}
+
 namespace Internal {
 
 namespace {
@@ -1177,6 +1198,12 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
         }
         user_error << "Generator has no GeneratorParam named: " << key_value.first << "\n";
     }
+}
+
+void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
+  Halide::GeneratorContext::init_from_context(context);
+  // pre-emptively build our param_info now
+  (void) this->param_info();
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
