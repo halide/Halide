@@ -5899,6 +5899,115 @@ EXTERN_C const IID IID_ID3D12DescriptorHeap;
 
 #endif 	/* __ID3D12DescriptorHeap_INTERFACE_DEFINED__ */
 
+
+#ifndef __ID3D12QueryHeap_INTERFACE_DEFINED__
+#define __ID3D12QueryHeap_INTERFACE_DEFINED__
+
+/* interface ID3D12QueryHeap */
+/* [unique][local][object][uuid] */ 
+
+
+EXTERN_C const IID IID_ID3D12QueryHeap;
+
+#if defined(__cplusplus) && !defined(CINTERFACE)
+    
+    MIDL_INTERFACE("0d9658ae-ed45-469e-a61d-970ec583cab4")
+    ID3D12QueryHeap : public ID3D12Pageable
+    {
+    public:
+    };
+    
+    
+#else 	/* C style interface */
+
+    typedef struct ID3D12QueryHeapVtbl
+    {
+        BEGIN_INTERFACE
+        
+        HRESULT ( STDMETHODCALLTYPE *QueryInterface )( 
+            ID3D12QueryHeap * This,
+            REFIID riid,
+            _COM_Outptr_  void **ppvObject);
+        
+        ULONG ( STDMETHODCALLTYPE *AddRef )( 
+            ID3D12QueryHeap * This);
+        
+        ULONG ( STDMETHODCALLTYPE *Release )( 
+            ID3D12QueryHeap * This);
+        
+        HRESULT ( STDMETHODCALLTYPE *GetPrivateData )( 
+            ID3D12QueryHeap * This,
+            _In_  REFGUID guid,
+            _Inout_  UINT *pDataSize,
+            _Out_writes_bytes_opt_( *pDataSize )  void *pData);
+        
+        HRESULT ( STDMETHODCALLTYPE *SetPrivateData )( 
+            ID3D12QueryHeap * This,
+            _In_  REFGUID guid,
+            _In_  UINT DataSize,
+            _In_reads_bytes_opt_( DataSize )  const void *pData);
+        
+        HRESULT ( STDMETHODCALLTYPE *SetPrivateDataInterface )( 
+            ID3D12QueryHeap * This,
+            _In_  REFGUID guid,
+            _In_opt_  const IUnknown *pData);
+        
+        HRESULT ( STDMETHODCALLTYPE *SetName )( 
+            ID3D12QueryHeap * This,
+            _In_z_  LPCWSTR Name);
+        
+        HRESULT ( STDMETHODCALLTYPE *GetDevice )( 
+            ID3D12QueryHeap * This,
+            REFIID riid,
+            _COM_Outptr_opt_  void **ppvDevice);
+        
+        END_INTERFACE
+    } ID3D12QueryHeapVtbl;
+
+    interface ID3D12QueryHeap
+    {
+        CONST_VTBL struct ID3D12QueryHeapVtbl *lpVtbl;
+    };
+
+    
+
+#ifdef COBJMACROS
+
+
+#define ID3D12QueryHeap_QueryInterface(This,riid,ppvObject)	\
+    ( (This)->lpVtbl -> QueryInterface(This,riid,ppvObject) ) 
+
+#define ID3D12QueryHeap_AddRef(This)	\
+    ( (This)->lpVtbl -> AddRef(This) ) 
+
+#define ID3D12QueryHeap_Release(This)	\
+    ( (This)->lpVtbl -> Release(This) ) 
+
+
+#define ID3D12QueryHeap_GetPrivateData(This,guid,pDataSize,pData)	\
+    ( (This)->lpVtbl -> GetPrivateData(This,guid,pDataSize,pData) ) 
+
+#define ID3D12QueryHeap_SetPrivateData(This,guid,DataSize,pData)	\
+    ( (This)->lpVtbl -> SetPrivateData(This,guid,DataSize,pData) ) 
+
+#define ID3D12QueryHeap_SetPrivateDataInterface(This,guid,pData)	\
+    ( (This)->lpVtbl -> SetPrivateDataInterface(This,guid,pData) ) 
+
+#define ID3D12QueryHeap_SetName(This,Name)	\
+    ( (This)->lpVtbl -> SetName(This,Name) ) 
+
+
+#define ID3D12QueryHeap_GetDevice(This,riid,ppvDevice)	\
+    ( (This)->lpVtbl -> GetDevice(This,riid,ppvDevice) ) 
+
+
+#endif /* COBJMACROS */
+
+#endif 	/* C style interface */
+
+#endif 	/* __ID3D12QueryHeap_INTERFACE_DEFINED__ */
+
+
 typedef HRESULT (WINAPI* PFN_D3D12_CREATE_DEVICE)( _In_opt_ IUnknown*, 
     D3D_FEATURE_LEVEL, 
     _In_ REFIID, _COM_Outptr_opt_ void** );

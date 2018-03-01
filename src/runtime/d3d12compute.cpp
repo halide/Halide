@@ -5,6 +5,7 @@
 #define HALIDE_D3D12_TRACE          (0)
 #define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
+#define HALIDE_D3D12_PROFILING      (0)
 #define HALIDE_D3D12_PIX            (0)
 #define HALIDE_D3D12_RENDERDOC      (0)
 
@@ -187,6 +188,7 @@ D3D12TYPENAME(ID3D12PipelineState)
 D3D12TYPENAME(ID3D12RootSignature)
 D3D12TYPENAME(ID3D12DescriptorHeap)
 D3D12TYPENAME(ID3D12Fence)
+D3D12TYPENAME(ID3D12QueryHeap)
 // d3dcommon.h
 D3D12TYPENAME(ID3DBlob)
 // dxgi.h
@@ -374,6 +376,7 @@ UUIDOF(ID3D12PipelineState)
 UUIDOF(ID3D12RootSignature)
 UUIDOF(ID3D12DescriptorHeap)
 UUIDOF(ID3D12Fence)
+UUIDOF(ID3D12QueryHeap)
 
 UUIDOF(IDXGIFactory1)
 UUIDOF(IDXGIAdapter1)
@@ -486,7 +489,13 @@ struct d3d12_binder {
     UINT descriptorSize;
 };
 
-struct d3d12_compile_options;
+struct d3d12_profiler {
+    d3d12_buffer queryResultsBuffer;
+    UINT64 tick_frequency;  // in Hz, may vary per command queue
+    ID3D12QueryHeap *queryHeap;
+    UINT next_free_query;
+    UINT max_queries;
+};
 
 static size_t number_of_elements(const halide_buffer_t *buffer) {
     // halide_buffer_t::number_of_elements() does not necessarily map to D3D12
@@ -604,6 +613,14 @@ void release_d3d12_object<d3d12_function>(d3d12_function *function) {
     Release_ID3D12Object(function->shaderBlob);
     Release_ID3D12Object(function->rootSignature);
     d3d12_free(function);
+}
+
+template<>
+void release_d3d12_object<d3d12_profiler>(d3d12_profiler *profiler) {
+    TRACELOG;
+    Release_ID3D12Object(profiler->queryHeap);
+    release_d3d12_object(&profiler->queryResultsBuffer);
+    d3d12_free(profiler);
 }
 
 template<>
@@ -993,8 +1010,8 @@ WEAK d3d12_buffer new_device_buffer(d3d12_device *device, size_t length) {
 }
 
 // faux type name for logging purposes in D3DError()
-struct ID3D12MemoryMappedResource;
-D3D12TYPENAME(ID3D12MemoryMappedResource)
+struct ID3D12MemoryMappedResourceFAUX;
+D3D12TYPENAME(ID3D12MemoryMappedResourceFAUX)
 
 WEAK void *map_buffer(d3d12_buffer *buffer) {
     TRACELOG;
@@ -1031,7 +1048,7 @@ WEAK void *map_buffer(d3d12_buffer *buffer) {
     const D3D12_RANGE *pReadRange = &readRange;
     void *pData = NULL;
     HRESULT result = resource->Map(Subresource, pReadRange, &pData);
-    if (D3DError(result, (ID3D12MemoryMappedResource*)pData, NULL, "Unable to map Direct3D 12 staging buffer memory")) {
+    if (D3DError(result, (ID3D12MemoryMappedResourceFAUX*)pData, NULL, "Unable to map Direct3D 12 staging buffer memory")) {
         return NULL;
     }
 
@@ -1074,7 +1091,7 @@ WEAK void unmap_buffer(d3d12_buffer *buffer) {
     UINT Subresource = 0;   // buffers contain only one subresource (at index 0)
     const D3D12_RANGE *pWrittenRange = &writtenRange;
     resource->Unmap(Subresource, pWrittenRange);
-    if (D3DError(S_OK, (ID3D12MemoryMappedResource*)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory")) {
+    if (D3DError(S_OK, (ID3D12MemoryMappedResourceFAUX*)pData, NULL, "Unable to unmap Direct3D 12 staging buffer memory")) {
         return;
     }
 
@@ -1155,6 +1172,86 @@ WEAK size_t suballocate(d3d12_device *device, d3d12_buffer *staging, size_t num_
     halide_assert(user_context, (use_count == 1));
     size_t byte_offset = 0; // always zero, for now
     return byte_offset;
+}
+
+// faux type name for logging purposes in D3DError()
+struct ID3D12CommandQueueTimestampFrequencyFAUX;
+D3D12TYPENAME(ID3D12CommandQueueTimestampFrequencyFAUX)
+
+d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
+    TRACELOG;
+
+    UINT64 Frequency = 0;
+    {
+        HRESULT result = (*queue)->GetTimestampFrequency(&Frequency);
+        if (D3DError(result, (ID3D12CommandQueueTimestampFrequencyFAUX*)Frequency, user_context, "Unable to query the timestamp frequency of the command queue")) {
+            return NULL;
+        }
+        TRACEPRINT("tick frequency: " << Frequency << " Hz.\n");
+    }
+
+    ID3D12QueryHeap *pQueryHeap = NULL;
+    {
+        D3D12_QUERY_HEAP_DESC desc = { };
+            desc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+            desc.Count = num_queries;
+            desc.NodeMask = 0;
+        HRESULT result = (*device)->CreateQueryHeap(&desc, IID_PPV_ARGS(&pQueryHeap));
+        if (D3DError(result, pQueryHeap, user_context, "Unable to create timestamp query heap")) {
+            return NULL;
+        }
+    }
+
+    // Query results can only be resolved to buffers whose current state is
+    // D3D12_RESOURCE_STATE_COPY_DEST; for CPU access, the buffer must also
+    // reside in a read-back heap.
+    size_t size_in_bytes = num_queries * sizeof(uint64_t);
+    d3d12_buffer queryResultsBuffer = new_readback_buffer(device, size_in_bytes);
+
+    d3d12_profiler *profiler = malloct<d3d12_profiler>();
+        profiler->queryHeap = pQueryHeap;
+        profiler->tick_frequency = Frequency;
+        profiler->queryResultsBuffer = queryResultsBuffer;
+        profiler->next_free_query = 0;
+        profiler->max_queries = num_queries;
+
+    return(profiler);
+}
+
+size_t request_timestamp(d3d12_command_list *cmdList, d3d12_profiler *profiler) {
+    TRACELOG;
+    ID3D12QueryHeap *pQueryHeap = profiler->queryHeap;
+    D3D12_QUERY_TYPE Type = D3D12_QUERY_TYPE_TIMESTAMP;
+    UINT Index = profiler->next_free_query;
+    ++(profiler->next_free_query);
+    // D3D12_QUERY_TYPE_TIMESTAMP is the only query that supports EndQuery only.
+    // BeginQuery cannot be called on a timestamp query.
+    (*cmdList)->EndQuery(pQueryHeap, Type, Index);
+    return Index;
+}
+
+void begin_profiling(d3d12_command_list *cmdList, d3d12_profiler *profiler) {
+    TRACELOG;
+    unmap_buffer(&profiler->queryResultsBuffer);
+    profiler->next_free_query = 0;
+}
+
+void end_profiling(d3d12_command_list *cmdList, d3d12_profiler *profiler) {
+    TRACELOG;
+    ID3D12QueryHeap *pQueryHeap = profiler->queryHeap;
+    D3D12_QUERY_TYPE Type = D3D12_QUERY_TYPE_TIMESTAMP;
+    UINT StartIndex = 0;
+    UINT NumQueries = profiler->next_free_query;
+    ID3D12Resource *pDestinationBuffer = profiler->queryResultsBuffer.resource;
+    UINT64 AlignedDestinationBufferOffset = 0;  // Must be a multiple of 8 bytes.
+    (*cmdList)->ResolveQueryData(pQueryHeap, Type, StartIndex, NumQueries, pDestinationBuffer, AlignedDestinationBufferOffset);
+}
+
+uint64_t *get_profiling_results(d3d12_profiler *profiler) {
+    TRACELOG;
+    void *buffer = map_buffer(&profiler->queryResultsBuffer);
+    uint64_t *timestamp_array = (uint64_t*)buffer;
+    return timestamp_array;
 }
 
 WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
@@ -1386,8 +1483,8 @@ WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *b
         barrier.Transition.Subresource = 0;
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-    // NOTE(marcos): can we leverage more asynchronous parallelism with special
-    // flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
+    // NOTE(marcos): it might be possible to achieve higher asynchronicity with
+    // special flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
 
     d3d12_buffer *staging = xfer->staging;
     switch (staging->type) {
@@ -1614,7 +1711,6 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
                 uavd.Buffer.CounterOffsetInBytes = 0;   // 0, since this is not an atomic counter
                 uavd.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-            // TODO(marcos): should probably use the "index" input argument here somewhere...
             halide_assert(user_context, (index < ResourceBindingLimits[UAV]));
             D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
             binder->CPU[UAV].ptr += binder->descriptorSize;
@@ -1982,9 +2078,9 @@ namespace {
 inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struct halide_buffer_t *buffer) {
     TRACELOG;
 
-    // NOTE(marcos): ideally, a copy engine command list would be ideal here,
-    // but it would also require a copy engine queue to submit it... for now
-    // just use a single compute queue for everything..
+    // NOTE(marcos): a copy/dma command list would be ideal here, but it would
+    // also require a dedicated copy command queue to submit it... for now just
+    // use the main compute queue and issue copies via compute command lists.
     //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
 
     static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
@@ -2341,14 +2437,26 @@ WEAK int halide_d3d12compute_run(void *user_context,
         uav_index++;
     }
 
+    #if HALIDE_D3D12_PROFILING
+    d3d12_profiler *profiler = new_profiler(device, 8);
+    begin_profiling(cmdList, profiler);
+    size_t ini = request_timestamp(cmdList, profiler);
+    #endif
+
     // run the kernel:
     dispatch_threadgroups(cmdList,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
 
+    #if HALIDE_D3D12_PROFILING
+    size_t end = request_timestamp(cmdList, profiler);
+    end_profiling(cmdList, profiler);
+    #endif
+
     // TODO(marcos): avoid placing UAV barriers all the time after a dispatch...
-    // in addition, only buffers written by the dispatch will need barriers, and
-    // only they are bound for read later.
+    // in fact, only buffers written to by the dispatch will need barriers, and
+    // only when later bound for read. For now, Halide does not provide enough
+    // context for chosing the right time to place transition barriers.
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
         if (!arg_is_buffer[i]) {
             continue;
@@ -2363,10 +2471,21 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     commit_command_list(cmdList);
 
-    wait_until_completed(cmdList);  // TODO(marcos): find a way to gracefully handle this hard wait...
+    wait_until_completed(cmdList);
 
     #if HALIDE_D3D12_RENDERDOC
     FinishCapturingGPUActivity();
+    #endif
+
+    #if HALIDE_D3D12_PROFILING
+    uint64_t* timestamps = get_profiling_results(profiler);
+    uint64_t eps = timestamps[end] - timestamps[ini];
+    UNUSED(eps);
+    TRACEPRINT("ticks -> [ " << timestamps[ini] << " , " << timestamps[end] << " ]\n");
+    TRACEPRINT("kernel execution time: " << double(eps*1000000) / double(profiler->tick_frequency) << "us (" << eps << " ticks).\n");
+    // TODO: keep some live performance stats in the d3d12_function object
+    // (accumulate stats based on dispatch similarities -- e.g., blocksX|Y|Z)
+    release_object(profiler);
     #endif
 
     release_object(cmdList);
