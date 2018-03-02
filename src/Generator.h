@@ -2434,13 +2434,8 @@ public:
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
-                              const MachineParams &machine_params = MachineParams::generic()) :
-        target("target", t),
-        auto_schedule("auto_schedule", auto_schedule),
-        machine_params("machine_params", machine_params),
-        externs_map(std::make_shared<ExternsMap>()),
-        value_tracker(std::make_shared<Internal::ValueTracker>()) {}
-    virtual ~GeneratorContext() {}
+                              const MachineParams &machine_params = MachineParams::generic());
+    virtual ~GeneratorContext();
 
     inline Target get_target() const { return target; }
     inline bool get_auto_schedule() const { return auto_schedule; }
@@ -2486,13 +2481,7 @@ protected:
 
     GeneratorContext() : GeneratorContext(Target()) {}
 
-    inline void init_from_context(const Halide::GeneratorContext &context) {
-        target.set(context.get_target());
-        auto_schedule.set(context.get_auto_schedule());
-        machine_params.set(context.get_machine_params());
-        value_tracker = context.get_value_tracker();
-        externs_map = context.get_externs_map();
-    }
+    virtual void init_from_context(const Halide::GeneratorContext &context);
 
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
         return value_tracker;
@@ -2580,6 +2569,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2661,6 +2651,8 @@ public:
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
+
+    void init_from_context(const Halide::GeneratorContext &context) override;
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_generate() = 0;
