@@ -47,6 +47,15 @@
 
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_COMPUTE
 
+#if HALIDE_D3D12_PROFILING
+// NOTE(marcos): timer queries are reporting exceedingly small elapsed deltas
+// when placed in compute queues... even with SetStablePowerState is enabled,
+// the queries misbehave... for now, just resort to using the graphics queue
+// when profiling
+#undef  HALIDE_D3D12_COMMAND_LIST_TYPE
+#define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
+#endif
+
 template<uint64_t length = 1024, int type = BasicPrinter>
 class StackPrinter : public Printer<type, length> {
 public:
@@ -840,6 +849,12 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         return NULL;
     }
 
+    #if HALIDE_D3D12_PROFILING
+    // Notes on NVIDIA GPU Boost:
+    // https://developer.nvidia.com/setstablepowerstateexe-%20disabling%20-gpu-boost-windows-10-getting-more-deterministic-timestamp-queries
+    device->SetStablePowerState(TRUE);
+    #endif
+
     Release_ID3D12Object(dxgiAdapter);
     Release_ID3D12Object(dxgiFactory);
 
@@ -1218,7 +1233,7 @@ d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
     return(profiler);
 }
 
-size_t request_timestamp(d3d12_command_list *cmdList, d3d12_profiler *profiler) {
+size_t request_timestamp_checkpoint(d3d12_command_list *cmdList, d3d12_profiler *profiler) {
     TRACELOG;
     ID3D12QueryHeap *pQueryHeap = profiler->queryHeap;
     D3D12_QUERY_TYPE Type = D3D12_QUERY_TYPE_TIMESTAMP;
@@ -1227,7 +1242,8 @@ size_t request_timestamp(d3d12_command_list *cmdList, d3d12_profiler *profiler) 
     // D3D12_QUERY_TYPE_TIMESTAMP is the only query that supports EndQuery only.
     // BeginQuery cannot be called on a timestamp query.
     (*cmdList)->EndQuery(pQueryHeap, Type, Index);
-    return Index;
+    size_t checkpoint_id = Index;
+    return checkpoint_id;
 }
 
 void begin_profiling(d3d12_command_list *cmdList, d3d12_profiler *profiler) {
@@ -1252,6 +1268,19 @@ uint64_t *get_profiling_results(d3d12_profiler *profiler) {
     void *buffer = map_buffer(&profiler->queryResultsBuffer);
     uint64_t *timestamp_array = (uint64_t*)buffer;
     return timestamp_array;
+}
+
+double get_elapsed_time(d3d12_profiler *profiler, size_t checkpoint1, size_t checkpoint2, double resolution=1e-6) {
+    TRACELOG;
+    uint64_t* timestamps = get_profiling_results(profiler);
+    uint64_t ts1 = timestamps[checkpoint1];
+    uint64_t ts2 = timestamps[checkpoint2];
+    TRACEPRINT("ticks : [ " << ts1 << " , " << ts2 << " ]\n");
+    uint64_t ticks = ts2 - ts1;
+    double frequency = double(profiler->tick_frequency);
+    frequency *= resolution;    // default is microsecond resolution (1e-6)
+    double eps = ticks / frequency;
+    return eps;
 }
 
 WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
@@ -2440,7 +2469,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     #if HALIDE_D3D12_PROFILING
     d3d12_profiler *profiler = new_profiler(device, 8);
     begin_profiling(cmdList, profiler);
-    size_t ini = request_timestamp(cmdList, profiler);
+    size_t ini = request_timestamp_checkpoint(cmdList, profiler);
     #endif
 
     // run the kernel:
@@ -2449,7 +2478,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
                           threadsX, threadsY, threadsZ);
 
     #if HALIDE_D3D12_PROFILING
-    size_t end = request_timestamp(cmdList, profiler);
+    size_t end = request_timestamp_checkpoint(cmdList, profiler);
     end_profiling(cmdList, profiler);
     #endif
 
@@ -2478,11 +2507,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
     #endif
 
     #if HALIDE_D3D12_PROFILING
-    uint64_t* timestamps = get_profiling_results(profiler);
-    uint64_t eps = timestamps[end] - timestamps[ini];
-    UNUSED(eps);
-    TRACEPRINT("ticks -> [ " << timestamps[ini] << " , " << timestamps[end] << " ]\n");
-    TRACEPRINT("kernel execution time: " << double(eps*1000000) / double(profiler->tick_frequency) << "us (" << eps << " ticks).\n");
+    uint64_t eps = (uint64_t)get_elapsed_time(profiler, ini, end);
+    StackPrinter<64>() << "kernel execution time: " << eps << "us.\n";
     // TODO: keep some live performance stats in the d3d12_function object
     // (accumulate stats based on dispatch similarities -- e.g., blocksX|Y|Z)
     release_object(profiler);

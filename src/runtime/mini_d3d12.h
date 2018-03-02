@@ -209,6 +209,14 @@ typedef _Null_terminated_ CONST WCHAR *LPCWSTR, *PCWSTR;
 #define FAR                 far
 #define NEAR                near
 
+#ifndef FALSE
+#define FALSE               0
+#endif
+
+#ifndef TRUE
+#define TRUE                1
+#endif
+
 /* basestd.h */
 typedef CHAR        INT8,   *PINT8;
 typedef SHORT       INT16,  *PINT16;
