@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> output(input.width(), input.height(), 3);
     int timing = atoi(argv[5]);
 
-    local_laplacian(input, levels, alpha/(levels-1), beta, output);
+    local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output);
 
     // Timing code
 
