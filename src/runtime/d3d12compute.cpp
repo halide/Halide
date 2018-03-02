@@ -49,8 +49,9 @@
 
 #if HALIDE_D3D12_PROFILING
 // NOTE(marcos): timer queries are reporting exceedingly small elapsed deltas
-// when placed in compute queues... even with SetStablePowerState is enabled,
-// the queries misbehave... for now, just resort to using the graphics queue
+// when placed in compute queues... this might be related to GPU Power Boost,
+// or the default SetStablePowerState(FALSE), but it's inconclusive since the
+// queries still misbehave regardless... for now, just use the graphics queue
 // when profiling
 #undef  HALIDE_D3D12_COMMAND_LIST_TYPE
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
@@ -849,10 +850,18 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         return NULL;
     }
 
-    #if HALIDE_D3D12_PROFILING
+    #if 0 & HALIDE_D3D12_PROFILING
     // Notes on NVIDIA GPU Boost:
     // https://developer.nvidia.com/setstablepowerstateexe-%20disabling%20-gpu-boost-windows-10-getting-more-deterministic-timestamp-queries
-    device->SetStablePowerState(TRUE);
+    // MSDN: "Do not call SetStablePowerState in shipped applications.
+    //        This method only works while the machine is in developer mode.
+    //        If developer mode is not enabled, then device removal will occur.
+    //        (DXGI_ERROR_DEVICE_REMOVED : 0x887a0005)"
+    // https://msdn.microsoft.com/en-us/library/windows/desktop/dn903835(v=vs.85).aspx
+    result = device->SetStablePowerState(TRUE);
+    if (D3DError(result, device, user_context, "Unable to activate stable power state")) {
+        return NULL;
+    }
     #endif
 
     Release_ID3D12Object(dxgiAdapter);
