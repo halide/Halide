@@ -26,6 +26,39 @@ using StubInputBuffer = Internal::StubInputBuffer<void>;
 
 namespace {
 
+// This seems redundant to the code in PyError.cpp, but is necessary
+// in case the Stub builder links in a separate copy of libHalide, rather
+// sharing the same halide.so that is built by default.
+void halide_python_error(void *, const char *msg) {
+    throw Error(msg);
+}
+
+void halide_python_print(void *, const char *msg) {
+    py::print(msg, py::arg("end") = "");
+}
+
+class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
+public:
+    void warning(const char* msg) {
+        py::print(msg, py::arg("end") = "");
+    }
+
+    void error(const char* msg) {
+        throw Error(msg);
+        // This method must not return!
+    }
+};
+
+void install_error_handlers(py::module &m) {
+    static HalidePythonCompileTimeErrorReporter reporter;
+    set_custom_compile_time_error_reporter(&reporter);
+
+    Halide::Internal::JITHandlers handlers;
+    handlers.custom_error = halide_python_error;
+    handlers.custom_print = halide_python_print;
+    Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+}
+
 // Anything that defines __getitem__ looks sequencelike to pybind,
 // so also check for __len_ to avoid things like Buffer and Func here.
 bool is_real_sequence(py::object o) {
@@ -162,6 +195,7 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
     }
     auto m = pybind11::module(module_name);
     try {
+        Halide::PythonBindings::install_error_handlers(m);
         Halide::PythonBindings::pystub_init(m, factory);
         return m.ptr();
     } catch (pybind11::error_already_set &e) {

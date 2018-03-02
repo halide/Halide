@@ -79,7 +79,14 @@ public:
             z1(x, y, c) = Tuple((i + 1) * 1.5f, 42.f);
             array_outputs2[i] = z1;
             array_outputs3[i]() = 42.f;
+
+
+            // Verify compute_with works for Output<Func>
+            array_outputs2[i].compute_with(array_outputs[i], x);
         }
+
+        // Verify compute_with works for Output<Buffer>
+        dim_only_output_buffer.compute_with(Func(typed_output_buffer), x);
     }
 
     void schedule() {
