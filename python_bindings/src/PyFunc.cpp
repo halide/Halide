@@ -68,7 +68,7 @@ void define_func(py::module &m) {
     // - custom_lowering_passes()
 
     // Not supported yet, because we want to think about how to expose runtime
-    // overloads in Python:
+    // overrides in Python (https://github.com/halide/Halide/issues/2790):
     // - set_error_handler()
     // - set_custom_trace()
     // - set_custom_print()
