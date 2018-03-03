@@ -33,6 +33,9 @@ def main():
     assert os.path.isfile("f_all.h")
     assert os.path.isfile("f_all.o")
 
+    f.compile_to(hl.Outputs(stmt_html_name="f.html"), args, "f")
+    assert os.path.isfile("f.html")
+
     return 0
 
 if __name__ == "__main__":

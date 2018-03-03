@@ -12,6 +12,7 @@
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
 #include "PyLambda.h"
+#include "PyOutputs.h"
 #include "PyParam.h"
 #include "PyRDom.h"
 #include "PyTarget.h"
@@ -36,6 +37,7 @@ PYBIND11_MODULE(halide, m) {
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
+    define_outputs(m);
     define_func(m);
     define_inline_reductions(m);
     define_lambda(m);
