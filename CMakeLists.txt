@@ -36,7 +36,7 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
-  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # LLVM5.x on Windows can include "$(Configuration)" in the path;
   # fix this so we can use the paths right away.
   string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
 endif()
@@ -94,6 +94,11 @@ function(check_tool_exists NAME PATH)
   # Need to convert to CMake path so that backslashes don't get
   # interpreted as an escape.
   file(TO_CMAKE_PATH "${PATH}" TOOL_PATH)
+  if (MSVC)
+    # LLVM5.x on Windows can include "$(Configuration)" in the path;
+    # fix this so we can use the paths right away.
+    string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} TOOL_PATH "${TOOL_PATH}")
+  endif()
   if (NOT EXISTS "${TOOL_PATH}")
     message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
   endif()
