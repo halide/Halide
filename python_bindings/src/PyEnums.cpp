@@ -27,6 +27,14 @@ void define_enums(py::module &m) {
         .value("AlignEnd", LoopAlignStrategy::AlignEnd)
     ;
 
+    py::enum_<MemoryType>(m, "MemoryType")
+        .value("Auto", MemoryType::Auto)
+        .value("Heap", MemoryType::Heap)
+        .value("Stack", MemoryType::Stack)
+        .value("Register", MemoryType::Register)
+        .value("GPUShared", MemoryType::GPUShared)
+    ;
+
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
         .value("C", NameMangling::C)
