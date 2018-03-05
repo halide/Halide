@@ -6,6 +6,7 @@
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "IROperator.h"
+#include "IRMutator.h"
 
 #define DEBUG_TYPES (0)
 
@@ -306,7 +307,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op)
             << "[" << id_index << "]"
             << ")";
 #if 0
-        // NOTE(marcos): let's keep this block of code here (disabled) , in case
+        // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
         // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
         if (op->type.bits() == 32) {
@@ -458,7 +459,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
                << print_reinterpret(promoted, op->value)
                << ";\n";
 #if 0
-        // NOTE(marcos): let's keep this block of code here (disabled) , in case
+        // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
         // the smallest type granularity in HLSL SM 5.1 allows is 32bit types):
         if (value_type.bits() == 32) {
@@ -888,10 +889,72 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         allocations.push(op->name, alloc);
     }
 
+    // Find and patch situations where the __shared buffer is read before having
+    // ever being initialized:
+
+    // NOTE(marcos): it would be cleaner if we could just use an IRVisitor here
+    // but in order to find the enclosing Stmt of a Load expression we need to
+    // to walk through base Stmt nodes, and only IRMutator has this overload:
+    struct FindUninitializedSharedLoads : public IRMutator2 {
+        using IRMutator2::visit;
+        virtual Expr visit(const Load *op) override {
+            if (op->name == "__shared") {
+                if (!latest_store) {
+                    // attempting to read from __shared before anything has been
+                    // written to it yet!
+                    bad_load_expr = op;
+                }
+            }
+            return IRMutator2::visit(op);
+        }
+        virtual Stmt visit(const Store *op) override {
+            Stmt store = IRMutator2::visit(op);
+            if (op->name == "__shared") {
+                latest_store = op;
+            }
+            return store;
+        }
+        virtual Stmt mutate(const Stmt &stmt) override {
+            if (!bad_load_expr) {
+                current_stmt = &stmt;
+            }
+            return IRMutator2::mutate(stmt);
+        }
+        const Stmt  *current_stmt  = nullptr;
+        const Load  *bad_load_expr = nullptr;
+        const Store *latest_store  = nullptr;
+    };
+    FindUninitializedSharedLoads fusl;
+    s = fusl.mutate(s);
+    if (fusl.bad_load_expr) {
+        debug(1) << "Found a potential load-before-initialization on __shared buffer!\n";
+        // use IRMutator to inject a zero-initialization before the load
+        struct ZeroInitializeSharedMemory : public IRMutator2 {
+            using IRMutator2::visit;
+            virtual Stmt mutate(const Stmt &op) override {
+                if (&op != uninitialized_load_stmt) {
+                    return IRMutator2::mutate(op);
+                }
+
+                debug(1) << "Patching __shared buffer with zero-intialization...\n";
+
+                const Load* lop = uninitialized_load_expr;
+                Stmt initialization = Store::make(lop->name, Expr(0), lop->index, Parameter(), lop->predicate);
+                return Block::make({ initialization, op });
+            }
+            const Stmt *uninitialized_load_stmt = nullptr;
+            const Load *uninitialized_load_expr = nullptr;
+        };
+        ZeroInitializeSharedMemory zism;
+        zism.uninitialized_load_stmt = fusl.current_stmt;
+        zism.uninitialized_load_expr = fusl.bad_load_expr;
+        s = zism.mutate(s);
+    }
+
     // Emit the kernel function preamble (numtreads):
 
     // Figure out the thread group size by traversing the stmt:
-    class FindThreadGroupSize : public IRVisitor
+    struct FindThreadGroupSize : public IRVisitor
     {
         using IRVisitor::visit;
         void visit(const For *loop)
@@ -928,7 +991,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             }
             return -1;
         }
-        friend class CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
         int numthreads [3] = { 1, 1, 1 };
     };
     FindThreadGroupSize ftg;
