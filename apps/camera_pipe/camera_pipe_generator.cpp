@@ -356,7 +356,7 @@ void CameraPipe::generate() {
         processed
             .estimate(c, 0, 3)
             .estimate(x, 0, 2592 - 32)
-            .estimate(y, 0, 1968 - 24);
+            .estimate(y, 0, 1968 - 48);
 
         // We can generate better-aligned tiles if we know the output starts at zero and is even
         processed.dim(0).set_bounds(0, (processed.dim(0).extent() / 2) * 2);
