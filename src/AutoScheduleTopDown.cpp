@@ -7,6 +7,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Util.h"
+#include "PartitionLoops.h"
 
 #include <set>
 #include <queue>
@@ -31,7 +32,8 @@ using std::pair;
 // f(0) = 0
 // f(params.last_level_cache_size) = params.balance
 double cost_of_cold_load(double buffer_size, const MachineParams &params) {
-    return params.balance * std::log2(1 + buffer_size / params.last_level_cache_size);
+    return params.balance * std::sqrt(buffer_size / params.last_level_cache_size);
+    //return params.balance * std::log2(1 + buffer_size / params.last_level_cache_size);
 }
 
 
@@ -116,6 +118,8 @@ struct FunctionDAG {
             // Do the cost analysis. Simplistic for now - just counts
             // leaf nodes in the expression trees.
             class LeafCounter : public IRVisitor {
+                bool likely = false;
+
                 using IRVisitor::visit;
                 void visit(const IntImm *) override {
                     leaves++;
@@ -139,6 +143,46 @@ struct FunctionDAG {
                     // addressing if it's a Halide or Image call, and
                     // in the actual function call if it's not.
                     leaves += op->args.size();
+                    if (op->is_intrinsic(Call::likely) || op->is_intrinsic(Call::likely_if_innermost)) {
+                        likely = true;
+                    }
+                }
+
+                bool visit_likely_pair(Expr a, Expr b) {
+                    bool old_likely = likely;
+                    int old_leaves = leaves;
+                    likely = false;
+                    leaves = 0;
+                    a.accept(this);
+                    int a_leaves = leaves;
+                    int a_likely = likely;
+                    likely = false;
+                    leaves = 0;
+                    b.accept(this);
+                    int b_leaves = leaves;
+                    int b_likely = likely;
+                    if (a_likely) {
+                        leaves = old_leaves + a_leaves;
+                    } else if (b_likely) {
+                        leaves = old_leaves + b_leaves;
+                    } else {
+                        leaves = old_leaves + a_leaves + b_leaves;
+                    }
+                    likely = old_likely;
+                    return a_likely || b_likely;
+                }
+
+                void visit(const Select *op) override {
+                    if (visit_likely_pair(op->true_value, op->false_value)) {
+                        op->condition.accept(this);
+                    }
+                }
+
+                void visit(const Min *op) override {
+                    visit_likely_pair(op->a, op->b);
+                }
+                void visit(const Max *op) override {
+                    visit_likely_pair(op->a, op->b);
                 }
             public:
                 int leaves = 0;
@@ -792,95 +836,112 @@ struct PartialScheduleNode {
         return result;
     }
 
+    struct FuncVars {
+        double num_cores = 0; // How much parallelism do we need to exploit with this Func?
+        struct FuncVar {
+            VarOrRVar var;
+            int64_t extent = 0;
+            bool outermost = false, parallel = false, exists = false;
+            FuncVar() : var(Var()) {}
+        };
+        vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
+    };
+
     void apply(LoopLevel here, const FunctionDAG &dag,
-               map<Function, vector<VarOrRVar>, Function::Compare> &vars_map,
-               double num_cores) {
+               map<Function, FuncVars, Function::Compare> &vars_map,
+               double num_cores,
+               const PartialScheduleNode *parent) {
         if (is_root()) {
             for (auto &c : children) {
                 Func(c->func).compute_root();
-                c->apply(LoopLevel::root(), dag, vars_map, num_cores);
+                c->apply(LoopLevel::root(), dag, vars_map, num_cores, this);
             }
         } else {
+            auto it = vars_map.find(func);
+            if (it == vars_map.end()) {
+                const auto &parent_bounds = parent->get_bounds(func, dag);
+                FuncVars vars;
+                vars.num_cores = num_cores;
+                for (int i = 0; i < func.dimensions(); i++) {
+                    FuncVars::FuncVar fv;
+                    fv.var = Var(func.args()[i]);
+                    fv.extent = parent_bounds.region[i].second - parent_bounds.region[i].first + 1;
+                    fv.outermost = true;
+                    fv.parallel = false;
+                    fv.exists = true;
+                    vars.vars.push_back(fv);
+                }
+                vars_map[func] = vars;
+            }
             auto &vars = vars_map[func];
 
-            if (vars.empty()) {
-                for (Var v : Func(func).args()) {
-                    vars.push_back(v);
-                }
-            }
-
             if (innermost) {
-                Var v = vars[0].var;
-                here = LoopLevel(func, v);
-                if (size[0] >= 16) {
-                    Func(func).vectorize(v, 16);
-                } else if (size[0] >= 8) {
-                    Func(func).vectorize(v, 8);
-                } else if (size[0] >= 4) {
-                    Func(func).vectorize(v, 4);
-                }
-                if ((int)vars.size() > func.dimensions()) {
-                    // If we've tiled at least once, we know the inner
-                    // extents and can unroll them if they're small.
-                    if (size[0] <= 32) {
-                        Func(func).unroll(v);
+                FuncVars::FuncVar v;
+                for (int i = 0; i < func.dimensions(); i++) {
+                    if (vars.vars[i].exists) {
+                        v = vars.vars[i];
+                        break;
                     }
                 }
-                if (num_cores > 1) {
-                    double task_size = size.back() / num_cores;
-                    if (task_size > 1) {
-                        Func(func).parallel(vars[func.dimensions() - 1], (int)std::ceil(task_size));
-                    } else {
-                        Func(func).parallel(vars[func.dimensions() - 1]);
+                here = LoopLevel(func, v.var);
+                if (v.extent >= 16) {
+                    Func(func).vectorize(v.var, 16);
+                } else if (v.extent >= 8) {
+                    Func(func).vectorize(v.var, 8);
+                } else if (v.extent >= 4) {
+                    Func(func).vectorize(v.var, 4);
+                }
+                if (v.exists && !v.outermost) {
+                    // If we've tiled at least once, we know the inner
+                    // extents and can unroll them if they're small.
+                    if (v.extent <= 32) {
+                        Func(func).unroll(v.var);
                     }
                 }
             } else {
                 // Do the implied splits
-                auto b = get_bounds(func, dag);
-                vector<VarOrRVar> new_inner;
-                for (size_t i = 0; i < b.region.size(); i++) {
-                    auto p = b.region[i];
-                    int extent = p.second - p.first + 1;
-                    Var old = vars[i].var;
-                    Var outer(old.name() + "o"), inner(old.name() + "i");
-                    Func(func).split(old, outer, inner, extent);
-                    vars[i] = outer;
-                    new_inner.push_back(inner);
-                }
-                // parallelize the outer vars
-                if (num_cores > 1) {
-                    int innermost_parallel_dimension;
-                    int num_parallel_dimensions = 0;
-                    for (int i = func.dimensions() - 1; num_cores > 1 && i >= 0; i--) {
-                        Func(func).parallel(vars[i]);
-                        num_parallel_dimensions++;
-                        innermost_parallel_dimension = i;
-                        num_cores /= size[i];
+                vector<FuncVars::FuncVar> new_inner;
+                for (int i = 0; i < func.dimensions(); i++) {
+                    FuncVars::FuncVar v;
+                    FuncVars::FuncVar &parent = vars.vars[i];
+                    int64_t factor = (parent.extent + size[i] - 1) / size[i];
+                    if (!parent.exists || parent.extent == 1 || factor == 1) {
+                        v.exists = false;
+                        v.extent = 1;
+                    } else if (size[i] == 1) {
+                        // Not split in this dimension
+                        v = parent;
+                        parent.exists = false;
+                        parent.extent = 1;
+                    } else {
+                        Var outer(parent.var.name() + "o"), inner(parent.var.name() + "i");
+                        Func(func).split(parent.var, outer, inner, (int)factor);
+                        v = parent;
+                        parent.var = outer;
+                        parent.extent = size[i];
+                        v.var = inner;
+                        v.extent = factor;
                     }
-                    // We parallelizes outer loop dimensions i + 1
-                    // through func.dimensions() - 1. Fuse them into
-                    // one parallel loop to minimize the amount of
-                    // nested parallelism.
-                    for (int i = 0; i < num_parallel_dimensions - 1; i++) {
-                        Var inner = vars[innermost_parallel_dimension].var;
-                        Var outer = vars[innermost_parallel_dimension + 1].var;
-                        Var fused(inner.name() + "_" + outer.name());
-                        Func(func).fuse(inner, outer, fused);
-                        vars[innermost_parallel_dimension] = fused;
-                        vars.erase(vars.begin() + innermost_parallel_dimension + 1);
-                    }
+                    new_inner.push_back(v);
                 }
-                here = LoopLevel(func, vars[0]);
-                vars.insert(vars.begin(), new_inner.begin(), new_inner.end());
+                for (int i = 0; i < func.dimensions(); i++) {
+                    if (!vars.vars[i].exists) continue;
+                    here = LoopLevel(func, vars.vars[i].var);
+                    break;
+                }
+                vars.vars.insert(vars.vars.begin(), new_inner.begin(), new_inner.end());
             }
             for (auto f : store_at) {
                 Func(f).store_at(here);
+            }
+            for (auto s : size) {
+                num_cores /= s;
             }
             for (auto &c : children) {
                 if (!c->func.same_as(func)) {
                     Func(c->func).compute_at(here);
                 }
-                c->apply(here, dag, vars_map, num_cores);
+                c->apply(here, dag, vars_map, num_cores, this);
             }
         }
     }
@@ -961,11 +1022,48 @@ struct State {
     }
 
     void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
-        map<Function, vector<VarOrRVar>, Function::Compare> vars_map;
-        root.apply(LoopLevel::root(), dag, vars_map, params.parallelism);
-        // Do all the reorders
+        map<Function, PartialScheduleNode::FuncVars, Function::Compare> vars_map;
+        root.apply(LoopLevel::root(), dag, vars_map, params.parallelism, nullptr);
+
         for (auto &p : vars_map) {
-            Func(p.first).reorder(p.second);
+            Func f(p.first);
+            // Do all the reorders
+            vector<VarOrRVar> vars;
+            for (auto &v : p.second.vars) {
+                if (v.exists) vars.push_back(v.var);
+            }
+            f.reorder(vars);
+
+            // Figure out which dimensions are parallel and fuse them
+            // into a single parallel outer loop (TODO: What if
+            // something is compute_at in between two parallel vars?
+            // Can't currently happen because we enforce adequately
+            // large outer loops).
+            double num_cores = p.second.num_cores;
+            VarOrRVar fused {Var()};
+            bool any_parallel = false;
+            for (int i = (int)p.second.vars.size() - 1; i >= 0 && num_cores > 1; i--) {
+                auto &v = p.second.vars[i];
+                if (!v.exists) continue;
+                int64_t extent = v.extent;
+                num_cores /= extent;
+                if (num_cores < 0.125) {
+                    // Should probably do another split and only mark the outer one as parallel
+                    int task_size = std::floor(1 / num_cores);
+                    debug(0) << "Task size for " << f.name() << ": " << task_size << "\n";
+                    f.parallel(v.var, task_size);
+                } else {
+                    f.parallel(v.var);
+                }
+                if (!any_parallel) {
+                    fused = v.var;
+                    any_parallel = true;
+                } else if (i > 1) {
+                    // Use the inner name, to not invalidate any compute_ats
+                    f.fuse(v.var, fused, v.var); // To consider: fuse may break loop partitioning. Check for likelies
+                    fused = v.var;
+                }
+            }
         }
     }
 
