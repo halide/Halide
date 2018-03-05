@@ -33,6 +33,7 @@
 #include "IRPrinter.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "Prefetch.h"
@@ -299,6 +300,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
 
+    if (t.has_feature(Target::CUDA)) {
+        debug(1) << "Injecting warp shuffles...\n";
+        s = lower_warp_shuffles(s);
+        debug(2) << "Lowering after injecting warp shuffles:\n" << s << "\n\n";
+    }
+
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
 
@@ -318,9 +325,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = loop_invariant_code_motion(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
-    debug(1) << "Splitting off Hexagon offload...\n";
-    s = inject_hexagon_rpc(s, t, result_module);
-    debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
+    if (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))) {
+        debug(1) << "Splitting off Hexagon offload...\n";
+        s = inject_hexagon_rpc(s, t, result_module);
+        debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
+    } else {
+        debug(1) << "Skipping Hexagon offload...\n";
+    }
 
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
@@ -426,8 +437,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     return result_module;
 }
 
-EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
-                            const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
+Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
+                     const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);

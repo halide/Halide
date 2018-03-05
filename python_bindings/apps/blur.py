@@ -5,13 +5,12 @@ from scipy.misc import imread, imsave
 import os.path
 
 def get_blur(input):
-
     assert type(input) == hl.ImageParam
     assert input.dimensions() == 2
 
     x, y = hl.Var("x"), hl.Var("y")
 
-    clamped_input = hl.repeat_edge(input)
+    clamped_input = hl.BoundaryConditions.repeat_edge(input)
 
     input_uint16 = hl.Func("input_uint16")
     input_uint16[x,y] = hl.cast(hl.UInt(16), clamped_input[x,y])
@@ -32,7 +31,6 @@ def get_blur(input):
 
 
 def get_input_data():
-
     image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
@@ -45,7 +43,6 @@ def get_input_data():
     return input_data
 
 def main():
-
     # define and compile the function
     input = hl.ImageParam(hl.UInt(8), 2, "input_param")
     blur = get_blur(input)

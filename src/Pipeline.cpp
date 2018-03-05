@@ -10,6 +10,7 @@
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
+#include "ParamMap.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 
@@ -93,7 +94,7 @@ struct PipelineContents {
         module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
-                                           /*is_explicit_name*/ true, /*register_instance*/ false);
+                                           /*is_explicit_name*/ true);
     }
 
     ~PipelineContents() {
@@ -113,12 +114,12 @@ struct PipelineContents {
 
 namespace Internal {
 template<>
-EXPORT RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
+RefCount &ref_count<PipelineContents>(const PipelineContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<PipelineContents>(const PipelineContents *p) {
+void destroy<PipelineContents>(const PipelineContents *p) {
     delete p;
 }
 }
@@ -164,8 +165,8 @@ Func Pipeline::get_func(size_t index) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
-    // Compute a realization order
-    vector<string> order = realization_order(contents->outputs, env).first;
+    // Compute a topological order
+    vector<string> order = topological_order(contents->outputs, env);
 
     user_assert(index < order.size())
         << "Index value passed is " << index << "; however, there are only "
@@ -528,7 +529,7 @@ const JITHandlers &Pipeline::jit_handlers() {
 }
 
 Realization Pipeline::realize(vector<int32_t> sizes,
-                              const Target &target) {
+                              const Target &target, const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto & out : contents->outputs) {
@@ -539,7 +540,7 @@ Realization Pipeline::realize(vector<int32_t> sizes,
         }
     }
     Realization r(bufs);
-    realize(r, target);
+    realize(r, target, param_map);
     for (size_t i = 0; i < r.size(); i++) {
         r[i].copy_to_host();
     }
@@ -547,30 +548,30 @@ Realization Pipeline::realize(vector<int32_t> sizes,
 }
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size,
-                              const Target &target) {
-    return realize({x_size, y_size, z_size, w_size}, target);
+                              const Target &target, const ParamMap &param_map) {
+  return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size,
-                              const Target &target) {
-    return realize({x_size, y_size, z_size}, target);
+                              const Target &target, const ParamMap &param_map) {
+  return realize({x_size, y_size, z_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, int y_size,
-                              const Target &target) {
-    return realize({x_size, y_size}, target);
+                              const Target &target, const ParamMap &param_map) {
+  return realize({x_size, y_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size,
-                              const Target &target) {
+                              const Target &target, const ParamMap &param_map) {
     // Use an explicit vector here, since {x_size} can be interpreted
     // as a scalar initializer
     vector<int32_t> v = {x_size};
-    return realize(v, target);
+    return realize(v, target, param_map);
 }
 
-Realization Pipeline::realize(const Target &target) {
-    return realize(vector<int32_t>(), target);
+Realization Pipeline::realize(const Target &target, const ParamMap &param_map) {
+  return realize(vector<int32_t>(), target, param_map);
 }
 
 namespace {
@@ -628,11 +629,9 @@ struct ErrorBuffer {
 struct JITFuncCallContext {
     ErrorBuffer error_buffer;
     JITUserContext jit_context;
-    Parameter &user_context_param;
     bool custom_error_handler;
 
-    JITFuncCallContext(const JITHandlers &handlers, Parameter &user_context_param)
-        : user_context_param(user_context_param) {
+    JITFuncCallContext(const JITHandlers &handlers) {
         void *user_context = nullptr;
         JITHandlers local_handlers = handlers;
         if (local_handlers.custom_error == nullptr) {
@@ -643,7 +642,6 @@ struct JITFuncCallContext {
             custom_error_handler = true;
         }
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
-        user_context_param.set_scalar(&jit_context);
 
         debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
                  << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
@@ -670,7 +668,6 @@ struct JITFuncCallContext {
 
     void finalize(int exit_status) {
         report_if_error(exit_status);
-        user_context_param.set_scalar((void *)nullptr); // Don't leave param hanging with pointer to stack.
     }
 };
 
@@ -679,7 +676,9 @@ struct JITFuncCallContext {
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
+vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
+                                                          const ParamMap &param_map, void *user_context,
+                                                          bool is_bounds_inference) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     compile_jit(target);
@@ -735,19 +734,31 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     vector<const void *> arg_values;
 
     for (const InferredArgument &arg : contents->inferred_args) {
-        if (arg.param.defined() && arg.param.is_buffer()) {
-            // ImageParam arg
-            Buffer<> buf = arg.param.buffer();
-            if (buf.defined()) {
-                arg_values.push_back(buf.raw_buffer());
+        if (arg.param.defined()) {
+            if (arg.param.same_as(contents->user_context_arg.param)) {
+                arg_values.push_back(user_context);
             } else {
-                // Unbound
-                arg_values.push_back(nullptr);
+                Buffer<> *buf_out_param;
+                const Parameter &p = param_map.map(arg.param, buf_out_param);
+                if (!is_bounds_inference) {
+                    user_assert(buf_out_param == nullptr) << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
+                }
+
+                if (p.is_buffer()) {
+                    // ImageParam arg
+                    Buffer<> buf = p.buffer();
+                    if (buf.defined()) {
+                        arg_values.push_back(buf.raw_buffer());
+                    } else {
+                        // Unbound
+                        arg_values.push_back(nullptr);
+                    }
+                    debug(1) << "JIT input ImageParam argument ";
+                } else {
+                    arg_values.push_back(p.scalar_address());
+                    debug(1) << "JIT input scalar argument ";
+                }
             }
-            debug(1) << "JIT input ImageParam argument ";
-        } else if (arg.param.defined()) {
-            arg_values.push_back(arg.param.scalar_address());
-            debug(1) << "JIT input scalar argument ";
         } else {
             debug(1) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
@@ -816,7 +827,7 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize(Realization dst, const Target &t) {
+void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -838,8 +849,6 @@ void Pipeline::realize(Realization dst, const Target &t) {
             target = get_jit_target_from_environment();
         }
     }
-
-    vector<const void *> args = prepare_jit_call_arguments(dst, target);
 
     // We need to make a context for calling the jitted function to
     // carry the the set of custom handlers. Here's how handlers get
@@ -863,7 +872,12 @@ void Pipeline::realize(Realization dst, const Target &t) {
     // user_context is just a pointer to a JITUserContext, which is a
     // member of the JITFuncCallContext which we will declare now:
 
-    JITFuncCallContext jit_context(jit_handlers(), contents->user_context_arg.param);
+    void *user_context_storage = nullptr;
+    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map,
+                                                           &user_context_storage, false);
+    // This has to happen after a runtime has been compiled.
+    JITFuncCallContext jit_context(jit_handlers());
+    user_context_storage = &jit_context.jit_context;
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -913,7 +927,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
         JITModule::Symbol reset_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_reset");
         if (report_sym.address && reset_sym.address) {
-            void *uc = jit_context.user_context_param.scalar<void *>();
+            void *uc = &jit_context.jit_context;
             void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
             report_fn_ptr(uc);
 
@@ -925,11 +939,16 @@ void Pipeline::realize(Realization dst, const Target &t) {
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(Realization dst) {
+void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
 
     Target target = get_jit_target_from_environment();
 
-    vector<const void *> args = prepare_jit_call_arguments(dst, target);
+    void *user_context_storage = nullptr;
+    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map,
+                                                           &user_context_storage, true);
+    // This has to happen after a runtime has been compiled.
+    JITFuncCallContext jit_context(jit_handlers());
+    user_context_storage = &jit_context.jit_context;
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
@@ -959,8 +978,6 @@ void Pipeline::infer_input_bounds(Realization dst) {
         debug(1) << "All inputs are bound. No need for bounds inference\n";
         return;
     }
-
-    JITFuncCallContext jit_context(jit_handlers(), contents->user_context_arg.param);
 
     int iter = 0;
     const int max_iters = 16;
@@ -1004,18 +1021,28 @@ void Pipeline::infer_input_bounds(Realization dst) {
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
-        internal_assert(!ia.param.buffer().defined());
+        Buffer<> *buf_out_param;
+        Parameter &p = param_map.map(ia.param, buf_out_param);
+
+        if (&p != &ia.param) {
+            user_assert(buf_out_param != nullptr) << "Output Buffer<> arguments to infer_input_bounds in parameters map must be passed as pointers.\n";
+        }
+        internal_assert(!p.buffer().defined());
 
         // Allocate enough memory with the right type and dimensionality.
         tracked_buffers[i].query.allocate();
 
-        // Bind this parameter to this buffer, giving away the
-        // buffer. The user retrieves it via ImageParam::get.
-        ia.param.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
+        if (buf_out_param != nullptr) {
+            *buf_out_param = Buffer<>(*tracked_buffers[i].query.raw_buffer());
+        } else {
+            // Bind this parameter to this buffer, giving away the
+            // buffer. The user retrieves it via ImageParam::get.
+            p.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
+        }
     }
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
     vector<int> size;
@@ -1029,7 +1056,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
         bufs.emplace_back(t, size);
     }
     Realization r(bufs);
-    infer_input_bounds(r);
+    infer_input_bounds(r, param_map);
 }
 
 void Pipeline::invalidate_cache() {

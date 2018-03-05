@@ -26,7 +26,7 @@ class IRMutator2;
  * engine or API as well as buffers that are used in the passed in
  * Stmt. Multiple LoweredFuncs are added to support legacy buffer_t
  * calling convention. */
-EXPORT Module lower(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
+Module lower(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
                     const std::vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
                     const std::vector<IRMutator2 *> &custom_passes = std::vector<IRMutator2 *>());
 
@@ -35,7 +35,7 @@ EXPORT Module lower(const std::vector<Function> &output_funcs, const std::string
  * on. Some stages of lowering may be target-specific. Mostly used as
  * a convenience function in tests that wish to assert some property
  * of the lowered IR. */
-EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
+Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
                             const std::vector<IRMutator2 *> &custom_passes = std::vector<IRMutator2 *>());
 
 void lower_test();

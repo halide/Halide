@@ -40,8 +40,8 @@ public:
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
-template<typename T> EXPORT RefCount &ref_count(const T *t);
-template<typename T> EXPORT void destroy(const T *t);
+template<typename T> RefCount &ref_count(const T *t);
+template<typename T> void destroy(const T *t);
 // @}
 
 /** Intrusive shared pointers have a reference count (a
@@ -146,7 +146,7 @@ public:
         return ptr == other.ptr;
     }
 
-    bool operator <(const IntrusivePtr<T> &other) const {
+    bool operator<(const IntrusivePtr<T> &other) const {
         return ptr < other.ptr;
     }
 

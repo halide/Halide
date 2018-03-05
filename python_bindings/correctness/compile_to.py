@@ -33,7 +33,8 @@ def main():
     assert os.path.isfile("f_all.h")
     assert os.path.isfile("f_all.o")
 
-    print("Success!")
+    f.compile_to(hl.Outputs(stmt_html_name="f.html"), args, "f")
+    assert os.path.isfile("f.html")
 
     return 0
 

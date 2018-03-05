@@ -100,7 +100,7 @@ private:
      *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
-    Allocation create_allocation(const std::string &name, Type type,
+    Allocation create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                  const std::vector<Expr> &extents,
                                  Expr condition, Expr new_expr, std::string free_function);
 

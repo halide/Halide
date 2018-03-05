@@ -186,7 +186,7 @@ int Func::outputs() const {
 
 /** Get the name of the extern function called for an extern
  * definition. */
-EXPORT const std::string &Func::extern_function_name() const {
+const std::string &Func::extern_function_name() const {
     return func.extern_function_name();
 }
 
@@ -293,7 +293,8 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             // validate that this doesn't introduce a race condition.
             if (!dims[i].is_pure() && var.is_rvar &&
                 (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread)) {
+                 t == ForType::GPUBlock || t == ForType::GPUThread ||
+                 t == ForType::GPULane)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -944,8 +945,9 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             // We should employ ShiftInwards when we can to prevent
             // overcompute and adding constraints to the bounds of
             // inputs and outputs. However, if we're already covered
-            // by an earlier ShiftInwards split, there's no point - it
-            // just complicates the IR and confuses bounds inference. An example of this is:
+            // by an earlier larger ShiftInwards split, there's no
+            // point - it just complicates the IR and confuses bounds
+            // inference. An example of this is:
             //
             // f.vectorize(x, 8).unroll(x, 4);
             //
@@ -963,19 +965,22 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             //
             // It's only the tail/epilogue that changes.
 
-            std::set<string> descends_from_shiftinwards_outer;
+            std::map<string, Expr> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
+                auto it = descends_from_shiftinwards_outer.find(s.old_var);
                 if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
-                } else if (s.is_split() && descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.inner);
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                    descends_from_shiftinwards_outer[s.outer] = s.factor;
+                } else if (s.is_split() && it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.inner] = it->second;
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 } else if ((s.is_rename() || s.is_purify()) &&
-                           descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                           it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 }
             }
-            if (descends_from_shiftinwards_outer.count(old_name)) {
+            auto it = descends_from_shiftinwards_outer.find(old_name);
+            if (it != descends_from_shiftinwards_outer.end() &&
+                can_prove(it->second >= factor)) {
                 tail = TailStrategy::RoundUp;
             } else {
                 tail = TailStrategy::ShiftInwards;
@@ -1527,6 +1532,12 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI de
     return *this;
 }
 
+Stage &Stage::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_type(tx, ForType::GPULane);
+    return *this;
+}
+
 Stage &Stage::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_type(bx, ForType::GPUBlock);
@@ -1574,17 +1585,7 @@ Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
-                       TailStrategy tail, DeviceAPI device_api) {
-    split(x, bx, tx, x_size, tail);
-    set_dim_device_api(bx, device_api);
-    set_dim_device_api(tx, device_api);
-    set_dim_type(bx, ForType::GPUBlock);
-    set_dim_type(tx, ForType::GPUThread);
-    return *this;
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
                        TailStrategy tail, DeviceAPI device_api) {
     split(x, bx, tx, x_size, tail);
     set_dim_device_api(bx, device_api);
@@ -1624,15 +1625,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, Var ty,
-                       Expr x_size, Expr y_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    return gpu_tile(x, y, x, y, tx, ty, x_size, y_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, RVar ty,
+                       VarOrRVar tx, VarOrRVar ty,
                        Expr x_size, Expr y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
@@ -1678,42 +1671,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     return gpu_tile(x, y, z, x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar);
-    split(x, bx, tx, x_size, tail);
-    set_dim_device_api(bx, device_api);
-    set_dim_device_api(tx, device_api);
-    set_dim_type(bx, ForType::GPUBlock);
-    set_dim_type(tx, ForType::GPUThread);
-    return *this;
-}
-
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       Expr x_size, Expr y_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        by("__deprecated_block_id_y", y.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar),
-        ty("__deprecated_thread_id_y", y.is_rvar);
-    return gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                       Expr x_size, Expr y_size, Expr z_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        by("__deprecated_block_id_y", y.is_rvar),
-        bz("__deprecated_block_id_z", z.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar),
-        ty("__deprecated_thread_id_y", y.is_rvar),
-        tz("__deprecated_thread_id_z", z.is_rvar);
-    return gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
 Stage &Stage::hexagon(VarOrRVar x) {
@@ -1990,6 +1947,12 @@ Func &Func::memoize() {
     return *this;
 }
 
+Func &Func::store_in(MemoryType t) {
+    invalidate_cache();
+    func.schedule().memory_type() = t;
+    return *this;
+}
+
 Stage Func::specialize(Expr c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0, args()).specialize(c);
@@ -2152,6 +2115,12 @@ Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI devi
     return *this;
 }
 
+Func &Func::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).gpu_lanes(tx, device_api);
+    return *this;
+}
+
 Func &Func::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).gpu_blocks(bx, device_api);
@@ -2194,13 +2163,7 @@ Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVa
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
@@ -2225,18 +2188,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, Var ty,
-                     Expr x_size, Expr y_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args())
-        .gpu_tile(x, y, tx, ty, x_size, y_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, RVar ty,
+                     VarOrRVar tx, VarOrRVar ty,
                      Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
@@ -2266,30 +2218,6 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     invalidate_cache();
     Stage(func, func.definition(), 0, args())
         .gpu_tile(x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, x_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     Expr x_size, Expr y_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, y, x_size, y_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                     Expr x_size, Expr y_size, Expr z_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, y, z, x_size, y_size, z_size, tail, device_api);
     return *this;
 }
 
@@ -2438,6 +2366,18 @@ Func &Func::compute_with(Stage s, VarOrRVar var, const vector<pair<VarOrRVar, Lo
 Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).compute_with(s, var, align);
+    return *this;
+}
+
+Func &Func::compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    return *this;
+}
+
+Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
     return *this;
 }
 
@@ -2850,32 +2790,32 @@ FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target, const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(sizes, target);
+    return pipeline().realize(sizes, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
-    return realize({x_size, y_size, z_size, w_size}, target);
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target, const ParamMap &param_map) {
+    return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
-    return realize({x_size, y_size, z_size}, target);
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target, const ParamMap &param_map) {
+    return realize({x_size, y_size, z_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, const Target &target) {
-    return realize({x_size, y_size}, target);
+Realization Func::realize(int x_size, int y_size, const Target &target, const ParamMap &param_map) {
+    return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, const Target &target) {
-    return realize(std::vector<int>{x_size}, target);
+Realization Func::realize(int x_size, const Target &target, const ParamMap &param_map) {
+    return realize(std::vector<int>{x_size}, target, param_map);
 }
 
-Realization Func::realize(const Target &target) {
-    return realize(std::vector<int>{}, target);
+Realization Func::realize(const Target &target, const ParamMap &param_map) {
+    return realize(std::vector<int>{}, target, param_map);
 }
 
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+  void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     int sizes[] = {x_size, y_size, z_size, w_size};
@@ -2892,7 +2832,7 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
-    infer_input_bounds(r);
+    infer_input_bounds(r, param_map);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3067,20 +3007,20 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Realization dst, const Target &target) {
-    pipeline().realize(dst, target);
+void Func::realize(Realization dst, const Target &target, const ParamMap &param_map) {
+    pipeline().realize(dst, target, param_map);
 }
 
-void Func::infer_input_bounds(Realization dst) {
-    pipeline().infer_input_bounds(dst);
+void Func::infer_input_bounds(Realization dst, const ParamMap &param_map) {
+    pipeline().infer_input_bounds(dst, param_map);
 }
 
 void *Func::compile_jit(const Target &target) {
     return pipeline().compile_jit(target);
 }
 
-EXPORT Var _("_");
-EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
+Var _("_");
+Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
            _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }

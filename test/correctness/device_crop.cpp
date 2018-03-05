@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
                        target.features_any_of({ Target::HVX_64, Target::HVX_128 });
-    
+
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("This is a gpu-specific test. Skipping it.\n");
         return 0;
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    
+
     printf("Test parent going out of scope before crop.\n");
     {
         Halide::Runtime::Buffer<int32_t> cropped;
@@ -116,7 +116,11 @@ int main(int argc, char **argv) {
         f(x, y) = in(x, y) + 42;
 
         Var xi, yi;
-        f.gpu_tile(x, y, xi, yi, 8, 8);
+        if (hexagon_rpc) {
+            f.hexagon();
+        } else {
+            f.gpu_tile(x, y, xi, yi, 8, 8);
+        }
 
         Halide::Buffer<int32_t> gpu_input = make_gpu_buffer(hexagon_rpc);
         Halide::Buffer<int32_t> gpu_output = make_gpu_buffer(hexagon_rpc);
@@ -127,7 +131,7 @@ int main(int argc, char **argv) {
         in.set(gpu_input);
 
         f.realize(gpu_output, target);
-        
+
         gpu_output.copy_to_host();
         for (int i = 0; i < 64; i++) {
             for (int j = 0; j < 64; j++) {

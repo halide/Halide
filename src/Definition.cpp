@@ -71,12 +71,12 @@ struct DefinitionContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) {
+RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) {
     return d->ref_count;
 }
 
 template<>
-EXPORT void destroy<DefinitionContents>(const DefinitionContents *d) {
+void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 

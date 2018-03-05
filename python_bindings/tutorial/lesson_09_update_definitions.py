@@ -156,7 +156,7 @@ def main():
         # But it's more manageable and more flexible to put the loop
         # in the generated code. We do this by defining a "reduction
         # domain" and using it inside an update definition:
-        r = hl.RDom(0, 50)
+        r = hl.RDom([(0, 50)])
         f[x, r] = f[x, r] * f[x, r]
         halide_result = f.realize(100, 100)
 
@@ -178,9 +178,9 @@ def main():
         # Check the results match:
         for yy in range(100):
             for xx in range(100):
-                if halide_result(xx, yy) != c_result[yy][xx]:
+                if halide_result[xx, yy] != c_result[yy][xx]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 
@@ -202,7 +202,7 @@ def main():
         histogram[x] = 0
 
         # Define a multi-dimensional reduction domain over the input image:
-        r = hl.RDom(0, input.width(), 0, input.height())
+        r = hl.RDom([(0, input.width()), (0, input.height())])
 
         # For every point in the reduction domain, increment the
         # histogram bucket corresponding to the intensity of the
@@ -224,9 +224,9 @@ def main():
 
         # Check the answers agree:
         for xx in range(256):
-            if c_result[xx] != halide_result(xx):
+            if c_result[xx] != halide_result[xx]:
                 raise Exception("halide_result(%d) = %d instead of %d" % (
-                       xx, halide_result(xx), c_result[xx]))
+                       xx, halide_result[xx], c_result[xx]))
                 return -1
 
 
@@ -305,9 +305,9 @@ def main():
         # Check the C and Halide results match:
         for yy in range( 16):
             for xx in range( 16 ):
-                if halide_result(xx, yy) != c_result[yy][xx]:
+                if halide_result[xx, yy] != c_result[yy][xx]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 
@@ -344,9 +344,9 @@ def main():
 
         # Check the results match
         for xx in range( 10 ):
-            if halide_result(xx) != c_result[xx]:
+            if halide_result[xx] != c_result[xx]:
                 raise Exception("halide_result(%d) = %d instead of %d" % (
-                       xx, halide_result(xx), c_result[xx]))
+                       xx, halide_result[xx], c_result[xx]))
                 return -1
 
 
@@ -408,9 +408,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -457,9 +457,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -501,9 +501,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -572,9 +572,9 @@ def main():
             # Check the results match
             for yy in range( 10):
                 for xx in range( 10 ):
-                    if halide_result(xx, yy) != c_result[yy][xx]:
+                    if halide_result[xx, yy] != c_result[yy][xx]:
                         print("halide_result(%d, %d) = %d instead of %d",
-                               xx, yy, halide_result(xx, yy), c_result[yy][xx])
+                               xx, yy, halide_result[xx, yy], c_result[yy][xx])
                         return -1
 
 
@@ -593,7 +593,7 @@ def main():
 
             producer, consumer = hl.Func("producer"), hl.Func("consumer")
 
-            r = hl.RDom(0, 5)
+            r = hl.RDom([(0, 5)])
             producer[x] = x * 17
             consumer[x] = x + 10
             consumer[x] += r + producer[x + r]
@@ -623,9 +623,9 @@ def main():
 
             # Check the results match
             for xx in range( 10 ):
-                if halide_result(xx) != c_result[xx]:
+                if halide_result[xx] != c_result[xx]:
                     raise Exception("halide_result(%d) = %d instead of %d" % (
-                           xx, halide_result(xx), c_result[xx]))
+                           xx, halide_result[xx], c_result[xx]))
                     return -1
 
 
@@ -637,10 +637,10 @@ def main():
         # hl.clamp-to-edge boundary condition:
 
         # First add the boundary condition.
-        clamped = hl.repeat_edge(input)
+        clamped = hl.BoundaryConditions.repeat_edge(input)
 
         # Define a 5x5 box that starts at (-2, -2)
-        r = hl.RDom(-2, 5, -2, 5)
+        r = hl.RDom([(-2, 5), (-2, 5)])
 
         # Compute the 5x5 sum around each pixel.
         local_sum = hl.Func("local_sum")
@@ -663,7 +663,7 @@ def main():
         #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
         local_sum = np.empty((1), dtype=np.int32)
 
-        c_result = hl.Buffer(hl.UInt(8), input.width(), input.height())
+        c_result = hl.Buffer(hl.UInt(8), [input.width(), input.height()])
         for yy in range(input.height()):
             for xx in range(input.width()):
                 # FIXME this loop is quite slow
@@ -675,7 +675,7 @@ def main():
                         # The clamping has been inlined into the update step.
                         clamped_x = min(max(xx + r_x, 0), input.width()-1)
                         clamped_y = min(max(yy + r_y, 0), input.height()-1)
-                        local_sum[0] += input(clamped_x, clamped_y)
+                        local_sum[0] += input[clamped_x, clamped_y]
 
                 # Pure step of blurry
                 #c_result(x, y) = (uint8_t)(local_sum[0] / 25)
@@ -685,10 +685,10 @@ def main():
         # Check the results match
         for yy in range(input.height()):
             for xx in range(input.width()):
-                if halide_result(xx, yy) != c_result(xx, yy):
+                if halide_result[xx, yy] != c_result[xx, yy]:
                     raise Exception("halide_result(%d, %d) = %d instead of %d"
                                     % (xx, yy,
-                                       halide_result(xx, yy), c_result(xx, yy)))
+                                       halide_result[xx, yy], c_result[xx, yy]))
                     return -1
 
 
@@ -699,7 +699,7 @@ def main():
         # innermost into their consumer. The most useful one is
         # "sum".
         f1 = hl.Func ("f1")
-        r = hl.RDom (0, 100)
+        r = hl.RDom([(0, 100)])
         f1[x] = hl.sum(r + x) * 7
 
         # Sum creates a small anonymous hl.Func to do the reduction. It's equivalent to:
@@ -727,14 +727,14 @@ def main():
 
         # Check they all match.
         for xx in range( 10 ):
-            if halide_result_1(xx) != c_result[xx]:
+            if halide_result_1[xx] != c_result[xx]:
                 print("halide_result_1(%d) = %d instead of %d",
-                       x, halide_result_1(x), c_result[x])
+                       xx, halide_result_1[xx], c_result[xx])
                 return -1
 
-            if halide_result_2(xx) != c_result[xx]:
+            if halide_result_2[xx] != c_result[xx]:
                 print("halide_result_2(%d) = %d instead of %d",
-                       x, halide_result_2(x), c_result[x])
+                       xx, halide_result_2[xx], c_result[xx])
                 return -1
 
 
@@ -756,7 +756,7 @@ def main():
         y_clamped = hl.clamp(y, 0, input.height()-1)
         clamped[x, y] = input[x_clamped, y_clamped]
 
-        box = hl.RDom(-2, 5, -2, 5)
+        box = hl.RDom([(-2, 5), (-2, 5)])
         # Compute the local maximum minus the local minimum:
         spread = hl.Func("spread")
         spread[x, y] = (maximum(clamped(x + box.x, y + box.y)) -

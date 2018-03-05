@@ -521,7 +521,7 @@ def main():
                         for i in range(4):
                             #print("x_vec[%i], y_vec[%i]" % (i, i),
                             #      x_vec[i], y_vec[i])
-                            if result(x_vec[i], y_vec[i]) != val[i]:
+                            if result[x_vec[i], y_vec[i]] != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
                                 return -1
 
@@ -538,7 +538,7 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            if result(x_vec[i], y_vec[i]) != val[i]:
+                            if result[x_vec[i], y_vec[i]] != val[i]:
                                 print("There was an error at %d %d!" % (x_vec[i], y_vec[i]))
 
 
