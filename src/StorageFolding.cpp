@@ -386,7 +386,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
             if (min_monotonic_increasing || max_monotonic_decreasing) {
-                Expr extent = simplify(max - min + 1);
+                Expr extent = max - min + 1;
+                // extent is often piecewise due to sliding window
+                // logic. It's easier to prove things about it if we
+                // break out the cases and let each simplify
+                // independently.
+                Expr steady_state = (op->min < Variable::make(Int(32), op->name));
+                Expr steady_extent = substitute(steady_state, const_true(), extent);
+                Expr initial_extent = substitute(steady_state, const_false(), extent);
+                extent = simplify(Max::make(steady_extent, initial_extent));
                 Expr factor;
                 if (explicit_factor.defined()) {
                     if (dynamic_footprint.empty()) {
