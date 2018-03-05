@@ -23,8 +23,8 @@ void define_enums(py::module &m) {
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
         .value("AlignStart", LoopAlignStrategy::AlignStart)
         .value("AlignEnd", LoopAlignStrategy::AlignEnd)
-        .value("AlignEnd", LoopAlignStrategy::AlignEnd)
-        .value("AlignEnd", LoopAlignStrategy::AlignEnd)
+        .value("NoAlign", LoopAlignStrategy::NoAlign)
+        .value("Auto", LoopAlignStrategy::Auto)
     ;
 
     py::enum_<MemoryType>(m, "MemoryType")
