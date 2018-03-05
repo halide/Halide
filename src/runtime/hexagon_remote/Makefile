@@ -23,8 +23,8 @@
 # from the SDK that cannot be redistributed with Halide).
 #
 
-HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.1
-HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/HEXAGON_Tools/8.0.10/Tools
+HEXAGON_SDK_ROOT ?= /local/mnt/workspace/rkolacha/Hexagon_SDK/3.2
+HEXAGON_TOOLS_ROOT ?= /local/mnt/workspace/rkolacha/Hexagon_SDK/3.2/tools/HEXAGON_Tools/8.0.10/Tools
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
 
@@ -49,9 +49,11 @@ CC-v60 = ${HEXAGON_TOOLS_ROOT}/bin/hexagon-clang
 CXX-v60 = ${HEXAGON_TOOLS_ROOT}/bin/hexagon-clang++
 LD-v60 = $(HEXAGON_TOOLS_ROOT)/bin/hexagon-link
 
-CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
-CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
-CCFLAGS-arm-64-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64
+#CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
+CC-arm-64-android = /local/mnt/workspace/rkolacha/Hexagon_SDK/3.2/tools/linaro/bin/aarch64-linux-gnu-gcc
+#CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
+CXX-arm-64-android = /local/mnt/workspace/rkolacha/Hexagon_SDK/3.2/tools/linaro/bin/aarch64-linux-gnu-g++
+#CCFLAGS-arm-64-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64
 
 CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-gcc
 CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
@@ -62,8 +64,10 @@ CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 
 CCFLAGS-v60 := $(CCFLAGS-v60) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv80_v62 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
-CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
-CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
+CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS}  -fPIE -pie \
+	-L${HEXAGON_SDK_LIBS}/common/remote/ship/UbuntuARM_Debug_aarch64/ -ladsprpc
+CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS}  -fPIE -pie \
+	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release/ -ladsprpc
 
 .PHONY: all
 all: hosts remotes
@@ -72,7 +76,7 @@ all: hosts remotes
 hosts: \
 	bin/arm-64-android/libhalide_hexagon_host.so \
 	bin/arm-32-android/libhalide_hexagon_host.so \
-	bin/host/libhalide_hexagon_host.so
+	#bin/host/libhalide_hexagon_host.so
 
 .PHONY: remotes
 remotes: \
@@ -102,15 +106,11 @@ bin/%/dlib.o: dlib.cpp dlib.h
 
 bin/%/host_malloc.o: host_malloc.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_malloc.cpp -o $@
-
-bin/%/libadsprpc_shim.o: libadsprpc_shim.cpp
-	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c libadsprpc_shim.cpp -o $@
+	$(CXX-$*) --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64 $(CCFLAGS-$*) -fPIC -c host_malloc.cpp -o $@
 
 bin/%/host_shim.o: host_shim.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_shim.cpp -o $@
+	$(CXX-$*) --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm64 $(CCFLAGS-$*) -fPIC -c host_shim.cpp -o $@
 
 bin/%/known_symbols.o: known_symbols.cpp
 	mkdir -p $(@D)
@@ -139,7 +139,7 @@ bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_
 	mkdir -p $(@D)
 	python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
 
-bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/host_shim.o bin/%/libadsprpc_shim.o
+bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/host_shim.o
 	mkdir -p $(@D)
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
