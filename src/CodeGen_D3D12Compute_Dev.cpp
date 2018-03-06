@@ -519,31 +519,35 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
         for (int i = 0; i < lanes; ++i)
         {
             // TODO(marcos): this indentation looks funny in the generated code
+            ostringstream rhs;
+            rhs << print_name(op->name)
+                << "["
+                << print_expr(ramp_base)
+                << " + " << i
+                << "]"
+                << " = "
+                << print_expr(op->value)
+                << "["
+                << i
+                << "]"
+                << ";\n";
             do_indent();
-            stream << print_name(op->name)
-                   << "["
-                   << print_expr(ramp_base)
-                   << " + " << i
-                   << "]"
-                   << " = "
-                   << print_expr(op->value)
-                   << "["
-                   << i
-                   << "]"
-                   << ";\n";
+            stream << rhs.str();
         }
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(value_type.is_vector());
 
         for (int i = 0; i < value_type.lanes(); ++i) {
+            ostringstream rhs;
+            rhs << print_name(op->name)
+                << "["
+                << print_expr(op->index) << "[" << i << "]"
+                << "]"
+                << " = "
+                << print_expr(op->value) << "[" << i << "];\n";
             do_indent();
-            stream << print_name(op->name)
-                   << "["
-                   << print_expr(op->index) << "[" << i << "]"
-                   << "]"
-                   << " = "
-                   << print_expr(op->value) << "[" << i << "];\n";
+            stream << rhs.str();
         }
     } else {
         ostringstream rhs;
