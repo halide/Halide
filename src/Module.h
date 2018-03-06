@@ -17,7 +17,8 @@
 
 namespace Halide {
 
-/** Type of linkage a function can have. */
+/** Type of linkage a function in a lowered Halide module can have. 
+    Also controls whether auxiliary functions and metadata are generated. */
 enum class LinkageType {
     External, ///< Visible externally.
     ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
