@@ -17,8 +17,6 @@
  * This implementation should provide a faily standalone "one file"
  * fast synchronization layer on top of readily available system primitives.
  *
- * TODO: Change halide_mutex and halide_cond definition to one uinptr_t that
- *       can always be zero initialized.
  * TODO: Implement pthread_once equivalent.
  * TODO: Add read/write lock and move SharedExclusiveSpinLock from tracing.cpp
  *        to this mechanism.
