@@ -675,7 +675,14 @@ public:
     void set_from_string(const std::string &new_value_string) override {
         std::istringstream iss(new_value_string);
         T t;
-        iss >> t;
+        // int8 and uint8 should be parsed as integers, not chars.
+        if (sizeof(T) == sizeof(char)) {
+            int i;
+            iss >> i;
+            t = (T) i;
+        } else {
+            iss >> t;
+        }
         user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << new_value_string;
         this->set(t);
     }
