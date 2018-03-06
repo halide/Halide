@@ -8,7 +8,7 @@ def test_compiletime_error():
     x = hl.Var('x')
     y = hl.Var('y')
     f = hl.Func('f')
-    f[x, y] = hl.cast(hl.UInt(16), x + y)
+    f[x, y] = hl.u16(x + y)
     # Deliberate type-mismatch error
     buf = hl.Buffer(hl.UInt(8), [2, 2])
     try:
@@ -21,7 +21,7 @@ def test_compiletime_error():
 def test_runtime_error():
     x = hl.Var('x')
     f = hl.Func('f')
-    f[x] = hl.cast(hl.UInt(8), x)
+    f[x] = hl.u8(x)
     f.bound(x, 0, 1)
     # Deliberate runtime error
     buf = hl.Buffer(hl.UInt(8), [10])
@@ -40,7 +40,7 @@ def test_basics():
     blur_xx = hl.Func('blur_xx')
     blur_y = hl.Func('blur_y')
 
-    yy = hl.cast(hl.Int(32), 1)
+    yy = hl.i32(1)
     assert yy.type() == hl.Int(32)
 
     z = x + 1
@@ -87,9 +87,9 @@ def test_basics2():
     # Construct the bilateral grid
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
     val0 = clamped[x * s_sigma, y * s_sigma]
-    val00 = clamped[x * s_sigma * hl.cast(hl.Int(32), 1), y * s_sigma * hl.cast(hl.Int(32), 1)]
-    val22 = clamped[x * s_sigma - hl.cast(hl.Int(32), s_sigma//2),
-                    y * s_sigma - hl.cast(hl.Int(32), s_sigma//2)]
+    val00 = clamped[x * s_sigma * hl.i32(1), y * s_sigma * hl.i32(1)]
+    val22 = clamped[x * s_sigma - hl.i32(s_sigma//2),
+                    y * s_sigma - hl.i32(s_sigma//2)]
     val2 = clamped[x * s_sigma - s_sigma//2, y * s_sigma - s_sigma//2]
     val3 = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
 
@@ -120,7 +120,7 @@ def test_basics3():
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], 'r')
     val = clamped[x * s_sigma + r.x - s_sigma//2, y * s_sigma + r.y - s_sigma//2]
     val = hl.clamp(val, 0.0, 1.0)
-    zi = hl.cast(hl.Int(32), (val / r_sigma) + 0.5)
+    zi = hl.i32((val / r_sigma) + 0.5)
     histogram = hl.Func('histogram')
     histogram[x, y, z, c] = 0.0
 
