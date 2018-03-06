@@ -135,6 +135,7 @@ DECLARE_CPP_INITMOD(windows_yield)
 DECLARE_CPP_INITMOD(write_debug_image)
 
 // Universal LL Initmods. Please keep sorted alphabetically.
+DECLARE_LL_INITMOD(libatomic_stub)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
@@ -709,6 +710,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // datalayout is not properly setup.
             modules.push_back(get_initmod_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
+
+            if (t.bits == 32) {
+                modules.push_back(get_initmod_libatomic_stub_ll(c));
+            }
 
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows) {
