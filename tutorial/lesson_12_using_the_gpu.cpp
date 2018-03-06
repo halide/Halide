@@ -183,6 +183,7 @@ public:
         // target object to compile_jit. Otherwise your CPU will very
         // slowly pretend it's a GPU, and use one thread per output
         // pixel.
+        printf("Target: %s\n", target.to_string().c_str());
         curved.compile_jit(target);
 
         return true;
