@@ -452,12 +452,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
     if (op->name == "__shared") {
         internal_assert(value_type.bits() <= 32);
         Type promoted = value_type.with_bits(32);
+		ostringstream rhs;
+        rhs << print_name(op->name)
+            << "[" << print_expr(op->index) << "]"
+            << " = "
+            << print_reinterpret(promoted, op->value)
+            << ";\n";
         do_indent();
-        stream << print_name(op->name)
-               << "[" << print_expr(op->index) << "]"
-               << " = "
-               << print_reinterpret(promoted, op->value)
-               << ";\n";
+        stream << rhs.str();
 #if 0
         // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
@@ -544,12 +546,14 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
                    << print_expr(op->value) << "[" << i << "];\n";
         }
     } else {
+        ostringstream rhs;
+        rhs << print_name(op->name)
+            << "[" << print_expr(op->index) << "]"
+            << " = "
+            << print_expr(op->value)
+            << ";\n";
         do_indent();
-        stream << print_name(op->name)
-                << "[" << print_expr(op->index) << "]"
-                << " = "
-                << print_expr(op->value)
-                << ";\n";
+        stream << rhs.str();
     }
 
     cache.clear();
