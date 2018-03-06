@@ -2112,7 +2112,7 @@ int main(int argc, char **argv) {
     bool success = test.test_all();
 
     // Compile a runtime for this target, for use in the static test.
-    compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
+    compile_standalone_runtime(Outputs().object(test.output_directory + "simd_op_check_runtime.o"), test.target);
 
     if (!success) {
         return -1;
