@@ -7,6 +7,27 @@
 #include "Simplify.h"
 
 namespace Halide {
+
+GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
+                                   const MachineParams &machine_params)
+    : target("target", t),
+      auto_schedule("auto_schedule", auto_schedule),
+      machine_params("machine_params", machine_params),
+      externs_map(std::make_shared<ExternsMap>()),
+      value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+
+GeneratorContext::~GeneratorContext() {
+    // nothing
+}
+
+void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
+    target.set(context.get_target());
+    auto_schedule.set(context.get_auto_schedule());
+    machine_params.set(context.get_machine_params());
+    value_tracker = context.get_value_tracker();
+    externs_map = context.get_externs_map();
+}
+
 namespace Internal {
 
 namespace {
@@ -648,12 +669,34 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
     generate(generator_params, inputs);
 }
 
-void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
-                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
+// Return a vector of all Outputs of this Generator; non-array outputs are returned
+// as a vector-of-size-1. This method is primarily useful for code that needs
+// to iterate through the outputs of unknown, arbitrary Generators (e.g.,
+// the Python bindings).
+std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
+                                                       const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
     generator->set_inputs_vector(inputs);
-    generator->call_generate();
-    generator->call_schedule();
+    Pipeline p = generator->build_pipeline();
+
+    std::vector<std::vector<Func>> v;
+    GeneratorBase::ParamInfo &pi = generator->param_info();
+    if (!pi.filter_outputs.empty()) {
+      for (auto output : pi.filter_outputs) {
+          const std::string &name = output->name();
+          if (output->is_array()) {
+              v.push_back(get_array_output(name));
+          } else {
+              v.push_back(std::vector<Func>{get_output(name)});
+          }
+      }
+    } else {
+      // Generators with build() method can't have Output<>, hence can't have array outputs
+      for (auto output : p.outputs()) {
+          v.push_back(std::vector<Func>{output});
+      }
+    }
+    return v;
 }
 
 GeneratorStub::Names GeneratorStub::get_names() const {
@@ -661,6 +704,9 @@ GeneratorStub::Names GeneratorStub::get_names() const {
     Names names;
     for (auto o : pi.generator_params) {
         names.generator_params.push_back(o->name);
+    }
+    for (auto o : pi.filter_params) {
+        names.filter_params.push_back(o->name());
     }
     for (auto o : pi.filter_inputs) {
         names.inputs.push_back(o->name());
@@ -1121,21 +1167,6 @@ std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
     return output->funcs();
 }
 
-std::vector<std::vector<Func>> GeneratorBase::get_all_outputs() {
-    std::vector<std::vector<Func>> v;
-    check_min_phase(GenerateCalled);
-    ParamInfo &pi = param_info();
-    for (auto output : pi.filter_outputs) {
-        const std::string &name = output->name();
-        if (output->is_array()) {
-            v.push_back(get_array_output(name));
-        } else {
-            v.push_back(std::vector<Func>{get_output(name)});
-        }
-    }
-    return v;
-}
-
 // Find output by name. If not found, assert-fail. Never returns null.
 GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
     // There usually are very few outputs, so a linear search is fine
@@ -1167,6 +1198,12 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
         }
         user_error << "Generator has no GeneratorParam named: " << key_value.first << "\n";
     }
+}
+
+void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
+  Halide::GeneratorContext::init_from_context(context);
+  // pre-emptively build our param_info now
+  (void) this->param_info();
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {

@@ -6,34 +6,35 @@
 - All docstrings have been removed; if we re-add them, we should find a way to import them from Doxygen output to ensure they are fresh.
 - Tutorials are incomplete and need lots of love.
 - Many error messages need to be made more informative. Many exceptions are of incorrect type.
+- Some hooks to override runtime functions (e.g. Func::set_error_handler) aren't yet implemented.
 
 - Wrappers Missing Entirely:
-    - ConciseCasts 
     - DeviceInterface
     - evaluate()
     - Float16 [possible via numpy?]
     - Generator
     - Module
-    - Outputs
     - Pipeline
 - Wrappers Incomplete, Tests Incomplete:
-    - BoundaryConditions
-    - Func
     - ParamMap
 - Wrappers Believed To Be Complete, But Tests Incomplete:
     - Buffer
+    - ConciseCasts
     - ExternFuncArgument
+    - Func
     - FuncRef
     - FuncTupleElementRef
     - ImageParam
     - InlineReductions
     - IROperator
     - LoopLevel
+    - Outputs
     - OutputImageParam
     - RDom
     - RVar
     - Stage
 - Wrappers Complete, Tests Complete:
+    - BoundaryConditions
     - Expr
     - Target
     - Type

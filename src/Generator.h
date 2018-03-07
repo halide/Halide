@@ -1853,6 +1853,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_at)
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
+    HALIDE_FORWARD_METHOD(Func, compute_with)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
@@ -1976,6 +1977,11 @@ public:
 
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     operator Func() const {
+        return get_values<ValueType>().at(0);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    operator Stage() const {
         return get_values<ValueType>().at(0);
     }
 
@@ -2428,13 +2434,8 @@ public:
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
-                              const MachineParams &machine_params = MachineParams::generic()) :
-        target("target", t),
-        auto_schedule("auto_schedule", auto_schedule),
-        machine_params("machine_params", machine_params),
-        externs_map(std::make_shared<ExternsMap>()),
-        value_tracker(std::make_shared<Internal::ValueTracker>()) {}
-    virtual ~GeneratorContext() {}
+                              const MachineParams &machine_params = MachineParams::generic());
+    virtual ~GeneratorContext();
 
     inline Target get_target() const { return target; }
     inline bool get_auto_schedule() const { return auto_schedule; }
@@ -2480,13 +2481,7 @@ protected:
 
     GeneratorContext() : GeneratorContext(Target()) {}
 
-    inline void init_from_context(const Halide::GeneratorContext &context) {
-        target.set(context.get_target());
-        auto_schedule.set(context.get_auto_schedule());
-        machine_params.set(context.get_machine_params());
-        value_tracker = context.get_value_tracker();
-        externs_map = context.get_externs_map();
-    }
+    virtual void init_from_context(const Halide::GeneratorContext &context);
 
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
         return value_tracker;
@@ -2574,6 +2569,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2655,6 +2651,8 @@ public:
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
+
+    void init_from_context(const Halide::GeneratorContext &context) override;
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_generate() = 0;
@@ -2772,12 +2770,6 @@ private:
     // array-of-Func output. If no such name exists (or is non-array), assert;
     // this method never returns undefined Funcs.
     std::vector<Func> get_array_output(const std::string &n);
-
-    // Return a vector of all Outputs of this Generator; non-array outputs are returned
-    // as a vector-of-size-1. This method is primarily useful for code that needs
-    // to iterate through the outputs of unknown, arbitrary Generators (e.g.,
-    // the Python bindings).
-    std::vector<std::vector<Func>> get_all_outputs();
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3150,7 +3142,7 @@ public:
                          GeneratorFactory generator_factory,
                          const GeneratorParamsMap &generator_params,
                          const std::vector<std::vector<Internal::StubInput>> &inputs);
-    void generate(const GeneratorParamsMap &generator_params,
+    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
                          const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
@@ -3166,10 +3158,6 @@ public:
 
     std::vector<Func> get_array_output(const std::string &n) const {
         return generator->get_array_output(n);
-    }
-
-    std::vector<std::vector<Func>> get_all_outputs() const {
-        return generator->get_all_outputs();
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -3193,7 +3181,7 @@ public:
     }
 
     struct Names {
-        std::vector<std::string> generator_params, inputs, outputs;
+        std::vector<std::string> generator_params, filter_params, inputs, outputs;
     };
     Names get_names() const;
 

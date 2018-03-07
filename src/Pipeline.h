@@ -88,7 +88,7 @@ public:
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the
-     * realization order. */
+     * topological order. */
     Func get_func(size_t index);
 
     /** Compile and generate multiple target files with single call.
