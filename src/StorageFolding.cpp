@@ -335,6 +335,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr min = simplify(box[dim].min);
             Expr max = simplify(box[dim].max);
 
+            // Consider the initial iteration and steady state
+            // separately for all these proofs.
+            Expr steady_state = (op->min < Variable::make(Int(32), op->name));
+
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min));
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max));
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min));
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max));
+
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
             if (!is_pure(min) ||
@@ -354,11 +363,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
-            bool min_monotonic_increasing = !explicit_only &&
-                (is_monotonic(min, op->name) == Monotonic::Increasing);
+            bool min_monotonic_increasing =
+                (!explicit_only &&
+                 is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
+                 can_prove(min_steady >= min_initial));
 
-            bool max_monotonic_decreasing = !explicit_only &&
-                (is_monotonic(max, op->name) == Monotonic::Decreasing);
+            bool max_monotonic_decreasing =
+                (!explicit_only &&
+                 is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
+                 can_prove(max_steady <= max_initial));
 
             if (!min_monotonic_increasing && !max_monotonic_decreasing &&
                 explicit_factor.defined()) {
@@ -386,15 +399,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
             if (min_monotonic_increasing || max_monotonic_decreasing) {
-                Expr extent = max - min + 1;
-                // extent is often piecewise due to sliding window
-                // logic. It's easier to prove things about it if we
-                // break out the cases and let each simplify
-                // independently.
-                Expr steady_state = (op->min < Variable::make(Int(32), op->name));
-                Expr steady_extent = substitute(steady_state, const_true(), extent);
-                Expr initial_extent = substitute(steady_state, const_false(), extent);
-                extent = simplify(Max::make(steady_extent, initial_extent));
+                Expr extent_steady = simplify(max_steady - min_steady + 1);
+                Expr extent_initial = simplify(max_initial - min_initial + 1);
+                Expr extent = simplify(Max::make(extent_steady, extent_initial));
                 Expr factor;
                 if (explicit_factor.defined()) {
                     if (dynamic_footprint.empty()) {
@@ -462,8 +469,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 }
             } else {
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                         << "min = " << min << "\n"
-                         << "max = " << max << "\n";
+                         << "min_initial = " << min_initial << "\n"
+                         << "min_steady = " << min_steady << "\n"
+                         << "max_initial = " << max_initial << "\n"
+                         << "max_steady = " << max_steady << "\n";
             }
         }
 
