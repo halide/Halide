@@ -2601,7 +2601,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
-                        const LoweredFunc::LinkageType linkage_type = LoweredFunc::ExternalPlusMetadata);
+                        const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler

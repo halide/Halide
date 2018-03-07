@@ -3,6 +3,7 @@
 #include "PyArgument.h"
 #include "PyBoundaryConditions.h"
 #include "PyBuffer.h"
+#include "PyConciseCasts.h"
 #include "PyEnums.h"
 #include "PyError.h"
 #include "PyExpr.h"
@@ -36,6 +37,7 @@ PYBIND11_MODULE(halide, m) {
     define_argument(m);
     define_boundary_conditions(m);
     define_buffer(m);
+    define_concise_casts(m);
     define_error(m);
     define_extern_func_argument(m);
     define_var(m);

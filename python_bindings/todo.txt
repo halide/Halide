@@ -8,7 +8,6 @@
 - Some hooks to override runtime functions (e.g. Func::set_error_handler) aren't yet implemented.
 
 - Wrappers Missing Entirely:
-    - ConciseCasts
     - DeviceInterface
     - evaluate()
     - Float16 [possible via numpy?]
@@ -17,6 +16,7 @@
     - ParamMap
 - Wrappers Believed To Be Complete, But Tests Incomplete:
     - Buffer
+    - ConciseCasts
     - ExternFuncArgument
     - Func
     - FuncRef
