@@ -20,10 +20,10 @@ void define_enums(py::module &m) {
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
 
-    py::enum_<Internal::LoweredFunc::LinkageType>(m, "LinkageType")
-        .value("External", Internal::LoweredFunc::External)
-        .value("ExternalPlusMetadata", Internal::LoweredFunc::ExternalPlusMetadata)
-        .value("Internal", Internal::LoweredFunc::Internal)
+    py::enum_<LinkageType>(m, "LinkageType")
+        .value("External", LinkageType::External)
+        .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
+        .value("Internal", LinkageType::Internal)
     ;
 
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")

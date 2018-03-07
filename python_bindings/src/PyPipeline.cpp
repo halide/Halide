@@ -77,7 +77,7 @@ void define_pipeline(py::module &m) {
             py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets") = get_target_from_environment())
 
         .def("compile_to_module", &Pipeline::compile_to_module,
-            py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = Internal::LoweredFunc::ExternalPlusMetadata)
+            py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
 
         .def("compile_jit", [](Pipeline &p, const Target &target) -> void {
             (void) p.compile_jit();
