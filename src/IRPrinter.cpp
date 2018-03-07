@@ -272,15 +272,15 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 }
 
 
-std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &type) {
+std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
-    case LoweredFunc::ExternalPlusMetadata:
+    case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
-    case LoweredFunc::External:
+    case LinkageType::External:
         stream << "external";
         break;
-    case LoweredFunc::Internal:
+    case LinkageType::Internal:
         stream << "internal";
         break;
     }

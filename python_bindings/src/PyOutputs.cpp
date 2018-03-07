@@ -50,6 +50,9 @@ void define_outputs(py::module &m) {
         .def_readwrite("stmt_html_name", &Outputs::stmt_html_name)
         .def_readwrite("static_library_name", &Outputs::static_library_name)
         .def_readwrite("schedule_name", &Outputs::schedule_name)
+        .def("__repr__", [](const Outputs &o) -> std::string {
+            return "<halide.Outputs>";
+        })
     ;
 
 }
