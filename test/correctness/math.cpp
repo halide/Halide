@@ -4,7 +4,7 @@
 #include <iostream>
 #include <limits>
 
-#if !defined(_MSC_VER) || (_MSC_VER < 1700)
+#if defined(_MSC_VER) && (_MSC_VER < 1700)
 // These functions don't exist in msvc < 2012 (i.e., when _MSC_VER < 1700)
 #define asinh(x)    (log(x + sqrt(x*x + 1)))
 #define acosh(x)    (log(x + sqrt(x*x - 1)))
