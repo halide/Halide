@@ -4,6 +4,14 @@
 #include <iostream>
 #include <limits>
 
+#if !defined(_MSC_VER) || (_MSC_VER < 1700)
+// These functions don't exist in msvc < 2012 (i.e., when _MSC_VER < 1700)
+#define asinh(x)    (log(x + sqrt(x*x + 1)))
+#define acosh(x)    (log(x + sqrt(x*x - 1)))
+#define atanh(x)    (log((1+x)/(1-x))/2)
+#define round(x)    (floor(x + 0.5))
+#endif
+
 using namespace Halide;
 
 template <typename value_t>
@@ -101,7 +109,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Buffer<type_ret> result = test_##name.realize(in.height(), target);          \
+        Buffer<type_ret> result = test_##name.realize(in.height(), target);         \
         for (int i = 0; i < in.height(); i++) {                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                         \
             assert(relatively_equal(c_result, result(i)) &&                         \
@@ -141,13 +149,10 @@ fun_1_float_types(atan)
 fun_1_float_types(sinh)
 fun_1_float_types(cosh)
 fun_1_float_types(tanh)
-#ifndef _MSC_VER
-// These functions don't exist in msvc < 2012
 fun_1_float_types(asinh)
 fun_1_float_types(acosh)
 fun_1_float_types(atanh)
 fun_1_float_types(round)
-#endif
 
 fun_2_float_types(pow)
 fun_2_float_types(atan2)
@@ -213,7 +218,7 @@ struct TestArgs {
     call_1(double, name, steps, start, end)
 
 #define call_2_float_types(name, steps, start1, end1, start2, end2) \
-    call_2(float, name, steps, start1, end1, start2, end2)        \
+    call_2(float, name, steps, start1, end1, start2, end2)          \
     call_2(double, name, steps, start1, end1, start2, end2)
 
 int main(int argc, char **argv) {
@@ -233,12 +238,10 @@ int main(int argc, char **argv) {
     call_1_float_types(cosh, 256, 0, 1);
     call_1_float_types(tanh, 256, 5 * -3.1415f, 5 * 3.1415f);
 
-#ifndef _MSC_VER
     call_1_float_types(asinh, 256, -10.0, 10.0);
     call_1_float_types(acosh, 256, 1.0, 10);
     call_1_float_types(atanh, 256, -1.0, 1.0);
     call_1_float_types(round, 256, -15, 15);
-#endif
 
     call_1_float_types(exp, 256, 0, 20);
     call_1_float_types(log, 256, 1, 1000000);
