@@ -212,6 +212,7 @@ else()
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
   add_compile_options(/wd4503)  # disable "decorated name length exceeded, name was truncated"
   add_compile_options(/wd4267)  # disable "conversion from 'size_t' to 'int', possible loss of data"
+  add_compile_options(/wd4800)  # forcing value to bool 'true' or 'false' (performance warning)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
   endif()
