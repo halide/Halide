@@ -49,6 +49,15 @@ public:
     Output<Func[2]> array_outputs2{ "array_outputs2", { Float(32), Float(32) }, 3 };
     Output<float[2]> array_outputs3{ "array_outputs3" };
 
+    Output<Buffer<float>[2]> array_outputs4{ "array_outputs4", 3 };
+    Output<Buffer<float>[2]> array_outputs5{ "array_outputs5" };  // dimensions will be inferred by usage
+    Output<Buffer<>[2]> array_outputs6{ "array_outputs6" };  // dimensions and type will be inferred by usage
+
+    // .size must be specified for all of these
+    Output<Buffer<float>[]> array_outputs7{ "array_outputs7", 3 };
+    Output<Buffer<float>[]> array_outputs8{ "array_outputs8" };
+    Output<Buffer<>[]> array_outputs9{ "array_outputs9" };
+
     void generate() {
         Var x, y, c;
 
@@ -80,6 +89,12 @@ public:
             array_outputs2[i] = z1;
             array_outputs3[i]() = 42.f;
 
+            array_outputs4[i](x, y, c) = cast<float>(x + y + c + (int) i);
+            array_outputs5[i](x, y, c) = cast<float>(x + y + c + (int) i);
+            array_outputs6[i](x, y, c) = cast<float>(x + y + c + (int) i);
+            array_outputs7[i](x, y, c) = cast<float>(x + y + c + (int) i);
+            array_outputs8[i](x, y, c) = cast<float>(x + y + c + (int) i);
+            array_outputs9[i](x, y, c) = cast<float>(x + y + c + (int) i);
 
             // Verify compute_with works for Output<Func>
             array_outputs2[i].compute_with(array_outputs[i], x);

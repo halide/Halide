@@ -1173,7 +1173,10 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_i16.size=2 \
 	array_i32.size=2 \
 	array_h.size=2 \
-	array_outputs.size=2
+	array_outputs.size=2 \
+	array_outputs7.size=2 \
+	array_outputs8.size=2 \
+	array_outputs9.size=2
 
 # metadata_tester is built with and without user-context
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator

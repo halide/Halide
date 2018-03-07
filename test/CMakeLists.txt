@@ -96,9 +96,9 @@ if (WITH_TEST_GENERATOR)
 
     set(TARGET "generator_aot_${NAME}")
     add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
-    target_include_directories("${TARGET}" PRIVATE 
-                               "${CMAKE_SOURCE_DIR}/tools" 
-                               "${CMAKE_SOURCE_DIR}" 
+    target_include_directories("${TARGET}" PRIVATE
+                               "${CMAKE_SOURCE_DIR}/tools"
+                               "${CMAKE_SOURCE_DIR}"
                                "${CMAKE_SOURCE_DIR}/src/runtime")
 
     if (NOT ${args_OMIT_DEFAULT_GENERATOR})
@@ -194,9 +194,9 @@ if (WITH_TEST_GENERATOR)
   #   set(TARGET )
 
   #   add_executable("generator_aot_${NAME}" "${GEN_TEST_DIR}/${FILE}")
-  #   target_include_directories("generator_aot_${NAME}" PRIVATE 
-  #                              "${CMAKE_SOURCE_DIR}" 
-  #                              "${CMAKE_SOURCE_DIR}/tools" 
+  #   target_include_directories("generator_aot_${NAME}" PRIVATE
+  #                              "${CMAKE_SOURCE_DIR}"
+  #                              "${CMAKE_SOURCE_DIR}/tools"
   #                              "${CMAKE_SOURCE_DIR}/src/runtime")
 
   #   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
@@ -252,7 +252,7 @@ if (WITH_TEST_GENERATOR)
   halide_define_aot_test(user_context_insanity
                          HALIDE_TARGET_FEATURES user_context)
 
-  add_library(cxx_mangling_externs 
+  add_library(cxx_mangling_externs
               "${GEN_TEST_DIR}/cxx_mangling_externs.cpp")
 
   halide_define_aot_test(cxx_mangling
@@ -321,6 +321,9 @@ if (WITH_TEST_GENERATOR)
       array_i32.size=2
       array_h.size=2
       array_outputs.size=2
+      array_outputs7.size=2
+      array_outputs8.size=2
+      array_outputs9.size=2
   )
   halide_define_aot_test(metadata_tester
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
@@ -342,7 +345,7 @@ if (WITH_TEST_GENERATOR)
   halide_library_from_generator(blur2x2)
   target_link_libraries(generator_aot_tiled_blur PUBLIC blur2x2)
 
-  add_library(cxx_mangling_define_extern_externs 
+  add_library(cxx_mangling_define_extern_externs
               "${GEN_TEST_DIR}/cxx_mangling_define_extern_externs.cpp")
   target_link_libraries(cxx_mangling_define_extern_externs PUBLIC cxx_mangling_externs cxx_mangling)
 

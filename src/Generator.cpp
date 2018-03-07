@@ -1241,9 +1241,13 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
     if (include_outputs) {
         for (auto output : pi.filter_outputs) {
             if (output->kind() == IOKind::Buffer) {
-                Parameter p = output->parameter();
-                // This must use p.name(), *not* output->name()
-                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                internal_assert(!output->funcs().empty());
+                for (auto &f : output->funcs()) {
+                    user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
+                    Parameter p = f.output_buffer().parameter();
+                    // This must use p.name(), *not* output->name()
+                    get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                }
             }
         }
     }
@@ -1716,11 +1720,6 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 
 void GeneratorOutputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
-}
-
-Parameter GeneratorOutputBase::parameter() const {
-    internal_assert(funcs().size() == 1);
-    return funcs().at(0).output_buffer().parameter();
 }
 
 void GeneratorOutputBase::init_internals() {

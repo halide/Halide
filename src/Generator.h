@@ -1918,8 +1918,6 @@ protected:
     friend class GeneratorBase;
     friend class StubEmitter;
 
-    Parameter parameter() const;
-
     void init_internals();
     void resize(size_t size);
 
@@ -2031,7 +2029,7 @@ private:
 
         const auto &output_types = f.output_types();
         user_assert(output_types.size() == 1)
-            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
+            << "Output " << this->name() << " should have size=1 but saw size=" << output_types.size() << "\n";
 
         Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
         user_assert(T::can_convert_from(other))
@@ -2040,11 +2038,11 @@ private:
 
         if (this->types_defined()) {
             user_assert(output_types.at(0) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
-                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2055,29 +2053,19 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    static_assert(!std::is_array<T>::value, "Output<Buffer<>[]> is not a legal construct.");
+    static std::vector<Type> my_types() {
+        return TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{};
+    }
 
 protected:
-    GeneratorOutput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer,
-                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
-                -1) {
+    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
+        : Super(name, IOKind::Buffer, my_types(), d) {
+        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
     }
 
-    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
-        : Super(name, IOKind::Buffer,
-                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : t,
-                d) {
-        if (TBase::has_static_halide_type) {
-            user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
-        } else {
-            user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
-        }
-    }
-
-    GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ TBase::static_halide_type() }, d) {
-        static_assert(TBase::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
+    GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t = {}, int d = -1)
+        : Super(array_size, name, IOKind::Buffer, my_types(), d) {
+        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
     }
 
     NO_INLINE std::string get_c_type() const override {
@@ -2113,11 +2101,11 @@ public:
 
         if (this->types_defined()) {
             user_assert(Type(buffer.type()) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(buffer.dimensions() == this->dims())
-                << "Output should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
+                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
