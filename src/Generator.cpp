@@ -1362,7 +1362,7 @@ Pipeline GeneratorBase::get_pipeline() {
 }
 
 Module GeneratorBase::build_module(const std::string &function_name,
-                                   const LoweredFunc::LinkageType linkage_type) {
+                                   const LinkageType linkage_type) {
     std::string auto_schedule_result;
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {

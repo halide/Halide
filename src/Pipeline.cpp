@@ -323,7 +323,7 @@ vector<Argument> Pipeline::infer_arguments() {
 Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
-                                   const Internal::LoweredFunc::LinkageType linkage_type) {
+                                   const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
     for (Function f : contents->outputs) {

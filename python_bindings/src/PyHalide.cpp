@@ -3,6 +3,7 @@
 #include "PyArgument.h"
 #include "PyBoundaryConditions.h"
 #include "PyBuffer.h"
+#include "PyConciseCasts.h"
 #include "PyEnums.h"
 #include "PyError.h"
 #include "PyExpr.h"
@@ -12,8 +13,11 @@
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
 #include "PyLambda.h"
+#include "PyMachineParams.h"
+#include "PyModule.h"
 #include "PyOutputs.h"
 #include "PyParam.h"
+#include "PyPipeline.h"
 #include "PyRDom.h"
 #include "PyTarget.h"
 #include "PyTuple.h"
@@ -33,12 +37,16 @@ PYBIND11_MODULE(halide, m) {
     define_argument(m);
     define_boundary_conditions(m);
     define_buffer(m);
+    define_concise_casts(m);
     define_error(m);
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
     define_outputs(m);
+    define_machine_params(m);
+    define_module(m);
     define_func(m);
+    define_pipeline(m);
     define_inline_reductions(m);
     define_lambda(m);
     define_operators(m);
