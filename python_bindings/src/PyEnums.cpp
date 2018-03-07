@@ -20,6 +20,12 @@ void define_enums(py::module &m) {
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
 
+    py::enum_<LinkageType>(m, "LinkageType")
+        .value("External", LinkageType::External)
+        .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
+        .value("Internal", LinkageType::Internal)
+    ;
+
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
         .value("AlignStart", LoopAlignStrategy::AlignStart)
         .value("AlignEnd", LoopAlignStrategy::AlignEnd)
