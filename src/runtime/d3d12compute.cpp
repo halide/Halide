@@ -155,6 +155,10 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
 #endif
 
+void d3d12_halt() {
+    ERRORLOG << "!!! HALT !!!";
+}
+
 static void *d3d12_malloc(size_t num_bytes) {
     TRACELOG;
     void *p = malloc(num_bytes);
@@ -215,6 +219,7 @@ static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const 
         ERRORLOG << message
                  << " (HRESULT=" << (void*)(int64_t)result
                  << ", object*=" << object << ").\n";
+        d3d12_halt();
         return true;
     }
     TRACEPRINT(d3d12typename(object) << " object created: " << object << "\n");
@@ -539,7 +544,8 @@ WEAK d3d12_buffer readback = { };   // staging buffer to retrieve data from the 
 template<typename d3d12_T>
 static void release_d3d12_object(d3d12_T *obj) {
     TRACELOG;
-    TRACEPRINT("!!!!!!!!!! RELEASING UNKNOWN D3D12 OBJECT !!!!!!!!!!\n");
+    TRACEPRINT("!!! ATTEMPTING TO RELEASE AN UNKNOWN OBJECT @ " << obj << " !!!\n");
+    d3d12_halt();
 }
 
 template<typename d3d12_T>
@@ -555,7 +561,7 @@ static void release_object(d3d12_T *obj) {
 template<typename ID3D12T>
 static void Release_ID3D12Object(ID3D12T *obj) {
     TRACELOG;
-    TRACEPRINT(d3d12typename(obj) << "\n");
+    TRACEPRINT(d3d12typename(obj) << " @ " << obj << "\n");
     if (obj) {
         obj->Release();
     }
@@ -1660,7 +1666,7 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
         TRACEPRINT("Unable to compile D3D12 compute shader (HRESULT=" << (void*)(int64_t)result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n");
         dump_shader(source, errorMsgs);
         Release_ID3D12Object(errorMsgs);
-        ERRORLOG << "!!! HALT !!!";
+        d3d12_halt();
         return NULL;
     }
 
@@ -1797,8 +1803,8 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
     if (FAILED(result_after)) {
         ERRORLOG << "Device Lost! GetDeviceRemovedReason(): "
                  << "before: " << (void*)(int64_t)result_before << " | "
-                 << "after: "  << (void*)(int64_t)result_after  << "\n"
-                 << "!!! HALT !!!";
+                 << "after: "  << (void*)(int64_t)result_after  << "\n";
+        d3d12_halt();
     }
 }
 
