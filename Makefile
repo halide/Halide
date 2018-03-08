@@ -1632,7 +1632,7 @@ $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
 ifeq ($(LLVM_VERSION_TIMES_10), 40)
 	@echo
-	@echo "*** Warning: LLVM 4.x is no longer actively tested with Halide. ***"
+	@echo "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***"
 	@echo
 endif
 	mkdir -p $(BUILD_DIR)
