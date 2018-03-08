@@ -33,16 +33,13 @@ enum {
 
 // http://www.llvm.org/docs/AMDGPUUsage.html#code-object
 enum {
-    EF_AMDGPU_MACH_AMDGCN_GFX801    0x028, //       gfx801
-    EF_AMDGPU_MACH_AMDGCN_GFX802    0x029, //       gfx802
-    EF_AMDGPU_MACH_AMDGCN_GFX803    0x02a, //       gfx803
-    EF_AMDGPU_MACH_AMDGCN_GFX810    0x02b, //       gfx810
-    EF_AMDGPU_MACH_AMDGCN_GFX900    0x02c, //       gfx900
-    EF_AMDGPU_MACH_AMDGCN_GFX902    0x02d, //       gfx902
-};
-
-enum {
-    DT_HEXAGON_VER = 0x70000001,
+    EF_AMDGPU_MACH_AMDGCN_GFX801 = 0x028, //       gfx801
+    EF_AMDGPU_MACH_AMDGCN_GFX802 = 0x029, //       gfx802
+    EF_AMDGPU_MACH_AMDGCN_GFX803 = 0x02a, //       gfx803
+    EF_AMDGPU_MACH_AMDGCN_GFX810 = 0x02b, //       gfx810
+    EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c, //       gfx900
+    EF_AMDGPU_MACH_AMDGCN_GFX902 = 0x02d, //       gfx902
+    EF_AMDGPU_XNACK = 0x100
 };
 
 // https://github.com/llvm-mirror/llvm/blob/master/include/llvm/BinaryFormat/ELFRelocs/AMDGPU.def
@@ -61,44 +58,6 @@ enum {
     R_AMDGPU_REL32_HI = 11,
     R_AMDGPU_RELATIVE64 = 13,
 };
-
-// This logic comes from support from Qualcomm.
-bool maybe_branch_inst(uint32_t reloc_type) {
-    switch (reloc_type) {
-    case R_HEX_PLT_B22_PCREL:
-    case R_HEX_B22_PCREL:
-    case R_HEX_B22_PCREL_X:
-    case R_HEX_B15_PCREL:
-    case R_HEX_B15_PCREL_X:
-    case R_HEX_B13_PCREL:
-    case R_HEX_B13_PCREL_X:
-    case R_HEX_B9_PCREL:
-    case R_HEX_B9_PCREL_X:
-    case R_HEX_B7_PCREL:
-    case R_HEX_B7_PCREL_X:
-    case R_HEX_B32_PCREL_X:
-    case R_HEX_32_PCREL:
-    case R_HEX_6_PCREL_X:
-
-    case R_HEX_LO16:
-    case R_HEX_HI16:
-    case R_HEX_16:
-    case R_HEX_8:
-    case R_HEX_32_6_X:
-    case R_HEX_16_X:
-    case R_HEX_12_X:
-    case R_HEX_11_X:
-    case R_HEX_10_X:
-    case R_HEX_9_X:
-    case R_HEX_8_X:
-    case R_HEX_7_X:
-    case R_HEX_6_X:
-    case R_HEX_32:
-        return true;
-    default:
-        return false;
-    }
-}
 
 std::string hex(uint32_t x) {
     char buffer[100];
@@ -282,8 +241,8 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
 void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
                    const Symbol *sym, uint32_t sym_offset, int32_t addend,
                    Elf::Section &got) {
-    // Hexagon relocations are specified in section 11.5 in
-    // the Hexagon Application Binary Interface spec.
+    // Amdgpu relocations are specified in section 11.5 in
+    // the Amdgpu Application Binary Interface spec.
 
     // Now we can define the variables from Table 11-5.
     uint32_t S = sym_offset;
@@ -446,28 +405,22 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     }
 }
 
-class HexagonLinker : public Linker {
+class AMDGPULinker : public Linker {
 public:
     uint32_t flags;
 
-    HexagonLinker(const Target &target) {
-        if (target.has_feature(Target::HVX_v66)) {
-            flags = Elf::EF_HEXAGON_MACH_V66;
-        } else if (target.has_feature(Target::HVX_v65)) {
-            flags = Elf::EF_HEXAGON_MACH_V65;
-        } else if (target.has_feature(Target::HVX_v62)) {
-            flags = Elf::EF_HEXAGON_MACH_V62;
+    AMDGPULinker(const Target &target) {
+        if (target.has_feature(Target::AMDGPUGFX900)) {
+            flags = Elf::EF_AMDGPU_MACH_AMDGCN_GFX900;
         } else {
-            flags = Elf::EF_HEXAGON_MACH_V60;
+            flags = Elf::EF_AMDGPU_MACH_AMDGCN_GFX900;
         }
     }
 
-    uint16_t get_machine() override { return EM_HEXAGON; }
+    uint16_t get_machine() override { return EM_AMDGPU; }
     uint32_t get_flags() override { return flags; }
     uint32_t get_version() override { return EV_CURRENT; }
     void append_dynamic(Section &dynamic) override {
-        dynamic.append_contents((uint32_t)DT_HEXAGON_VER);
-        dynamic.append_contents((uint32_t)0x3);
     }
 
     uint64_t get_got_entry(Section &got, const Symbol &sym) override {
@@ -547,7 +500,7 @@ public:
 namespace {
 
 const std::string runtime_module_name = "halide_shared_runtime";
-const std::string pipeline_module_name = "halide_hexagon_code";
+const std::string pipeline_module_name = "halide_amdgpu_code";
 
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
@@ -585,13 +538,13 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
-class InjectHexagonRpc : public IRMutator2 {
+class InjectAmdgpuRpc : public IRMutator2 {
     std::map<std::string, Expr> state_bufs;
 
     Module &device_code;
 
     // Alignment info for Int(32) variables in scope, so we don't lose
-    // the information when creating Hexagon kernels.
+    // the information when creating Amdgpu kernels.
     Scope<ModulusRemainder> alignment_info;
 
     Expr state_var(const std::string& name, Type type) {
@@ -611,11 +564,11 @@ class InjectHexagonRpc : public IRMutator2 {
     }
 
     Expr module_state() {
-        return state_var("hexagon_module_state", type_of<void*>());
+        return state_var("amdgpu_module_state", type_of<void*>());
     }
 
     Expr module_state_ptr() {
-        return state_var_ptr("hexagon_module_state", type_of<void*>());
+        return state_var_ptr("amdgpu_module_state", type_of<void*>());
     }
 
     // Create a Buffer containing the given buffer/size, and return an
@@ -630,26 +583,26 @@ class InjectHexagonRpc : public IRMutator2 {
     using IRMutator2::visit;
 
     Stmt visit(const For *loop) override {
-        if (loop->device_api != DeviceAPI::Hexagon) {
+        if (loop->device_api != DeviceAPI::AMDGPU) {
             return IRMutator2::visit(loop);
         }
 
         // Unrolling or loop partitioning might generate multiple
         // loops with the same name, so we need to make them unique.
         // There's a bit of a hack here: the offload_rpc. prefix is
-        // significant, it tells the Hexagon code generator to expect
-        // the arguments to be unpacked by the Hexagon remote-side RPC
+        // significant, it tells the Amdgpu code generator to expect
+        // the arguments to be unpacked by the Amdgpu remote-side RPC
         // call, which doesn't work with standard buffers.
         std::string hex_name = unique_name("offload_rpc." + loop->name);
 
-        // After moving this to Hexagon, it doesn't need to be marked
-        // Hexagon anymore.
+        // After moving this to Amdgpu, it doesn't need to be marked
+        // Amdgpu anymore.
         Stmt body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
                               DeviceAPI::None, loop->body);
         body = remove_trivial_for_loops(body);
 
         // Build a closure for the device code.
-        // TODO: Should this move the body of the loop to Hexagon,
+        // TODO: Should this move the body of the loop to Amdgpu,
         // or the loop itself? Currently, this moves the loop itself.
         Closure c(body);
 
@@ -692,8 +645,8 @@ class InjectHexagonRpc : public IRMutator2 {
 
             // Unpack buffer parameters into the scope. They come in as host/dev struct pairs.
             Expr buf = Variable::make(Handle(), i.first + ".buffer");
-            Expr host_ptr = Call::make(Handle(), "_halide_hexagon_buffer_get_host", {buf}, Call::Extern);
-            Expr device_ptr = Call::make(Handle(), "_halide_hexagon_buffer_get_device", {buf}, Call::Extern);
+            Expr host_ptr = Call::make(Handle(), "_halide_amdgpu_buffer_get_host", {buf}, Call::Extern);
+            Expr device_ptr = Call::make(Handle(), "_halide_amdgpu_buffer_get_device", {buf}, Call::Extern);
             body = LetStmt::make(i.first + ".device", device_ptr, body);
             body = LetStmt::make(i.first, host_ptr, body);
 
@@ -718,9 +671,9 @@ class InjectHexagonRpc : public IRMutator2 {
         std::vector<Expr> arg_flags;
 
         for (const auto& i : c.buffers) {
-            // The Hexagon runtime expects buffer args to be
+            // The Amdgpu runtime expects buffer args to be
             // passed as just the device and host
-            // field. CodeGen_Hexagon knows how to unpack buffers
+            // field. CodeGen_Amdgpu knows how to unpack buffers
             // passed this way.
             Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
             Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
@@ -757,7 +710,7 @@ class InjectHexagonRpc : public IRMutator2 {
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        return call_extern_and_assert("halide_hexagon_run", params);
+        return call_extern_and_assert("halide_amdgpu_run", params);
     }
 
     Expr visit(const Let *op) override {
@@ -787,7 +740,7 @@ class InjectHexagonRpc : public IRMutator2 {
     }
 
 public:
-    InjectHexagonRpc(Module &device_code) : device_code(device_code) {}
+    InjectAmdgpuRpc(Module &device_code) : device_code(device_code) {}
 
     Stmt inject(Stmt s) {
         s = mutate(s);
@@ -801,13 +754,13 @@ public:
             Expr code_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), pipeline_module_name + ".buffer");
             Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { code_buf_var, 0 }, Call::Extern);
             Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { code_buf_var }, Call::Extern);
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+            Stmt init_kernels = call_extern_and_assert("halide_amdgpu_initialize_kernels",
                                                        { module_state_ptr(), code_ptr, cast<uint64_t>(code_size), runtime_ptr, cast<uint64_t>(runtime_size) });
             s = Block::make(init_kernels, s);
         }
 
         // TODO: This can probably go away due to general debug info at the submodule compile level.
-        debug(1) << "Hexagon device code module: " << device_code << "\n";
+        debug(1) << "Amdgpu device code module: " << device_code << "\n";
 
         return s;
     }
@@ -815,64 +768,32 @@ public:
 
 }  // namespace
 
-Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
+Stmt inject_amdgpu_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
-    // Make a new target for the device module.
-    Target target(Target::NoOS, Target::Hexagon, 32);
-    // There are two ways of offloading, on device and on host.
-    // In the former we have true QuRT available, while on the
-    // latter we simulate the Hexagon side code with a barebones
-    // Shim layer, ie. NO QURT!
-    if (host_target.arch == Target::ARM) {
-        target.os = Target::QuRT;
-    }
-
-    // These feature flags are propagated from the host target to the
-    // device module.
-    //
-    // TODO: We'd like Target::Debug to be in this list too, but trunk
-    // llvm currently disagrees with hexagon clang as to what
-    // constitutes valid debug info.
-    static const Target::Feature shared_features[] = {
-        Target::Profile,
-        Target::NoAsserts,
-        Target::HVX_64,
-        Target::HVX_128,
-        Target::HVX_v62,
-        Target::HVX_v65,
-        Target::HVX_v66,
-    };
-    for (Target::Feature i : shared_features) {
-        if (host_target.has_feature(i)) {
-            target = target.with_feature(i);
-        }
-    }
-
-    Module shared_runtime(runtime_module_name, target);
-    Module hexagon_module(pipeline_module_name, target.with_feature(Target::NoRuntime));
-    InjectHexagonRpc injector(hexagon_module);
+    Target target(Target::Linux, Target::X86, 64);
+    Module amdgpu_module(pipeline_module_name, target.with_feature(Target::NoRuntime));
+    InjectAmdgpuRpc injector(amdgpu_module);
     s = injector.inject(s);
 
-    if (!hexagon_module.functions().empty()) {
-        containing_module.append(hexagon_module);
-        containing_module.append(shared_runtime);
+    if (!amdgpu_module.functions().empty()) {
+        containing_module.append(amdgpu_module);
     }
 
     return s;
 }
 
-Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_code) {
+Buffer<uint8_t> compile_module_to_amdgpu_shared_object(const Module &device_code) {
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
     // Write intermediate bitcode to disk if requested.
     // TODO: We really need something better than this. This won't
     // work in non-trivial JIT or AOT programs.
-    std::string bitcode_dump_path = get_env_variable("HL_HEXAGON_DUMP_BITCODE");
+    std::string bitcode_dump_path = get_env_variable("HL_AMDGPU_DUMP_BITCODE");
     if (!bitcode_dump_path.empty()) {
         auto fd_ostream = make_raw_fd_ostream(bitcode_dump_path);
         compile_llvm_module_to_llvm_bitcode(*llvm_module, *fd_ostream);
-        debug(0) << "Wrote Hexagon device bitcode to " << bitcode_dump_path;
+        debug(0) << "Wrote Amdgpu device bitcode to " << bitcode_dump_path;
     }
 
     llvm::SmallVector<char, 4096> object;
@@ -881,7 +802,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
     if (debug::debug_level() >= min_debug_level) {
-        debug(0) << "Hexagon device code assembly: " << "\n";
+        debug(0) << "AMDGPU device code assembly: " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
@@ -901,7 +822,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         // TODO: We should set the type to SHT_NOBITS
         // This will cause a difference in MemSize and FileSize like so:
         //        FileSize = (MemSize - size_of_bss)
-        // When the Hexagon loader is used on 8998 and later targets,
+        // When the Amdgpu loader is used on 8998 and later targets,
         // the difference is filled with zeroes thereby initializing the .bss
         // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
@@ -925,16 +846,16 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     // Link into a shared object.
     std::string soname = "lib" + device_code.name() + ".so";
-    Elf::HexagonLinker linker(device_code.target());
+    Elf::AMDGPULinker linker(device_code.target());
     std::vector<std::string> dependencies = {
-        "libhalide_hexagon_remote_skel.so",
+        "libhalide_amdgpu_remote_skel.so",
     };
     std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies, soname);
 
-    std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
+    std::string signer = get_env_variable("HL_AMDGPU_CODE_SIGNER");
     if (!signer.empty()) {
         // If signer is specified, shell out to a tool/script that will
-        // sign the Hexagon code in a specific way. The tool is expected
+        // sign the AMDGPU code in a specific way. The tool is expected
         // to be of the form
         //
         //     signer /path/to/unsigned.so /path/to/signed.so
@@ -942,10 +863,10 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         // where unsigned and signed paths must not be the same file.
         // If the signed file already exists, it will be overwritten.
 
-        TemporaryFile input("hvx_unsigned", ".so");
-        TemporaryFile output("hvx_signed", ".so");
+        TemporaryFile input("amdgpu_unsigned", ".so");
+        TemporaryFile output("amdgpu_signed", ".so");
 
-        debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
+        debug(1) << "Signing Amdgpu code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
         {
             std::ofstream f(input.pathname());
@@ -959,7 +880,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
         int result = system(cmd.c_str());
         internal_assert(result == 0)
-            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
+            << "HL_AMDGPU_CODE_SIGNER failed: result = " << result
             << " for cmd (" << cmd << ")";
 
         {
