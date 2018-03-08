@@ -1161,7 +1161,6 @@ $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
-	type_only_input_buffer.dim=3 \
 	dim_only_input_buffer.type=uint8 \
 	untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 \
 	output.type=float32,float32 output.dim=3 \
@@ -1173,6 +1172,18 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_i16.size=2 \
 	array_i32.size=2 \
 	array_h.size=2 \
+	buffer_array_input2.dim=3 \
+	buffer_array_input3.type=float32 \
+	buffer_array_input4.dim=3 \
+	buffer_array_input4.type=float32 \
+	buffer_array_input5.size=2 \
+	buffer_array_input6.size=2 \
+	buffer_array_input6.dim=3 \
+	buffer_array_input7.size=2 \
+	buffer_array_input7.type=float32 \
+	buffer_array_input8.size=2 \
+	buffer_array_input8.dim=3 \
+	buffer_array_input8.type=float32 \
 	array_outputs.size=2 \
 	array_outputs7.size=2 \
 	array_outputs8.size=2 \

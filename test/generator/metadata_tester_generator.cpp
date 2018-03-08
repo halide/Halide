@@ -9,7 +9,6 @@ class MetadataTester : public Halide::Generator<MetadataTester> {
 public:
     Input<Func> input{ "input" };  // must be overridden to {UInt(8), 3}
     Input<Buffer<uint8_t>> typed_input_buffer{ "typed_input_buffer", 3 };
-    Input<Buffer<>> type_only_input_buffer{ "type_only_input_buffer", UInt(8) };  // must be overridden to dim=3
     Input<Buffer<>> dim_only_input_buffer{ "dim_only_input_buffer", 3 };  // must be overridden to type=UInt(8)
     Input<Buffer<>> untyped_input_buffer{ "untyped_input_buffer" };  // must be overridden to {UInt(8), 3}
     Input<bool> b{ "b", true };
@@ -39,6 +38,16 @@ public:
     Input<int32_t[2]> array2_i32{ "array2_i32", 32, -32, 127 };
     Input<void *[]> array_h{ "array_h", nullptr };  // must be overridden to size=2
 
+    Input<Buffer<float>[2]> buffer_array_input1{ "buffer_array_input1", 3 };
+    Input<Buffer<float>[2]> buffer_array_input2{ "buffer_array_input2" }; // buffer_array_input2.dim must be set
+    Input<Buffer<>[2]> buffer_array_input3{ "buffer_array_input3", 3 }; // buffer_array_input2.type must be set
+    Input<Buffer<>[2]> buffer_array_input4{ "buffer_array_input4" }; // dim and type must be set
+    // .size must be specified for all of these
+    Input<Buffer<float>[]> buffer_array_input5{ "buffer_array_input5", 3 };
+    Input<Buffer<float>[]> buffer_array_input6{ "buffer_array_input6" }; // buffer_array_input2.dim must be set
+    Input<Buffer<>[]> buffer_array_input7{ "buffer_array_input7", 3 }; // buffer_array_input2.type must be set
+    Input<Buffer<>[]> buffer_array_input8{ "buffer_array_input8" }; // dim and type must be set
+
     Output<Func> output{ "output" };  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float>> typed_output_buffer{ "typed_output_buffer", 3 };
     Output<Buffer<float>> type_only_output_buffer{ "type_only_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
@@ -65,11 +74,23 @@ public:
         Expr zero1 = array_input[1](x, y, c) - array_input[0](x, y, c);
         Expr zero2 = array_i32[1] - array_i32[0];
 
+        Expr bzero1 = buffer_array_input1[1](x, y, c) - buffer_array_input1[0](x, y, c);
+        Expr bzero2 = buffer_array_input2[1](x, y, c) - buffer_array_input2[0](x, y, c);
+        Expr bzero3 = buffer_array_input3[1](x, y, c) - buffer_array_input3[0](x, y, c);
+        Expr bzero4 = buffer_array_input4[1](x, y, c) - buffer_array_input4[0](x, y, c);
+        Expr bzero5 = buffer_array_input5[1](x, y, c) - buffer_array_input5[0](x, y, c);
+        Expr bzero6 = buffer_array_input6[1](x, y, c) - buffer_array_input6[0](x, y, c);
+        Expr bzero7 = buffer_array_input7[1](x, y, c) - buffer_array_input7[0](x, y, c);
+        Expr bzero8 = buffer_array_input8[1](x, y, c) - buffer_array_input8[0](x, y, c);
+
+
+        Expr zero = zero1 + zero2 + bzero1 + bzero2 + bzero3 + bzero4 + bzero5 + bzero6 + bzero7 + bzero8;
+
         assert(output.types().size() == 2);
         Type output_type = output.types().at(0);
 
         Func f1("f1"), f2("f2");
-        f1(x, y, c) = cast(output_type, input(x, y, c) + zero1 + zero2);
+        f1(x, y, c) = cast(output_type, input(x, y, c) + zero);
         f2(x, y, c) = cast<float>(f1(x, y, c) + 1);
 
         Func t1("t1");

@@ -425,9 +425,12 @@ void StubEmitter::emit() {
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
-        if (output->is_array()) getter = "get_array_output";
-        else if (c_type == "Func") getter = "get_output";
-        else getter = "get_output_buffer<" + c_type + ">";
+        const bool is_func = (c_type == "Func");
+        if (output->is_array()) {
+            getter = is_func ? "get_array_output" : "get_array_output_buffer<" + c_type + ">";
+        } else {
+            getter = is_func ? "get_output" : "get_output_buffer<" + c_type + ">";
+        }
         out_info.push_back({
             output->name(),
             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
@@ -1233,9 +1236,11 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
     ParamInfo &pi = param_info();
     for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
-            Parameter p = input->parameter();
-            // This must use p.name(), *not* input->name()
-            get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+            internal_assert(!input->parameters_.empty());
+            for (auto &p : input->parameters_) {
+                // This must use p.name(), *not* input->name()
+                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+            }
         }
     }
     if (include_outputs) {
@@ -1612,7 +1617,7 @@ void GeneratorInputBase::set_def_min_max() {
 }
 
 Parameter GeneratorInputBase::parameter() const {
-    internal_assert(parameters_.size() == 1);
+    user_assert(!this->is_array()) << "Cannot call the parameter() on Input<[]> " << name() << "; use an explicit subscript operator instead.";
     return parameters_.at(0);
 }
 
@@ -1625,9 +1630,12 @@ void GeneratorInputBase::verify_internals() const {
 }
 
 void GeneratorInputBase::init_internals() {
-    user_assert(array_size_defined()) << "ArraySize is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
-    user_assert(types_defined()) << "Type is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
-    user_assert(dims_defined()) << "Dimensions is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
+    user_assert(array_size_defined()) << "ArraySize is not defined for Input "
+        << name() << "; you may need to specify '" << name() << ".size' as a GeneratorParam.\n";
+    user_assert(types_defined()) << "Type is not defined for Input "
+        << name() << "; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
+    user_assert(dims_defined()) << "Dimensions are not defined for Input "
+        << name() << "; you may need to specify '" << name() << ".dim' as a GeneratorParam.\n";
 
     parameters_.clear();
     exprs_.clear();

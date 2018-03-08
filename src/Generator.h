@@ -1441,8 +1441,6 @@ protected:
         }
     }
 
-    static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
-
     template<typename T2>
     inline T2 as() const {
         return (T2) *this;
@@ -1457,7 +1455,8 @@ public:
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!TBase::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
+        user_error << "You cannot specify a Type argument for Input<Buffer<T>> '"
+            << name << "'; specify a static type instead.";
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
@@ -1476,7 +1475,8 @@ public:
 
     template<typename T2>
     operator StubInputBuffer<T2>() const {
-        return StubInputBuffer<T2>(this->parameter());
+        user_assert(!this->is_array()) << "Cannot assign an array type to a non-array type for Input " << this->name();
+        return StubInputBuffer<T2>(this->parameters_.at(0));
     }
 
     operator Func() const {
@@ -1505,7 +1505,8 @@ public:
     }
 
     operator ImageParam() const {
-        return ImageParam(this->parameter(), Func(*this));
+        user_assert(!this->is_array()) << "Cannot convert an Input<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
+        return ImageParam(this->parameters_.at(0), Func(*this));
     }
 
     /** Forward methods to the ImageParam. */
@@ -3142,6 +3143,16 @@ public:
     template<typename T2>
     T2 get_output_buffer(const std::string &n) const {
         return T2(get_output(n), generator);
+    }
+
+    template<typename T2>
+    std::vector<T2> get_array_output_buffer(const std::string &n) const {
+        auto v =  generator->get_array_output(n);
+        std::vector<T2> result;
+        for (auto &o : v) {
+            result.push_back(T2(o, generator));
+        }
+        return result;
     }
 
     std::vector<Func> get_array_output(const std::string &n) const {
