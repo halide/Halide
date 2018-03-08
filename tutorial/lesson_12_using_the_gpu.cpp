@@ -117,7 +117,7 @@ public:
         // This is helpful for figuring out which stages are slow, or when
         // CPU -> GPU copies happen. It hurts performance though, so we'll
         // leave it commented out.
-        target.set_feature(Target::Debug);
+        //target.set_feature(Target::Debug);
 
         // We make the decision about whether to use the GPU for each
         // Func independently. If you have one Func computed on the
