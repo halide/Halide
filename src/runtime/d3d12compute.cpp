@@ -111,13 +111,20 @@ static void *const user_context = NULL;
 #define ERRORLOG    error(user_context) << TRACEINDENT
 // ^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^
 
+static const char* d3d12_debug_dump();
+
+#define d3d12_halt(...)             \
+    ERRORLOG << __VA_ARGS__ << "\n" \
+             << d3d12_debug_dump()  \
+             << "!!! HALT !!!\n"
+
 void *d3d12_load_library(const char *name) {
     TRACELOG;
     void *lib = halide_load_library(name);
     if (lib) {
         TRACEPRINT("Loaded runtime library '" << name << "' at location " << lib << "\n");
     } else {
-        ERRORLOG << "Unable to load runtime library: " << name << "\n";
+        d3d12_halt("Unable to load runtime library: " << name);
     }
     return lib;
 }
@@ -128,7 +135,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
     if (symbol) {
         TRACEPRINT("Symbol '" << name << "' found at " << symbol << "\n");
     } else {
-        ERRORLOG << "Symbol not found: " << name << "\n";
+        d3d12_halt("Symbol not found: " << name);
     }
     return symbol;
 }
@@ -154,10 +161,6 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 #undef  HALIDE_D3D12_COMMAND_LIST_TYPE
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
 #endif
-
-void d3d12_halt() {
-    ERRORLOG << "!!! HALT !!!";
-}
 
 static void *d3d12_malloc(size_t num_bytes) {
     TRACELOG;
@@ -216,10 +219,10 @@ static bool D3DError(HRESULT result, ID3D12T *object, void *user_context, const 
     // D3D12: https://msdn.microsoft.com/en-us/library/windows/desktop/bb509553(v=vs.85).aspx
     // Win32: https://msdn.microsoft.com/en-us/library/windows/desktop/aa378137(v=vs.85).aspx
     if (FAILED(result) || !object) {
-        ERRORLOG << message
-                 << " (HRESULT=" << (void*)(int64_t)result
-                 << ", object*=" << object << ").\n";
-        d3d12_halt();
+        d3d12_halt(
+            message << " (HRESULT=" << (void*)(int64_t)result
+            << ", object*=" << object << ")"
+        );
         return true;
     }
     TRACEPRINT(d3d12typename(object) << " object created: " << object << "\n");
@@ -531,6 +534,7 @@ static size_t number_of_elements(const halide_buffer_t *buffer) {
     return elements;
 }
 
+WEAK IDXGIAdapter1 *dxgiAdapter = NULL;
 WEAK d3d12_device *device = NULL;
 WEAK d3d12_command_queue *queue = NULL;
 WEAK ID3D12Fence *queue_fence = NULL;
@@ -544,8 +548,7 @@ WEAK d3d12_buffer readback = { };   // staging buffer to retrieve data from the 
 template<typename d3d12_T>
 static void release_d3d12_object(d3d12_T *obj) {
     TRACELOG;
-    TRACEPRINT("!!! ATTEMPTING TO RELEASE AN UNKNOWN OBJECT @ " << obj << " !!!\n");
-    d3d12_halt();
+    d3d12_halt("!!! ATTEMPTING TO RELEASE AN UNKNOWN OBJECT @ " << obj << " !!!");
 }
 
 template<typename d3d12_T>
@@ -572,6 +575,7 @@ void release_d3d12_object<d3d12_device>(d3d12_device *device) {
     TRACELOG;
     ID3D12Device *p = (*device);
     Release_ID3D12Object(p);
+    Release_ID3D12Object(dxgiAdapter);
 }
 
 template<>
@@ -663,7 +667,7 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     dbuffer->elements = number_of_elements(hbuffer);
     dbuffer->format = FindD3D12FormatForHalideType(hbuffer->type);
     if (DXGI_FORMAT_UNKNOWN == dbuffer->format) {
-        ERRORLOG << "unsupported buffer element type: " << hbuffer->type << "\n";
+        d3d12_halt("unsupported buffer element type: " << hbuffer->type);
         return -3;
     }
 
@@ -777,7 +781,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     TRACELOG;
 
 #ifndef BITS_64
-    ERRORLOG << "Direct3D 12 back-end not yet supported on 32bit targets...\n";
+    d3d12_halt("Direct3D 12 back-end not yet supported on 32bit targets...");
     return NULL;
 #endif
 
@@ -801,7 +805,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         return NULL;
     }
 
-    IDXGIAdapter1 *dxgiAdapter = NULL;
+    halide_assert(user_context, (dxgiAdapter == NULL));
     for (int i = 0; ; ++i) {
         IDXGIAdapter1 *adapter = NULL;
         HRESULT result = dxgiFactory->EnumAdapters1(i, &adapter);
@@ -813,13 +817,14 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
         }
         DXGI_ADAPTER_DESC1 desc = { };
         if (FAILED(adapter->GetDesc1(&desc))) {
-            ERRORLOG << "Unable to retrieve information (DXGI_ADAPTER_DESC1) about adapter number #" << i;
+            d3d12_halt("Unable to retrieve information (DXGI_ADAPTER_DESC1) about adapter number #" << i);
             return NULL;
         }
         char Description[128];
         for (int i = 0; i < 128; ++i) {
             Description[i] = desc.Description[i];
         }
+        Description[127] = '\0';
         TRACEPRINT("-- Adapter #" << i << ": " << Description << "\n");
         if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
             TRACEPRINT("-- this is a software adapter (skipping)\n");
@@ -836,7 +841,7 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     }
 
     if (NULL == dxgiAdapter) {
-        ERRORLOG << "Unable to find a suitable D3D12 Adapter.\n";
+        d3d12_halt("Unable to find a suitable D3D12 Adapter.");
         return NULL;
     }
 
@@ -870,7 +875,6 @@ static d3d12_device *D3D12CreateSystemDefaultDevice(void *user_context) {
     }
     #endif
 
-    Release_ID3D12Object(dxgiAdapter);
     Release_ID3D12Object(dxgiFactory);
 
     #if HALIDE_D3D12_PIX
@@ -933,7 +937,7 @@ ID3D12RootSignature *D3D12CreateMasterRootSignature(ID3D12Device *device) {
     HRESULT result = D3D12SerializeRootSignature(&rsd, Version, &pSignBlob, &pSignError);
     if (D3DError(result, pSignBlob, NULL, "Unable to serialize the Direct3D 12 root signature")) {
         halide_assert(user_context, pSignError);
-        ERRORLOG << (const char*)pSignError->GetBufferPointer();
+        d3d12_halt((const char*)pSignError->GetBufferPointer());
         return NULL;
     }
 
@@ -1666,7 +1670,7 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
         TRACEPRINT("Unable to compile D3D12 compute shader (HRESULT=" << (void*)(int64_t)result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n");
         dump_shader(source, errorMsgs);
         Release_ID3D12Object(errorMsgs);
-        d3d12_halt();
+        d3d12_halt("[end-of-shader-dump]");
         return NULL;
     }
 
@@ -1729,7 +1733,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 
             DXGI_FORMAT Format = input_buffer->format;
             if (DXGI_FORMAT_UNKNOWN == Format) {
-                ERRORLOG << "unsupported buffer element type: " << input_buffer->halide->type << "\n";
+                d3d12_halt("unsupported buffer element type: " << input_buffer->halide->type);
             }
 
             UINT FirstElement = input_buffer->offset;
@@ -1801,10 +1805,11 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
 
     HRESULT result_after = (*device)->GetDeviceRemovedReason();
     if (FAILED(result_after)) {
-        ERRORLOG << "Device Lost! GetDeviceRemovedReason(): "
-                 << "before: " << (void*)(int64_t)result_before << " | "
-                 << "after: "  << (void*)(int64_t)result_after  << "\n";
-        d3d12_halt();
+        d3d12_halt(
+            "Device Lost! GetDeviceRemovedReason(): "
+            << "before: " << (void*)(int64_t)result_before << " | "
+            << "after: "  << (void*)(int64_t)result_after
+        );
     }
 }
 
@@ -1989,6 +1994,41 @@ WEAK command_list_completed_handler_block_literal command_list_completed_handler
 
 }}}} // namespace Halide::Runtime::Internal::D3D12Compute
 
+static const char* d3d12_debug_dump() {
+    TRACELOG;
+
+    if (!device) {
+        return "debug info not available: no device.";
+    }
+
+    halide_assert(user_context, (dxgiAdapter != NULL));
+    DXGI_ADAPTER_DESC1 desc = { };
+    if (FAILED(dxgiAdapter->GetDesc1(&desc))) {
+        return "Unable to retrieve information about the adapter.\n";
+    }
+
+    // NOTE(marcos): this printer will leak, but that's fine since debug dump
+    // is a panic mechanism that precedes an operational "halt":
+    void* dump_buffer = d3d12_malloc(64*1024);
+    if (!dump_buffer) {
+        return "Unable to allocate memory for the debug dump.\n";
+    }
+    Printer<StringStreamPrinter, 64*1024> dump (user_context, (char*)dump_buffer);
+
+    dump << "\n===== Debug Dump =====\n";
+
+    // simple conversion from Windows 16bit wchar to char:
+    char Description[128];
+    for (int i = 0; i < 128; ++i) {
+        Description[i] = desc.Description[i];
+    }
+    Description[127] = '\0';
+
+    dump << "D3D12 Adapter: " << Description << "\n";
+
+    return dump.str();
+}
+
 using namespace Halide::Runtime::Internal::D3D12Compute;
 
 extern "C" {
@@ -2026,12 +2066,12 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     d3d12_buffer *d3d12_buf = new_buffer(d3d12_context.device, size);
     if (d3d12_buf == 0) {
-        ERRORLOG << "D3D12: Failed to allocate buffer of size " << (int64_t)size << ".\n";
+        d3d12_halt("D3D12: Failed to allocate buffer of size " << (int64_t)size);
         return -1;
     }
 
     if (0 != wrap_buffer(buf, d3d12_buf)) {
-        ERRORLOG << "D3D12: unable to wrap halide buffer and D3D12 buffer.\n";
+        d3d12_halt("D3D12: unable to wrap halide buffer and D3D12 buffer.");
         return -1;
     }
 
@@ -2099,7 +2139,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
         state->library = new_library_with_source(d3d12_context.device, source, source_size);
         if (state->library == 0) {
-            ERRORLOG << "D3D12Compute: new_library_with_source failed.\n";
+            d3d12_halt("D3D12Compute: new_library_with_source failed.");
             return -1;
         }
 
@@ -2368,13 +2408,13 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     d3d12_command_allocator *command_allocator = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
     if (command_allocator == 0) {
-        ERRORLOG << "D3D12Compute: Could not create compute command allocator.\n";
+        d3d12_halt("D3D12Compute: Could not create compute command allocator.");
         return -1;
     }
 
     d3d12_compute_command_list *cmdList = new_compute_command_list(device, command_allocator);
     if (cmdList == 0) {
-        ERRORLOG << "D3D12Compute: Could not create compute command list.\n";
+        d3d12_halt("D3D12Compute: Could not create compute command list.");
         return -1;
     }
 
@@ -2389,7 +2429,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_binder *binder = new_descriptor_binder(device);
     d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(d3d12_context.device, function);
     if (pipeline_state == 0) {
-        ERRORLOG << "D3D12Compute: Could not allocate pipeline state.\n";
+        d3d12_halt("D3D12Compute: Could not allocate pipeline state.");
         release_object(function);
         return -1;
     }
@@ -2420,7 +2460,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         size_t constant_buffer_size = (total_args_size + 255) & ~255;
         args_buffer = new_constant_buffer(d3d12_context.device, constant_buffer_size);
         if (!args_buffer) {
-            ERRORLOG << "D3D12Compute: Could not allocate arguments buffer.\n";
+            d3d12_halt("D3D12Compute: Could not allocate arguments buffer.");
             release_object(function);
             return -1;
         }
@@ -2598,7 +2638,7 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
 
     int ret = halide_d3d12compute_wrap_buffer(user_context, dst, opaqued);
     if (ret != 0) {
-        ERRORLOG << "halide_d3d12compute_device_crop: failed when wrapping buffer.\n";
+        d3d12_halt("halide_d3d12compute_device_crop: failed when wrapping buffer.");
         return ret;
     }
 
@@ -2649,7 +2689,7 @@ WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffe
     d3d12_buffer *dbuffer = malloct<d3d12_buffer>();
     if (dbuffer == NULL) {
         unwrap_buffer(halide_buf);
-        ERRORLOG << "halide_d3d12compute_wrap_buffer: malloc failed making device handle.\n";
+        d3d12_halt("halide_d3d12compute_wrap_buffer: malloc failed making device handle.");
         return halide_error_code_out_of_memory;
     }
 
