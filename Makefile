@@ -13,7 +13,7 @@ UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
     # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz
+    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz, -Wl,--stack,8388608
     SHARED_EXT=dll
     FPIC=
 else
