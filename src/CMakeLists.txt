@@ -321,6 +321,7 @@ set(HEADER_FILES
   FuzzFloatStores.h
   Generator.h
   HexagonOffload.h
+  AMDGPUOffload.h
   HexagonOptimize.h
   runtime/HalideRuntime.h
   runtime/HalideBuffer.h
@@ -479,6 +480,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   FuzzFloatStores.cpp
   Generator.cpp
   HexagonOffload.cpp
+  AMDGPUOffload.cpp
   HexagonOptimize.cpp
   IR.cpp
   IREquality.cpp

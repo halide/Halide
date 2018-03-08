@@ -24,6 +24,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
+#include "AMDGPUOffload.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectOpenGLIntrinsics.h"

@@ -615,6 +615,7 @@ enum RuntimeKind {
     OpenGL,
     OpenGLCompute,
     Hexagon,
+    AMDGPUGFX900,
     MaxRuntimeKind
 };
 
@@ -647,6 +648,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX_128, false);
         one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
+        one_gpu.set_feature(Target::AMDGPUGFX900, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCL:
@@ -675,6 +677,10 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case Hexagon:
             one_gpu.set_feature(Target::HVX_64);
             module_name = "hexagon";
+            break;
+        case AMDGPUGFX900:
+            one_gpu.set_feature(Target::AMDGPUGFX900);
+            module_name = "amdgpu";
             break;
         default:
             module_name = "shared runtime";
@@ -795,6 +801,12 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::CUDA)) {
         JITModule m = make_module(for_module, target, CUDA, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::AMDGPUGFX900)) {
+        JITModule m = make_module(for_module, target, AMDGPUGFX900, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }

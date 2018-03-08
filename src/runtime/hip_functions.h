@@ -6,11 +6,11 @@
 #endif
 
 HIP_FN(hipError_t, hipInit, (unsigned int Flags));
-HIP_FN(hipError_t, hipDeviceGetCount, (int *count));
+HIP_FN(hipError_t, hipGetDeviceCount, (int *count));
 HIP_FN(hipError_t, hipDeviceGet, (hipDevice_t *device, int ordinal));
 HIP_FN(hipError_t, hipDeviceGetAttribute, (int*, hipDeviceAttribute_t, hipDevice_t));
 HIP_FN(hipError_t, hipDeviceGetName, (char*, int len, hipDevice_t dev));
-HIP_FN(hipError_t, hipDeviceGetTotalMem, (size_t *, hipError_t));
+HIP_FN(hipError_t, hipDeviceTotalMem, (size_t *, hipDevice_t));
 HIP_FN(hipError_t, hipCtxCreate, (hipCtx_t *pctx, unsigned int flags, hipDevice_t dev));
 HIP_FN(hipError_t, hipCtxDestroy, (hipCtx_t pctx));
 HIP_FN(hipError_t, hipModuleLoadData, (hipModule_t *module, const void *image));
@@ -38,7 +38,9 @@ void** extra));
 HIP_FN(hipError_t, hipCtxSynchronize, ());
 HIP_FN(hipError_t, hipCtxPushCurrent, (hipCtx_t ctx));
 HIP_FN(hipError_t, hipCtxPopCurrent, (hipCtx_t *pctx));
-HIP_FN(hipError_t, hipPointerGetAttribute, (void *result, int query, hipDeviceptr_t ptr));
+HIP_FN(hipError_t, hipPointerGetAttributes, (void *result, int query, hipDeviceptr_t ptr));
 HIP_FN(hipError_t, hipStreamSynchronize, (hipStream_t hStream));
+HIP_FN(hipError_t, hipCtxGetApiVersion, (hipCtx_t ctx, int *));
+HIP_FN(hipError_t, hipProfilerStop, ());
 
 #undef HIP_FN

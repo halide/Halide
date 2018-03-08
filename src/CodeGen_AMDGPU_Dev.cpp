@@ -419,9 +419,19 @@ vector<char> CodeGen_AMDGPU_Dev::compile_to_src() {
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
+/* For Debugging AMDGPU isa
+    llvm::SmallString<8> dataAsm;
+    llvm::raw_svector_ostream destAsm(dataAsm);
+    destAsm.SetUnbuffered();
+    llvm::legacy::PassManager passAsm;
 
-    // Output string stream
+    target_machine->addPassesToEmitFile(passAsm, destAsm,
+                                llvm::TargetMachine::CGFT_AssemblyFile);
 
+    passAsm.run(*module);
+    std::string assembly(dataAsm.begin(), dataAsm.end());
+    std::cout<<assembly<<std::endl;
+*/
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
                                                     TargetMachine::CGFT_AssemblyFile,

@@ -139,6 +139,7 @@ typedef enum hipDeviceAttribute_t {
     hipDeviceAttributePciDeviceId,                          ///< PCI Device ID.
     hipDeviceAttributeMaxSharedMemoryPerMultiprocessor,     ///< Maximum Shared Memory Per Multiprocessor.
     hipDeviceAttributeIsMultiGpuBoard,                      ///< Multiple GPU devices.
+    hipDeviceAttributeMax,
 } hipDeviceAttribute_t;
 
 typedef enum hipMemoryType {
