@@ -70,7 +70,7 @@ std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
 
 /** Emit a halide linkage value in a human readable format */
-std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &);
+std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
