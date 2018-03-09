@@ -1617,7 +1617,7 @@ void GeneratorInputBase::set_def_min_max() {
 }
 
 Parameter GeneratorInputBase::parameter() const {
-    user_assert(!this->is_array()) << "Cannot call the parameter() on Input<[]> " << name() << "; use an explicit subscript operator instead.";
+    user_assert(!this->is_array()) << "Cannot call the parameter() method on Input<[]> " << name() << "; use an explicit subscript operator instead.";
     return parameters_.at(0);
 }
 
