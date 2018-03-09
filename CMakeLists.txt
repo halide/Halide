@@ -31,6 +31,10 @@ else()
   endif()
 endif()
 
+if("${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "40")
+  message(WARNING "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***")
+endif()
+
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")

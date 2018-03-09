@@ -1820,6 +1820,12 @@ void generator_test() {
             GeneratorParam<int> gp0{"gp0", 0};
             GeneratorParam<float> gp1{"gp1", 1.f};
             GeneratorParam<uint64_t> gp2{"gp2", 2};
+            GeneratorParam<uint8_t> gp_uint8{"gp_uint8", 65};
+            GeneratorParam<int8_t> gp_int8{"gp_int8", 66};
+            GeneratorParam<char> gp_char{"gp_char", 97};
+            GeneratorParam<signed char> gp_schar{"gp_schar", 98};
+            GeneratorParam<unsigned char> gp_uchar{"gp_uchar", 99};
+            GeneratorParam<bool> gp_bool{"gp_bool", true};
 
             Input<int> input{"input"};
 
@@ -1827,6 +1833,12 @@ void generator_test() {
                 internal_assert(gp0 == 1);
                 internal_assert(gp1 == 2.f);
                 internal_assert(gp2 == (uint64_t) 2);  // unchanged
+                internal_assert(gp_uint8 == 67);
+                internal_assert(gp_int8 == 68);
+                internal_assert(gp_bool == false);
+                internal_assert(gp_char == 107);
+                internal_assert(gp_schar == 108);
+                internal_assert(gp_uchar == 109);
                 Var x;
                 Func output;
                 output(x) = input + gp0;
@@ -1850,6 +1862,14 @@ void generator_test() {
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
+
+        // Verify that 8-bit non-boolean GP values are parsed as integers, not chars.
+        tester.gp_int8.set_from_string("68");
+        tester.gp_uint8.set_from_string("67");
+        tester.gp_char.set_from_string("107");
+        tester.gp_schar.set_from_string("108");
+        tester.gp_uchar.set_from_string("109");
+        tester.gp_bool.set_from_string("false");
 
         tester.build_pipeline();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
