@@ -18,9 +18,9 @@ env:
     #
     # Test a mix of llvm versions, a mix of build systems, and a mix of shared vs static library
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
-    - LLVM_VERSION=4.0.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
+    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
     - LLVM_VERSION=5.0.0 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-    - LLVM_VERSION=4.0.1 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
+    - LLVM_VERSION=6.0.0 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
 cache: apt ccache
 dist: trusty
 # Note the commands below are written assuming Ubuntu 12.04LTS
