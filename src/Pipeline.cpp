@@ -180,7 +180,7 @@ string Pipeline::auto_schedule(const Target &target) {
     string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
         // Default machine parameters for generic CPU architecture.
-        MachineParams arch_params(16, 16 * 1024 * 1024, 40);
+        MachineParams arch_params(64, 16 * 1024 * 1024, 40);
         return auto_schedule(target, arch_params);
     } else {
         return auto_schedule(target, MachineParams(params));
