@@ -149,7 +149,7 @@ struct FunctionDAG {
                     // There's a bunch of implied math in the
                     // addressing if it's a Halide or Image call, and
                     // in the actual function call if it's not.
-                    // leaves += op->args.size();
+                    leaves += op->args.size();
                     if (op->is_intrinsic(Call::likely) || op->is_intrinsic(Call::likely_if_innermost)) {
                         likely = true;
                     }
@@ -1156,6 +1156,54 @@ struct State {
                      << (compute_cost + mem_cost) << " = "
                      << compute_cost << " + " << mem_cost << "\n";
         }
+
+        /*
+        // Print it in a form that can be copy-pasted elsewhere
+        debug(0) << "nodes = [";
+        for (const auto &n : dag.nodes) {
+            // double essential = root.get_bounds(n.func, dag).min_cost;
+            auto it = node_costs.find(&n);
+            if (it != node_costs.end()) {
+                debug(0) << " " << it->second;
+            } else {
+                debug(0) << " " << inlined_costs[n.func];
+            }
+        }
+        debug(0) << "]\n";
+
+        debug(0) << "edges = [";
+        for (const auto &n1 : dag.nodes) {
+            debug(0) << "[";
+            for (const auto &n2 : dag.nodes) {
+                const FunctionDAG::Edge *edge = nullptr;
+                for (const auto *e : dag.outgoing_edges.at(n1.func)) {
+                    if (e->consumer.same_as(n2.func)) {
+                        edge = e;
+                    }
+                }
+                if (edge) {
+                    debug(0) << " " << edge_costs[edge];
+                } else {
+                    debug(0) << " 0";
+                }
+            }
+            debug(0) << "]\n";
+        }
+        debug(0) << "]\n";
+        */
+
+        for (const auto &n : dag.nodes) {
+            auto it = node_costs.find(&n);
+            if (it != node_costs.end()) {
+                debug(0) << "XXXN " << it->second << "\n";
+            } else {
+                debug(0) << "XXXI " << inlined_costs[n.func] << "\n";
+            }
+        }
+        for (const auto &e : dag.edges) {
+            debug(0) << "XXXE " << edge_costs[&e] << "\n";
+        }
+
     }
 };
 
