@@ -57,6 +57,9 @@ struct FunctionDAG {
         // The min/max variables used to denote a symbolic region of
         // this Func. Used in the cost above, and in the Edges below.
         vector<Interval> region;
+
+        // The vectorization width that should be used.
+        int vector_size;
     };
 
     struct Edge {
@@ -82,7 +85,7 @@ struct FunctionDAG {
 
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
-    FunctionDAG(const vector<Function> &outputs, const MachineParams &params) {
+    FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
         map<string, Function> env;
         for (Function o : outputs) {
             populate_environment(o, env);
@@ -121,20 +124,24 @@ struct FunctionDAG {
                 bool likely = false;
 
                 using IRVisitor::visit;
-                void visit(const IntImm *) override {
+                void visit(const IntImm *op) override {
                     leaves++;
+                    check_type(op->type);
                 }
 
                 void visit(const UIntImm *op) override {
                     leaves++;
+                    check_type(op->type);
                 }
 
                 void visit(const FloatImm *op) override {
                     leaves++;
+                    check_type(op->type);
                 }
 
                 void visit(const Variable *op) override {
                     leaves++;
+                    check_type(op->type);
                 }
                 void visit(const Call *op) override {
                     IRVisitor::visit(op);
@@ -142,10 +149,11 @@ struct FunctionDAG {
                     // There's a bunch of implied math in the
                     // addressing if it's a Halide or Image call, and
                     // in the actual function call if it's not.
-                    leaves += op->args.size();
+                    // leaves += op->args.size();
                     if (op->is_intrinsic(Call::likely) || op->is_intrinsic(Call::likely_if_innermost)) {
                         likely = true;
                     }
+                    check_type(op->type);
                 }
 
                 bool visit_likely_pair(Expr a, Expr b) {
@@ -184,8 +192,19 @@ struct FunctionDAG {
                 void visit(const Max *op) override {
                     visit_likely_pair(op->a, op->b);
                 }
+                void visit(const Cast *op) override {
+                    IRVisitor::visit(op);
+                    check_type(op->type);
+                }
+                void check_type(Type t) {
+                    if (!narrowest_type.bits() ||
+                        t.bits() < narrowest_type.bits()) {
+                        narrowest_type = t;
+                    }
+                }
             public:
                 int leaves = 0;
+                Type narrowest_type;
                 map<string, int> calls;
             };
             LeafCounter counter;
@@ -202,6 +221,7 @@ struct FunctionDAG {
             node.compute *= bytes_per_element;
             node.compute_if_inlined *= bytes_per_element;
             node.memory = bytes_per_element;
+            node.vector_size = target.natural_vector_size(counter.narrowest_type);
 
             // Set parameter estimates (we could also do this in compute_bounds_and_costs)
             class ApplyParamEstimates : public IRMutator {
@@ -289,12 +309,12 @@ private:
 
 };
 
-vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool allow_splits) {
+vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool allow_splits, int vector_size) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
-        auto v = generate_tilings(s, d - 1, allow_splits);
+        auto v = generate_tilings(s, d - 1, allow_splits, vector_size);
         for (auto t : v) {
             bool is_full = false, is_one = false;
             // Skip trivial tilings
@@ -311,7 +331,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
                     t.back() = 1;
                     result.push_back(t);
                 }
-                if (s[d] != 1 && !is_full) {
+                if (s[d] != 1 && !is_full && is_one) {
                     t.back() = s[d];
                     result.push_back(t);
                 }
@@ -320,7 +340,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
                     int inner = (s[d] + outer - 1) / outer;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
-                    if (outer > inner || (d == 0 && inner < 16)) break; // TODO 16 should be a param
+                    if (outer > inner || (d == 0 && inner < vector_size)) break;
                     t.back() = outer;
                     result.push_back(t);
                 }
@@ -389,9 +409,10 @@ struct PartialScheduleNode {
             subinstances *= i;
         }
         if (innermost) {
+            int vector_size = dag.node_map.at(func)->vector_size;
             int64_t ideal_subinstances = subinstances;
             subinstances /= size[0];
-            subinstances *= ((size[0] + 15) / 16) * 16;
+            subinstances *= ((size[0] + vector_size - 1) / vector_size) * vector_size;
 
             // Record overcompute due to vectorization
             double factor = double(subinstances) / ideal_subinstances;
@@ -447,8 +468,14 @@ struct PartialScheduleNode {
                     auto c = bounds_computed.region[i-1];
                     int64_t er = r.second - r.first + 1;
                     int64_t ec = c.second - c.first + 1;
-                    if (er == ec) continue;
+                    if (ec == er) {
+                        continue;
+                    }
                     discount = double(ec) / er;
+                    if (i == 1) {
+                        // By folding on the innermost dimension, you just broke vectorization. Don't do that.
+                        discount = 1e10;
+                    }
                     break;
                 }
                 if (node_costs) {
@@ -493,7 +520,11 @@ struct PartialScheduleNode {
     struct Bound {
         // The box over which something is touched
         vector<pair<int64_t, int64_t>> region;
-        // The minimum possible number of points evaluated.
+        // The number of points in that box
+        int64_t region_points;
+        // The minimum possible number of points evaluated. May be
+        // less than region_points if inlining is a good idea (e.g. a
+        // sparsely-sampled Func with large bounds)
         int64_t min_points;
         // The minimum possible compute cost
         double min_cost;
@@ -510,13 +541,13 @@ struct PartialScheduleNode {
         Bound bound;
         if (dag.outgoing_edges.at(f).empty() && is_root()) {
             // Use the bounds estimate
-            bound.min_points = 1;
+            bound.region_points = 1;
             map<string, pair<int64_t, int64_t>> estimates;
             for (auto b : f.schedule().estimates()) {
                 int64_t i_min = *as_const_int(b.min);
                 int64_t i_extent = *as_const_int(b.extent);
                 estimates[b.var] = {i_min, i_min + i_extent - 1};
-                bound.min_points *= i_extent;
+                bound.region_points *= i_extent;
             }
             // Set the bounds using the estimates
             for (int i = 0; i < f.dimensions(); i++) {
@@ -525,7 +556,8 @@ struct PartialScheduleNode {
                     << "Need an estimate on dimension " << i << " of \"" << f.name() << "\"";
                 bound.region.push_back(it->second);
             }
-            bound.min_cost = bound.min_points * dag.node_map.at(f)->compute;
+            bound.min_cost = bound.region_points * dag.node_map.at(f)->compute;
+            bound.min_points = bound.region_points;
         } else {
             internal_assert(!dag.outgoing_edges.at(f).empty())
                 << "No consumers of " << f.name()
@@ -566,6 +598,7 @@ struct PartialScheduleNode {
             for (int i = 0; i < f.dimensions(); i++) {
                 points_if_realized *= (bound.region[i].second - bound.region[i].first + 1);
             }
+            bound.region_points = points_if_realized;
             bound.min_points = std::min(points_if_realized, calls_if_inlined);
             const auto *n = dag.node_map.at(f);
             bound.min_cost = std::min(points_if_realized * n->compute, calls_if_inlined * n->compute_if_inlined);
@@ -686,6 +719,7 @@ struct PartialScheduleNode {
         node->tileable = true;
         Bound single_point;
         single_point.min_points = 1;
+        single_point.region_points = 1;
         single_point.min_cost = dag.node_map.at(f)->compute;
         for (int i = 0; i < f.dimensions(); i++) {
             // Initialize the loop nest to cover the desired bounds
@@ -699,8 +733,18 @@ struct PartialScheduleNode {
     // Return all possible ways to compute f in tiles.
     vector<PartialScheduleNode> compute_in_tiles(Function f, const FunctionDAG &dag,
                                                  const PartialScheduleNode *parent,
+                                                 const MachineParams &params,
                                                  bool in_realization) const {
         vector<PartialScheduleNode> result;
+
+        // Is it worth descending into this loop? If the bounds don't shrink, it's pointless
+        if (parent) {
+            int64_t parent_points = parent->get_bounds(f, dag).region_points;
+            int64_t in_loop_points = get_bounds(f, dag).region_points;
+            if (parent_points <= in_loop_points) {
+                return result;
+            }
+        }
 
         // Figure out which child we can fuse this into
         int child = -1;
@@ -729,18 +773,24 @@ struct PartialScheduleNode {
             return result;
         }
 
+        int vector_size = dag.node_map.at(f)->vector_size;
+
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_size);
 
             for (auto t : tilings) {
+
+                // Random dropout. Uncomment to get a random family of plausible schedules.
+                // if (rand() & 3) continue;
+
                 if (parent->is_root()) {
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
                     int total = 1;
                     for (auto s : t) {
                         total *= s;
                     }
-                    if (total < 16) continue; // TODO: 16 should come from the params
+                    if (total < params.parallelism) continue;
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
@@ -765,6 +815,8 @@ struct PartialScheduleNode {
                 // Then move factors from the outer loop to the inner loop
 
                 auto parent_bounds = parent->get_bounds(func, dag);
+                auto &b = outer.bounds[func];
+                b.region_points = 1;
                 for (size_t i = 0; i < t.size(); i++) {
                     int factor = t[i];
                     inner->size[i] = (outer.size[i] + factor - 1) / factor;
@@ -772,7 +824,8 @@ struct PartialScheduleNode {
                     int64_t min = parent_bounds.region[i].first;
                     int64_t extent = parent_bounds.region[i].second - min + 1;
                     extent = (extent + factor - 1) / factor;
-                    outer.bounds[func].region[i] = {min, min + extent - 1};
+                    b.region[i] = {min, min + extent - 1};
+                    b.region_points *= extent;
                     // TODO: min_points, min_compute?
                 }
 
@@ -794,7 +847,7 @@ struct PartialScheduleNode {
                     // loop.
                     PartialScheduleNode store_at_here = std::move(outer);
                     store_at_here.store_at.insert(f);
-                    auto v = inner->compute_in_tiles(f, dag, &store_at_here, true);
+                    auto v = inner->compute_in_tiles(f, dag, &store_at_here, params, true);
                     for (PartialScheduleNode n : v) {
                         // Once we're sliding a function over a loop,
                         // it's best not to tile it again, or Halide's
@@ -818,7 +871,7 @@ struct PartialScheduleNode {
                     // level to be further out.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, dag, this, store_here);
+                auto v = children[child]->compute_in_tiles(f, dag, this, params, store_here);
                 for (PartialScheduleNode n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -884,19 +937,17 @@ struct PartialScheduleNode {
                     }
                 }
                 here = LoopLevel(func, v.var);
-                if (v.extent >= 16) {
+                int vector_size = dag.node_map.at(func)->vector_size;
+                if (v.extent >= 2 * vector_size && (((v.extent + vector_size - 1) / vector_size) & 1) == 0) {
+                    Func(func).vectorize(v.var, 2 * vector_size);
+                } else if (v.extent >= vector_size) {
+                    Func(func).vectorize(v.var, vector_size);
+                } else if (v.extent >= 16) {
                     Func(func).vectorize(v.var, 16);
                 } else if (v.extent >= 8) {
                     Func(func).vectorize(v.var, 8);
                 } else if (v.extent >= 4) {
                     Func(func).vectorize(v.var, 4);
-                }
-                if (v.exists && !v.outermost) {
-                    // If we've tiled at least once, we know the inner
-                    // extents and can unroll them if they're small.
-                    if (v.extent <= 32) {
-                        Func(func).unroll(v.var);
-                    }
                 }
             } else {
                 // Do the implied splits
@@ -1005,7 +1056,7 @@ struct State {
         }
 
         // 2) Realize it somewhere
-        auto tile_options = root.compute_in_tiles(f, dag, nullptr, false);
+        auto tile_options = root.compute_in_tiles(f, dag, nullptr, params, false);
         for (PartialScheduleNode n : tile_options) {
             auto child = new State(*this);
             child->root = std::move(n);
@@ -1158,9 +1209,6 @@ State optimal_schedule(FunctionDAG &dag,
 
     for (int i = 0; ; i++) {
 
-        // Random dropout
-        // while (q.size() > 1 && (rand() & 3)) q.pop();
-
         if (q.size() > (size_t)beam_size) {
             decltype(q) trimmed;
             for (int i = 0; i < beam_size; i++) {
@@ -1199,7 +1247,13 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
                                         const Target &target,
                                         const MachineParams &params) {
 
-    srand(time(NULL));
+    string seed_str = get_env_variable("HL_SEED");
+    int seed = (int)time(NULL);
+    if (!seed_str.empty()) {
+        seed = atoi(seed_str.c_str());
+    }
+    debug(0) << "Dropout seed = " << seed << "\n";
+    srand(seed);
 
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
     size_t beam_size = 1;
@@ -1213,7 +1267,7 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
         time_limit = atof(time_limit_str.c_str());
     }
 
-    FunctionDAG dag(outputs, params);
+    FunctionDAG dag(outputs, params, target);
 
     dag.dump();
 
@@ -1257,7 +1311,8 @@ std::string generate_schedules_top_down(const std::vector<Function> &outputs,
 void autoschedule_test() {
     MachineParams params(16, 16 * 1024 * 1024, 40);
     size_t beam_size = 1;
-    Target target("host");
+    // Use a fixed target for the analysis to get consistent results from this test.
+    Target target("x86-64-linux-sse41-avx-avx2");
 
     Var x("x"), y("y");
 
@@ -1271,7 +1326,7 @@ void autoschedule_test() {
         h.estimate(x, 0, 1000).estimate(y, 0, 1000);
 
         vector<Function> outputs = {h.function()};
-        FunctionDAG dag(outputs, params);
+        FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
@@ -1304,7 +1359,7 @@ void autoschedule_test() {
         cheap_memory.balance = 1;
 
         vector<Function> outputs = {h.function()};
-        FunctionDAG dag(outputs, cheap_memory);
+        FunctionDAG dag(outputs, cheap_memory, target);
         State optimal = optimal_schedule(dag, outputs, cheap_memory, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
@@ -1327,7 +1382,7 @@ void autoschedule_test() {
         h.estimate(x, 0, 2048).estimate(y, 0, 2048);
 
         vector<Function> outputs = {h.function()};
-        FunctionDAG dag(outputs, params);
+        FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
@@ -1349,7 +1404,7 @@ void autoschedule_test() {
         h.estimate(x, 0, 2048).estimate(y, 0, 2048);
 
         vector<Function> outputs = {h.function()};
-        FunctionDAG dag(outputs, params);
+        FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
@@ -1378,7 +1433,7 @@ void autoschedule_test() {
         }
         f[N-1].estimate(x, 0, 2048).estimate(y, 0, 2048);
         vector<Function> outputs = {f[N-1].function()};
-        FunctionDAG dag(outputs, params);
+        FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, 1);
         debug(0) << "** Optimal schedule:\n";
         optimal.dump();
@@ -1397,7 +1452,7 @@ void autoschedule_test() {
         f.estimate(x, 0, 2048).estimate(y, 0, 2048);
 
         vector<Function> outputs = {f.function()};
-        FunctionDAG dag(outputs, params);
+        FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
@@ -1422,7 +1477,7 @@ void autoschedule_test() {
         downx.estimate(x, 1, 1022).estimate(y, 1, 1022).estimate(k, 0, 256);
 
         vector<Function> outputs = {downx.function()};
-        FunctionDAG dag(outputs, params);
+        FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, 1);
 
         debug(0) << "** Optimal schedule:\n";
