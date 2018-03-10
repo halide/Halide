@@ -148,12 +148,7 @@ CXX_FLAGS += -funwind-tables
 print-%:
 	@echo '$*=$($*)'
 
-# Append the --link-static flag to llvm-config if it exists. We can
-# make this unconditional once llvm 4.0 is the minimum version we
-# support.
-LLVM_LINK_STATIC_FLAG = $(shell $(LLVM_CONFIG) --link-static 2>/dev/null && echo " --link-static")
-
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
 
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
@@ -1638,6 +1633,11 @@ endif
 ifneq ($(LLVM_OK), )
 $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
+ifeq ($(LLVM_VERSION_TIMES_10), 40)
+	@echo
+	@echo "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***"
+	@echo
+endif
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
 else
