@@ -705,15 +705,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
         }
 
+        if (t.bits == 32) {
+            modules.push_back(get_initmod_libatomic_stub_ll(c));
+        }
+
         if (module_type != ModuleJITShared) {
             // The first module for inline only case has to be C/C++ compiled otherwise the
             // datalayout is not properly setup.
             modules.push_back(get_initmod_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
-
-            if (t.bits == 32) {
-                modules.push_back(get_initmod_libatomic_stub_ll(c));
-            }
 
             // Math intrinsics vary slightly across platforms
             if (t.os == Target::Windows) {
