@@ -698,7 +698,7 @@ struct Pipeline::JITCallArgs {
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-void Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
+void Pipeline::prepare_jit_call_arguments(Realization &dst, const Target &target,
                                           const ParamMap &param_map, void *user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
@@ -802,7 +802,7 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_map) {
+void Pipeline::realize(Realization &dst, const Target &t, const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -916,7 +916,7 @@ void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_m
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
+void Pipeline::infer_input_bounds(Realization &dst, const ParamMap &param_map) {
 
     Target target = get_jit_target_from_environment();
 

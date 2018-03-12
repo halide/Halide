@@ -735,16 +735,16 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
     Realization realize(int x_size, int y_size, int z_size, int w_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
     Realization realize(int x_size, int y_size, int z_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
     Realization realize(int x_size, int y_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
     Realization realize(int x_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
+                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
+    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -753,7 +753,7 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -779,8 +779,8 @@ public:
      * to evaulate f over a 10x10 region.
      */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
-    void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap::empty);
+    void infer_input_bounds(Realization &dst, const ParamMap &param_map = ParamMap::empty);
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
