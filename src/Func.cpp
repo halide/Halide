@@ -3007,11 +3007,11 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Realization dst, const Target &target, const ParamMap &param_map) {
+void Func::realize(Realization &dst, const Target &target, const ParamMap &param_map) {
     pipeline().realize(dst, target, param_map);
 }
 
-void Func::infer_input_bounds(Realization dst, const ParamMap &param_map) {
+void Func::infer_input_bounds(Realization &dst, const ParamMap &param_map) {
     pipeline().infer_input_bounds(dst, param_map);
 }
 
