@@ -101,5 +101,7 @@ int main(int argc, char **argv) {
 	std::cout << "One argument Pipeline realize reusing Realization/Target/ParamMap time " << t * 1e6 << "us.\n";
     }
 
+    std::cout << "Success!\n";
+
     return 0;
 }
