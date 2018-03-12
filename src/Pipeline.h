@@ -378,7 +378,14 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
+    // @{
     void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
+    template <typename T>
+    void realize(Buffer<T> &buf, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
+        Realization r(buf);
+        realize(r, target, param_map);
+    }
+    // @}
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
