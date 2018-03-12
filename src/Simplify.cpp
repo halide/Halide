@@ -3683,6 +3683,7 @@ private:
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
+        double fa, fb;
 
         ModulusRemainder mod_rem(0, 1);
         if (delta_ramp &&
@@ -3701,6 +3702,9 @@ private:
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
             return make_bool(ua < ub, op->type.lanes());
+        } else if (const_float(a, &fa) &&
+                   const_float(b, &fb)) {
+            return make_bool(fa < fb, op->type.lanes());
         } else if (const_int(a, &ia) &&
                    a.type().is_max(ia)) {
             // Comparing maximum of type < expression of type.  This can never be true.
