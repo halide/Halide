@@ -63,6 +63,7 @@ struct PipelineContents {
         jit_module = JITModule();
         jit_target = Target();
         inferred_args.clear();
+        output_buffer_types.clear();
     }
 
     // The outputs
@@ -85,6 +86,13 @@ struct PipelineContents {
      * function in the jit_module above. The two must be updated
      * together. */
     vector<InferredArgument> inferred_args;
+
+    struct OutputBufferType {
+        Function func;
+        Type type;
+        int dims;
+    };
+    vector<OutputBufferType> output_buffer_types;
 
     /** List of C funtions and Funcs to satisfy HalideExtern* and
      * define_extern calls. */
@@ -312,7 +320,6 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
         }
     }
 
-
     return result;
 }
 
@@ -418,6 +425,8 @@ void *Pipeline::compile_jit(const Target &target_arg) {
         debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target.to_string() << "\n";
         return contents->jit_module.main_function();
     }
+    // Clear all cached info in case there is an error.
+    contents->invalidate_cache();
 
     contents->jit_target = target;
 
@@ -435,6 +444,13 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     // Come up with a name for the generated function
     string name = generate_function_name();
+
+    // Flatten output buffer types info to speed up realize calls
+    for (Function f : contents->outputs) {
+        for (Type t : f.output_types()) {
+            contents->output_buffer_types.push_back({f, t, f.dimensions()});
+        }
+    }
 
     // Compile to a module and also compile any submodules.
     Module module = compile_to_module(args, name, target).resolve_submodules();
@@ -673,12 +689,33 @@ struct JITFuncCallContext {
 
 }  // namespace
 
+struct Pipeline::JITCallArgs {
+    size_t size{0};
+    const void *fixed_store[64];
+    const void **store;
+
+    JITCallArgs(size_t size) : size(size) {
+        if (size > (sizeof(fixed_store) / sizeof(fixed_store[0]))) {
+            // TODO(zalman): Call new[]?
+            store = (const void **)malloc(sizeof(void *) * size);
+        } else {
+            store = fixed_store;
+        }
+    }
+
+  ~JITCallArgs() {
+      if (store != fixed_store) {
+          free(store);
+      }
+    }
+};
+
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
-                                                          const ParamMap &param_map, void *user_context,
-                                                          bool is_bounds_inference) {
+void Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
+                                          const ParamMap &param_map, void *user_context,
+                                          bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     compile_jit(target);
@@ -686,29 +723,16 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
-    struct OutputBufferType {
-        Function func;
-        Type type;
-        int dims;
-    };
-    vector<OutputBufferType> output_buffer_types;
-    for (Function f : contents->outputs) {
-        for (Type t : f.output_types()) {
-            OutputBufferType obt = {f, t, f.dimensions()};
-            output_buffer_types.push_back(obt);
-        }
-    }
-
-    user_assert(output_buffer_types.size() == dst.size())
+    user_assert(contents->output_buffer_types.size() == dst.size())
         << "Realization contains wrong number of Images (" << dst.size()
-        << ") for realizing pipeline with " << output_buffer_types.size()
+        << ") for realizing pipeline with " << contents->output_buffer_types.size()
         << " outputs\n";
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
-        Function func = output_buffer_types[i].func;
-        int  dims = output_buffer_types[i].dims;
-        Type type = output_buffer_types[i].type;
+        Function &func = contents->output_buffer_types[i].func;
+        int  dims = contents->output_buffer_types[i].dims;
+        Type &type = contents->output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
             << "Can't realize Func \"" << func.name()
             << "\" into Buffer at " << (void *)dst[i].data()
@@ -729,14 +753,12 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             << "\" has type " << type << ".\n";
     }
 
-
     // Come up with the void * arguments to pass to the argv function
-    vector<const void *> arg_values;
-
+    size_t arg_index = 0;
     for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined()) {
             if (arg.param.same_as(contents->user_context_arg.param)) {
-                arg_values.push_back(user_context);
+                args_result.store[arg_index++] = user_context;
             } else {
                 Buffer<> *buf_out_param;
                 const Parameter &p = param_map.map(arg.param, buf_out_param);
@@ -748,34 +770,32 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
                     // ImageParam arg
                     Buffer<> buf = p.buffer();
                     if (buf.defined()) {
-                        arg_values.push_back(buf.raw_buffer());
+                        args_result.store[arg_index++] = buf.raw_buffer();
                     } else {
                         // Unbound
-                        arg_values.push_back(nullptr);
+                        args_result.store[arg_index++] = nullptr;
                     }
                     debug(1) << "JIT input ImageParam argument ";
                 } else {
-                    arg_values.push_back(p.scalar_address());
+                    args_result.store[arg_index++] = p.scalar_address();
                     debug(1) << "JIT input scalar argument ";
                 }
             }
         } else {
             debug(1) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
-            arg_values.push_back(arg.buffer.raw_buffer());
+            args_result.store[arg_index++] = (void *)arg.buffer.raw_buffer();
         }
-        const void *ptr = arg_values.back();
+        const void *ptr = args_result.store[arg_index - 1];
         debug(1) << arg.arg.name << " @ " << ptr << "\n";
     }
 
     // Then the outputs
     for (size_t i = 0; i < dst.size(); i++) {
-        arg_values.push_back(dst[i].raw_buffer());
-        const void *ptr = arg_values.back();
+        const void *ptr = dst[i].raw_buffer();
+        args_result.store[arg_index++] = ptr;
         debug(1) << "JIT output buffer @ " << ptr << ", " << dst[i].data() << "\n";
     }
-
-    return arg_values;
 }
 
 std::vector<JITModule>
@@ -873,8 +893,10 @@ void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_m
     // member of the JITFuncCallContext which we will declare now:
 
     void *user_context_storage = nullptr;
-    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map,
-                                                           &user_context_storage, false);
+    JITCallArgs args(contents->inferred_args.size() + dst.size());
+    prepare_jit_call_arguments(dst, target, param_map,
+                               &user_context_storage, false, args);
+
     // This has to happen after a runtime has been compiled.
     JITFuncCallContext jit_context(jit_handlers());
     user_context_storage = &jit_context.jit_context;
@@ -917,7 +939,7 @@ void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_m
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = contents->jit_module.argv_function()(&(args[0]));
+    int exit_status = contents->jit_module.argv_function()(args.store);
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -944,8 +966,10 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
     Target target = get_jit_target_from_environment();
 
     void *user_context_storage = nullptr;
-    vector<const void *> args = prepare_jit_call_arguments(dst, target, param_map,
-                                                           &user_context_storage, true);
+    size_t args_size = contents->inferred_args.size() + dst.size();
+    JITCallArgs args(args_size);
+    prepare_jit_call_arguments(dst, target, param_map,
+                               &user_context_storage, true, args);
     // This has to happen after a runtime has been compiled.
     JITFuncCallContext jit_context(jit_handlers());
     user_context_storage = &jit_context.jit_context;
@@ -957,11 +981,11 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
         // it's simpler to use the runtime buffer class.
         Runtime::Buffer<> query, orig;
     };
-    vector<TrackedBuffer> tracked_buffers(args.size());
+    vector<TrackedBuffer> tracked_buffers(args_size);
 
     vector<size_t> query_indices;
     for (size_t i = 0; i < contents->inferred_args.size(); i++) {
-        if (args[i] == nullptr) {
+        if (args.store[i] == nullptr) {
             query_indices.push_back(i);
             InferredArgument ia = contents->inferred_args[i];
             internal_assert(ia.param.defined() && ia.param.is_buffer());
@@ -969,7 +993,7 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
             vector<int> initial_shape(ia.param.dimensions(), 0);
             tracked_buffers[i].query = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
             tracked_buffers[i].orig = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
-            args[i] = tracked_buffers[i].query.raw_buffer();
+            args.store[i] = tracked_buffers[i].query.raw_buffer();
         }
     }
 
@@ -989,7 +1013,7 @@ void Pipeline::infer_input_bounds(Realization dst, const ParamMap &param_map) {
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = contents->jit_module.argv_function()(&(args[0]));
+        int exit_status = contents->jit_module.argv_function()(args.store);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

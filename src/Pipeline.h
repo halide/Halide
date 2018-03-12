@@ -60,8 +60,10 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map,
-                                                         void *user_context, bool is_bounds_inference);
+
+    struct JITCallArgs; // Opaque structure to optimize away dynamic allocation in this path.
+    void prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map,
+                                    void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
