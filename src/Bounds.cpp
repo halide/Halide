@@ -655,6 +655,12 @@ private:
         }
     }
 
+    Expr make_not(Expr e) {
+        if (is_one(e)) return make_zero(e.type());
+        if (is_zero(e)) return make_one(e.type());
+        return !e;
+    }
+
     void visit(const Not *op) {
         op->a.accept(this);
         Interval a = interval;
@@ -664,8 +670,8 @@ private:
         } else if (a.is_single_point()) {
             interval = Interval::single_point(!a.min);
         } else {
-            interval.min = !a.max;
-            interval.max = !a.min;
+            interval.min = make_not(a.max);
+            interval.max = make_not(a.min);
         }
     }
 
