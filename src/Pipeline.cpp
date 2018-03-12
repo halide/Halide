@@ -63,7 +63,6 @@ struct PipelineContents {
         jit_module = JITModule();
         jit_target = Target();
         inferred_args.clear();
-        output_buffer_types.clear();
     }
 
     // The outputs
@@ -86,13 +85,6 @@ struct PipelineContents {
      * function in the jit_module above. The two must be updated
      * together. */
     vector<InferredArgument> inferred_args;
-
-    struct OutputBufferType {
-        Function func;
-        Type type;
-        int dims;
-    };
-    vector<OutputBufferType> output_buffer_types;
 
     /** List of C funtions and Funcs to satisfy HalideExtern* and
      * define_extern calls. */
@@ -445,13 +437,6 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Come up with a name for the generated function
     string name = generate_function_name();
 
-    // Flatten output buffer types info to speed up realize calls
-    for (Function f : contents->outputs) {
-        for (Type t : f.output_types()) {
-            contents->output_buffer_types.push_back({f, t, f.dimensions()});
-        }
-    }
-
     // Compile to a module and also compile any submodules.
     Module module = compile_to_module(args, name, target).resolve_submodules();
     auto f = module.get_function_by_name(name);
@@ -723,36 +708,6 @@ void Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
-    user_assert(contents->output_buffer_types.size() == dst.size())
-        << "Realization contains wrong number of Images (" << dst.size()
-        << ") for realizing pipeline with " << contents->output_buffer_types.size()
-        << " outputs\n";
-
-    // Check the type and dimensionality of the buffer
-    for (size_t i = 0; i < dst.size(); i++) {
-        Function &func = contents->output_buffer_types[i].func;
-        int  dims = contents->output_buffer_types[i].dims;
-        Type &type = contents->output_buffer_types[i].type;
-        user_assert(dst[i].dimensions() == dims)
-            << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].data()
-            << " because Buffer is " << dst[i].dimensions()
-            << "-dimensional, but Func \"" << func.name()
-            << "\" is " << dims << "-dimensional.\n";
-        // For our purposes here, consider all Handle types equivalent:
-        // Buffer<> doesn't retain handle-traits (thus it collapses all
-        // all Handle types into void*), but Func does not, so we can have
-        // confusing cases where Buffer<char*> is not "compatible" with Func<char*>.
-        // (Buffer-of-handle-type is a degenerate case anyway...)
-        user_assert(dst[i].type() == type ||
-                    (dst[i].type().is_handle() && type.is_handle()))
-            << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].data()
-            << " because Buffer has type " << Type(dst[i].type())
-            << ", but Func \"" << func.name()
-            << "\" has type " << type << ".\n";
-    }
-
     // Come up with the void * arguments to pass to the argv function
     size_t arg_index = 0;
     for (const InferredArgument &arg : contents->inferred_args) {
@@ -784,7 +739,7 @@ void Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target,
         } else {
             debug(1) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
-            args_result.store[arg_index++] = (void *)arg.buffer.raw_buffer();
+            args_result.store[arg_index++] = arg.buffer.raw_buffer();
         }
         const void *ptr = args_result.store[arg_index - 1];
         debug(1) << arg.arg.name << " @ " << ptr << "\n";
