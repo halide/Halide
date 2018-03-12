@@ -31,12 +31,16 @@ else()
   endif()
 endif()
 
+if("${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "40")
+  message(WARNING "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***")
+endif()
+
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
-  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # LLVM5.x on Windows can include "$(Configuration)" in the path;
   # fix this so we can use the paths right away.
   string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
 endif()
@@ -94,6 +98,11 @@ function(check_tool_exists NAME PATH)
   # Need to convert to CMake path so that backslashes don't get
   # interpreted as an escape.
   file(TO_CMAKE_PATH "${PATH}" TOOL_PATH)
+  if (MSVC)
+    # LLVM5.x on Windows can include "$(Configuration)" in the path;
+    # fix this so we can use the paths right away.
+    string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} TOOL_PATH "${TOOL_PATH}")
+  endif()
   if (NOT EXISTS "${TOOL_PATH}")
     message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
   endif()
@@ -207,6 +216,7 @@ else()
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
   add_compile_options(/wd4503)  # disable "decorated name length exceeded, name was truncated"
   add_compile_options(/wd4267)  # disable "conversion from 'size_t' to 'int', possible loss of data"
+  add_compile_options(/wd4800)  # forcing value to bool 'true' or 'false' (performance warning)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
   endif()

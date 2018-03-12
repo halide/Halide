@@ -128,7 +128,7 @@ def main():
         # using a helper function from the BoundaryConditions
         # namespace like so:
         #
-        # clamped = BoundaryConditions::hl.repeat_edge(input)
+        # clamped = hl.BoundaryConditions.repeat_edge(input)
         #
         # These are important to use for other boundary conditions,
         # because they are expressed in the way that Halide can best

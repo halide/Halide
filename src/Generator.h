@@ -675,7 +675,16 @@ public:
     void set_from_string(const std::string &new_value_string) override {
         std::istringstream iss(new_value_string);
         T t;
-        iss >> t;
+        // All one-byte ints int8 and uint8 should be parsed as integers, not chars --
+        // including 'char' itself. (Note that sizeof(bool) is often-but-not-always-1,
+        // so be sure to exclude that case.)
+        if (sizeof(T) == sizeof(char) && !std::is_same<T, bool>::value) {
+            int i;
+            iss >> i;
+            t = (T) i;
+        } else {
+            iss >> t;
+        }
         user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << new_value_string;
         this->set(t);
     }
@@ -1178,8 +1187,8 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_) {}
-    StubInput(const Func &f) : kind_(IOKind::Function), func_(f) {}
-    StubInput(const Expr &e) : kind_(IOKind::Scalar), expr_(e) {}
+    StubInput(const Func &f) : kind_(IOKind::Function), parameter_(), func_(f) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), parameter_(), expr_(e) {}
 
 private:
     friend class GeneratorInputBase;
@@ -1441,8 +1450,6 @@ protected:
         }
     }
 
-    static_assert(!std::is_array<T>::value, "Input<Buffer<>[]> is not a legal construct.");
-
     template<typename T2>
     inline T2 as() const {
         return (T2) *this;
@@ -1457,7 +1464,8 @@ public:
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!TBase::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
+        user_error << "You cannot specify a Type argument for Input<Buffer<T>> '"
+            << name << "'; specify a static type instead.";
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
@@ -1476,7 +1484,8 @@ public:
 
     template<typename T2>
     operator StubInputBuffer<T2>() const {
-        return StubInputBuffer<T2>(this->parameter());
+        user_assert(!this->is_array()) << "Cannot assign an array type to a non-array type for Input " << this->name();
+        return StubInputBuffer<T2>(this->parameters_.at(0));
     }
 
     operator Func() const {
@@ -1505,7 +1514,8 @@ public:
     }
 
     operator ImageParam() const {
-        return ImageParam(this->parameter(), Func(*this));
+        user_assert(!this->is_array()) << "Cannot convert an Input<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
+        return ImageParam(this->parameters_.at(0), Func(*this));
     }
 
     /** Forward methods to the ImageParam. */
@@ -1853,6 +1863,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, compute_at)
     HALIDE_FORWARD_METHOD(Func, compute_inline)
     HALIDE_FORWARD_METHOD(Func, compute_root)
+    HALIDE_FORWARD_METHOD(Func, compute_with)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, estimate)
@@ -1917,8 +1928,6 @@ protected:
     friend class GeneratorBase;
     friend class StubEmitter;
 
-    Parameter parameter() const;
-
     void init_internals();
     void resize(size_t size);
 
@@ -1979,6 +1988,11 @@ public:
         return get_values<ValueType>().at(0);
     }
 
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    operator Stage() const {
+        return get_values<ValueType>().at(0);
+    }
+
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     size_t size() const {
         return get_values<ValueType>().size();
@@ -2025,7 +2039,7 @@ private:
 
         const auto &output_types = f.output_types();
         user_assert(output_types.size() == 1)
-            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
+            << "Output " << this->name() << " should have size=1 but saw size=" << output_types.size() << "\n";
 
         Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
         user_assert(T::can_convert_from(other))
@@ -2034,11 +2048,11 @@ private:
 
         if (this->types_defined()) {
             user_assert(output_types.at(0) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
-                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
+                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2049,29 +2063,19 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    static_assert(!std::is_array<T>::value, "Output<Buffer<>[]> is not a legal construct.");
+    static std::vector<Type> my_types() {
+        return TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{};
+    }
 
 protected:
-    GeneratorOutput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer,
-                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{},
-                -1) {
+    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
+        : Super(name, IOKind::Buffer, my_types(), d) {
+        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
     }
 
-    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
-        : Super(name, IOKind::Buffer,
-                TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : t,
-                d) {
-        if (TBase::has_static_halide_type) {
-            user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
-        } else {
-            user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
-        }
-    }
-
-    GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ TBase::static_halide_type() }, d) {
-        static_assert(TBase::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
+    GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t = {}, int d = -1)
+        : Super(array_size, name, IOKind::Buffer, my_types(), d) {
+        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
     }
 
     NO_INLINE std::string get_c_type() const override {
@@ -2107,11 +2111,11 @@ public:
 
         if (this->types_defined()) {
             user_assert(Type(buffer.type()) == this->type())
-                << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(buffer.dimensions() == this->dims())
-                << "Output should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
+                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2428,13 +2432,8 @@ public:
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
-                              const MachineParams &machine_params = MachineParams::generic()) :
-        target("target", t),
-        auto_schedule("auto_schedule", auto_schedule),
-        machine_params("machine_params", machine_params),
-        externs_map(std::make_shared<ExternsMap>()),
-        value_tracker(std::make_shared<Internal::ValueTracker>()) {}
-    virtual ~GeneratorContext() {}
+                              const MachineParams &machine_params = MachineParams::generic());
+    virtual ~GeneratorContext();
 
     inline Target get_target() const { return target; }
     inline bool get_auto_schedule() const { return auto_schedule; }
@@ -2480,13 +2479,7 @@ protected:
 
     GeneratorContext() : GeneratorContext(Target()) {}
 
-    inline void init_from_context(const Halide::GeneratorContext &context) {
-        target.set(context.get_target());
-        auto_schedule.set(context.get_auto_schedule());
-        machine_params.set(context.get_machine_params());
-        value_tracker = context.get_value_tracker();
-        externs_map = context.get_externs_map();
-    }
+    virtual void init_from_context(const Halide::GeneratorContext &context);
 
     inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
         return value_tracker;
@@ -2574,6 +2567,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -2605,7 +2599,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
-                        const LoweredFunc::LinkageType linkage_type = LoweredFunc::ExternalPlusMetadata);
+                        const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
@@ -2655,6 +2649,8 @@ public:
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
+
+    void init_from_context(const Halide::GeneratorContext &context) override;
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_generate() = 0;
@@ -2721,7 +2717,7 @@ private:
         // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
         // Must be empty if the Generator has a build() method rather than generate()/schedule().
         // Only one of filter_inputs and filter_params may be nonempty.
-        std::vector<Internal::Parameter *> filter_params;
+        std::vector<Internal::RegisteredParameter *> filter_params;
 
         // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
@@ -2772,12 +2768,6 @@ private:
     // array-of-Func output. If no such name exists (or is non-array), assert;
     // this method never returns undefined Funcs.
     std::vector<Func> get_array_output(const std::string &n);
-
-    // Return a vector of all Outputs of this Generator; non-array outputs are returned
-    // as a vector-of-size-1. This method is primarily useful for code that needs
-    // to iterate through the outputs of unknown, arbitrary Generators (e.g.,
-    // the Python bindings).
-    std::vector<std::vector<Func>> get_all_outputs();
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3150,7 +3140,7 @@ public:
                          GeneratorFactory generator_factory,
                          const GeneratorParamsMap &generator_params,
                          const std::vector<std::vector<Internal::StubInput>> &inputs);
-    void generate(const GeneratorParamsMap &generator_params,
+    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
                          const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
@@ -3164,12 +3154,18 @@ public:
         return T2(get_output(n), generator);
     }
 
-    std::vector<Func> get_array_output(const std::string &n) const {
-        return generator->get_array_output(n);
+    template<typename T2>
+    std::vector<T2> get_array_output_buffer(const std::string &n) const {
+        auto v =  generator->get_array_output(n);
+        std::vector<T2> result;
+        for (auto &o : v) {
+            result.push_back(T2(o, generator));
+        }
+        return result;
     }
 
-    std::vector<std::vector<Func>> get_all_outputs() const {
-        return generator->get_all_outputs();
+    std::vector<Func> get_array_output(const std::string &n) const {
+        return generator->get_array_output(n);
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
@@ -3193,7 +3189,7 @@ public:
     }
 
     struct Names {
-        std::vector<std::string> generator_params, inputs, outputs;
+        std::vector<std::string> generator_params, filter_params, inputs, outputs;
     };
     Names get_names() const;
 

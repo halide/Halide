@@ -2,14 +2,19 @@ from __future__ import print_function
 from __future__ import division
 
 import halide as hl
+
 import simplestub
 # test alternate-but-legal syntax
 from complexstub import generate as complexstub
 
+import buildmethod
+import partialbuildmethod
+import nobuildmethod
+
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
     f.realize(b)
-    
+
     assert b[0, 0] == 3.5 + offset + 123
     assert b[0, 1] == 4.5 + offset + 123
     assert b[1, 0] == 4.5 + offset + 123
@@ -154,7 +159,7 @@ def test_complexstub():
     float_arg = 1.25
     int_arg = 33
 
-    r = complexstub(target, 
+    r = complexstub(target,
                     typed_buffer_input=constant_image,
                     untyped_buffer_input=constant_image,
                     simple_input=input,
@@ -166,11 +171,11 @@ def test_complexstub():
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
-    (simple_output, 
-        tuple_output, 
-        array_output, 
-        typed_buffer_output, 
-        untyped_buffer_output, 
+    (simple_output,
+        tuple_output,
+        array_output,
+        typed_buffer_output,
+        untyped_buffer_output,
         static_compiled_buffer_output) = r
 
     b = simple_output.realize(32, 32, 3, target)
@@ -237,7 +242,56 @@ def test_complexstub():
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 
+def test_buildmethod():
+    x, y, c = hl.Var(), hl.Var(), hl.Var()
+    target = hl.get_jit_target_from_environment()
+
+    b_in = hl.Buffer(hl.Float(32), [2, 2])
+    b_in.fill(123)
+
+    b_out = hl.Buffer(hl.Int(32), [2, 2])
+
+    try:
+        f = buildmethod.generate(target, b_in, 1)
+    except RuntimeError as e:
+        assert "Generators that use ImageParam/Param (instead of Input<>) are not supported in the Python bindings." in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+def test_partialbuildmethod():
+    x, y, c = hl.Var(), hl.Var(), hl.Var()
+    target = hl.get_jit_target_from_environment()
+
+    b_in = hl.Buffer(hl.Float(32), [2, 2])
+    b_in.fill(123)
+
+    b_out = hl.Buffer(hl.Int(32), [2, 2])
+
+    try:
+        f = partialbuildmethod.generate(target, b_in, 1)
+    except RuntimeError as e:
+        assert "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings." in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+def test_nobuildmethod():
+    x, y, c = hl.Var(), hl.Var(), hl.Var()
+    target = hl.get_jit_target_from_environment()
+
+    b_in = hl.Buffer(hl.Float(32), [2, 2])
+    b_in.fill(123)
+
+    b_out = hl.Buffer(hl.Int(32), [2, 2])
+
+    f = nobuildmethod.generate(target, b_in, 1.0)
+    f.realize(b_out)
+
+    assert b_out.all_equal(123)
+
 if __name__ == "__main__":
     test_simplestub()
     test_looplevel()
     test_complexstub()
+    test_buildmethod()
+    test_partialbuildmethod()
+    test_nobuildmethod()

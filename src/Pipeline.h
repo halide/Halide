@@ -60,7 +60,8 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map, bool is_bounds_inference);
+    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map,
+                                                         void *user_context, bool is_bounds_inference);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -87,7 +88,7 @@ public:
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the
-     * realization order. */
+     * topological order. */
     Func get_func(size_t index);
 
     /** Compile and generate multiple target files with single call.
@@ -200,7 +201,7 @@ public:
     Module compile_to_module(const std::vector<Argument> &args,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment(),
-                             const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::ExternalPlusMetadata);
+                             const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
