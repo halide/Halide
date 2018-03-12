@@ -408,7 +408,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     target.set_feature(Target::JIT);
     target.set_feature(Target::UserContext);
 
-    debug(2) << "jit-compiling for: " << target_arg.to_string() << "\n";
+    debug(2) << "jit-compiling for: " << target_arg << "\n";
 
     // If we're re-jitting for the same target, we can just keep the
     // old jit module.
