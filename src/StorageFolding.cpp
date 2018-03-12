@@ -1,4 +1,5 @@
 #include "StorageFolding.h"
+#include "CSE.h"
 #include "IROperator.h"
 #include "IRMutator.h"
 #include "Simplify.h"
@@ -291,8 +292,6 @@ public:
           dim(dim), storage_dim(storage_dim) {}
 };
 
-
-
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
@@ -334,7 +333,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             int dim = (int)(i-1);
             Expr min = simplify(box[dim].min);
             Expr max = simplify(box[dim].max);
-            Expr extent = simplify(max - min + 1);
+
+            // Consider the initial iteration and steady state
+            // separately for all these proofs.
+            Expr loop_var = Variable::make(Int(32), op->name);
+            Expr steady_state = (op->min < loop_var);
+
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min));
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max));
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min));
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max));
+            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1));
+            Expr extent_steady = simplify(max_steady - min_steady + 1);
+            Expr extent = Max::make(extent_initial, extent_steady);
+            extent = simplify(common_subexpression_elimination(extent));
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
@@ -351,15 +363,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
-                     << "Max: " << max << '\n';
+                     << "Max: " << max << '\n'
+                     << "Extent: " << extent << '\n';
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
-            bool min_monotonic_increasing = !explicit_only &&
-                (is_monotonic(min, op->name) == Monotonic::Increasing);
+            bool min_monotonic_increasing =
+                (!explicit_only &&
+                 is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
+                 can_prove(min_steady >= min_initial));
 
-            bool max_monotonic_decreasing = !explicit_only &&
-                (is_monotonic(max, op->name) == Monotonic::Decreasing);
+            bool max_monotonic_decreasing =
+                (!explicit_only &&
+                 is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
+                 can_prove(max_steady <= max_initial));
 
             if (explicit_factor.defined()) {
                 bool can_skip_dynamic_checks =
@@ -452,8 +469,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 }
             } else {
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                         << "min = " << min << "\n"
-                         << "max = " << max << "\n";
+                         << "min_initial = " << min_initial << "\n"
+                         << "min_steady = " << min_steady << "\n"
+                         << "max_initial = " << max_initial << "\n"
+                         << "max_steady = " << max_steady << "\n";
             }
         }
 
