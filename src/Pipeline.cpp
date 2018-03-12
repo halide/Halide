@@ -414,7 +414,7 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // old jit module.
     if (contents->jit_target == target &&
         contents->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target.to_string() << "\n";
+        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target << "\n";
         return contents->jit_module.main_function();
     }
     // Clear all cached info in case there is an error.
@@ -806,7 +806,7 @@ void Pipeline::realize(Realization dst, const Target &t, const ParamMap &param_m
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    debug(2) << "Realizing Pipeline for " << target.to_string() << "\n";
+    debug(2) << "Realizing Pipeline for " << target << "\n";
 
     for (size_t i = 0; i < dst.size(); i++) {
         user_assert(dst[i].data() != nullptr)
