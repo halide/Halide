@@ -755,10 +755,13 @@ public:
      * automatically copy data back from the GPU. */
     // @{
     void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    template <typename T>
-    void realize(Buffer<T> &buf, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        Realization r(buf);
-        realize(r, target, param_map);
+    template<typename T, int D>
+    NO_INLINE void realize(Runtime::Buffer<T, D> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
+        pipeline().realize(dst, target, param_map);
+    }
+    template<typename T>
+    NO_INLINE void realize(Buffer<T> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
+        pipeline().realize(dst, target, param_map);
     }
     // @}
 
@@ -789,6 +792,14 @@ public:
     // @{
     void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap::empty);
     void infer_input_bounds(Realization &dst, const ParamMap &param_map = ParamMap::empty);
+    template<typename T, int D>
+    NO_INLINE void infer_input_bounds(Runtime::Buffer<T, D> &dst, const ParamMap &param_map = ParamMap::empty) {
+        pipeline().infer_input_bounds(dst, param_map);
+    }
+    template<typename T>
+    NO_INLINE void infer_input_bounds(Buffer<T> &dst, const ParamMap &param_map = ParamMap::empty) {
+        pipeline().infer_input_bounds(dst, param_map);
+    }
     // @}
 
     /** Statically compile this function to llvm bitcode, with the

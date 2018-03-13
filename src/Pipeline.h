@@ -62,7 +62,12 @@ class Pipeline {
     std::vector<Argument> infer_arguments(Internal::Stmt body);
 
     struct JITCallArgs; // Opaque structure to optimize away dynamic allocation in this path.
-    void prepare_jit_call_arguments(Realization &dst, const Target &target, const ParamMap &param_map,
+
+    // For the three method below, precisely one of the first two args should be non-null
+    void realize_helper(Realization *r, halide_buffer_t *buf, const Target &target, const ParamMap &param_map);
+    void infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, const ParamMap &param_map);
+    void prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
+                                    const Target &target, const ParamMap &param_map,
                                     void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -379,11 +384,16 @@ public:
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
     // @{
-    void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
+    NO_INLINE void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
+        realize_helper(&dst, nullptr, target, param_map);
+    }
+    template<typename T, int D>
+    NO_INLINE void realize(Runtime::Buffer<T, D> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
+        realize_helper(nullptr, dst.raw_buffer(), target, param_map);
+    }
     template <typename T>
-    void realize(Buffer<T> &buf, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        Realization r(buf);
-        realize(r, target, param_map);
+    NO_INLINE void realize(Buffer<T> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
+        realize_helper(nullptr, dst.raw_buffer(), target, param_map);
     }
     // @}
 
@@ -394,7 +404,17 @@ public:
      * ImageParams. */
     // @{
     void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap::empty);
-    void infer_input_bounds(Realization &dst, const ParamMap &param_map = ParamMap::empty);
+    NO_INLINE void infer_input_bounds(Realization &dst, const ParamMap &param_map = ParamMap::empty) {
+        infer_input_bounds_helper(&dst, nullptr, param_map);
+    }
+    template<typename T, int D>
+    NO_INLINE void infer_input_bounds(Runtime::Buffer<T, D> &dst, const ParamMap &param_map = ParamMap::empty) {
+        infer_input_bounds_helper(nullptr, dst.raw_buffer(), param_map);
+    }
+    template<typename T>
+    NO_INLINE void infer_input_bounds(Buffer<T> &dst, const ParamMap &param_map = ParamMap::empty) {
+        infer_input_bounds_helper(nullptr, dst.raw_buffer(), param_map);
+    }
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
@@ -416,6 +436,7 @@ public:
     void invalidate_cache();
 
 private:
+
     std::string generate_function_name() const;
 };
 

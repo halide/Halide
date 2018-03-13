@@ -676,7 +676,6 @@ struct JITFuncCallContext {
 
 struct Pipeline::JITCallArgs {
     size_t size{0};
-    const void *fixed_store[64];
     const void **store;
 
     JITCallArgs(size_t size) : size(size) {
@@ -688,18 +687,25 @@ struct Pipeline::JITCallArgs {
         }
     }
 
-  ~JITCallArgs() {
-      if (store != fixed_store) {
-          free(store);
-      }
+    ~JITCallArgs() {
+        if (store != fixed_store) {
+            free(store);
+        }
     }
+
+private:
+    const void *fixed_store[64];
+    JITCallArgs(const JITCallArgs &) = delete;
+    JITCallArgs(JITCallArgs &&) = delete;
+    void operator=(const JITCallArgs &) = delete;
 };
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-void Pipeline::prepare_jit_call_arguments(Realization &dst, const Target &target,
-                                          const ParamMap &param_map, void *user_context,
+void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
+                                          const Target &target, const ParamMap &param_map,
+                                          void *user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -707,6 +713,8 @@ void Pipeline::prepare_jit_call_arguments(Realization &dst, const Target &target
 
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
+
+    const bool no_param_map = (&param_map == &ParamMap::empty);
 
     // Come up with the void * arguments to pass to the argv function
     size_t arg_index = 0;
@@ -716,20 +724,14 @@ void Pipeline::prepare_jit_call_arguments(Realization &dst, const Target &target
                 args_result.store[arg_index++] = user_context;
             } else {
                 Buffer<> *buf_out_param;
-                const Parameter &p = param_map.map(arg.param, buf_out_param);
+                const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
                 if (!is_bounds_inference) {
                     user_assert(buf_out_param == nullptr) << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
                 }
 
                 if (p.is_buffer()) {
                     // ImageParam arg
-                    Buffer<> buf = p.buffer();
-                    if (buf.defined()) {
-                        args_result.store[arg_index++] = buf.raw_buffer();
-                    } else {
-                        // Unbound
-                        args_result.store[arg_index++] = nullptr;
-                    }
+                    args_result.store[arg_index++] = p.raw_buffer();
                     debug(1) << "JIT input ImageParam argument ";
                 } else {
                     args_result.store[arg_index++] = p.scalar_address();
@@ -746,10 +748,15 @@ void Pipeline::prepare_jit_call_arguments(Realization &dst, const Target &target
     }
 
     // Then the outputs
-    for (size_t i = 0; i < dst.size(); i++) {
-        const void *ptr = dst[i].raw_buffer();
-        args_result.store[arg_index++] = ptr;
-        debug(1) << "JIT output buffer @ " << ptr << ", " << dst[i].data() << "\n";
+    if (r) {
+        for (size_t i = 0; i < r->size(); i++) {
+            const halide_buffer_t *buf = (*r)[i].raw_buffer();
+            args_result.store[arg_index++] = buf;
+            debug(1) << "JIT output buffer @ " << (void *)buf << ", " << buf->host << "\n";
+        }
+    } else {
+        args_result.store[arg_index++] = buf;
+        debug(1) << "JIT output buffer @ " << (void *)buf << ", " << buf->host << "\n";
     }
 }
 
@@ -802,16 +809,22 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize(Realization &dst, const Target &t, const ParamMap &param_map) {
+void Pipeline::realize_helper(Realization *r, halide_buffer_t *buf, const Target &t, const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
-    for (size_t i = 0; i < dst.size(); i++) {
-        user_assert(dst[i].data() != nullptr)
-            << "Buffer at " << &(dst[i]) << " is unallocated. "
-            << "The Buffers in a Realization passed to realize must all be allocated\n";
+    if (r) {
+        for (size_t i = 0; i < r->size(); i++) {
+            user_assert((*r)[i].data() != nullptr)
+                << "Buffer at " << &((*r)[i]) << " is unallocated. "
+                << "The Buffers in a Realization passed to realize must all be allocated\n";
+        }
+    } else {
+        user_assert(buf && (buf->host || buf->device))
+            << "Buffer at " << (void *)buf << " is unallocated. "
+            << "The Buffers passed to realize must all be allocated\n";
     }
 
     // If target is unspecified...
@@ -848,8 +861,8 @@ void Pipeline::realize(Realization &dst, const Target &t, const ParamMap &param_
     // member of the JITFuncCallContext which we will declare now:
 
     void *user_context_storage = nullptr;
-    JITCallArgs args(contents->inferred_args.size() + dst.size());
-    prepare_jit_call_arguments(dst, target, param_map,
+    JITCallArgs args(contents->inferred_args.size() + (r ? r->size() : 1));
+    prepare_jit_call_arguments(r, buf, target, param_map,
                                &user_context_storage, false, args);
 
     // This has to happen after a runtime has been compiled.
@@ -916,14 +929,14 @@ void Pipeline::realize(Realization &dst, const Target &t, const ParamMap &param_
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(Realization &dst, const ParamMap &param_map) {
+void Pipeline::infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, const ParamMap &param_map) {
 
     Target target = get_jit_target_from_environment();
 
     void *user_context_storage = nullptr;
-    size_t args_size = contents->inferred_args.size() + dst.size();
+    size_t args_size = contents->inferred_args.size() + (r ? r->size() : 1);
     JITCallArgs args(args_size);
-    prepare_jit_call_arguments(dst, target, param_map,
+    prepare_jit_call_arguments(r, buf, target, param_map,
                                &user_context_storage, true, args);
     // This has to happen after a runtime has been compiled.
     JITFuncCallContext jit_context(jit_handlers());

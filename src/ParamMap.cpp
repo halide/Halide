@@ -48,6 +48,6 @@ Internal::Parameter &ParamMap::map(Internal::Parameter &p, Buffer<> *&buf_out_pa
     }
 }
 
-ParamMap ParamMap::empty;
+const ParamMap ParamMap::empty;
 
 }

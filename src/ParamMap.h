@@ -94,7 +94,7 @@ public:
     Internal::Parameter &map(Internal::Parameter &p, Buffer<> *&buf_out_param) const;
     // @}
 
-    static ParamMap empty;
+    static const ParamMap empty;
 };
 
 }
