@@ -723,11 +723,10 @@ void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
             if (arg.param.same_as(contents->user_context_arg.param)) {
                 args_result.store[arg_index++] = user_context;
             } else {
-                Buffer<> *buf_out_param;
+                Buffer<> *buf_out_param = nullptr;
                 const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
-                if (!is_bounds_inference) {
-                    user_assert(buf_out_param == nullptr) << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
-                }
+                user_assert(is_bounds_inference || !buf_out_param)
+                    << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
 
                 if (p.is_buffer()) {
                     // ImageParam arg
@@ -752,11 +751,11 @@ void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
         for (size_t i = 0; i < r->size(); i++) {
             const halide_buffer_t *buf = (*r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
         }
     } else {
         args_result.store[arg_index++] = buf;
-        debug(1) << "JIT output buffer @ " << (void *)buf << ", " << buf->host << "\n";
+        debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
     }
 }
 
