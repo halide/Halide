@@ -24,7 +24,11 @@
 #include "PyType.h"
 #include "PyVar.h"
 
-PYBIND11_MODULE(halide, m) {
+#ifndef HALIDE_PYBIND_MODULE_NAME
+  #define HALIDE_PYBIND_MODULE_NAME halide
+#endif
+
+PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     using namespace Halide::PythonBindings;
 
     // Order of definitions matters somewhat:
