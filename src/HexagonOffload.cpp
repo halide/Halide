@@ -794,7 +794,7 @@ class InjectHexagonRpc : public IRMutator2 {
             }
             args.push_back(arg);
         }
-        device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::ExternalPlusMetadata));
+        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
 
         // Generate a call to hexagon_device_run.
         std::vector<Expr> arg_sizes;

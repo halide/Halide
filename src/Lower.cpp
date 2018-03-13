@@ -74,7 +74,7 @@ using std::vector;
 using std::map;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
-             const vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+             const vector<Argument> &args, const LinkageType linkage_type,
              const vector<IRMutator2 *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -449,7 +449,7 @@ Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::strin
         }
     }
 
-    Module module = lower(output_funcs, pipeline_name, t, args, Internal::LoweredFunc::External, custom_passes);
+    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, custom_passes);
 
     return module.functions().front().body;
 }

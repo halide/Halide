@@ -111,7 +111,7 @@ class WrapExternStages : public IRMutator2 {
 
         // Add the wrapper to the module
         debug(2) << "Wrapped extern call to " << op->name << ":\n" << body << "\n\n";
-        LoweredFunc wrapper(wrapper_name, args, body, LoweredFunc::Internal, NameMangling::C);
+        LoweredFunc wrapper(wrapper_name, args, body, LinkageType::Internal, NameMangling::C);
         module.append(wrapper);
 
         // Return the name
@@ -240,7 +240,7 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
 
     // Add the wrapper to the module.
     debug(2) << "Added legacy wrapper for " << fn.name << ":\n" << body << "\n\n";
-    LoweredFunc wrapper(name, args, body, LoweredFunc::External, NameMangling::Default);
+    LoweredFunc wrapper(name, args, body, LinkageType::External, NameMangling::Default);
     module.append(wrapper);
 }
 
