@@ -1311,7 +1311,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     srand(seed);
 
     string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    size_t beam_size = 1;
+    size_t beam_size = 20;
     if (!beam_size_str.empty()) {
         beam_size = atoi(beam_size_str.c_str());
     }
