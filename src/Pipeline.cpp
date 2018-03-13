@@ -709,8 +709,6 @@ void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    compile_jit(target);
-
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
@@ -859,14 +857,17 @@ void Pipeline::realize_helper(Realization *r, halide_buffer_t *buf, const Target
     // user_context is just a pointer to a JITUserContext, which is a
     // member of the JITFuncCallContext which we will declare now:
 
-    void *user_context_storage = nullptr;
+    // Ensure the module is compiled.
+    compile_jit(target);
+
+    // This has to happen after a runtime has been compiled in compile_jit.
+    JITFuncCallContext jit_context(jit_handlers());
+    void *user_context_storage = &jit_context.jit_context;
+
     JITCallArgs args(contents->inferred_args.size() + (r ? r->size() : 1));
     prepare_jit_call_arguments(r, buf, target, param_map,
                                &user_context_storage, false, args);
 
-    // This has to happen after a runtime has been compiled.
-    JITFuncCallContext jit_context(jit_handlers());
-    user_context_storage = &jit_context.jit_context;
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -932,14 +933,16 @@ void Pipeline::infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, c
 
     Target target = get_jit_target_from_environment();
 
-    void *user_context_storage = nullptr;
+    compile_jit(target);
+
+    // This has to happen after a runtime has been compiled in compile_jit.
+    JITFuncCallContext jit_context(jit_handlers());
+    void *user_context_storage = &jit_context.jit_context;
+
     size_t args_size = contents->inferred_args.size() + (r ? r->size() : 1);
     JITCallArgs args(args_size);
     prepare_jit_call_arguments(r, buf, target, param_map,
                                &user_context_storage, true, args);
-    // This has to happen after a runtime has been compiled.
-    JITFuncCallContext jit_context(jit_handlers());
-    user_context_storage = &jit_context.jit_context;
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
