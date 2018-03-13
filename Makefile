@@ -947,20 +947,6 @@ test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
-# TODO: these are temporary targets added to allow existing buildbot to run without breaking;
-# it will be removed after buildbot is updated.
-.PHONY: test_errors
-test_errors: test_error
-
-.PHONY: test_generators
-test_generators: test_generator
-
-.PHONY: test_tutorials
-test_tutorials: test_tutorial
-
-.PHONY: test_warnings
-test_warnings: test_warning
-
 ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
