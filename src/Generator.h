@@ -1518,6 +1518,31 @@ public:
         return ImageParam(this->parameters_.at(0), Func(*this));
     }
 
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    size_t size() const {
+        return this->parameters_.size();
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const ImageParam operator[](size_t i) const {
+        return ImageParam(this->parameters_.at(i), this->funcs().at(i));
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const ImageParam at(size_t i) const {
+        return ImageParam(this->parameters_.at(i), this->funcs().at(i));
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    typename std::vector<ImageParam>::const_iterator begin() const {
+        user_error << "Input<Buffer<>>::begin() is not supported.";
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    typename std::vector<ImageParam>::const_iterator end() const {
+        user_error << "Input<Buffer<>>::end() is not supported.";
+    }
+
     /** Forward methods to the ImageParam. */
     // @{
     HALIDE_FORWARD_METHOD(ImageParam, dim)
@@ -2143,6 +2168,7 @@ public:
     }
 
     operator OutputImageParam() const {
+        user_assert(!this->is_array()) << "Cannot convert an Output<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
         return this->funcs_.at(0).output_buffer();
     }
