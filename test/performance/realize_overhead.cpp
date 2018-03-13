@@ -145,5 +145,7 @@ int main(int argc, char **argv) {
         std::cout << std::to_string(i) << "-argument Func realize to Buffer time " << t * 1e6 << "us.\n";
     }
 
+    std::cout << "Success!\n";
+
     return 0;
 }
