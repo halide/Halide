@@ -47,7 +47,9 @@ public:
         : env(e),
           trace_all_loads(t.has_feature(Target::TraceLoads)),
           trace_all_stores(t.has_feature(Target::TraceStores)),
-          trace_all_realizations(t.has_feature(Target::TraceRealizations)) {
+          // Set trace_all_realizations to true if either trace_loads or trace_stores is on too:
+          // They don't work without trace_all_realizations being on (and the errors are missing symbol mysterious nonsense).
+          trace_all_realizations(t.features_any_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations})) {
     }
 
 private:
