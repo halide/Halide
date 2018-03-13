@@ -41,25 +41,13 @@ struct TraceEventBuilder {
 class InjectTracing : public IRMutator2 {
 public:
     const map<string, Function> &env;
-    bool trace_all_loads, trace_all_stores, trace_all_realizations;
+    const bool trace_all_loads, trace_all_stores, trace_all_realizations;
 
     InjectTracing(const map<string, Function> &e, const Target &t)
-        : env(e) {
-        trace_all_loads = t.has_feature(Target::TraceLoads);
-        trace_all_stores = t.has_feature(Target::TraceStores);
-        trace_all_realizations = t.has_feature(Target::TraceRealizations);
-
-        // Check for the deprecated tracing level environment var.
-        string global_level = get_env_variable("HL_TRACE");
-        if (!global_level.empty()) {
-            user_warning << "Using HL_TRACE to set a global tracing level "
-                         << "is deprecated. Use the target flags trace_loads, "
-                         << "trace_stores, and trace_realizations instead\n";
-            int l = std::stoi(global_level);
-            trace_all_loads |= l > 2;
-            trace_all_stores |= l > 1;
-            trace_all_realizations |= l > 0;
-        }
+        : env(e),
+          trace_all_loads(t.has_feature(Target::TraceLoads)),
+          trace_all_stores(t.has_feature(Target::TraceStores)),
+          trace_all_realizations(t.has_feature(Target::TraceRealizations)) {
     }
 
 private:

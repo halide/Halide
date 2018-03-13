@@ -1,5 +1,4 @@
 #!/bin/bash
-export HL_TRACE=3
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
 rm -f $1/camera_pipe.avi

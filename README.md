@@ -151,12 +151,9 @@ compiling. Higher numbers will print more detail.
 HL_NUM_THREADS=... specifies the size of the thread pool. This has no
 effect on OS X or iOS, where we just use grand central dispatch.
 
-HL_TRACE=1 injects print statements into compiled Halide code that
-will describe what the program is doing at runtime. Higher values
-print more detail.
-
 HL_TRACE_FILE=... specifies a binary target file to dump tracing data
-into. The output can be parsed programmatically by starting from the
+into (ignored unless at least one `trace_` feature is enabled in HL_TARGET or
+HL_JIT_TARGET). The output can be parsed programmatically by starting from the
 code in utils/HalideTraceViz.cpp
 
 
@@ -337,8 +334,8 @@ To build and run an example app using the Hexagon target,
   3. Build and run an example for Hexagon HVX
 
 #### 1. Obtain and build LLVM and clang v4.0 or later from llvm.org
-The Hexagon backend is currently under development. So it's best to use trunk llvm. 
-These are the same instructions as above for building Clang/LLVM, but for trunk 
+The Hexagon backend is currently under development. So it's best to use trunk llvm.
+These are the same instructions as above for building Clang/LLVM, but for trunk
 Clang/LLVM instead of 4.0.
 
     cd <path to llvm>
