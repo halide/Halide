@@ -310,6 +310,7 @@ SOURCE_FILES = \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AutoSchedule.cpp \
+  AutoScheduleNew.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -446,6 +447,7 @@ HEADER_FILES = \
   AssociativeOpsTable.h \
   Associativity.h \
   AutoSchedule.h \
+  AutoScheduleNew.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
   Bounds.h \

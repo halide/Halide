@@ -252,6 +252,7 @@ set(HEADER_FILES
   AssociativeOpsTable.h
   Associativity.h
   AutoSchedule.h
+  AutoScheduleNew.h  
   AutoScheduleUtils.h
   BoundaryConditions.h
   Bounds.h
@@ -414,6 +415,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AssociativeOpsTable.cpp
   Associativity.cpp
   AutoSchedule.cpp
+  AutoScheduleNew.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
   Bounds.cpp

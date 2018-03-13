@@ -13,6 +13,7 @@
 #include "ParamMap.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
+#include "AutoScheduleNew.h"
 
 using namespace Halide::Internal;
 
@@ -155,7 +156,11 @@ string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_p
     user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
                 target.arch == Target::POWERPC || target.arch == Target::MIPS)
         << "Automatic scheduling is currently supported only on these architectures.";
-    return generate_schedules(contents->outputs, target, arch_params);
+    if (target.has_feature(Target::NewAutoscheduler)) {
+        return generate_schedules_new(contents->outputs, target, arch_params);
+    } else {
+        return generate_schedules(contents->outputs, target, arch_params);
+    }
 }
 
 Func Pipeline::get_func(size_t index) {
