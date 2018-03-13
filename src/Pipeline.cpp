@@ -723,7 +723,7 @@ void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
             if (arg.param.same_as(contents->user_context_arg.param)) {
                 args_result.store[arg_index++] = user_context;
             } else {
-                Buffer<> *buf_out_param;
+                Buffer<> *buf_out_param = nullptr;
                 const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
                 if (!is_bounds_inference) {
                     user_assert(buf_out_param == nullptr) << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
