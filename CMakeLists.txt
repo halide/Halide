@@ -174,6 +174,14 @@ if (HALIDE_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif()
 
+# For in-tree builds, we need to set the input variables for halide.cmake
+# to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
+set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
+set(HALIDE_SRC_DIR "${CMAKE_BINARY_DIR}/src")
+set(HALIDE_TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+set(HALIDE_COMPILER_LIB Halide)
+set(HALIDE_DISTRIB_DIR "/bad-path")
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
@@ -186,8 +194,8 @@ function(halide_project name folder)
     endif()
   endif()
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  target_include_directories("${name}" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  target_include_directories("${name}" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+  target_include_directories("${name}" PRIVATE "${HALIDE_SRC_DIR}")
+  target_include_directories("${name}" PRIVATE "${HALIDE_TOOLS_DIR}")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
@@ -238,12 +246,6 @@ if (OPENMP_FOUND)
   message(STATUS "Found OpenMP")
 endif()
 
-# For in-tree builds, we need to set the input variables for halide.cmake
-# to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
-set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
-set(HALIDE_TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools")
-set(HALIDE_COMPILER_LIB Halide)
-set(HALIDE_DISTRIB_DIR "/bad-path")
 include(halide.cmake)
 
 # -----------------------------------------------------------------------------
