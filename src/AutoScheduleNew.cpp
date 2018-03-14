@@ -786,7 +786,7 @@ struct PartialScheduleNode {
             for (auto t : tilings) {
 
                 // Random dropout. Uncomment to get a random family of plausible schedules.
-                // if (rand() & 3) continue;
+                if (rand() & 3) continue;
 
                 if (parent->is_root()) {
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
@@ -971,7 +971,12 @@ struct PartialScheduleNode {
                             parent.extent = 1;
                         } else {
                             Var outer(parent.var.name() + "o"), inner(parent.var.name() + "i");
-                            Func(func).split(parent.var, outer, inner, (int)factor);
+                            if (parent.extent % factor == 0) {
+                                // TODO: If the actual size doesn't match the estimates, this could make some bad assumptions.
+                                Func(func).split(parent.var, outer, inner, (int)factor, TailStrategy::RoundUp);
+                            } else {
+                                Func(func).split(parent.var, outer, inner, (int)factor, TailStrategy::GuardWithIf);
+                            }
                             v = parent;
                             parent.var = outer;
                             parent.extent = size[i];
@@ -1198,7 +1203,7 @@ struct State {
         debug(0) << "]\n";
         */
 
-        /*
+
         for (const auto &n : dag.nodes) {
             auto it = node_costs.find(&n);
             if (it != node_costs.end()) {
@@ -1210,7 +1215,7 @@ struct State {
         for (const auto &e : dag.edges) {
             debug(0) << "XXXE " << edge_costs[&e] << "\n";
         }
-        */
+
     }
 };
 
