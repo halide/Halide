@@ -1536,11 +1536,13 @@ public:
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     typename std::vector<ImageParam>::const_iterator begin() const {
         user_error << "Input<Buffer<>>::begin() is not supported.";
+        return {};
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     typename std::vector<ImageParam>::const_iterator end() const {
         user_error << "Input<Buffer<>>::end() is not supported.";
+        return {};
     }
 
     /** Forward methods to the ImageParam. */
