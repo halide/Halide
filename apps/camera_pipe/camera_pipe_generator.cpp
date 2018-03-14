@@ -386,9 +386,15 @@ void CameraPipe::generate() {
 
         processed
             .estimate(c, 0, 3)
-            .estimate(x, 0, 2592)
-            .estimate(y, 0, 1968);
+            .estimate(x, 0, 2592 - 32)
+            .estimate(y, 0, 1968 - 48);
 
+
+        // We can generate slightly better code if we know the output is even-size
+        processed
+            .bound(c, 0, 3)
+            .bound(x, 0, ((processed.dim(0).extent())/2)*2)
+            .bound(y, 0, ((processed.dim(1).extent())/2)*2);
     } else {
 
         Expr out_width = processed.width();
