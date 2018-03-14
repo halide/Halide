@@ -3,7 +3,6 @@
 
 using namespace Halide::Runtime::Internal::Qurt;
 
-
 extern "C" {
 extern void *memalign(size_t, size_t);
 
@@ -16,6 +15,12 @@ int halide_host_cpu_count() {
     // Assume a Snapdragon 820
     return 4;
 }
+
+//Wrapper that envelopes and init_flag for initialization 
+typedef struct {
+    qurt_mutex_t mutex;
+    volatile int lock;
+} qurt_mutex_wrapper_t;
 
 namespace {
 struct spawned_thread {
@@ -55,17 +60,25 @@ WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-WEAK void halide_mutex_lock(halide_mutex *mutex) {
-    qurt_mutex_lock((qurt_mutex_t *)mutex);
+WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    //check here if mutex is initialized 
+    if (!(__sync_lock_test_and_set(&pmutex->lock, 1))) {
+        qurt_mutex_init((qurt_mutex_t *)&pmutex->mutex);
+    }
+    qurt_mutex_lock((qurt_mutex_t *)&pmutex->mutex);
 }
 
-WEAK void halide_mutex_unlock(halide_mutex *mutex) {
-    qurt_mutex_unlock((qurt_mutex_t *)mutex);
+WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    qurt_mutex_unlock((qurt_mutex_t *)&pmutex->mutex);
 }
 
-WEAK void halide_mutex_destroy(halide_mutex *mutex) {
-    qurt_mutex_destroy((qurt_mutex_t *)mutex);
-    memset(mutex, 0, sizeof(halide_mutex));
+WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
+    qurt_mutex_wrapper_t *pmutex = (qurt_mutex_wrapper_t *)mutex_arg;
+    qurt_mutex_destroy((qurt_mutex_t *)&pmutex->mutex);
+    __sync_lock_release(&pmutex->lock);
+    memset(mutex_arg, 0, sizeof(halide_mutex));
 }
 
 WEAK void halide_cond_init(struct halide_cond *cond) {
@@ -96,16 +109,6 @@ extern "C" {
 WEAK int halide_do_par_for(void *user_context,
                            halide_task_t task,
                            int min, int size, uint8_t *closure) {
-    qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
-    if (!work_queue.initialized) {
-        // The thread pool asssumes that a zero-initialized mutex can
-        // be locked. Not true on hexagon, and there doesn't seem to
-        // be an init_once mechanism either. In this shim binary, it's
-        // safe to assume that the first call to halide_do_par_for is
-        // done by the main thread, so there's no race condition on
-        // initializing this mutex.
-        qurt_mutex_init(mutex);
-    }
     return halide_default_do_par_for(user_context, task, min, size, (uint8_t *)closure);
 }
 
