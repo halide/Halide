@@ -5500,12 +5500,24 @@ private:
 
         if (new_value.defined() && info.new_uses > 0) {
             // The new name/value may be used
-            result = T::make(new_name, new_value, result);
+            if (info.new_uses == 1) {
+                // This is conservative - there may only be one use
+                // even if info.new_uses > 1, due to repeatedly
+                // revisiting nodes, or cancellations after visiting
+                // nodes.
+                result = mutate(substitute(new_name, new_value, result));
+            } else {
+                result = T::make(new_name, new_value, result);
+            }
         }
 
         if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
-            result = T::make(op->name, value, result);
+            if (info.old_uses == 1 && remove_dead_lets) {
+                result = mutate(substitute(op->name, value, result));
+            } else {
+                result = T::make(op->name, value, result);
+            }
         }
 
         // Don't needlessly make a new Let/LetStmt node.  (Here's a
