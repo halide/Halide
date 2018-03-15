@@ -33,14 +33,17 @@ $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -DNO_AUTO_SCHEDULE -I$(BIN)/viz -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
-../../bin/HalideTraceViz:
+../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
 $(BIN)/local_laplacian.mp4: $(BIN)/process_viz ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash viz.sh
+	bash viz.sh $(BIN)
 
 clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/out.png
+
+viz: $(BIN)/local_laplacian.mp4
+	mplayer $^
