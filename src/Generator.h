@@ -1524,12 +1524,12 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    const ImageParam operator[](size_t i) const {
+    ImageParam operator[](size_t i) const {
         return ImageParam(this->parameters_.at(i), this->funcs().at(i));
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    const ImageParam at(size_t i) const {
+    ImageParam at(size_t i) const {
         return ImageParam(this->parameters_.at(i), this->funcs().at(i));
     }
 
