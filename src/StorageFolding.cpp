@@ -345,8 +345,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr max_initial = simplify(substitute(steady_state, const_false(), max));
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1));
             Expr extent_steady = simplify(max_steady - min_steady + 1);
-            Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent));
+            Expr extent = simplify(Max::make(extent_initial, extent_steady));
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
@@ -364,19 +363,26 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n'
+                     << "Min steady: " << min_steady << '\n'
+                     << "Max steady: " << max_steady << '\n'
+                     << "Min initial: " << min_initial << '\n'
+                     << "Max initial: " << max_initial << '\n'
+                     << "Min monotonic: " << simplify(min_steady >= min_initial) << '\n'
                      << "Extent: " << extent << '\n';
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
             bool min_monotonic_increasing =
                 (!explicit_only &&
-                 is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
-                 can_prove(min_steady >= min_initial));
+                 (is_monotonic(min, op->name) == Monotonic::Increasing ||
+                  (is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
+                   can_prove(min_steady >= min_initial))));
 
             bool max_monotonic_decreasing =
                 (!explicit_only &&
-                 is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
-                 can_prove(max_steady <= max_initial));
+                 (is_monotonic(max, op->name) == Monotonic::Decreasing ||
+                  (is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
+                   can_prove(max_steady <= max_initial))));
 
             if (explicit_factor.defined()) {
                 bool can_skip_dynamic_checks =
