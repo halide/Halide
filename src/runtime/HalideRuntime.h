@@ -1486,6 +1486,7 @@ struct halide_profiler_pipeline_stats {
 };
 
 /** The global state of the profiler. */
+
 struct halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
@@ -1516,6 +1517,9 @@ struct halide_profiler_state {
 
     /** Is the profiler thread running. */
     bool started;
+
+    /** Sampling thread reference to be joined at shutdown. */
+    struct halide_thread *sampling_thread;
 };
 
 /** Profiler func ids with special meanings. */
