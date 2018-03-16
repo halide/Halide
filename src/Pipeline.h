@@ -65,6 +65,7 @@ public:
         std::unique_ptr<std::vector<Buffer<>>> buffer_list;
 
         RealizationArg(Realization &r) : r(&r) { }
+        RealizationArg(Realization &&r) : r(&r) { }
         RealizationArg(halide_buffer_t *buf) : buf(buf) { }
         template<typename T, int D>
         NO_INLINE RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
