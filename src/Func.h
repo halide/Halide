@@ -735,16 +735,18 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size, int y_size, int z_size, int w_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size, int y_size, int z_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size, int y_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, int y_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -753,18 +755,8 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    // @{
-    void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    template<typename T, int D>
-    NO_INLINE void realize(Runtime::Buffer<T, D> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        pipeline().realize(dst, target, param_map);
-    }
-    template<typename T>
-    NO_INLINE void realize(Buffer<T> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        pipeline().realize(dst, target, param_map);
-    }
-    // @}
-
+    void realize(Pipeline::RealizationArg outputs, const Target &target = Target(),
+                 Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -790,16 +782,10 @@ public:
      * to evaulate f over a 10x10 region.
      */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap::empty);
-    void infer_input_bounds(Realization &dst, const ParamMap &param_map = ParamMap::empty);
-    template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Runtime::Buffer<T, D> &dst, const ParamMap &param_map = ParamMap::empty) {
-        pipeline().infer_input_bounds(dst, param_map);
-    }
-    template<typename T>
-    NO_INLINE void infer_input_bounds(Buffer<T> &dst, const ParamMap &param_map = ParamMap::empty) {
-        pipeline().infer_input_bounds(dst, param_map);
-    }
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    void infer_input_bounds(Pipeline::RealizationArg outputs,
+                            Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the

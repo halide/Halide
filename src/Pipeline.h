@@ -57,6 +57,36 @@ struct JITExtern;
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
 class Pipeline {
+public:
+    struct RealizationArg {
+        // Only one of the following may be non-null
+        Realization *r{nullptr};
+        halide_buffer_t *buf{nullptr};
+        std::unique_ptr<std::vector<Buffer<>>> buffer_list;
+
+        RealizationArg(Realization &r) : r(&r) { }
+        RealizationArg(halide_buffer_t *buf) : buf(buf) { }
+        template<typename T, int D>
+        NO_INLINE RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
+        template <typename T>
+        NO_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
+        template<typename T, typename ...Args,
+                 typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
+            RealizationArg(Buffer<T> &a, Args&&... args) {
+            buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
+        }
+        RealizationArg(RealizationArg &&from) = default;
+
+        size_t size() {
+            if (r != nullptr) {
+                return r->size();
+            } else if (buffer_list) {
+                return buffer_list->size();
+            }
+            return 1;
+        }
+    };
+
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
@@ -64,10 +94,8 @@ class Pipeline {
     struct JITCallArgs; // Opaque structure to optimize away dynamic allocation in this path.
 
     // For the three method below, precisely one of the first two args should be non-null
-    void realize_helper(Realization *r, halide_buffer_t *buf, const Target &target, const ParamMap &param_map);
-    void infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, const ParamMap &param_map);
-    void prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
-                                    const Target &target, const ParamMap &param_map,
+    void prepare_jit_call_arguments(RealizationArg &output, const Target &target,
+                                    Internal::OptionalRef<const ParamMap> param_map,
                                     void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -362,16 +390,18 @@ public:
 
     /** See Func::realize */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size, int y_size, int z_size, int w_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size, int y_size, int z_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size, int y_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(int x_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
-    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap::empty);
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, int y_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(int x_size, const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    Realization realize(const Target &target = Target(),
+                        Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or
@@ -383,19 +413,8 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    // @{
-    NO_INLINE void realize(Realization &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        realize_helper(&dst, nullptr, target, param_map);
-    }
-    template<typename T, int D>
-    NO_INLINE void realize(Runtime::Buffer<T, D> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        realize_helper(nullptr, dst.raw_buffer(), target, param_map);
-    }
-    template <typename T>
-    NO_INLINE void realize(Buffer<T> &dst, const Target &target = Target(), const ParamMap &param_map = ParamMap::empty) {
-        realize_helper(nullptr, dst.raw_buffer(), target, param_map);
-    }
-    // @}
+    NO_INLINE void realize(RealizationArg output, const Target &target = Target(), 
+                           Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -403,18 +422,10 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap::empty);
-    NO_INLINE void infer_input_bounds(Realization &dst, const ParamMap &param_map = ParamMap::empty) {
-        infer_input_bounds_helper(&dst, nullptr, param_map);
-    }
-    template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Runtime::Buffer<T, D> &dst, const ParamMap &param_map = ParamMap::empty) {
-        infer_input_bounds_helper(nullptr, dst.raw_buffer(), param_map);
-    }
-    template<typename T>
-    NO_INLINE void infer_input_bounds(Buffer<T> &dst, const ParamMap &param_map = ParamMap::empty) {
-        infer_input_bounds_helper(nullptr, dst.raw_buffer(), param_map);
-    }
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, 
+                            Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
+    NO_INLINE void infer_input_bounds(RealizationArg output,
+                                      Internal::OptionalRef<const ParamMap> param_map = Internal::OptionalRef<const ParamMap>());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

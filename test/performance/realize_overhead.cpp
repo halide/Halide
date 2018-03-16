@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
         Param<int> in;
 
         f() = in + 42;
+        f.compile_jit();
 
         in.set(0);
 
@@ -139,6 +140,7 @@ int main(int argc, char **argv) {
         }
 
         f() = e;
+        f.compile_jit();
 
         Buffer<int32_t> buf(1);
         double t = benchmark([&]() { f.realize(buf); });

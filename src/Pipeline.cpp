@@ -529,8 +529,8 @@ const JITHandlers &Pipeline::jit_handlers() {
     return contents->jit_handlers;
 }
 
-Realization Pipeline::realize(vector<int32_t> sizes,
-                              const Target &target, const ParamMap &param_map) {
+Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
+                              Internal::OptionalRef<const ParamMap> param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto & out : contents->outputs) {
@@ -548,30 +548,31 @@ Realization Pipeline::realize(vector<int32_t> sizes,
     return r;
 }
 
-Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size,
-                              const Target &target, const ParamMap &param_map) {
+Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
+                              Internal::OptionalRef<const ParamMap> param_map) {
   return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size, int y_size, int z_size,
-                              const Target &target, const ParamMap &param_map) {
+Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
+                              Internal::OptionalRef<const ParamMap> param_map) {
   return realize({x_size, y_size, z_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size, int y_size,
-                              const Target &target, const ParamMap &param_map) {
+Realization Pipeline::realize(int x_size, int y_size, const Target &target,
+                              Internal::OptionalRef<const ParamMap> param_map) {
   return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size,
-                              const Target &target, const ParamMap &param_map) {
+Realization Pipeline::realize(int x_size, const Target &target,
+                              Internal::OptionalRef<const ParamMap> param_map) {
     // Use an explicit vector here, since {x_size} can be interpreted
     // as a scalar initializer
     vector<int32_t> v = {x_size};
     return realize(v, target, param_map);
 }
 
-Realization Pipeline::realize(const Target &target, const ParamMap &param_map) {
+Realization Pipeline::realize(const Target &target,
+                              Internal::OptionalRef<const ParamMap> param_map) {
   return realize(vector<int32_t>(), target, param_map);
 }
 
@@ -703,16 +704,15 @@ private:
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
-                                          const Target &target, const ParamMap &param_map,
-                                          void *user_context,
+void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target &target,
+                                          Internal::OptionalRef<const ParamMap> param_map, void *user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
-    const bool no_param_map = (&param_map == &ParamMap::empty);
+    const bool no_param_map = !param_map;
 
     // Come up with the void * arguments to pass to the argv function
     size_t arg_index = 0;
@@ -722,13 +722,19 @@ void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
                 args_result.store[arg_index++] = user_context;
             } else {
                 Buffer<> *buf_out_param = nullptr;
-                const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
+                const Parameter &p = no_param_map ? arg.param : param_map.value().map(arg.param, buf_out_param);
                 user_assert(is_bounds_inference || !buf_out_param)
                     << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
 
                 if (p.is_buffer()) {
                     // ImageParam arg
-                    args_result.store[arg_index++] = p.raw_buffer();
+                    Buffer<> buf = p.buffer();
+                    if (buf.defined()) {
+                        args_result.store[arg_index++] = p.raw_buffer();
+                    } else {
+                        // Unbound
+                        args_result.store[arg_index++] = nullptr;
+                    }
                     debug(1) << "JIT input ImageParam argument ";
                 } else {
                     args_result.store[arg_index++] = p.scalar_address();
@@ -745,16 +751,23 @@ void Pipeline::prepare_jit_call_arguments(Realization *r, halide_buffer_t *buf,
     }
 
     // Then the outputs
-    if (r) {
-        for (size_t i = 0; i < r->size(); i++) {
-            const halide_buffer_t *buf = (*r)[i].raw_buffer();
+    if (outputs.r) {
+        for (size_t i = 0; i < outputs.r->size(); i++) {
+            const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
             debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
         }
+    } else if (outputs.buf) {
+        args_result.store[arg_index++] = outputs.buf;
+        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << outputs.buf->host << "\n";
     } else {
-        args_result.store[arg_index++] = buf;
-        debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+        for (const Buffer<> &buffer : *outputs.buffer_list) {
+            const halide_buffer_t *buf = buffer.raw_buffer();
+            args_result.store[arg_index++] = buf;
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+        }
     }
+    
 }
 
 std::vector<JITModule>
@@ -806,21 +819,28 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize_helper(Realization *r, halide_buffer_t *buf, const Target &t, const ParamMap &param_map) {
+void Pipeline::realize(RealizationArg outputs, const Target &t,
+                       Internal::OptionalRef<const ParamMap> param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
-    if (r) {
-        for (size_t i = 0; i < r->size(); i++) {
-            user_assert((*r)[i].data() != nullptr)
-                << "Buffer at " << &((*r)[i]) << " is unallocated. "
+    if (outputs.r) {
+        for (size_t i = 0; i < outputs.r->size(); i++) {
+            user_assert((*outputs.r)[i].data() != nullptr)
+                << "Buffer at " << &((*outputs.r)[i]) << " is unallocated. "
+                << "The Buffers in a Realization passed to realize must all be allocated\n";
+        }
+    } else if (outputs.buffer_list) {
+      for (const Buffer<> &buf : *outputs.buffer_list) {
+            user_assert(buf.data() != nullptr)
+                << "Buffer at " << &buf << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }
     } else {
-        user_assert(buf && (buf->host || buf->device))
-            << "Buffer at " << (void *)buf << " is unallocated. "
+        user_assert(outputs.buf && (outputs.buf->host || outputs.buf->device))
+            << "Buffer at " << (void *)outputs.buf << " is unallocated. "
             << "The Buffers passed to realize must all be allocated\n";
     }
 
@@ -864,8 +884,8 @@ void Pipeline::realize_helper(Realization *r, halide_buffer_t *buf, const Target
     JITFuncCallContext jit_context(jit_handlers());
     void *user_context_storage = &jit_context.jit_context;
 
-    JITCallArgs args(contents->inferred_args.size() + (r ? r->size() : 1));
-    prepare_jit_call_arguments(r, buf, target, param_map,
+    JITCallArgs args(contents->inferred_args.size() + outputs.size());
+    prepare_jit_call_arguments(outputs, target, param_map,
                                &user_context_storage, false, args);
 
 
@@ -929,8 +949,7 @@ void Pipeline::realize_helper(Realization *r, halide_buffer_t *buf, const Target
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, const ParamMap &param_map) {
-
+void Pipeline::infer_input_bounds(RealizationArg outputs, Internal::OptionalRef<const ParamMap> param_map) {
     Target target = get_jit_target_from_environment();
 
     compile_jit(target);
@@ -939,9 +958,9 @@ void Pipeline::infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, c
     JITFuncCallContext jit_context(jit_handlers());
     void *user_context_storage = &jit_context.jit_context;
 
-    size_t args_size = contents->inferred_args.size() + (r ? r->size() : 1);
+    size_t args_size = contents->inferred_args.size() + outputs.size();
     JITCallArgs args(args_size);
-    prepare_jit_call_arguments(r, buf, target, param_map,
+    prepare_jit_call_arguments(outputs, target, param_map,
                                &user_context_storage, true, args);
 
     struct TrackedBuffer {
@@ -1015,8 +1034,8 @@ void Pipeline::infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, c
     // Now allocate the resulting buffers
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
-        Buffer<> *buf_out_param;
-        Parameter &p = param_map.map(ia.param, buf_out_param);
+        Buffer<> *buf_out_param = nullptr;
+        Parameter &p = !param_map ? ia.param : param_map.value().map(ia.param, buf_out_param);
 
         if (&p != &ia.param) {
             user_assert(buf_out_param != nullptr) << "Output Buffer<> arguments to infer_input_bounds in parameters map must be passed as pointers.\n";
@@ -1036,7 +1055,8 @@ void Pipeline::infer_input_bounds_helper(Realization *r, halide_buffer_t *buf, c
     }
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) {
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, 
+                                  Internal::OptionalRef<const ParamMap> param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
     vector<int> size;
