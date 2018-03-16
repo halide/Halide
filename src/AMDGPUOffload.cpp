@@ -99,6 +99,40 @@ std::string print_sections(const Object &obj) {
     return oss.str();
 }
 
+void do_reloc(char *addr, uint64_t mask, uintptr_t val, bool is_signed, bool verify) {
+    uint64_t inst = *((uint64_t *)addr);
+    debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
+    debug(4) << "val: " << hex(val) << "\n";
+    debug(4) << "mask: " << hex(mask) << "\n";
+
+    uintptr_t old_val = val;
+    bool consumed_every_bit = false;
+    for (int i = 0; i < 32; i++) {
+        if (mask & (1 << i)) {
+            internal_assert((inst & (1 << i)) == 0);
+
+            // Consume a bit of val
+            int next_bit = val & 1;
+            if (is_signed) {
+                consumed_every_bit |= ((intptr_t)val) == -1;
+                val = ((intptr_t)val) >> 1;
+            } else {
+                val = ((uintptr_t)val) >> 1;
+            }
+            consumed_every_bit |= (val == 0);
+            inst |= (next_bit << i);
+        }
+    }
+
+    internal_assert(!verify || consumed_every_bit)
+        << "Relocation overflow inst=" << hex(inst)
+        << "mask=" << hex(mask) << " val=" << hex(old_val) << "\n";
+
+    debug(4) << "Relocated instruction: " << hex(inst) << "\n";
+
+    *((uint64_t *)addr) = inst;
+}
+
 void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
     uint32_t inst = *((uint32_t *)addr);
     debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
@@ -261,139 +295,48 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
 
     // Define some constants from table 11-3
     const uint32_t Word32     = 0xffffffff;
-    const uint32_t Word16     = 0xffff;
-    const uint32_t Word8      = 0xff;
-    const uint32_t Word32_B22 = 0x01ff3ffe;
-    const uint32_t Word32_B15 = 0x00df20fe;
-    const uint32_t Word32_B13 = 0x00202ffe;
-    const uint32_t Word32_B9  = 0x003000fe;
-    const uint32_t Word32_B7  = 0x00001f18;
-    const uint32_t Word32_GP  = 0; // The mask is instruction-specific
-    const uint32_t Word32_X26 = 0x0fff3fff;
-    const uint32_t Word32_U6  = 0; // The mask is instruction-specific
-    const uint32_t Word32_R6  = 0x000007e0;
-    const uint32_t Word32_LO  = 0x00c03fff;
+    const uint64_t Word64     = 0xffffffffffffffff;
     const bool truncate = false, verify = true;
     const bool _unsigned = false, _signed = true;
 
     bool needs_got_entry = false;
 
     switch (type) {
-    case R_HEX_B22_PCREL:
-        do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2, _signed, verify);
+    case R_AMDGPU_ABS32_LO:
+        do_reloc(fixup_addr, Word32, intptr_t((S + A) & 0xFFFFFFFF), _unsigned, verify);
         break;
-    case R_HEX_B15_PCREL:
-        // Untested
-        do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2, _signed, verify);
+    case R_AMDGPU_ABS32_HI:
+        do_reloc(fixup_addr, Word32, intptr_t((S + A) >> 32), _unsigned, verify);
         break;
-    case R_HEX_B7_PCREL:
-        do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2, _signed, verify);
+    case R_AMDGPU_ABS64:
         break;
-    case R_HEX_LO16:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
+    case R_AMDGPU_REL32:
+        do_reloc(fixup_addr, Word32, intptr_t(S + A - P), _unsigned, verify);
         break;
-    case R_HEX_HI16:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
+    case R_AMDGPU_REL64:
+        do_reloc(fixup_addr, Word64, intptr_t(S + A - P), _unsigned, verify);
         break;
-    case R_HEX_32:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32, intptr_t(S + A), _unsigned, truncate);
+    case R_AMDGPU_ABS32:
+        do_reloc(fixup_addr, Word32, intptr_t(S + A), _unsigned, verify);
         break;
-    case R_HEX_16:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word16, uintptr_t(S + A), _unsigned, truncate);
+    case R_AMDGPU_GOTPCREL:
+        do_reloc(fixup_addr, Word32, intptr_t(G + GOT + A - P), _unsigned, verify);
         break;
-    case R_HEX_8:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word8, uintptr_t(S + A), _unsigned, truncate);
+    case R_AMDGPU_GOTPCREL32_LO:
+        do_reloc(fixup_addr, Word32, intptr_t((G + GOT + A - P) & 0xffffffff), _unsigned, verify);
         break;
-    case R_HEX_GPREL16_0:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP), _unsigned, verify);
+    case R_AMDGPU_GOTPCREL32_HI:
+        do_reloc(fixup_addr, Word32, intptr_t((G + GOT + A - P) >> 32), _unsigned, verify);
         break;
-    case R_HEX_GPREL16_1:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1, _unsigned, verify);
+    case R_AMDGPU_REL32_LO:
+        do_reloc(fixup_addr, Word32, intptr_t((S + A - P) & 0xffffffff), _unsigned, verify);
         break;
-    case R_HEX_GPREL16_2:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2, _unsigned, verify);
+    case R_AMDGPU_REL32_HI:
+        do_reloc(fixup_addr, Word32, intptr_t((S + A - P) >> 32), _unsigned, verify);
         break;
-    case R_HEX_GPREL16_3:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3, _unsigned, verify);
+    case R_AMDGPU_RELATIVE64:
+        do_reloc(fixup_addr, Word64, intptr_t(S + A), _unsigned, verify);
         break;
-    case R_HEX_HL16:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr,   Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
-        do_reloc(fixup_addr+4, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
-        break;
-    case R_HEX_B13_PCREL:
-        do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2, _signed, verify);
-        break;
-    case R_HEX_B9_PCREL:
-        do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2, _signed, verify);
-        break;
-    case R_HEX_B32_PCREL_X:
-        do_reloc(fixup_addr, Word32_X26, intptr_t(S + A - P) >> 6, _signed, truncate);
-        break;
-    case R_HEX_32_6_X:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6, _unsigned, verify);
-        break;
-    case R_HEX_B22_PCREL_X:
-        do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f, _signed, verify);
-        break;
-    case R_HEX_B15_PCREL_X:
-        do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f, _signed, verify);
-        break;
-    case R_HEX_B13_PCREL_X:
-        do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f, _signed, verify);
-        break;
-    case R_HEX_B9_PCREL_X:
-        do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f, _signed, verify);
-        break;
-    case R_HEX_B7_PCREL_X:
-        do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f, _signed, verify);
-        break;
-    case R_HEX_16_X:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A), _unsigned, truncate);
-        break;
-    case R_HEX_12_X:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_R6, uintptr_t(S + A), _unsigned, truncate);
-        break;
-    case R_HEX_11_X:
-    case R_HEX_10_X:
-    case R_HEX_9_X:
-    case R_HEX_8_X:
-    case R_HEX_7_X:
-    case R_HEX_6_X:
-        internal_error << "Not pic code " << type << "\n";
-        do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A), _unsigned, truncate);
-        break;
-    case R_HEX_32_PCREL:
-        do_reloc(fixup_addr, Word32, intptr_t(S + A - P), _signed, verify);
-        break;
-    case R_HEX_6_PCREL_X:
-        do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A - P), _unsigned, truncate);
-        break;
-    case R_HEX_GOT_32_6_X:
-        do_reloc(fixup_addr, Word32_X26, intptr_t(G) >> 6, _signed, truncate);
-        needs_got_entry = true;
-        break;
-    case R_HEX_GOT_16_X:
-        do_reloc(fixup_addr, Word32_U6, intptr_t(G), _signed, truncate);
-        needs_got_entry = true;
-        break;
-    case R_HEX_GOT_11_X:
-        do_reloc(fixup_addr, Word32_U6, uintptr_t(G), _unsigned, truncate);
-        needs_got_entry = true;
-        break;
-
     default:
         internal_error << "Unhandled relocation type " << type << "\n";
     }
