@@ -1515,9 +1515,6 @@ struct halide_profiler_state {
      * e.g. on a DSP. If null, it reads from the int above instead. */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
 
-    /** Is the profiler thread running. */
-    bool started;
-
     /** Sampling thread reference to be joined at shutdown. */
     struct halide_thread *sampling_thread;
 };

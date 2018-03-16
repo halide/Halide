@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, false, NULL};
+    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, NULL};
     return &s;
 }
 }
@@ -178,10 +178,9 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
     ScopedMutexLock lock(&s->lock);
 
-    if (!s->started) {
+    if (!s->sampling_thread) {
         halide_start_clock(user_context);
         s->sampling_thread = halide_spawn_thread(sampling_profiler_thread, NULL);
-        s->started = true;
     }
 
     halide_profiler_pipeline_stats *p =
@@ -406,9 +405,7 @@ WEAK void halide_profiler_reset() {
     // halide_profiler_stack_peak_update update the profiler pipeline's
     // state without grabbing the global profiler state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
-
     ScopedMutexLock lock(&s->lock);
-
     halide_profiler_reset_unlocked(s);
 }
 
@@ -416,11 +413,13 @@ namespace {
 __attribute__((destructor))
 WEAK void halide_profiler_shutdown() {
     halide_profiler_state *s = halide_profiler_get_state();
-    if (!s->started) return;
+    if (!s->sampling_thread) {
+        return;
+    }
+
     s->current_func = halide_profiler_please_stop;
     halide_join_thread(s->sampling_thread);
     s->sampling_thread = NULL;
-    s->started = false;
     s->current_func = halide_profiler_outside_of_halide;
 
     // Print results. No need to lock anything because we just shut
