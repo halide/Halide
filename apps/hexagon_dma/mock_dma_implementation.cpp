@@ -8,7 +8,6 @@
 #include "pipeline.h"
 #include "HalideRuntime.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -85,22 +84,19 @@ int32 nDmaWrapper_FreeDma(t_DmaWrapper_DmaEngineHandle dma_handle) {
 
 int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
 
-    t_st_hw_descriptor *desc = 0;
     if(handle != 0) {
         dma_handle_t* dma_handle = (dma_handle_t *)handle;
-        desc = dma_handle->ptr;
+        t_st_hw_descriptor *desc = dma_handle->ptr;
 
         while (desc != NULL) {
             unsigned char* host_addr = reinterpret_cast<unsigned char *>(desc->stWord1.src_frm_base_addr);
             unsigned char* dest_addr = reinterpret_cast<unsigned char *>(desc->stWord1.dst_frm_base_addr);
- 
-// Helpful debug code.
-#if 0
-            printf("Processing descriptor %p -- host_addr: %p dest_addr: %p ROI: (X: %u, Y: %u, W: %u, H: %u) SrcRoiStride: %u, DstRoiStride %u, FrmWidth %u.\n",
-                   desc, host_addr, dest_addr, desc->stWord0.RoiX, desc->stWord0.RoiY, desc->stWord1.RoiW, desc->stWord1.RoiH,
-                   desc->stWord1.SrcRoiStride, desc->stWord1.DstRoiStride, desc->stWord0.FrmWidth);
-#endif
 
+#if 0 
+            printf("Processing descriptor %p -- host_addr: %p dest_addr: %p ROI: (X: %u, Y: %u, W: %u, H: %u) SrcRoiStride: %u, DstRoiStride %u, FrmWidth %u.\n",
+                   desc, host_addr, dest_addr, desc->stWord0.roiX, desc->stWord0.roiY, desc->stWord1.roiW, desc->stWord1.roiH,
+                   desc->stWord1.src_roi_stride, desc->stWord1.dst_roi_stride, desc->stWord0.frm_width);
+#endif
             int x = desc->stWord0.roiX;
             int y = desc->stWord0.roiY;
             int w = desc->stWord1.roiW;
@@ -112,7 +108,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
                     int RoiOffset = x + y * desc->stWord1.src_roi_stride;
                     int xout = xii;
                     int yout = yii * desc->stWord0.frm_width;
-                    dest_addr[yin+xin] = host_addr[RoiOffset + yout + xout];
+                    dest_addr[yin+xin] = host_addr[RoiOffset + yout + xout]; 
                 }
             }
             desc = reinterpret_cast<t_st_hw_descriptor*>(desc->stWord0.des_pointer);
@@ -173,18 +169,27 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
         dma_handle->ptr = desc;
     }
 
+    int mul_factor  =1;
+    int l2_chroma_offset = 0;
+    if (dma_transfer_parm->eFmt == eDmaFmt_NV12_UV) { //chroma fmt for NV12
+        mul_factor = 2; //DMA Driver anamoly
+        l2_chroma_offset = (dma_transfer_parm->u16FrameH * dma_transfer_parm->u16FrameW); 
+    }
+    
     desc->stWord0.dst_is_ubwc = dma_transfer_parm->bIsFmtUbwc;
     desc->stWord0.dst_is_tcm = (dma_transfer_parm->eTransferType == eDmaWrapper_DdrToL2) ? 1 : 0;
     desc->stWord0.frm_height = dma_transfer_parm->u16FrameH;
     desc->stWord0.frm_width = dma_transfer_parm->u16FrameW;
     desc->stWord0.roiX = dma_transfer_parm->u16RoiX;
-    desc->stWord0.roiY = dma_transfer_parm->u16RoiY;
-    desc->stWord1.roiH = dma_transfer_parm->u16RoiH;
+    desc->stWord0.roiY = dma_transfer_parm->u16RoiY/mul_factor;
+    desc->stWord1.roiH = dma_transfer_parm->u16RoiH/mul_factor;
     desc->stWord1.roiW = dma_transfer_parm->u16RoiW;
     desc->stWord1.src_roi_stride = dma_transfer_parm->u16FrameStride;
     desc->stWord1.dst_roi_stride = dma_transfer_parm->u16RoiStride;
     desc->stWord1.dst_frm_base_addr = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
-    desc->stWord1.src_frm_base_addr  = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);
+    void *frame_addr = (void *) ((addr_t)dma_transfer_parm->pFrameBuf + (addr_t)l2_chroma_offset);
+    desc->stWord1.src_frm_base_addr  = reinterpret_cast<uintptr_t>(frame_addr);
+    
     return 0;
 
 }
@@ -202,3 +207,9 @@ int32 nDmaWrapper_GetDescbuffsize(t_eDmaFmt *fmt, uint16 nsize) {
     return desc_size;
 }
 
+int32 nDmaWrapper_GetRecommendedIntermBufSize(t_eDmaFmt eFmtId, bool bUse16BitPaddingInL2,
+                                              t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
+                                               bool bIsUbwc, uint16 u16IntermBufStride) {
+
+return 0;
+}

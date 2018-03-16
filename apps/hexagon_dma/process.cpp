@@ -2,13 +2,11 @@
 #include <memory.h>
 #include <assert.h>
 #include <stdlib.h>
-
 #include "halide_benchmark.h"
-
 #include "pipeline.h"
-
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
+#include "../../src/runtime/mini_hexagon_dma.h"
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -21,13 +19,13 @@ int main(int argc, char **argv) {
 
     // Fill the input buffer with random data. This is just a plain
     // old memory buffer.
-    uint8_t *memory_to_dma_from = (uint8_t*)malloc(width * height);
-    for (int i = 0; i < width * height; i++) {
+    uint8_t *memory_to_dma_from = (uint8_t*)malloc(width * height * 1.5);
+    for (int i = 0; i < width * height* 1.5;  i++) {
         memory_to_dma_from[i] = (uint8_t)rand();
     }
 
-    Halide::Runtime::Buffer<uint8_t> input_validation(memory_to_dma_from, width, height);
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height);
+    Halide::Runtime::Buffer<uint8_t> input_validation(memory_to_dma_from, width, height, 2);
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 2);
 
     // TODO: We shouldn't need to allocate a host buffer here, but the
     // current implementation of cropping + halide_buffer_copy needs
@@ -46,23 +44,37 @@ int main(int argc, char **argv) {
 
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_NV12);
 
-    Halide::Runtime::Buffer<uint8_t> output(width, height);
+    Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
+ 
+    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
+    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
 
-    int result = pipeline(input, output);
+
+    int result = pipeline(input, output_y, output_c);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
 
-    // Validate that the algorithm did what we expect.
-    output.for_each_element([&](int x, int y) {
-        uint8_t correct = input_validation(x, y) * 2;
-        if (correct != output(x, y)) {
-            printf("Mismatch at %d %d: %d != %d\n", x, y, correct, output(x, y));
-            abort();
-        }
-    });
+    output.copy_to_host();
+    int c = 2;
+    const int plane_start = 0;
+    const int plane_end = c;
+    printf("plane start=%d end=%d\n", plane_start, plane_end);
+    for (int z = plane_start; z < plane_end; z++) {
+        int height_c = (z==1) ? height/2 : height;
+        for(int y = 0; y < height_c; y++) {
+            for(int x = 0; x < width; x++) {
+                uint8_t correct = memory_to_dma_from[x + y*width + z*width*height] * 2;
+                if (correct != output(x, y, z)) {
+                    static int cnt = 0;
+                    printf("Mismatch at x=%d y=%d c=%d : %d != %d\n", x, y, z, correct, output(x, y, z));
+                    if(++cnt > 20) abort();
+                }
+            }
+         }
+    }
 
     halide_hexagon_dma_unprepare(nullptr, input);
 

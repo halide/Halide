@@ -17,6 +17,8 @@ struct dma_device_handle {
     int frame_width;
     int frame_height;
     int frame_stride;
+    bool is_ubwc;
+    t_eDmaFmt fmt;
     void *cache_buf;
 };
 
@@ -30,6 +32,8 @@ dma_device_handle *malloc_device_handle() {
     dev->frame_height = 0;
     dev->frame_stride = 0;
     dev->cache_buf = 0;
+    dev->is_ubwc = 0;
+    dev->fmt = eDmaFmt_RawData;
     return dev;
 }
 
@@ -60,7 +64,7 @@ static void* desc_pool_get (void* user_context) {
     // We have to allocate two descriptors here
     temp = (pdesc_pool) malloc(sizeof(desc_pool_t));
     if (temp == NULL) {
-        error(user_context) << "malloc failed\n";  
+        error(user_context) << "malloc failed\n";
         return NULL;
     }
     uint8_t* desc = (uint8_t *)HAP_cache_lock(sizeof(char)*descriptor_size*2, NULL);
@@ -79,11 +83,11 @@ static void* desc_pool_get (void* user_context) {
         (temp->next)->used = false;
         (temp->next)->next = NULL;
     } else {
-        //no need to throw error since we allocate two descriptor at a time 
+        //no need to throw error since we allocate two descriptor at a time
         // but only use one
-        debug(user_context) << "malloc failed\n" ; 
+        debug(user_context) << "malloc failed\n" ;
     }
-    
+
     if (prev != NULL) {
         prev->next = temp;
     } else if (dma_desc_pool == NULL) {
@@ -119,6 +123,155 @@ static void desc_pool_free (void* user_context) {
             free(temp2);
         }
     }
+}
+
+static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
+                                       struct halide_buffer_t *dst) {
+
+    dma_device_handle *dev = (dma_device_handle *)src->device;
+
+    debug(user_context)
+        << "Hexagon dev handle: buffer: " << dev->buffer << " dev offset (" << dev->offset_x << ", " << dev->offset_y << ") frame_width: " << dev->frame_width
+        << " frame_height: " << dev->frame_height << " frame_stride: " << dev->frame_stride << "\n";
+
+    int roi_stride = 0;
+    int roi_width = 0;
+    int roi_height = 0;
+
+    //To Do This needs to be generalissed for other formats too
+    t_eDmaFmt lumaFmt = eDmaFmt_NV12_Y;
+    t_eDmaFmt chromaFmt = eDmaFmt_NV12_UV;
+    if ( dev->fmt == eDmaFmt_NV12 ) {
+        lumaFmt = eDmaFmt_NV12_Y;
+        dev->fmt = lumaFmt;
+    } else {
+        chromaFmt = eDmaFmt_NV12_UV;
+    }
+ 
+    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
+    int nRet = nDmaWrapper_GetRecommendedWalkSize(dev->fmt, dev->is_ubwc, &stWalkSize);
+
+    roi_stride = dst->dim[1].stride;
+    roi_width = stWalkSize.u16W;
+    roi_height = stWalkSize.u16H;
+
+    //To Do l2_chroma_offset not using now but will come into use when chaining
+    int tcmStride;
+    t_StDmaWrapper_RoiAlignInfo pStRoiSize;
+    pStRoiSize.u16W = roi_width;
+    pStRoiSize.u16H = roi_height;
+    // Note: Both the source and destination are checked for UBWC mode as buffers are shared between the source frame and destination frame.
+    tcmStride = nDmaWrapper_GetRecommendedIntermBufStride (lumaFmt, &pStRoiSize, false);
+    // Get the size for the Luma component.
+    qurt_size_t tcm_buf_size = nDmaWrapper_GetRecommendedIntermBufSize(lumaFmt, 0, &pStRoiSize, false, tcmStride);
+    // The size of the Luma plane is the Chroma offset in this example.
+    int l2_chroma_offset = tcm_buf_size;
+ 
+    debug(user_context) << "roi_width" << roi_width;
+    debug(user_context) << "roi_height" << roi_height;
+    debug(user_context) << "roi_stride" << roi_stride;
+    debug(user_context) << "l2chromaoffset" << l2_chroma_offset;
+
+    // DMA driver Expect the Stride to be 256 Byte Aligned
+    halide_assert(user_context, (roi_stride % 256) == 0);
+
+    // Return NULL if descriptor is not allocated
+    void* desc_addr = desc_pool_get(user_context);
+    if (desc_addr == NULL) {
+        error(user_context) << "Hexagon: DMA descriptor allocation error \n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
+    // Copy from Locked Cache to a temp DDR buffer
+    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
+    int buf_size = dst->size_in_bytes();
+    debug(user_context) << "cache buffer size " << buf_size << "\n";
+    if (dev->cache_buf == 0) {
+        dev->cache_buf = HAP_cache_lock((sizeof(uint8_t) * buf_size), 0);
+    }
+
+    /***************************************************/
+    //To Do Right now luma and chroma are seperate but we need to think of chaining them
+    l2_chroma_offset = 0;
+    if (dev->fmt == chromaFmt) {
+        t_StDmaWrapper_DmaTransferSetup stDmaTransferParm2;
+        stDmaTransferParm2.eFmt = dev->fmt; 
+        stDmaTransferParm2.u16FrameW = dev->frame_width;
+        stDmaTransferParm2.u16FrameH = dev->frame_height;
+        stDmaTransferParm2.u16FrameStride = dev->frame_stride;
+        stDmaTransferParm2.u16RoiW = roi_width;
+        //To Do Driver API halfs this for chroma format
+        stDmaTransferParm2.u16RoiH = roi_height * 2 ;
+        stDmaTransferParm2.u16RoiStride = roi_stride;
+        stDmaTransferParm2.bIsFmtUbwc = dev->is_ubwc;
+        stDmaTransferParm2.bUse16BitPaddingInL2 = 0;
+        stDmaTransferParm2.pDescBuf = desc_addr;
+        stDmaTransferParm2.pTcmDataBuf = (void *)((addr_t)dev->cache_buf + (addr_t)l2_chroma_offset);
+        stDmaTransferParm2.pFrameBuf = dev->buffer;
+        stDmaTransferParm2.eTransferType = eDmaWrapper_DdrToL2;
+        stDmaTransferParm2.u16RoiX = dev->offset_x + dst->dim[0].min;
+        stDmaTransferParm2.u16RoiY = (dev->offset_y + dst->dim[1].min) * 2;
+
+        debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm2.pDescBuf << "\n" ;
+        nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm2);
+        if (nRet != QURT_EOK) {
+            debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
+            return halide_error_code_device_buffer_copy_failed;
+        }
+    } else { 
+        t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
+        stDmaTransferParm.eFmt = dev->fmt; 
+        stDmaTransferParm.u16FrameW = dev->frame_width;
+        stDmaTransferParm.u16FrameH = dev->frame_height;
+        stDmaTransferParm.u16FrameStride = dev->frame_stride;
+        stDmaTransferParm.u16RoiW = roi_width;
+        stDmaTransferParm.u16RoiH = roi_height;
+        stDmaTransferParm.u16RoiStride = roi_stride;
+        stDmaTransferParm.bIsFmtUbwc = dev->is_ubwc;
+        stDmaTransferParm.bUse16BitPaddingInL2 = 0;
+        stDmaTransferParm.pDescBuf = desc_addr;
+        stDmaTransferParm.pTcmDataBuf = dev->cache_buf;
+        stDmaTransferParm.pFrameBuf = dev->buffer;
+        stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
+        stDmaTransferParm.u16RoiX = dev->offset_x + dst->dim[0].min;
+        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min;
+
+        if ((stDmaTransferParm.u16RoiY + roi_height == dev->frame_height) &&
+            (stDmaTransferParm.u16RoiX + roi_width == dev->frame_width)) {
+             dev->fmt = chromaFmt;
+        }
+
+        debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n" ;
+        nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
+        if (nRet != QURT_EOK) {
+            debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
+            return halide_error_code_device_buffer_copy_failed;
+        }
+    }
+
+    debug(user_context) << "Hexagon: " << dev->dma_engine << " move\n" ;
+
+    nRet = nDmaWrapper_Move(dev->dma_engine);
+    if (nRet != QURT_EOK) {
+        debug(user_context) << "Hexagon: nDmaWrapper_Move error: " << nRet << "\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+    
+   debug(user_context) << "Hexagon: " << dev->dma_engine << " wait\n" ;
+
+    nRet = nDmaWrapper_Wait(dev->dma_engine);
+    if (nRet != QURT_EOK) {
+        debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
+    void *dest = reinterpret_cast<void *>(dst->host);
+    if (dest) {
+        memcpy(dest, dev->cache_buf, buf_size);
+    }
+
+    desc_pool_put(user_context, desc_addr);
+    return halide_error_code_success;
 }
 
 }}}}  // namespace Halide::Runtime::Internal::HexagonDma
@@ -199,7 +352,7 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
 }
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_engine) {
+                                                     void *dma_engine, bool is_ubwc, int fmt) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_allocate_engine (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
@@ -207,6 +360,8 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct 
     halide_assert(user_context, dma_engine);
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     dev->dma_engine = dma_engine;
+    dev->is_ubwc = is_ubwc;
+    dev->fmt = (t_eDmaFmt) fmt;
     return halide_error_code_success;
 }
 
@@ -271,86 +426,9 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         << "Hexagon: halide_hexagon_dma_buffer_copy (user_context: " << user_context
         << ", src: " << src << ", dst: " << dst << ")\n";
 
-    dma_device_handle *dev = (dma_device_handle *)src->device;
-
-    debug(user_context) 
-        << "Hexagon dev handle: buffer: " << dev->buffer << " dev offset (" << dev->offset_x << ", " << dev->offset_y << ") frame_width: " << dev->frame_width 
-        << " frame_height: " << dev->frame_height << " frame_stride: " << dev->frame_stride << "\n";
-
-#if 0 // Seems useful, but this flattens the mins
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
-#endif
-
-    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
-    int nRet = nDmaWrapper_GetRecommendedWalkSize(eDmaFmt_RawData, false, &stWalkSize);
-    int roi_stride = dst->dim[1].stride; // nDmaWrapper_GetRecommendedIntermBufStride(eDmaFmt_RawData, &stWalkSize, false);
-    int roi_width = stWalkSize.u16W;
-    int roi_height = stWalkSize.u16H;
-    // DMA driver Expect the Stride to be 256 Byte Aligned
-    halide_assert(user_context, (roi_stride % 256) == 0);
-
-    // Return NULL if descriptor is not allocated
-    void* desc_addr = desc_pool_get(user_context);
-    if (desc_addr == NULL) {
-        error(user_context) << "Hexagon: DMA descriptor allocation error \n";
-        return halide_error_code_device_buffer_copy_failed;
-    }
-
-    // Allocation of L2 Cache for DMA Transfer
-    // Copy from Locked Cache to a temp DDR buffer 
-    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline 
-    int buf_size = dst->size_in_bytes();
-    debug(user_context) << "cach buffer size " << buf_size << "\n";
-    if (dev->cache_buf == 0) {
-        dev->cache_buf = HAP_cache_lock((sizeof(uint8_t) * buf_size), 0); 
-    }
+    int nRet = halide_hexagon_dma_wrapper(user_context, src, dst);
    
-    t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
-    stDmaTransferParm.eFmt = eDmaFmt_RawData;
-    stDmaTransferParm.u16FrameW = dev->frame_width;
-    stDmaTransferParm.u16FrameH = dev->frame_height;
-    stDmaTransferParm.u16FrameStride = dev->frame_stride;
-    stDmaTransferParm.u16RoiW = roi_width;
-    stDmaTransferParm.u16RoiH = roi_height;
-    stDmaTransferParm.u16RoiStride = roi_stride;
-    stDmaTransferParm.bIsFmtUbwc = 0;
-    stDmaTransferParm.bUse16BitPaddingInL2 = 0;
-    stDmaTransferParm.pDescBuf = desc_addr;
-    stDmaTransferParm.pTcmDataBuf = dev->cache_buf;
-    stDmaTransferParm.pFrameBuf = dev->buffer;
-    stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
-    stDmaTransferParm.u16RoiX = dev->offset_x + dst->dim[0].min;
-    stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min;
-    
-    debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n" ;
-    nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
-    if (nRet != QURT_EOK) {
-        debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n"; 
-        return halide_error_code_device_buffer_copy_failed; 
-    }
-
-    debug(user_context) << "Hexagon: " << dev->dma_engine << " move\n" ;
-
-    nRet = nDmaWrapper_Move(dev->dma_engine);
-    if (nRet != QURT_EOK) {
-        debug(user_context) << "Hexagon: nDmaWrapper_Move error: " << nRet << "\n";
-        return halide_error_code_device_buffer_copy_failed;
-    }
-    nRet = nDmaWrapper_Wait(dev->dma_engine);
-    if (nRet != QURT_EOK) {
-        debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
-        return halide_error_code_device_buffer_copy_failed;
-    }
-   
-    void *dest = reinterpret_cast<void *>(dst->host);
-    // TODO: Doing a manual copy from the DMA'ed Locked L2 cache to Halide destination DDR buffer
-    // This should be removed once the cache locking is addressed inside Halide Pipeline 
-    if (dest) { 
-        memcpy(dest, dev->cache_buf, buf_size);
-    }
-    desc_pool_put(user_context, desc_addr);
- 
-    return halide_error_code_success;
+    return nRet;
 }
 
 WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t* buf) {
