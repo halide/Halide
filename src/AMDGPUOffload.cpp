@@ -99,177 +99,13 @@ std::string print_sections(const Object &obj) {
     return oss.str();
 }
 
-void do_reloc(char *addr, uint64_t mask, uintptr_t val, bool is_signed, bool verify) {
-    uint64_t inst = *((uint64_t *)addr);
-    debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
-    debug(4) << "val: " << hex(val) << "\n";
-    debug(4) << "mask: " << hex(mask) << "\n";
-
-    uintptr_t old_val = val;
-    bool consumed_every_bit = false;
-    for (int i = 0; i < 32; i++) {
-        if (mask & (1 << i)) {
-            internal_assert((inst & (1 << i)) == 0);
-
-            // Consume a bit of val
-            int next_bit = val & 1;
-            if (is_signed) {
-                consumed_every_bit |= ((intptr_t)val) == -1;
-                val = ((intptr_t)val) >> 1;
-            } else {
-                val = ((uintptr_t)val) >> 1;
-            }
-            consumed_every_bit |= (val == 0);
-            inst |= (next_bit << i);
-        }
-    }
-
-    internal_assert(!verify || consumed_every_bit)
-        << "Relocation overflow inst=" << hex(inst)
-        << "mask=" << hex(mask) << " val=" << hex(old_val) << "\n";
-
-    debug(4) << "Relocated instruction: " << hex(inst) << "\n";
-
-    *((uint64_t *)addr) = inst;
+void do_reloc_64(char *addr, uintptr_t val) {
+    *((uint64_t*)addr) = (uint64_t)val;
 }
 
-void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
-    uint32_t inst = *((uint32_t *)addr);
-    debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
-    debug(4) << "val: " << hex(val) << "\n";
-    debug(4) << "mask: " << hex(mask) << "\n";
-
-    if (!mask) {
-        // The mask depends on the instruction. To implement
-        // relocations for new instructions see
-        // instruction_encodings.txt
-        // First print the bits so I can search for it in the
-        // instruction encodings.
-        debug(4) << "Instruction bits: ";
-        for (int i = 31; i >=0; i--) {
-            debug(4) << (int)((inst >> i) & 1);
-        }
-        debug(4) << "\n";
-
-        if ((inst & (3 << 14)) == 0) {
-            // Some instructions are actually pairs of 16-bit
-            // subinstructions. See section 3.7 in the
-            // programmer's reference.
-            debug(4) << "Duplex!\n";
-
-            int iclass = ((inst >> 29) << 1) | ((inst >> 13) & 1);
-            debug(4) << "Class: " << hex(iclass) << "\n";
-            debug(4) << "Hi: ";
-            for (int i = 28; i >= 16; i--) {
-                debug(4) << (int)((inst >> i) & 1);
-            }
-            debug(4) << "\n";
-            debug(4) << "Lo: ";
-            for (int i = 12; i >= 0; i--) {
-                debug(4) << (int)((inst >> i) & 1);
-            }
-            debug(4) << "\n";
-
-            // We only know how to do the ones where the high
-            // subinstruction is an immediate assignment. (marked
-            // as A in table 9-4 in the programmer's reference
-            // manual).
-            internal_assert(iclass >= 3 && iclass <= 7);
-
-            // Pull out the subinstructions. They're the low 13
-            // bits of each half-word.
-            uint32_t hi = (inst >> 16) & ((1 << 13) - 1);
-            //uint32_t lo = inst & ((1 << 13) - 1);
-
-            // We only understand the ones where hi starts with 010
-            internal_assert((hi >> 10) == 2);
-
-            // Low 6 bits of val go in the following bits.
-            mask = 63 << 20;
-
-        } else if ((inst >> 24) == 72) {
-            // Example instruction encoding that has this high byte (ignoring bits 1 and 2):
-            // 0100 1ii0  000i iiii  PPit tttt  iiii iiii
-            debug(4) << "Instruction-specific case A\n";
-            mask = 0x061f20ff;
-        } else if ((inst >> 24) == 73) {
-            // 0100 1ii1  000i iiii  PPii iiii  iiid dddd
-            debug(4) << "Instruction-specific case B\n";
-            mask = 0x061f3fe0;
-        } else if ((inst >> 24) == 120) {
-            // 0111 1000  ii-i iiii  PPii iiii  iiid dddd
-            debug(4) << "Instruction-specific case C\n";
-            mask = 0x00df3fe0;
-        } else if ((inst >> 16) == 27209) {
-            // 0110 1010  0100 1001  PP-i iiii  i--d dddd
-            mask = 0x00001f80;
-        } else if ((inst >> 25) == 72) {
-            // 1001 0ii0  101s ssss  PPii iiii  iiid dddd
-            // 1001 0ii1  000s ssss  PPii iiii  iiid dddd
-            mask = 0x06003fe0;
-        } else if ((inst >> 24) == 115 || (inst >> 24) == 124) {
-            // 0111 0011 -10sssss PP1iiiii iiiddddd
-            // 0111 0011 -11sssss PP1iiiii iiiddddd
-            // 0111 0011 0uusssss PP0iiiii iiiddddd
-            // 0111 0011 1uusssss PP0iiiii iiiddddd
-            // 0111 0011 -00sssss PP1iiiii iiiddddd
-            // 0111 0011 -01sssss PP1iiiii iiiddddd
-            // 0111 1100 0IIIIIII PPIiiiii iiiddddd
-            // 0111 0011 -11sssss PP1iiiii iiiddddd
-            mask = 0x00001fe0;
-
-        } else if ((inst >> 24) == 126) {
-            // 0111 1110 0uu0 iiii PP0i iiii iiid dddd
-            // 0111 1110 0uu0 iiii PP1i iiii iiid dddd
-            // 0111 1110 0uu1 iiii PP0i iiii iiid dddd
-            // 0111 1110 0uu1 iiii PP1i iiii iiid dddd
-            mask = 0x000f1fe0;
-        } else if ((inst >> 24) == 65 || (inst >> 24) == 77) {
-            // 0100 0001 000s ssss PP0t tiii iiid dddd
-            // 0100 0001 001s ssss PP0t tiii iiid dddd
-            // 0100 0001 010s ssss PP0t tiii iiid dddd
-            // 0100 0001 011s ssss PP0t tiii iiid dddd
-            // 0100 0001 100s ssss PP0t tiii iiid dddd
-            // 0100 0001 110s ssss PP0t tiii iiid dddd
-            // TODO: Add instructions to comment for mask 77.
-            mask = 0x000007e0;
-        } else if ((inst >> 21) == 540) {
-            // 0100 0011 100s ssss PP0t tiii iiid dddd
-            mask = 0x000007e0;
-        } else if ((inst >> 28) == 11) {
-            // 1011 iiii iiis ssss PPii iiii iiid dddd
-            mask = 0x0fe03fe0;
-        } else {
-            internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
-        }
-    }
-
-    uintptr_t old_val = val;
-    bool consumed_every_bit = false;
-    for (int i = 0; i < 32; i++) {
-        if (mask & (1 << i)) {
-            internal_assert((inst & (1 << i)) == 0);
-
-            // Consume a bit of val
-            int next_bit = val & 1;
-            if (is_signed) {
-                consumed_every_bit |= ((intptr_t)val) == -1;
-                val = ((intptr_t)val) >> 1;
-            } else {
-                val = ((uintptr_t)val) >> 1;
-            }
-            consumed_every_bit |= (val == 0);
-            inst |= (next_bit << i);
-        }
-    }
-
-    internal_assert(!verify || consumed_every_bit)
-        << "Relocation overflow inst=" << hex(inst)
-        << "mask=" << hex(mask) << " val=" << hex(old_val) << "\n";
-
-    debug(4) << "Relocated instruction: " << hex(inst) << "\n";
-
-    *((uint32_t *)addr) = inst;
+void do_reloc_32(char *addr, uintptr_t val) {
+    internal_assert(val <= 0xffffffff);
+    *((uint32_t*)addr) = val;
 }
 
 void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
@@ -282,7 +118,6 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     uint32_t S = sym_offset;
     uint32_t P = fixup_offset;
     intptr_t A = addend;
-    uint32_t GP = 0;
 
     uint32_t G = got.contents_size();
     for (const Relocation &r : got.relocations()) {
@@ -293,49 +128,46 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         }
     }
 
-    // Define some constants from table 11-3
-    const uint32_t Word32     = 0xffffffff;
-    const uint64_t Word64     = 0xffffffffffffffff;
-    const bool truncate = false, verify = true;
-    const bool _unsigned = false, _signed = true;
-
     bool needs_got_entry = false;
 
     switch (type) {
+    case R_AMDGPU_NONE:
+        break;
     case R_AMDGPU_ABS32_LO:
-        do_reloc(fixup_addr, Word32, intptr_t((S + A) & 0xFFFFFFFF), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t((S + A) & 0xFFFFFFFF));
         break;
     case R_AMDGPU_ABS32_HI:
-        do_reloc(fixup_addr, Word32, intptr_t((S + A) >> 32), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t((S + A) >> 32));
         break;
     case R_AMDGPU_ABS64:
+        do_reloc_32(fixup_addr, intptr_t(S + A));
         break;
     case R_AMDGPU_REL32:
-        do_reloc(fixup_addr, Word32, intptr_t(S + A - P), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t(S + A - P));
         break;
     case R_AMDGPU_REL64:
-        do_reloc(fixup_addr, Word64, intptr_t(S + A - P), _unsigned, verify);
+        do_reloc_64(fixup_addr, intptr_t(S + A - P));
         break;
     case R_AMDGPU_ABS32:
-        do_reloc(fixup_addr, Word32, intptr_t(S + A), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t(S + A));
         break;
     case R_AMDGPU_GOTPCREL:
-        do_reloc(fixup_addr, Word32, intptr_t(G + GOT + A - P), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t(G + GOT + A - P));
         break;
     case R_AMDGPU_GOTPCREL32_LO:
-        do_reloc(fixup_addr, Word32, intptr_t((G + GOT + A - P) & 0xffffffff), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t((G + GOT + A - P) & 0xffffffff));
         break;
     case R_AMDGPU_GOTPCREL32_HI:
-        do_reloc(fixup_addr, Word32, intptr_t((G + GOT + A - P) >> 32), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t((G + GOT + A - P) >> 32));
         break;
     case R_AMDGPU_REL32_LO:
-        do_reloc(fixup_addr, Word32, intptr_t((S + A - P) & 0xffffffff), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t((S + A - P) & 0xffffffff));
         break;
     case R_AMDGPU_REL32_HI:
-        do_reloc(fixup_addr, Word32, intptr_t((S + A - P) >> 32), _unsigned, verify);
+        do_reloc_32(fixup_addr, intptr_t((S + A - P) >> 32));
         break;
     case R_AMDGPU_RELATIVE64:
-        do_reloc(fixup_addr, Word64, intptr_t(S + A), _unsigned, verify);
+        do_reloc_64(fixup_addr, intptr_t(B + A));
         break;
     default:
         internal_error << "Unhandled relocation type " << type << "\n";
