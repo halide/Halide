@@ -2791,38 +2791,38 @@ FuncTupleElementRef::operator Expr() const {
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
-                          Internal::OptionalRef<const ParamMap> param_map) {
+                          const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     return pipeline().realize(sizes, target, param_map);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                          Internal::OptionalRef<const ParamMap> param_map) {
+                          const ParamMap &param_map) {
     return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
-                          Internal::OptionalRef<const ParamMap> param_map) {
+                          const ParamMap &param_map) {
     return realize({x_size, y_size, z_size}, target, param_map);
 }
 
 Realization Func::realize(int x_size, int y_size, const Target &target,
-                          Internal::OptionalRef<const ParamMap> param_map) {
+                          const ParamMap &param_map) {
     return realize({x_size, y_size}, target, param_map);
 }
 
 Realization Func::realize(int x_size, const Target &target,
-                          Internal::OptionalRef<const ParamMap> param_map) {
+                          const ParamMap &param_map) {
     return realize(std::vector<int>{x_size}, target, param_map);
 }
 
 Realization Func::realize(const Target &target,
-                          Internal::OptionalRef<const ParamMap> param_map) {
+                          const ParamMap &param_map) {
     return realize(std::vector<int>{}, target, param_map);
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     int sizes[] = {x_size, y_size, z_size, w_size};
@@ -3015,12 +3015,12 @@ const Internal::JITHandlers &Func::jit_handlers() {
 }
 
 void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
-                   Internal::OptionalRef<const ParamMap> param_map) {
+                   const ParamMap &param_map) {
     pipeline().realize(std::move(outputs), target, param_map);
 }
 
 void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
     pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 

@@ -530,7 +530,7 @@ const JITHandlers &Pipeline::jit_handlers() {
 }
 
 Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto & out : contents->outputs) {
@@ -549,22 +549,22 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
 }
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
   return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
   return realize({x_size, y_size, z_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, int y_size, const Target &target,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
   return realize({x_size, y_size}, target, param_map);
 }
 
 Realization Pipeline::realize(int x_size, const Target &target,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
     // Use an explicit vector here, since {x_size} can be interpreted
     // as a scalar initializer
     vector<int32_t> v = {x_size};
@@ -572,7 +572,7 @@ Realization Pipeline::realize(int x_size, const Target &target,
 }
 
 Realization Pipeline::realize(const Target &target,
-                              Internal::OptionalRef<const ParamMap> param_map) {
+                              const ParamMap &param_map) {
   return realize(vector<int32_t>(), target, param_map);
 }
 
@@ -705,14 +705,14 @@ private:
 // currently bound value for all of the params and image
 // params.
 void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target &target,
-                                          Internal::OptionalRef<const ParamMap> param_map, void *user_context,
+                                          const ParamMap &param_map, void *user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
-    const bool no_param_map = !param_map;
+    const bool no_param_map = &param_map == &ParamMap::empty;
 
     // Come up with the void * arguments to pass to the argv function
     size_t arg_index = 0;
@@ -722,7 +722,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                 args_result.store[arg_index++] = user_context;
             } else {
                 Buffer<> *buf_out_param = nullptr;
-                const Parameter &p = no_param_map ? arg.param : param_map.value().map(arg.param, buf_out_param);
+                const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
                 user_assert(is_bounds_inference || !buf_out_param)
                     << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
 
@@ -820,7 +820,7 @@ Pipeline::make_externs_jit_module(const Target &target,
 }
 
 void Pipeline::realize(RealizationArg outputs, const Target &t,
-                       Internal::OptionalRef<const ParamMap> param_map) {
+                       const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -949,7 +949,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(RealizationArg outputs, Internal::OptionalRef<const ParamMap> param_map) {
+void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
     Target target = get_jit_target_from_environment();
 
     compile_jit(target);
@@ -1035,7 +1035,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, Internal::OptionalRef<
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
         Buffer<> *buf_out_param = nullptr;
-        Parameter &p = !param_map ? ia.param : param_map.value().map(ia.param, buf_out_param);
+        Parameter &p = param_map.map(ia.param, buf_out_param);
 
         if (&p != &ia.param) {
             user_assert(buf_out_param != nullptr) << "Output Buffer<> arguments to infer_input_bounds in parameters map must be passed as pointers.\n";
@@ -1056,7 +1056,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, Internal::OptionalRef<
 }
 
 void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, 
-                                  Internal::OptionalRef<const ParamMap> param_map) {
+                                  const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
     vector<int> size;

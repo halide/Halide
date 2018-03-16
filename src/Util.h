@@ -379,20 +379,6 @@ struct IsRoundtrippable {
     }
 };
 
-template <typename T>
-class OptionalRef {
-    T *val;
-public:
-    OptionalRef() : val(nullptr) { }
-    OptionalRef(T &v) : val(&v) { }
-    OptionalRef(T &&v) : val(&v) { }
-    OptionalRef(const OptionalRef &rhs) : val(rhs.val) { }
-
-    operator bool() { return val != nullptr; }
-
-    T &value() { return *val; }
-};
-
 }  // namespace Internal
 }  // namespace Halide
 
