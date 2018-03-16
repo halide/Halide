@@ -140,13 +140,13 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, p
     _halide_user_assert(args.size() <= names.inputs.size())
         << "Expected at most " << names.inputs.size() << " positional args, but saw " << args.size() << ".";
     for (size_t i = 0; i < args.size(); ++i) {
-        _halide_user_assert(inputs[i].size() == 0)
+        _halide_user_assert(inputs[i].empty())
             << "Generator Input named '" << names.inputs[i] << "' was specified by both position and keyword.";
         append_input(args[i], inputs[i]);
     }
 
     for (size_t i = 0; i < inputs.size(); ++i) {
-        _halide_user_assert(inputs[i].size() != 0)
+        _halide_user_assert(!inputs[i].empty())
             << "Generator Input named '" << names.inputs[i] << "' was not specified.";
     }
 
