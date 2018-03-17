@@ -33,5 +33,5 @@ make bin/process_viz && \
 --down 125  --store 80  --func outGPyramid[3] \
 --down 62   --store 160 --func outGPyramid[4] \
 --down 31   --store 320 --func outGPyramid[5] |\
-avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 ./bin/local_laplacian.mp4
+avconv -y -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 ./bin/local_laplacian.mp4
 #mplayer -demuxer rawvideo -rawvideo w=1920:h=1080:format=rgba:fps=30 -idle -fixed-vo -
