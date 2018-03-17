@@ -51,7 +51,7 @@ std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
 
 // A struct specifying a text label that will appear on the screen at some point.
 struct Label {
-    const char *text;
+    std::string text;
     int x, y, n;
 };
 
@@ -62,7 +62,7 @@ struct FuncInfo {
 
     // Configuration for how the func should be drawn
     struct Config {
-        int zoom = 0;
+        float zoom = 0;
         int load_cost = 0;
         int store_cost = 0;
         int dims = 0;
@@ -184,18 +184,16 @@ void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
 static constexpr int FONT_W = 12;
 static constexpr int FONT_H = 32;
 
-void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+void draw_text(const std::string &text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
     // The font array contains 96 characters of FONT_W * FONT_H letters.
     assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
 
     // Drop any alpha component of color
     color &= 0xffffff;
 
-    for (int c = 0; ; c++) {
-        int chr = text[c];
-        if (chr == 0) {
-            return;
-        }
+    int c = -1;
+    for (int chr : text) {
+        ++c;
 
         // We only handle a subset of ascii
         if (chr < 32 || chr > 127) {
@@ -378,7 +376,16 @@ int parse_int(const char *str) {
     return (int) result;
 }
 
-int parse_float(const char *str) {
+int parse_int_percent(const char *str, int percent_max) {
+    int result = parse_int(str);
+    size_t len = strlen(str);
+    if (len && str[len-1] == '%') {
+        result = (result * percent_max) / 100;
+    }
+    return (int) result;
+}
+
+float parse_float(const char *str) {
     char *endptr = nullptr;
     errno = 0;
     float result = strtof(str, &endptr);
@@ -444,20 +451,20 @@ int run(int argc, char **argv) {
             config.max = parse_float(argv[++i]);
         } else if (next == "--move") {
             expect(i + 2 < argc, i);
-            config.x = parse_int(argv[++i]);
-            config.y = parse_int(argv[++i]);
+            config.x = parse_int_percent(argv[++i], frame_width);
+            config.y = parse_int_percent(argv[++i], frame_height);
         } else if (next == "--left") {
             expect(i + 1 < argc, i);
-            config.x -= parse_int(argv[++i]);
+            config.x -= parse_int_percent(argv[++i], frame_width);
         } else if (next == "--right") {
             expect(i + 1 < argc, i);
-            config.x += parse_int(argv[++i]);
+            config.x += parse_int_percent(argv[++i], frame_width);
         } else if (next == "--up") {
             expect(i + 1 < argc, i);
-            config.y -= parse_int(argv[++i]);
+            config.y -= parse_int_percent(argv[++i], frame_height);
         } else if (next == "--down") {
             expect(i + 1 < argc, i);
-            config.y += parse_int(argv[++i]);
+            config.y += parse_int_percent(argv[++i], frame_height);
         } else if (next == "--push") {
             pos_stack.push_back({config.x, config.y});
         } else if (next == "--pop") {
@@ -476,7 +483,7 @@ int run(int argc, char **argv) {
             config.blank_on_end_realization = false;
         } else if (next == "--zoom") {
             expect(i + 1 < argc, i);
-            config.zoom = parse_int(argv[++i]);
+            config.zoom = parse_float(argv[++i]);
         } else if (next == "--load") {
             expect(i + 1 < argc, i);
             config.load_cost = parse_int(argv[++i]);
@@ -494,8 +501,8 @@ int run(int argc, char **argv) {
                 expect(i + 2 < argc, i);
                 if (config.x_stride.size() <= config.dims) config.x_stride.resize(config.dims+1, 0);
                 if (config.y_stride.size() <= config.dims) config.y_stride.resize(config.dims+1, 0);
-                config.x_stride[config.dims] = parse_int(argv[++i]);
-                config.y_stride[config.dims] = parse_int(argv[++i]);
+                config.x_stride[config.dims] = parse_int_percent(argv[++i], frame_width);
+                config.y_stride[config.dims] = parse_int_percent(argv[++i], frame_height);
                 config.dims++;
             }
         } else if (next == "--label") {
@@ -525,6 +532,15 @@ int run(int argc, char **argv) {
             expect(false, i);
         }
         i++;
+    }
+
+    // If no labels specified for a func, default to the funcname
+    for (auto &p : func_info) {
+        auto &config = p.second.config;
+        if (config.labels.empty()) {
+            Label l = {p.first, config.x, config.y, 1};
+            config.labels.push_back(l);
+        }
     }
 
     // halide_clock counts halide events. video_clock counts how many
@@ -707,11 +723,11 @@ int run(int argc, char **argv) {
                     // Compute the screen-space x, y coord to draw this.
                     int x = fi.config.x;
                     int y = fi.config.y;
-                    const int z = fi.config.zoom;
+                    const float z = fi.config.zoom;
                     for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_coord(d * p.type.lanes + lane);
-                        x += fi.config.zoom * fi.config.x_stride[d] * a;
-                        y += fi.config.zoom * fi.config.y_stride[d] * a;
+                        x += z * fi.config.x_stride[d] * a;
+                        y += z * fi.config.y_stride[d] * a;
                     }
 
                     // The box to draw must be entirely on-screen
