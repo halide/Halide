@@ -138,14 +138,14 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     int roi_width = 0;
     int roi_height = 0;
 
-    //To Do This needs to be generalissed for other formats too
-    t_eDmaFmt lumaFmt = eDmaFmt_NV12_Y;
-    t_eDmaFmt chromaFmt = eDmaFmt_NV12_UV;
-    if ( dev->fmt == eDmaFmt_NV12 ) {
-        lumaFmt = eDmaFmt_NV12_Y;
+    //To Do To removed when chaining of descriptor is implemented  
+    t_eDmaFmt lumaFmt = eDmaFmt_Invalid;
+    if ((dev->fmt == eDmaFmt_NV12) || 
+        (dev->fmt == eDmaFmt_P010) ||
+        (dev->fmt == eDmaFmt_TP10) ||
+        (dev->fmt == eDmaFmt_NV124R)) {
+        lumaFmt = (t_eDmaFmt)((int)dev->fmt+ 1);
         dev->fmt = lumaFmt;
-    } else {
-        chromaFmt = eDmaFmt_NV12_UV;
     }
  
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
@@ -155,22 +155,9 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     roi_width = stWalkSize.u16W;
     roi_height = stWalkSize.u16H;
 
-    //To Do l2_chroma_offset not using now but will come into use when chaining
-    int tcmStride;
-    t_StDmaWrapper_RoiAlignInfo pStRoiSize;
-    pStRoiSize.u16W = roi_width;
-    pStRoiSize.u16H = roi_height;
-    // Note: Both the source and destination are checked for UBWC mode as buffers are shared between the source frame and destination frame.
-    tcmStride = nDmaWrapper_GetRecommendedIntermBufStride (lumaFmt, &pStRoiSize, false);
-    // Get the size for the Luma component.
-    qurt_size_t tcm_buf_size = nDmaWrapper_GetRecommendedIntermBufSize(lumaFmt, 0, &pStRoiSize, false, tcmStride);
-    // The size of the Luma plane is the Chroma offset in this example.
-    int l2_chroma_offset = tcm_buf_size;
- 
     debug(user_context) << "roi_width" << roi_width;
     debug(user_context) << "roi_height" << roi_height;
     debug(user_context) << "roi_stride" << roi_stride;
-    debug(user_context) << "l2chromaoffset" << l2_chroma_offset;
 
     // DMA driver Expect the Stride to be 256 Byte Aligned
     halide_assert(user_context, (roi_stride % 256) == 0);
@@ -190,65 +177,42 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         dev->cache_buf = HAP_cache_lock((sizeof(uint8_t) * buf_size), 0);
     }
 
-    /***************************************************/
-    //To Do Right now luma and chroma are seperate but we need to think of chaining them
-    l2_chroma_offset = 0;
-    if (dev->fmt == chromaFmt) {
-        t_StDmaWrapper_DmaTransferSetup stDmaTransferParm2;
-        stDmaTransferParm2.eFmt = dev->fmt; 
-        stDmaTransferParm2.u16FrameW = dev->frame_width;
-        stDmaTransferParm2.u16FrameH = dev->frame_height;
-        stDmaTransferParm2.u16FrameStride = dev->frame_stride;
-        stDmaTransferParm2.u16RoiW = roi_width;
-        //To Do Driver API halfs this for chroma format
-        stDmaTransferParm2.u16RoiH = roi_height * 2 ;
-        stDmaTransferParm2.u16RoiStride = roi_stride;
-        stDmaTransferParm2.bIsFmtUbwc = dev->is_ubwc;
-        stDmaTransferParm2.bUse16BitPaddingInL2 = 0;
-        stDmaTransferParm2.pDescBuf = desc_addr;
-        stDmaTransferParm2.pTcmDataBuf = (void *)((addr_t)dev->cache_buf + (addr_t)l2_chroma_offset);
-        stDmaTransferParm2.pFrameBuf = dev->buffer;
-        stDmaTransferParm2.eTransferType = eDmaWrapper_DdrToL2;
-        stDmaTransferParm2.u16RoiX = dev->offset_x + dst->dim[0].min;
-        stDmaTransferParm2.u16RoiY = (dev->offset_y + dst->dim[1].min) * 2;
+    t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
+    stDmaTransferParm.eFmt = dev->fmt; 
+    stDmaTransferParm.u16FrameW = dev->frame_width;
+    stDmaTransferParm.u16FrameH = dev->frame_height;
+    stDmaTransferParm.u16FrameStride = dev->frame_stride;
+    stDmaTransferParm.u16RoiW = roi_width;
+    stDmaTransferParm.u16RoiH = roi_height;
+    stDmaTransferParm.u16RoiStride = roi_stride;
+    stDmaTransferParm.bIsFmtUbwc = dev->is_ubwc;
+    stDmaTransferParm.bUse16BitPaddingInL2 = 0;
+    stDmaTransferParm.pDescBuf = desc_addr;
+    stDmaTransferParm.pTcmDataBuf = dev->cache_buf;
+    stDmaTransferParm.pFrameBuf = dev->buffer;
+    stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
+    stDmaTransferParm.u16RoiX = dev->offset_x + dst->dim[0].min;
+    stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min;
 
-        debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm2.pDescBuf << "\n" ;
-        nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm2);
-        if (nRet != QURT_EOK) {
-            debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
-            return halide_error_code_device_buffer_copy_failed;
-        }
-    } else { 
-        t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
-        stDmaTransferParm.eFmt = dev->fmt; 
-        stDmaTransferParm.u16FrameW = dev->frame_width;
-        stDmaTransferParm.u16FrameH = dev->frame_height;
-        stDmaTransferParm.u16FrameStride = dev->frame_stride;
-        stDmaTransferParm.u16RoiW = roi_width;
-        stDmaTransferParm.u16RoiH = roi_height;
-        stDmaTransferParm.u16RoiStride = roi_stride;
-        stDmaTransferParm.bIsFmtUbwc = dev->is_ubwc;
-        stDmaTransferParm.bUse16BitPaddingInL2 = 0;
-        stDmaTransferParm.pDescBuf = desc_addr;
-        stDmaTransferParm.pTcmDataBuf = dev->cache_buf;
-        stDmaTransferParm.pFrameBuf = dev->buffer;
-        stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
-        stDmaTransferParm.u16RoiX = dev->offset_x + dst->dim[0].min;
-        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min;
-
-        if ((stDmaTransferParm.u16RoiY + roi_height == dev->frame_height) &&
-            (stDmaTransferParm.u16RoiX + roi_width == dev->frame_width)) {
-             dev->fmt = chromaFmt;
-        }
-
-        debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n" ;
-        nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
-        if (nRet != QURT_EOK) {
-            debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
-            return halide_error_code_device_buffer_copy_failed;
-        }
+    //To Do DMA Driver anamoly for chroma element of NV12 
+    if (dev->fmt == eDmaFmt_NV12_UV) {
+        stDmaTransferParm.u16RoiH = roi_height * 2;
+        stDmaTransferParm.u16RoiY = stDmaTransferParm.u16RoiY * 2;
     }
 
+    //Move to chroma format once luma is done 
+    if ((stDmaTransferParm.u16RoiY + roi_height == dev->frame_height) &&
+            (stDmaTransferParm.u16RoiX + roi_width == dev->frame_width)) {
+        dev->fmt = (t_eDmaFmt)((int)dev->fmt + 1);
+    }
+
+    debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n" ;
+    nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
+    if (nRet != QURT_EOK) {
+        debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+    
     debug(user_context) << "Hexagon: " << dev->dma_engine << " move\n" ;
 
     nRet = nDmaWrapper_Move(dev->dma_engine);
