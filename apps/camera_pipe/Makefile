@@ -29,7 +29,7 @@ $(BIN)/viz/process: process.cpp $(BIN)/viz/camera_pipe.a
 $(BIN)/out.png: $(BIN)/process
 	$(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 1.0 $(TIMING_ITERATIONS) $@ $(BIN)/h_auto.png
 
-../../bin/HalideTraceViz:
+../../bin/HalideTraceViz: ../../util/HalideTraceViz.cpp
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
 $(BIN)/camera_pipe.mp4: $(BIN)/viz/process viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
@@ -39,3 +39,6 @@ clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/out.png
+
+viz: $(BIN)/camera_pipe.mp4
+	mplayer $^

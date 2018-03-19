@@ -935,12 +935,45 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
                    << dump_argument_list();
     }
 
+    bool round_up_ok = !exact;
+    if (round_up_ok && !definition.is_init()) {
+        // If it's the outermost split in this dimension, RoundUp
+        // is OK. Otherwise we need GuardWithIf to avoid
+        // recomputing values in the case where the inner split
+        // factor does not divide the outer split factor.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        round_up_ok = !inner_vars.count(old_name);
+        user_assert(round_up_ok || tail != TailStrategy::RoundUp)
+            << "Can't use TailStrategy::RoundUp for splitting " << old_name
+            << " in update definition of " << name() << ". "
+            << "It may redundantly recompute some values, which "
+            << "could change the meaning of the algorithm. "
+            << "Use TailStrategy::GuardWithIf instead.";
+    }
+
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
             tail = TailStrategy::GuardWithIf;
         } else if (!definition.is_init()) {
-            tail = TailStrategy::RoundUp;
+            tail = round_up_ok ? TailStrategy::RoundUp : TailStrategy::GuardWithIf;
         } else {
             // We should employ ShiftInwards when we can to prevent
             // overcompute and adding constraints to the bounds of

@@ -13,7 +13,7 @@ UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
     # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz
+    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz -Wl,--stack,8388608
     SHARED_EXT=dll
     FPIC=
 else
@@ -950,20 +950,6 @@ test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
-# TODO: these are temporary targets added to allow existing buildbot to run without breaking;
-# it will be removed after buildbot is updated.
-.PHONY: test_errors
-test_errors: test_error
-
-.PHONY: test_generators
-test_generators: test_generator
-
-.PHONY: test_tutorials
-test_tutorials: test_tutorial
-
-.PHONY: test_warnings
-test_warnings: test_warning
-
 ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
@@ -1159,7 +1145,6 @@ $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
-	type_only_input_buffer.dim=3 \
 	dim_only_input_buffer.type=uint8 \
 	untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 \
 	output.type=float32,float32 output.dim=3 \
@@ -1171,7 +1156,22 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_i16.size=2 \
 	array_i32.size=2 \
 	array_h.size=2 \
-	array_outputs.size=2
+	buffer_array_input2.dim=3 \
+	buffer_array_input3.type=float32 \
+	buffer_array_input4.dim=3 \
+	buffer_array_input4.type=float32 \
+	buffer_array_input5.size=2 \
+	buffer_array_input6.size=2 \
+	buffer_array_input6.dim=3 \
+	buffer_array_input7.size=2 \
+	buffer_array_input7.type=float32 \
+	buffer_array_input8.size=2 \
+	buffer_array_input8.dim=3 \
+	buffer_array_input8.type=float32 \
+	array_outputs.size=2 \
+	array_outputs7.size=2 \
+	array_outputs8.size=2 \
+	array_outputs9.size=2
 
 # metadata_tester is built with and without user-context
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
