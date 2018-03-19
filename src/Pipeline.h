@@ -391,17 +391,17 @@ public:
     /** See Func::realize */
     // @{
     Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty);
+                        const ParamMap &param_map = ParamMap::empty_map());
     Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty);
+                        const ParamMap &param_map = ParamMap::empty_map());
     Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty);
+                        const ParamMap &param_map = ParamMap::empty_map());
     Realization realize(int x_size, int y_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty);
+                        const ParamMap &param_map = ParamMap::empty_map());
     Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty);
+                        const ParamMap &param_map = ParamMap::empty_map());
     Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty);
+                        const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or
@@ -414,7 +414,7 @@ public:
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
     NO_INLINE void realize(RealizationArg output, const Target &target = Target(), 
-                           const ParamMap &param_map = ParamMap::empty);
+                           const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -423,9 +423,9 @@ public:
      * ImageParams. */
     // @{
     void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, 
-                            const ParamMap &param_map = ParamMap::empty);
+                            const ParamMap &param_map = ParamMap::empty_map());
     NO_INLINE void infer_input_bounds(RealizationArg output,
-                                      const ParamMap &param_map = ParamMap::empty);
+                                      const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

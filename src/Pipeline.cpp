@@ -712,7 +712,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function());
 
-    const bool no_param_map = &param_map == &ParamMap::empty;
+    const bool no_param_map = &param_map == &ParamMap::empty_map();
 
     // Come up with the void * arguments to pass to the argv function
     size_t arg_index = 0;
