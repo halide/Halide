@@ -132,7 +132,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     }
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, pipeline_name, env, outputs, t);
+    s = inject_tracing(s, pipeline_name, env, outputs, args, t);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";

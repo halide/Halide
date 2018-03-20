@@ -206,10 +206,12 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                                      "Consume",
                                      "End consume",
                                      "Begin pipeline",
-                                     "End pipeline"};
+                                     "End pipeline",
+                                     "Pipeline layout info",
+                                     "Pipeline metadata"};
 
-        // Only print out the value on stores and loads.
-        bool print_value = (e->event < 2);
+        // Only print out the value on stores and loads and layout-info.
+        bool print_value = (e->event < 2) || (e->event == 10);
 
         ss << event_types[e->event] << " " << e->func << "." << e->value_index << "(";
         if (e->type.lanes > 1) {

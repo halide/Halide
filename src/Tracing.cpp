@@ -10,6 +10,7 @@ using std::vector;
 using std::map;
 using std::string;
 using std::pair;
+using std::set;
 
 struct TraceEventBuilder {
     string func;
@@ -42,14 +43,19 @@ class InjectTracing : public IRMutator2 {
 public:
     const map<string, Function> &env;
     const bool trace_all_loads, trace_all_stores, trace_all_realizations;
+    set<string> output_names;
+    vector<Expr> intermediate_pipeline_infos;
 
-    InjectTracing(const map<string, Function> &e, const Target &t)
+    InjectTracing(const map<string, Function> &e, const Target &t, const vector<Function> &outputs)
         : env(e),
           trace_all_loads(t.has_feature(Target::TraceLoads)),
           trace_all_stores(t.has_feature(Target::TraceStores)),
           // Set trace_all_realizations to true if either trace_loads or trace_stores is on too:
           // They don't work without trace_all_realizations being on (and the errors are missing symbol mysterious nonsense).
-          trace_all_realizations(t.features_any_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations})) {
+          trace_all_realizations(t.features_any_of({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations})){
+        for (const auto &o : outputs) {
+            output_names.insert(o.name());
+        }
     }
 
 private:
@@ -175,6 +181,7 @@ private:
 
             // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
             Expr call_before = builder.build();
+            // Note that end_realization relies on builder.func and builder.coordinates still being set.
             builder.event = halide_trace_end_realization;
             builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
             Expr call_after = builder.build();
@@ -182,6 +189,18 @@ private:
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
             stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
+
+            if (!output_names.count(op->name)) {
+                builder.event = halide_trace_pipeline_layout_info;
+                builder.type = UInt(8);
+                builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
+                builder.value = {Expr(1)};  // intermediate
+    for (size_t i = 0; i < builder.coordinates.size(); i++) {
+        builder.coordinates[i] = 0;
+    }
+                intermediate_pipeline_infos.push_back(builder.build());
+            }
+
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
@@ -253,22 +272,53 @@ public:
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name,
                     const map<string, Function> &env, const vector<Function> &outputs,
-                    const Target &t) {
+                    const vector<Argument> &args, const Target &t) {
     Stmt original = s;
-    InjectTracing tracing(env, t);
+
+    InjectTracing tracing(env, t, outputs);
+    vector<Expr> pipeline_layout_infos;
+
+    TraceEventBuilder layout_info_builder;
+    layout_info_builder.event = halide_trace_pipeline_layout_info;
+    layout_info_builder.type = UInt(8);
+    layout_info_builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
+
+    for (auto &arg : args) {
+        if (arg.is_buffer()) {
+            layout_info_builder.func = arg.name;
+            layout_info_builder.value = {Expr(0)};  // input
+            layout_info_builder.coordinates.clear();
+            for (int i = 0; i < arg.dimensions; i++) {
+                string d = std::to_string(i);
+                Expr min = Variable::make(Int(32), arg.name + ".min." + d);
+                Expr extent = Variable::make(Int(32), arg.name + ".extent." + d);
+                layout_info_builder.coordinates.push_back(min);
+                layout_info_builder.coordinates.push_back(extent);
+            }
+            pipeline_layout_infos.push_back(layout_info_builder.build());
+        }
+    }
 
     // Add a dummy realize block for the output buffers
     for (Function output : outputs) {
         Region output_region;
         Parameter output_buf = output.output_buffers()[0];
         internal_assert(output_buf.is_buffer());
+
+        layout_info_builder.func = output.name();
+        layout_info_builder.value = {Expr(2)};  // output
+        layout_info_builder.coordinates.clear();
+
         for (int i = 0; i < output.dimensions(); i++) {
             string d = std::to_string(i);
             Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
             Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
             output_region.push_back(Range(min, extent));
+            layout_info_builder.coordinates.push_back(min);
+            layout_info_builder.coordinates.push_back(extent);
         }
         s = Realize::make(output.name(), output.output_types(), MemoryType::Auto, output_region, const_true(), s);
+        pipeline_layout_infos.push_back(layout_info_builder.build());
     }
 
     // Inject tracing calls
@@ -283,7 +333,6 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
         builder.func = pipeline_name;
         builder.event = halide_trace_begin_pipeline;
         builder.parent_id = 0;
-
         Expr pipeline_start = builder.build();
 
         builder.event = halide_trace_end_pipeline;
@@ -291,6 +340,13 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
         Expr pipeline_end = builder.build();
 
         s = Block::make(s, Evaluate::make(pipeline_end));
+
+        for (const vector<Expr> &v : {pipeline_layout_infos, tracing.intermediate_pipeline_infos}) {
+            for (Expr e : v) {
+                s = Block::make(Evaluate::make(e), s);
+            }
+        }
+
         s = LetStmt::make("pipeline.trace_id", pipeline_start, s);
     }
 

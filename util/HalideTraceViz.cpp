@@ -51,7 +51,7 @@ std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
 
 // A struct specifying a text label that will appear on the screen at some point.
 struct Label {
-    const char *text;
+    string text;
     int x, y, n;
 };
 
@@ -184,18 +184,16 @@ void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
 static constexpr int FONT_W = 12;
 static constexpr int FONT_H = 32;
 
-void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+void draw_text(const std::string &text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
     // The font array contains 96 characters of FONT_W * FONT_H letters.
     assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
 
     // Drop any alpha component of color
     color &= 0xffffff;
 
-    for (int c = 0; ; c++) {
-        int chr = text[c];
-        if (chr == 0) {
-            return;
-        }
+    int c = -1;
+    for (int chr : text) {
+        ++c;
 
         // We only handle a subset of ascii
         if (chr < 32 || chr > 127) {
@@ -403,6 +401,7 @@ int run(int argc, char **argv) {
 
     int timestep = 10000;
     int hold_frames = 250;
+    bool do_auto_layout = false;
 
     FuncInfo::Config config;
     config.x = config.y = 0;
@@ -521,6 +520,9 @@ int run(int argc, char **argv) {
             int g = parse_int(argv[++i]);
             int b = parse_int(argv[++i]);
             config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+        } else if (next == "--auto") {
+            // TODO: document mixing flags
+            do_auto_layout = true;
         } else {
             expect(false, i);
         }
@@ -547,6 +549,17 @@ int run(int argc, char **argv) {
     };
 
     map<uint32_t, PipelineInfo> pipeline_info;
+
+    enum class LayoutInfoPhase {
+        Input, Intermediate, Output
+    };
+
+    struct AutoLayoutInfo {
+        string name;
+        LayoutInfoPhase phase;
+    };
+
+    map<uint32_t, vector<AutoLayoutInfo>> pipeline_auto_layout_info;
 
     size_t end_counter = 0;
     size_t packet_clock = 0;
@@ -629,7 +642,17 @@ int run(int argc, char **argv) {
             pipeline_info[p.id] = {p.func(), p.id};
             continue;
         } else if (p.event == halide_trace_end_pipeline) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
+            continue;
+        } else if (p.event == halide_trace_pipeline_layout_info) {
+            // If there are layout infos, they will come immediately after the pipeline's
+            // halide_trace_begin_pipeline and before any realizations.
+std::cerr<<"LAYOUT: "<< p.func()<< " " << p.get_value_as<int>(0)<<"\n";
+            pipeline_auto_layout_info[p.parent_id].push_back({ p.func(), p.get_value_as<LayoutInfoPhase>(0) });
+            continue;
+        } else if (p.event == halide_trace_pipeline_metadata) {
+            // TODO
             continue;
         }
 
@@ -638,23 +661,97 @@ int run(int argc, char **argv) {
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
             p.event == halide_trace_consume) {
+            assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
                    p.event == halide_trace_end_consume) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
         }
 
         string qualified_name = pipeline.name + ":" + p.func();
+//std::cerr<<"qualified_name:? "<< qualified_name<<"\n";
 
         if (func_info.find(qualified_name) == func_info.end()) {
             if (func_info.find(p.func()) != func_info.end()) {
                 func_info[qualified_name] = func_info[p.func()];
                 func_info.erase(p.func());
-            } else {
-                std::cerr << "Warning: ignoring func " << qualified_name << " event " << p.event << "\n";
-                std::cerr << "Parent event " << p.parent_id << " " << pipeline.name << "\n";
             }
+        }
+
+        // The first time we see an event that isn't begin/end pipeline,
+        // or layout_info, or metadata, check to see if we should do
+        // auto-layout.
+        if (do_auto_layout) {
+            assert(pipeline_auto_layout_info.count(pipeline.id));
+            for (const auto &info : pipeline_auto_layout_info[pipeline.id]) {
+                string qualified_name = pipeline.name + ":" + info.name;
+                FuncInfo &fi = func_info[qualified_name];
+std::cerr<<"CONFIG:? "<< qualified_name<<" -> " <<fi.configured<<"\n";
+                if (fi.configured) continue;
+
+                // gray
+                fi.config.color_dim = -1;
+                fi.config.zoom = 1;
+                fi.config.min = 0;
+                fi.config.store_cost = 1;
+                fi.config.load_cost = 0;
+                fi.config.blank_on_end_realization = false;
+                fi.config.dims = 2;
+                fi.config.x_stride = { 1, 0 };
+                fi.config.y_stride = { 0, 1 };
+                fi.config.uninitialized_memory_color = 255 << 24;
+
+                if (info.phase == LayoutInfoPhase::Input) {
+                    fi.config.x = 100;
+                    fi.config.y = 300;
+                    fi.config.max = 1;
+                }
+
+                if (info.phase == LayoutInfoPhase::Intermediate) {
+                    fi.config.x = 550;
+                    fi.config.y = 300;
+                    fi.config.max = 32;
+                }
+
+                if (info.phase == LayoutInfoPhase::Output) {
+                    fi.config.x = 1564;
+                    fi.config.y = 300;
+                    fi.config.max = 1;
+                }
+
+                fi.config.labels.push_back({info.name, fi.config.x, fi.config.y, 1});
+
+    // fi.config.zoom = 1;
+    // fi.config.min = 0;
+    // fi.config.max = 1;
+    // fi.config.store_cost = 1;
+    // fi.config.load_cost = 0;
+    // fi.config.blank_on_end_realization = false;
+    // fi.config.dims = 2;
+    // fi.config.x_stride = { 1, 0 };
+    // fi.config.y_stride = { 0, 1 };
+    // fi.config.uninitialized_memory_color = 255 << 24;
+// # --gray --strides 1 0 0 1 \
+// # --max 1 --move 100 300 --func input \
+// # --strides 1 0 0 1 40 0 --zoom 3 \
+// # --max 32 --move 550 100 --func histogram \
+// # --max 512 --down 200 --func blurz \
+// # --max 8192 --down 200 --func blurx \
+// # --max 131072 --down 200 --func blury \
+// # --strides 1 0 0 1 --zoom 1 \
+// # --max 1 --move 1564 300 --func bilateral_grid | \
+                fi.config.labels.swap(config.labels);
+                // fi.config.dump(func);
+                fi.configured = true;
+            }
+            do_auto_layout = false;
+        }
+
+        if (func_info.find(qualified_name) == func_info.end()) {
+            std::cerr << "Warning: ignoring func " << qualified_name << " event " << p.event << "\n"
+                      << "Parent event " << p.parent_id << " " << pipeline.name << "\n";
         }
 
         // Draw the event
@@ -789,9 +886,13 @@ int run(int argc, char **argv) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
+            break;
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
-            break;
+        case halide_trace_pipeline_layout_info:
+        case halide_trace_pipeline_metadata:
+            std::cerr << "Misplaced tracing event: " << p.event << "\n";
+            exit(-1);
         default:
             std::cerr << "Unknown tracing event code: " << p.event << "\n";
             exit(-1);

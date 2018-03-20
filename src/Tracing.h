@@ -9,6 +9,7 @@
 
 #include "IR.h"
 #include "Target.h"
+#include "Argument.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,6 +21,7 @@ namespace Internal {
 Stmt inject_tracing(Stmt, const std::string &pipeline_name,
                     const std::map<std::string, Function> &env,
                     const std::vector<Function> &outputs,
+                    const std::vector<Argument> &args,
                     const Target &Target);
 
 }

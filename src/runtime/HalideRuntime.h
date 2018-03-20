@@ -325,7 +325,9 @@ enum halide_trace_event_code_t {halide_trace_load = 0,
                                 halide_trace_consume = 6,
                                 halide_trace_end_consume = 7,
                                 halide_trace_begin_pipeline = 8,
-                                halide_trace_end_pipeline = 9};
+                                halide_trace_end_pipeline = 9,
+                                halide_trace_pipeline_layout_info = 10,
+                                halide_trace_pipeline_metadata = 11 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -333,19 +335,25 @@ struct halide_trace_event_t {
 
     /** If the event type is a load or a store, this points to the
      * value being loaded or stored. Use the type field to safely cast
-     * this to a concrete pointer type and retrieve it. For other
-     * events this is null. */
+     * this to a concrete pointer type and retrieve it.
+     *
+     * If the event type is pipeline_layout_info, this is an enum value:
+     * 0 = 'func' refers to an input with the given name
+     * 1 = 'func' refers to an intermediate realization with the given name
+     * 2 = 'func' refers to an output with the given name
+     *
+     * For other events this is null. */
     void *value;
 
     /** For loads and stores, an array which contains the location
      * being accessed. For vector loads or stores it is an array of
      * vectors of coordinates (the vector dimension is innermost).
      *
-     * For realization or production-related events, this will contain
-     * the mins and extents of the region being accessed, in the order
+     * For realization or production-related events, and for pipeline_info events,
+     * this will contain the mins and extents of the region being accessed, in the order
      * min0, extent0, min1, extent1, ...
      *
-     * For pipeline-related events, this will be null.
+     * For begin_pipeline and end_pipeline events, this will be null.
      */
     int32_t *coordinates;
 
@@ -387,6 +395,9 @@ struct halide_trace_event_t {
  * ownership hierarchy looks like:
  *
  * begin_pipeline
+ * [pipeline_info_input]
+ * [pipeline_info_intermediate]
+ * [pipeline_info_output]
  * +--begin_realization
  * |  +--produce
  * |  |  +--load/store

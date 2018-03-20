@@ -44,3 +44,24 @@ test: $(BIN)/out.png
 
 viz: $(BIN)/bilateral_grid.mp4
 	mplayer $^
+
+$(BIN)/abilateral_grid.mp4: $(BIN)/filter_viz ../../bin/HalideTraceViz
+	@mkdir -p $(@D)
+	# export HL_TRACE_FILE=/dev/stdout
+	# export HL_NUMTHREADS=4
+	HL_TRACE_FILE=/dev/stdout $(BIN)/filter_viz ../images/gray_small.png $1/out_small.png 0.2 0 | \
+		../../bin/HalideTraceViz --auto | \
+		avconv -y -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 $@
+
+# --gray --strides 1 0 0 1 \
+# --max 1 --move 100 300 --func input \
+# --strides 1 0 0 1 40 0 --zoom 3 \
+# --max 32 --move 550 100 --func histogram \
+# --max 512 --down 200 --func blurz \
+# --max 8192 --down 200 --func blurx \
+# --max 131072 --down 200 --func blury \
+# --strides 1 0 0 1 --zoom 1 \
+# --max 1 --move 1564 300 --func bilateral_grid | \
+
+aviz: $(BIN)/abilateral_grid.mp4
+	mplayer $^
