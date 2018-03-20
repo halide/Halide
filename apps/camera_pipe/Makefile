@@ -42,3 +42,14 @@ test: $(BIN)/out.png
 
 viz: $(BIN)/camera_pipe.mp4
 	mplayer $^
+
+
+$(BIN)/acamera_pipe.mp4: $(BIN)/viz/process ../../bin/HalideTraceViz
+	@mkdir -p $(@D)
+	# export HL_NUMTHREADS=4
+	HL_TRACE_FILE=/dev/stdout $(BIN)/viz/process ../images/bayer_small.png 3700 1.8 50 1 1 $(BIN)/out.png | \
+		../../bin/HalideTraceViz --auto --auto_grid 7 2  | \
+		avconv -y -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 $@
+
+aviz: $(BIN)/acamera_pipe.mp4
+	mplayer $^

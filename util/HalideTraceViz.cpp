@@ -49,6 +49,20 @@ std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
     return stream;
 }
 
+std::ostream &operator<<(std::ostream &stream, const vector<pair<int, int>> &v) {
+    stream << "[ ";
+    bool need_comma = false;
+    for (auto &pt : v) {
+        if (need_comma) {
+            stream << ", ";
+        }
+        stream << "(" << pt.first << "," << pt.second << ")";
+        need_comma = true;
+    }
+    stream << " ]";
+    return stream;
+}
+
 // A struct specifying a text label that will appear on the screen at some point.
 struct Label {
     string text;
@@ -62,14 +76,14 @@ struct FuncInfo {
 
     // Configuration for how the func should be drawn
     struct Config {
-        float zoom = 0;
+        float zoom = 1.f;
         int load_cost = 0;
-        int store_cost = 0;
-        int dims = 0;
+        int store_cost = 1;
+        int dims = 2;
         int x, y = 0;
-        vector<int> x_stride, y_stride;
-        int color_dim = 0;
-        float min = 0.0f, max = 0.0f;
+        vector<pair<int, int>> strides = { {1, 0}, {0, 1} };
+        int color_dim = -1;
+        float min = 0.f, max = 1.f;
         vector<Label> labels;
         bool blank_on_end_realization = false;
         uint32_t uninitialized_memory_color = 0xff000000;
@@ -85,8 +99,7 @@ struct FuncInfo {
                     " load cost: " << load_cost << "\n" <<
                     " store cost: " << store_cost << "\n" <<
                     " x: " << x << " y: " << y << "\n" <<
-                    " x_stride: " << x_stride << "\n" <<
-                    " y_stride: " << y_stride << "\n";
+                    " strides: " << strides << "\n";
         }
     } config;
 
@@ -353,13 +366,15 @@ void fill_realization(uint32_t *image, int image_width, int image_height, uint32
     } else {
         int min = p.get_coord(current_dimension * 2 + 0);
         int extent = p.get_coord(current_dimension * 2 + 1);
-        x_off += fi.config.x_stride[current_dimension] * min;
-        y_off += fi.config.y_stride[current_dimension] * min;
+        const auto &pt = fi.config.strides[current_dimension];
+        x_off += pt.first * min;
+        y_off += pt.second * min;
         for (int i = min; i < min + extent; i++) {
             fill_realization(image, image_width, image_height, color, fi, p,
                 current_dimension + 1, x_off, y_off);
-            x_off += fi.config.x_stride[current_dimension];
-            y_off += fi.config.y_stride[current_dimension];
+            const auto &pt = fi.config.strides[current_dimension];
+            x_off += pt.first;
+            y_off += pt.second;
         }
     }
 }
@@ -396,6 +411,7 @@ int run(int argc, char **argv) {
 
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
+    int auto_layout_rows = 2, auto_layout_cols = 4;
     float decay_factor[2] = {1, 2};
     map<string, FuncInfo> func_info;
 
@@ -404,18 +420,6 @@ int run(int argc, char **argv) {
     bool do_auto_layout = false;
 
     FuncInfo::Config config;
-    config.x = config.y = 0;
-    config.zoom = 1;
-    config.color_dim = -1;
-    config.min = 0;
-    config.max = 1;
-    config.store_cost = 1;
-    config.load_cost = 0;
-    config.blank_on_end_realization = false;
-    config.dims = 2;
-    config.x_stride = { 1, 0 };
-    config.y_stride = { 0, 1 };
-    config.uninitialized_memory_color = 255 << 24;
 
     vector<pair<int, int>> pos_stack;
 
@@ -491,11 +495,10 @@ int run(int argc, char **argv) {
                     break;
                 }
                 expect(i + 2 < argc, i);
-                if (config.x_stride.size() <= config.dims) config.x_stride.resize(config.dims+1, 0);
-                if (config.y_stride.size() <= config.dims) config.y_stride.resize(config.dims+1, 0);
-                config.x_stride[config.dims] = parse_int(argv[++i]);
-                config.y_stride[config.dims] = parse_int(argv[++i]);
-                config.dims++;
+                if (config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
+                int x = parse_int(argv[++i]);
+                int y = parse_int(argv[++i]);
+                config.strides[config.dims++] = {x, y};
             }
         } else if (next == "--label") {
             expect(i + 3 < argc, i);
@@ -521,8 +524,23 @@ int run(int argc, char **argv) {
             int b = parse_int(argv[++i]);
             config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else if (next == "--auto") {
-            // TODO: document mixing flags
+            // TODO: document me
             do_auto_layout = true;
+        } else if (next == "--auto_grid") {
+            // TODO: document me
+            expect(i + 2 < argc, i);
+            auto_layout_cols = parse_int(argv[++i]);
+            auto_layout_rows = parse_int(argv[++i]);
+        } else if (next == "--no-label") {
+            // TODO: document me
+            expect(i + 1 < argc, i);
+            char *func = argv[++i];
+            func_info[func].config.labels.clear();
+        } else if (next == "--no-func") {
+            // TODO: document me
+            expect(i + 1 < argc, i);
+            char *func = argv[++i];
+            func_info.erase(func);
         } else {
             expect(false, i);
         }
@@ -557,6 +575,7 @@ int run(int argc, char **argv) {
     struct AutoLayoutInfo {
         string name;
         LayoutInfoPhase phase;
+        vector<int> bounds;
     };
 
     map<uint32_t, vector<AutoLayoutInfo>> pipeline_auto_layout_info;
@@ -648,8 +667,16 @@ int run(int argc, char **argv) {
         } else if (p.event == halide_trace_pipeline_layout_info) {
             // If there are layout infos, they will come immediately after the pipeline's
             // halide_trace_begin_pipeline and before any realizations.
-std::cerr<<"LAYOUT: "<< p.func()<< " " << p.get_value_as<int>(0)<<"\n";
-            pipeline_auto_layout_info[p.parent_id].push_back({ p.func(), p.get_value_as<LayoutInfoPhase>(0) });
+            vector<int> bounds(p.dimensions);
+            for (int i = 0; i < p.dimensions; ++i) {
+                bounds[i] = p.get_coord(i);
+            }
+        std::cerr<<"p.func() "<<p.func()<<" bounds "<<bounds<<" p.dimensions "<<p.dimensions<<"\n";
+            pipeline_auto_layout_info[p.parent_id].push_back({
+                p.func(),
+                p.get_value_as<LayoutInfoPhase>(0),
+                std::move(bounds)
+            });
             continue;
         } else if (p.event == halide_trace_pipeline_metadata) {
             // TODO
@@ -671,7 +698,6 @@ std::cerr<<"LAYOUT: "<< p.func()<< " " << p.get_value_as<int>(0)<<"\n";
         }
 
         string qualified_name = pipeline.name + ":" + p.func();
-//std::cerr<<"qualified_name:? "<< qualified_name<<"\n";
 
         if (func_info.find(qualified_name) == func_info.end()) {
             if (func_info.find(p.func()) != func_info.end()) {
@@ -685,65 +711,42 @@ std::cerr<<"LAYOUT: "<< p.func()<< " " << p.get_value_as<int>(0)<<"\n";
         // auto-layout.
         if (do_auto_layout) {
             assert(pipeline_auto_layout_info.count(pipeline.id));
-            for (const auto &info : pipeline_auto_layout_info[pipeline.id]) {
+            vector<AutoLayoutInfo> &v = pipeline_auto_layout_info[pipeline.id];
+            // Sort so we have inputs, intermediates, outputs
+            struct by_layout_phase {
+                bool operator()(const AutoLayoutInfo &a,
+                                const AutoLayoutInfo &b) const {
+                    return a.phase < b.phase;
+                }
+            };
+            std::stable_sort(v.begin(), v.end(), by_layout_phase());
+            int num_cells = auto_layout_rows * auto_layout_cols;
+            if (v.size() > num_cells) {
+                std::cerr << "Warning: not enough grid cells for auto, need at least " << v.size() << "\n";
+            }
+            int cell_w = frame_width / auto_layout_cols;
+            int cell_h = frame_height / auto_layout_rows;
+            for (int i = 0; i < (int)v.size(); ++i) {
+                const auto &info = v[i];
                 string qualified_name = pipeline.name + ":" + info.name;
                 FuncInfo &fi = func_info[qualified_name];
-std::cerr<<"CONFIG:? "<< qualified_name<<" -> " <<fi.configured<<"\n";
-                if (fi.configured) continue;
 
-                // gray
-                fi.config.color_dim = -1;
-                fi.config.zoom = 1;
-                fi.config.min = 0;
-                fi.config.store_cost = 1;
-                fi.config.load_cost = 0;
-                fi.config.blank_on_end_realization = false;
-                fi.config.dims = 2;
-                fi.config.x_stride = { 1, 0 };
-                fi.config.y_stride = { 0, 1 };
-                fi.config.uninitialized_memory_color = 255 << 24;
-
-                if (info.phase == LayoutInfoPhase::Input) {
-                    fi.config.x = 100;
-                    fi.config.y = 300;
-                    fi.config.max = 1;
-                }
-
-                if (info.phase == LayoutInfoPhase::Intermediate) {
-                    fi.config.x = 550;
-                    fi.config.y = 300;
-                    fi.config.max = 32;
-                }
-
-                if (info.phase == LayoutInfoPhase::Output) {
-                    fi.config.x = 1564;
-                    fi.config.y = 300;
-                    fi.config.max = 1;
-                }
+// TODO ugh
+                fi.config.x = (i % auto_layout_cols) * cell_w + 20;
+                fi.config.y = (i / auto_layout_cols) * cell_h + 20;
 
                 fi.config.labels.push_back({info.name, fi.config.x, fi.config.y, 1});
 
-    // fi.config.zoom = 1;
-    // fi.config.min = 0;
-    // fi.config.max = 1;
-    // fi.config.store_cost = 1;
-    // fi.config.load_cost = 0;
-    // fi.config.blank_on_end_realization = false;
-    // fi.config.dims = 2;
-    // fi.config.x_stride = { 1, 0 };
-    // fi.config.y_stride = { 0, 1 };
-    // fi.config.uninitialized_memory_color = 255 << 24;
-// # --gray --strides 1 0 0 1 \
-// # --max 1 --move 100 300 --func input \
-// # --strides 1 0 0 1 40 0 --zoom 3 \
-// # --max 32 --move 550 100 --func histogram \
-// # --max 512 --down 200 --func blurz \
-// # --max 8192 --down 200 --func blurx \
-// # --max 131072 --down 200 --func blury \
-// # --strides 1 0 0 1 --zoom 1 \
-// # --max 1 --move 1564 300 --func bilateral_grid | \
-                fi.config.labels.swap(config.labels);
-                // fi.config.dump(func);
+                fi.config.dims = info.bounds.size() / 2;
+                if (fi.config.strides.size() < fi.config.dims) fi.config.strides.resize(fi.config.dims, {0, 0});
+                // std::cerr<<"LAYOUT: "<< info.name<< " @ " << fi.config.x<<" "<<fi.config.y<<" dims " << fi.config.dims<<" strides " << fi.config.strides<<"\n";
+
+                if (fi.config.dims == 3) {
+                    // assume RGB
+                    // TODO only if unspecified
+                    fi.config.color_dim = 2;
+                }
+
                 fi.configured = true;
             }
             do_auto_layout = false;
@@ -807,8 +810,9 @@ std::cerr<<"CONFIG:? "<< qualified_name<<" -> " <<fi.configured<<"\n";
                     const float z = fi.config.zoom;
                     for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_coord(d * p.type.lanes + lane);
-                        x += z * fi.config.x_stride[d] * a;
-                        y += z * fi.config.y_stride[d] * a;
+                        const auto &pt = fi.config.strides[d];
+                        x += z * pt.first * a;
+                        y += z * pt.second * a;
                     }
 
                     // The box to draw must be entirely on-screen
