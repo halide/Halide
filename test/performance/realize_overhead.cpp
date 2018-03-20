@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         Pipeline p(f);
         p.compile_jit();
 
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         Realization r(buf);
         Target target;
         ParamMap pm;
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         Pipeline p(f);
         p.compile_jit();
 
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         Target target;
         ParamMap pm;
         double t = benchmark([&]() { p.realize(buf, target, pm); });
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         p.compile_jit();
 
         // This is probably the most common case
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         double t = benchmark([&]() { p.realize(buf); });
         std::cout << "No argument Pipeline realize reusing Buffer only time " << t * 1e6 << "us.\n";
     }
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         Pipeline p(f);
         p.compile_jit();
 
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         Realization r(buf);
         Target target("host-no_asserts-no_bounds_query");
         ParamMap pm;
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
 
         in.set(0);
 
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         double t = benchmark([&]() { f.realize(buf); });
         std::cout << "One argument Func realize to Buffer time " << t * 1e6 << "us.\n";
     }
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
         Pipeline p(f);
         p.compile_jit();
 
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         Realization r(buf);
         Target target;
         ParamMap pm;
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         f() = e;
         f.compile_jit();
 
-        Buffer<int32_t> buf(1);
+        auto buf = Buffer<int32_t>::make_scalar();
         double t = benchmark([&]() { f.realize(buf); });
         std::cout << std::to_string(i) << "-argument Func realize to Buffer time " << t * 1e6 << "us.\n";
     }
