@@ -68,7 +68,7 @@ public:
         RealizationArg(Realization &&r) : r(&r) { }
         RealizationArg(halide_buffer_t *buf) : buf(buf) { }
         template<typename T, int D>
-        NO_INLINE RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
+        RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
         template <typename T>
         NO_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
         template<typename T, typename ...Args,
@@ -413,8 +413,8 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    NO_INLINE void realize(RealizationArg output, const Target &target = Target(), 
-                           const ParamMap &param_map = ParamMap::empty_map());
+    void realize(RealizationArg output, const Target &target = Target(), 
+                 const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -424,8 +424,8 @@ public:
     // @{
     void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, 
                             const ParamMap &param_map = ParamMap::empty_map());
-    NO_INLINE void infer_input_bounds(RealizationArg output,
-                                      const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(RealizationArg output,
+                            const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
