@@ -62,7 +62,7 @@ struct FuncInfo {
 
     // Configuration for how the func should be drawn
     struct Config {
-        int zoom = 0;
+        float zoom = 0;
         int load_cost = 0;
         int store_cost = 0;
         int dims = 0;
@@ -278,7 +278,7 @@ Funcs.
      screen. This is the default
 
  --zoom factor: Each value of a Func will draw as a factor x factor
-     box in the output.
+     box in the output. Fractional values are allowed.
 
  --load time: Each load from a Func costs the given number of ticks.
 
@@ -378,7 +378,7 @@ int parse_int(const char *str) {
     return (int) result;
 }
 
-int parse_float(const char *str) {
+float parse_float(const char *str) {
     char *endptr = nullptr;
     errno = 0;
     float result = strtof(str, &endptr);
@@ -476,7 +476,7 @@ int run(int argc, char **argv) {
             config.blank_on_end_realization = false;
         } else if (next == "--zoom") {
             expect(i + 1 < argc, i);
-            config.zoom = parse_int(argv[++i]);
+            config.zoom = parse_float(argv[++i]);
         } else if (next == "--load") {
             expect(i + 1 < argc, i);
             config.load_cost = parse_int(argv[++i]);
@@ -707,11 +707,11 @@ int run(int argc, char **argv) {
                     // Compute the screen-space x, y coord to draw this.
                     int x = fi.config.x;
                     int y = fi.config.y;
-                    const int z = fi.config.zoom;
+                    const float z = fi.config.zoom;
                     for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_coord(d * p.type.lanes + lane);
-                        x += fi.config.zoom * fi.config.x_stride[d] * a;
-                        y += fi.config.zoom * fi.config.y_stride[d] * a;
+                        x += z * fi.config.x_stride[d] * a;
+                        y += z * fi.config.y_stride[d] * a;
                     }
 
                     // The box to draw must be entirely on-screen
