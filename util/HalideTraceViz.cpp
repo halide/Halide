@@ -794,11 +794,12 @@ int run(int argc, char **argv) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
-            break;
+        // Note that you can get nested pipeline begin/end events when you trace
+        // something that has extern stages that are also Halide-being-traced;
+        // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
-            std::cerr << "Misplaced tracing event: " << p.event << "\n";
-            exit(-1);
+            break;
         default:
             std::cerr << "Unknown tracing event code: " << p.event << "\n";
             exit(-1);
