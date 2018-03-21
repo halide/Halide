@@ -138,8 +138,9 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     int roi_width = 0;
     int roi_height = 0;
 
-    //To Do To removed when chaining of descriptor is implemented  
-    // To do we are assuming right now luma to be first component 
+    // Changing the Format to Chroma after LUMA is done   
+    //TODO: Will be removed when chaining of descriptor is implemented(LUMA and CHROMA Handled simultaneously)  
+    //TODO: We are assuming that Chroma is followed by LUMA Processing always, Work is in progress to resolve this   
     t_eDmaFmt lumaFmt = eDmaFmt_Invalid;
     if ((dev->fmt == eDmaFmt_NV12) || 
         (dev->fmt == eDmaFmt_P010) ||
@@ -195,7 +196,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     stDmaTransferParm.u16RoiX = dev->offset_x + dst->dim[0].min;
     stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min;
 
-    //DMA Driver anamoly for chroma element  
+    // DMA Driver Halves the Height and Y Offset so that only Half the ROI Size of Luma is transferred  for chroma
+    // We are compensating this assumption to meet  Halide perspective. i.e. ROI size is same for both Luma and Chroma    
     if ((dev->fmt == eDmaFmt_NV12_UV) ||
         (dev->fmt == eDmaFmt_P010_UV) ||
         (dev->fmt == eDmaFmt_TP10_UV) ||
@@ -205,7 +207,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         stDmaTransferParm.u16RoiY = stDmaTransferParm.u16RoiY * 2;
     }
 
-    //To Do We are assuming here that first is luma component then chroma 
+    //TODO: We are assuming that first is luma component followed by chroma, Work is in progress to avoid this Assumption 
     if (((stDmaTransferParm.u16RoiY + roi_height) == dev->frame_height) &&
         (stDmaTransferParm.u16RoiX + roi_width == dev->frame_width)) {
         dev->fmt = (t_eDmaFmt)((int)dev->fmt + 1);
