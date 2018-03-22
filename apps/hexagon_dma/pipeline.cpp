@@ -4,23 +4,23 @@ using namespace Halide;
 
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 2};
-    Output<Buffer<uint8_t>> output_y{"output_y", 2};
-    Output<Buffer<uint8_t>> output_uv{"output_uv", 2};
+    Input<Buffer<uint8_t>> input{"input", 3};
+    Output<Buffer<uint8_t>> output_y{"output_y", 3};
+    Output<Buffer<uint8_t>> output_uv{"output_uv", 3};
 
     void generate() {
-        Var x{"x"}, y{"y"};
+        Var x{"x"}, y{"y"}, c{"c"};
 
         // We need a wrapper for the output so we can schedule the
         // multiply update in tiles.
         Func copy_y("copy_y");
         Func copy_uv("copy_uv");
 
-        copy_y(x, y) = input(x, y);
-        copy_uv(x, y) = input(x, y);
+        copy_y(x, y, c) = input(x, y, c);
+        copy_uv(x, y, c) = input(x, y, c);
 
-        output_y(x, y) = copy_y(x, y) * 2;
-        output_uv(x, y) = copy_uv(x, y) * 2;
+        output_y(x, y, c) = copy_y(x, y, c) * 2;
+        output_uv(x, y, c) = copy_uv(x, y, c) * 2;
 
         Var tx("tx"), ty("ty");
 

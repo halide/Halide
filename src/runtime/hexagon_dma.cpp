@@ -138,16 +138,18 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     int roi_width = 0;
     int roi_height = 0;
 
-    // Changing the Format to Chroma after LUMA is done   
-    //TODO: Will be removed when chaining of descriptor is implemented(LUMA and CHROMA Handled simultaneously)  
-    //TODO: We are assuming that Chroma is followed by LUMA Processing always, Work is in progress to resolve this   
-    t_eDmaFmt lumaFmt = eDmaFmt_Invalid;
+    // Changing the Format to Chroma or LUMA based on dimension    
+    t_eDmaFmt currentFmt = dev->fmt;
     if ((dev->fmt == eDmaFmt_NV12) || 
         (dev->fmt == eDmaFmt_P010) ||
         (dev->fmt == eDmaFmt_TP10) ||
         (dev->fmt == eDmaFmt_NV124R)) {
-        lumaFmt = (t_eDmaFmt)((int)dev->fmt+ 1);
-        dev->fmt = lumaFmt;
+        if ((dst->dimensions = 3) &&
+            (dst->dim[2].min == 1)) {
+            currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); //chroma format
+        } else {
+            currentFmt = (t_eDmaFmt)((int)dev->fmt+ 1); //luma
+        }
     }
  
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
@@ -180,7 +182,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     }
 
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
-    stDmaTransferParm.eFmt = dev->fmt; 
+    stDmaTransferParm.eFmt = currentFmt; 
     stDmaTransferParm.u16FrameW = dev->frame_width;
     stDmaTransferParm.u16FrameH = dev->frame_height;
     stDmaTransferParm.u16FrameStride = dev->frame_stride;
@@ -198,19 +200,12 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // DMA Driver Halves the Height and Y Offset so that only Half the ROI Size of Luma is transferred  for chroma
     // We are compensating this assumption to meet  Halide perspective. i.e. ROI size is same for both Luma and Chroma    
-    if ((dev->fmt == eDmaFmt_NV12_UV) ||
-        (dev->fmt == eDmaFmt_P010_UV) ||
-        (dev->fmt == eDmaFmt_TP10_UV) ||
-        (dev->fmt == eDmaFmt_NV124R_UV)) {
-        
+    if ((currentFmt == eDmaFmt_NV12_UV) ||
+        (currentFmt == eDmaFmt_P010_UV) ||
+        (currentFmt == eDmaFmt_TP10_UV) ||
+        (currentFmt == eDmaFmt_NV124R_UV)) {
         stDmaTransferParm.u16RoiH = roi_height * 2;
         stDmaTransferParm.u16RoiY = stDmaTransferParm.u16RoiY * 2;
-    }
-
-    //TODO: We are assuming that first is luma component followed by chroma, Work is in progress to avoid this Assumption 
-    if (((stDmaTransferParm.u16RoiY + roi_height) == dev->frame_height) &&
-        (stDmaTransferParm.u16RoiX + roi_width == dev->frame_width)) {
-        dev->fmt = (t_eDmaFmt)((int)dev->fmt + 1);
     }
 
     debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n" ;
