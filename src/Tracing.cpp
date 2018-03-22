@@ -72,6 +72,18 @@ private:
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
             trace_it = trace_all_loads;
+            // If there is a Function in the env named "name_im", assume that
+            // this image is an ImageParam, so sniff that Function to see
+            // if we want to trace loads on it. (This allows us to trace
+            // loads on inputs without having to enable them globally.)
+            auto it = env.find(op->name + "_im");
+            if (it != env.end()) {
+                Function f = it->second;
+                if (f.is_tracing_loads()) {
+                    trace_it = true;
+                }
+            }
+
             trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
