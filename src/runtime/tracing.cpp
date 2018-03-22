@@ -367,8 +367,8 @@ WEAK int halide_trace_helper(void *user_context,
                              int parent_id, int value_index, int dimensions) {
     halide_trace_event_t event;
     event.func = func;
-    event.coordinates = coords;
     event.value = value;
+    event.coordinates = coords;
     event.type.code = (halide_type_code_t)type_code;
     event.type.bits = (uint8_t)type_bits;
     event.type.lanes = (uint16_t)type_lanes;
@@ -379,6 +379,9 @@ WEAK int halide_trace_helper(void *user_context,
         dimensions *= event.type.lanes;
     }
     event.dimensions = dimensions;
+    halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
+    halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
+    halide_msan_annotate_memory_is_initialized(user_context, coords, dimensions * sizeof(int32_t));
     return halide_trace(user_context, &event);
 }
 
