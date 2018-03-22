@@ -12,7 +12,7 @@ using std::string;
 using std::pair;
 
 struct TraceEventBuilder {
-    string func;
+    string func, trace_tag;
     vector<Expr> value;
     vector<Expr> coordinates;
     Type type;
@@ -33,7 +33,8 @@ struct TraceEventBuilder {
                              values, coords,
                              (int)type.code(), (int)type.bits(), (int)type.lanes(),
                              (int)event,
-                             parent_id, idx, (int)coordinates.size()};
+                             parent_id, idx, (int)coordinates.size(),
+                             Expr(trace_tag)};
         return Call::make(Int(32), Call::trace, args, Call::Extern);
     }
 };
@@ -42,6 +43,8 @@ class InjectTracing : public IRMutator2 {
 public:
     const map<string, Function> &env;
     const bool trace_all_loads, trace_all_stores, trace_all_realizations;
+    // We want to preserve the order, so use a vector<pair> rather than a map
+    vector<pair<string, vector<string>>> trace_tags;
 
     InjectTracing(const map<string, Function> &e, const Target &t)
         : env(e),
@@ -72,6 +75,18 @@ private:
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
             trace_it = trace_all_loads;
+            // If there is a Function in the env named "name_im", assume that
+            // this image is an ImageParam, so sniff that Function to see
+            // if we want to trace loads on it. (This allows us to trace
+            // loads on inputs without having to enable them globally.)
+            auto it = env.find(op->name + "_im");
+            if (it != env.end()) {
+                Function f = it->second;
+                if (f.is_tracing_loads()) {
+                    trace_it = true;
+                }
+            }
+
             trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
@@ -182,6 +197,11 @@ private:
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
             stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
+
+            const vector<string> &t = f.get_trace_tags();
+            if (!t.empty()) {
+                trace_tags.push_back({op->name, t});
+            }
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
@@ -291,6 +311,24 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
         Expr pipeline_end = builder.build();
 
         s = Block::make(s, Evaluate::make(pipeline_end));
+
+        // All trace_tag events go at the start, immediately after begin_pipeline.
+        // For a given realization/input/output, we output them in the order
+        // we encounter them (which is to say, the order they were added); however,
+        // we don't attempt to preserve a particular order between functions.
+        for (const auto &trace_tags : tracing.trace_tags) {
+            // builder.parent_id is already set correctly
+            builder.func = trace_tags.first;  // func name
+            builder.event = halide_trace_tag;
+            // We must reverse-iterate to preserve order
+            for (auto it = trace_tags.second.rbegin(); it != trace_tags.second.rend(); ++it) {
+                user_assert(it->find('\0') == string::npos)
+                    << "add_trace_tag() may not contain the null character.";
+                builder.trace_tag = *it;
+                s = Block::make(Evaluate::make(builder.build()), s);
+            }
+        }
+
         s = LetStmt::make("pipeline.trace_id", pipeline_start, s);
     }
 

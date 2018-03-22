@@ -228,6 +228,7 @@ void define_func(py::module &m) {
         .def("trace_stores", &Func::trace_stores)
         .def("trace_realizations", &Func::trace_realizations)
         .def("print_loop_nest", &Func::print_loop_nest)
+        .def("add_trace_tag", &Func::add_trace_tag, py::arg("trace_tag"))
 
         // TODO: also provide to-array versions to avoid requiring filesystem usage
         .def("debug_to_file", &Func::debug_to_file)

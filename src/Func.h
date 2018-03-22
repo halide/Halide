@@ -2245,6 +2245,13 @@ public:
      * halide_trace. */
     Func &trace_realizations();
 
+    /** Add a string of arbitrary text that will be passed thru to trace
+     * inspection code if the Func is realized in trace mode. (Funcs that are
+     * inlined won't have their tags emitted.) Ignored entirely if
+     * tracing is not enabled for the Func (or globally).
+     */
+    Func &add_trace_tag(const std::string &trace_tag);
+
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */

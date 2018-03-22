@@ -2458,6 +2458,12 @@ Func &Func::trace_realizations() {
     return *this;
 }
 
+Func &Func::add_trace_tag(const std::string &trace_tag) {
+    invalidate_cache();
+    func.add_trace_tag(trace_tag);
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     invalidate_cache();
     func.debug_file() = filename;
