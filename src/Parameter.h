@@ -109,6 +109,9 @@ public:
      * bound buffer. Only relevant when jitting */
     Buffer<> buffer() const;
 
+    /** Get the raw currently-bound buffer. null if unbound */
+    const halide_buffer_t *raw_buffer() const;
+
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
     void set_buffer(Buffer<> b);
@@ -116,7 +119,6 @@ public:
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
      * change. Only relevant when jitting. */
-
     void *scalar_address() const;
 
     /** Tests if this handle is the same as another handle */
