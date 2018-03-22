@@ -182,17 +182,30 @@ int main(int argc, char **argv) {
         if (i < correct_trace_length) correct = correct_trace[i];
 
         if (!events_match(recorded, correct)) {
-            // Uh oh. Maybe it's just a reordered load.
-            if (i > 0 && events_match(recorded, correct_trace[i-1]) &&
-                recorded.event_type == 0 && correct.event_type == 0) {
-                // Phew.
-                continue;
-            }
+            constexpr int radius_max = 2;
 
-            if (i < correct_trace_length-1 &&
-                events_match(recorded, correct_trace[i+1]) &&
-                recorded.event_type == 0 && correct.event_type == 0) {
-                // Phew.
+            // Uh oh. Maybe it's just a reordered load.
+            bool reordered = false;
+            for (int radius = 1; radius <= radius_max; ++radius) {
+                if (i >= radius &&
+                    events_match(recorded, correct_trace[i-radius]) &&
+                    recorded.event_type == 0 &&
+                    correct.event_type == 0) {
+                    // Phew.
+                    reordered = true;
+                    break;
+                }
+
+                if (i < correct_trace_length-radius &&
+                    events_match(recorded, correct_trace[i+radius]) &&
+                    recorded.event_type == 0 &&
+                    correct.event_type == 0) {
+                    // Phew.
+                    reordered = true;
+                    break;
+                }
+            }
+            if (reordered) {
                 continue;
             }
 
