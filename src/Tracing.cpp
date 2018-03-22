@@ -177,6 +177,11 @@ private:
         if (iter == env.end()) return stmt;
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
+            const vector<string> &t = f.get_trace_tags();
+            if (!t.empty()) {
+                trace_tags.push_back({op->name, t});
+            }
+
             // Throw a tracing call before and after the realize body
             TraceEventBuilder builder;
             builder.func = op->name;
@@ -197,11 +202,7 @@ private:
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
             stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
-
-            const vector<string> &t = f.get_trace_tags();
-            if (!t.empty()) {
-                trace_tags.push_back({op->name, t});
-            }
+            // Warning: 'op' may be invalid at this point
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
