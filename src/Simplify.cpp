@@ -17,6 +17,7 @@
 #include "Bounds.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "IRMatch.h"
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -4401,16 +4402,9 @@ private:
             return expr;
         }
 
-        const Call *ct = true_value.as<Call>();
-        const Call *cf = false_value.as<Call>();
-        const Select *sel_t = true_value.as<Select>();
-        const Select *sel_f = false_value.as<Select>();
-        const Add *add_t = true_value.as<Add>();
-        const Add *add_f = false_value.as<Add>();
-        const Sub *sub_t = true_value.as<Sub>();
-        const Sub *sub_f = false_value.as<Sub>();
-        const Mul *mul_t = true_value.as<Mul>();
-        const Mul *mul_f = false_value.as<Mul>();
+        auto mutated = IRMatcher::select(condition, true_value, false_value);
+
+        IRMatcher::Wild x, y, z, w;
 
         if (is_zero(condition)) {
             return false_value;
@@ -4434,124 +4428,58 @@ private:
             } else {
                 return mutate(!condition);
             }
-        } else if (const Broadcast *b = condition.as<Broadcast>()) {
-            // Select of broadcast -> scalar select
-            return mutate(Select::make(b->value, true_value, false_value));
-        } else if (const NE *ne = condition.as<NE>()) {
-            // Normalize select(a != b, c, d) to select(a == b, d, c)
-            return mutate(Select::make(ne->a == ne->b, false_value, true_value));
-        } else if (const LE *le = condition.as<LE>()) {
-            // Normalize select(a <= b, c, d) to select(b < a, d, c)
-            return mutate(Select::make(le->b < le->a, false_value, true_value));
-        } else if (ct && ct->is_intrinsic(Call::likely) &&
-                   equal(ct->args[0], false_value)) {
-            // select(cond, likely(a), a) -> likely(a)
+        } else if (match(condition, broadcast(x))) {
+            return mutate(select(x, true_value, false_value));
+        } else if (match(condition, x != y)) {
+            // Normalize select(x != y, c, d) to select(a == b, d, c)
+            return mutate(select(x == y, false_value, true_value));
+        } else if (match(condition, x <= y)) {
+            // Normalize select(x <= y, c, d) to select(y < x, d, c)
+            return mutate(select(y < x, false_value, true_value));
+        } else if (match(true_value, intrin(Call::likely, x))) {
             return true_value;
-        } else if (cf &&
-                   cf->is_intrinsic(Call::likely) &&
-                   equal(cf->args[0], true_value)) {
-            // select(cond, a, likely(a)) -> likely(a)
+        } else if (match(false_value, intrin(Call::likely, x))) {
             return false_value;
-        } else if (sel_t &&
-                   equal(sel_t->true_value, false_value)) {
-            // select(a, select(b, c, d), c) -> select(a && !b, d, c)
-            return mutate(Select::make(condition && !sel_t->condition, sel_t->false_value, false_value));
-        } else if (sel_t &&
-                   equal(sel_t->false_value, false_value)) {
-            // select(a, select(b, c, d), d) -> select(a && b, c, d)
-            return mutate(Select::make(condition && sel_t->condition, sel_t->true_value, false_value));
-        } else if (sel_f &&
-                   equal(sel_f->false_value, true_value)) {
-            // select(a, d, select(b, c, d)) -> select(a || !b, d, c)
-            return mutate(Select::make(condition || !sel_f->condition, true_value, sel_f->true_value));
-        } else if (sel_f &&
-                   equal(sel_f->true_value, true_value)) {
-            // select(a, d, select(b, d, c)) -> select(a || b, d, c)
-            return mutate(Select::make(condition || sel_f->condition, true_value, sel_f->false_value));
-        } else if (sel_t &&
-                   equal(sel_t->condition, condition)) {
-            // select(a, select(a, b, c), d) -> select(a, b, d)
-            return mutate(Select::make(condition, sel_t->true_value, false_value));
-        } else if (sel_f &&
-                   equal(sel_f->condition, condition)) {
-            // select(a, b, select(a, c, d)) -> select(a, b, d)
-            return mutate(Select::make(condition, true_value, sel_f->false_value));
-        } else if (add_t &&
-                   add_f &&
-                   equal(add_t->a, add_f->a)) {
-            // select(c, a+b, a+d) -> a + select(x, b, d)
-            return mutate(add_t->a + Select::make(condition, add_t->b, add_f->b));
-        } else if (add_t &&
-                   add_f &&
-                   equal(add_t->a, add_f->b)) {
-            // select(c, a+b, d+a) -> a + select(x, b, d)
-            return mutate(add_t->a + Select::make(condition, add_t->b, add_f->a));
-        } else if (add_t &&
-                   add_f &&
-                   equal(add_t->b, add_f->a)) {
-            // select(c, b+a, a+d) -> a + select(x, b, d)
-            return mutate(add_t->b + Select::make(condition, add_t->a, add_f->b));
-        } else if (add_t &&
-                   add_f &&
-                   equal(add_t->b, add_f->b)) {
-            // select(c, b+a, d+a) -> select(x, b, d) + a
-            return mutate(Select::make(condition, add_t->a, add_f->a) + add_t->b);
-        } else if (sub_t &&
-                   sub_f &&
-                   equal(sub_t->a, sub_f->a)) {
-            // select(c, a-b, a-d) -> a - select(x, b, d)
-            return mutate(sub_t->a - Select::make(condition, sub_t->b, sub_f->b));
-        } else if (sub_t &&
-                   sub_f &&
-                   equal(sub_t->b, sub_f->b)) {
-            // select(c, b-a, d-a) -> select(x, b, d) - a
-            return mutate(Select::make(condition, sub_t->a, sub_f->a) - sub_t->b);\
-        } else if (add_t &&
-                   sub_f &&
-                   equal(add_t->a, sub_f->a)) {
-            // select(c, a+b, a-d) -> a + select(x, b, 0-d)
-            return mutate(add_t->a + Select::make(condition, add_t->b, make_zero(sub_f->b.type()) - sub_f->b));
-        } else if (add_t &&
-                   sub_f &&
-                   equal(add_t->b, sub_f->a)) {
-            // select(c, b+a, a-d) -> a + select(x, b, 0-d)
-            return mutate(add_t->b + Select::make(condition, add_t->a, make_zero(sub_f->b.type()) - sub_f->b));
-        } else if (sub_t &&
-                   add_f &&
-                   equal(sub_t->a, add_f->a)) {
-            // select(c, a-b, a+d) -> a + select(x, 0-b, d)
-            return mutate(sub_t->a + Select::make(condition, make_zero(sub_t->b.type()) - sub_t->b, add_f->b));
-        } else if (sub_t &&
-                   add_f &&
-                   equal(sub_t->a, add_f->b)) {
-            // select(c, a-b, d+a) -> a + select(x, 0-b, d)
-            return mutate(sub_t->a + Select::make(condition, make_zero(sub_t->b.type()) - sub_t->b, add_f->a));
-        } else if (mul_t &&
-                   mul_f &&
-                   equal(mul_t->a, mul_f->a)) {
-            // select(c, a*b, a*d) -> a * select(x, b, d)
-            return mutate(mul_t->a * Select::make(condition, mul_t->b, mul_f->b));
-        } else if (mul_t &&
-                   mul_f &&
-                   equal(mul_t->a, mul_f->b)) {
-            // select(c, a*b, d*a) -> a * select(x, b, d)
-            return mutate(mul_t->a * Select::make(condition, mul_t->b, mul_f->a));
-        } else if (mul_t &&
-                   mul_f &&
-                   equal(mul_t->b, mul_f->a)) {
-            // select(c, b*a, a*d) -> a * select(x, b, d)
-            return mutate(mul_t->b * Select::make(condition, mul_t->a, mul_f->b));
-        } else if (mul_t &&
-                   mul_f &&
-                   equal(mul_t->b, mul_f->b)) {
-            // select(c, b*a, d*a) -> select(x, b, d) * a
-            return mutate(Select::make(condition, mul_t->a, mul_f->a) * mul_t->b);
+        } else if (match(mutated, select(x, select(y, z, w), z))) {
+            return mutate(select(x && !y, w, z));
+        } else if (match(mutated, select(x, select(y, z, w), w))) {
+            return mutate(select(x && y, z, w));
+        } else if (match(mutated, select(x, y, select(z, w, y)))) {
+            return mutate(select(x || !z, y, w));
+        } else if (match(mutated, select(x, y, select(z, y, w)))) {
+            return mutate(select(x || z, y, w));
+        } else if (match(mutated, select(x, y, select(x, z, w)))) {
+            return mutate(select(x, y, w));
+        } else if (match(mutated, select(x, select(x, y, z), w))) {
+            return mutate(select(x, y, w));
+        } else if (match(mutated, select(x, y + z, y + w)) ||
+                   match(mutated, select(x, y + z, w + y)) ||
+                   match(mutated, select(x, z + y, y + w))) {
+            return mutate(y + select(x, z, w));
+        } else if (match(mutated, select(x, z + y, w + y))) {
+            return mutate(select(x, z, w) + y);
+        } else if (match(mutated, select(x, y - z, y - w))) {
+            return mutate(y - select(x, z, w));
+        } else if (match(mutated, select(x, y - z, w - z))) {
+            return mutate(select(x, y, w) - z);
+        } else if (match(mutated, select(x, y + z, y - w)) ||
+                   match(mutated, select(x, z + y, y - w))) {
+            return mutate(y + select(x, z, - w));
+        } else if (match(mutated, select(x, y - z, y + w)) ||
+                   match(mutated, select(x, y - z, w + y))) {
+            return mutate(y + select(x, - z, w));
+        } else if (match(mutated, select(x, y * z, y * w)) ||
+                   match(mutated, select(x, y * z, w * y)) ||
+                   match(mutated, select(x, z * y, y * w))) {
+            return mutate(y * select(x, z, w));
+        } else if (match(mutated, select(x, z * y, w * y))) {
+            return mutate(select(x, z, w) * y);
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
             return op;
         } else {
-            return Select::make(condition, true_value, false_value);
+            return select(condition, true_value, false_value);
         }
     }
 
