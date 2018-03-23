@@ -152,7 +152,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         uint32_t header_bytes = (uint32_t)sizeof(halide_trace_packet_t);
         uint32_t coords_bytes = e->dimensions * (uint32_t)sizeof(int32_t);
         uint32_t name_bytes = strlen(e->func) + 1;
-        uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes;
+        uint32_t trace_tag_bytes = e->trace_tag ? (strlen(e->trace_tag) + 1) : 1;
+        uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes + trace_tag_bytes;
         uint32_t total_size = (total_size_without_padding + 3) & ~3;
 
         // Claim some space to write to in the trace buffer
@@ -177,6 +178,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
             memcpy((void *)packet->value(), e->value, value_bytes);
         }
         memcpy((void *)packet->func(), e->func, name_bytes);
+        memcpy((void *)packet->trace_tag(), e->trace_tag ? e->trace_tag : "", trace_tag_bytes);
 
         // Release it
         halide_trace_buffer->release_packet(packet);
@@ -206,7 +208,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                                      "Consume",
                                      "End consume",
                                      "Begin pipeline",
-                                     "End pipeline"};
+                                     "End pipeline",
+                                     "Tag"};
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);
@@ -278,6 +281,11 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                 ss << ">";
             }
         }
+
+        if (e->trace_tag && *e->trace_tag) {
+            ss << " tag = \"" << e->trace_tag << "\"";
+        }
+
         ss << "\n";
         ss.msan_annotate_is_initialized();
 
@@ -364,11 +372,13 @@ WEAK int halide_trace_helper(void *user_context,
                              void *value, int *coords,
                              int type_code, int type_bits, int type_lanes,
                              int code,
-                             int parent_id, int value_index, int dimensions) {
+                             int parent_id, int value_index, int dimensions,
+                             const char *trace_tag) {
     halide_trace_event_t event;
     event.func = func;
     event.coordinates = coords;
     event.value = value;
+    event.trace_tag = trace_tag;
     event.type.code = (halide_type_code_t)type_code;
     event.type.bits = (uint8_t)type_bits;
     event.type.lanes = (uint16_t)type_lanes;
