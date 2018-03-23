@@ -300,15 +300,6 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "type_only_input_buffer",
-          halide_argument_kind_input_buffer,
-          3,
-          halide_type_t(halide_type_uint, 8),
-          nullptr,
-          nullptr,
-          nullptr,
-        },
-        {
           "dim_only_input_buffer",
           halide_argument_kind_input_buffer,
           3,
@@ -624,6 +615,150 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "buffer_array_input1_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input1_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input2_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input2_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input3_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input3_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input4_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input4_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input5_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input5_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input6_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input6_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input7_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input7_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input8_0",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "buffer_array_input8_1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "output.0",
           halide_argument_kind_output_buffer,
           3,
@@ -757,6 +892,114 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
           nullptr,
           nullptr,
+        },
+        {
+          "array_outputs4_0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs4_1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs5_0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs5_1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs6_0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs6_1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs7_0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs7_1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs8_0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs8_1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs9_0",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "array_outputs9_1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
         }
     };
     const int kExpectedArgumentCount = (int)sizeof(kExpectedArguments) / sizeof(kExpectedArguments[0]);
@@ -782,6 +1025,7 @@ int main(int argc, char **argv) {
     int result;
 
     Buffer<uint8_t> input = make_image<uint8_t>();
+    Buffer<float> input_array[2] = {make_image<float>(), make_image<float>()};
 
     Buffer<float> output0(kSize, kSize, 3);
     Buffer<float> output1(kSize, kSize, 3);
@@ -793,11 +1037,16 @@ int main(int argc, char **argv) {
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array3[2] = {Buffer<float>{1}, Buffer<float>{1}};
+    Buffer<float> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array7[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array8[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float> output_array9[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
 
     result = metadata_tester(
         input,             // Input<Func>
         input,             // Input<Buffer<uint8_t>>
-        input,             // Input<Buffer<>>(uint8)
         input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
         false,             // Input<bool>
@@ -824,6 +1073,14 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[]>
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
         output0, output1,  // Output<Tuple(Func, Func)>
         typed_output_buffer,    // Output<Buffer<float>>(3)
         type_only_output_buffer,    // Output<Buffer<float>>
@@ -832,7 +1089,13 @@ int main(int argc, char **argv) {
         output_scalar,     // Output<float>
         output_array[0], output_array[1],   // Output<Func[]>
         output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
-        output_array3[0], output_array3[1]  // Output<float[2]>
+        output_array3[0], output_array3[1],  // Output<float[2]>
+        output_array4[0], output_array4[1],  // Output<Buffer<float>[2]>
+        output_array5[0], output_array5[1],  // Output<Buffer<float>[2]>
+        output_array6[0], output_array6[1],  // Output<Buffer<float>[2]>
+        output_array7[0], output_array7[1],  // Output<Buffer<float>[2]>
+        output_array8[0], output_array8[1],  // Output<Buffer<float>[2]>
+        output_array9[0], output_array9[1]   // Output<Buffer<float>[2]>
     );
     EXPECT_EQ(0, result);
 
@@ -840,7 +1103,6 @@ int main(int argc, char **argv) {
         user_context,
         input,             // Input<Func>
         input,             // Input<Buffer<uint8_t>>
-        input,             // Input<Buffer<>>(uint8)
         input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
         false,             // Input<bool>
@@ -867,6 +1129,14 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[]>
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
+        input_array[0], input_array[1],  // Input<Buffer<float>[2]>
         output0, output1,  // Output<Tuple(Func, Func)>
         typed_output_buffer,    // Output<Buffer<float>>(3)
         type_only_output_buffer,    // Output<Buffer<float>>
@@ -875,7 +1145,13 @@ int main(int argc, char **argv) {
         output_scalar,     // Output<float>
         output_array[0], output_array[1],    // Output<Func[]>
         output_array2[0], output_array2[1], output_array2[2], output_array2[3], // Output<Func[2]>(Tuple)
-        output_array3[0], output_array3[1]  // Output<float[2]>
+        output_array3[0], output_array3[1],  // Output<float[2]>
+        output_array4[0], output_array4[1],  // Output<Buffer<float>[2]>
+        output_array5[0], output_array5[1],  // Output<Buffer<float>[2]>
+        output_array6[0], output_array6[1],  // Output<Buffer<float>[2]>
+        output_array7[0], output_array7[1],  // Output<Buffer<float>[2]>
+        output_array8[0], output_array8[1],  // Output<Buffer<float>[2]>
+        output_array9[0], output_array9[1]   // Output<Buffer<float>[2]>
     );
     EXPECT_EQ(0, result);
 

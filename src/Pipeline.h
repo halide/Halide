@@ -57,10 +57,46 @@ struct JITExtern;
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
 class Pipeline {
+public:
+    struct RealizationArg {
+        // Only one of the following may be non-null
+        Realization *r{nullptr};
+        halide_buffer_t *buf{nullptr};
+        std::unique_ptr<std::vector<Buffer<>>> buffer_list;
+
+        RealizationArg(Realization &r) : r(&r) { }
+        RealizationArg(Realization &&r) : r(&r) { }
+        RealizationArg(halide_buffer_t *buf) : buf(buf) { }
+        template<typename T, int D>
+        RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
+        template <typename T>
+        NO_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
+        template<typename T, typename ...Args,
+                 typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
+            RealizationArg(Buffer<T> &a, Args&&... args) {
+            buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
+        }
+        RealizationArg(RealizationArg &&from) = default;
+
+        size_t size() {
+            if (r != nullptr) {
+                return r->size();
+            } else if (buffer_list) {
+                return buffer_list->size();
+            }
+            return 1;
+        }
+    };
+
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target, const ParamMap &param_map, bool is_bounds_inference);
+
+    struct JITCallArgs; // Opaque structure to optimize away dynamic allocation in this path.
+
+    // For the three method below, precisely one of the first two args should be non-null
+    void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
+                                    void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -87,7 +123,7 @@ public:
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the
-     * realization order. */
+     * topological order. */
     Func get_func(size_t index);
 
     /** Compile and generate multiple target files with single call.
@@ -200,7 +236,7 @@ public:
     Module compile_to_module(const std::vector<Argument> &args,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment(),
-                             const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::ExternalPlusMetadata);
+                             const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -354,16 +390,18 @@ public:
 
     /** See Func::realize */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size, int z_size, int w_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size, int z_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or
@@ -375,7 +413,8 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    void realize(RealizationArg output, const Target &target = Target(), 
+                 const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -383,8 +422,10 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
-    void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, 
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(RealizationArg output,
+                            const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
@@ -406,6 +447,7 @@ public:
     void invalidate_cache();
 
 private:
+
     std::string generate_function_name() const;
 };
 

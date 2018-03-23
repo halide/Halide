@@ -35,9 +35,37 @@ using std::queue;
 using std::array;
 using std::pair;
 
+std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
+    stream << "[ ";
+    bool need_comma = false;
+    for (int i : v) {
+        if (need_comma) {
+            stream << ", ";
+        }
+        stream << i;
+        need_comma = true;
+    }
+    stream << " ]";
+    return stream;
+}
+
+std::ostream &operator<<(std::ostream &stream, const vector<pair<int, int>> &v) {
+    stream << "[ ";
+    bool need_comma = false;
+    for (auto &pt : v) {
+        if (need_comma) {
+            stream << ", ";
+        }
+        stream << "(" << pt.first << "," << pt.second << ")";
+        need_comma = true;
+    }
+    stream << " ]";
+    return stream;
+}
+
 // A struct specifying a text label that will appear on the screen at some point.
 struct Label {
-    const char *text;
+    string text;
     int x, y, n;
 };
 
@@ -48,45 +76,30 @@ struct FuncInfo {
 
     // Configuration for how the func should be drawn
     struct Config {
-        int zoom = 0;
+        float zoom = 1.f;
         int load_cost = 0;
-        int store_cost = 0;
-        int dims = 0;
+        int store_cost = 1;
+        int dims = 2;
         int x, y = 0;
-        int x_stride[16];
-        int y_stride[16];
-        int color_dim = 0;
-        float min = 0.0f, max = 0.0f;
+        vector<pair<int, int>> strides = { {1, 0}, {0, 1} };
+        int color_dim = -1;
+        float min = 0.f, max = 1.f;
         vector<Label> labels;
         bool blank_on_end_realization = false;
         uint32_t uninitialized_memory_color = 0xff000000;
 
         void dump(const char *name) {
-            fprintf(stderr,
-                    "Func %s:\n"
-                    " min: %f max: %f\n"
-                    " color_dim: %d\n"
-                    " blank: %d\n"
-                    " dims: %d\n"
-                    " zoom: %d\n"
-                    " load cost: %d\n"
-                    " store cost: %d\n"
-                    " x: %d y: %d\n"
-                    " x_stride: %d %d %d %d\n"
-                    " y_stride: %d %d %d %d\n",
-                    name,
-                    min, max,
-                    color_dim,
-                    blank_on_end_realization,
-                    dims,
-                    zoom, load_cost, store_cost, x, y,
-                    x_stride[0], x_stride[1], x_stride[2], x_stride[3],
-                    y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
-        }
-
-        Config() {
-            memset(x_stride, 0, sizeof(x_stride));
-            memset(y_stride, 0, sizeof(y_stride));
+            std::cerr <<
+                    "Func " << name << ":\n" <<
+                    " min: " << min << " max: " << max << "\n" <<
+                    " color_dim: " << color_dim << "\n" <<
+                    " blank: " << blank_on_end_realization << "\n" <<
+                    " dims: " << dims << "\n" <<
+                    " zoom: " << zoom << "\n" <<
+                    " load cost: " << load_cost << "\n" <<
+                    " store cost: " << store_cost << "\n" <<
+                    " x: " << x << " y: " << y << "\n" <<
+                    " strides: " << strides << "\n";
         }
     } config;
 
@@ -142,30 +155,24 @@ struct FuncInfo {
         }
 
         void report() {
-            fprintf(stderr,
-                    "Func %s:\n"
-                    " bounds of domain: ", qualified_name.c_str());
+            std::cerr <<
+                    "Func " << qualified_name << ":\n";
             for (int i = 0; i < 16; i++) {
-                if (min_coord[i] == 0 && max_coord[i] == 0) break;
-                if (i > 0) {
-                    fprintf(stderr, " x ");
+                if (min_coord[i] == 0 && max_coord[i] == 0) {
+                    break;
                 }
-                fprintf(stderr, "[%d, %d)", min_coord[i], max_coord[i]);
+                if (i > 0) {
+                    std::cerr << " x ";
+                }
+                std::cerr << "[" << min_coord[i] << ", " << max_coord[i] << ")";
             }
-            // TODO: Convert this file to using std::cerr so I don't
-            // have to struggle with cross-platform printf format
-            // specifiers. (stores and loads below really shouldn't be a double)
-            fprintf(stderr,
+            std::cerr <<
                     "\n"
-                    " range of values: [%f, %f]\n"
-                    " number of realizations: %d\n"
-                    " number of productions: %d\n"
-                    " number of loads: %g\n"
-                    " number of stores: %g\n",
-                    min_value, max_value,
-                    num_realizations, num_productions,
-                    (double)loads,
-                    (double)stores);
+                    " range of values: [" << min_value << ", " << max_value << "]\n"
+                    " number of realizations: " << num_realizations << "\n"
+                    " number of productions: " << num_productions << "\n"
+                    " number of loads: " << loads << "\n"
+                    " number of stores: " << stores << "\n";
         }
 
     } stats;
@@ -187,21 +194,24 @@ void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
     }
 }
 
-#define FONT_W 12
-#define FONT_H 32
-void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+static constexpr int FONT_W = 12;
+static constexpr int FONT_H = 32;
+
+void draw_text(const std::string &text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
     // The font array contains 96 characters of FONT_W * FONT_H letters.
     assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
 
     // Drop any alpha component of color
     color &= 0xffffff;
 
-    for (int c = 0; ; c++) {
-        int chr = text[c];
-        if (chr == 0) return;
+    int c = -1;
+    for (int chr : text) {
+        ++c;
 
         // We only handle a subset of ascii
-        if (chr < 32 || chr > 127) chr = 32;
+        if (chr < 32 || chr > 127) {
+            chr = 32;
+        }
         chr -= 32;
 
         uint8_t *font_ptr = inconsolata_raw + chr * (FONT_W * FONT_H);
@@ -218,7 +228,7 @@ void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, in
 }
 
 void usage() {
-    fprintf(stderr,
+    std::cerr <<
             R"USAGE(
 HalideTraceViz accepts Halide-generated binary tracing packets from
 stdin, and outputs them as raw 8-bit rgba32 pixel values to
@@ -279,7 +289,7 @@ Funcs.
      screen. This is the default
 
  --zoom factor: Each value of a Func will draw as a factor x factor
-     box in the output.
+     box in the output. Fractional values are allowed.
 
  --load time: Each load from a Func costs the given number of ticks.
 
@@ -321,25 +331,26 @@ Funcs.
      appears with its bottom left corner at the current coordinates
      and fades in over n frames.
 
-)USAGE");
+)USAGE";
 }
 
 // If the condition is false, print usage and exit with error.
 void expect(bool cond, int i) {
     if (!cond) {
         if (i) {
-            fprintf(stderr, "Argument parsing failed at argument %d\n", i);
+            std::cerr << "Argument parsing failed at argument " << i << "\n";
         }
         usage();
         exit(-1);
     }
 }
 
-// See all boxes corresponding to positions in a Func's allocation to
+// Set all boxes corresponding to positions in a Func's allocation to
 // the given color. Recursive to handle arbitrary
 // dimensionalities. Used by begin and end realization events.
-void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color, const FuncInfo &fi,
-                      Packet &p, int current_dimension = 0, int x_off = 0, int y_off = 0) {
+void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color,
+                      const FuncInfo &fi, const Packet &p,
+                      int current_dimension = 0, int x_off = 0, int y_off = 0) {
     assert(p.dimensions >= 2 * fi.config.dims);
     if (2 * current_dimension == p.dimensions) {
         int x_min = x_off * fi.config.zoom + fi.config.x;
@@ -355,14 +366,41 @@ void fill_realization(uint32_t *image, int image_width, int image_height, uint32
     } else {
         int min = p.get_coord(current_dimension * 2 + 0);
         int extent = p.get_coord(current_dimension * 2 + 1);
-        x_off += fi.config.x_stride[current_dimension] * min;
-        y_off += fi.config.y_stride[current_dimension] * min;
+        const auto &pt = fi.config.strides[current_dimension];
+        x_off += pt.first * min;
+        y_off += pt.second * min;
         for (int i = min; i < min + extent; i++) {
-            fill_realization(image, image_width, image_height, color, fi, p, current_dimension + 1, x_off, y_off);
-            x_off += fi.config.x_stride[current_dimension];
-            y_off += fi.config.y_stride[current_dimension];
+            fill_realization(image, image_width, image_height, color, fi, p,
+                current_dimension + 1, x_off, y_off);
+            const auto &pt = fi.config.strides[current_dimension];
+            x_off += pt.first;
+            y_off += pt.second;
         }
     }
+}
+
+int parse_int(const char *str) {
+    char *endptr = nullptr;
+    errno = 0;
+    long result = strtol(str, &endptr, 0);
+    if (errno == ERANGE || str == endptr) {
+        std::cerr << "Unable to parse '" << str << "' as an int\n";
+        usage();
+        exit(-1);
+    }
+    return (int) result;
+}
+
+float parse_float(const char *str) {
+    char *endptr = nullptr;
+    errno = 0;
+    float result = strtof(str, &endptr);
+    if (errno == ERANGE || str == endptr) {
+        std::cerr << "Unable to parse '" << str << "' as a float\n";
+        usage();
+        exit(-1);
+    }
+    return result;
 }
 
 int run(int argc, char **argv) {
@@ -379,21 +417,8 @@ int run(int argc, char **argv) {
     int timestep = 10000;
     int hold_frames = 250;
 
+    // The struct's default values are what we want
     FuncInfo::Config config;
-    config.x = config.y = 0;
-    config.zoom = 1;
-    config.color_dim = -1;
-    config.min = 0;
-    config.max = 1;
-    config.store_cost = 1;
-    config.load_cost = 0;
-    config.blank_on_end_realization = false;
-    config.dims = 2;
-    config.x_stride[0] = 1;
-    config.y_stride[0] = 0;
-    config.x_stride[1] = 0;
-    config.y_stride[1] = 1;
-    config.uninitialized_memory_color = 255 << 24;
 
     vector<pair<int, int>> pos_stack;
 
@@ -403,8 +428,8 @@ int run(int argc, char **argv) {
         string next = argv[i];
         if (next == "--size") {
             expect(i + 2 < argc, i);
-            frame_width = atoi(argv[++i]);
-            frame_height = atoi(argv[++i]);
+            frame_width = parse_int(argv[++i]);
+            frame_height = parse_int(argv[++i]);
         } else if (next == "--func") {
             expect(i + 1 < argc, i);
             const char *func = argv[++i];
@@ -415,26 +440,26 @@ int run(int argc, char **argv) {
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
-            config.min = atof(argv[++i]);
+            config.min = parse_float(argv[++i]);
         } else if (next == "--max") {
             expect(i + 1 < argc, i);
-            config.max = atof(argv[++i]);
+            config.max = parse_float(argv[++i]);
         } else if (next == "--move") {
             expect(i + 2 < argc, i);
-            config.x = atoi(argv[++i]);
-            config.y = atoi(argv[++i]);
+            config.x = parse_int(argv[++i]);
+            config.y = parse_int(argv[++i]);
         } else if (next == "--left") {
             expect(i + 1 < argc, i);
-            config.x -= atoi(argv[++i]);
+            config.x -= parse_int(argv[++i]);
         } else if (next == "--right") {
             expect(i + 1 < argc, i);
-            config.x += atoi(argv[++i]);
+            config.x += parse_int(argv[++i]);
         } else if (next == "--up") {
             expect(i + 1 < argc, i);
-            config.y -= atoi(argv[++i]);
+            config.y -= parse_int(argv[++i]);
         } else if (next == "--down") {
             expect(i + 1 < argc, i);
-            config.y += atoi(argv[++i]);
+            config.y += parse_int(argv[++i]);
         } else if (next == "--push") {
             pos_stack.push_back({config.x, config.y});
         } else if (next == "--pop") {
@@ -444,7 +469,7 @@ int run(int argc, char **argv) {
             pos_stack.pop_back();
         } else if (next == "--rgb") {
             expect(i + 1 < argc, i);
-            config.color_dim = atoi(argv[++i]);
+            config.color_dim = parse_int(argv[++i]);
         } else if (next == "--gray") {
             config.color_dim = -1;
         } else if (next == "--blank") {
@@ -453,13 +478,13 @@ int run(int argc, char **argv) {
             config.blank_on_end_realization = false;
         } else if (next == "--zoom") {
             expect(i + 1 < argc, i);
-            config.zoom = atoi(argv[++i]);
+            config.zoom = parse_float(argv[++i]);
         } else if (next == "--load") {
             expect(i + 1 < argc, i);
-            config.load_cost = atoi(argv[++i]);
+            config.load_cost = parse_int(argv[++i]);
         } else if (next == "--store") {
             expect(i + 1 < argc, i);
-            config.store_cost = atoi(argv[++i]);
+            config.store_cost = parse_int(argv[++i]);
         } else if (next == "--strides") {
             config.dims = 0;
             while (i + 1 < argc) {
@@ -469,32 +494,33 @@ int run(int argc, char **argv) {
                     break;
                 }
                 expect(i + 2 < argc, i);
-                config.x_stride[config.dims] = atoi(argv[++i]);
-                config.y_stride[config.dims] = atoi(argv[++i]);
-                config.dims++;
+                if (config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
+                int x = parse_int(argv[++i]);
+                int y = parse_int(argv[++i]);
+                config.strides[config.dims++] = {x, y};
             }
         } else if (next == "--label") {
             expect(i + 3 < argc, i);
             char *func = argv[++i];
             char *text = argv[++i];
-            int n = atoi(argv[++i]);
+            int n = parse_int(argv[++i]);
             Label l = {text, config.x, config.y, n};
             func_info[func].config.labels.push_back(l);
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
-            timestep = atoi(argv[++i]);
+            timestep = parse_int(argv[++i]);
         } else if (next == "--decay") {
             expect(i + 2 < argc, i);
-            decay_factor[0] = atof(argv[++i]);
-            decay_factor[1] = atof(argv[++i]);
+            decay_factor[0] = parse_float(argv[++i]);
+            decay_factor[1] = parse_float(argv[++i]);
         } else if (next == "--hold") {
             expect(i + 1 < argc, i);
-            hold_frames = atoi(argv[++i]);
+            hold_frames = parse_int(argv[++i]);
         } else if (next == "--uninit") {
             expect(i + 3 < argc, i);
-            int r = atoi(argv[++i]);
-            int g = atoi(argv[++i]);
-            int b = atoi(argv[++i]);
+            int r = parse_int(argv[++i]);
+            int g = parse_int(argv[++i]);
+            int b = parse_int(argv[++i]);
             config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else {
             expect(false, i);
@@ -509,20 +535,12 @@ int run(int argc, char **argv) {
 
     // There are three layers - image data, an animation on top of
     // it, and text labels. These layers get composited.
-    uint32_t *image = new uint32_t[frame_width * frame_height];
-    memset(image, 0, 4 * frame_width * frame_height);
-
-    uint32_t *anim = new uint32_t[frame_width * frame_height];
-    memset(anim, 0, 4 * frame_width * frame_height);
-
-    uint32_t *anim_decay = new uint32_t[frame_width * frame_height];
-    memset(anim_decay, 0, 4 * frame_width * frame_height);
-
-    uint32_t *text = new uint32_t[frame_width * frame_height];
-    memset(text, 0, 4 * frame_width * frame_height);
-
-    uint32_t *blend = new uint32_t[frame_width * frame_height];
-    memset(blend, 0, 4 * frame_width * frame_height);
+    const int frame_elems = frame_width * frame_height;
+    std::vector<uint32_t> image(frame_elems, 0),
+                          anim(frame_elems, 0),
+                          anim_decay(frame_elems, 0),
+                          text(frame_elems, 0),
+                          blend(frame_elems, 0);
 
     struct PipelineInfo {
         string name;
@@ -543,16 +561,16 @@ int run(int argc, char **argv) {
         }
 
         if (halide_clock >= video_clock) {
-            const ssize_t frame_bytes = 4 * frame_width * frame_height;
+            const ssize_t frame_bytes = 4 * frame_elems;
 
             while (halide_clock >= video_clock) {
                 // Composite text over anim over image
-                for (int i = 0; i < frame_width * frame_height; i++) {
-                    uint8_t *anim_decay_px  = (uint8_t *)(anim_decay + i);
-                    uint8_t *anim_px  = (uint8_t *)(anim + i);
-                    uint8_t *image_px = (uint8_t *)(image + i);
-                    uint8_t *text_px  = (uint8_t *)(text + i);
-                    uint8_t *blend_px = (uint8_t *)(blend + i);
+                for (int i = 0; i < frame_elems; i++) {
+                    uint8_t *anim_decay_px  = (uint8_t *)(anim_decay.data() + i);
+                    uint8_t *anim_px  = (uint8_t *)(anim.data() + i);
+                    uint8_t *image_px = (uint8_t *)(image.data() + i);
+                    uint8_t *text_px  = (uint8_t *)(text.data() + i);
+                    uint8_t *blend_px = (uint8_t *)(blend.data() + i);
                     // anim over anim_decay
                     composite(anim_decay_px, anim_px, anim_decay_px);
                     // anim_decay over image
@@ -562,9 +580,9 @@ int run(int argc, char **argv) {
                 }
 
                 // Dump the frame
-                ssize_t bytes_written = write(1, blend, frame_bytes);
+                ssize_t bytes_written = write(1, blend.data(), frame_bytes);
                 if (bytes_written < frame_bytes) {
-                    fprintf(stderr, "Could not write frame to stdout.\n");
+                    std::cerr << "Could not write frame to stdout.\n";
                     return -1;
                 }
 
@@ -573,7 +591,7 @@ int run(int argc, char **argv) {
                 // Decay the anim_decay
                 if (decay_factor[1] != 1) {
                     const uint32_t inv_d1 = (1 << 24) / decay_factor[1];
-                    for (int i = 0; i < frame_width * frame_height; i++) {
+                    for (int i = 0; i < frame_elems; i++) {
                         uint32_t color = anim_decay[i];
                         uint32_t rgb = color & 0x00ffffff;
                         uint32_t alpha = (color >> 24);
@@ -585,7 +603,7 @@ int run(int argc, char **argv) {
 
                 // Also decay the anim
                 const uint32_t inv_d0 = (1 << 24) / decay_factor[0];
-                for (int i = 0; i < frame_width * frame_height; i++) {
+                for (int i = 0; i < frame_elems; i++) {
                     uint32_t color = anim[i];
                     uint32_t rgb = color & 0x00ffffff;
                     uint32_t alpha = (color >> 24);
@@ -596,7 +614,7 @@ int run(int argc, char **argv) {
             }
 
             // Blank anim
-            memset(anim, 0, frame_bytes);
+            std::fill(anim.begin(), anim.end(), 0);
         }
 
         // Read a tracing packet
@@ -612,6 +630,7 @@ int run(int argc, char **argv) {
             pipeline_info[p.id] = {p.func(), p.id};
             continue;
         } else if (p.event == halide_trace_end_pipeline) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
             continue;
         }
@@ -621,10 +640,12 @@ int run(int argc, char **argv) {
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
             p.event == halide_trace_consume) {
+            assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
                    p.event == halide_trace_end_consume) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
         }
 
@@ -635,8 +656,8 @@ int run(int argc, char **argv) {
                 func_info[qualified_name] = func_info[p.func()];
                 func_info.erase(p.func());
             } else {
-                fprintf(stderr, "Warning: ignoring func %s event %d    \n", qualified_name.c_str(), p.event);
-                fprintf(stderr, "Parent event %d %s\n", p.parent_id, pipeline.name.c_str());
+                std::cerr << "Warning: ignoring func " << qualified_name << " event " << p.event << "\n";
+                std::cerr << "Parent event " << p.parent_id << " " << pipeline.name << "\n";
             }
         }
 
@@ -658,11 +679,11 @@ int run(int argc, char **argv) {
         for (size_t i = 0; i < fi.config.labels.size(); i++) {
             const Label &label = fi.config.labels[i];
             if (frames_since_first_draw <= label.n) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
+                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::min(1, label.n);
                 if (color > 255) color = 255;
                 color *= 0x10101;
 
-                draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
+                draw_text(label.text, label.x, label.y, color, text.data(), frame_width, frame_height);
             }
         }
 
@@ -690,11 +711,12 @@ int run(int argc, char **argv) {
                     // Compute the screen-space x, y coord to draw this.
                     int x = fi.config.x;
                     int y = fi.config.y;
-                    const int z = fi.config.zoom;
+                    const float z = fi.config.zoom;
                     for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_coord(d * p.type.lanes + lane);
-                        x += fi.config.zoom * fi.config.x_stride[d] * a;
-                        y += fi.config.zoom * fi.config.y_stride[d] * a;
+                        const auto &pt = fi.config.strides[d];
+                        x += z * pt.first * a;
+                        y += z * pt.second * a;
                     }
 
                     // The box to draw must be entirely on-screen
@@ -759,11 +781,11 @@ int run(int argc, char **argv) {
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            fill_realization(image, frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
+            fill_realization(image.data(), frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
             if (fi.config.blank_on_end_realization) {
-                fill_realization(image, frame_width, frame_height, 0, fi, p);
+                fill_realization(image.data(), frame_width, frame_height, 0, fi, p);
             }
             break;
         case halide_trace_produce:
@@ -772,17 +794,20 @@ int run(int argc, char **argv) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
+        // Note that you can get nested pipeline begin/end events when you trace
+        // something that has extern stages that are also Halide-being-traced;
+        // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
             break;
         default:
-            fprintf(stderr, "Unknown tracing event code: %d\n", p.event);
+            std::cerr << "Unknown tracing event code: " << p.event << "\n";
             exit(-1);
         }
 
     }
 
-    fprintf(stderr, "Total number of Funcs: %d\n", (int)func_info.size());
+    std::cerr << "Total number of Funcs: " << func_info.size() << "\n";
 
     // Print stats about the Func gleaned from the trace.
     vector<std::pair<std::string, FuncInfo> > funcs;

@@ -2,10 +2,12 @@
 #include <sstream>
 
 #include "IRPrinter.h"
+
+#include "Associativity.h"
+#include "AssociativeOpsTable.h"
 #include "IROperator.h"
 #include "Module.h"
-#include "AssociativeOpsTable.h"
-#include "Associativity.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -124,6 +126,10 @@ ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
         << (loop_level.defined() ? loop_level.to_string() : "undefined")
         << ")";
+}
+
+ostream &operator<<(ostream &stream, const Target &target) {
+    return stream << "target(" << target.to_string() << ")";
 }
 
 namespace Internal {
@@ -269,15 +275,15 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 }
 
 
-std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &type) {
+std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
-    case LoweredFunc::ExternalPlusMetadata:
+    case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
-    case LoweredFunc::External:
+    case LinkageType::External:
         stream << "external";
         break;
-    case LoweredFunc::Internal:
+    case LinkageType::Internal:
         stream << "internal";
         break;
     }
