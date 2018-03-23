@@ -51,19 +51,19 @@ void expr_match_test();
 namespace IRMatcher {
 
 struct Wild {
-    const Expr *val = nullptr;
+    const BaseExprNode *val = nullptr;
     HALIDE_ALWAYS_INLINE bool match(const Expr &e) {
         if (val) {
             // early-out
-            if ((*val)->node_type != e->node_type) return false;
-            if (val->same_as(e)) return true;
-            return equal(*val, e);
+            if (val->node_type != e->node_type) return false;
+            if (val == e.get()) return true;
+            return equal(val, e);
         }
-        val = &e;
+        val = (const BaseExprNode *)e.get();
         return true;
     }
-    operator Expr() {
-        return *val;
+    NO_INLINE operator Expr() {
+        return val;
     }
     HALIDE_ALWAYS_INLINE void reset() {
         val = nullptr;
@@ -99,7 +99,7 @@ struct Intrin {
     }
 
     Intrin(Call::ConstString intrin, Args... args) : intrin(intrin), args(args...) {}
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return val;
     }
     HALIDE_ALWAYS_INLINE void reset() {
@@ -121,7 +121,7 @@ struct ConstInt {
             return false;
         }
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return *val;
     }
     HALIDE_ALWAYS_INLINE void reset() {
@@ -139,7 +139,7 @@ struct Zero {
             return false;
         }
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return make_zero(type);
     }
     HALIDE_ALWAYS_INLINE void reset() {}
@@ -155,7 +155,7 @@ struct One {
             return false;
         }
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return make_one(type);
     }
     HALIDE_ALWAYS_INLINE void reset() {}
@@ -171,8 +171,10 @@ struct BinOp {
                 a.match(op->a) &&
                 b.match(op->b));
     }
-    operator Expr() {
-        return Op::make(a, b);
+    NO_INLINE operator Expr() {
+        Expr ea = a, eb = b;
+        match_types(ea, eb);
+        return Op::make(ea, eb);
     }
     HALIDE_ALWAYS_INLINE void reset() {
         a.reset();
@@ -188,7 +190,7 @@ struct UnaryOp {
         return (op->node_type == Op::_node_type &&
                 a.match(op->a));
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return Op::make(a);
     }
     HALIDE_ALWAYS_INLINE void reset() {
@@ -212,7 +214,7 @@ struct SelectOp {
     HALIDE_ALWAYS_INLINE bool match(const SelectOp<C2, T2, F2> &instance) {
         return c.match(instance.c) && t.match(instance.t) && f.match(instance.f);
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return Select::make(c, t, f);
     }
     HALIDE_ALWAYS_INLINE void reset() {
@@ -236,7 +238,7 @@ struct BroadcastOp {
             return false;
         }
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return Broadcast::make(a, lanes);
     }
     HALIDE_ALWAYS_INLINE void reset() {
@@ -260,7 +262,7 @@ struct RampOp {
             return false;
         }
     }
-    operator Expr() {
+    NO_INLINE operator Expr() {
         return Ramp::make(a, b, lanes);
     }
     HALIDE_ALWAYS_INLINE void reset() {
@@ -332,6 +334,16 @@ BinOp<EQ, A, B> operator==(A &&a, B &&b) {
 template<typename A, typename B>
 BinOp<NE, A, B> operator!=(A &&a, B &&b) {
     return BinOp<NE, A, B>{a, b};
+}
+
+template<typename A, typename B>
+BinOp<Or, A, B> operator||(A &&a, B &&b) {
+    return BinOp<Or, A, B>{a, b};
+}
+
+template<typename A, typename B>
+BinOp<And, A, B> operator&&(A &&a, B &&b) {
+    return BinOp<And, A, B>{a, b};
 }
 
 template<typename A>

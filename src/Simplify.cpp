@@ -162,6 +162,15 @@ public:
 
     }
 
+    HALIDE_ALWAYS_INLINE Expr mutate(Expr &&e) {
+        return ((const BaseExprNode *)e.get())->mutate_expr(this);
+    }
+
+    Expr mutate(const Expr &e) override {
+        return ((const BaseExprNode *)e.get())->mutate_expr(this);
+    }
+
+
 #if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e) override {
         const std::string spaces(debug_indent, ' ');
@@ -4397,12 +4406,13 @@ private:
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
+
+        auto mutated = IRMatcher::select(condition, true_value, false_value);
+
         Expr expr;
         if (propagate_indeterminate_expression(condition, true_value, false_value, op->type, &expr)) {
             return expr;
         }
-
-        auto mutated = IRMatcher::select(condition, true_value, false_value);
 
         IRMatcher::Wild x, y, z, w;
 
