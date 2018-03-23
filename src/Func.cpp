@@ -2458,6 +2458,12 @@ Func &Func::trace_realizations() {
     return *this;
 }
 
+Func &Func::add_trace_tag(const std::string &trace_tag) {
+    invalidate_cache();
+    func.add_trace_tag(trace_tag);
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     invalidate_cache();
     func.debug_file() = filename;
@@ -2823,32 +2829,39 @@ FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
+                          const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     return pipeline().realize(sizes, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize({x_size, y_size, z_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, int y_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize(std::vector<int>{x_size}, target, param_map);
 }
 
-Realization Func::realize(const Target &target, const ParamMap &param_map) {
+Realization Func::realize(const Target &target,
+                          const ParamMap &param_map) {
     return realize(std::vector<int>{}, target, param_map);
 }
 
-  void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) {
+void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                              const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     int sizes[] = {x_size, y_size, z_size, w_size};
@@ -3040,12 +3053,14 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Realization dst, const Target &target, const ParamMap &param_map) {
-    pipeline().realize(dst, target, param_map);
+void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
+                   const ParamMap &param_map) {
+    pipeline().realize(std::move(outputs), target, param_map);
 }
 
-void Func::infer_input_bounds(Realization dst, const ParamMap &param_map) {
-    pipeline().infer_input_bounds(dst, param_map);
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+                              const ParamMap &param_map) {
+    pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 
 void *Func::compile_jit(const Target &target) {
