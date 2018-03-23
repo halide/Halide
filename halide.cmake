@@ -574,7 +574,7 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
-      COMMAND CMAKE -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
@@ -582,9 +582,9 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
-      COMMAND CMAKE -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
-      COMMAND CMAKE -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
-      COMMAND CMAKE -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
