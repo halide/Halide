@@ -570,12 +570,25 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
   add_custom_target(${EXEC_TARGET} DEPENDS ${args_OUTPUTS})
 
   # As of CMake 3.x, add_custom_command() recognizes executable target names in its COMMAND.
-  add_custom_command(
-    OUTPUT ${args_OUTPUTS}
-    DEPENDS ${args_GENERATOR_BINARY}
-    COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
-    COMMENT "${EXTRA_OUTPUTS_COMMENT}"
-  )
+  if(NOT WIN32)
+    add_custom_command(
+      OUTPUT ${args_OUTPUTS}
+      DEPENDS ${args_GENERATOR_BINARY}
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
+      COMMENT "${EXTRA_OUTPUTS_COMMENT}"
+    )
+  else()
+    add_custom_command(
+      OUTPUT ${args_OUTPUTS}
+      DEPENDS ${args_GENERATOR_BINARY}
+      COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
+      COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
+      COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
+      COMMENT "${EXTRA_OUTPUTS_COMMENT}"
+    )
+  endif()
   foreach(OUT ${args_OUTPUTS})
     set_source_files_properties(${OUT} PROPERTIES GENERATED TRUE)
   endforeach()
