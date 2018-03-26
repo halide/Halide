@@ -135,7 +135,6 @@ int main(int argc, char **argv) {
 
     input.trace_loads();
 
-    // Make it all-zero so the existing output values are the same
     Buffer<float> input_buf(10);
     input_buf.fill(0.f);
     input.set(input_buf);
