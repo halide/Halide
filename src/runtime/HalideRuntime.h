@@ -1571,12 +1571,20 @@ extern struct halide_profiler_state *halide_profiler_get_state();
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
-/** Reset all profiler state.
+/** Reset profiler state cheaply. May leave threads running or some
+ * memory allocated but all accumluated statistics are reset.
  * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
 extern void halide_profiler_reset();
+
+/** Reset all profiler state.
+ * WARNING: Do NOT call this method while any halide pipeline is
+ * running; halide_profiler_memory_allocate/free and
+ * halide_profiler_stack_peak_update update the profiler pipeline's
+ * state without grabbing the global profiler state's lock. */
+void halide_profiler_shutdown();
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
