@@ -167,7 +167,6 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         do_reloc_32(fixup_addr, intptr_t((S + A - P) >> 32));
         break;
     case R_AMDGPU_RELATIVE64:
-        do_reloc_64(fixup_addr, intptr_t(B + A));
         break;
     default:
         internal_error << "Unhandled relocation type " << type << "\n";
@@ -175,8 +174,8 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
 
     if (needs_got_entry && G == got.contents_size()) {
         debug(2) << "Adding GOT entry " << G << " for symbol " << sym->get_name() << "\n";
-        got.append_contents((uint32_t)0);
-        got.add_relocation(Relocation(R_HEX_GLOB_DAT, G, 0, sym));
+        got.append_contents((uint64_t)0);
+        got.add_relocation(Relocation(R_AMDGPU_RELATIVE64, G, 0, sym));
     }
 }
 
@@ -201,15 +200,15 @@ public:
     uint64_t get_got_entry(Section &got, const Symbol &sym) override {
         // Check if we already made a got entry for this symbol.
         for (const Relocation &r : got.relocations()) {
-            if (r.get_symbol() == &sym && r.get_type() == R_HEX_GLOB_DAT) {
+            if (r.get_symbol() == &sym && r.get_type() == R_AMDGPU_RELATIVE64) {
                 internal_assert(r.get_addend() == 0);
                 return r.get_offset();
             }
         }
 
         uint64_t got_offset = got.contents_size();
-        got.append_contents((uint32_t)0);
-        got.add_relocation(Elf::Relocation(R_HEX_GLOB_DAT, got_offset, 0, &sym));
+        got.append_contents((uint64_t)0);
+        got.add_relocation(Elf::Relocation(R_AMDGPU_RELATIVE64, got_offset, 0, &sym));
         return got_offset;
     }
 
