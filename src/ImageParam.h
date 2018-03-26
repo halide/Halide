@@ -128,6 +128,9 @@ public:
     bool is_explicit_name() const {
         return param.is_explicit_name();
     }
+
+    /** Trace all loads from this ImageParam by emitting calls to halide_trace. */
+    void trace_loads();
 };
 
 }

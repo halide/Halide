@@ -82,7 +82,11 @@ private:
             auto it = env.find(op->name + "_im");
             if (it != env.end()) {
                 Function f = it->second;
-                if (f.is_tracing_loads()) {
+                // f could be scheduled and have actual loads from it (via ImageParam::in),
+                // so only honor trace the loads if it is inlined.
+                if (f.is_tracing_loads() &&
+                    f.can_be_inlined() &&
+                    f.schedule().compute_level().is_inlined()) {
                     trace_it = true;
                 }
             }
