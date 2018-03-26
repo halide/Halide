@@ -30,7 +30,7 @@ class RVar {
 
 public:
     /** An empty reduction variable. */
-    RVar() : _name(Internal::make_entity_name(this, "Halide::RVar", 'r')) {}
+    RVar() : _name(Internal::make_entity_name(this, "Halide:.*:RVar", 'r')) {}
 
     /** Construct an RVar with the given name */
     explicit RVar(const std::string &n) : _name(n) {

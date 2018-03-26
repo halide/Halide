@@ -62,11 +62,11 @@ public:
      * auto-generated name */
     // @{
     Param() :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
     }
     explicit Param(Type t) :
-        param(t, false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(t, false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(!has_static_type, "Cannot use this ctor with an explicit type.");
     }
     // @}
@@ -94,7 +94,7 @@ public:
      * 'val'. Only triggers for non-pointer types. */
     template <typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
     explicit Param(not_void_T val) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set<not_void_T>(val);
     }
@@ -111,7 +111,7 @@ public:
     /** Construct a scalar parameter of type T with an initial value of 'val'
     * and a given min and max. */
     Param(not_void_T val, Expr min, Expr max) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set_range(min, max);
         set<not_void_T>(val);
