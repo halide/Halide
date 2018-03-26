@@ -83,7 +83,7 @@ void define_func(py::module &m) {
         .def(py::init([](const ImageParam &im) -> Func { return im; }))
 
         .def("realize", [](Func &f, Buffer<> buffer, const Target &target, const ParamMap &param_map) -> void {
-            f.realize(Realization(buffer), target);
+            f.realize(buffer, target);
         }, py::arg("dst"), py::arg("target") = Target(), py::arg("param_map") = ParamMap())
 
         // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
@@ -228,6 +228,7 @@ void define_func(py::module &m) {
         .def("trace_stores", &Func::trace_stores)
         .def("trace_realizations", &Func::trace_realizations)
         .def("print_loop_nest", &Func::print_loop_nest)
+        .def("add_trace_tag", &Func::add_trace_tag, py::arg("trace_tag"))
 
         // TODO: also provide to-array versions to avoid requiring filesystem usage
         .def("debug_to_file", &Func::debug_to_file)
@@ -289,7 +290,7 @@ void define_func(py::module &m) {
             py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("param_map") = ParamMap())
 
         .def("infer_input_bounds", [](Func &f, Buffer<> buffer, const ParamMap &param_map) -> void {
-            f.infer_input_bounds(Realization(buffer), param_map);
+            f.infer_input_bounds(buffer, param_map);
         }, py::arg("dst"), py::arg("param_map") = ParamMap())
 
         .def("infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer, const ParamMap &param_map) -> void {
