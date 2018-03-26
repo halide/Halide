@@ -128,6 +128,7 @@ DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
+DECLARE_CPP_INITMOD(windows_profiler)
 DECLARE_CPP_INITMOD(windows_tempfile)
 DECLARE_CPP_INITMOD(windows_threads)
 DECLARE_CPP_INITMOD(write_debug_image)
@@ -746,10 +747,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
+            // MIPS doesn't support the atomics the profiler requires.
             if (t.arch != Target::MIPS && t.os != Target::NoOS &&
                 t.os != Target::QuRT) {
-                // MIPS doesn't support the atomics the profiler requires.
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
+	        if (t.os == Target::Windows) {
+		    modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+		} else {
+		    modules.push_back(get_initmod_profiler(c, bits_64, debug));
+		}
             }
 
             if (t.has_feature(Target::MSAN)) {

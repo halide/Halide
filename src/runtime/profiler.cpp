@@ -409,8 +409,9 @@ WEAK void halide_profiler_reset() {
     halide_profiler_reset_unlocked(s);
 }
 
-namespace {
+#ifndef WINDOWS
 __attribute__((destructor))
+#endif
 WEAK void halide_profiler_shutdown() {
     halide_profiler_state *s = halide_profiler_get_state();
     if (!s->sampling_thread) {
@@ -428,6 +429,27 @@ WEAK void halide_profiler_shutdown() {
 
     halide_profiler_reset_unlocked(s);
 }
+
+namespace {
+#ifdef WINDOWS
+WEAK void halide_windows_profiler_shutdown() {
+    halide_profiler_state *s = halide_profiler_get_state();
+    if (!s->sampling_thread) {
+        return;
+    }
+
+    // On Windows it is unsafe to do anything with threads or critical
+    // sections in a static destructor as it may run after threads
+    // have been killed by the OS. Furthermore, may calls, even things
+    // like EnterCriticalSection may be set to kill the process if
+    // called during process shutdown. Hence kthis routine doesn't attmept
+    // to clean up state as the destructor does on other platforms.
+
+    // Print results. Avoid locking as it will cause problems and
+    // nothing should be running.
+    halide_profiler_report_unlocked(NULL, s);
+}
+#endif
 }
 
 WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
