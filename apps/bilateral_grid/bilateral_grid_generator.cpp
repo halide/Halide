@@ -114,6 +114,37 @@ public:
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
         }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        input
+            .add_trace_tag("move 100 300");
+
+        histogram
+            .add_trace_tag("strides 1 0 0 1 40 0")
+            .add_trace_tag("zoom 3")
+            .add_trace_tag("max 32")
+            .add_trace_tag("move 550 100");
+
+        blurz
+            .add_trace_tag("strides 1 0 0 1 40 0")
+            .add_trace_tag("zoom 3")
+            .add_trace_tag("max 512")
+            .add_trace_tag("move 550 300");
+
+        blurx
+            .add_trace_tag("strides 1 0 0 1 40 0")
+            .add_trace_tag("zoom 3")
+            .add_trace_tag("max 8192")
+            .add_trace_tag("move 550 500");
+
+        blury
+            .add_trace_tag("strides 1 0 0 1 40 0")
+            .add_trace_tag("zoom 3")
+            .add_trace_tag("max 131072")
+            .add_trace_tag("move 550 700");
+
+        bilateral_grid
+            .add_trace_tag("move 1564 300");
     }
 };
 
