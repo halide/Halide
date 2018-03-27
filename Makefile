@@ -747,7 +747,7 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
 
-$(INCLUDE_DIR)/Halide.h: $(SRC_DIR)/HalideHeader.h $(HEADERS) $(SRC_DIR)/HalideFooter.h $(BIN_DIR)/build_halide_h
+$(INCLUDE_DIR)/Halide.h: $(SRC_DIR)/../LICENSE.txt $(HEADERS) $(BIN_DIR)/build_halide_h
 	@mkdir -p $(@D)
 	$(BIN_DIR)/build_halide_h ../LICENSE.txt $(HEADERS) > $(INCLUDE_DIR)/Halide.h
 	# Also generate a precompiled version in the same folder so that anything compiled with a compatible set of flags can use it
