@@ -750,11 +750,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // MIPS doesn't support the atomics the profiler requires.
             if (t.arch != Target::MIPS && t.os != Target::NoOS &&
                 t.os != Target::QuRT) {
-	        if (t.os == Target::Windows) {
-		    modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
-		} else {
-		    modules.push_back(get_initmod_profiler(c, bits_64, debug));
-		}
+                if (t.os == Target::Windows) {
+                    modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_profiler(c, bits_64, debug));
+                }
             }
 
             if (t.has_feature(Target::MSAN)) {
