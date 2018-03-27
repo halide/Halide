@@ -7,6 +7,27 @@
 #include "Simplify.h"
 
 namespace Halide {
+
+GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
+                                   const MachineParams &machine_params)
+    : target("target", t),
+      auto_schedule("auto_schedule", auto_schedule),
+      machine_params("machine_params", machine_params),
+      externs_map(std::make_shared<ExternsMap>()),
+      value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+
+GeneratorContext::~GeneratorContext() {
+    // nothing
+}
+
+void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
+    target.set(context.get_target());
+    auto_schedule.set(context.get_auto_schedule());
+    machine_params.set(context.get_machine_params());
+    value_tracker = context.get_value_tracker();
+    externs_map = context.get_externs_map();
+}
+
 namespace Internal {
 
 namespace {
@@ -404,9 +425,12 @@ void StubEmitter::emit() {
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
-        if (output->is_array()) getter = "get_array_output";
-        else if (c_type == "Func") getter = "get_output";
-        else getter = "get_output_buffer<" + c_type + ">";
+        const bool is_func = (c_type == "Func");
+        if (output->is_array()) {
+            getter = is_func ? "get_array_output" : "get_array_output_buffer<" + c_type + ">";
+        } else {
+            getter = is_func ? "get_output" : "get_output_buffer<" + c_type + ">";
+        }
         out_info.push_back({
             output->name(),
             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
@@ -1179,6 +1203,12 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
     }
 }
 
+void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
+  Halide::GeneratorContext::init_from_context(context);
+  // pre-emptively build our param_info now
+  (void) this->param_info();
+}
+
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
     user_assert(is_valid_name(registered_name)) << "Invalid Generator name: " << registered_name;
     internal_assert(!registered_name.empty() && !stub_name.empty());
@@ -1206,17 +1236,23 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
     ParamInfo &pi = param_info();
     for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
-            Parameter p = input->parameter();
-            // This must use p.name(), *not* input->name()
-            get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+            internal_assert(!input->parameters_.empty());
+            for (auto &p : input->parameters_) {
+                // This must use p.name(), *not* input->name()
+                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+            }
         }
     }
     if (include_outputs) {
         for (auto output : pi.filter_outputs) {
             if (output->kind() == IOKind::Buffer) {
-                Parameter p = output->parameter();
-                // This must use p.name(), *not* output->name()
-                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                internal_assert(!output->funcs().empty());
+                for (auto &f : output->funcs()) {
+                    user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
+                    Parameter p = f.output_buffer().parameter();
+                    // This must use p.name(), *not* output->name()
+                    get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                }
             }
         }
     }
@@ -1335,7 +1371,7 @@ Pipeline GeneratorBase::get_pipeline() {
 }
 
 Module GeneratorBase::build_module(const std::string &function_name,
-                                   const LoweredFunc::LinkageType linkage_type) {
+                                   const LinkageType linkage_type) {
     std::string auto_schedule_result;
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {
@@ -1581,7 +1617,7 @@ void GeneratorInputBase::set_def_min_max() {
 }
 
 Parameter GeneratorInputBase::parameter() const {
-    internal_assert(parameters_.size() == 1);
+    user_assert(!this->is_array()) << "Cannot call the parameter() method on Input<[]> " << name() << "; use an explicit subscript operator instead.";
     return parameters_.at(0);
 }
 
@@ -1594,9 +1630,12 @@ void GeneratorInputBase::verify_internals() const {
 }
 
 void GeneratorInputBase::init_internals() {
-    user_assert(array_size_defined()) << "ArraySize is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
-    user_assert(types_defined()) << "Type is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
-    user_assert(dims_defined()) << "Dimensions is not defined for Input " << name() << "; you may need to specify a GeneratorParam.\n";
+    user_assert(array_size_defined()) << "ArraySize is not defined for Input "
+        << name() << "; you may need to specify '" << name() << ".size' as a GeneratorParam.\n";
+    user_assert(types_defined()) << "Type is not defined for Input "
+        << name() << "; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
+    user_assert(dims_defined()) << "Dimensions are not defined for Input "
+        << name() << "; you may need to specify '" << name() << ".dim' as a GeneratorParam.\n";
 
     parameters_.clear();
     exprs_.clear();
@@ -1691,11 +1730,6 @@ void GeneratorOutputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
 }
 
-Parameter GeneratorOutputBase::parameter() const {
-    internal_assert(funcs().size() == 1);
-    return funcs().at(0).output_buffer().parameter();
-}
-
 void GeneratorOutputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
@@ -1786,6 +1820,12 @@ void generator_test() {
             GeneratorParam<int> gp0{"gp0", 0};
             GeneratorParam<float> gp1{"gp1", 1.f};
             GeneratorParam<uint64_t> gp2{"gp2", 2};
+            GeneratorParam<uint8_t> gp_uint8{"gp_uint8", 65};
+            GeneratorParam<int8_t> gp_int8{"gp_int8", 66};
+            GeneratorParam<char> gp_char{"gp_char", 97};
+            GeneratorParam<signed char> gp_schar{"gp_schar", 98};
+            GeneratorParam<unsigned char> gp_uchar{"gp_uchar", 99};
+            GeneratorParam<bool> gp_bool{"gp_bool", true};
 
             Input<int> input{"input"};
 
@@ -1793,6 +1833,12 @@ void generator_test() {
                 internal_assert(gp0 == 1);
                 internal_assert(gp1 == 2.f);
                 internal_assert(gp2 == (uint64_t) 2);  // unchanged
+                internal_assert(gp_uint8 == 67);
+                internal_assert(gp_int8 == 68);
+                internal_assert(gp_bool == false);
+                internal_assert(gp_char == 107);
+                internal_assert(gp_schar == 108);
+                internal_assert(gp_uchar == 109);
                 Var x;
                 Func output;
                 output(x) = input + gp0;
@@ -1816,6 +1862,14 @@ void generator_test() {
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
+
+        // Verify that 8-bit non-boolean GP values are parsed as integers, not chars.
+        tester.gp_int8.set_from_string("68");
+        tester.gp_uint8.set_from_string("67");
+        tester.gp_char.set_from_string("107");
+        tester.gp_schar.set_from_string("108");
+        tester.gp_uchar.set_from_string("109");
+        tester.gp_bool.set_from_string("false");
 
         tester.build_pipeline();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
@@ -1888,6 +1942,35 @@ void generator_test() {
         Buffer<float> im = tester_instance.realize(1);
         internal_assert(im.dim(0).extent() == 1);
         internal_assert(im(0) == 1475.25f) << "Expected 1475.25 but saw " << im(0);
+    }
+
+    // Verify that array inputs and outputs are typed correctly.
+    {
+        class Tester : public Generator<Tester> {
+        public:
+            Input<int[]> expr_array_input{ "expr_array_input" };
+            Input<Func[]> func_array_input{ "input_func_array" };
+            Input<Buffer<>[]> buffer_array_input{ "buffer_array_input" };
+
+            Input<int[]> expr_array_output{ "expr_array_output" };
+            Output<Func[]> func_array_output{"func_array_output"};
+            Output<Buffer<>[]> buffer_array_output{ "buffer_array_output" };
+
+
+            void generate() {
+            }
+        };
+
+        Tester tester_instance;
+
+        static_assert(std::is_same<decltype(tester_instance.expr_array_input[0]), const Expr &>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.expr_array_output[0]), const Expr &>::value, "type mismatch");
+
+        static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), const Func &>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
+
+        static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), const Func &>::value, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {

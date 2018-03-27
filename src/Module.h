@@ -16,6 +16,15 @@
 #include "Target.h"
 
 namespace Halide {
+
+/** Type of linkage a function in a lowered Halide module can have. 
+    Also controls whether auxiliary functions and metadata are generated. */
+enum class LinkageType {
+    External, ///< Visible externally.
+    ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
+    Internal, ///< Not visible externally, similar to 'static' linkage in C.
+};
+
 namespace Internal {
 
 /** Definition of an argument to a LoweredFunc. This is similar to
@@ -45,13 +54,6 @@ struct LoweredFunc {
 
     /** Body of this function. */
     Stmt body;
-
-    /** Type of linkage a function can have. */
-    enum LinkageType {
-        External, ///< Visible externally.
-        ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
-        Internal, ///< Not visible externally, similar to 'static' linkage in C.
-    };
 
     /** The linkage of this function. */
     LinkageType linkage;

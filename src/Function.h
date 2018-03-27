@@ -278,9 +278,11 @@ public:
     void trace_loads();
     void trace_stores();
     void trace_realizations();
+    void add_trace_tag(const std::string &trace_tag);
     bool is_tracing_loads() const;
     bool is_tracing_stores() const;
     bool is_tracing_realizations() const;
+    const std::vector<std::string> &get_trace_tags() const;
     // @}
 
     /** Replace this Function's LoopLevels with locked copies that

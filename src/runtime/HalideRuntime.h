@@ -325,7 +325,8 @@ enum halide_trace_event_code_t {halide_trace_load = 0,
                                 halide_trace_consume = 6,
                                 halide_trace_end_consume = 7,
                                 halide_trace_begin_pipeline = 8,
-                                halide_trace_end_pipeline = 9};
+                                halide_trace_end_pipeline = 9,
+                                halide_trace_tag = 10 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -348,6 +349,11 @@ struct halide_trace_event_t {
      * For pipeline-related events, this will be null.
      */
     int32_t *coordinates;
+
+    /** For halide_trace_tag, this points to a read-only null-terminated string
+     * of arbitrary text. For all other events, this will be null.
+     */
+    const char *trace_tag;
 
     /** If the event type is a load or a store, this is the type of
      * the data. Otherwise, the value is meaningless. */
@@ -387,6 +393,9 @@ struct halide_trace_event_t {
  * ownership hierarchy looks like:
  *
  * begin_pipeline
+ * +--trace_tag (if any)
+ * +--trace_tag (if any)
+ * ...
  * +--begin_realization
  * |  +--produce
  * |  |  +--load/store
@@ -402,6 +411,10 @@ struct halide_trace_event_t {
  * function, or many active productions for a single
  * realization. Within a single production, the ordering of events is
  * meaningful.
+ *
+ * Note that all trace_tag events (if any) will occur just after the begin_pipeline
+ * event, but before any begin_realization events. All trace_tags for a given Func
+ * will be emitted in the order added.
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
@@ -464,6 +477,27 @@ struct halide_trace_packet_t {
 
     HALIDE_ALWAYS_INLINE char *func() {
         return (char *)value() + type.lanes * type.bytes();
+    }
+
+    /** Get the trace_tag (if any), assuming this packet is laid out in memory
+     * as it was written. It comes after the func name. If there is no trace_tag,
+     * this will return a pointer to an empty string. */
+    HALIDE_ALWAYS_INLINE const char *trace_tag() const {
+        const char *f = func();
+        // strlen may not be available here
+        while (*f++) {
+            // nothing
+        }
+        return f;
+    }
+
+    HALIDE_ALWAYS_INLINE char *trace_tag() {
+        char *f = func();
+        // strlen may not be available here
+        while (*f++) {
+            // nothing
+        }
+        return f;
     }
     #endif
 };
@@ -1487,6 +1521,7 @@ struct halide_profiler_pipeline_stats {
 };
 
 /** The global state of the profiler. */
+
 struct halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
@@ -1515,8 +1550,8 @@ struct halide_profiler_state {
      * e.g. on a DSP. If null, it reads from the int above instead. */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
 
-    /** Is the profiler thread running. */
-    bool started;
+    /** Sampling thread reference to be joined at shutdown. */
+    struct halide_thread *sampling_thread;
 };
 
 /** Profiler func ids with special meanings. */
@@ -1537,12 +1572,20 @@ extern struct halide_profiler_state *halide_profiler_get_state();
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
-/** Reset all profiler state.
+/** Reset profiler state cheaply. May leave threads running or some
+ * memory allocated but all accumluated statistics are reset.
  * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
 extern void halide_profiler_reset();
+
+/** Reset all profiler state.
+ * WARNING: Do NOT call this method while any halide pipeline is
+ * running; halide_profiler_memory_allocate/free and
+ * halide_profiler_stack_peak_update update the profiler pipeline's
+ * state without grabbing the global profiler state's lock. */
+void halide_profiler_shutdown();
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */

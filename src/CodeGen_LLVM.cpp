@@ -134,15 +134,15 @@ using std::stack;
 namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
-llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
+llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // TODO(dsharlet): For some reason, marking internal functions as
     // private linkage on OSX is causing some of the static tests to
     // fail. Figure out why so we can remove this.
     return llvm::GlobalValue::ExternalLinkage;
 
     switch (t) {
-    case LoweredFunc::ExternalPlusMetadata:
-    case LoweredFunc::External:
+    case LinkageType::ExternalPlusMetadata:
+    case LinkageType::External:
         return llvm::GlobalValue::ExternalLinkage;
     default:
         return llvm::GlobalValue::PrivateLinkage;
@@ -467,7 +467,7 @@ struct MangledNames {
 };
 
 MangledNames get_mangled_names(const std::string &name,
-                               LoweredFunc::LinkageType linkage,
+                               LinkageType linkage,
                                NameMangling mangling,
                                const std::vector<LoweredArgument> &args,
                                const Target &target) {
@@ -478,7 +478,7 @@ MangledNames get_mangled_names(const std::string &name,
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    if (linkage != LoweredFunc::Internal &&
+    if (linkage != LinkageType::Internal &&
         ((mangling == NameMangling::Default &&
           target.has_feature(Target::CPlusPlusMangling)) ||
          mangling == NameMangling::CPlusPlus)) {
@@ -561,7 +561,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());
@@ -588,7 +588,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 
-void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
+void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
                               const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     current_function_args = args;
 
@@ -698,7 +698,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
 
     // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
     // happen for every output buffer if the function succeeds.
-    if (f.linkage != LoweredFunc::Internal &&
+    if (f.linkage != LinkageType::Internal &&
         target.has_feature(Target::MSAN)) {
         llvm::Function *annotate_buffer_fn =
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
@@ -2570,7 +2570,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
             if (!sub_fn) {
                 extern_sub_fn_name = get_mangled_names(sub_fn_name,
-                                                       LoweredFunc::External,
+                                                       LinkageType::External,
                                                        NameMangling::Default,
                                                        current_function_args,
                                                        get_target()).extern_name;

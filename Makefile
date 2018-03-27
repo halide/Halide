@@ -13,7 +13,7 @@ UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
     # assume we are building for the MinGW environment
-    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz
+    COMMON_LD_FLAGS=-luuid -lole32 -lpthread -lz -Wl,--stack,8388608
     SHARED_EXT=dll
     FPIC=
 else
@@ -148,12 +148,7 @@ CXX_FLAGS += -funwind-tables
 print-%:
 	@echo '$*=$($*)'
 
-# Append the --link-static flag to llvm-config if it exists. We can
-# make this unconditional once llvm 4.0 is the minimum version we
-# support.
-LLVM_LINK_STATIC_FLAG = $(shell $(LLVM_CONFIG) --link-static 2>/dev/null && echo " --link-static")
-
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) $(LLVM_LINK_STATIC_FLAG) --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
 
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
@@ -668,6 +663,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_get_symbol \
   windows_io \
   windows_opencl \
+  windows_profiler \
   windows_tempfile \
   windows_threads \
   write_debug_image \
@@ -957,20 +953,6 @@ test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generator: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
-# TODO: these are temporary targets added to allow existing buildbot to run without breaking;
-# it will be removed after buildbot is updated.
-.PHONY: test_errors
-test_errors: test_error
-
-.PHONY: test_generators
-test_generators: test_generator
-
-.PHONY: test_tutorials
-test_tutorials: test_tutorial
-
-.PHONY: test_warnings
-test_warnings: test_warning
-
 ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning test_generator
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
@@ -1166,7 +1148,6 @@ $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
-	type_only_input_buffer.dim=3 \
 	dim_only_input_buffer.type=uint8 \
 	untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 \
 	output.type=float32,float32 output.dim=3 \
@@ -1178,7 +1159,22 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_i16.size=2 \
 	array_i32.size=2 \
 	array_h.size=2 \
-	array_outputs.size=2
+	buffer_array_input2.dim=3 \
+	buffer_array_input3.type=float32 \
+	buffer_array_input4.dim=3 \
+	buffer_array_input4.type=float32 \
+	buffer_array_input5.size=2 \
+	buffer_array_input6.size=2 \
+	buffer_array_input6.dim=3 \
+	buffer_array_input7.size=2 \
+	buffer_array_input7.type=float32 \
+	buffer_array_input8.size=2 \
+	buffer_array_input8.dim=3 \
+	buffer_array_input8.type=float32 \
+	array_outputs.size=2 \
+	array_outputs7.size=2 \
+	array_outputs8.size=2 \
+	array_outputs9.size=2
 
 # metadata_tester is built with and without user-context
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
@@ -1640,11 +1636,16 @@ endif
 ifneq ($(LLVM_OK), )
 $(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
 	@echo "Found a new enough version of llvm"
+ifeq ($(LLVM_VERSION_TIMES_10), 40)
+	@echo
+	@echo "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***"
+	@echo
+endif
 	mkdir -p $(BUILD_DIR)
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 3.7 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 4.0 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
