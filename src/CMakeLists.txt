@@ -393,9 +393,9 @@ set(HEADER_FILES
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
-  COMMAND build_halide_h ${HEADER_FILES} HalideFooter.h > "${NATIVE_INCLUDE_PATH}Halide.h"
+  COMMAND build_halide_h HalideHeader.h ${HEADER_FILES} HalideFooter.h > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-  DEPENDS build_halide_h ${HEADER_FILES})
+  DEPENDS build_halide_h ${HEADER_FILES} HalideHeader.h HalideFooter.h)
 add_custom_target(
     HalideIncludes
     ALL

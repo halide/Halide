@@ -9,3 +9,5 @@
 #undef internal_assert
 #undef halide_runtime_error
 #undef HALIDE_EXPORT
+
+#endif // HALIDE_H
