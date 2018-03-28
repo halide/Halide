@@ -299,11 +299,16 @@ struct Expr : public Internal::IRHandle {
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-             Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+    Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+
+    /** Override get() to return a BaseExprNode * instead of an IRNode * */
+    const Internal::BaseExprNode *get() const {
+        return (const Internal::BaseExprNode *)ptr;
+    }
 
     /** Get the type of this expression node */
     Type type() const {
-        return ((const Internal::BaseExprNode *)ptr)->type;
+        return get()->type;
     }
 };
 
@@ -394,6 +399,11 @@ enum class ForType {
 struct Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+
+    /** Override get() to return a BaseStmtNode * instead of an IRNode * */
+    const BaseStmtNode *get() const {
+        return (const Internal::BaseStmtNode *)ptr;
+    }
 
     /** This lets you use a Stmt as a key in a map of the form
      * map<Stmt, Foo, Stmt::Compare> */

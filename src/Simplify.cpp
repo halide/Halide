@@ -4407,90 +4407,61 @@ private:
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
 
-        auto mutated = IRMatcher::select(condition, true_value, false_value);
-
         Expr expr;
         if (propagate_indeterminate_expression(condition, true_value, false_value, op->type, &expr)) {
             return expr;
         }
 
-        IRMatcher::Wild x, y, z, w;
+        IRMatcher::Wild<0> x;
+        IRMatcher::Wild<1> y;
+        IRMatcher::Wild<2> z;
+        IRMatcher::Wild<3> w;
+        IRMatcher::Const<1> one;
+        IRMatcher::Const<0> zero;
+        auto mutated = IRMatcher::select(*condition.get(), *true_value.get(), *false_value.get());
 
-        if (is_zero(condition)) {
-            return false_value;
-        } else if (is_one(condition)) {
-            return true_value;
-        } else if (equal(true_value, false_value)) {
-            return true_value;
-        } else if (true_value.type().is_bool() &&
-                   is_one(true_value) &&
-                   is_zero(false_value)) {
-            if (true_value.type().is_vector() && condition.type().is_scalar()) {
-                return Broadcast::make(condition, true_value.type().lanes());
-            } else {
-                return condition;
-            }
-        } else if (true_value.type().is_bool() &&
-                   is_zero(true_value) &&
-                   is_one(false_value)) {
-            if (true_value.type().is_vector() && condition.type().is_scalar()) {
-                return Broadcast::make(mutate(!condition), true_value.type().lanes());
-            } else {
-                return mutate(!condition);
-            }
-        } else if (match(condition, broadcast(x))) {
-            return mutate(select(x, true_value, false_value));
-        } else if (match(condition, x != y)) {
-            // Normalize select(x != y, c, d) to select(a == b, d, c)
-            return mutate(select(x == y, false_value, true_value));
-        } else if (match(condition, x <= y)) {
-            // Normalize select(x <= y, c, d) to select(y < x, d, c)
-            return mutate(select(y < x, false_value, true_value));
-        } else if (match(true_value, intrin(Call::likely, x))) {
-            return true_value;
-        } else if (match(false_value, intrin(Call::likely, x))) {
-            return false_value;
-        } else if (match(mutated, select(x, select(y, z, w), z))) {
-            return mutate(select(x && !y, w, z));
-        } else if (match(mutated, select(x, select(y, z, w), w))) {
-            return mutate(select(x && y, z, w));
-        } else if (match(mutated, select(x, y, select(z, w, y)))) {
-            return mutate(select(x || !z, y, w));
-        } else if (match(mutated, select(x, y, select(z, y, w)))) {
-            return mutate(select(x || z, y, w));
-        } else if (match(mutated, select(x, y, select(x, z, w)))) {
-            return mutate(select(x, y, w));
-        } else if (match(mutated, select(x, select(x, y, z), w))) {
-            return mutate(select(x, y, w));
-        } else if (match(mutated, select(x, y + z, y + w)) ||
-                   match(mutated, select(x, y + z, w + y)) ||
-                   match(mutated, select(x, z + y, y + w))) {
-            return mutate(y + select(x, z, w));
-        } else if (match(mutated, select(x, z + y, w + y))) {
-            return mutate(select(x, z, w) + y);
-        } else if (match(mutated, select(x, y - z, y - w))) {
-            return mutate(y - select(x, z, w));
-        } else if (match(mutated, select(x, y - z, w - z))) {
-            return mutate(select(x, y, w) - z);
-        } else if (match(mutated, select(x, y + z, y - w)) ||
-                   match(mutated, select(x, z + y, y - w))) {
-            return mutate(y + select(x, z, - w));
-        } else if (match(mutated, select(x, y - z, y + w)) ||
-                   match(mutated, select(x, y - z, w + y))) {
-            return mutate(y + select(x, - z, w));
-        } else if (match(mutated, select(x, y * z, y * w)) ||
-                   match(mutated, select(x, y * z, w * y)) ||
-                   match(mutated, select(x, z * y, y * w))) {
-            return mutate(y * select(x, z, w));
-        } else if (match(mutated, select(x, z * y, w * y))) {
-            return mutate(select(x, z, w) * y);
+        if (rewrite(mutated, expr,
+                    select(one, x, y), x,
+                    select(zero, x, y), y,
+                    select(x, y, y), y,
+                    select(x, intrin(Call::likely, y), y), true_value,
+                    select(x, y, intrin(Call::likely, y)), false_value)) {
+            return expr;
+        } else if (rewrite(mutated, expr,
+                           select(x, one, zero), cast(op->type, x),
+                           select(x, zero, one), cast(op->type, !x),
+                           select(broadcast(x), y, z), select(x, y, z),
+                           select(x != y, z, w), select(x == y, w, z),
+                           select(x <= y, z, w), select(y < x, w, z),
+                           select(x, select(y, z, w), z), select(x && !y, w, z),
+                           select(x, select(y, z, w), w), select(x && y, z, w),
+                           select(x, y, select(z, y, w)), select(x || z, y, w),
+                           select(x, y, select(z, w, y)), select(x || !z, y, w),
+                           select(x, select(x, y, z), w), select(x, y, w),
+                           select(x, y, select(x, z, w)), select(x, y, w),
+                           select(x, y + z, y + w), y + select(x, z, w),
+                           select(x, y + z, w + y), y + select(x, z, w),
+                           select(x, z + y, y + w), y + select(x, z, w),
+                           select(x, z + y, w + y), select(x, z, w) + y,
+                           select(x, y - z, y - w), y - select(x, z, w),
+                           select(x, y - z, y + w), y + select(x, -z, w),
+                           select(x, y + z, y - w), y + select(x, z, -w),
+                           select(x, y - z, w + y), y + select(x, -z, w),
+                           select(x, z + y, y - w), y + select(x, z, -w),
+                           select(x, z - y, w - y), select(x, z, w) - y,
+                           select(x, y * z, y * w), y * select(x, z, w),
+                           select(x, y * z, w * y), y * select(x, z, w),
+                           select(x, z * y, y * w), y * select(x, z, w),
+                           select(x, z * y, w * y), select(x, z, w) * y)) {
+            return mutate(std::move(expr));
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
             return op;
         } else {
-            return select(condition, true_value, false_value);
+            return Select::make(condition, true_value, false_value);
         }
+
     }
 
     Expr visit(const Ramp *op) override {
