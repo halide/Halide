@@ -19,15 +19,15 @@ typedef struct {
         uintptr_t des_pointer   ;   // for chain to next "desc" or NULL to terminate the chain
         uint32 dst_pix_fmt      :  3;
         uint32 dst_is_ubwc      :  1;
-        uint32 drc_pix_fmt      :  3;
-        uint32 drc_is_ubwc      :  1;
+        uint32 src_pix_fmt      :  3;
+        uint32 src_is_ubwc      :  1;
         uint32 dst_is_tcm       :  1;
         uint32 _unused0         :  3;
-        uint32 drc_is_tcm       :  1;
+        uint32 src_is_tcm       :  1;
         uint32 _unused1         :  3;
         uint32 dst_pix_padding  :  1;
         uint32 _unused2         :  3;
-        uint32 drc_pix_padding  :  1;
+        uint32 src_pix_padding  :  1;
         uint32 _unused3         : 11;
         uint32 frm_height       : 16;
         uint32 frm_width        : 16;
@@ -45,12 +45,45 @@ typedef struct {
         uint32 dst_roi_start_addr  : 32;
         uint32 ubwc_stat_pointer   : 32;// use reserved3 for gralloc ubwc_stat_pointer
     } stWord1;
+    struct {
+        uint32 pix_fmt;
+        uint32 _unused0;
+        uint32 _unused1;
+        uint32 _unused2;
+    } stWord2;
 } t_st_hw_descriptor;
 
 typedef struct {
     int x; //in case we want to keep a count
     t_st_hw_descriptor *ptr;
 } dma_handle_t;
+
+static int nDmaPixelSize(int pix_fmt)
+{
+    int nRet = 0;
+    switch(pix_fmt) {
+        case eDmaFmt_RawData:
+        case eDmaFmt_NV12:
+        case eDmaFmt_NV12_Y:
+        case eDmaFmt_NV12_UV:
+        case eDmaFmt_NV124R:
+        case eDmaFmt_NV124R_Y:
+        case eDmaFmt_NV124R_UV:
+            nRet = 1;
+            break;
+        case eDmaFmt_P010:
+        case eDmaFmt_P010_Y:
+        case eDmaFmt_P010_UV:
+        case eDmaFmt_TP10:
+        case eDmaFmt_TP10_Y:
+        case eDmaFmt_TP10_UV:
+            nRet = 2;
+            break;
+    }
+    assert(nRet != 0);
+
+    return nRet;
+}
 
 void* HAP_cache_lock(unsigned int size, void** paddr_ptr) {
     void * alloc = 0;
@@ -101,15 +134,14 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
             int y = desc->stWord0.roiY;
             int w = desc->stWord1.roiW;
             int h = desc->stWord1.roiH;
+            int pixelsize = nDmaPixelSize(desc->stWord2.pix_fmt);
             for (int yii=0;yii<h;yii++) {
-              for (int xii=0;xii<w;xii++) {
-                    int yin = yii * desc->stWord1.dst_roi_stride;
-                    int xin = xii;
-                    int RoiOffset = x + y * desc->stWord1.src_roi_stride;
-                    int xout = xii;
-                    int yout = yii * desc->stWord0.frm_width;
-                    dest_addr[yin+xin] = host_addr[RoiOffset + yout + xout]; 
-                }
+              // per line copy 
+              int yin = yii * desc->stWord1.dst_roi_stride * pixelsize;
+              int RoiOffset = (x + y * desc->stWord1.src_roi_stride) * pixelsize;
+              int yout = yii * desc->stWord0.frm_width * pixelsize;
+              int len = w * pixelsize;
+              memcpy(&dest_addr[yin], &host_addr[RoiOffset + yout], len);
             }
             desc = reinterpret_cast<t_st_hw_descriptor*>(desc->stWord0.des_pointer);
         }
@@ -171,9 +203,29 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
 
     int mul_factor  =1;
     int l2_chroma_offset = 0;
-    if (dma_transfer_parm->eFmt == eDmaFmt_NV12_UV) { //chroma fmt for NV12
-        mul_factor = 2; //DMA Driver anamoly
-        l2_chroma_offset = (dma_transfer_parm->u16FrameH * dma_transfer_parm->u16FrameW); 
+    switch (dma_transfer_parm->eFmt) { // chroma fmt
+        case eDmaFmt_NV12_UV:
+        case eDmaFmt_NV124R_UV:
+        case eDmaFmt_P010_UV:
+        case eDmaFmt_TP10_UV:
+            {
+                int pixelsize = nDmaPixelSize(dma_transfer_parm->eFmt);
+                mul_factor = 2; //DMA Driver anamoly
+                //l2_chroma_offset = (dma_transfer_parm->u16FrameH * dma_transfer_parm->u16FrameW) * pixelsize;
+                l2_chroma_offset = (dma_transfer_parm->u16FrameH * dma_transfer_parm->u16FrameStride) * pixelsize;
+            }
+            break;
+        case eDmaFmt_RawData:
+        case eDmaFmt_NV12:
+        case eDmaFmt_NV12_Y:
+        case eDmaFmt_NV124R:
+        case eDmaFmt_NV124R_Y:
+        case eDmaFmt_P010:
+        case eDmaFmt_P010_Y:
+        case eDmaFmt_TP10:
+        case eDmaFmt_TP10_Y:
+        default:
+            break;
     }
     
     desc->stWord0.dst_is_ubwc = dma_transfer_parm->bIsFmtUbwc;
@@ -189,6 +241,7 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
     desc->stWord1.dst_frm_base_addr = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
     void *frame_addr = (void *) ((addr_t)dma_transfer_parm->pFrameBuf + (addr_t)l2_chroma_offset);
     desc->stWord1.src_frm_base_addr  = reinterpret_cast<uintptr_t>(frame_addr);
+    desc->stWord2.pix_fmt = dma_transfer_parm->eFmt;
     
     return 0;
 

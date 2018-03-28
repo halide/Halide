@@ -18,6 +18,7 @@ struct dma_device_handle {
     int frame_height;
     int frame_stride;
     bool is_ubwc;
+    bool is_write;
     t_eDmaFmt fmt;
     void *cache_buf;
 };
@@ -34,6 +35,7 @@ dma_device_handle *malloc_device_handle() {
     dev->cache_buf = 0;
     dev->is_ubwc = 0;
     dev->fmt = eDmaFmt_RawData;
+    dev->is_write = 0;
     return dev;
 }
 
@@ -140,28 +142,58 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Changing the Format to Chroma or LUMA based on dimension    
     t_eDmaFmt currentFmt = dev->fmt;
+    if (dst->dimensions == 3) {
+        if ((dev->fmt == eDmaFmt_NV12) ||
+            (dev->fmt == eDmaFmt_P010) ||
+            (dev->fmt == eDmaFmt_TP10) ||
+            (dev->fmt == eDmaFmt_NV124R)) {
+            if (dst->dim[2].min == 1) {
+                currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); //chroma format
+            } else {
+                currentFmt = (t_eDmaFmt)((int)dev->fmt + 1); //luma
+            }
+        } else {
+            error(user_context) << "Hexagon: DMA pixel format not match Halide Buffer dimension \n";
+            return halide_error_code_device_buffer_copy_failed;
+        }
+    } else {
+        // 2-D Buffer Case
+        if ((dev->fmt == eDmaFmt_NV12)   ||
+            (dev->fmt == eDmaFmt_P010)   ||
+            (dev->fmt == eDmaFmt_NV124R) ||
+            (dev->fmt == eDmaFmt_TP10)) {
+            error(user_context) << "Hexagon: DMA pixel format not match Halide Buffer dimension \n";
+            return halide_error_code_device_buffer_copy_failed;
+        } 
+    }        
+    
     if ((dev->fmt == eDmaFmt_NV12) || 
         (dev->fmt == eDmaFmt_P010) ||
         (dev->fmt == eDmaFmt_TP10) ||
         (dev->fmt == eDmaFmt_NV124R)) {
-        if ((dst->dimensions = 3) &&
-            (dst->dim[2].min == 1)) {
-            currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); //chroma format
+        
+        if (dst->dimensions == 3) {
+            if (dst->dim[2].min == 1) {
+                currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); //chroma format
+            } else {
+                currentFmt = (t_eDmaFmt)((int)dev->fmt + 1); //luma format
+            }
         } else {
-            currentFmt = (t_eDmaFmt)((int)dev->fmt+ 1); //luma
+            error(user_context) << "Hexagon: DMA unsuported pixel format for 3D Halide Buffer dimension \n";
+            return halide_error_code_device_buffer_copy_failed;
         }
-    }
+    } 
  
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(dev->fmt, dev->is_ubwc, &stWalkSize);
 
-    roi_stride = dst->dim[1].stride;
+    roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(currentFmt, &stWalkSize, dev->is_ubwc);
     roi_width = stWalkSize.u16W;
     roi_height = stWalkSize.u16H;
 
-    debug(user_context) << "roi_width" << roi_width;
-    debug(user_context) << "roi_height" << roi_height;
-    debug(user_context) << "roi_stride" << roi_stride;
+    debug(user_context) << " roi_width " << roi_width;
+    debug(user_context) << " roi_height " << roi_height;
+    debug(user_context) << " roi_stride " << roi_stride;
 
     // DMA driver Expect the Stride to be 256 Byte Aligned
     halide_assert(user_context, (roi_stride % 256) == 0);
@@ -175,28 +207,32 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Copy from Locked Cache to a temp DDR buffer
     // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
-    int buf_size = dst->size_in_bytes();
-    debug(user_context) << "cache buffer size " << buf_size << "\n";
+    int buf_size = roi_stride * roi_height * dst->type.bytes(); //dst->size_in_bytes();
+    debug(user_context) << " cache buffer size " << buf_size << "\n";
     if (dev->cache_buf == 0) {
-        dev->cache_buf = HAP_cache_lock((sizeof(uint8_t) * buf_size), 0);
+        dev->cache_buf = HAP_cache_lock(buf_size, 0);
     }
 
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
-    stDmaTransferParm.eFmt = currentFmt; 
-    stDmaTransferParm.u16FrameW = dev->frame_width;
-    stDmaTransferParm.u16FrameH = dev->frame_height;
-    stDmaTransferParm.u16FrameStride = dev->frame_stride;
-    stDmaTransferParm.u16RoiW = roi_width;
-    stDmaTransferParm.u16RoiH = roi_height;
-    stDmaTransferParm.u16RoiStride = roi_stride;
-    stDmaTransferParm.bIsFmtUbwc = dev->is_ubwc;
-    stDmaTransferParm.bUse16BitPaddingInL2 = 0;
-    stDmaTransferParm.pDescBuf = desc_addr;
-    stDmaTransferParm.pTcmDataBuf = dev->cache_buf;
-    stDmaTransferParm.pFrameBuf = dev->buffer;
-    stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
-    stDmaTransferParm.u16RoiX = dev->offset_x + dst->dim[0].min;
-    stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min;
+    stDmaTransferParm.eFmt                  = currentFmt; 
+    stDmaTransferParm.u16FrameW             = dev->frame_width;
+    stDmaTransferParm.u16FrameH             = dev->frame_height;
+    stDmaTransferParm.u16FrameStride        = dev->frame_stride;
+    stDmaTransferParm.u16RoiW               = roi_width;
+    stDmaTransferParm.u16RoiH               = roi_height;
+    stDmaTransferParm.u16RoiStride          = roi_stride;
+    stDmaTransferParm.bIsFmtUbwc            = dev->is_ubwc;
+    stDmaTransferParm.bUse16BitPaddingInL2  = 0;
+    stDmaTransferParm.pDescBuf              = desc_addr;
+    stDmaTransferParm.pTcmDataBuf           = dev->cache_buf;
+    stDmaTransferParm.pFrameBuf             = dev->buffer;
+    if (dev->is_write) {
+       stDmaTransferParm.eTransferType      = eDmaWrapper_L2ToDdr;
+    } else {
+       stDmaTransferParm.eTransferType      = eDmaWrapper_DdrToL2;
+    }
+    stDmaTransferParm.u16RoiX               = dev->offset_x + dst->dim[0].min;
+    stDmaTransferParm.u16RoiY               = dev->offset_y + dst->dim[1].min;
 
     // DMA Driver Halves the Height and Y Offset so that only Half the ROI Size of Luma is transferred  for chroma
     // We are compensating this assumption to meet  Halide perspective. i.e. ROI size is same for both Luma and Chroma    
@@ -231,9 +267,21 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         return halide_error_code_device_buffer_copy_failed;
     }
 
-    void *dest = reinterpret_cast<void *>(dst->host);
+    uint8_t *dest = reinterpret_cast<uint8_t *>(dst->host);
+
+    // Copy from Locked Cache to a temp DDR buffer
+    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
     if (dest) {
-        memcpy(dest, dev->cache_buf, buf_size);
+        const int pixelsize = dst->type.bytes();
+        const int linesize = roi_width * pixelsize;
+        uint8_t *cache_buf = reinterpret_cast<uint8_t *>(dev->cache_buf);
+        debug(user_context) << "copy cache: " << "pixelsize= " << pixelsize << " linesize= " << linesize << "\n";
+        int y, sy, dy;
+        for (y=0; y<roi_height; y++) {
+            sy = y * roi_stride * pixelsize;
+            dy = y * dst->dim[1].stride * pixelsize;
+            memcpy(&dest[dy], &cache_buf[sy], linesize);
+        }
     }
 
     desc_pool_put(user_context, desc_addr);
@@ -318,7 +366,7 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
 }
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_engine, bool is_ubwc, int fmt) {
+                                                     void *dma_engine, bool is_ubwc, int fmt, bool is_write ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_allocate_engine (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
@@ -328,6 +376,7 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct 
     dev->dma_engine = dma_engine;
     dev->is_ubwc = is_ubwc;
     dev->fmt = (t_eDmaFmt) fmt;
+    dev->is_write = is_write;
     return halide_error_code_success;
 }
 

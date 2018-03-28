@@ -38,7 +38,7 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
 extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
 extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, int fmt);
+                                                       void *dma_engine, bool is_ubwc, int fmt, bool is_write);
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 ///@}
 
