@@ -166,23 +166,6 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
             return halide_error_code_device_buffer_copy_failed;
         } 
     }        
-    
-    if ((dev->fmt == eDmaFmt_NV12) || 
-        (dev->fmt == eDmaFmt_P010) ||
-        (dev->fmt == eDmaFmt_TP10) ||
-        (dev->fmt == eDmaFmt_NV124R)) {
-        
-        if (dst->dimensions == 3) {
-            if (dst->dim[2].min == 1) {
-                currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); //chroma format
-            } else {
-                currentFmt = (t_eDmaFmt)((int)dev->fmt + 1); //luma format
-            }
-        } else {
-            error(user_context) << "Hexagon: DMA unsuported pixel format for 3D Halide Buffer dimension \n";
-            return halide_error_code_device_buffer_copy_failed;
-        }
-    } 
  
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(dev->fmt, dev->is_ubwc, &stWalkSize);
