@@ -1027,9 +1027,8 @@ public:
     template<typename T>
     void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
-        // cast it to a deleter that takes a IRMutator2 *. The custom
-        // deleter lives in user code, so that deletion is on the same
-        // heap as construction (I hate Windows).
+        // wrap in a lambda. The custom deleter lives in user code, so
+        // that deletion is on the same heap as construction (I hate Windows).
         add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
