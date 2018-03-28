@@ -24,9 +24,9 @@ void dump_header(std::string header) {
     }
 
     char line[1024];
-    const auto line_len = sizeof(line);
+    const int line_len = sizeof(line);
     const char include_str[] = "#include \"";
-    const auto include_str_len = sizeof(include_str) - 1; // remove null terminator
+    const int include_str_len = sizeof(include_str) - 1; // remove null terminator
 
     while (fgets(line, line_len, f)) {
         if (strncmp(line, include_str, include_str_len) == 0) {
