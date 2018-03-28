@@ -24,12 +24,14 @@ void dump_header(std::string header) {
     }
 
     char line[1024];
+    const auto line_len = sizeof(line);
     const char include_str[] = "#include \"";
+    const auto include_str_len = sizeof(include_str) - 1; // remove null terminator
 
-    while (fgets(line, sizeof(line), f)) {
-        if (strncmp(line, include_str, sizeof(include_str)) == 0) {
-            char *sub_header = line + sizeof(include_str);
-            for (int i = 0; i < sizeof(line) - sizeof(include_str); i++) {
+    while (fgets(line, line_len, f)) {
+        if (strncmp(line, include_str, include_str_len) == 0) {
+            char *sub_header = line + include_str_len;
+            for (int i = 0; i < line_len - include_str_len; i++) {
                 if (sub_header[i] == '"') sub_header[i] = 0;
             }
             size_t slash_pos = header.rfind('/');
