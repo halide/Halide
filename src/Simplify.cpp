@@ -4428,8 +4428,6 @@ private:
                     select(x, y, intrin(Call::likely, y)), false_value)) {
             return expr;
         } else if (rewrite(mutated, expr,
-                           select(x, one, zero), cast(op->type, x),
-                           select(x, zero, one), cast(op->type, !x),
                            select(broadcast(x), y, z), select(x, y, z),
                            select(x != y, z, w), select(x == y, w, z),
                            select(x <= y, z, w), select(y < x, w, z),
@@ -4454,12 +4452,17 @@ private:
                            select(x, z * y, y * w), y * select(x, z, w),
                            select(x, z * y, w * y), select(x, z, w) * y)) {
             return mutate(std::move(expr));
+        } else if (op->type.is_bool() &&
+                   rewrite(mutated, expr,
+                           select(x, one, zero), cast(op->type, x),
+                           select(x, zero, one), cast(op->type, !x))) {
+            return mutate(std::move(expr));
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
             return op;
         } else {
-            return Select::make(condition, true_value, false_value);
+            return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
         }
 
     }

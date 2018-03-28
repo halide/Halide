@@ -381,6 +381,9 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) {
     case IRNodeType::Shuffle:
         return (equal_helper(((const Shuffle &)a).vectors, ((const Shuffle &)b).vectors) &&
                 equal_helper(((const Shuffle &)a).indices, ((const Shuffle &)b).indices));
+    // Explicitly list all the Stmts instead of using a default
+    // clause so that if new Exprs are added without being handled
+    // here we get a compile-time error.
     case IRNodeType::LetStmt:
     case IRNodeType::AssertStmt:
     case IRNodeType::ProducerConsumer:
@@ -394,9 +397,10 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) {
     case IRNodeType::IfThenElse:
     case IRNodeType::Evaluate:
     case IRNodeType::Prefetch:
-        internal_error << "Unreachable";
-        return false;
+        ;
     }
+    internal_error << "Unreachable";
+    return false;
 }
 }
 

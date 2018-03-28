@@ -96,6 +96,12 @@ Expr to_expr(const BaseExprNode &e, MatcherState &state) {
     return Expr(&e);
 }
 
+HALIDE_ALWAYS_INLINE
+std::ostream &operator<<(std::ostream &s, const BaseExprNode &n) {
+    s << Expr(&n);
+    return s;
+}
+
 bool equal_helper(const BaseExprNode &a, const BaseExprNode &b);
 
 // A fast version of expression equality that assumes a well-typed non-null expression tree.
@@ -421,6 +427,12 @@ struct Intrin {
 
     Intrin(Call::ConstString intrin, Args... args) : intrin(intrin), args(args...) {}
 };
+
+template<typename... Args>
+inline std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
+    s << op.intrin << "(...)"; // TODO: print args
+    return s;
+}
 
 template<typename... Args>
 HALIDE_ALWAYS_INLINE
