@@ -3037,7 +3037,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
+void Func::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 

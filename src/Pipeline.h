@@ -49,7 +49,7 @@ void delete_lowering_pass(T *pass) {
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
 struct CustomLoweringPass {
     Internal::IRMutator2 *pass;
-    void (*deleter)(Internal::IRMutator2 *);
+    std::function<void()> deleter;
 };
 
 struct JITExtern;
@@ -371,16 +371,13 @@ public:
         // cast it to a deleter that takes a IRMutator2 *. The custom
         // deleter lives in user code, so that deletion is on the same
         // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator2 *) =
-            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
-        add_custom_lowering_pass(pass, deleter);
+        add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass,
-                                  void (*deleter)(Internal::IRMutator2 *));
+    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
@@ -413,7 +410,7 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(RealizationArg output, const Target &target = Target(), 
+    void realize(RealizationArg output, const Target &target = Target(),
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given set of output buffers,
@@ -422,7 +419,7 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, 
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(RealizationArg output,
                             const ParamMap &param_map = ParamMap::empty_map());

@@ -1030,15 +1030,13 @@ public:
         // cast it to a deleter that takes a IRMutator2 *. The custom
         // deleter lives in user code, so that deletion is on the same
         // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator2 *) =
-            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
-        add_custom_lowering_pass(pass, deleter);
+        add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, void (*deleter)(Internal::IRMutator2 *));
+    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
