@@ -214,9 +214,7 @@ struct BinOp {
 
     HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         Expr ea = to_expr(a, state), eb = to_expr(b, state);
-        if (ea.type() != eb.type()) {
-            match_types(ea, eb);
-        }
+        match_types(ea, eb);
         return Op::make(std::move(ea), std::move(eb));
     }
 };
