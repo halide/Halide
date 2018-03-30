@@ -673,7 +673,6 @@ RUNTIME_LL_COMPONENTS = \
   arm_no_neon \
   hvx_64 \
   hvx_128 \
-  libatomic_stub \
   mips \
   posix_math \
   powerpc \

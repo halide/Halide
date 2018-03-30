@@ -1,3 +1,4 @@
+extern "C" void * pthread_self();
 
 namespace Halide { namespace Runtime { namespace Internal {
 
@@ -15,6 +16,7 @@ struct work {
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
 struct work_queue_t {
     // all fields are protected by this mutex.
+    // It must be first in the structure due to how it is initialized.
     halide_mutex mutex;
 
     // Singly linked list for job stack
@@ -187,7 +189,9 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     halide_mutex_lock(&work_queue.mutex);
 
     if (!work_queue.initialized) {
-        memset(&work_queue, 0, sizeof(work_queue));
+        // Ensure all fields except the mutex are zeroed.
+        size_t offset = sizeof(halide_mutex);
+        memset(((char *)&work_queue) + offset, 0, sizeof(work_queue) - offset);
 
         // Compute the desired number of threads to use. Other code
         // can also mess with this value, but only when the work queue
@@ -276,24 +280,24 @@ WEAK int halide_set_num_threads(int n) {
 }
 
 WEAK void halide_shutdown_thread_pool() {
-    if (!work_queue.initialized) return;
+    if (work_queue.initialized) {
+        // Wake everyone up and tell them the party's over and it's time
+        // to go home
+        halide_mutex_lock(&work_queue.mutex);
+        work_queue.shutdown = true;
+        halide_cond_broadcast(&work_queue.wakeup_owners);
+        halide_cond_broadcast(&work_queue.wakeup_a_team);
+        halide_cond_broadcast(&work_queue.wakeup_b_team);
+        halide_mutex_unlock(&work_queue.mutex);
 
-    // Wake everyone up and tell them the party's over and it's time
-    // to go home
-    halide_mutex_lock(&work_queue.mutex);
-    work_queue.shutdown = true;
-    halide_cond_broadcast(&work_queue.wakeup_owners);
-    halide_cond_broadcast(&work_queue.wakeup_a_team);
-    halide_cond_broadcast(&work_queue.wakeup_b_team);
-    halide_mutex_unlock(&work_queue.mutex);
+        // Wait until they leave
+        for (int i = 0; i < work_queue.threads_created; i++) {
+            halide_join_thread(work_queue.threads[i]);
+        }
 
-    // Wait until they leave
-    for (int i = 0; i < work_queue.threads_created; i++) {
-        halide_join_thread(work_queue.threads[i]);
+        // Tidy up
+        work_queue.initialized = false;
     }
-
-    // Tidy up
-    work_queue.initialized = false;
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {

@@ -6,17 +6,15 @@
 
 extern "C" {
 
-// On posix platforms, there's a 1-to-1 correspondence between
-// halide_* threading functions and the pthread_* functions. We take
-// some liberties with the types of the opaque pointer objects to
-// avoid a bunch of pointer casts.
-
+// This code cannot depend on system headers, hence we choose a data size which will
+// be large enough for all systems we care about.
+// 64 bytes covers this for both mutex and condvar. Using int64_t ensures alignment.
 struct pthread_mutex_t {
-    uintptr_t _private[8];
+    int64_t _private[8];
 };
 
 struct pthread_cond_t {
-    uintptr_t _private[8];
+    int64_t _private[8];
 };
 
 typedef long pthread_t;

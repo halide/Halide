@@ -31,6 +31,111 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 namespace Synchronization {
 
+namespace {
+
+#ifdef BITS_32
+__attribute__((always_inline))  uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
+    return __sync_and_and_fetch(addr, val);
+}
+
+__attribute__((always_inline)) bool cas_strong_sequentially_consistent_helper(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    uintptr_t oldval = *expected;
+    uintptr_t gotval = __sync_val_compare_and_swap(addr, oldval, *desired);
+    *expected = gotval;
+    return oldval == gotval;
+}
+
+ __attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
+}
+      
+__attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
+}
+
+__attribute__((always_inline)) bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
+}
+
+__attribute__((always_inline)) bool atomic_cas_weak_acquire_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+     return cas_strong_sequentially_consistent_helper(addr, expected, desired);
+}
+
+__attribute__((always_inline)) uintptr_t atomic_fetch_and_release(uintptr_t *addr, uintptr_t val) {
+    return __sync_fetch_and_and(addr, val);
+}
+
+__attribute__((always_inline)) void atomic_load_relaxed(uintptr_t *addr, uintptr_t *val) {
+    *val = *addr;
+}
+
+__attribute__((always_inline)) uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) {
+    return __sync_or_and_fetch(addr, val);
+}
+
+__attribute__((always_inline)) void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
+    *addr = *val;
+}
+
+__attribute__((always_inline)) void atomic_store_release(uintptr_t *addr, uintptr_t *val) {
+    *addr = *val;
+    __sync_synchronize();
+}
+
+__attribute__((always_inline)) void atomic_thread_fence_acquire() {
+     __sync_synchronize();
+}
+
+#else
+
+__attribute__((always_inline))  uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
+    return __atomic_and_fetch(addr, val, __ATOMIC_RELEASE);
+}
+
+__attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
+}
+      
+__attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
+}
+
+__attribute__((always_inline)) bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+}
+
+__attribute__((always_inline)) bool atomic_cas_weak_acquire_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+}
+
+__attribute__((always_inline)) uintptr_t atomic_fetch_and_release(uintptr_t *addr, uintptr_t val) {
+    return __atomic_fetch_and(addr, val, __ATOMIC_RELEASE);
+}
+
+__attribute__((always_inline)) void atomic_load_relaxed(uintptr_t *addr, uintptr_t *val) {
+    __atomic_load(addr, val, __ATOMIC_RELAXED);
+}
+
+__attribute__((always_inline)) uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) {
+    return __atomic_or_fetch(addr, val, __ATOMIC_RELAXED);
+}
+
+__attribute__((always_inline)) void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
+    __atomic_store(addr, val, __ATOMIC_RELAXED);
+}
+
+__attribute__((always_inline)) void atomic_store_release(uintptr_t *addr, uintptr_t *val) {
+    __atomic_store(addr, val, __ATOMIC_RELEASE);
+}
+
+__attribute__((always_inline)) void atomic_thread_fence_acquire() {
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+}
+
+#endif
+
+}
+ 
 class spin_control {
     int spin_count;
 
@@ -101,13 +206,13 @@ public:
         uintptr_t expected = 0;
         uintptr_t desired = lock_bit;
         // Try for a fast grab of the lock bit. If this does not work, call the full adaptive looping code.
-        if (!__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        if (!atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
             lock_full();
         }
     }
 
     __attribute__((always_inline)) void unlock() {
-        uintptr_t val = __atomic_fetch_and(&state, ~(uintptr_t)lock_bit, __ATOMIC_RELEASE);
+        uintptr_t val = atomic_fetch_and_release(&state, ~(uintptr_t)lock_bit);
         // If another thread is currently queueing, that thread will ensure
         // it acquires the lock or wakes a waiting thread.
         bool no_thread_queuing = (val & queue_lock_bit) == 0;
@@ -124,13 +229,13 @@ word_lock::word_lock() : state(0) { }
 void word_lock::lock_full() {
     spin_control spinner;
     uintptr_t expected;
-    __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+    atomic_load_relaxed(&state, &expected);
 
     while (true) {
         if (!(expected & lock_bit)) {
             uintptr_t desired = expected | lock_bit;
 
-            if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+            if (atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
                 return;
             }
             continue;
@@ -138,7 +243,7 @@ void word_lock::lock_full() {
 
         if (((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) != 0) && spinner.should_spin()) {
             halide_thread_yield();
-            __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+            atomic_load_relaxed(&state, &expected);
             continue;
         }
 
@@ -160,17 +265,17 @@ void word_lock::lock_full() {
         }
 
         uintptr_t desired = ((uintptr_t)&node) | (expected & (queue_lock_bit | lock_bit));
-        if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+        if (atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
             node.parker.park();
             spinner.reset();
-            __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+            atomic_load_relaxed(&state, &expected);
         }
     }
 }
 
 void word_lock::unlock_full() {
     uintptr_t expected;
-    __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+    atomic_load_relaxed(&state, &expected);
 
     while (true) {
         // If another thread is currently queueing, that thread will ensure
@@ -183,7 +288,7 @@ void word_lock::unlock_full() {
         }
 
         uintptr_t desired = expected | queue_lock_bit;
-        if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        if (atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
             break;
         }
     }
@@ -209,10 +314,10 @@ void word_lock::unlock_full() {
         // that currently holds the lock do the wakeup
         if (expected & lock_bit) {
             uintptr_t desired = expected & ~(uintptr_t)queue_lock_bit;
-            if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+            if (atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
                 return;
             }
-            __atomic_thread_fence(__ATOMIC_ACQUIRE);
+            atomic_thread_fence_acquire();
             continue;
         }
 
@@ -221,13 +326,13 @@ void word_lock::unlock_full() {
             bool continue_outer = false;
             while (!continue_outer) {
                 uintptr_t desired = expected & lock_bit;
-                if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+                if (atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
                     break;
                 }
                 if ((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) == 0) {
                     continue;
                 } else {
-                    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+                    atomic_thread_fence_acquire();
                     continue_outer = true;
                 }
             }
@@ -237,7 +342,7 @@ void word_lock::unlock_full() {
             }
         } else {
             head->tail = new_tail;
-            __atomic_and_fetch(&state, ~(uintptr_t)queue_lock_bit, __ATOMIC_RELEASE);
+            atomic_and_fetch_release(&state, ~(uintptr_t)queue_lock_bit);
         }
 
         // TODO: The reason there are three calls here is other things can happen between them.
@@ -440,7 +545,7 @@ uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
     queue_data *data = *data_location;
     while (data != NULL) {
         uintptr_t cur_addr;
-        __atomic_load(&data->sleep_address, &cur_addr, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&data->sleep_address, &cur_addr);
         if (cur_addr == addr) {
             queue_data *next = data->next;
             *data_location = next;
@@ -453,7 +558,7 @@ uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
                 queue_data *data2 = next;
                 while (data2 != NULL && !more_waiters) {
                     uintptr_t cur_addr2;
-                    __atomic_load(&data2->sleep_address, &cur_addr2, __ATOMIC_RELAXED);
+                    atomic_load_relaxed(&data2->sleep_address, &cur_addr2);
                     more_waiters = (cur_addr2 == addr);
                     data2 = data2->next;
                 }
@@ -496,7 +601,7 @@ uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
 
     while (data != NULL) {
         uintptr_t cur_addr;
-        __atomic_load(&data->sleep_address, &cur_addr, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&data->sleep_address, &cur_addr);
 
         queue_data *next = data->next;
         if (cur_addr == addr) {
@@ -567,7 +672,7 @@ int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control &cont
 
     while (data != NULL) {
         uintptr_t cur_addr;
-        __atomic_load(&data->sleep_address, &cur_addr, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&data->sleep_address, &cur_addr);
 
         queue_data *next = data->next;
         if (cur_addr == addr_from) {
@@ -587,7 +692,7 @@ int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control &cont
                 }
 
                 requeue_tail = data;
-                __atomic_store(&data->sleep_address, &addr_to, __ATOMIC_RELAXED);
+                atomic_store_relaxed(&data->sleep_address, &addr_to);
             }
             data = next;
             // TODO: prev ptr?
@@ -634,7 +739,7 @@ bool mutex_parking_control_validate(void *control, validate_action &action) {
     mutex_parking_control *mutex_control = (mutex_parking_control *)control;
 
     uintptr_t result;
-    __atomic_load(mutex_control->lock_state, &result, __ATOMIC_RELAXED);
+    atomic_load_relaxed(mutex_control->lock_state, &result);
     return result == (lock_bit | parked_bit);
 }
 
@@ -644,7 +749,7 @@ uintptr_t mutex_parking_control_unpark(void *control, int unparked, bool more_wa
 
     // TODO: consider handling fairness.
     uintptr_t return_state = more_waiters ? parked_bit : 0;
-    __atomic_store(mutex_control->lock_state, &return_state, __ATOMIC_RELEASE);
+    atomic_store_release(mutex_control->lock_state, &return_state);
 
     return 0;
 }
@@ -662,12 +767,12 @@ class fast_mutex {
         // Everyone says this should be 40. Have not measured it.
         spin_control spinner;
         uintptr_t expected;
-        __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&state, &expected);
 
         while (true) {
             if (!(expected & lock_bit)) {
                 uintptr_t desired = expected | lock_bit;
-                if (__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+                if (atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
                     return;
                 }
                 continue;
@@ -676,14 +781,14 @@ class fast_mutex {
             // If no one is parked, spin with spin count.
             if ((expected & parked_bit) == 0 && spinner.should_spin()) {
                 halide_thread_yield();
-                __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+                atomic_load_relaxed(&state, &expected);
                 continue;
             }
             
             // Mark mutex as having parked threads if not already done.
             if ((expected & parked_bit) == 0) {
                 uintptr_t desired = expected | parked_bit;
-                if (!__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+                if (!atomic_cas_weak_relaxed_relaxed(&state, &expected, &desired)) {
                     continue;
                 }
             }
@@ -696,7 +801,7 @@ class fast_mutex {
             }
 
             spinner.reset();
-            __atomic_load(&state, &expected, __ATOMIC_RELAXED);
+            atomic_load_relaxed(&state, &expected);
         }
     }
 
@@ -705,7 +810,7 @@ class fast_mutex {
         uintptr_t desired = 0;
         // Try for a fast release of the lock. Redundant with code in lock, but done
         // to make unlock_full a standalone unlock that can be called directly.
-        if (__atomic_compare_exchange(&state, &expected, &desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+        if (atomic_cas_strong_release_relaxed(&state, &expected, &desired)) {
             return;
         }
 
@@ -719,7 +824,7 @@ public:
         uintptr_t expected = 0;
         uintptr_t desired = lock_bit;
         // Try for a fast grab of the lock bit. If this does not work, call the full adaptive looping code.
-        if (!__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        if (!atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
             lock_full();
         }
     }
@@ -728,28 +833,28 @@ public:
         uintptr_t expected = lock_bit;
         uintptr_t desired = 0;
         // Try for a fast grab of the lock bit. If this does not work, call the full adaptive looping code.
-        if (!__atomic_compare_exchange(&state, &expected, &desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+        if (!atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
             unlock_full();
         }
     }
 
     bool make_parked_if_locked() {
         uintptr_t val;
-        __atomic_load(&state, &val, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&state, &val);
         while (true) {
             if (!(val & lock_bit)) {
                 return false;
             }
 
             uintptr_t desired = val | parked_bit;
-            if (__atomic_compare_exchange(&state, &val, &desired, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+            if (atomic_cas_weak_relaxed_relaxed(&state, &val, &desired)) {
                 return true;
             }
         }
     }
 
     void make_parked() {
-        __atomic_or_fetch(&state, parked_bit, __ATOMIC_RELAXED);
+        atomic_or_fetch_relaxed(&state, parked_bit);
     }
 };
 
@@ -765,7 +870,7 @@ uintptr_t signal_parking_control_unpark(void *control, int unparked, bool more_w
 
     if (!more_waiters) {
         uintptr_t val = 0;
-        __atomic_store(signal_control->cond_state, &val, __ATOMIC_RELAXED);
+        atomic_store_relaxed(signal_control->cond_state, &val);
     }
 
 #if 0 // TODO: figure out why this was here.
@@ -791,7 +896,7 @@ bool broadcast_parking_control_validate(void *control, validate_action &action) 
     broadcast_parking_control *broadcast_control = (broadcast_parking_control *)control;
 
     uintptr_t val;
-    __atomic_load(broadcast_control->cond_state, &val, __ATOMIC_RELAXED);
+    atomic_load_relaxed(broadcast_control->cond_state, &val);
     // By the time this broadcast locked everything and was processed, the cond
     // has progressed to a new mutex, do nothing since any waiting threads have
     // to be waiting on what is effectively a different condition.
@@ -800,7 +905,7 @@ bool broadcast_parking_control_validate(void *control, validate_action &action) 
     }
     // Clear the cond's connection to the mutex as all waiting threads are going to reque onto the mutex.
     val = 0;
-    __atomic_store(broadcast_control->cond_state, &val, __ATOMIC_RELAXED);
+    atomic_store_relaxed(broadcast_control->cond_state, &val);
 
     action.unpark_one = !broadcast_control->mutex->make_parked_if_locked();
 
@@ -832,11 +937,11 @@ bool wait_parking_control_validate(void *control, validate_action &action) {
     wait_parking_control *wait_control = (wait_parking_control *)control;
 
     uintptr_t val;
-    __atomic_load(wait_control->cond_state, &val, __ATOMIC_RELAXED);
+    atomic_load_relaxed(wait_control->cond_state, &val);
 
     if (val == 0) {
         val = (uintptr_t)wait_control->mutex;
-        __atomic_store(wait_control->cond_state, &val, __ATOMIC_RELAXED);
+        atomic_store_relaxed(wait_control->cond_state, &val);
     } else if (val != (uintptr_t)wait_control->mutex) {
         // TODO: signal error.
         action.invalid_unpark_info = (uintptr_t)wait_control->mutex;
@@ -857,7 +962,7 @@ uintptr_t wait_parking_control_unpark(void *control, int unparked, bool more_wai
 
     if (!more_waiters) {
         uintptr_t val = 0;
-        __atomic_store(wait_control->cond_state, &val, __ATOMIC_RELAXED);
+        atomic_store_relaxed(wait_control->cond_state, &val);
     }
     return 0;
 }
@@ -877,7 +982,7 @@ class fast_cond {
 
     __attribute__((always_inline)) void signal() {
         uintptr_t val;
-        __atomic_load(&state, &val, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&state, &val);
         if (val == 0) {
             return;
         }
@@ -887,7 +992,7 @@ class fast_cond {
 
     __attribute__((always_inline)) void broadcast() {
         uintptr_t val;
-        __atomic_load(&state, &val, __ATOMIC_RELAXED);
+        atomic_load_relaxed(&state, &val);
         if (val == 0) {
             return;
         }
@@ -902,7 +1007,7 @@ class fast_cond {
             mutex->lock();
         } else { // TODO: this is debug only.
             uintptr_t val;
-            __atomic_load((uintptr_t *)mutex, &val, __ATOMIC_RELAXED);
+            atomic_load_relaxed((uintptr_t *)mutex, &val);
             halide_assert(NULL, val & 0x1);
         }
     }
