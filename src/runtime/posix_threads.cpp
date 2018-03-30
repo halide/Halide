@@ -10,11 +10,11 @@ extern "C" {
 // be large enough for all systems we care about.
 // 64 bytes covers this for both mutex and condvar. Using int64_t ensures alignment.
 struct pthread_mutex_t {
-    int64_t _private[8];
+    uint64_t _private[8];
 };
 
 struct pthread_cond_t {
-    int64_t _private[8];
+    uint64_t _private[8];
 };
 
 typedef long pthread_t;
@@ -36,7 +36,7 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 #if TLS_CACHING_PARKER
 
 struct pthread_once_t {
-    uintptr_t _private[8];
+    uint64_t _private[8];
 };
 
 typedef unsigned int pthread_key_t;
