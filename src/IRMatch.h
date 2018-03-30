@@ -405,7 +405,7 @@ struct Intrin {
     std::tuple<Args...> args;
 
     template<int i,
-             typename = typename std::enable_if<(i + 1 < sizeof...(Args))>::type>
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
     HALIDE_ALWAYS_INLINE bool match_args(int, const Call &c, MatcherState &state) const {
         return std::get<i>(args).match(c.args[i], state) && match_args<i + 1>(0, c, state);
     }
