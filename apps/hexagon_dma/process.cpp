@@ -37,6 +37,16 @@ int main(int argc, char **argv) {
                              reinterpret_cast<uint64_t>(memory_to_dma_from));
     input.set_device_dirty();
 
+    //Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
+    Halide::Runtime::Buffer<uint8_t> output(nullptr, width, height, 2);
+    output.allocate();
+    uint8_t *memory_to_dma_to = (uint8_t*)malloc(width * height * 2);
+    output.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(memory_to_dma_to));
+    output.set_host_dirty(); 
+ 
+    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
+    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
+
     // In order to actually do a DMA transfer, we need to allocate a
     // DMA engine.
     void *dma_engine = nullptr;
@@ -45,11 +55,7 @@ int main(int argc, char **argv) {
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_NV12,0);
-
-    Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
- 
-    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, output, dma_engine, false, eDmaFmt_NV12,1);
 
 
     int result = pipeline(input, output_y, output_c);
@@ -77,12 +83,14 @@ int main(int argc, char **argv) {
     }
 
     halide_hexagon_dma_unprepare(nullptr, input);
+    halide_hexagon_dma_unprepare(nullptr, output);
 
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
     free(memory_to_dma_from);
+    free(memory_to_dma_to);
 
     printf("Success!\n");
     return 0;
