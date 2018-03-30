@@ -4421,41 +4421,41 @@ private:
         auto mutated = IRMatcher::select(*condition.get(), *true_value.get(), *false_value.get());
 
         if (rewrite(mutated, expr,
-                    select(one, x, y), x,
-                    select(zero, x, y), y,
-                    select(x, y, y), y,
-                    select(x, intrin(Call::likely, y), y), true_value,
-                    select(x, y, intrin(Call::likely, y)), false_value)) {
+                    rule(select(one, x, y), x),
+                    rule(select(zero, x, y), y),
+                    rule(select(x, y, y), y),
+                    rule(select(x, intrin(Call::likely, y), y), true_value),
+                    rule(select(x, y, intrin(Call::likely, y)), false_value))) {
             return expr;
         } else if (rewrite(mutated, expr,
-                           select(broadcast(x), y, z), select(x, y, z),
-                           select(x != y, z, w), select(x == y, w, z),
-                           select(x <= y, z, w), select(y < x, w, z),
-                           select(x, select(y, z, w), z), select(x && !y, w, z),
-                           select(x, select(y, z, w), w), select(x && y, z, w),
-                           select(x, y, select(z, y, w)), select(x || z, y, w),
-                           select(x, y, select(z, w, y)), select(x || !z, y, w),
-                           select(x, select(x, y, z), w), select(x, y, w),
-                           select(x, y, select(x, z, w)), select(x, y, w),
-                           select(x, y + z, y + w), y + select(x, z, w),
-                           select(x, y + z, w + y), y + select(x, z, w),
-                           select(x, z + y, y + w), y + select(x, z, w),
-                           select(x, z + y, w + y), select(x, z, w) + y,
-                           select(x, y - z, y - w), y - select(x, z, w),
-                           select(x, y - z, y + w), y + select(x, -z, w),
-                           select(x, y + z, y - w), y + select(x, z, -w),
-                           select(x, y - z, w + y), y + select(x, -z, w),
-                           select(x, z + y, y - w), y + select(x, z, -w),
-                           select(x, z - y, w - y), select(x, z, w) - y,
-                           select(x, y * z, y * w), y * select(x, z, w),
-                           select(x, y * z, w * y), y * select(x, z, w),
-                           select(x, z * y, y * w), y * select(x, z, w),
-                           select(x, z * y, w * y), select(x, z, w) * y)) {
+                           rule(select(broadcast(x), y, z), select(x, y, z)),
+                           rule(select(x != y, z, w), select(x == y, w, z)),
+                           rule(select(x <= y, z, w), select(y < x, w, z)),
+                           rule(select(x, select(y, z, w), z), select(x && !y, w, z)),
+                           rule(select(x, select(y, z, w), w), select(x && y, z, w)),
+                           rule(select(x, y, select(z, y, w)), select(x || z, y, w)),
+                           rule(select(x, y, select(z, w, y)), select(x || !z, y, w)),
+                           rule(select(x, select(x, y, z), w), select(x, y, w)),
+                           rule(select(x, y, select(x, z, w)), select(x, y, w)),
+                           rule(select(x, y + z, y + w), y + select(x, z, w)),
+                           rule(select(x, y + z, w + y), y + select(x, z, w)),
+                           rule(select(x, z + y, y + w), y + select(x, z, w)),
+                           rule(select(x, z + y, w + y), select(x, z, w) + y),
+                           rule(select(x, y - z, y - w), y - select(x, z, w)),
+                           rule(select(x, y - z, y + w), y + select(x, -z, w)),
+                           rule(select(x, y + z, y - w), y + select(x, z, -w)),
+                           rule(select(x, y - z, w + y), y + select(x, -z, w)),
+                           rule(select(x, z + y, y - w), y + select(x, z, -w)),
+                           rule(select(x, z - y, w - y), select(x, z, w) - y),
+                           rule(select(x, y * z, y * w), y * select(x, z, w)),
+                           rule(select(x, y * z, w * y), y * select(x, z, w)),
+                           rule(select(x, z * y, y * w), y * select(x, z, w)),
+                           rule(select(x, z * y, w * y), select(x, z, w) * y))) {
             return mutate(std::move(expr));
         } else if (op->type.is_bool() &&
                    rewrite(mutated, expr,
-                           select(x, one, zero), cast(op->type, x),
-                           select(x, zero, one), cast(op->type, !x))) {
+                           rule(select(x, one, zero), cast(op->type, x)),
+                           rule(select(x, zero, one), cast(op->type, !x)))) {
             return mutate(std::move(expr));
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&

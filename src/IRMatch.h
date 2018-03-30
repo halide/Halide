@@ -85,7 +85,23 @@ struct MatcherState {
     }
 };
 
-template<typename Pattern>
+template<typename T,
+         typename = typename std::remove_reference<T>::type::pattern_tag>
+struct enable_if_pattern {
+    struct type {};
+};
+
+template<typename T1, typename T2>
+struct enable_if_pattern_or_expr;
+
+template<typename T>
+struct enable_if_pattern_or_expr<T, typename std::remove_reference<T>::type::pattern_tag> {};
+
+template<typename T>
+struct enable_if_pattern_or_expr<const BaseExprNode &, T> {};
+
+template<typename Pattern,
+         typename = typename enable_if_pattern<Pattern>::type>
 HALIDE_ALWAYS_INLINE
 Expr to_expr(Pattern &&p, MatcherState &state) {
     return p.make(state);
@@ -117,7 +133,7 @@ bool equal(const BaseExprNode &a, const BaseExprNode &b) {
 // Matches and binds to any Expr
 template<int i>
 struct Wild {
-    struct IRMatcherPattern {};
+    struct pattern_tag {};
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
         if (state.is_bound(i)) {
             // early-out
@@ -134,7 +150,8 @@ struct Wild {
         return true;
     }
 
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(const Pattern &op, MatcherState &state) const {
         return false;
     }
@@ -154,7 +171,7 @@ std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
 // constant must be representable as an int.
 template<int i>
 struct Const {
-    struct IRMatcherPattern {};
+    struct pattern_tag {};
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
         const BaseExprNode *op = &e;
         if (e.node_type == IRNodeType::Broadcast) {
@@ -176,7 +193,8 @@ struct Const {
         return true;
     }
 
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(const Pattern &op, MatcherState &state) const {
         return false;
     }
@@ -191,7 +209,7 @@ std::ostream &operator<<(std::ostream &s, const Const<i> &op) {
 // Matches one of the binary operators
 template<typename Op, typename A, typename B>
 struct BinOp {
-    struct IRMatcherPattern {};
+    struct pattern_tag {};
     A a;
     B b;
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
@@ -207,7 +225,8 @@ struct BinOp {
         return std::is_same<Op, Op2>::value && a.match(op.a) && b.match(op.b);
     }
 
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(const Pattern &op, MatcherState &state) const {
         return false;
     }
@@ -401,13 +420,14 @@ BinOp<And, A, B> operator&&(A &&a, B &&b) {
 
 template<typename... Args>
 struct Intrin {
+    struct pattern_tag {};
     Call::ConstString intrin;
     std::tuple<Args...> args;
 
     template<int i,
              typename = typename std::enable_if<(i < sizeof...(Args))>::type>
     HALIDE_ALWAYS_INLINE bool match_args(int, const Call &c, MatcherState &state) const {
-        return std::get<i>(args).match(c.args[i], state) && match_args<i + 1>(0, c, state);
+        return std::get<i>(args).match(*c.args[i].get(), state) && match_args<i + 1>(0, c, state);
     }
 
     template<int i>
@@ -423,12 +443,32 @@ struct Intrin {
         return (c.is_intrinsic(intrin) && match_args<0>(0, c, state));
     }
 
+    template<int i,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE void print_args(int, std::ostream &s) const {
+        s << std::get<i>(args);
+        if (i + 1 < sizeof...(Args)) {
+            s << ", ";
+        }
+        print_args<i+1>(0, s);
+    }
+
+    template<int i>
+    HALIDE_ALWAYS_INLINE void print_args(double, std::ostream &s) const {
+    }
+
+    HALIDE_ALWAYS_INLINE void print_args(std::ostream &s) const {
+        print_args<0>(0, s);
+    }
+
     Intrin(Call::ConstString intrin, Args... args) : intrin(intrin), args(args...) {}
 };
 
 template<typename... Args>
 inline std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
-    s << op.intrin << "(...)"; // TODO: print args
+    s << op.intrin << "(";
+    op.print_args(s);
+    s << ")";
     return s;
 }
 
@@ -440,6 +480,7 @@ Intrin<Args...> intrin(Call::ConstString name, Args&&... args) {
 
 template<typename Op, typename A>
 struct UnaryOp {
+    struct pattern_tag {};
     A a;
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
         const Op &op = (const Op &)e;
@@ -452,7 +493,8 @@ struct UnaryOp {
         return std::is_same<Op, Op2>::value && a.match(op.a);
     }
 
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(const Pattern &op, MatcherState &state) const {
         return false;
     }
@@ -476,6 +518,7 @@ inline std::ostream &operator<<(std::ostream &s, const UnaryOp<Not, A> &op) {
 
 template<typename C, typename T, typename F>
 struct SelectOp {
+    struct pattern_tag {};
     C c;
     T t;
     F f;
@@ -492,7 +535,8 @@ struct SelectOp {
                 t.match(instance.t, state) &&
                 f.match(instance.f, state));
     }
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(const Pattern &p, MatcherState &state) const {
         return false;
     }
@@ -515,7 +559,7 @@ SelectOp<C, T, F> select(C &&c, T &&t, F &&f) {
 
 template<typename A>
 struct BroadcastOp {
-    struct IRMatcherPattern {};
+    struct pattern_tag {};
     A a;
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
         if (e.node_type == Broadcast::_node_type) {
@@ -542,6 +586,7 @@ BroadcastOp<A> broadcast(A &&a) { // matches any number of lanes
 
 template<typename A, typename B>
 struct RampOp {
+    struct pattern_tag {};
     A a;
     B b;
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
@@ -575,7 +620,7 @@ RampOp<A, B> ramp(A &&a, B &&b) { // matches any number of lanes
 
 template<typename A>
 struct NegateOp {
-    struct IRMatcherPattern {};
+    struct pattern_tag {};
     A a;
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
         const Sub &op = (const Sub &)e;
@@ -586,7 +631,8 @@ struct NegateOp {
     HALIDE_ALWAYS_INLINE bool match(NegateOp<A> &&p, MatcherState &state) const {
         return a.match(p.a, state);
     }
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(Pattern &&p, MatcherState &state) const {
         return false;
     }
@@ -611,6 +657,7 @@ NegateOp<A> operator-(A &&a) {
 
 template<typename A>
 struct CastOp {
+    struct pattern_tag {};
     Type type;
     A a;
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
@@ -622,7 +669,8 @@ struct CastOp {
     HALIDE_ALWAYS_INLINE bool match(const CastOp<A2> &op, MatcherState &state) const {
         return a.match(op.a, state);
     }
-    template<typename Pattern>
+    template<typename Pattern,
+             typename = typename enable_if_pattern<Pattern>::type>
     HALIDE_ALWAYS_INLINE bool match(Pattern &&p, MatcherState &state) const {
         return false;
     }
@@ -649,42 +697,44 @@ void validate_rule() {
     // TODO
 }
 
-template<typename Instance, typename Before, typename After>
-HALIDE_ALWAYS_INLINE
-bool apply_rule_inner(Instance &&in, Expr &result, Before &&before, After &&after) {
-    MatcherState state;
-    if (!before.match(std::forward<Instance>(in), state)) {
-        return false;
-    } else {
-        result = to_expr(std::forward<After>(after), state);
-        return true;
+template<typename Before, typename After>
+struct Rule {
+    Before before;
+    After after;
+
+    template<typename Instance>
+    bool apply(Instance &&in, Expr &result) {
+        MatcherState state;
+        // debug(0) << in << " vs " << before << "\n";
+        if (!before.match(std::forward<Instance>(in), state)) {
+            // debug(0) << "No match\n";
+            return false;
+        } else {
+            // debug(0) << "Match\n";
+            result = to_expr(after, state);
+            return true;
+        }
     }
+};
+
+template<typename Before,
+         typename After,
+         typename = typename enable_if_pattern<After>::type,
+         typename = typename enable_if_pattern<Before>::type>
+Rule<Before, After> rule(Before &&before, After &&after) {
+    return {before, after};
 }
 
-template<typename Pattern>
-HALIDE_ALWAYS_INLINE
-Pattern unwrap_expr(Pattern &&p) {
-    return std::forward<Pattern>(p);
+template<typename Before,
+         typename = typename enable_if_pattern<Before>::type>
+Rule<Before, const BaseExprNode &> rule(Before &&before, const Expr &after) {
+    return {before, *after.get()};
 }
 
-HALIDE_ALWAYS_INLINE
-const BaseExprNode &unwrap_expr(const Expr &e) {
-    return *e.get();
-}
-
-HALIDE_ALWAYS_INLINE
-const BaseExprNode &unwrap_expr(Expr &e) {
-    return *e.get();
-}
-
-template<typename Instance, typename Before, typename After>
-HALIDE_ALWAYS_INLINE
-bool apply_rule(Instance &&in, Expr &result, Before &&before, After &&after) {
-    validate_rule<Before, After>();
-    return apply_rule_inner(unwrap_expr(std::forward<Instance>(in)),
-                            result,
-                            std::forward<Before>(before),
-                            unwrap_expr(std::forward<After>(after)));
+template<typename Before,
+         typename = typename enable_if_pattern<Before>::type>
+Rule<Before, const BaseExprNode &> rule(Before &&before, Expr &after) {
+    return {before, *after.get()};
 }
 
 template<typename Instance>
@@ -693,10 +743,10 @@ bool rewrite(Instance &&, Expr &) {
     return false;
 }
 
-template<typename Instance, typename Before, typename After, typename... Rules>
+template<typename Instance, typename Rule, typename... Rules>
 HALIDE_ALWAYS_INLINE
-bool rewrite(Instance &&in, Expr &result, Before &&before, After &&after, Rules&&... rules) {
-    if (apply_rule(in, result, std::forward<Before>(before), std::forward<After>(after))) {
+bool rewrite(Instance &&in, Expr &result, Rule &&rule, Rules&&... rules) {
+    if (rule.apply(in, result)) {
         return true;
     } else {
         return rewrite(std::forward<Instance>(in), result,
