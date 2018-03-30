@@ -217,10 +217,6 @@ __attribute__((always_inline)) T reinterpret(const U &x) {
 
 extern WEAK __attribute__((always_inline)) int halide_malloc_alignment();
 
-struct halide_thread_parker {
-    uint64_t _private[16];
-};
-
 void halide_thread_yield();
 
 }}}
