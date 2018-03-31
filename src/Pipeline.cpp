@@ -105,7 +105,7 @@ struct PipelineContents {
         invalidate_cache();
         for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
             if (custom_lowering_passes[i].deleter) {
-                custom_lowering_passes[i].deleter(custom_lowering_passes[i].pass);
+                custom_lowering_passes[i].deleter();
             }
         }
         custom_lowering_passes.clear();
@@ -507,7 +507,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
     return contents->jit_externs;
 }
 
-void Pipeline::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
+void Pipeline::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
@@ -767,7 +767,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
             debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
         }
     }
-    
+
 }
 
 std::vector<JITModule>
@@ -1055,7 +1055,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
     }
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, 
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                                   const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
