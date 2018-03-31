@@ -373,6 +373,7 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) {
     case IRNodeType::Call:
         return (((const Call &)a).name == ((const Call &)b).name &&
                 ((const Call &)a).call_type == ((const Call &)b).call_type &&
+                ((const Call &)a).value_index == ((const Call &)b).value_index &&
                 equal_helper(((const Call &)a).args, ((const Call &)b).args));
     case IRNodeType::Let:
         return (((const Let &)a).name == ((const Let &)b).name &&
