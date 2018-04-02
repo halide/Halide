@@ -494,7 +494,7 @@ int run(int argc, char **argv) {
                     break;
                 }
                 expect(i + 2 < argc, i);
-                if (config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
+                if ((int) config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
                 int x = parse_int(argv[++i]);
                 int y = parse_int(argv[++i]);
                 config.strides[config.dims++] = {x, y};
