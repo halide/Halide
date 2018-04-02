@@ -88,6 +88,7 @@ struct FunctionContents {
     Expr extern_proxy_expr;
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
+    std::vector<string> trace_tags;
 
     bool frozen = false;
 
@@ -340,6 +341,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
+    copy->trace_tags = contents->trace_tags;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -885,6 +887,10 @@ void Function::trace_stores() {
 void Function::trace_realizations() {
     contents->trace_realizations = true;
 }
+void Function::add_trace_tag(const std::string &trace_tag) {
+    contents->trace_tags.push_back(trace_tag);
+}
+
 bool Function::is_tracing_loads() const {
     return contents->trace_loads;
 }
@@ -893,6 +899,9 @@ bool Function::is_tracing_stores() const {
 }
 bool Function::is_tracing_realizations() const {
     return contents->trace_realizations;
+}
+const std::vector<std::string> &Function::get_trace_tags() const {
+    return contents->trace_tags;
 }
 
 void Function::freeze() {

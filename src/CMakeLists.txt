@@ -81,6 +81,7 @@ set(RUNTIME_CPP
   windows_get_symbol
   windows_io
   windows_opencl
+  windows_profiler
   windows_tempfile
   windows_threads
   write_debug_image

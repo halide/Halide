@@ -1,6 +1,7 @@
 #!/bin/bash
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUM_THREADS=4
+rm -f bin/local_laplacian.mp4
 make bin/process_viz && \
 ./bin/process_viz ../images/rgb_small.png 4 1 1 0 ./bin/out_small.png | \
 ../../bin/HalideTraceViz \
