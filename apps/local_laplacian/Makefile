@@ -10,7 +10,7 @@ $(BIN)/local_laplacian.generator: local_laplacian_generator.cpp $(GENERATOR_DEPS
 
 $(BIN)/local_laplacian.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -o $(BIN) -f local_laplacian target=$(HL_TARGET) auto_schedule=false
+	$^ -g local_laplacian -o $(BIN) -f local_laplacian target=$(HL_TARGET) auto_schedule=false float_point=false
 
 $(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
