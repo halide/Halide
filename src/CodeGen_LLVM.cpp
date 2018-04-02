@@ -157,6 +157,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     builder(nullptr),
     value(nullptr),
     very_likely_branch(nullptr),
+    default_fp_math_md(nullptr),
+    strict_fp_math_md(nullptr),
     target(t),
     void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
     i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
@@ -256,7 +258,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
-    destructor_block(nullptr) {
+    destructor_block(nullptr),
+    strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
 }
 
@@ -378,6 +381,23 @@ void CodeGen_LLVM::init_context() {
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
     very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
+    default_fp_math_md = md_builder.createFPMath(0.0);
+    strict_fp_math_md = md_builder.createFPMath(0.0);
+    builder->setDefaultFPMathTag(default_fp_math_md);
+    llvm::FastMathFlags fast_flags;
+    fast_flags.setNoNaNs();
+    fast_flags.setNoInfs();
+    fast_flags.setNoSignedZeros();
+    // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
+    // fast_flags.setAllowReciprocal();
+    #if LLVM_VERSION >= 60
+    // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
+    // turns on all the flags.
+    fast_flags.setAllowReassoc();
+    fast_flags.setAllowContract(true);
+    fast_flags.setApproxFunc();
+    #endif
+    builder->setFastMathFlags(fast_flags);
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
@@ -500,6 +520,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -2662,6 +2683,13 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+        value = codegen(op->args[0]);
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
@@ -2682,6 +2710,23 @@ void CodeGen_LLVM::visit(const Call *op) {
                (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
+
+        /* NaNs are not supposed to exist in "no NaNs" compilation
+         * mode, but it appears llvm special cases the unordered
+         * compare instruction when the global NoNaNsFPMath option is
+         * set and still checks for a NaN. However if the nnan flag is
+         * set on the instruction itself, llvm treats the comparison
+         * as always false. Thus we always turn off the per-instruction
+         * fast-math flags for this instruction. I.e. it is always
+         * treated as strict. Note that compilation may still be in
+         * fast-math mode due to global options, but that's ok due to
+         * the aforementioned special casing. */
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+
         value = builder->CreateFCmpUNO(a, a);
     } else {
         // It's an extern call.

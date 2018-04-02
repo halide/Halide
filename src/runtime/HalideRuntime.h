@@ -1106,7 +1106,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
-    halide_target_feature_end = 50, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_end = 51, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

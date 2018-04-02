@@ -163,7 +163,10 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
-TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS)
+# Also allow tests, via conditional compilation, to use the entire
+# capability of the CPU being compiled on via -march=native. This
+# presumes tests are run on the smae machine they are compiled on.
+TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=native
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # gcc 4.8 fires a bogus warning on old versions of png.h
@@ -418,6 +421,7 @@ SOURCE_FILES = \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
+  StrictifyFloat.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
@@ -565,6 +569,7 @@ HEADER_FILES = \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
+  StrictifyFloat.h \
   Substitute.h \
   Target.h \
   ThreadPool.h \
