@@ -1562,7 +1562,7 @@ private:
                     types.push_back(type_info);
                 } else if (fmt.tag == tag_namespace && fmt.has_children) {
                     if (namespace_name.empty()) {
-                        namespace_name = "{anonymous}";
+                        namespace_name = "_";
                     }
                     namespace_stack.push_back({ namespace_name, stack_depth });
                 } else if ((fmt.tag == tag_inlined_subroutine ||
