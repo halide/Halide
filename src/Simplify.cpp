@@ -5544,7 +5544,7 @@ private:
             const bool const_false_conditions_expected =
                 call && call->name == "halide_error_specialize_fail";
             if (!const_false_conditions_expected) {
-                user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
+                user_error << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                              << stmt << "\n";
             }
         } else if (a && is_one(a->condition)) {
