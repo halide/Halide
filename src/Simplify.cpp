@@ -1809,21 +1809,12 @@ private:
     }
 
     Expr visit(const Mul *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            return IRMutator2::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-
-        if (no_float_simplify && op->type.is_float()) {
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                return op;
-            } else {
-                return Mul::make(a, b);
-            }
-        }
-
-        Expr expr;
-        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
-            return expr;
-        }
 
         IRMatcher::Wild<0> x;
         IRMatcher::Wild<1> y;
@@ -1836,7 +1827,8 @@ private:
         const Shuffle *shuffle_a = a.as<Shuffle>();
         const Shuffle *shuffle_b = b.as<Shuffle>();
 
-        auto mutated = IRMatcher::operator*(*a.get(), *b.get());
+        Expr expr;
+        auto mutated = IRMatcher::mul(a, b);
         if (rewrite(mutated, expr,
                     rule(c0 * c1, fold(c0 * c1)),
                     rule(zero * x, a),
@@ -4609,7 +4601,7 @@ private:
         IRMatcher::Wild<3> w;
         IRMatcher::Const<1> one;
         IRMatcher::Const<0> zero;
-        auto mutated = IRMatcher::select(*condition.get(), *true_value.get(), *false_value.get());
+        auto mutated = IRMatcher::select(condition, true_value, false_value);
 
         if (rewrite(mutated, expr,
                     rule(select(one, x, y), x),
