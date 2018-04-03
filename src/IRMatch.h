@@ -89,47 +89,38 @@ struct MatcherState {
         uint64_t u;
         int64_t i;
     } bound_const[4];
-    struct ConstType {
-        uint32_t bits;
-        ConstType(halide_type_t t) : bits(reinterpret_bits<uint32_t>(t)) {}
-        ConstType() {}
-        HALIDE_ALWAYS_INLINE
-        halide_type_t &type() const {
-            static_assert(sizeof(bits) == sizeof(halide_type_t), "sizeof(halide_type_t) != sizeof(uint32_t)");
-            return *((halide_type_t *)this);
-        }
 
-        // values of the lanes with special meaning.
-        static constexpr uint16_t signed_integer_overflow = 0x8000;
-        static constexpr uint16_t indeterminate_expression = 0x4000;
-        static constexpr uint16_t special_values_mask = 0xc000;
-    };
-    ConstType bound_const_type[4];
+    // values of the lanes with special meaning.
+    static constexpr uint16_t signed_integer_overflow = 0x8000;
+    static constexpr uint16_t indeterminate_expression = 0x4000;
+    static constexpr uint16_t special_values_mask = 0xc000;
+
+    halide_type_t bound_const_type[4];
     uint32_t const_bound_mask = 0;
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, double f, halide_type_t t) {
         bound_const[i].f = f;
-        bound_const_type[i] = reinterpret_bits<ConstType>(t);
+        bound_const_type[i] = t;
         const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, uint64_t u, halide_type_t t) {
         bound_const[i].u = u;
-        bound_const_type[i] = reinterpret_bits<ConstType>(t);
+        bound_const_type[i] = t;
         const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, int64_t s, halide_type_t t) {
         bound_const[i].i = s;
-        bound_const_type[i] = reinterpret_bits<ConstType>(t);
+        bound_const_type[i] = t;
         const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
-    void get_bound_const(int i, ConstVal &val, ConstType &type) const {
+    void get_bound_const(int i, ConstVal &val, halide_type_t &type) const {
         val = bound_const[i];
         type = bound_const_type[i];
     }
@@ -161,12 +152,12 @@ Expr to_expr(const BaseExprNode &e, MatcherState &state) {
 
 inline NO_INLINE
 Expr to_special_expr(halide_type_t ty) {
-    uint16_t flags = ty.lanes & MatcherState::ConstType::special_values_mask;
-    ty.lanes &= ~MatcherState::ConstType::special_values_mask;
+    uint16_t flags = ty.lanes & MatcherState::special_values_mask;
+    ty.lanes &= ~MatcherState::special_values_mask;
     static std::atomic<int> counter;
-    if (flags & MatcherState::ConstType::indeterminate_expression) {
+    if (flags & MatcherState::indeterminate_expression) {
         return Call::make(ty, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
-    } else if (flags & MatcherState::ConstType::signed_integer_overflow) {
+    } else if (flags & MatcherState::signed_integer_overflow) {
         return Call::make(ty, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
     }
     // unreachable
@@ -174,9 +165,9 @@ Expr to_special_expr(halide_type_t ty) {
 }
 
 HALIDE_ALWAYS_INLINE
-Expr to_expr(MatcherState::ConstVal val, MatcherState::ConstType ty, MatcherState &state) {
-    halide_type_t scalar_type = ty.type();
-    if (scalar_type.lanes & MatcherState::ConstType::special_values_mask) {
+Expr to_expr(MatcherState::ConstVal val, halide_type_t ty, MatcherState &state) {
+    halide_type_t scalar_type = ty;
+    if (scalar_type.lanes & MatcherState::special_values_mask) {
         return to_special_expr(scalar_type);
     }
 
@@ -236,9 +227,9 @@ struct WildConstInt {
         int64_t value = ((const IntImm *)op)->value;
         if (state.is_bound_const(i)) {
             MatcherState::ConstVal val;
-            MatcherState::ConstType type;
+            halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type.type() && value == val.i;
+            return op->type == type && value == val.i;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -246,12 +237,12 @@ struct WildConstInt {
 
     HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         MatcherState::ConstVal val;
-        MatcherState::ConstType type;
+        halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -270,9 +261,9 @@ struct WildConstUInt {
         uint64_t value = ((const UIntImm *)op)->value;
         if (state.is_bound_const(i)) {
             MatcherState::ConstVal val;
-            MatcherState::ConstType type;
+            halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type.type() && value == val.u;
+            return op->type == type && value == val.u;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -280,12 +271,12 @@ struct WildConstUInt {
 
     HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         MatcherState::ConstVal val;
-        MatcherState::ConstType type;
+        halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -305,9 +296,9 @@ struct WildConstFloat {
         double value = ((const FloatImm *)op)->value;
         if (state.is_bound_const(i)) {
             MatcherState::ConstVal val;
-            MatcherState::ConstType type;
+            halide_type_t type;
             state.get_bound_const(i, val, type);
-            return op->type == type.type() && value == val.f;
+            return op->type == type && value == val.f;
         }
         state.set_bound_const(i, value, ty);
         return true;
@@ -315,12 +306,12 @@ struct WildConstFloat {
 
     HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         MatcherState::ConstVal val;
-        MatcherState::ConstType type;
+        halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -348,12 +339,12 @@ struct WildConst {
 
     HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         MatcherState::ConstVal val;
-        MatcherState::ConstType type;
+        halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -459,22 +450,22 @@ struct BinOp {
     }
 
     template<typename A1 = A, typename B1 = B>
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         MatcherState::ConstVal cva, cvb;
-        MatcherState::ConstType cta, ctb;
+        halide_type_t cta, ctb;
         a.make_folded_const(cva, cta, state);
         b.make_folded_const(cvb, ctb, state);
         // The types are known to match except possibly for overflow flags in the lanes field
         ty.bits = cta.bits | ctb.bits;
-        switch (cta.type().code) {
+        switch (cta.code) {
         case halide_type_int:
-            val.i = constant_fold_bin_op<Op>(ty.type(), cva.i, cvb.i);
+            val.i = constant_fold_bin_op<Op>(ty, cva.i, cvb.i);
             break;
         case halide_type_uint:
-            val.u = constant_fold_bin_op<Op>(ty.type(), cva.u, cvb.u);
+            val.u = constant_fold_bin_op<Op>(ty, cva.u, cvb.u);
             break;
         case halide_type_float:
-            val.f = constant_fold_bin_op<Op>(ty.type(), cva.f, cvb.f);
+            val.f = constant_fold_bin_op<Op>(ty, cva.f, cvb.f);
             break;
         default:
             // unreachable
@@ -510,15 +501,15 @@ struct CmpOp {
 
     template<typename A1 = A,
              typename B1 = B>
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         MatcherState::ConstVal cva, cvb;
-        MatcherState::ConstType cta, ctb;
+        halide_type_t cta, ctb;
         a.make_folded_const(cva, cta, state);
         b.make_folded_const(cvb, ctb, state);
-        ty.type().code = halide_type_uint;
-        ty.type().bits = 1;
-        ty.type().lanes = cta.type().lanes | ctb.type().lanes;
-        switch (cta.type().code) {
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = cta.lanes | ctb.lanes;
+        switch (cta.code) {
         case halide_type_int:
             val.u = constant_fold_cmp_op<Op>(val.i, val.i);
             break;
@@ -637,7 +628,7 @@ BinOp<Add, A, B> operator+(A a, B b) {
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) {
-    t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::ConstType::signed_integer_overflow : 0;
+    t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     uint64_t ones = (uint64_t)(-1);
     return (a + b) & (ones >> (64 - t.bits));
 }
@@ -672,7 +663,7 @@ BinOp<Sub, const BaseExprNode &, const BaseExprNode &> sub(const Expr &a, const 
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Sub>(halide_type_t &t, int64_t a, int64_t b) {
-    t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::ConstType::signed_integer_overflow : 0;
+    t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     uint64_t ones = (uint64_t)(-1);
     return (a - b) & (ones >> (64 - t.bits));
 }
@@ -707,7 +698,7 @@ BinOp<Mul, const BaseExprNode &, const BaseExprNode &> mul(const Expr &a, const 
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Mul>(halide_type_t &t, int64_t a, int64_t b) {
-    t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::ConstType::signed_integer_overflow : 0;
+    t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     uint64_t ones = (uint64_t)(-1);
     return (a * b) & (ones >> (64 - t.bits));
 }
@@ -738,7 +729,7 @@ template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Div>(halide_type_t &t, int64_t a, int64_t b) {
     if (b == 0) {
-        t.lanes |= MatcherState::ConstType::indeterminate_expression;
+        t.lanes |= MatcherState::indeterminate_expression;
         return 0;
     } else {
         return div_imp(a, b);
@@ -749,7 +740,7 @@ template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_bin_op<Div>(halide_type_t &t, uint64_t a, uint64_t b) {
     if (b == 0) {
-        t.lanes |= MatcherState::ConstType::indeterminate_expression;
+        t.lanes |= MatcherState::indeterminate_expression;
         return 0;
     } else {
         return a / b;
@@ -775,7 +766,7 @@ template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Mod>(halide_type_t &t, int64_t a, int64_t b) {
     if (b == 0) {
-        t.lanes |= MatcherState::ConstType::indeterminate_expression;
+        t.lanes |= MatcherState::indeterminate_expression;
         return 0;
     } else {
         return mod_imp(a, b);
@@ -786,7 +777,7 @@ template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_bin_op<Mod>(halide_type_t &t, uint64_t a, uint64_t b) {
     if (b == 0) {
-        t.lanes |= MatcherState::ConstType::indeterminate_expression;
+        t.lanes |= MatcherState::indeterminate_expression;
         return 0;
     } else {
         return a % b;
@@ -1291,13 +1282,13 @@ struct NegateOp {
         return Sub::make(std::move(z), std::move(ea));
     }
     template<typename A1 = A>
-    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, MatcherState::ConstType &ty, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE void make_folded_const(MatcherState::ConstVal &val, halide_type_t &ty, MatcherState &state) const {
         a.make_folded_const(val, ty, state);
-        switch (ty.type().code) {
+        switch (ty.code) {
         case halide_type_int:
-            if (ty.type().bits >= 32 && val.i && !(val.i << (65 - ty.type().bits))) {
+            if (ty.bits >= 32 && val.i && !(val.i << (65 - ty.bits))) {
                 // Trying to negate the most negative signed int for a no-overflow type.
-                ty.type().lanes |= MatcherState::ConstType::signed_integer_overflow;
+                ty.lanes |= MatcherState::signed_integer_overflow;
             } else {
                 val.i = -val.i;
             }
@@ -1366,7 +1357,7 @@ struct Fold {
     A a;
     HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         MatcherState::ConstVal c;
-        MatcherState::ConstType ty;
+        halide_type_t ty;
         a.make_folded_const(c, ty, state);
         return to_expr(c, ty, state);
     }
@@ -1395,7 +1386,7 @@ template<typename Pattern,
 HALIDE_ALWAYS_INLINE
 bool evaluate_predicate(Pattern &&p, MatcherState &state) {
     MatcherState::ConstVal c;
-    MatcherState::ConstType ty;
+    halide_type_t ty;
     p.make_folded_const(c, ty, state);
     return c.u;
 }
