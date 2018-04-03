@@ -82,4 +82,9 @@ Func ImageParam::in() {
     return func.in();
 }
 
+void ImageParam::trace_loads() {
+    internal_assert(func.defined());
+    func.trace_loads();
+}
+
 }

@@ -148,7 +148,7 @@ static int debug_indent = 0;
 class Simplify : public IRMutator2 {
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
-        remove_dead_lets(r) {
+        remove_dead_lets(r), no_float_simplify(false) {
         alignment_info.set_containing_scope(ai);
 
         // Only respect the constant bounds from the containing scope.
@@ -208,6 +208,7 @@ public:
 
 private:
     bool remove_dead_lets;
+    bool no_float_simplify;
 
     struct VarInfo {
         Expr replacement;
@@ -448,6 +449,15 @@ private:
 
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
+        if (no_float_simplify &&
+            (op->type.is_float() || value.type().is_float())) {
+            if (value.same_as(op->value)) {
+                return op;
+            } else {
+                return Cast::make(op->type, value);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(value, op->type, &expr)) {
             return expr;
@@ -577,6 +587,15 @@ private:
 
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Add::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -1080,6 +1099,15 @@ private:
     Expr visit(const Sub *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Sub::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -1783,6 +1811,15 @@ private:
     Expr visit(const Mul *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Mul::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -1939,6 +1976,15 @@ private:
     Expr visit(const Div *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Div::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -2398,6 +2444,16 @@ private:
     Expr visit(const Mod *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Mod::make(a, b);
+            }
+        }
+
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -2547,6 +2603,15 @@ private:
     Expr visit(const Min *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Min::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -3086,7 +3151,17 @@ private:
     }
 
     Expr visit(const Max *op) override {
-        Expr a = mutate(op->a), b = mutate(op->b);
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Max::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -3611,7 +3686,18 @@ private:
     }
 
     Expr visit(const EQ *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return EQ::make(a, b);
+            }
+        }
+
         Expr delta = mutate(op->a - op->b);
+
         Expr expr;
         if (propagate_indeterminate_expression(delta, op->type, &expr)) {
             return expr;
@@ -3700,11 +3786,31 @@ private:
     }
 
     Expr visit(const NE *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return NE::make(a, b);
+            }
+        }
+
         return mutate(Not::make(op->a == op->b));
     }
 
     Expr visit(const LT *op) override {
-        Expr a = mutate(op->a), b = mutate(op->b);
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return LT::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -4029,14 +4135,47 @@ private:
     }
 
     Expr visit(const LE *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return LE::make(a, b);
+            }
+        }
+
         return mutate(!(op->b < op->a));
     }
 
     Expr visit(const GT *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return GT::make(a, b);
+            }
+        }
+
         return mutate(op->b < op->a);
     }
 
     Expr visit(const GE *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return GE::make(a, b);
+            }
+        }
+
         return mutate(!(op->a < op->b));
     }
 
@@ -4664,7 +4803,10 @@ private:
             found_buffer_reference(op->name, op->args.size());
         }
 
-        if (op->is_intrinsic(Call::shift_left) ||
+        if (op->is_intrinsic(Call::strict_float)) {
+            ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
+            return IRMutator2::visit(op);
+        } else if (op->is_intrinsic(Call::shift_left) ||
             op->is_intrinsic(Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             Expr expr;

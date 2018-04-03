@@ -1952,7 +1952,6 @@ inline Expr likely_if_innermost(Expr e) {
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
-
 /** Cast an expression to the halide type corresponding to the C++
  * type T clamping to the minimum and maximum values of the result
  * type. */
@@ -1964,6 +1963,17 @@ Expr saturating_cast(Expr e) {
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
 Expr saturating_cast(Type t, Expr e);
+
+/** Makes a best effort attempt to preserve IEEE floating-point
+ * semantics in evaluating an expression. May not be implemented for
+ * all backends. (E.g. it is difficult to do this for C++ code
+ * generation as it depends on the compiler flags used to compile the
+ * generated code. */
+inline Expr strict_float(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::strict_float,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
+}
 
 }
 
