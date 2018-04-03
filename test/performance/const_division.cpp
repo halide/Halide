@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <cstdio>
 #include <cstdint>
+#include <random>
 #include "halide_benchmark.h"
 
 using namespace Halide;
@@ -104,8 +105,9 @@ bool test(int w, bool div) {
 }
 
 int main(int argc, char **argv) {
-
-    srand(time(nullptr));
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    rng.seed(seed);
+    std::cout << "const_division test seed: " << seed << std::endl;
 
     bool success = true;
     for (int i = 0; i < 2; i++) {
