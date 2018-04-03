@@ -1788,6 +1788,57 @@ private:
             return expr;
         }
 
+        IRMatcher::Wild<0> x;
+        IRMatcher::Wild<1> y;
+        IRMatcher::Wild<2> z;
+        IRMatcher::WildConst<0> c0;
+        IRMatcher::WildConst<1> c1;
+        IRMatcher::Const<1> one;
+        IRMatcher::Const<0> zero;
+
+        const Shuffle *shuffle_a = a.as<Shuffle>();
+        const Shuffle *shuffle_b = b.as<Shuffle>();
+
+        auto mutated = IRMatcher::operator*(*a.get(), *b.get());
+        if (rewrite(mutated, expr,
+                    rule(c0 * c1, fold(c0 * c1)),
+                    rule(zero * x, a),
+                    rule(one * x, b),
+                    rule(x * zero, b),
+                    rule(x * one, a),
+                    rule(c0 * x, x * c0),
+                    rule((x + c0) * c1, x * c1 + fold(c0 * c1)),
+                    rule((x - y) * c0, (y - x) * fold(-c0), is_negative_negatable_const(b)),
+                    rule((x * c0) * c1, x * fold(c0 * c1)),
+                    rule((x * c0) * y, (x * y) * c0),
+                    rule(x * (y * c0), (x * y) * c0),
+                    rule(min(x, y) * max(x, y), x * y),
+                    rule(min(x, y) * max(y, x), x * y),
+                    rule(max(x, y) * min(x, y), x * y),
+                    rule(max(x, y) * min(y, x), y * x),
+                    rule(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())),
+                    rule(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes())),
+                    rule(broadcast(z) * ramp(x, y), ramp(z * x, z * y, op->type.lanes())),
+                    rule(IRMatcher::intrin(Call::signed_integer_overflow) * x, a),
+                    rule(x * IRMatcher::intrin(Call::signed_integer_overflow), b),
+                    rule(IRMatcher::intrin(Call::indeterminate_expression) * x, a),
+                    rule(x * IRMatcher::intrin(Call::indeterminate_expression), b))) {
+            return mutate(expr);
+        } else if (shuffle_a && shuffle_b &&
+                   shuffle_a->is_slice() &&
+                   shuffle_b->is_slice()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return hoist_slice_vector<Mul>(op);
+            } else {
+                return hoist_slice_vector<Mul>(Mul::make(a, b));
+            }
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            return op;
+        } else {
+            return Mul::make(a, b);
+        }
+
+        /*
         if (is_simple_const(a) ||
             (b.as<Min>() && a.as<Max>())) {
             std::swap(a, b);
@@ -1845,7 +1896,7 @@ private:
             } else {
                 return hoist_slice_vector<Mul>(Mul::make(a, b));
             }
-        }else if (broadcast_a && broadcast_b) {
+        } else if (broadcast_a && broadcast_b) {
             return Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -1882,6 +1933,7 @@ private:
         } else {
             return Mul::make(a, b);
         }
+        */
     }
 
     Expr visit(const Div *op) override {
