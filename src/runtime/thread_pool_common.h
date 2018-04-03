@@ -53,8 +53,24 @@ struct work_queue_t {
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
 
-    bool running() {
+    bool running() const {
         return !shutdown;
+    }
+
+    void assert_zeroed() const {
+        // Ensure all fields except the mutex are zeroed.
+        size_t offset = sizeof(halide_mutex);
+        const char *bytes = ((const char *)this) + offset;
+        while (offset < sizeof(work_queue_t) && bytes[offset] == 0) {
+            offset++;
+        }
+        halide_assert(NULL, offset == sizeof(work_queue_t) && "Logic error in thread pool work queue initialization.\n");
+    }
+
+    void reset() {
+        // Ensure all fields except the mutex are zeroed.
+        size_t offset = sizeof(halide_mutex);
+        memset(((char *)this) + offset, 0, sizeof(work_queue_t) - offset);
     }
 
 };
@@ -189,9 +205,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     halide_mutex_lock(&work_queue.mutex);
 
     if (!work_queue.initialized) {
-        // Ensure all fields except the mutex are zeroed.
-        size_t offset = sizeof(halide_mutex);
-        memset(((char *)&work_queue) + offset, 0, sizeof(work_queue) - offset);
+        work_queue.assert_zeroed();
 
         // Compute the desired number of threads to use. Other code
         // can also mess with this value, but only when the work queue
@@ -296,7 +310,7 @@ WEAK void halide_shutdown_thread_pool() {
         }
 
         // Tidy up
-        work_queue.initialized = false;
+        work_queue.reset();
     }
 }
 
