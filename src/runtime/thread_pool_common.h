@@ -57,16 +57,19 @@ struct work_queue_t {
         return !shutdown;
     }
 
+    // Used to check initial state is correct.
     void assert_zeroed() const {
-        // Ensure all fields except the mutex are zeroed.
+        // Assert that all fields except the mutex are zeroed.
         size_t offset = sizeof(halide_mutex);
-        const char *bytes = ((const char *)this) + offset;
+        const char *bytes = ((const char *)this);
         while (offset < sizeof(work_queue_t) && bytes[offset] == 0) {
             offset++;
         }
         halide_assert(NULL, offset == sizeof(work_queue_t) && "Logic error in thread pool work queue initialization.\n");
     }
 
+    // Return the work queue to initial state. Must be called while locked
+    // and queue will remain locked.
     void reset() {
         // Ensure all fields except the mutex are zeroed.
         size_t offset = sizeof(halide_mutex);
