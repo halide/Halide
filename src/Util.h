@@ -59,7 +59,7 @@ DST safe_numeric_cast(SRC s) {
     if (std::is_floating_point<SRC>::value && std::is_integral<DST>::value) {
         if (s < (SRC) std::numeric_limits<DST>::min()) {
           return std::numeric_limits<DST>::min();
-      }
+        }
         if (s > (SRC) std::numeric_limits<DST>::max()) {
           return std::numeric_limits<DST>::max();
         }
