@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <map>
 
+namespace {
+
 using std::map;
 using std::string;
 
@@ -1161,6 +1163,8 @@ int nested_compute_with_test() {
     }
     return 0;
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     printf("Running split reorder test\n");

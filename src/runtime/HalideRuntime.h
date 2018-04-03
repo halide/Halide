@@ -1106,7 +1106,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
-    halide_target_feature_end = 50, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_end = 51, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -1520,6 +1521,7 @@ struct halide_profiler_pipeline_stats {
 };
 
 /** The global state of the profiler. */
+
 struct halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
@@ -1548,8 +1550,8 @@ struct halide_profiler_state {
      * e.g. on a DSP. If null, it reads from the int above instead. */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
 
-    /** Is the profiler thread running. */
-    bool started;
+    /** Sampling thread reference to be joined at shutdown. */
+    struct halide_thread *sampling_thread;
 };
 
 /** Profiler func ids with special meanings. */
@@ -1570,12 +1572,20 @@ extern struct halide_profiler_state *halide_profiler_get_state();
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
-/** Reset all profiler state.
+/** Reset profiler state cheaply. May leave threads running or some
+ * memory allocated but all accumluated statistics are reset.
  * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
 extern void halide_profiler_reset();
+
+/** Reset all profiler state.
+ * WARNING: Do NOT call this method while any halide pipeline is
+ * running; halide_profiler_memory_allocate/free and
+ * halide_profiler_stack_peak_update update the profiler pipeline's
+ * state without grabbing the global profiler state's lock. */
+void halide_profiler_shutdown();
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
