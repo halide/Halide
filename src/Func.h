@@ -735,16 +735,18 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size, int z_size, int w_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size, int z_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -753,7 +755,8 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    void realize(Pipeline::RealizationArg outputs, const Target &target = Target(),
+                 const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -779,8 +782,10 @@ public:
      * to evaulate f over a 10x10 region.
      */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
-    void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(Pipeline::RealizationArg outputs,
+                            const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
@@ -1022,18 +1027,15 @@ public:
     template<typename T>
     void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
-        // cast it to a deleter that takes a IRMutator2 *. The custom
-        // deleter lives in user code, so that deletion is on the same
-        // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator2 *) =
-            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
-        add_custom_lowering_pass(pass, deleter);
+        // wrap in a lambda. The custom deleter lives in user code, so
+        // that deletion is on the same heap as construction (I hate Windows).
+        add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, void (*deleter)(Internal::IRMutator2 *));
+    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
@@ -2244,6 +2246,13 @@ public:
     /** Trace all realizations of this Func by emitting calls to
      * halide_trace. */
     Func &trace_realizations();
+
+    /** Add a string of arbitrary text that will be passed thru to trace
+     * inspection code if the Func is realized in trace mode. (Funcs that are
+     * inlined won't have their tags emitted.) Ignored entirely if
+     * tracing is not enabled for the Func (or globally).
+     */
+    Func &add_trace_tag(const std::string &trace_tag);
 
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide

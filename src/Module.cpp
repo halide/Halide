@@ -116,6 +116,7 @@ struct ModuleContents {
     std::vector<Module> submodules;
     std::vector<ExternalCode> external_code;
     std::map<std::string, std::string> metadata_name_map;
+    bool any_strict_float{false};
 };
 
 template<>
@@ -161,6 +162,10 @@ void Module::set_auto_schedule(const std::string &auto_schedule) {
     contents->auto_schedule = auto_schedule;
 }
 
+void Module::set_any_strict_float(bool any_strict_float) {
+    contents->any_strict_float = any_strict_float;
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
@@ -171,6 +176,10 @@ const std::string &Module::name() const {
 
 const std::string &Module::auto_schedule() const {
     return contents->auto_schedule;
+}
+
+bool Module::any_strict_float() const {
+    return contents->any_strict_float;
 }
 
 const std::vector<Buffer<>> &Module::buffers() const {
@@ -200,7 +209,7 @@ Internal::LoweredFunc Module::get_function_by_name(const std::string &name) cons
         }
     }
     user_error << "get_function_by_name: function " << name << " not found.\n";
-    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LoweredFunc::External);
+    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LinkageType::External);
 }
 
 void Module::append(const Buffer<> &buffer) {
@@ -605,7 +614,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         Module wrapper_module(fn_name, wrapper_target);
-        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         // Add a wrapper to accept old buffer_ts
         add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
@@ -620,7 +629,7 @@ void compile_multitarget(const std::string &fn_name,
 
     if (!output_files.c_header_name.empty()) {
         Module header_module(fn_name, base_target);
-        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::ExternalPlusMetadata));
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
         // Add a wrapper to accept old buffer_ts
         add_legacy_wrapper(header_module, header_module.functions().back());
         Outputs header_out = Outputs().c_header(output_files.c_header_name);

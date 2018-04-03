@@ -144,6 +144,11 @@ Buffer<> Parameter::buffer() const {
     return contents->buffer;
 }
 
+const halide_buffer_t *Parameter::raw_buffer() const {
+    if (!is_buffer()) return nullptr;
+    return contents->buffer.raw_buffer();
+}
+
 void Parameter::set_buffer(Buffer<> b) {
     check_is_buffer();
     if (b.defined()) {

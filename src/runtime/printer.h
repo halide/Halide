@@ -102,6 +102,9 @@ public:
     // Use it like a stringstream.
     const char *str() {
         if (buf) {
+            if (type == StringStreamPrinter) {
+                msan_annotate_is_initialized();
+            }
             return buf;
         } else {
             return allocation_error();

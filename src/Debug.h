@@ -22,6 +22,10 @@ std::ostream &operator<<(std::ostream &stream, const Type &);
 class Module;
 std::ostream &operator<<(std::ostream &stream, const Module &);
 
+struct Target;
+/** Emit a halide Target in a human readable form */
+std::ostream &operator<<(std::ostream &stream, const Target &);
+
 namespace Internal {
 
 struct Stmt;

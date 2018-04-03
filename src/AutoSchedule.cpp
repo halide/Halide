@@ -488,13 +488,10 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // Substitute parameter estimates into the bounds and add them to the
                     // current scope.
                     for (int d = 0; d < (int)dims.size() - 1; d++) {
-                        string var_name = dims[d].var;
-                        internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
-
-                        Expr lower = subsitute_var_estimates(get_element(curr_bounds, dims[d].var).min);
-                        Expr upper = subsitute_var_estimates(get_element(curr_bounds, dims[d].var).max);
-                        Interval simple_bounds = Interval(lower, upper);
-                        curr_scope.push(var_name, simple_bounds);
+                        Interval simple_bounds = get_element(curr_bounds, dims[d].var);
+                        simple_bounds.min = subsitute_var_estimates(simple_bounds.min);
+                        simple_bounds.max = subsitute_var_estimates(simple_bounds.max);
+                        curr_scope.push(dims[d].var, simple_bounds);
                     }
 
                     // Find the regions required for each value of the current function stage,
@@ -558,12 +555,13 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             auto iter = env.find(f_reg.first);
             bool in_env = (iter != env.end());
 
+
             if (!lower.as<IntImm>() && in_env) {
                 const Function &curr_f = iter->second;
                 for (const auto &b : curr_f.schedule().estimates()) {
                     size_t num_pure_args = curr_f.args().size();
                     if ((i < num_pure_args) && (b.var == curr_f.args()[i])) {
-                        lower = Expr(b.min.as<IntImm>()->value);
+                        lower = b.min;
                     }
                 }
             }
@@ -575,7 +573,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     if ((i < num_pure_args) && (b.var == curr_f.args()[i])) {
                         const IntImm *bmin = b.min.as<IntImm>();
                         const IntImm *bextent = b.extent.as<IntImm>();
-                        upper = Expr(bmin->value + bextent->value - 1);
+                        upper = IntImm::make(Int(32), bmin->value + bextent->value - 1);
                     }
                 }
             }
@@ -698,9 +696,9 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
             for (i = estimates.size() - 1; i >= 0; --i) {
                 const auto &est = estimates[i];
                 if ((est.var == arg) && est.min.defined() && est.extent.defined()) {
-                    Interval I = Interval(est.min, simplify(est.min + est.extent - 1));
-                    pure_bounds.emplace(arg, I);
-                    out_box.push_back(I);
+                    Interval in = Interval(est.min, simplify(est.min + est.extent - 1));
+                    pure_bounds.emplace(arg, in);
+                    out_box.push_back(in);
                     break;
                 }
             }

@@ -516,7 +516,8 @@ struct Call : public ExprNode<Call> {
         select_mask,
         extract_mask_element,
         require,
-        size_of_halide_buffer_t;
+        size_of_halide_buffer_t,
+        strict_float;
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
