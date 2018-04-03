@@ -51,12 +51,15 @@
 namespace Halide {
 namespace Internal {
 
-/** out-of-range casts of float -> nonfloat are UB; this clamps
- * the float to a legal range in situations where the conversion isn't
- * statically known to be safe. */
+/** Some numeric conversions are UB if the value won't fit in the result;
+ * this clamps the value to a legal range to avoid the UB. */
 template<typename DST, typename SRC>
 DST safe_numeric_cast(SRC s) {
-    if (std::is_floating_point<SRC>::value && std::is_integral<DST>::value) {
+    if (std::is_integral<DST>::value &&
+        (std::is_floating_point<SRC>::value ||
+         (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)))) {
+        // float -> int is UB if value won't fit
+        // any int -> signed int is UB if value won't fit
         if (s < (SRC) std::numeric_limits<DST>::min()) {
           return std::numeric_limits<DST>::min();
         }
