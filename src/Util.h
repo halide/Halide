@@ -18,6 +18,7 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <limits>
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
@@ -49,6 +50,22 @@
 
 namespace Halide {
 namespace Internal {
+
+/** out-of-range casts of float -> nonfloat are UB; this clamps
+ * the float to a legal range in situations where the conversion isn't
+ * statically known to be safe. */
+template<typename DST, typename SRC>
+DST safe_numeric_cast(SRC s) {
+    if (std::is_floating_point<SRC>::value && std::is_integral<DST>::value) {
+        if (s < (SRC) std::numeric_limits<DST>::min()) {
+          return std::numeric_limits<DST>::min();
+      }
+        if (s > (SRC) std::numeric_limits<DST>::max()) {
+          return std::numeric_limits<DST>::max();
+        }
+    }
+    return (DST) s;
+}
 
 /** An aggressive form of reinterpret cast used for correct type-punning. */
 template<typename DstType, typename SrcType>
