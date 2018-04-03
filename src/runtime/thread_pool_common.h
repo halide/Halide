@@ -16,8 +16,14 @@ struct work {
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
 struct work_queue_t {
     // all fields are protected by this mutex.
-    // It must be first in the structure due to how it is initialized.
     halide_mutex mutex;
+
+    // The desired number threads doing work.
+    int desired_num_threads;
+
+    // All fields after this must be zero in the initial state. See assert_zeroed
+    // Field serves both to mark the offset in struct and as layout padding.
+    int zero_marker;
 
     // Singly linked list for job stack
     work *jobs;
@@ -46,9 +52,6 @@ struct work_queue_t {
     // The number threads created
     int threads_created;
 
-    // The desired number threads doing work.
-    int desired_num_threads;
-
     // Global flags indicating the threadpool should shut down, and
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
@@ -59,21 +62,22 @@ struct work_queue_t {
 
     // Used to check initial state is correct.
     void assert_zeroed() const {
-        // Assert that all fields except the mutex are zeroed.
-        size_t offset = sizeof(halide_mutex);
-        const char *bytes = ((const char *)this);
-        while (offset < sizeof(work_queue_t) && bytes[offset] == 0) {
-            offset++;
+        // Assert that all fields except the mutex and desired hreads count are zeroed.
+        const char *bytes = ((const char *)&this->zero_marker);
+        const char *limit = ((const char *)this) + sizeof(work_queue_t);
+        while (bytes < limit && *bytes == 0) {
+            bytes++;
         }
-        halide_assert(NULL, offset == sizeof(work_queue_t) && "Logic error in thread pool work queue initialization.\n");
+        halide_assert(NULL, bytes == limit && "Logic error in thread pool work queue initialization.\n");
     }
 
     // Return the work queue to initial state. Must be called while locked
     // and queue will remain locked.
     void reset() {
-        // Ensure all fields except the mutex are zeroed.
-        size_t offset = sizeof(halide_mutex);
-        memset(((char *)this) + offset, 0, sizeof(work_queue_t) - offset);
+        // Ensure all fields except the mutex and desired hreads count are zeroed.
+        char *bytes = ((char *)&this->zero_marker);
+        char *limit = ((char *)this) + sizeof(work_queue_t);
+        memset(bytes, 0, limit - bytes);
     }
 
 };
