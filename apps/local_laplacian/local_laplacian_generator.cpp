@@ -141,7 +141,65 @@ public:
                 outGPyramid[j].compute_root();
             }
         }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        input
+            .add_trace_tag("rgb 2")
+            .add_trace_tag("max 65535")
+            .add_trace_tag("move 30 100")
+            .add_trace_tag("label");
+
+        output
+            .add_trace_tag("rgb 2")
+            .add_trace_tag("max 65535")
+            .add_trace_tag("move 1700 100")
+            .add_trace_tag("label");
+
+        gray
+            .add_trace_tag("store 5")
+            .add_trace_tag("move 370 100")
+            .add_trace_tag("label 'input pyramid'");
+
+        for (int i = 0; i < pyramid_levels; ++i) {
+            int y = 100;
+            for (int j = 0; j < i; ++j) {
+                y += 500 >> j;
+            }
+            if (i > 0) {
+                int x = 370;
+                int store_cost = 1 << (i + 1);
+                inGPyramid[i]
+                    .add_trace_tag("move " + std::to_string(x) + " " + std::to_string(y))
+                    .add_trace_tag("store " + std::to_string(store_cost));
+            }
+            if (i > 0) {
+                int x = 720;
+                int store_cost = 1 << i;
+                if (i == 1) {
+                    gPyramid[i]
+                        .add_trace_tag("move " + std::to_string(x) + " " + std::to_string(100))
+                        .add_trace_tag("label 'differently curved intermediate pyramids'");
+                }
+                gPyramid[i]
+                    .add_trace_tag("strides 1 0 0 1 200 0")
+                    .add_trace_tag("move " + std::to_string(x) + " " + std::to_string(y))
+                    .add_trace_tag("store " + std::to_string(store_cost));
+            }
+            {
+                int x = 1500;
+                int store_cost = (1 << i) * 10;
+                if (i == 0) {
+                    outGPyramid[i]
+                        .add_trace_tag("move " + std::to_string(x) + " " + std::to_string(100))
+                        .add_trace_tag("label 'output pyramids'");
+                }
+                outGPyramid[i]
+                    .add_trace_tag("move " + std::to_string(x) + " " + std::to_string(y))
+                    .add_trace_tag("store " + std::to_string(store_cost));
+            }
+        }
     }
+
 private:
     Var x, y, c, k;
 

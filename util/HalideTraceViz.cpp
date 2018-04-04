@@ -35,31 +35,8 @@ using std::queue;
 using std::array;
 using std::pair;
 
-std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
-    stream << "[ ";
-    bool need_comma = false;
-    for (int i : v) {
-        if (need_comma) {
-            stream << ", ";
-        }
-        stream << i;
-        need_comma = true;
-    }
-    stream << " ]";
-    return stream;
-}
-
-std::ostream &operator<<(std::ostream &stream, const vector<pair<int, int>> &v) {
-    stream << "[ ";
-    bool need_comma = false;
-    for (auto &pt : v) {
-        if (need_comma) {
-            stream << ", ";
-        }
-        stream << "(" << pt.first << "," << pt.second << ")";
-        need_comma = true;
-    }
-    stream << " ]";
+std::ostream &operator<<(std::ostream &stream, const pair<int, int> &pt) {
+    stream << "(" << pt.first << "," << pt.second << ")";
     return stream;
 }
 
@@ -68,6 +45,26 @@ struct Label {
     string text;
     int x, y, n;
 };
+
+std::ostream &operator<<(std::ostream &stream, const Label &label) {
+    stream << "text=\"" << label.text << " @ " << label.x << " " << label.y << " n=" << label.n;
+    return stream;
+}
+
+template<typename T>
+std::ostream &operator<<(std::ostream &stream, const vector<T> &v) {
+    stream << "[ ";
+    bool need_comma = false;
+    for (const T &t : v) {
+        if (need_comma) {
+            stream << ", ";
+        }
+        stream << t;
+        need_comma = true;
+    }
+    stream << " ]";
+    return stream;
+}
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
@@ -88,7 +85,7 @@ struct FuncInfo {
         bool blank_on_end_realization = false;
         uint32_t uninitialized_memory_color = 0xff000000;
 
-        void dump(const char *name) {
+        void dump(const string &name) const {
             std::cerr <<
                     "Func " << name << ":\n" <<
                     " min: " << min << " max: " << max << "\n" <<
@@ -99,7 +96,8 @@ struct FuncInfo {
                     " load cost: " << load_cost << "\n" <<
                     " store cost: " << store_cost << "\n" <<
                     " x: " << x << " y: " << y << "\n" <<
-                    " strides: " << strides << "\n";
+                    " strides: " << strides << "\n" <<
+                    " labels: " << labels << "\n";
         }
     } config;
 
@@ -197,7 +195,7 @@ void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
 static constexpr int FONT_W = 12;
 static constexpr int FONT_H = 32;
 
-void draw_text(const std::string &text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+void draw_text(const string &text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
     // The font array contains 96 characters of FONT_W * FONT_H letters.
     assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
 
@@ -403,12 +401,7 @@ float parse_float(const char *str) {
     return result;
 }
 
-int run(int argc, char **argv) {
-    if (argc == 1) {
-        usage();
-        return 0;
-    }
-
+struct Params {
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
     float decay_factor[2] = {1, 2};
@@ -417,125 +410,262 @@ int run(int argc, char **argv) {
     int timestep = 10000;
     int hold_frames = 250;
 
-    // The struct's default values are what we want
-    FuncInfo::Config config;
+    void parse_one(const string &func_name, int argc, char **argv) {
+        do_parse(argc, argv, func_name);
+    }
 
-    vector<pair<int, int>> pos_stack;
-
-    // Parse command line args
-    int i = 1;
-    while (i < argc) {
-        string next = argv[i];
-        if (next == "--size") {
-            expect(i + 2 < argc, i);
-            frame_width = parse_int(argv[++i]);
-            frame_height = parse_int(argv[++i]);
-        } else if (next == "--func") {
-            expect(i + 1 < argc, i);
-            const char *func = argv[++i];
-            FuncInfo &fi = func_info[func];
-            fi.config.labels.swap(config.labels);
-            fi.config = config;
-            fi.config.dump(func);
-            fi.configured = true;
-        } else if (next == "--min") {
-            expect(i + 1 < argc, i);
-            config.min = parse_float(argv[++i]);
-        } else if (next == "--max") {
-            expect(i + 1 < argc, i);
-            config.max = parse_float(argv[++i]);
-        } else if (next == "--move") {
-            expect(i + 2 < argc, i);
-            config.x = parse_int(argv[++i]);
-            config.y = parse_int(argv[++i]);
-        } else if (next == "--left") {
-            expect(i + 1 < argc, i);
-            config.x -= parse_int(argv[++i]);
-        } else if (next == "--right") {
-            expect(i + 1 < argc, i);
-            config.x += parse_int(argv[++i]);
-        } else if (next == "--up") {
-            expect(i + 1 < argc, i);
-            config.y -= parse_int(argv[++i]);
-        } else if (next == "--down") {
-            expect(i + 1 < argc, i);
-            config.y += parse_int(argv[++i]);
-        } else if (next == "--push") {
-            pos_stack.push_back({config.x, config.y});
-        } else if (next == "--pop") {
-            expect(!pos_stack.empty(), i);
-            config.x = pos_stack.back().first;
-            config.y = pos_stack.back().second;
-            pos_stack.pop_back();
-        } else if (next == "--rgb") {
-            expect(i + 1 < argc, i);
-            config.color_dim = parse_int(argv[++i]);
-        } else if (next == "--gray") {
-            config.color_dim = -1;
-        } else if (next == "--blank") {
-            config.blank_on_end_realization = true;
-        } else if (next == "--no-blank") {
-            config.blank_on_end_realization = false;
-        } else if (next == "--zoom") {
-            expect(i + 1 < argc, i);
-            config.zoom = parse_float(argv[++i]);
-        } else if (next == "--load") {
-            expect(i + 1 < argc, i);
-            config.load_cost = parse_int(argv[++i]);
-        } else if (next == "--store") {
-            expect(i + 1 < argc, i);
-            config.store_cost = parse_int(argv[++i]);
-        } else if (next == "--strides") {
-            config.dims = 0;
-            while (i + 1 < argc) {
-                const char *next_arg = argv[i + 1];
-                if (next_arg[0] == '-' &&
-                    next_arg[1] == '-') {
+    void split_and_parse_one(const string &func_name, const string &trace_tag) {
+        // Do a simplistic split into argc/argv,
+        // with limited support for 'quoted strings'.
+        // TODO: allow for escapes via \, and maybe for "quoted strings".
+        vector<string> storage;
+        int delimiter = 0;
+        storage.push_back("");
+        enum {
+            Undecided,
+            ParsingNormal,
+            ParsingQuoted,
+        } state = Undecided;
+        for (int c : trace_tag) {
+            if (isspace(c)) {
+                switch(state) {
+                case Undecided:
+                    // leading spaces, just skip them
+                    break;
+                case ParsingNormal:
+                    // Finish this entry
+                    storage.push_back("");
+                    state = Undecided;
+                    break;
+                case ParsingQuoted:
+                    // Just add the spaces inside the quoted string.
+                    storage.back().push_back(c);
                     break;
                 }
-                expect(i + 2 < argc, i);
-                if ((int) config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
-                int x = parse_int(argv[++i]);
-                int y = parse_int(argv[++i]);
-                config.strides[config.dims++] = {x, y};
+            } else if (c == '\'') {
+                switch(state) {
+                case Undecided:
+                    // Start parsing a quoted string
+                    state = ParsingQuoted;
+                    break;
+                case ParsingNormal:
+                    // Single-quote inside a space-delimited block.
+                    // Could assert-fail? But let's just add it.
+                    storage.back().push_back(c);
+                    break;
+                case ParsingQuoted:
+                    // Finish this entry
+                    storage.push_back("");
+                    state = Undecided;
+                    break;
+                }
+            } else {
+                switch(state) {
+                case Undecided:
+                    // Start parsing non-quoted string
+                    state = ParsingNormal;
+                    // fall thru
+                case ParsingNormal:
+                case ParsingQuoted:
+                    // Continue parsing string
+                    storage.back().push_back(c);
+                    break;
+                }
             }
-        } else if (next == "--label") {
-            expect(i + 3 < argc, i);
-            char *func = argv[++i];
-            char *text = argv[++i];
-            int n = parse_int(argv[++i]);
-            Label l = {text, config.x, config.y, n};
-            func_info[func].config.labels.push_back(l);
-        } else if (next == "--timestep") {
-            expect(i + 1 < argc, i);
-            timestep = parse_int(argv[++i]);
-        } else if (next == "--decay") {
-            expect(i + 2 < argc, i);
-            decay_factor[0] = parse_float(argv[++i]);
-            decay_factor[1] = parse_float(argv[++i]);
-        } else if (next == "--hold") {
-            expect(i + 1 < argc, i);
-            hold_frames = parse_int(argv[++i]);
-        } else if (next == "--uninit") {
-            expect(i + 3 < argc, i);
-            int r = parse_int(argv[++i]);
-            int g = parse_int(argv[++i]);
-            int b = parse_int(argv[++i]);
-            config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
-        } else {
-            expect(false, i);
         }
-        i++;
+        if (storage.back().empty()) {
+            storage.pop_back();
+        }
+        vector<char *> argv;
+        for (string &s : storage) {
+            argv.push_back(const_cast<char *>(s.c_str()));
+        }
+        parse_one(func_name, (int) argv.size(), argv.data());
     }
+
+    void parse_flags(int argc, char **argv) {
+        do_parse(argc, argv, /*func_name*/ "");
+    }
+
+private:
+    void do_parse(int argc, char **argv, const string &func_name) {
+        FuncInfo::Config config;
+        if (!func_name.empty()) {
+            config = func_info[func_name].config;
+        }
+
+        const bool expect_flags = func_name.empty();
+        vector<pair<int, int>> pos_stack;
+
+        int i = 0;
+        while (i < argc) {
+            char *p = argv[i];
+            if (expect_flags) {
+                // Everything should start with --
+                if (p[0] != '-' || p[1] != '-') {
+                    expect(false, i);
+                }
+                p += 2;
+            }
+            string next = p;
+            if (next == "size") {
+                expect(i + 2 < argc, i);
+                frame_width = parse_int(argv[++i]);
+                frame_height = parse_int(argv[++i]);
+            } else if (next == "func") {
+                if (!func_name.empty()) {
+                    std::cerr << "Warning, the 'func' param is only supported as a command-line flag; ignoring\n";
+                    return;
+                }
+                expect(i + 1 < argc, i);
+                const char *func = argv[++i];
+                FuncInfo &fi = func_info[func];
+                fi.config.labels.swap(config.labels);
+                fi.config = config;
+                fi.configured = true;
+            } else if (next == "min") {
+                expect(i + 1 < argc, i);
+                config.min = parse_float(argv[++i]);
+            } else if (next == "max") {
+                expect(i + 1 < argc, i);
+                config.max = parse_float(argv[++i]);
+            } else if (next == "move") {
+                expect(i + 2 < argc, i);
+                config.x = parse_int(argv[++i]);
+                config.y = parse_int(argv[++i]);
+            } else if (next == "left") {
+                expect(i + 1 < argc, i);
+                config.x -= parse_int(argv[++i]);
+            } else if (next == "right") {
+                expect(i + 1 < argc, i);
+                config.x += parse_int(argv[++i]);
+            } else if (next == "up") {
+                expect(i + 1 < argc, i);
+                config.y -= parse_int(argv[++i]);
+            } else if (next == "down") {
+                expect(i + 1 < argc, i);
+                config.y += parse_int(argv[++i]);
+            } else if (next == "push") {
+                pos_stack.push_back({config.x, config.y});
+            } else if (next == "pop") {
+                expect(!pos_stack.empty(), i);
+                config.x = pos_stack.back().first;
+                config.y = pos_stack.back().second;
+                pos_stack.pop_back();
+            } else if (next == "rgb") {
+                expect(i + 1 < argc, i);
+                config.color_dim = parse_int(argv[++i]);
+            } else if (next == "gray") {
+                config.color_dim = -1;
+            } else if (next == "blank") {
+                config.blank_on_end_realization = true;
+            } else if (next == "no-blank") {
+                config.blank_on_end_realization = false;
+            } else if (next == "zoom") {
+                expect(i + 1 < argc, i);
+                config.zoom = parse_float(argv[++i]);
+            } else if (next == "load") {
+                expect(i + 1 < argc, i);
+                config.load_cost = parse_int(argv[++i]);
+            } else if (next == "store") {
+                expect(i + 1 < argc, i);
+                config.store_cost = parse_int(argv[++i]);
+            } else if (next == "strides") {
+                config.dims = 0;
+                while (i + 1 < argc) {
+                    const char *next_arg = argv[i + 1];
+                    if (expect_flags &&
+                        next_arg[0] == '-' &&
+                        next_arg[1] == '-') {
+                        break;
+                    }
+                    expect(i + 2 < argc, i);
+                    if ((int) config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
+                    int x = parse_int(argv[++i]);
+                    int y = parse_int(argv[++i]);
+                    config.strides[config.dims++] = {x, y};
+                }
+            } else if (next == "label") {
+                // 'label' is slightly different between the tag version
+                // and the flag version, because (unlike every other flag),
+                // the --label flag doesn't apply to the 'current' func,
+                // but rather, takes an explicit func name.
+                // TODO: should we revise that flag to bring it in line with the others?
+                if (!func_name.empty()) {
+                    string text = func_name;
+                    int n = 0;
+                    // For tags, don't specify the funcname (it's redundant),
+                    // and allow the text and timing args to be optional.
+                    if (i + 1 < argc) {
+                        text = argv[++i];
+                    }
+                    if (i + 1 < argc) {
+                        n = parse_int(argv[++i]);
+                    }
+                    Label l = {text, config.x, config.y, n};
+                    // Always apply to the current config
+                    config.labels.push_back(l);
+                } else {
+                    expect(i + 3 < argc, i);
+                    const char *func = argv[++i];
+                    const char *text = argv[++i];
+                    int n = parse_int(argv[++i]);
+                    Label l = {text, config.x, config.y, n};
+                    // Always apply to this func's config, regardless of 'current'
+                    func_info[func].config.labels.push_back(l);
+                }
+            } else if (next == "timestep") {
+                expect(i + 1 < argc, i);
+                timestep = parse_int(argv[++i]);
+            } else if (next == "decay") {
+                expect(i + 2 < argc, i);
+                decay_factor[0] = parse_float(argv[++i]);
+                decay_factor[1] = parse_float(argv[++i]);
+            } else if (next == "hold") {
+                expect(i + 1 < argc, i);
+                hold_frames = parse_int(argv[++i]);
+            } else if (next == "uninit") {
+                expect(i + 3 < argc, i);
+                int r = parse_int(argv[++i]);
+                int g = parse_int(argv[++i]);
+                int b = parse_int(argv[++i]);
+                config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+            } else {
+                if (expect_flags) {
+                    expect(false, i);
+                } else {
+                    std::cerr << "Warning, ignoring unknown param '" << next << "'\n";
+                    return;
+                }
+            }
+            i++;
+        }
+
+        if (!func_name.empty()) {
+            func_info[func_name].config = config;
+            func_info[func_name].configured = true;
+        }
+    }
+};
+
+int run(int argc, char **argv) {
+    if (argc == 1) {
+        usage();
+        return 0;
+    }
+
+    Params params;
+    params.parse_flags(argc-1, argv+1);
 
     // halide_clock counts halide events. video_clock counts how many
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
+    bool func_info_dumped = false;
 
     // There are three layers - image data, an animation on top of
     // it, and text labels. These layers get composited.
-    const int frame_elems = frame_width * frame_height;
+    const int frame_elems = params.frame_width * params.frame_height;
     std::vector<uint32_t> image(frame_elems, 0),
                           anim(frame_elems, 0),
                           anim_decay(frame_elems, 0),
@@ -554,8 +684,8 @@ int run(int argc, char **argv) {
     for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
-            halide_clock += timestep;
-            if (end_counter == (size_t)hold_frames) {
+            halide_clock += params.timestep;
+            if (end_counter == (size_t)params.hold_frames) {
                 break;
             }
         }
@@ -586,11 +716,11 @@ int run(int argc, char **argv) {
                     return -1;
                 }
 
-                video_clock += timestep;
+                video_clock += params.timestep;
 
                 // Decay the anim_decay
-                if (decay_factor[1] != 1) {
-                    const uint32_t inv_d1 = (1 << 24) / decay_factor[1];
+                if (params.decay_factor[1] != 1) {
+                    const uint32_t inv_d1 = (1 << 24) / params.decay_factor[1];
                     for (int i = 0; i < frame_elems; i++) {
                         uint32_t color = anim_decay[i];
                         uint32_t rgb = color & 0x00ffffff;
@@ -602,7 +732,7 @@ int run(int argc, char **argv) {
                 }
 
                 // Also decay the anim
-                const uint32_t inv_d0 = (1 << 24) / decay_factor[0];
+                const uint32_t inv_d0 = (1 << 24) / params.decay_factor[0];
                 for (int i = 0; i < frame_elems; i++) {
                     uint32_t color = anim[i];
                     uint32_t rgb = color & 0x00ffffff;
@@ -633,6 +763,22 @@ int run(int argc, char **argv) {
             assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
             continue;
+        } else if (p.event == halide_trace_tag) {
+            // If there are trace tags, they will come immediately after the pipeline's
+            // halide_trace_begin_pipeline but before any realizations.
+            params.split_and_parse_one(p.func(), p.trace_tag());
+            continue;
+        }
+
+        if (!func_info_dumped) {
+            // dump after any tags are processed
+            for (const auto &p : params.func_info) {
+                const auto &fi = p.second;
+                if (fi.configured) {
+                    fi.config.dump(p.first);
+                }
+            }
+            func_info_dumped = true;
         }
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
@@ -651,18 +797,18 @@ int run(int argc, char **argv) {
 
         string qualified_name = pipeline.name + ":" + p.func();
 
-        if (func_info.find(qualified_name) == func_info.end()) {
-            if (func_info.find(p.func()) != func_info.end()) {
-                func_info[qualified_name] = func_info[p.func()];
-                func_info.erase(p.func());
+        if (params.func_info.find(qualified_name) == params.func_info.end()) {
+            if (params.func_info.find(p.func()) != params.func_info.end()) {
+                params.func_info[qualified_name] = params.func_info[p.func()];
+                params.func_info.erase(p.func());
             } else {
-                std::cerr << "Warning: ignoring func " << qualified_name << " event " << p.event << "\n";
-                std::cerr << "Parent event " << p.parent_id << " " << pipeline.name << "\n";
+                std::cerr << "Warning: ignoring func " << qualified_name << " event " << p.event << "\n"
+                          << "Parent event " << p.parent_id << " " << pipeline.name << "\n";
             }
         }
 
         // Draw the event
-        FuncInfo &fi = func_info[qualified_name];
+        FuncInfo &fi = params.func_info[qualified_name];
         if (!fi.configured) continue;
 
         if (fi.stats.first_draw_time == 0) {
@@ -674,16 +820,16 @@ int run(int argc, char **argv) {
             fi.stats.qualified_name = qualified_name;
         }
 
-        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
+        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / params.timestep;
 
         for (size_t i = 0; i < fi.config.labels.size(); i++) {
             const Label &label = fi.config.labels[i];
             if (frames_since_first_draw <= label.n) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::min(1, label.n);
+                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.n);
                 if (color > 255) color = 255;
                 color *= 0x10101;
 
-                draw_text(label.text, label.x, label.y, color, text.data(), frame_width, frame_height);
+                draw_text(label.text, label.x, label.y, color, text.data(), params.frame_width, params.frame_height);
             }
         }
 
@@ -720,10 +866,10 @@ int run(int argc, char **argv) {
                     }
 
                     // The box to draw must be entirely on-screen
-                    if (y < 0 || y >= frame_height ||
-                        x < 0 || x >= frame_width ||
-                        y + z - 1 < 0 || y + z - 1 >= frame_height ||
-                        x + z - 1 < 0 || x + z - 1 >= frame_width) {
+                    if (y < 0 || y >= params.frame_height ||
+                        x < 0 || x >= params.frame_width ||
+                        y + z - 1 < 0 || y + z - 1 >= params.frame_height ||
+                        x + z - 1 < 0 || x + z - 1 >= params.frame_width) {
                         continue;
                     }
 
@@ -741,7 +887,7 @@ int run(int argc, char **argv) {
                         update_image = true;
                         // Get the old color, in case we're only
                         // updating one of the color channels.
-                        image_color = image[frame_width * y + x];
+                        image_color = image[params.frame_width * y + x];
 
                         double value = p.get_value_as<double>(lane);
 
@@ -768,7 +914,7 @@ int run(int argc, char **argv) {
                     // Draw the pixel
                     for (int dy = 0; dy < fi.config.zoom; dy++) {
                         for (int dx = 0; dx < fi.config.zoom; dx++) {
-                            int px = frame_width * (y + dy) + x + dx;
+                            int px = params.frame_width * (y + dy) + x + dx;
                             anim[px] = color;
                             if (update_image) {
                                 image[px] = image_color;
@@ -781,11 +927,11 @@ int run(int argc, char **argv) {
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            fill_realization(image.data(), frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
+            fill_realization(image.data(), params.frame_width, params.frame_height, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
             if (fi.config.blank_on_end_realization) {
-                fill_realization(image.data(), frame_width, frame_height, 0, fi, p);
+                fill_realization(image.data(), params.frame_width, params.frame_height, 0, fi, p);
             }
             break;
         case halide_trace_produce:
@@ -799,6 +945,7 @@ int run(int argc, char **argv) {
         // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
+        case halide_trace_tag:
             break;
         default:
             std::cerr << "Unknown tracing event code: " << p.event << "\n";
@@ -807,21 +954,21 @@ int run(int argc, char **argv) {
 
     }
 
-    std::cerr << "Total number of Funcs: " << func_info.size() << "\n";
+    std::cerr << "Total number of Funcs: " << params.func_info.size() << "\n";
 
     // Print stats about the Func gleaned from the trace.
-    vector<std::pair<std::string, FuncInfo> > funcs;
-    for (std::pair<std::string, FuncInfo> p : func_info) {
+    vector<std::pair<string, FuncInfo> > funcs;
+    for (std::pair<string, FuncInfo> p : params.func_info) {
         funcs.push_back(p);
     }
     struct by_first_packet_idx {
-        bool operator()(const std::pair<std::string, FuncInfo> &a,
-                        const std::pair<std::string, FuncInfo> &b) const {
+        bool operator()(const std::pair<string, FuncInfo> &a,
+                        const std::pair<string, FuncInfo> &b) const {
             return a.second.stats.first_packet_idx < b.second.stats.first_packet_idx;
         }
     };
     std::sort(funcs.begin(), funcs.end(), by_first_packet_idx());
-    for (std::pair<std::string, FuncInfo> p : funcs) {
+    for (std::pair<string, FuncInfo> p : funcs) {
         p.second.stats.report();
     }
 
