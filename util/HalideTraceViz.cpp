@@ -434,7 +434,6 @@ int run(int argc, char **argv) {
             FuncInfo &fi = func_info[func];
             fi.config.labels.swap(config.labels);
             fi.config = config;
-            fi.config.dump(func);
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
