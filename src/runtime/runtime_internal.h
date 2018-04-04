@@ -161,7 +161,8 @@ WEAK int halide_trace_helper(void *user_context,
                              void *value, int *coords,
                              int type_code, int type_bits, int type_lanes,
                              int code,
-                             int parent_id, int value_index, int dimensions);
+                             int parent_id, int value_index, int dimensions,
+                             const char *trace_tag);
 
 }  // extern "C"
 

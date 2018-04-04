@@ -14,7 +14,7 @@ def test_compiletime_error():
     try:
         f.realize(buf)
     except RuntimeError as e:
-        assert 'Buffer has type uint8, but Func "f" has type uint16.' in str(e)
+        assert 'Output buffer f has type uint16 but type of the buffer passed in is uint8' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
