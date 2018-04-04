@@ -52,19 +52,41 @@ namespace Halide {
 namespace Internal {
 
 /** Some numeric conversions are UB if the value won't fit in the result;
- * this clamps the value to a legal range to avoid the UB. */
-template<typename DST, typename SRC>
+ * safe_numeric_cast<>() is meant as a drop-in replacement for a C/C++ cast
+ * that adds well-defined behavior for the UB cases, attempting to mimic
+ * common implementation behavior as much as possible.
+ */
+template<typename DST, typename SRC,
+         typename std::enable_if<std::is_floating_point<SRC>::value>::type * = nullptr>
 DST safe_numeric_cast(SRC s) {
-    if (std::is_integral<DST>::value &&
-        (std::is_floating_point<SRC>::value ||
-         (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)))) {
-        // float -> int is UB if value won't fit
-        // any int -> signed int is UB if value won't fit
+    if (std::is_integral<DST>::value) {
+        // Treat float -> int as a saturating cast; this is handled
+        // in different ways by different compilers, so an arbitrary but safe
+        // choice like this is reasonable.
         if (s < (SRC) std::numeric_limits<DST>::min()) {
           return std::numeric_limits<DST>::min();
         }
         if (s > (SRC) std::numeric_limits<DST>::max()) {
           return std::numeric_limits<DST>::max();
+        }
+    }
+    return (DST) s;
+}
+
+template<typename DST, typename SRC,
+         typename std::enable_if<std::is_integral<SRC>::value>::type * = nullptr>
+DST safe_numeric_cast(SRC s) {
+    if (std::is_integral<DST>::value) {
+        // any-int -> signed-int is technically UB if value won't fit;
+        // in practice, common compilers implement such conversions as done below
+        // (as verified by exhaustive testing on Clang for x86-64). We could
+        // probably continue to rely on that behavior, but making it explicit
+        // avoids possible wrather of UBSan and similar debug helpers.
+        // (Yes, using sizeof for this comparison is a little odd for the uint->int
+        // case, but the intent is to match existing common behavior, which this does.)
+        if (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)) {
+            using UnsignedSrc = typename std::make_unsigned<SRC>::type;
+            return (DST) (s & (UnsignedSrc) (-1));
         }
     }
     return (DST) s;
