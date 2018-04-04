@@ -198,6 +198,13 @@ void do_test() {
             Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions(), 0);
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
             test_round_trip(cb4, format);
+
+            // Here we add two dimensions, both with extent one
+            Buffer<T> lb4 = luma_buf.embedded(luma_buf.dimensions(), 0);
+            lb4 = lb4.embedded(lb4.dimensions(), 0);
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
+            test_round_trip(lb4, format);
+
             continue;
         }
         if (format != "pgm") {
