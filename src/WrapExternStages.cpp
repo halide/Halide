@@ -159,6 +159,10 @@ void wrap_legacy_extern_stages(Module m) {
 }
 
 void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
+    if (module.target().has_feature(Target::NoLegacyWrapper)) {
+        return;
+    }
+
     // Build the arguments to the wrapper function
     vector<LoweredArgument> args;
     vector<Stmt> upgrades, downgrades;

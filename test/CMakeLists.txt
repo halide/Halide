@@ -285,7 +285,9 @@ if (WITH_TEST_GENERATOR)
                            HALIDE_TARGET_FEATURES debug)
   # endif()
 
+  # pyramid needs a custom arg. Also uses no_legacy_wrapper just to ensure we have test coverage for it.
   halide_define_aot_test(pyramid
+                         HALIDE_TARGET_FEATURES no_legacy_wrapper
                          GENERATOR_ARGS levels=10)
 
   halide_define_aot_test(msan
