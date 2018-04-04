@@ -815,11 +815,10 @@ bool buffer_is_compact_planar(ImageType &im) {
         if (im.dim(d-1).stride() > im.dim(d).stride()) {
             return false;
         }
-        // strides can only match if both strides are 1
+        // Strides can only match if the previous dimension has extent 1
         // (this can happen when artificially adding dimension(s), e.g.
         // to write a .tmp file)
-        if (im.dim(d-1).stride() == im.dim(d).stride() &&
-            !(im.dim(d-1).extent() == 1 && im.dim(d).extent() == 1)) {
+        if (im.dim(d-1).stride() == im.dim(d).stride() && im.dim(d-1).extent() != 1) {
             return false;
         }
     }

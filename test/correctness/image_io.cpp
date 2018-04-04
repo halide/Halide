@@ -199,11 +199,12 @@ void do_test() {
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
             test_round_trip(cb4, format);
 
-            // Here we add two dimensions, both with extent one
-            Buffer<T> lb4 = luma_buf.embedded(luma_buf.dimensions(), 0);
-            lb4 = lb4.embedded(lb4.dimensions(), 0);
+            // Here we test matching strides
+            Buffer<T> funky_buf = f.realize(10, 10, 1, 3);
+            funky_buf.fill(42);
+
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
-            test_round_trip(lb4, format);
+            test_round_trip(funky_buf, format);
 
             continue;
         }
