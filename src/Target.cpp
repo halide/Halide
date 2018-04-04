@@ -265,6 +265,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
     {"strict_float", Target::StrictFloat},
+    {"no_legacy_wrapper", Target::NoLegacyWrapper},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

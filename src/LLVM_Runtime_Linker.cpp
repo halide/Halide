@@ -744,7 +744,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
-            modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
+            if (!t.has_feature(Target::NoLegacyWrapper)) {
+                modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
+            }
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
             // MIPS doesn't support the atomics the profiler requires.
