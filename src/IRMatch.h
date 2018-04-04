@@ -1383,7 +1383,7 @@ struct Fold {
     struct pattern_tag {};
     A a;
     HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
-        halide_scalar_value_t c;
+        halide_scalar_value_t c {{0}};
         halide_type_t ty;
         a.make_folded_const(c, ty, state);
         return to_expr(c, ty, state);
