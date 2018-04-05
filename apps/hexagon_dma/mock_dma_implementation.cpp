@@ -102,7 +102,7 @@ int HAP_cache_unlock(void* vaddr_ptr) {
 }
 
 t_DmaWrapper_DmaEngineHandle hDmaWrapper_AllocDma(void) {
-    dma_handle_t* handle = (dma_handle_t*)malloc(sizeof(dma_handle_t));
+    dma_handle_t *handle = (dma_handle_t *)malloc(sizeof(dma_handle_t));
     handle->ptr = NULL;
     return (void *)handle;
 }
@@ -118,12 +118,12 @@ int32 nDmaWrapper_FreeDma(t_DmaWrapper_DmaEngineHandle dma_handle) {
 int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
 
     if(handle != 0) {
-        dma_handle_t* dma_handle = (dma_handle_t *)handle;
+        dma_handle_t *dma_handle = (dma_handle_t *)handle;
         t_st_hw_descriptor *desc = dma_handle->ptr;
 
         while (desc != NULL) {
-            unsigned char* host_addr = reinterpret_cast<unsigned char *>(desc->stWord1.src_frm_base_addr);
-            unsigned char* dest_addr = reinterpret_cast<unsigned char *>(desc->stWord1.dst_frm_base_addr);
+            unsigned char *host_addr = reinterpret_cast<unsigned char *>(desc->stWord1.src_frm_base_addr);
+            unsigned char *dest_addr = reinterpret_cast<unsigned char *>(desc->stWord1.dst_frm_base_addr);
 
 #if 0 
             printf("Processing descriptor %p -- host_addr: %p dest_addr: %p ROI: (X: %u, Y: %u, W: %u, H: %u) SrcRoiStride: %u, DstRoiStride %u, FrmWidth %u.\n",
@@ -135,15 +135,15 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
             int w = desc->stWord1.roiW;
             int h = desc->stWord1.roiH;
             int pixelsize = nDmaPixelSize(desc->stWord2.pix_fmt);
-            for (int yii=0;yii<h;yii++) {
-              // per line copy 
-              int yin = yii * desc->stWord1.dst_roi_stride * pixelsize;
-              int RoiOffset = (x + y * desc->stWord1.src_roi_stride) * pixelsize;
-              int yout = yii * desc->stWord0.frm_width * pixelsize;
-              int len = w * pixelsize;
-              memcpy(&dest_addr[yin], &host_addr[RoiOffset + yout], len);
+            for (int yii = 0; yii < h; yii++) {
+                // per line copy 
+                int yin = yii * desc->stWord1.dst_roi_stride * pixelsize;
+                int RoiOffset = (x + y * desc->stWord1.src_roi_stride) * pixelsize;
+                int yout = yii * desc->stWord0.frm_width * pixelsize;
+                int len = w * pixelsize;
+                memcpy(&dest_addr[yin], &host_addr[RoiOffset + yout], len);
             }
-            desc = reinterpret_cast<t_st_hw_descriptor*>(desc->stWord0.des_pointer);
+            desc = reinterpret_cast<t_st_hw_descriptor *>(desc->stWord0.des_pointer);
         }
     }
     return 0;
@@ -201,7 +201,7 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
         dma_handle->ptr = desc;
     }
 
-    int mul_factor  =1;
+    int mul_factor = 1;
     int l2_chroma_offset = 0;
     switch (dma_transfer_parm->eFmt) { // chroma fmt
         case eDmaFmt_NV12_UV:
@@ -209,9 +209,10 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
         case eDmaFmt_P010_UV:
         case eDmaFmt_TP10_UV:
             {
+                //DMA Driver halves the Y offset and height so that only half the size of roi luma is transferred for chroma
+                // Adjusting for that behavior 
                 int pixelsize = nDmaPixelSize(dma_transfer_parm->eFmt);
-                mul_factor = 2; //DMA Driver anamoly
-                //l2_chroma_offset = (dma_transfer_parm->u16FrameH * dma_transfer_parm->u16FrameW) * pixelsize;
+                mul_factor = 2; 
                 l2_chroma_offset = (dma_transfer_parm->u16FrameH * dma_transfer_parm->u16FrameStride) * pixelsize;
             }
             break;
@@ -249,10 +250,10 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
 
 int32 nDmaWrapper_GetDescbuffsize(t_eDmaFmt *fmt, uint16 nsize) {
 
-    int32 i, yuvformat=0,desc_size;
-    for (i=0;i<nsize;i++) {
-        if ((fmt[i]==eDmaFmt_NV12)||(fmt[i]==eDmaFmt_TP10)||
-            (fmt[i]==eDmaFmt_NV124R)||(fmt[i]==eDmaFmt_P010)) {
+    int32  desc_size, yuvformat = 0;
+    for (int32 i = 0; i < nsize; i++) {
+        if ((fmt[i] == eDmaFmt_NV12)||(fmt[i] == eDmaFmt_TP10)||
+            (fmt[i] == eDmaFmt_NV124R)||(fmt[i] == eDmaFmt_P010)) {
             yuvformat += 1;
         }
     }
@@ -264,5 +265,5 @@ int32 nDmaWrapper_GetRecommendedIntermBufSize(t_eDmaFmt eFmtId, bool bUse16BitPa
                                               t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
                                                bool bIsUbwc, uint16 u16IntermBufStride) {
 
-return 0;
+    return 0;
 }

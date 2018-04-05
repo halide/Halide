@@ -29,24 +29,22 @@ public:
         const int tile_height = 128;
 
         output_y.compute_root()
-            .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+                .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
         output_uv.compute_root()
-           .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+                 .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
         // Schedule the copy to be computed at tiles with a
         // circular buffer of two tiles.
         copy_y.compute_at(output_y, tx)
               .store_root()
               .fold_storage(x, tile_width * 2)
-              //.copy_to_host();
-              .copy_to_device();
+              .copy_to_host();
 
         copy_uv.compute_at(output_uv, tx)
                .store_root()
                .fold_storage(x, tile_width * 2)
-               //.copy_to_host();
-               .copy_to_device();
+               .copy_to_host();
     }
 
 };

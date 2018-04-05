@@ -17,11 +17,10 @@ int main(int argc, char **argv) {
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
 
-    // Fill the input buffer with random data. This is just a plain
-    // old memory buffer.
-    uint8_t *memory_to_dma_from = (uint8_t*)malloc(width * height * 1.5);
-    for (int i = 0; i < width * height* 1.5;  i++) {
-        memory_to_dma_from[i] = (uint8_t)rand();
+    // Fill the input buffer with random data. This is just a plain old memory buffer
+    uint8_t *memory_to_dma_from = (uint8_t *)malloc(width * height * 1.5 );
+    for (int i = 0; i < width * height * 1.5;  i++) {
+        memory_to_dma_from[i] = ((uint8_t)rand()) >> 1;
     }
 
     Halide::Runtime::Buffer<uint8_t> input_validation(memory_to_dma_from, width, height, 2);
@@ -37,16 +36,6 @@ int main(int argc, char **argv) {
                              reinterpret_cast<uint64_t>(memory_to_dma_from));
     input.set_device_dirty();
 
-    //Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
-    Halide::Runtime::Buffer<uint8_t> output(nullptr, width, height, 2);
-    output.allocate();
-    uint8_t *memory_to_dma_to = (uint8_t*)malloc(width * height * 2);
-    output.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(memory_to_dma_to));
-    output.set_host_dirty(); 
- 
-    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
-
     // In order to actually do a DMA transfer, we need to allocate a
     // DMA engine.
     void *dma_engine = nullptr;
@@ -54,9 +43,12 @@ int main(int argc, char **argv) {
 
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_NV12,0);
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, output, dma_engine, false, eDmaFmt_NV12,1);
+    // The Last parameter 0 indicate DMA Read
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_NV12);
 
+    Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
+    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
+    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
 
     int result = pipeline(input, output_y, output_c);
     if (result != 0) {
@@ -70,27 +62,25 @@ int main(int argc, char **argv) {
     printf("plane start=%d end=%d\n", plane_start, plane_end);
     for (int z = plane_start; z < plane_end; z++) {
         int height_c = (z==1) ? height/2 : height;
-        for(int y = 0; y < height_c; y++) {
-            for(int x = 0; x < width; x++) {
+        for (int y = 0; y < height_c; y++) {
+            for (int x = 0; x < width; x++) {
                 uint8_t correct = memory_to_dma_from[x + y*width + z*width*height] * 2;
                 if (correct != output(x, y, z)) {
                     static int cnt = 0;
                     printf("Mismatch at x=%d y=%d c=%d : %d != %d\n", x, y, z, correct, output(x, y, z));
-                    if(++cnt > 20) abort();
+                    if (++cnt > 20) abort();
                 }
             }
-         }
+        }
     }
 
     halide_hexagon_dma_unprepare(nullptr, input);
-    halide_hexagon_dma_unprepare(nullptr, output);
 
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
     free(memory_to_dma_from);
-    free(memory_to_dma_to);
 
     printf("Success!\n");
     return 0;
