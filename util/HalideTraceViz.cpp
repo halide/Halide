@@ -35,31 +35,8 @@ using std::queue;
 using std::array;
 using std::pair;
 
-std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
-    stream << "[ ";
-    bool need_comma = false;
-    for (int i : v) {
-        if (need_comma) {
-            stream << ", ";
-        }
-        stream << i;
-        need_comma = true;
-    }
-    stream << " ]";
-    return stream;
-}
-
-std::ostream &operator<<(std::ostream &stream, const vector<pair<int, int>> &v) {
-    stream << "[ ";
-    bool need_comma = false;
-    for (auto &pt : v) {
-        if (need_comma) {
-            stream << ", ";
-        }
-        stream << "(" << pt.first << "," << pt.second << ")";
-        need_comma = true;
-    }
-    stream << " ]";
+std::ostream &operator<<(std::ostream &stream, const pair<int, int> &pt) {
+    stream << "(" << pt.first << "," << pt.second << ")";
     return stream;
 }
 
@@ -68,6 +45,26 @@ struct Label {
     string text;
     int x, y, n;
 };
+
+std::ostream &operator<<(std::ostream &stream, const Label &label) {
+    stream << "text=\"" << label.text << " @ " << label.x << " " << label.y << " n=" << label.n;
+    return stream;
+}
+
+template<typename T>
+std::ostream &operator<<(std::ostream &stream, const vector<T> &v) {
+    stream << "[ ";
+    bool need_comma = false;
+    for (const T &t : v) {
+        if (need_comma) {
+            stream << ", ";
+        }
+        stream << t;
+        need_comma = true;
+    }
+    stream << " ]";
+    return stream;
+}
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
@@ -88,7 +85,7 @@ struct FuncInfo {
         bool blank_on_end_realization = false;
         uint32_t uninitialized_memory_color = 0xff000000;
 
-        void dump(const char *name) {
+        void dump(const string &name) const {
             std::cerr <<
                     "Func " << name << ":\n" <<
                     " min: " << min << " max: " << max << "\n" <<
@@ -99,7 +96,8 @@ struct FuncInfo {
                     " load cost: " << load_cost << "\n" <<
                     " store cost: " << store_cost << "\n" <<
                     " x: " << x << " y: " << y << "\n" <<
-                    " strides: " << strides << "\n";
+                    " strides: " << strides << "\n" <<
+                    " labels: " << labels << "\n";
         }
     } config;
 
@@ -436,7 +434,6 @@ int run(int argc, char **argv) {
             FuncInfo &fi = func_info[func];
             fi.config.labels.swap(config.labels);
             fi.config = config;
-            fi.config.dump(func);
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
@@ -532,6 +529,7 @@ int run(int argc, char **argv) {
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
+    bool func_info_dumped = false;
 
     // There are three layers - image data, an animation on top of
     // it, and text labels. These layers get composited.
@@ -633,6 +631,22 @@ int run(int argc, char **argv) {
             assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
             continue;
+        } else if (p.event == halide_trace_tag) {
+            // If there are trace tags, they will come immediately after the pipeline's
+            // halide_trace_begin_pipeline but before any realizations.
+            std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
+            continue;
+        }
+
+        if (!func_info_dumped) {
+            // dump after any tags are handled
+            for (const auto &p : func_info) {
+                const auto &fi = p.second;
+                if (fi.configured) {
+                    fi.config.dump(p.first);
+                }
+            }
+            func_info_dumped = true;
         }
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
@@ -679,7 +693,7 @@ int run(int argc, char **argv) {
         for (size_t i = 0; i < fi.config.labels.size(); i++) {
             const Label &label = fi.config.labels[i];
             if (frames_since_first_draw <= label.n) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::min(1, label.n);
+                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.n);
                 if (color > 255) color = 255;
                 color *= 0x10101;
 
@@ -799,6 +813,7 @@ int run(int argc, char **argv) {
         // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
+        case halide_trace_tag:
             break;
         default:
             std::cerr << "Unknown tracing event code: " << p.event << "\n";

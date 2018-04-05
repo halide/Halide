@@ -1560,6 +1560,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, height)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
     // }@
 };
 
@@ -1883,6 +1884,7 @@ protected:
 public:
     /** Forward schedule-related methods to the underlying Func. */
     // @{
+    HALIDE_FORWARD_METHOD(Func, add_trace_tag)
     HALIDE_FORWARD_METHOD(Func, align_bounds)
     HALIDE_FORWARD_METHOD(Func, align_storage)
     HALIDE_FORWARD_METHOD_CONST(Func, args)
