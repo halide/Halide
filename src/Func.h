@@ -331,7 +331,7 @@ public:
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args&&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
@@ -660,7 +660,7 @@ public:
 
     /** Construct a new Func to wrap a Buffer. */
     template<typename T>
-    NO_INLINE explicit Func(Buffer<T> &im) : Func() {
+    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -1231,7 +1231,7 @@ public:
     FuncRef operator()(std::vector<Var>) const;
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
     operator()(Args&&... args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
@@ -1248,7 +1248,7 @@ public:
     FuncRef operator()(std::vector<Expr>) const;
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
     operator()(Expr x, Args&&... args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
@@ -1516,7 +1516,7 @@ public:
     Func &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args&&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
@@ -1903,7 +1903,7 @@ public:
 
     Func &reorder_storage(Var x, Var y);
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
     reorder_storage(Var x, Var y, Args&&... args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
@@ -2328,7 +2328,7 @@ inline void assign_results(Realization &r, int idx, First first, Second second, 
  * expression. This can be thought of as a scalar version of
  * \ref Func::realize */
 template<typename T>
-NO_INLINE T evaluate(Expr e) {
+HALIDE_NO_USER_CODE_INLINE T evaluate(Expr e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
@@ -2341,7 +2341,7 @@ NO_INLINE T evaluate(Expr e) {
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template <typename First, typename... Rest>
-NO_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
@@ -2371,7 +2371,7 @@ inline void schedule_scalar(Func f) {
  * specifies one.
  */
 template<typename T>
-NO_INLINE T evaluate_may_gpu(Expr e) {
+HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(Expr e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
@@ -2387,7 +2387,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
  *  use GPU if jit target from environment specifies one. */
 // @{
 template <typename First, typename... Rest>
-NO_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&... rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;

@@ -20,6 +20,8 @@
 #include <cstring>
 #include <limits>
 
+#include "runtime/HalideRuntime.h"
+
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
 #ifdef Halide_EXPORTS
@@ -34,13 +36,9 @@
 
 // If we're in user code, we don't want certain functions to be inlined.
 #if defined(COMPILING_HALIDE) || defined(BUILDING_PYTHON)
-#define NO_INLINE
+#define HALIDE_NO_USER_CODE_INLINE
 #else
-#ifdef _WIN32
-#define NO_INLINE __declspec(noinline)
-#else
-#define NO_INLINE __attribute__((noinline))
-#endif
+#define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
 // On windows, Halide needs a larger stack than the default MSVC provides
@@ -181,13 +179,13 @@ T fold_right(const std::vector<T> &vec, Fn f) {
 }
 
 template <typename T1, typename T2, typename T3, typename T4 >
-inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
+inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                      const T3 &a1, const T4 &a2) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
 }
 
 template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
-inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
+inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                    const T3 &a1, const T4 &a2, Args&&... args) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
     collect_paired_args(collected_args, std::forward<Args>(args)...);
