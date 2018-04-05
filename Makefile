@@ -610,7 +610,6 @@ RUNTIME_CPP_COMPONENTS = \
   errors \
   fake_thread_pool \
   float16_t \
-  gcd_thread_pool \
   gpu_device_selection \
   hexagon_cpu_features \
   hexagon_host \
@@ -618,6 +617,7 @@ RUNTIME_CPP_COMPONENTS = \
   linux_clock \
   linux_host_cpu_count \
   linux_opengl_context \
+  linux_yield \
   matlab \
   metadata \
   metal \
@@ -637,6 +637,7 @@ RUNTIME_CPP_COMPONENTS = \
   osx_get_symbol \
   osx_host_cpu_count \
   osx_opengl_context \
+  osx_yield \
   posix_allocator \
   posix_clock \
   posix_error_handler \
@@ -652,10 +653,10 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_allocator \
   qurt_hvx \
   qurt_init_fini \
-  qurt_thread_pool \
+  qurt_threads \
+  qurt_yield \
   runtime_api \
   ssp \
-  thread_pool \
   to_string \
   tracing \
   windows_clock \
@@ -666,6 +667,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_tempfile \
   windows_threads \
+  windows_yield \
   write_debug_image \
   x86_cpu_features
 
