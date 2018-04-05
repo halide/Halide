@@ -70,7 +70,7 @@ public:
         template<typename T, int D>
         RealizationArg(Runtime::Buffer<T, D> &dst) : buf(dst.raw_buffer()) { }
         template <typename T>
-        NO_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
+        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst) : buf(dst.raw_buffer()) { }
         template<typename T, typename ...Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
             RealizationArg(Buffer<T> &a, Args&&... args) {

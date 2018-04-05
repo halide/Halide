@@ -23,8 +23,10 @@ extern "C" {
 // it is not necessary, and may produce warnings for some build configurations.
 #ifdef _MSC_VER
 #define HALIDE_ALWAYS_INLINE __forceinline
+#define HALIDE_NEVER_INLINE __declspec(noinline)
 #else
 #define HALIDE_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define HALIDE_NEVER_INLINE __attribute__((noinline))
 #endif
 
 /** \file
@@ -87,15 +89,11 @@ typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
-/** Cross-platform mutex. These are allocated statically inside the
- * runtime, hence the fixed size. They must be initialized with
- * zero. The first time halide_mutex_lock is called, the lock must be
- * initialized in a thread safe manner. This incurs a small overhead
- * for a once mechanism, but makes the lock reliably easy to setup and
- * use without depending on e.g. C++ constructor logic.
+/** Cross-platform mutex. Must be initialized with zero and implementation
+ * must treat zero as an unlocked mutex with no waiters, etc.
  */
 struct halide_mutex {
-    uint64_t _private[8];
+    uintptr_t _private[1];
 };
 
 /** A basic set of mutex and condition variable functions, which call
@@ -107,7 +105,6 @@ struct halide_mutex {
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
-extern void halide_mutex_destroy(struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -1107,7 +1104,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
     halide_target_feature_d3d12compute = 50, ///< Enable Direct3D 12 Compute runtime.
-    halide_target_feature_end = 51, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_strict_float = 51, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_end = 52, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

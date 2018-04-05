@@ -87,7 +87,8 @@ struct Target {
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
         D3D12Compute = halide_target_feature_d3d12compute,
-        FeatureEnd = halide_target_feature_end,
+        StrictFloat = halide_target_feature_strict_float,
+        FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())

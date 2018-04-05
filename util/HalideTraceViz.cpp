@@ -17,7 +17,8 @@ typedef int64_t ssize_t;
 #else
 #include <unistd.h>
 #endif
-#include <string.h>
+#include <string>
+#include <list>
 
 #include "inconsolata.h"
 #include "HalideRuntime.h"
@@ -34,32 +35,10 @@ using std::string;
 using std::queue;
 using std::array;
 using std::pair;
+using std::list;
 
-std::ostream &operator<<(std::ostream &stream, const vector<int> &v) {
-    stream << "[ ";
-    bool need_comma = false;
-    for (int i : v) {
-        if (need_comma) {
-            stream << ", ";
-        }
-        stream << i;
-        need_comma = true;
-    }
-    stream << " ]";
-    return stream;
-}
-
-std::ostream &operator<<(std::ostream &stream, const vector<pair<int, int>> &v) {
-    stream << "[ ";
-    bool need_comma = false;
-    for (auto &pt : v) {
-        if (need_comma) {
-            stream << ", ";
-        }
-        stream << "(" << pt.first << "," << pt.second << ")";
-        need_comma = true;
-    }
-    stream << " ]";
+std::ostream &operator<<(std::ostream &stream, const pair<int, int> &pt) {
+    stream << "(" << pt.first << "," << pt.second << ")";
     return stream;
 }
 
@@ -68,6 +47,26 @@ struct Label {
     string text;
     int x, y, n;
 };
+
+std::ostream &operator<<(std::ostream &stream, const Label &label) {
+    stream << "text=\"" << label.text << " @ " << label.x << " " << label.y << " n=" << label.n;
+    return stream;
+}
+
+template<typename T>
+std::ostream &operator<<(std::ostream &stream, const vector<T> &v) {
+    stream << "[ ";
+    bool need_comma = false;
+    for (const T &t : v) {
+        if (need_comma) {
+            stream << ", ";
+        }
+        stream << t;
+        need_comma = true;
+    }
+    stream << " ]";
+    return stream;
+}
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
@@ -88,7 +87,7 @@ struct FuncInfo {
         bool blank_on_end_realization = false;
         uint32_t uninitialized_memory_color = 0xff000000;
 
-        void dump(const char *name) {
+        void dump(const string &name) const {
             std::cerr <<
                     "Func " << name << ":\n" <<
                     " min: " << min << " max: " << max << "\n" <<
@@ -99,14 +98,15 @@ struct FuncInfo {
                     " load cost: " << load_cost << "\n" <<
                     " store cost: " << store_cost << "\n" <<
                     " x: " << x << " y: " << y << "\n" <<
-                    " strides: " << strides << "\n";
+                    " strides: " << strides << "\n" <<
+                    " labels: " << labels << "\n";
         }
     } config;
 
     // Information about actual observed values gathered while parsing the trace
     struct Observed {
         string qualified_name;
-        int first_draw_time = 0, first_packet_idx = 0;
+        int first_draw_time = -1, first_packet_idx = -1;
         double min_value = 0.0, max_value = 0.0;
         int min_coord[16];
         int max_coord[16];
@@ -436,7 +436,6 @@ int run(int argc, char **argv) {
             FuncInfo &fi = func_info[func];
             fi.config.labels.swap(config.labels);
             fi.config = config;
-            fi.config.dump(func);
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
@@ -494,7 +493,7 @@ int run(int argc, char **argv) {
                     break;
                 }
                 expect(i + 2 < argc, i);
-                if (config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
+                if ((int) config.strides.size() <= config.dims) config.strides.resize(config.dims+1, {0, 0});
                 int x = parse_int(argv[++i]);
                 int y = parse_int(argv[++i]);
                 config.strides[config.dims++] = {x, y};
@@ -532,6 +531,7 @@ int run(int argc, char **argv) {
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
+    bool func_info_dumped = false;
 
     // There are three layers - image data, an animation on top of
     // it, and text labels. These layers get composited.
@@ -549,6 +549,7 @@ int run(int argc, char **argv) {
 
     map<uint32_t, PipelineInfo> pipeline_info;
 
+    list<pair<Label, int>> labels_being_drawn;
     size_t end_counter = 0;
     size_t packet_clock = 0;
     for (;;) {
@@ -633,6 +634,22 @@ int run(int argc, char **argv) {
             assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
             continue;
+        } else if (p.event == halide_trace_tag) {
+            // If there are trace tags, they will come immediately after the pipeline's
+            // halide_trace_begin_pipeline but before any realizations.
+            std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
+            continue;
+        }
+
+        if (!func_info_dumped) {
+            // dump after any tags are handled
+            for (const auto &p : func_info) {
+                const auto &fi = p.second;
+                if (fi.configured) {
+                    fi.config.dump(p.first);
+                }
+            }
+            func_info_dumped = true;
         }
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
@@ -665,25 +682,32 @@ int run(int argc, char **argv) {
         FuncInfo &fi = func_info[qualified_name];
         if (!fi.configured) continue;
 
-        if (fi.stats.first_draw_time == 0) {
+        if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
+            for (const auto &label : fi.config.labels) {
+                labels_being_drawn.push_back({label, halide_clock});
+            }
         }
 
-        if (fi.stats.first_packet_idx == 0) {
+        if (fi.stats.first_packet_idx < 0) {
             fi.stats.first_packet_idx = packet_clock;
             fi.stats.qualified_name = qualified_name;
         }
 
-        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
-
-        for (size_t i = 0; i < fi.config.labels.size(); i++) {
-            const Label &label = fi.config.labels[i];
-            if (frames_since_first_draw <= label.n) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::min(1, label.n);
+        for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+            const Label &label = it->first;
+            int first_draw_clock = it->second;
+            int frames_since_first_draw = (halide_clock - first_draw_clock) / timestep;
+            if (frames_since_first_draw < label.n) {
+                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.n);
                 if (color > 255) color = 255;
                 color *= 0x10101;
-
                 draw_text(label.text, label.x, label.y, color, text.data(), frame_width, frame_height);
+                ++it;
+            } else {
+                // Once we reach or exceed the final frame, draw at 100% opacity, then remove
+                draw_text(label.text, label.x, label.y, 0xffffff, text.data(), frame_width, frame_height);
+                it = labels_being_drawn.erase(it);
             }
         }
 
@@ -799,6 +823,7 @@ int run(int argc, char **argv) {
         // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
+        case halide_trace_tag:
             break;
         default:
             std::cerr << "Unknown tracing event code: " << p.event << "\n";

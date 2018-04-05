@@ -394,16 +394,18 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
 
+    bool per_instruction_fast_math_flags = false;
+    get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
+
     options = llvm::TargetOptions();
     #if LLVM_VERSION < 50
-    options.LessPreciseFPMADOption = true;
+    options.LessPreciseFPMADOption = !per_instruction_fast_math_flags;
     #endif
-    options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-    options.UnsafeFPMath = true;
-
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
+    options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+    options.UnsafeFPMath = !per_instruction_fast_math_flags;
+    options.NoInfsFPMath = !per_instruction_fast_math_flags;
+    options.NoNaNsFPMath = !per_instruction_fast_math_flags;
+    options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.StackAlignmentOverride = 0;
@@ -439,8 +441,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module) {
     std::string error_string;
 
-    const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
-    if (!target) {
+    const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
+    if (!llvm_target) {
         std::cout << error_string << std::endl;
 #if LLVM_VERSION < 60
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
@@ -448,14 +450,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
 #endif
     }
-    internal_assert(target) << "Could not create target for " << module.getTargetTriple() << "\n";
+    internal_assert(llvm_target) << "Could not create LLVM target for " << module.getTargetTriple() << "\n";
 
     llvm::TargetOptions options;
     std::string mcpu = "";
     std::string mattrs = "";
     get_target_options(module, options, mcpu, mattrs);
 
-    return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(module.getTargetTriple(),
+    return std::unique_ptr<llvm::TargetMachine>(llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,

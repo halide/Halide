@@ -10,6 +10,7 @@ using std::vector;
 using std::map;
 using std::string;
 using std::pair;
+using std::set;
 
 struct TraceEventBuilder {
     string func, trace_tag;
@@ -45,6 +46,7 @@ public:
     const bool trace_all_loads, trace_all_stores, trace_all_realizations;
     // We want to preserve the order, so use a vector<pair> rather than a map
     vector<pair<string, vector<string>>> trace_tags;
+    set<string> trace_tags_added;
 
     InjectTracing(const map<string, Function> &e, const Target &t)
         : env(e),
@@ -56,13 +58,19 @@ public:
     }
 
 private:
+    void add_trace_tags(const string &name, const vector<string> &t) {
+        if (!t.empty() && !trace_tags_added.count(name)) {
+            trace_tags.push_back({name, t});
+            trace_tags_added.insert(name);
+        }
+    }
+
     using IRMutator2::visit;
 
     Expr visit(const Call *op) override {
         Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
-
         bool trace_it = false;
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
@@ -73,6 +81,9 @@ private:
 
             trace_it = f.is_tracing_loads() || trace_all_loads;
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
+            if (trace_it) {
+                add_trace_tags(op->name, f.get_trace_tags());
+            }
         } else if (op->call_type == Call::Image) {
             trace_it = trace_all_loads;
             // If there is a Function in the env named "name_im", assume that
@@ -84,10 +95,11 @@ private:
                 Function f = it->second;
                 // f could be scheduled and have actual loads from it (via ImageParam::in),
                 // so only honor trace the loads if it is inlined.
-                if (f.is_tracing_loads() &&
+                if ((f.is_tracing_loads() || trace_all_loads) &&
                     f.can_be_inlined() &&
                     f.schedule().compute_level().is_inlined()) {
                     trace_it = true;
+                    add_trace_tags(op->name, f.get_trace_tags());
                 }
             }
 
@@ -181,10 +193,7 @@ private:
         if (iter == env.end()) return stmt;
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
-            const vector<string> &t = f.get_trace_tags();
-            if (!t.empty()) {
-                trace_tags.push_back({op->name, t});
-            }
+            add_trace_tags(op->name, f.get_trace_tags());
 
             // Throw a tracing call before and after the realize body
             TraceEventBuilder builder;
