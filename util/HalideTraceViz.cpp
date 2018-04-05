@@ -17,7 +17,8 @@ typedef int64_t ssize_t;
 #else
 #include <unistd.h>
 #endif
-#include <string.h>
+#include <string>
+#include <list>
 
 #include "inconsolata.h"
 #include "HalideRuntime.h"
@@ -34,6 +35,7 @@ using std::string;
 using std::queue;
 using std::array;
 using std::pair;
+using std::list;
 
 std::ostream &operator<<(std::ostream &stream, const pair<int, int> &pt) {
     stream << "(" << pt.first << "," << pt.second << ")";
@@ -104,7 +106,7 @@ struct FuncInfo {
     // Information about actual observed values gathered while parsing the trace
     struct Observed {
         string qualified_name;
-        int first_draw_time = 0, first_packet_idx = 0;
+        int first_draw_time = -1, first_packet_idx = -1;
         double min_value = 0.0, max_value = 0.0;
         int min_coord[16];
         int max_coord[16];
@@ -547,6 +549,7 @@ int run(int argc, char **argv) {
 
     map<uint32_t, PipelineInfo> pipeline_info;
 
+    list<pair<Label, int>> labels_being_drawn;
     size_t end_counter = 0;
     size_t packet_clock = 0;
     for (;;) {
@@ -679,25 +682,32 @@ int run(int argc, char **argv) {
         FuncInfo &fi = func_info[qualified_name];
         if (!fi.configured) continue;
 
-        if (fi.stats.first_draw_time == 0) {
+        if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
+            for (const auto &label : fi.config.labels) {
+                labels_being_drawn.push_back({label, halide_clock});
+            }
         }
 
-        if (fi.stats.first_packet_idx == 0) {
+        if (fi.stats.first_packet_idx < 0) {
             fi.stats.first_packet_idx = packet_clock;
             fi.stats.qualified_name = qualified_name;
         }
 
-        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
-
-        for (size_t i = 0; i < fi.config.labels.size(); i++) {
-            const Label &label = fi.config.labels[i];
-            if (frames_since_first_draw <= label.n) {
+        for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+            const Label &label = it->first;
+            int first_draw_clock = it->second;
+            int frames_since_first_draw = (halide_clock - first_draw_clock) / timestep;
+            if (frames_since_first_draw < label.n) {
                 uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.n);
                 if (color > 255) color = 255;
                 color *= 0x10101;
-
                 draw_text(label.text, label.x, label.y, color, text.data(), frame_width, frame_height);
+                ++it;
+            } else {
+                // Once we reach or exceed the final frame, draw at 100% opacity, then remove
+                draw_text(label.text, label.x, label.y, 0xffffff, text.data(), frame_width, frame_height);
+                it = labels_being_drawn.erase(it);
             }
         }
 
