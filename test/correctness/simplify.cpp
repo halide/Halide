@@ -1167,7 +1167,7 @@ void check_math() {
 
     check(Halide::sqrt(4.0f), 2.0f);
     check(Halide::log(0.5f + 0.5f), 0.0f);
-    check(Halide::exp(log(2.0f)), 2.0f);
+    check(Halide::exp(Halide::log(2.0f)), 2.0f);
     check(Halide::pow(4.0f, 0.5f), 2.0f);
     check(Halide::round(1000.0f*Halide::pow(Halide::exp(1.0f), Halide::log(10.0f))), 10000.0f);
 
