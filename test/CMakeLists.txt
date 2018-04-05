@@ -285,7 +285,7 @@ if (WITH_TEST_GENERATOR)
   # endif()
 
   halide_define_aot_test(old_buffer_t
-                         HALIDE_TARGET_FEATURES legacy_wrappers)
+                         HALIDE_TARGET_FEATURES legacy_buffer_wrappers)
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)

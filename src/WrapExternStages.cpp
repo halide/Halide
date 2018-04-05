@@ -145,7 +145,7 @@ public:
 }
 
 void wrap_legacy_extern_stages(Module m) {
-    if (!m.target().has_feature(Target::LegacyWrappers)) {
+    if (!m.target().has_feature(Target::LegacyBufferWrappers)) {
         return;
     }
 
@@ -163,7 +163,7 @@ void wrap_legacy_extern_stages(Module m) {
 }
 
 void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
-    if (!module.target().has_feature(Target::LegacyWrappers)) {
+    if (!module.target().has_feature(Target::LegacyBufferWrappers)) {
         return;
     }
 

@@ -747,7 +747,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
 
-            // Note that we deliberately include this module, even if Target::LegacyWrappers
+            // Note that we deliberately include this module, even if Target::LegacyBufferWrappers
             // isn't enabled: it isn't much code, and it makes it much easier to
             // intermingle code that is built with this flag with code that is
             // built without.
