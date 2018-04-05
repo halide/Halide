@@ -23,8 +23,10 @@ extern "C" {
 // it is not necessary, and may produce warnings for some build configurations.
 #ifdef _MSC_VER
 #define HALIDE_ALWAYS_INLINE __forceinline
+#define HALIDE_NEVER_INLINE __declspec(noinline)
 #else
 #define HALIDE_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define HALIDE_NEVER_INLINE __attribute__((noinline))
 #endif
 
 /** \file

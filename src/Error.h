@@ -149,7 +149,7 @@ class Voidifier {
 // N.B. Any function that might throw a user_assert or user_error may
 // not be inlined into the user's code, or the line number will be
 // misattributed to Halide.h. Either make such functions internal to
-// libHalide, or mark them as NO_INLINE.
+// libHalide, or mark them as HALIDE_NO_USER_CODE_INLINE.
 
 }
 

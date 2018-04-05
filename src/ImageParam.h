@@ -59,7 +59,7 @@ public:
      */
     // @{
     template <typename... Args>
-    NO_INLINE Expr operator()(Args&&... args) const {
+    HALIDE_NO_USER_CODE_INLINE Expr operator()(Args&&... args) const {
         return func(std::forward<Args>(args)...);
     }
     Expr operator()(std::vector<Expr>) const;
