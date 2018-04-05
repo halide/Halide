@@ -121,6 +121,11 @@ void check_casts() {
     // But only when overflow is undefined for the type
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
+
+    // Check that chains of widening casts don't lose the distinction
+    // between zero-extending and sign-extending.
+    check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
+          UIntImm::make(UInt(64), 0xffffffffULL));
 }
 
 void check_algebra() {
@@ -378,6 +383,10 @@ void check_algebra() {
     check(1 - (1 + y)/2 - 1, (0 - y)/2);
     check(1 - (-y + 1)/2 - 1, y/2);
     check(1 - (0 - y)/5, (y + 9)/5);
+
+    // Test case with most negative 32-bit number, as constant to check that it is not negated.
+    check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
+          ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 }
 
 void check_vectors() {
@@ -436,6 +445,80 @@ void check_vectors() {
         Expr expected = (!ramp(const_true(), const_true(), 2)) &&
                         (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
         check(test, expected);
+    }
+
+
+    // Collapse some vector interleaves
+    check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));
+    check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
+    check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
+    check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
+    {
+        Expr vec = ramp(x, 1, 16);
+        check(interleave_vectors({slice(vec, 0, 2, 8), slice(vec, 1, 2, 8)}), vec);
+        check(interleave_vectors({slice(vec, 0, 4, 4), slice(vec, 1, 4, 4), slice(vec, 2, 4, 4), slice(vec, 3, 4, 4)}), vec);
+    }
+
+    // Collapse some vector concats
+    check(concat_vectors({ramp(x, 2, 4), ramp(x+8, 2, 4)}), ramp(x, 2, 8));
+    check(concat_vectors({ramp(x, 3, 2), ramp(x+6, 3, 2), ramp(x+12, 3, 2)}), ramp(x, 3, 6));
+
+    // Now some ones that can't work
+    {
+        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 2, 4), ramp(x+2, 2, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
+        check(e, e);
+        e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
+        check(e, e);
+
+        e = concat_vectors({ramp(x, 1, 4), ramp(x+4, 2, 4)});
+        check(e, e);
+        e = concat_vectors({ramp(x, 1, 4), ramp(x+8, 1, 4)});
+        check(e, e);
+        e = concat_vectors({ramp(x, 1, 4), ramp(y+4, 1, 4)});
+        check(e, e);
+    }
+
+    // Now check that an interleave of some collapsible loads collapses into a single dense load
+    {
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
+        check(interleave_vectors({load1, load2}), load12);
+
+        // They don't collapse in the other order
+        Expr e = interleave_vectors({load2, load1});
+        check(e, e);
+
+        // Or if the buffers are different
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        e = interleave_vectors({load1, load3});
+        check(e, e);
+    }
+
+    // Check that concatenated loads of adjacent scalars collapse into a vector load.
+    {
+        int lanes = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < lanes; i++) {
+            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true()));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes)));
+    }
+
+    {
+        // A predicated store with a provably-false predicate.
+        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr index = ramp(x + y, 1, 8);
+        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred);
+        check(stmt, Evaluate::make(0));
     }
 }
 
@@ -788,6 +871,70 @@ void check_bounds() {
     check(max(x + (z + y), y + w), max(x + z, w) + y);
     check(max(x + y, z + (x + w)), max(y, z + w) + x);
     check(max(x + y, z + (w + x)), max(y, z + w) + x);
+
+    // Check min(x, y)*max(x, y) gets simplified into x*y
+    check(min(x, y)*max(x, y), x*y);
+    check(min(x, y)*max(y, x), x*y);
+    check(max(x, y)*min(x, y), x*y);
+    check(max(y, x)*min(x, y), x*y);
+
+    // Check min(x, y) + max(x, y) gets simplified into x + y
+    check(min(x, y) + max(x, y), x + y);
+    check(min(x, y) + max(y, x), x + y);
+    check(max(x, y) + min(x, y), x + y);
+    check(max(y, x) + min(x, y), x + y);
+
+    // Check max(min(x, y), max(x, y)) gets simplified into max(x, y)
+    check(max(min(x, y), max(x, y)), max(x, y));
+    check(max(min(x, y), max(y, x)), max(x, y));
+    check(max(max(x, y), min(x, y)), max(x, y));
+    check(max(max(y, x), min(x, y)), max(x, y));
+
+    // Check min(max(x, y), min(x, y)) gets simplified into min(x, y)
+    check(min(max(x, y), min(x, y)), min(x, y));
+    check(min(max(x, y), min(y, x)), min(x, y));
+    check(min(min(x, y), max(x, y)), min(x, y));
+    check(min(min(y, x), max(x, y)), min(x, y));
+
+    // Check if we can simplify away comparison on vector types considering bounds.
+    Scope<Interval> bounds_info;
+    bounds_info.push("x", Interval(0,4));
+    check_in_bounds(ramp(x,  1, 4) < broadcast( 0, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x,  1, 4) < broadcast( 8, 4), const_true(4),  bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast(-4, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast( 5, 4), const_true(4),  bounds_info);
+    check_in_bounds(min(ramp(x,  1, 4), broadcast( 0, 4)), broadcast(0, 4),  bounds_info);
+    check_in_bounds(min(ramp(x,  1, 4), broadcast( 8, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast(-4, 4)), broadcast(-4, 4), bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast( 5, 4)), ramp(x, -1, 4),   bounds_info);
+    check_in_bounds(max(ramp(x,  1, 4), broadcast( 0, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(max(ramp(x,  1, 4), broadcast( 8, 4)), broadcast(8, 4),  bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4),   bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast( 5, 4)), broadcast(5, 4),  bounds_info);
+
+    check(min(x, 63) - min(x, 3), clamp(x, 3, 63) + (-3));
+    check(min(x, 3) - min(x, 63), 3 - clamp(x, 3, 63));
+    check(min(63, x) - min(x, 3), clamp(x, 3, 63) + (-3));
+    check(min(x, 3) - min(63, x), 3 - clamp(x, 3, 63));
+
+    // This used to throw the simplifier into a loop
+    simplify((min((min(((x*64) + y), (z + -63)) + 31), min((((x*64) + y) + 63), z)) -
+              min((min((((x*64) + y) + 63), z) + -31), (min(((x*64) + y), (z + -63)) + 32))));
+
+    check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4 + (-63), -60, 0) + 63);
+    check(min(x * 4, y - 3) - min(x * 4 + 63, y), -3 - clamp(y - x * 4 + (-3), 0, 60));
+    check(min(y, x * 4 + 63) - min(x * 4, y - 3), 63 - clamp(x * 4 - y + 63, 0, 60));
+    check(min(x * 4, y - 3) - min(y, x * 4 + 63), -3 - clamp(y - x * 4 + (-3), 0, 60));
+
+    check(max(x, 63) - max(x, 3), 63 - clamp(x, 3, 63));
+    check(max(x, 3) - max(x, 63), clamp(x, 3, 63) + (-63));
+    check(max(63, x) - max(3, x), 63 - clamp(x, 3, 63));
+    check(max(3, x) - max(x, 63), clamp(x, 3, 63) + (-63));
+
+    check(max(x * 4 + 63, y) - max(x * 4, y - 3), 3 - clamp(y - x * 4 + (-63), -60, 0));
+    check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4 + (-3), 0, 60) + (-63));
+    check(max(x * 4 + 63, y) - max(y - 3, x * 4), 3 - clamp(y - x * 4 + (-63), -60, 0));
+    check(max(y - 3, x * 4) - max(y, x * 4 + 63), -63 - clamp(x * 4 - y + 3, -60, 0));
 }
 
 void check_boolean() {
@@ -1355,20 +1502,8 @@ void check_indeterminate() {
     }
 }
 
-int main(int argc, char **argv) {
-    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
-    Expr xf = cast<float>(x);
-    Expr yf = cast<float>(y);
-    Expr t = const_true(), f = const_false();
-
-    check_indeterminate();
-    check_casts();
-    check_algebra();
-    check_vectors();
-    check_bounds();
-    check_math();
-    check_boolean();
-    check_overflow();
+void check_bitwise() {
+    Expr x = Var("x");
 
     // Check bitshift operations
     check(cast(Int(16), x) << 10, cast(Int(16), x) * 1024);
@@ -1385,13 +1520,11 @@ int main(int argc, char **argv) {
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
     check(Let::make(x.as<Variable>()->name, 5, ((~x) & 3) | 16), (~5 & 3) | 16);
     check(Let::make(x.as<Variable>()->name, 5, ((~cast<uint8_t>(x)) & 3) | 16), make_const(UInt(8), (~5 & 3) | 16));
+}
 
-    // Check that chains of widening casts don't lose the distinction
-    // between zero-extending and sign-extending.
-    check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
-          UIntImm::make(UInt(64), 0xffffffffULL));
-
-    v = Variable::make(Int(32, 4), "v");
+void check_lets() {
+    Expr x = Var("x"), y = Var("y");
+    Expr v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
     check(Let::make("x", 3, x+4), 7);
 
@@ -1411,9 +1544,22 @@ int main(int argc, char **argv) {
     check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
           LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
 
-    // Test case with most negative 32-bit number, as constant to check that it is not negated.
-    check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
-          ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+}
+
+int main(int argc, char **argv) {
+    check_indeterminate();
+    check_casts();
+    check_algebra();
+    check_vectors();
+    check_bounds();
+    check_math();
+    check_boolean();
+    check_overflow();
+    check_bitwise();
+
+    // Miscellaneous cases that don't fit into one of the categories above.
+
+    Expr x = Var("x"), y = Var("y");
 
     // Check that constant args to a stringify get combined
     check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::Intrinsic),
@@ -1427,110 +1573,6 @@ int main(int argc, char **argv) {
         Expr base = Variable::make(Handle(), "buf");
         check(Call::make(Int(32), Call::prefetch, {base, x, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
               Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
-    }
-
-    // Check min(x, y)*max(x, y) gets simplified into x*y
-    check(min(x, y)*max(x, y), x*y);
-    check(min(x, y)*max(y, x), x*y);
-    check(max(x, y)*min(x, y), x*y);
-    check(max(y, x)*min(x, y), x*y);
-
-    // Check min(x, y) + max(x, y) gets simplified into x + y
-    check(min(x, y) + max(x, y), x + y);
-    check(min(x, y) + max(y, x), x + y);
-    check(max(x, y) + min(x, y), x + y);
-    check(max(y, x) + min(x, y), x + y);
-
-    // Check max(min(x, y), max(x, y)) gets simplified into max(x, y)
-    check(max(min(x, y), max(x, y)), max(x, y));
-    check(max(min(x, y), max(y, x)), max(x, y));
-    check(max(max(x, y), min(x, y)), max(x, y));
-    check(max(max(y, x), min(x, y)), max(x, y));
-
-    // Check min(max(x, y), min(x, y)) gets simplified into min(x, y)
-    check(min(max(x, y), min(x, y)), min(x, y));
-    check(min(max(x, y), min(y, x)), min(x, y));
-    check(min(min(x, y), max(x, y)), min(x, y));
-    check(min(min(y, x), max(x, y)), min(x, y));
-
-    // Check if we can simplify away comparison on vector types considering bounds.
-    Scope<Interval> bounds_info;
-    bounds_info.push("x", Interval(0,4));
-    check_in_bounds(ramp(x,  1, 4) < broadcast( 0, 4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x,  1, 4) < broadcast( 8, 4), const_true(4),  bounds_info);
-    check_in_bounds(ramp(x, -1, 4) < broadcast(-4, 4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x, -1, 4) < broadcast( 5, 4), const_true(4),  bounds_info);
-    check_in_bounds(min(ramp(x,  1, 4), broadcast( 0, 4)), broadcast(0, 4),  bounds_info);
-    check_in_bounds(min(ramp(x,  1, 4), broadcast( 8, 4)), ramp(x, 1, 4),    bounds_info);
-    check_in_bounds(min(ramp(x, -1, 4), broadcast(-4, 4)), broadcast(-4, 4), bounds_info);
-    check_in_bounds(min(ramp(x, -1, 4), broadcast( 5, 4)), ramp(x, -1, 4),   bounds_info);
-    check_in_bounds(max(ramp(x,  1, 4), broadcast( 0, 4)), ramp(x, 1, 4),    bounds_info);
-    check_in_bounds(max(ramp(x,  1, 4), broadcast( 8, 4)), broadcast(8, 4),  bounds_info);
-    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4),   bounds_info);
-    check_in_bounds(max(ramp(x, -1, 4), broadcast( 5, 4)), broadcast(5, 4),  bounds_info);
-
-    // Collapse some vector interleaves
-    check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));
-    check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
-    check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
-    check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
-    {
-        Expr vec = ramp(x, 1, 16);
-        check(interleave_vectors({slice(vec, 0, 2, 8), slice(vec, 1, 2, 8)}), vec);
-        check(interleave_vectors({slice(vec, 0, 4, 4), slice(vec, 1, 4, 4), slice(vec, 2, 4, 4), slice(vec, 3, 4, 4)}), vec);
-    }
-
-    // Collapse some vector concats
-    check(concat_vectors({ramp(x, 2, 4), ramp(x+8, 2, 4)}), ramp(x, 2, 8));
-    check(concat_vectors({ramp(x, 3, 2), ramp(x+6, 3, 2), ramp(x+12, 3, 2)}), ramp(x, 3, 6));
-
-    // Now some ones that can't work
-    {
-        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
-        check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x+2, 2, 4)});
-        check(e, e);
-        e = interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4)});
-        check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
-        check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
-        check(e, e);
-
-        e = concat_vectors({ramp(x, 1, 4), ramp(x+4, 2, 4)});
-        check(e, e);
-        e = concat_vectors({ramp(x, 1, 4), ramp(x+8, 1, 4)});
-        check(e, e);
-        e = concat_vectors({ramp(x, 1, 4), ramp(y+4, 1, 4)});
-        check(e, e);
-    }
-
-    // Now check that an interleave of some collapsible loads collapses into a single dense load
-    {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
-        check(interleave_vectors({load1, load2}), load12);
-
-        // They don't collapse in the other order
-        Expr e = interleave_vectors({load2, load1});
-        check(e, e);
-
-        // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        e = interleave_vectors({load1, load3});
-        check(e, e);
-    }
-
-    // Check that concatenated loads of adjacent scalars collapse into a vector load.
-    {
-        int lanes = 4;
-        std::vector<Expr> loads;
-        for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true()));
-        }
-
-        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes)));
     }
 
     // This expression doesn't simplify, but it did cause exponential
@@ -1548,14 +1590,6 @@ int main(int argc, char **argv) {
           Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2)));
     check((ramp(-71, 39, 2)/Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2))) >= Broadcast::make(23, 2),
           (Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2)) * Broadcast::make(23, 2)) <= ramp(-71, 39, 2));
-
-    {
-        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
-        Expr index = ramp(x + y, 1, 8);
-        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
-        Stmt stmt = Store::make("f", value, index, Parameter(), pred);
-        check(stmt, Evaluate::make(0));
-    }
 
     {
         // Verify that integer types passed to min() and max() are coerced to match
@@ -1591,30 +1625,6 @@ int main(int argc, char **argv) {
         Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
         check(e, expected);
     }
-
-    check(min(x, 63) - min(x, 3), clamp(x, 3, 63) + (-3));
-    check(min(x, 3) - min(x, 63), 3 - clamp(x, 3, 63));
-    check(min(63, x) - min(x, 3), clamp(x, 3, 63) + (-3));
-    check(min(x, 3) - min(63, x), 3 - clamp(x, 3, 63));
-
-    // This used to throw the simplifier into a loop
-    simplify((min((min(((x*64) + y), (z + -63)) + 31), min((((x*64) + y) + 63), z)) -
-              min((min((((x*64) + y) + 63), z) + -31), (min(((x*64) + y), (z + -63)) + 32))));
-
-    check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4 + (-63), -60, 0) + 63);
-    check(min(x * 4, y - 3) - min(x * 4 + 63, y), -3 - clamp(y - x * 4 + (-3), 0, 60));
-    check(min(y, x * 4 + 63) - min(x * 4, y - 3), 63 - clamp(x * 4 - y + 63, 0, 60));
-    check(min(x * 4, y - 3) - min(y, x * 4 + 63), -3 - clamp(y - x * 4 + (-3), 0, 60));
-
-    check(max(x, 63) - max(x, 3), 63 - clamp(x, 3, 63));
-    check(max(x, 3) - max(x, 63), clamp(x, 3, 63) + (-63));
-    check(max(63, x) - max(3, x), 63 - clamp(x, 3, 63));
-    check(max(3, x) - max(x, 63), clamp(x, 3, 63) + (-63));
-
-    check(max(x * 4 + 63, y) - max(x * 4, y - 3), 3 - clamp(y - x * 4 + (-63), -60, 0));
-    check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4 + (-3), 0, 60) + (-63));
-    check(max(x * 4 + 63, y) - max(y - 3, x * 4), 3 - clamp(y - x * 4 + (-63), -60, 0));
-    check(max(y - 3, x * 4) - max(y, x * 4 + 63), -63 - clamp(x * 4 - y + 3, -60, 0));
 
     // Check that provably-true require() expressions are simplified away
     {
