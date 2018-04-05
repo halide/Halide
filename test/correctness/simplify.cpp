@@ -6,7 +6,6 @@ using namespace Halide::Internal;
 #define internal_assert _halide_user_assert
 
 void check(const Expr &a, const Expr &b) {
-    //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
         std::cerr
@@ -19,7 +18,6 @@ void check(const Expr &a, const Expr &b) {
 }
 
 void check(const Stmt &a, const Stmt &b) {
-    //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Stmt simpler = simplify(a);
     if (!equal(simpler, b)) {
         std::cerr
@@ -32,7 +30,6 @@ void check(const Stmt &a, const Stmt &b) {
 }
 
 void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
-    //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a, true, bi);
     if (!equal(simpler, b)) {
         std::cerr
