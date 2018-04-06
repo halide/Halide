@@ -202,25 +202,36 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     compare_scalar(a.bits(), b.bits());
     compare_scalar(a.lanes(), b.lanes());
 
-    if (result != Equal || !a.is_handle()) return result;
+    if (result != Equal) return result;
 
     const halide_handle_cplusplus_type *ha = a.handle_type;
     const halide_handle_cplusplus_type *hb = b.handle_type;
 
     if (ha == hb) {
-        // Early-out
+        // Same handle type, or both not handles, or both void *
         return result;
     }
 
     if (ha == nullptr) {
+        // void* < T*
         result = LessThan;
         return result;
     }
 
     if (hb == nullptr) {
+        // T* > void*
         result = GreaterThan;
         return result;
     }
+
+    // They're both non-void handle types with distinct type info
+    // structs. We now need to distinguish between different C++
+    // pointer types (e.g. char * vs const float *). If would be nice
+    // if the structs were unique per C++ type. Then comparing the
+    // pointers above would be sufficient.  Unfortunately, different
+    // shared libraries in the same process each create a distinct
+    // struct for the same type. We therefore have to do a deep
+    // comparison of the type info fields.
 
     compare_scalar(ha->reference_type, hb->reference_type);
     compare_names(ha->inner_name.name, hb->inner_name.name);
