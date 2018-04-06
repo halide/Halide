@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_trace_config.h"
 
 namespace {
 
@@ -139,6 +140,71 @@ public:
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);
                 outGPyramid[j].compute_root();
+            }
+        }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.color_dim = 2;
+            cfg.max = 65535;
+            cfg.pos.x = 30;
+            cfg.pos.y = 100;
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos.x = 1700;
+            output.add_trace_tag(cfg.to_trace_tag());
+        }
+
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.store_cost = 5;
+            cfg.pos.x = 370;
+            cfg.pos.y = 100;
+            cfg.labels = { { "input pyramid", {280, 32} } };
+            gray.add_trace_tag(cfg.to_trace_tag());
+        }
+
+        for (int i = 0; i < pyramid_levels; ++i) {
+            int y = 100;
+            for (int j = 0; j < i; ++j) {
+                y += 500 >> j;
+            }
+            if (i > 0) {
+                int x = 370;
+                int store_cost = 1 << (i + 1);
+                Halide::Trace::FuncConfig cfg;
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                cfg.auto_label = false;
+                inGPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+            if (i > 0) {
+                int x = 720;
+                int store_cost = 1 << i;
+                Halide::Trace::FuncConfig cfg;
+                cfg.strides = {{1, 0}, {0, 1}, {200, 0}};
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                cfg.auto_label = false;
+                if (i == 1) {
+                    cfg.labels = { { "differently curved intermediate pyramids", {x, 100} } };
+                    cfg.pos = {x, 100};
+                }
+                gPyramid[i].add_trace_tag(cfg.to_trace_tag());
+            }
+            {
+                int x = 1500;
+                int store_cost = (1 << i) * 10;
+                Halide::Trace::FuncConfig cfg;
+                cfg.pos = {x, y};
+                cfg.store_cost = store_cost;
+                cfg.auto_label = false;
+                if (i == 0) {
+                    cfg.labels = { { "output pyramids", {x, 100} } };
+                    cfg.pos = {x, 100};
+                }
+                outGPyramid[i].add_trace_tag(cfg.to_trace_tag());
             }
         }
     }
