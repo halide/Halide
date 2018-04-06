@@ -8,6 +8,7 @@
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
+#include "ModulusRemainder.h"
 
 namespace Halide {
 namespace Internal {
@@ -118,6 +119,13 @@ struct MatcherState {
     }
 
     HALIDE_ALWAYS_INLINE
+    void set_bound_const(int i, halide_scalar_value_t val, halide_type_t t) {
+        bound_const[i] = val;
+        bound_const_type[i] = t;
+        const_bound_mask |= (1 << i);
+    }
+
+    HALIDE_ALWAYS_INLINE
     void get_bound_const(int i, halide_scalar_value_t &val, halide_type_t &type) const {
         val = bound_const[i];
         type = bound_const_type[i];
@@ -139,12 +147,12 @@ struct enable_if_pattern {
 template<typename Pattern,
          typename = typename enable_if_pattern<Pattern>::type>
 HALIDE_ALWAYS_INLINE
-Expr to_expr(Pattern &&p, const MatcherState &state) {
+Expr to_expr(Pattern &&p, MatcherState &state) {
     return p.make(state);
 }
 
 HALIDE_ALWAYS_INLINE
-Expr to_expr(const BaseExprNode &e, const MatcherState &state) {
+Expr to_expr(const BaseExprNode &e, MatcherState &state) {
     return Expr(&e);
 }
 
@@ -163,7 +171,7 @@ Expr to_special_expr(halide_type_t ty) {
 }
 
 HALIDE_ALWAYS_INLINE
-Expr to_expr(halide_scalar_value_t val, halide_type_t ty, const MatcherState &state) {
+Expr to_expr(halide_scalar_value_t val, halide_type_t ty, MatcherState &state) {
     halide_type_t scalar_type = ty;
     if (scalar_type.lanes & MatcherState::special_values_mask) {
         return to_special_expr(scalar_type);
@@ -193,8 +201,7 @@ Expr to_expr(halide_scalar_value_t val, halide_type_t ty, const MatcherState &st
     return e;
 }
 
-HALIDE_ALWAYS_INLINE
-std::ostream &operator<<(std::ostream &s, const BaseExprNode &n) {
+inline std::ostream &operator<<(std::ostream &s, const BaseExprNode &n) {
     s << Expr(&n);
     return s;
 }
@@ -214,7 +221,8 @@ bool equal(const BaseExprNode &a, const BaseExprNode &b) {
 template<int i>
 struct WildConstInt {
     struct pattern_tag {};
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
@@ -234,14 +242,16 @@ struct WildConstInt {
         return true;
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -255,7 +265,8 @@ std::ostream &operator<<(std::ostream &s, const WildConstInt<i> &c) {
 template<int i>
 struct WildConstUInt {
     struct pattern_tag {};
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
@@ -275,14 +286,16 @@ struct WildConstUInt {
         return true;
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -296,7 +309,8 @@ std::ostream &operator<<(std::ostream &s, const WildConstUInt<i> &c) {
 template<int i>
 struct WildConstFloat {
     struct pattern_tag {};
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         halide_type_t ty = e.type;
         const BaseExprNode *op = &e;
@@ -317,14 +331,16 @@ struct WildConstFloat {
         return true;
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -339,7 +355,8 @@ std::ostream &operator<<(std::ostream &s, const WildConstFloat<i> &c) {
 template<int i>
 struct WildConst {
     struct pattern_tag {};
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
@@ -357,14 +374,16 @@ struct WildConst {
         }
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
         return to_expr(val, type, state);
     }
 
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -379,7 +398,8 @@ std::ostream &operator<<(std::ostream &s, const WildConst<i> &c) {
 template<int i>
 struct Wild {
     struct pattern_tag {};
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         if (state.is_bound(i)) {
             return equal(*state.get_binding(i), e);
         }
@@ -387,7 +407,8 @@ struct Wild {
         return true;
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         return state.get_binding(i);
     }
 };
@@ -400,34 +421,37 @@ std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
 
 // Matches a specific constant or broadcast of that constant. The
 // constant must be representable as an int.
-template<int i>
 struct Const {
+    int val;
+    Const(int v) : val(v) {}
+
     struct pattern_tag {};
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         const BaseExprNode *op = &e;
         if (e.node_type == IRNodeType::Broadcast) {
             op = ((const Broadcast *)op)->value.get();
         }
         switch (op->node_type) {
         case IRNodeType::IntImm:
-            return ((const IntImm *)op)->value == i;
+            return ((const IntImm *)op)->value == (int64_t)val;
         case IRNodeType::UIntImm:
-            return ((const UIntImm *)op)->value == i;
+            return ((const UIntImm *)op)->value == (uint64_t)val;
         case IRNodeType::FloatImm:
-            return ((const FloatImm *)op)->value == i;
+            return ((const FloatImm *)op)->value == (double)val;
         default:
             return false;
         }
     }
 
-    HALIDE_ALWAYS_INLINE bool match(const Const<i> &, MatcherState &state) const {
-        return true;
+    HALIDE_ALWAYS_INLINE
+    bool match(const Const &b, MatcherState &state) const {
+        return val == b.val;
     }
 };
 
-template<int i>
-std::ostream &operator<<(std::ostream &s, const Const<i> &op) {
-    s << i;
+inline std::ostream &operator<<(std::ostream &s, const Const &op) {
+    s << op.val;
     return s;
 }
 
@@ -440,43 +464,10 @@ uint64_t constant_fold_bin_op(halide_type_t &, uint64_t, uint64_t);
 template<typename Op>
 double constant_fold_bin_op(halide_type_t &, double, double);
 
-template<typename Op>
-uint64_t constant_fold_cmp_op(int64_t, int64_t);
-
-template<typename Op>
-uint64_t constant_fold_cmp_op(uint64_t, uint64_t);
-
-template<typename Op>
-uint64_t constant_fold_cmp_op(double, double);
-
-
-// Matches one of the binary operators
 template<typename Op, typename A, typename B>
-struct BinOp {
-    struct pattern_tag {};
-    A a;
-    B b;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
-        if (e.node_type != Op::_node_type) {
-            return false;
-        }
-        const Op &op = (const Op &)e;
-        return a.match(*op.a.get(), state) && b.match(*op.b.get(), state);
-    }
-
-    template<typename Op2, typename A2, typename B2>
-    HALIDE_ALWAYS_INLINE bool match(const BinOp<Op2, A2, B2> &op, MatcherState &state) const {
-        return std::is_same<Op, Op2>::value && a.match(op.a, state) && b.match(op.b, state);
-    }
-
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
-        Expr ea = to_expr(a, state), eb = to_expr(b, state);
-        match_types(ea, eb);
-        return Op::make(std::move(ea), std::move(eb));
-    }
-
-    template<typename A1 = A, typename B1 = B>
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+struct BinOpFolder {
+    HALIDE_ALWAYS_INLINE
+    static void make_folded_const(const A &a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) {
         halide_scalar_value_t val_a, val_b;
         halide_type_t type_a, type_b;
         a.make_folded_const(val_a, type_a, state);
@@ -499,15 +490,89 @@ struct BinOp {
             ;
         }
     }
+
+    HALIDE_ALWAYS_INLINE
+    static Expr make(const A &a, const B &b, MatcherState &state) {
+        Expr ea = to_expr(a, state), eb = to_expr(b, state);
+        // We sometimes mix vectors and scalars in the rewrite rules,
+        // so insert a broadcast if necessary.
+        if (ea.type().is_vector() && !eb.type().is_vector()) {
+            eb = Broadcast::make(eb, ea.type().lanes());
+        }
+        if (eb.type().is_vector() && !ea.type().is_vector()) {
+            ea = Broadcast::make(ea, eb.type().lanes());
+        }
+        return Op::make(std::move(ea), std::move(eb));
+    }
 };
 
-// Matches one of the comparison operators
+template<typename Op, typename A>
+struct BinOpFolder<Op, A, Const> {
+    HALIDE_ALWAYS_INLINE
+    static void make_folded_const(const A &a, Const b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) {
+        a.make_folded_const(val, ty, state);
+        switch (ty.code) {
+        case halide_type_int:
+            val.u.i64 = constant_fold_bin_op<Op>(ty, val.u.i64, (int64_t)b.val);
+            break;
+        case halide_type_uint:
+            val.u.u64 = constant_fold_bin_op<Op>(ty, val.u.u64, (uint64_t)b.val);
+            break;
+        case halide_type_float:
+            val.u.f64 = constant_fold_bin_op<Op>(ty, val.u.f64, (double)b.val);
+            break;
+        default:
+            // unreachable
+            ;
+        }
+    }
+
+    HALIDE_ALWAYS_INLINE
+    static Expr make(const A &a, Const b, MatcherState &state) {
+        Expr ea = to_expr(a, state);
+        Expr eb = make_const(ea.type(), b.val);
+        return Op::make(std::move(ea), std::move(eb));
+    }
+};
+
+template<typename Op, typename B>
+struct BinOpFolder<Op, Const, B> {
+    HALIDE_ALWAYS_INLINE
+    static void make_folded_const(Const a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) {
+        b.make_folded_const(val, ty, state);
+        switch (ty.code) {
+        case halide_type_int:
+            val.u.i64 = constant_fold_bin_op<Op>(ty, (int64_t)a.val, val.u.i64);
+            break;
+        case halide_type_uint:
+            val.u.u64 = constant_fold_bin_op<Op>(ty, (uint64_t)a.val, val.u.u64);
+            break;
+        case halide_type_float:
+            val.u.f64 = constant_fold_bin_op<Op>(ty, (double)a.val, val.u.f64);
+            break;
+        default:
+            // unreachable
+            ;
+        }
+    }
+
+    HALIDE_ALWAYS_INLINE
+    static Expr make(Const a, const B &b, MatcherState &state) {
+        Expr eb = to_expr(b, state);
+        Expr ea = make_const(eb.type(), a.val);
+        return Op::make(std::move(ea), std::move(eb));
+    }
+};
+
+
+// Matches one of the binary operators
 template<typename Op, typename A, typename B>
-struct CmpOp {
+struct BinOp {
     struct pattern_tag {};
     A a;
     B b;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         if (e.node_type != Op::_node_type) {
             return false;
         }
@@ -516,19 +581,37 @@ struct CmpOp {
     }
 
     template<typename Op2, typename A2, typename B2>
-    HALIDE_ALWAYS_INLINE bool match(const CmpOp<Op2, A2, B2> &op, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BinOp<Op2, A2, B2> &op, MatcherState &state) const {
         return std::is_same<Op, Op2>::value && a.match(op.a, state) && b.match(op.b, state);
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
-        Expr ea = to_expr(a, state), eb = to_expr(b, state);
-        match_types(ea, eb);
-        return Op::make(std::move(ea), std::move(eb));
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
+        return BinOpFolder<Op, A, B>::make(a, b, state);
     }
 
-    template<typename A1 = A,
-             typename B1 = B>
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+
+    template<typename A1 = A, typename B1 = B>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        BinOpFolder<Op, A1, B1>::make_folded_const(a, b, val, ty, state);
+    }
+};
+
+template<typename Op>
+uint64_t constant_fold_cmp_op(int64_t, int64_t);
+
+template<typename Op>
+uint64_t constant_fold_cmp_op(uint64_t, uint64_t);
+
+template<typename Op>
+uint64_t constant_fold_cmp_op(double, double);
+
+template<typename Op, typename A, typename B>
+struct CmpOpFolder {
+    HALIDE_ALWAYS_INLINE
+    static void make_folded_const(const A &a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) {
         halide_scalar_value_t val_a, val_b;
         halide_type_t type_a, type_b;
         a.make_folded_const(val_a, type_a, state);
@@ -550,6 +633,116 @@ struct CmpOp {
             // unreachable
             ;
         }
+    }
+
+    HALIDE_ALWAYS_INLINE
+    static Expr make(const A &a, const B &b, MatcherState &state) {
+        Expr ea = to_expr(a, state), eb = to_expr(b, state);
+        // We sometimes mix vectors and scalars in the rewrite rules,
+        // so insert a broadcast if necessary.
+        if (ea.type().is_vector() && !eb.type().is_vector()) {
+            eb = Broadcast::make(eb, ea.type().lanes());
+        }
+        if (eb.type().is_vector() && !ea.type().is_vector()) {
+            ea = Broadcast::make(ea, eb.type().lanes());
+        }
+        return Op::make(std::move(ea), std::move(eb));
+    }
+};
+
+template<typename Op, typename B>
+struct CmpOpFolder<Op, Const, B> {
+    HALIDE_ALWAYS_INLINE
+    static void make_folded_const(Const a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) {
+        b.make_folded_const(val, ty, state);
+        switch (ty.code) {
+        case halide_type_int:
+            val.u.u64 = constant_fold_cmp_op<Op>((int64_t)a.val, val.u.i64);
+            break;
+        case halide_type_uint:
+            val.u.u64 = constant_fold_cmp_op<Op>((uint64_t)a.val, val.u.u64);
+            break;
+        case halide_type_float:
+            val.u.u64 = constant_fold_cmp_op<Op>((double)a.val, val.u.f64);
+            break;
+        default:
+            // unreachable
+            ;
+        }
+        ty.bits = 1;
+        ty.code = halide_type_uint;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    static Expr make(Const a, const B &b, MatcherState &state) {
+        Expr eb = to_expr(b, state);
+        Expr ea = make_const(eb.type(), a.val);
+        return Op::make(std::move(ea), std::move(eb));
+    }
+};
+
+template<typename Op, typename A>
+struct CmpOpFolder<Op, A, Const> {
+    HALIDE_ALWAYS_INLINE
+    static void make_folded_const(const A &a, Const b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) {
+        a.make_folded_const(val, ty, state);
+        switch (ty.code) {
+        case halide_type_int:
+            val.u.u64 = constant_fold_cmp_op<Op>(val.u.i64, (int64_t)b.val);
+            break;
+        case halide_type_uint:
+            val.u.u64 = constant_fold_cmp_op<Op>(val.u.u64, (uint64_t)b.val);
+            break;
+        case halide_type_float:
+            val.u.u64 = constant_fold_cmp_op<Op>(val.u.f64, (double)b.val);
+            break;
+        default:
+            // unreachable
+            ;
+        }
+        ty.bits = 1;
+        ty.code = halide_type_uint;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    static Expr make(const A &a, Const b, MatcherState &state) {
+        Expr ea = to_expr(a, state);
+        Expr eb = make_const(ea.type(), b.val);
+        return Op::make(std::move(ea), std::move(eb));
+    }
+};
+
+// Matches one of the comparison operators
+template<typename Op, typename A, typename B>
+struct CmpOp {
+    struct pattern_tag {};
+    A a;
+    B b;
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
+        if (e.node_type != Op::_node_type) {
+            return false;
+        }
+        const Op &op = (const Op &)e;
+        return a.match(*op.a.get(), state) && b.match(*op.b.get(), state);
+    }
+
+    template<typename Op2, typename A2, typename B2>
+    HALIDE_ALWAYS_INLINE
+    bool match(const CmpOp<Op2, A2, B2> &op, MatcherState &state) const {
+        return std::is_same<Op, Op2>::value && a.match(op.a, state) && b.match(op.b, state);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
+        return CmpOpFolder<Op, A, B>::make(a, b, state);
+    }
+
+    template<typename A1 = A,
+             typename B1 = B>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        CmpOpFolder<Op, A, B>::make_folded_const(a, b, val, ty, state);
     }
 };
 
@@ -652,6 +845,20 @@ BinOp<Add, A, B> operator+(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Add, A, Const> operator+(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Add, Const, B> operator+(int a, B b) {
+    return {Const(a), b};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) {
@@ -680,6 +887,20 @@ template<typename A,
 HALIDE_ALWAYS_INLINE
 BinOp<Sub, A, B> operator-(A a, B b) {
     return {a, b};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Sub, A, Const> operator-(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Sub, Const, B> operator-(int a, B b) {
+    return {Const(a), b};
 }
 
 HALIDE_ALWAYS_INLINE
@@ -717,6 +938,21 @@ BinOp<Mul, A, B> operator*(A a, B b) {
     return {a, b};
 }
 
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Mul, A, Const> operator*(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Mul, Const, B> operator*(int a, B b) {
+    return {Const(a), b};
+}
+
 HALIDE_ALWAYS_INLINE
 BinOp<Mul, const BaseExprNode &, const BaseExprNode &> mul(const Expr &a, const Expr &b) {
     return {*a.get(), *b.get()};
@@ -750,6 +986,25 @@ template<typename A,
 HALIDE_ALWAYS_INLINE
 BinOp<Div, A, B> operator/(A a, B b) {
     return {a, b};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Div, A, Const> operator/(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Div, Const, B> operator/(int a, B b) {
+    return {Const(a), b};
+}
+
+HALIDE_ALWAYS_INLINE
+BinOp<Div, const BaseExprNode &, const BaseExprNode &> div(const Expr &a, const Expr &b) {
+    return {*a.get(), *b.get()};
 }
 
 template<>
@@ -789,6 +1044,20 @@ BinOp<Mod, A, B> operator%(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Mod, A, Const> operator%(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Mod, Const, B> operator%(int a, B b) {
+    return {Const(a), b};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Mod>(halide_type_t &t, int64_t a, int64_t b) {
@@ -826,6 +1095,20 @@ BinOp<Min, A, B> min(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Min, A, Const> min(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Min, Const, B> min(int a, B b) {
+    return {Const(a), b};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Min>(halide_type_t &t, int64_t a, int64_t b) {
@@ -853,6 +1136,21 @@ BinOp<Max, A, B> max(A a, B b) {
     return {a, b};
 }
 
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Max, A, Const> max(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename B,
+         typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Max, Const, B> max(int a, B b) {
+    return {Const(a), b};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Max>(halide_type_t &t, int64_t a, int64_t b) {
@@ -877,6 +1175,13 @@ template<typename A,
          typename = typename enable_if_pattern<B>::type>
 HALIDE_ALWAYS_INLINE
 CmpOp<LT, A, B> operator<(A a, B b) {
+    return {a, b};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+CmpOp<LT, A, Const> operator<(A a, int b) {
     return {a, b};
 }
 
@@ -907,6 +1212,13 @@ CmpOp<GT, A, B> operator>(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+CmpOp<GT, A, Const> operator>(A a, int b) {
+    return {a, Const(b)};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_cmp_op<GT>(int64_t a, int64_t b) {
@@ -932,6 +1244,13 @@ template<typename A,
 HALIDE_ALWAYS_INLINE
 CmpOp<LE, A, B> operator<=(A a, B b) {
     return {a, b};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+CmpOp<LE, A, Const> operator<=(A a, int b) {
+    return {a, Const(b)};
 }
 
 template<>
@@ -962,6 +1281,13 @@ CmpOp<GE, A, B> operator>=(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+CmpOp<GE, A, Const> operator>=(A a, int b) {
+    return {a, Const(b)};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_cmp_op<GE>(int64_t a, int64_t b) {
@@ -987,6 +1313,13 @@ template<typename A,
 HALIDE_ALWAYS_INLINE
 CmpOp<EQ, A, B> operator==(A a, B b) {
     return {a, b};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+CmpOp<EQ, A, Const> operator==(A a, int b) {
+    return {a, Const(b)};
 }
 
 template<>
@@ -1016,6 +1349,13 @@ CmpOp<NE, A, B> operator!=(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+CmpOp<NE, A, Const> operator!=(A a, int b) {
+    return {a, Const(b)};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_cmp_op<NE>(int64_t a, int64_t b) {
@@ -1043,6 +1383,20 @@ BinOp<Or, A, B> operator||(A a, B b) {
     return {a, b};
 }
 
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Or, A, Const> operator||(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<Or, A, Const> operator||(int b, A a) {
+    return {a, Const(b)};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_bin_op<Or>(halide_type_t &t, uint64_t a, uint64_t b) {
@@ -1056,6 +1410,20 @@ template<typename A,
 HALIDE_ALWAYS_INLINE
 BinOp<And, A, B> operator&&(A a, B b) {
     return {a, b};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<And, A, Const> operator&&(A a, int b) {
+    return {a, Const(b)};
+}
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BinOp<And, A, Const> operator&&(int b, A a) {
+    return {a, Const(b)};
 }
 
 template<>
@@ -1072,16 +1440,19 @@ struct Intrin {
 
     template<int i,
              typename = typename std::enable_if<(i < sizeof...(Args))>::type>
-    HALIDE_ALWAYS_INLINE bool match_args(int, const Call &c, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match_args(int, const Call &c, MatcherState &state) const {
         return std::get<i>(args).match(*c.args[i].get(), state) && match_args<i + 1>(0, c, state);
     }
 
     template<int i>
-    HALIDE_ALWAYS_INLINE bool match_args(double, const Call &c, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match_args(double, const Call &c, MatcherState &state) const {
         return true;
     }
 
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         if (e.node_type != IRNodeType::Call) {
             return false;
         }
@@ -1091,7 +1462,8 @@ struct Intrin {
 
     template<int i,
              typename = typename std::enable_if<(i < sizeof...(Args))>::type>
-    HALIDE_ALWAYS_INLINE void print_args(int, std::ostream &s) const {
+    HALIDE_ALWAYS_INLINE
+    void print_args(int, std::ostream &s) const {
         s << std::get<i>(args);
         if (i + 1 < sizeof...(Args)) {
             s << ", ";
@@ -1100,10 +1472,12 @@ struct Intrin {
     }
 
     template<int i>
-    HALIDE_ALWAYS_INLINE void print_args(double, std::ostream &s) const {
+    HALIDE_ALWAYS_INLINE
+    void print_args(double, std::ostream &s) const {
     }
 
-    HALIDE_ALWAYS_INLINE void print_args(std::ostream &s) const {
+    HALIDE_ALWAYS_INLINE
+    void print_args(std::ostream &s) const {
         print_args<0>(0, s);
     }
 
@@ -1128,18 +1502,21 @@ template<typename Op, typename A>
 struct UnaryOp {
     struct pattern_tag {};
     A a;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         const Op &op = (const Op &)e;
         return (op.node_type == Op::_node_type &&
                 a.match(*op.a.get(), state));
     }
 
     template<typename Op2, typename A2>
-    HALIDE_ALWAYS_INLINE bool match(const UnaryOp<Op2, A2> &op, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const UnaryOp<Op2, A2> &op, MatcherState &state) const {
         return std::is_same<Op, Op2>::value && a.match(op.a, state);
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         return Op::make(to_expr(a, state));
     }
 };
@@ -1162,7 +1539,8 @@ struct SelectOp {
     C c;
     T t;
     F f;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         const Select &op = (const Select &)e;
         return (e.node_type == Select::_node_type &&
                 c.match(*op.condition.get(), state) &&
@@ -1170,17 +1548,19 @@ struct SelectOp {
                 f.match(*op.false_value.get(), state));
     }
     template<typename C2, typename T2, typename F2>
-    HALIDE_ALWAYS_INLINE bool match(const SelectOp<C2, T2, F2> &instance, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const SelectOp<C2, T2, F2> &instance, MatcherState &state) const {
         return (c.match(instance.c, state) &&
                 t.match(instance.t, state) &&
                 f.match(instance.f, state));
     }
     template<typename Pattern,
              typename = typename enable_if_pattern<Pattern>::type>
-    HALIDE_ALWAYS_INLINE bool match(const Pattern &p, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const Pattern &p, MatcherState &state) const {
         return false;
     }
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
         return Select::make(to_expr(c, state), to_expr(t, state), to_expr(f, state));
     }
 };
@@ -1212,7 +1592,8 @@ struct BroadcastOp {
     struct pattern_tag {};
     A a;
     int lanes;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         if (e.node_type == Broadcast::_node_type) {
             const Broadcast &op = (const Broadcast &)e;
             if ((lanes == -1 || lanes == op.lanes) &&
@@ -1224,11 +1605,13 @@ struct BroadcastOp {
     }
 
     template<typename A2>
-    HALIDE_ALWAYS_INLINE bool match(const BroadcastOp<A2> &op, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BroadcastOp<A2> &op, MatcherState &state) const {
         return a.match(op.a, state) && (lanes == op.lanes || lanes == -1 || op.lanes == -1);
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         return Broadcast::make(to_expr(a, state), lanes);
     }
 
@@ -1252,7 +1635,8 @@ struct RampOp {
     A a;
     B b;
     int lanes;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         const Ramp &op = (const Ramp &)e;
         if (op.node_type == Ramp::_node_type &&
             a.match(*op.base.get(), state) &&
@@ -1262,13 +1646,16 @@ struct RampOp {
             return false;
         }
     }
+
     template<typename A2, typename B2>
-    HALIDE_ALWAYS_INLINE bool match(const RampOp<A2, B2> &op, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const RampOp<A2, B2> &op, MatcherState &state) const {
         return (a.match(op.a, state) &&
                 b.match(op.b, state));
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         return Ramp::make(to_expr(a, state), to_expr(b, state), lanes);
     }
 };
@@ -1289,27 +1676,28 @@ template<typename A>
 struct NegateOp {
     struct pattern_tag {};
     A a;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         const Sub &op = (const Sub &)e;
         return (op.node_type == Sub::_node_type &&
                 a.match(*op.b.get(), state) &&
                 is_zero(op.a));
     }
-    HALIDE_ALWAYS_INLINE bool match(NegateOp<A> &&p, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(NegateOp<A> &&p, MatcherState &state) const {
         return a.match(p.a, state);
     }
-    template<typename Pattern,
-             typename = typename enable_if_pattern<Pattern>::type>
-    HALIDE_ALWAYS_INLINE bool match(Pattern &&p, MatcherState &state) const {
-        return false;
-    }
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         Expr ea = to_expr(a, state);
         Expr z = make_zero(ea.type());
         return Sub::make(std::move(z), std::move(ea));
     }
+
     template<typename A1 = A>
-    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         a.make_folded_const(val, ty, state);
         switch (ty.code) {
         case halide_type_int:
@@ -1351,17 +1739,20 @@ struct CastOp {
     struct pattern_tag {};
     Type type;
     A a;
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState &state) const {
         const Cast &op = (const Cast &)e;
         return (op.node_type == Cast::_node_type &&
                 a.match(*op.value.get(), state));
     }
     template<typename A2>
-    HALIDE_ALWAYS_INLINE bool match(const CastOp<A2> &op, MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    bool match(const CastOp<A2> &op, MatcherState &state) const {
         return a.match(op.a, state);
     }
 
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         return cast(type, to_expr(a, state));
     }
 };
@@ -1382,7 +1773,8 @@ template<typename A>
 struct Fold {
     struct pattern_tag {};
     A a;
-    HALIDE_ALWAYS_INLINE Expr make(const MatcherState &state) const {
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state) const {
         halide_scalar_value_t c {{0}};
         halide_type_t ty;
         a.make_folded_const(c, ty, state);
@@ -1393,6 +1785,81 @@ struct Fold {
 template<typename A>
 HALIDE_ALWAYS_INLINE
 Fold<A> fold(A a) {
+    return {a};
+}
+
+
+
+template<typename A, typename Prover>
+struct CanProve {
+    struct pattern_tag {};
+    A a;
+    Prover *prover;  // An existing simplifying mutator
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        Expr condition = a.make(state);
+        condition = prover->mutate(condition);
+        val.u.u64 = is_one(condition);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = condition.type().lanes();
+    };
+};
+
+template<typename A,
+         typename Prover,
+         typename = typename enable_if_pattern<A>::type>
+CanProve<A, Prover> can_prove(A a, Prover *s) {
+    return {a, s};
+}
+
+template<typename A, typename B>
+struct GCDOp {
+    struct pattern_tag {};
+    A a;
+    B b;
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        halide_scalar_value_t val_a, val_b;
+        halide_type_t type_a, type_b;
+        a.make_folded_const(val_a, type_a, state);
+        b.make_folded_const(val_b, type_b, state);
+        ty = type_a;
+        ty.lanes |= type_b.lanes;
+        internal_assert(ty.code == halide_type_int && ty.bits >= 32);
+        val.u.i64 = Halide::Internal::gcd(val_a.u.i64, val_b.u.i64);
+    };
+};
+
+template<typename A,
+         typename B,
+         typename = typename enable_if_pattern<A>::type,
+         typename = typename enable_if_pattern<B>::type>
+GCDOp<A, B> gcd(A a, B b) {
+    return {a, b};
+}
+
+template<int i, typename A>
+struct BindOp {
+    struct pattern_tag {};
+    A a;
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        a.make_folded_const(val, ty, state);
+        state.set_bound_const(i, val, ty);
+        // The bind node evaluates to true
+        val.u.u64 = 1;
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = 1;
+    };
+};
+
+template<int i,
+         typename A,
+         typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
+BindOp<i, A> bind(WildConst<i> c, A a) {
     return {a};
 }
 
