@@ -5,7 +5,7 @@
 #define HALIDE_D3D12_TRACE          (0)
 #define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
-#define HALIDE_D3D12_PROFILING      (1)
+#define HALIDE_D3D12_PROFILING      (0)
 #define HALIDE_D3D12_PIX            (0)
 #define HALIDE_D3D12_RENDERDOC      (0)
 
