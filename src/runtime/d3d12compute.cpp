@@ -432,6 +432,11 @@ struct d3d12_buffer {
     UINT sizeInBytes;
     UINT offset;        // FirstElement
     UINT elements;      // NumElements
+    // NOTE(marcos): unfortunately, we need both 'offset' and 'offsetInBytes';
+    // multi-dimensional buffers and crops (their strides/alignment/padding)
+    // end up complicating the relationship between elements (offset) and bytes
+    // so it is more practical (and less error prone) to memoize 'offsetInBytes'
+    // once than recomputing it all the time it is needed
     UINT offsetInBytes;
     DXGI_FORMAT format;
     D3D12_RESOURCE_STATES state;
@@ -502,7 +507,10 @@ enum ResourceBindingSlots {
 static const uint32_t ResourceBindingLimits [NumSlots] = {
     16, // UAV
     14, // CBV
-    25, // SRV (the actual limit is 128, but will allow only 25 for now)
+    25, // SRV (the actual tier-1 limit is 128, but will allow only 25 for now)
+    // TODO(marcos): we may consider increasing it to the limit once we have a
+    // pool of d3d12_binder objects that are recycled whenever kernels are run
+    // (at the moment, a new binder is created/destroyed with every kernel run)
 };
 
 struct d3d12_binder {
