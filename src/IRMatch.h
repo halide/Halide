@@ -1775,7 +1775,7 @@ struct Fold {
     A a;
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state) const {
-        halide_scalar_value_t c {{0}};
+        halide_scalar_value_t c;
         halide_type_t ty;
         a.make_folded_const(c, ty, state);
         return to_expr(c, ty, state);
@@ -1882,7 +1882,7 @@ bool evaluate_predicate(Pattern &&p, MatcherState &state) {
     halide_scalar_value_t c;
     halide_type_t ty;
     p.make_folded_const(c, ty, state);
-    return c.u.u64 != 0;
+    return (c.u.u64 != 0) && ((ty.lanes & MatcherState::special_values_mask) == 0);
 }
 
 template<typename Before, typename After, typename Predicate>

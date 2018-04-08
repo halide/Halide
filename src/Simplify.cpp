@@ -1835,7 +1835,7 @@ private:
                     rule(x * 1, a),
                     rule(c0 * x, x * c0),
                     rule((x + c0) * c1, x * c1 + fold(c0 * c1)),
-                    rule((x - y) * c0, (y - x) * fold(-c0), is_negative_negatable_const(b)),
+                    rule((x - y) * c0, (y - x) * fold(-c0), -c0 > 0), // If negating c0 causes overflow or UB, the predicate will be treated as false.
                     rule((x * c0) * c1, x * fold(c0 * c1)),
                     rule((x * c0) * y, (x * y) * c0),
                     rule(x * (y * c0), (x * y) * c0),
