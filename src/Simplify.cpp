@@ -1991,157 +1991,59 @@ private:
     }
 
     Expr visit(const Mod *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            return IRMutator2::visit(op);
+        }
+
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        if (no_float_simplify && op->type.is_float()) {
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                return op;
-            } else {
-                return Mod::make(a, b);
-            }
-        }
-
+        IRMatcher::Wild<0> x;
+        IRMatcher::Wild<1> y;
+        IRMatcher::WildConst<0> c0;
+        IRMatcher::WildConst<1> c1;
+        IRMatcher::WildConst<2> c2;
+        auto indet = IRMatcher::intrin(Call::indeterminate_expression);
+        auto overflow = IRMatcher::intrin(Call::signed_integer_overflow);
+        int lanes = op->type.lanes();
 
         Expr expr;
-        if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
+        auto mutated = IRMatcher::mod(a, b);
+
+        if (rewrite(mutated, expr,
+                    rule(c0 % c1, fold(c0 % c1)),
+                    rule(0 % x, a),
+                    rule(x % c0, x, c0 > 0 && can_prove(x >= 0 && x < c0, this)))) {
             return expr;
-        }
-
-        int64_t ia = 0, ib = 0;
-        uint64_t ua = 0, ub = 0;
-        double fa = 0.0f, fb = 0.0f;
-        const Broadcast *broadcast_a = a.as<Broadcast>();
-        const Broadcast *broadcast_b = b.as<Broadcast>();
-        const Mul *mul_a = a.as<Mul>();
-        const Add *add_a = a.as<Add>();
-        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
-        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : nullptr;
-        const Ramp *ramp_a = a.as<Ramp>();
-
-        // If the RHS is a constant, do modulus remainder analysis on the LHS
-        ModulusRemainder mod_rem(0, 1);
-
-        if (const_int(b, &ib) &&
-            ib &&
-            no_overflow_scalar_int(op->type)) {
-
-            // If the LHS is bounded, we can possibly bail out early
-            int64_t a_min, a_max;
-            if (const_int_bounds(a, &a_min, &a_max) &&
-                a_max < ib && a_min >= 0) {
-                return a;
-            }
-
-            mod_rem = modulus_remainder(a, alignment_info);
-        }
-
-        // If the RHS is a constant and the LHS is a ramp, do modulus
-        // remainder analysis on the base.
-        if (broadcast_b &&
-            const_int(broadcast_b->value, &ib) &&
-            ib &&
-            ramp_a &&
-            no_overflow_scalar_int(ramp_a->base.type())) {
-            mod_rem = modulus_remainder(ramp_a->base, alignment_info);
-        }
-
-        if (is_zero(b) && !op->type.is_float()) {
-            return indeterminate_expression_error(op->type);
-        } else if (is_one(b) && !op->type.is_float()) {
-            return make_zero(op->type);
-        } else if (is_zero(a)) {
-            return a;
-        } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            return IntImm::make(op->type, mod_imp(ia, ib));
-        } else if (const_uint(a, &ua) && const_uint(b, &ub)) {
-            return UIntImm::make(op->type, ua % ub);
-        } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            return FloatImm::make(op->type, mod_imp(fa, fb));
-        } else if (broadcast_a && broadcast_b) {
-            return mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->lanes));
-        } else if (no_overflow(op->type) &&
-                   mul_a &&
-                   const_int(b, &ib) &&
-                   ib &&
-                   const_int(mul_a->b, &ia) &&
-                   (ia % ib == 0)) {
-            // (x * (b*a)) % b -> 0
-            return make_zero(op->type);
-        } else if (no_overflow(op->type) &&
-                   mul_a &&
-                   const_int(b, &ib) &&
-                   ib &&
-                   const_int(mul_a->b, &ia) &&
-                   ia > 0 &&
-                   (ib % ia == 0)) {
-            // (x * a) % (a * b) -> (x % b) * a
-            Expr ratio = make_const(a.type(), div_imp(ib, ia));
-            return mutate((mul_a->a % ratio) * mul_a->b);
-        } else if (no_overflow(op->type) &&
-                   add_a &&
-                   mul_a_a &&
-                   const_int(mul_a_a->b, &ia) &&
-                   const_int(b, &ib) &&
-                   ib &&
-                   (ia % ib == 0)) {
-            // (x * (b*a) + y) % b -> (y % b)
-            return mutate(add_a->b % b);
-        } else if (no_overflow(op->type) &&
-                   add_a &&
-                   const_int(add_a->b, &ia) &&
-                   const_int(b, &ib) &&
-                   ib &&
-                   (ia % ib == 0)) {
-            // (y + (b*a)) % b -> (y % b)
-            return mutate(add_a->a % b);
-        } else if (no_overflow(op->type) &&
-                   add_a &&
-                   mul_a_b &&
-                   const_int(mul_a_b->b, &ia) &&
-                   const_int(b, &ib) &&
-                   ib &&
-                   (ia % ib == 0)) {
-            // (y + x * (b*a)) % b -> (y % b)
-            return mutate(add_a->a % b);
-        } else if (no_overflow_scalar_int(op->type) &&
-                   const_int(b, &ib) &&
-                   ib &&
-                   mod_rem.modulus % ib == 0) {
-            // ((a*b)*x + c) % a -> c % a
-            return make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
-        } else if (no_overflow(op->type) &&
-                   ramp_a &&
-                   const_int(ramp_a->stride, &ia) &&
-                   broadcast_b &&
-                   const_int(broadcast_b->value, &ib) &&
-                   ib &&
-                   ia % ib == 0) {
-            // ramp(x, 4, w) % broadcast(2, w)
-            return mutate(Broadcast::make(ramp_a->base % broadcast_b->value, ramp_a->lanes));
-        } else if (ramp_a &&
-                   no_overflow_scalar_int(ramp_a->base.type()) &&
-                   const_int(ramp_a->stride, &ia) &&
-                   broadcast_b &&
-                   const_int(broadcast_b->value, &ib) &&
-                   ib != 0 &&
-                   mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
-            // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
-            Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
-            return mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->lanes));
-        } else if (ramp_a &&
-                   no_overflow_scalar_int(ramp_a->base.type()) &&
-                   const_int(ramp_a->stride, &ia) &&
-                   !is_const(ramp_a->base) &&
-                   broadcast_b &&
-                   const_int(broadcast_b->value, &ib) &&
-                   ib != 0 &&
-                   mod_rem.modulus % ib == 0) {
-            // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
-            Type t = ramp_a->base.type();
-            Expr new_base = make_const(t, mod_imp((int64_t)mod_rem.remainder, ib));
-            return mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->lanes) % b);
+        } else if (rewrite(mutated, expr,
+                           rule(broadcast(x) % broadcast(y), broadcast(x % y, lanes)))) {
+            return mutate(expr);
+        } else if (!op->type.is_float() &&
+                   rewrite(mutated, expr,
+                           rule(x % indet, b),
+                           rule(indet % x, a),
+                           rule(x % overflow, b),
+                           rule(overflow % x, a),
+                           rule(x % 0, indeterminate_expression_error(op->type)),
+                           rule(x % 1, make_zero(op->type)),
+                           rule(1 % x, a))) {
+            return expr;
+        } else if (no_overflow_int(op->type) &&
+                   rewrite(mutated, expr,
+                           rule((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)),
+                           rule((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)),
+                           rule((x * c0) % c1, (x % fold(c1/c0)) * c0, c1 % c0 == 0),
+                           rule((x * c0 + y) % c1, y % c1, c0 % c1 == 0),
+                           rule((y + x * c0) % c1, y % c1, c0 % c1 == 0),
+                           rule(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0),
+                           rule(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
+                                // First and last lanes are the same when...
+                                can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)),
+                           rule(ramp(x * c0, c2) % broadcast(c1), (ramp(x * fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)),
+                           rule(ramp(x + c0, c2) % broadcast(c1), (ramp(x + fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)),
+                           rule(ramp(x * c0 + y, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0),
+                           rule(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))) {
+            return mutate(expr);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
