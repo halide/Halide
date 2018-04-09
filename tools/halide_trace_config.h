@@ -1,6 +1,7 @@
 #ifndef HALIDE_TRACE_CONFIG_H
 #define HALIDE_TRACE_CONFIG_H
 
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <string>
