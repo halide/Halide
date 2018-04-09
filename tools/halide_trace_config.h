@@ -115,6 +115,14 @@ struct FuncConfig {
     bool blank_on_end_realization = false;
     uint32_t uninitialized_memory_color = 0xff000000;
 
+    static std::string tag_start_text() {
+        return std::string("htv_func_config:");
+    }
+
+    static bool match(const std::string &trace_tag) {
+        return trace_tag.find(tag_start_text()) == 0;
+    }
+
     void dump(std::ostream &os, const std::string &name) const {
         os << std::boolalpha
             << "Func: " << name << "\n"
@@ -136,6 +144,7 @@ struct FuncConfig {
         // a space-separated iostream text string,
         // in an assumed order rather than freeform.
         os
+            << tag_start_text() << " "
             << config.zoom << " "
             << config.load_cost << " "
             << config.store_cost << " "
@@ -152,7 +161,9 @@ struct FuncConfig {
     }
 
     friend std::istream &operator>>(std::istream &is, FuncConfig &config) {
+        std::string start_text;
         is
+            >> start_text
             >> config.zoom
             >> config.load_cost
             >> config.store_cost
@@ -165,6 +176,9 @@ struct FuncConfig {
             >> config.auto_label
             >> config.blank_on_end_realization
             >> config.uninitialized_memory_color;
+        if (start_text != tag_start_text()) {
+            is.setstate(std::ios::failbit);
+        }
         return is;
     }
 

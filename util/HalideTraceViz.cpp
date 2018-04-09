@@ -581,10 +581,13 @@ int run(int argc, char **argv) {
         } else if (p.event == halide_trace_tag) {
             // If there are trace tags, they will come immediately after the pipeline's
             // halide_trace_begin_pipeline but before any realizations.
-            // std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
-            Halide::Trace::FuncConfig cfg(p.trace_tag());
-            func_info[p.func()].config = cfg;
-            func_info[p.func()].configured = true;
+            if (FuncConfig::match(p.trace_tag())) {
+                Halide::Trace::FuncConfig cfg(p.trace_tag());
+                func_info[p.func()].config = cfg;
+                func_info[p.func()].configured = true;
+            } else {
+                std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
+            }
             continue;
         }
 

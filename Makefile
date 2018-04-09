@@ -1734,6 +1734,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(RUNTIME_EXPORTED_INCLUDES) \
 						   $(ROOT_DIR)/README*.md \
 						   $(ROOT_DIR)/bazel/* \
+						   $(ROOT_DIR)/tools/* \
 						   $(BUILD_DIR)/halide_config.bzl \
 						   $(BUILD_DIR)/halide_config.cmake \
 						   $(ROOT_DIR)/halide.cmake
@@ -1789,7 +1790,8 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/tools/halide_benchmark.h \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
-		halide/tools/halide_image_info.h
+		halide/tools/halide_image_info.h \
+		halide/tools/halide_trace_config.h
 	rm -rf halide
 
 .PHONY: distrib
