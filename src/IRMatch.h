@@ -136,6 +136,8 @@ struct MatcherState {
         return (const_bound_mask & (1 << i)) != 0;
     }
 
+    HALIDE_ALWAYS_INLINE
+    MatcherState() {}
 };
 
 template<typename T,
@@ -423,6 +425,8 @@ std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
 // constant must be representable as an int.
 struct Const {
     int val;
+
+    HALIDE_ALWAYS_INLINE
     Const(int v) : val(v) {}
 
     struct pattern_tag {};
@@ -1486,6 +1490,7 @@ struct Intrin {
         print_args<0>(0, s);
     }
 
+    HALIDE_ALWAYS_INLINE
     Intrin(Call::ConstString intrin, Args... args) : intrin(intrin), args(args...) {}
 };
 
@@ -1673,7 +1678,7 @@ std::ostream &operator<<(std::ostream &s, const RampOp<A, B> &op) {
 
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-RampOp<A, B> ramp(A a, B b, int lanes = -1) { 
+RampOp<A, B> ramp(A a, B b, int lanes = -1) {
     return {a, b, lanes};
 }
 
