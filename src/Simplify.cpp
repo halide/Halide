@@ -1821,36 +1821,37 @@ private:
         IRMatcher::Wild<2> z;
         IRMatcher::WildConst<0> c0;
         IRMatcher::WildConst<1> c1;
+        auto indet = IRMatcher::intrin(Call::indeterminate_expression);
+        auto overflow = IRMatcher::intrin(Call::signed_integer_overflow);
 
         const Shuffle *shuffle_a = a.as<Shuffle>();
         const Shuffle *shuffle_b = b.as<Shuffle>();
 
-        Expr expr;
-        auto mutated = IRMatcher::mul(a, b);
-        if (rewrite(mutated, expr,
-                    rule(c0 * c1, fold(c0 * c1)),
-                    rule(0 * x, a),
-                    rule(1 * x, b),
-                    rule(x * 0, b),
-                    rule(x * 1, a),
-                    rule(c0 * x, x * c0),
-                    rule((x + c0) * c1, x * c1 + fold(c0 * c1)),
-                    rule((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0), // If negating c0 causes overflow or UB, the predicate will be treated as false.
-                    rule((x * c0) * c1, x * fold(c0 * c1)),
-                    rule((x * c0) * y, (x * y) * c0),
-                    rule(x * (y * c0), (x * y) * c0),
-                    rule(min(x, y) * max(x, y), x * y),
-                    rule(min(x, y) * max(y, x), x * y),
-                    rule(max(x, y) * min(x, y), x * y),
-                    rule(max(x, y) * min(y, x), y * x),
-                    rule(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())),
-                    rule(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes())),
-                    rule(broadcast(z) * ramp(x, y), ramp(z * x, z * y, op->type.lanes())),
-                    rule(IRMatcher::intrin(Call::signed_integer_overflow) * x, a),
-                    rule(x * IRMatcher::intrin(Call::signed_integer_overflow), b),
-                    rule(IRMatcher::intrin(Call::indeterminate_expression) * x, a),
-                    rule(x * IRMatcher::intrin(Call::indeterminate_expression), b))) {
-            return mutate(expr);
+        auto rewriter = IRMatcher::rewriter(IRMatcher::mul(a, b));
+        if (rewriter(c0 * c1, fold(c0 * c1)) ||
+            rewriter(0 * x, a) ||
+            rewriter(1 * x, b) ||
+            rewriter(x * 0, b) ||
+            rewriter(x * 1, a) ||
+            rewriter(overflow * x, a) ||
+            rewriter(x * overflow, b) ||
+            rewriter(indet * x, a) ||
+            rewriter(x * indet, b)) {
+            return rewriter.result;
+        } else if (rewriter(c0 * x, x * c0) ||
+                   rewriter((x + c0) * c1, x * c1 + fold(c0 * c1)) ||
+                   rewriter((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0) || // If negating c0 causes overflow or UB, the predicate will be treated as false.
+                   rewriter((x * c0) * c1, x * fold(c0 * c1)) ||
+                   rewriter((x * c0) * y, (x * y) * c0) ||
+                   rewriter(x * (y * c0), (x * y) * c0) ||
+                   rewriter(min(x, y) * max(x, y), x * y) ||
+                   rewriter(min(x, y) * max(y, x), x * y) ||
+                   rewriter(max(x, y) * min(x, y), x * y) ||
+                   rewriter(max(x, y) * min(y, x), y * x) ||
+                   rewriter(broadcast(x) * broadcast(y), broadcast(x * y, op->type.lanes())) ||
+                   rewriter(ramp(x, y) * broadcast(z), ramp(x * z, y * z, op->type.lanes())) ||
+                   rewriter(broadcast(z) * ramp(x, y), ramp(z * x, z * y, op->type.lanes()))) {
+            return mutate(rewriter.result);
         } else if (shuffle_a && shuffle_b &&
                    shuffle_a->is_slice() &&
                    shuffle_b->is_slice()) {
@@ -2001,43 +2002,36 @@ private:
         auto overflow = IRMatcher::intrin(Call::signed_integer_overflow);
         int lanes = op->type.lanes();
 
-        Expr expr;
-        auto mutated = IRMatcher::mod(a, b);
+        auto rewriter = IRMatcher::rewriter(IRMatcher::mod(a, b));
 
-        if (rewrite(mutated, expr,
-                    rule(c0 % c1, fold(c0 % c1)),
-                    rule(0 % x, a),
-                    rule(x % c0, x, c0 > 0 && can_prove(x >= 0 && x < c0, this)))) {
-            return expr;
-        } else if (rewrite(mutated, expr,
-                           rule(broadcast(x) % broadcast(y), broadcast(x % y, lanes)))) {
-            return mutate(expr);
-        } else if (!op->type.is_float() &&
-                   rewrite(mutated, expr,
-                           rule(x % indet, b),
-                           rule(indet % x, a),
-                           rule(x % overflow, b),
-                           rule(overflow % x, a),
-                           rule(x % 0, indeterminate_expression_error(op->type)),
-                           rule(x % 1, make_zero(op->type)),
-                           rule(1 % x, a))) {
-            return expr;
-        } else if (no_overflow_int(op->type) &&
-                   rewrite(mutated, expr,
-                           rule((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)),
-                           rule((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)),
-                           rule((x * c0) % c1, (x % fold(c1/c0)) * c0, c1 % c0 == 0),
-                           rule((x * c0 + y) % c1, y % c1, c0 % c1 == 0),
-                           rule((y + x * c0) % c1, y % c1, c0 % c1 == 0),
-                           rule(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0),
-                           rule(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
-                                // First and last lanes are the same when...
-                                can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)),
-                           rule(ramp(x * c0, c2) % broadcast(c1), (ramp(x * fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)),
-                           rule(ramp(x + c0, c2) % broadcast(c1), (ramp(x + fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)),
-                           rule(ramp(x * c0 + y, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0),
-                           rule(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))) {
-            return mutate(expr);
+        if (rewriter(c0 % c1, fold(c0 % c1)) ||
+            rewriter(0 % x, a) ||
+            rewriter(x % c0, x, c0 > 0 && can_prove(x >= 0 && x < c0, this)) ||
+            (!op->type.is_float() &&
+             (rewriter(x % indet, b) ||
+              rewriter(indet % x, a) ||
+              rewriter(x % overflow, b) ||
+              rewriter(overflow % x, a) ||
+              rewriter(x % 0, indeterminate_expression_error(op->type)) ||
+              rewriter(x % 1, make_zero(op->type)) ||
+              rewriter(1 % x, a)))) {
+            return rewriter.result;
+        } else if (rewriter(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
+                   (no_overflow_int(op->type) &&
+                    (rewriter((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                     rewriter((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                     rewriter((x * c0) % c1, (x % fold(c1/c0)) * c0, c1 % c0 == 0) ||
+                     rewriter((x * c0 + y) % c1, y % c1, c0 % c1 == 0) ||
+                     rewriter((y + x * c0) % c1, y % c1, c0 % c1 == 0) ||
+                     rewriter(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0) ||
+                     rewriter(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
+                              // First and last lanes are the same when...
+                              can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)) ||
+                     rewriter(ramp(x * c0, c2) % broadcast(c1), (ramp(x * fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                     rewriter(ramp(x + c0, c2) % broadcast(c1), (ramp(x + fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                     rewriter(ramp(x * c0 + y, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0) ||
+                     rewriter(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0)))) {
+            return mutate(rewriter.result);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -4053,45 +4047,41 @@ private:
         IRMatcher::Wild<2> z;
         IRMatcher::Wild<3> w;
         IRMatcher::Const zero(0), one(1);
-        auto mutated = IRMatcher::select(condition, true_value, false_value);
+        auto rewriter = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value));
 
-        if (rewrite(mutated, expr,
-                    rule(select(one, x, y), x),
-                    rule(select(zero, x, y), y),
-                    rule(select(x, y, y), y),
-                    rule(select(x, intrin(Call::likely, y), y), true_value),
-                    rule(select(x, y, intrin(Call::likely, y)), false_value))) {
-            return expr;
-        } else if (rewrite(mutated, expr,
-                           rule(select(broadcast(x), y, z), select(x, y, z)),
-                           rule(select(x != y, z, w), select(x == y, w, z)),
-                           rule(select(x <= y, z, w), select(y < x, w, z)),
-                           rule(select(x, select(y, z, w), z), select(x && !y, w, z)),
-                           rule(select(x, select(y, z, w), w), select(x && y, z, w)),
-                           rule(select(x, y, select(z, y, w)), select(x || z, y, w)),
-                           rule(select(x, y, select(z, w, y)), select(x || !z, y, w)),
-                           rule(select(x, select(x, y, z), w), select(x, y, w)),
-                           rule(select(x, y, select(x, z, w)), select(x, y, w)),
-                           rule(select(x, y + z, y + w), y + select(x, z, w)),
-                           rule(select(x, y + z, w + y), y + select(x, z, w)),
-                           rule(select(x, z + y, y + w), y + select(x, z, w)),
-                           rule(select(x, z + y, w + y), select(x, z, w) + y),
-                           rule(select(x, y - z, y - w), y - select(x, z, w)),
-                           rule(select(x, y - z, y + w), y + select(x, -z, w)),
-                           rule(select(x, y + z, y - w), y + select(x, z, -w)),
-                           rule(select(x, y - z, w + y), y + select(x, -z, w)),
-                           rule(select(x, z + y, y - w), y + select(x, z, -w)),
-                           rule(select(x, z - y, w - y), select(x, z, w) - y),
-                           rule(select(x, y * z, y * w), y * select(x, z, w)),
-                           rule(select(x, y * z, w * y), y * select(x, z, w)),
-                           rule(select(x, z * y, y * w), y * select(x, z, w)),
-                           rule(select(x, z * y, w * y), select(x, z, w) * y))) {
-            return mutate(std::move(expr));
-        } else if (op->type.is_bool() &&
-                   rewrite(mutated, expr,
-                           rule(select(x, one, zero), cast(op->type, x)),
-                           rule(select(x, zero, one), cast(op->type, !x)))) {
-            return mutate(std::move(expr));
+        if (rewriter(select(one, x, y), x) ||
+            rewriter(select(zero, x, y), y) ||
+            rewriter(select(x, y, y), y) ||
+            rewriter(select(x, intrin(Call::likely, y), y), true_value) ||
+            rewriter(select(x, y, intrin(Call::likely, y)), false_value)) {
+            return rewriter.result;
+        } else if (rewriter(select(broadcast(x), y, z), select(x, y, z)) ||
+                   rewriter(select(x != y, z, w), select(x == y, w, z)) ||
+                   rewriter(select(x <= y, z, w), select(y < x, w, z)) ||
+                   rewriter(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
+                   rewriter(select(x, select(y, z, w), w), select(x && y, z, w)) ||
+                   rewriter(select(x, y, select(z, y, w)), select(x || z, y, w)) ||
+                   rewriter(select(x, y, select(z, w, y)), select(x || !z, y, w)) ||
+                   rewriter(select(x, select(x, y, z), w), select(x, y, w)) ||
+                   rewriter(select(x, y, select(x, z, w)), select(x, y, w)) ||
+                   rewriter(select(x, y + z, y + w), y + select(x, z, w)) ||
+                   rewriter(select(x, y + z, w + y), y + select(x, z, w)) ||
+                   rewriter(select(x, z + y, y + w), y + select(x, z, w)) ||
+                   rewriter(select(x, z + y, w + y), select(x, z, w) + y) ||
+                   rewriter(select(x, y - z, y - w), y - select(x, z, w)) ||
+                   rewriter(select(x, y - z, y + w), y + select(x, -z, w)) ||
+                   rewriter(select(x, y + z, y - w), y + select(x, z, -w)) ||
+                   rewriter(select(x, y - z, w + y), y + select(x, -z, w)) ||
+                   rewriter(select(x, z + y, y - w), y + select(x, z, -w)) ||
+                   rewriter(select(x, z - y, w - y), select(x, z, w) - y) ||
+                   rewriter(select(x, y * z, y * w), y * select(x, z, w)) ||
+                   rewriter(select(x, y * z, w * y), y * select(x, z, w)) ||
+                   rewriter(select(x, z * y, y * w), y * select(x, z, w)) ||
+                   rewriter(select(x, z * y, w * y), select(x, z, w) * y) ||
+                   (op->type.is_bool() &&
+                    (rewriter(select(x, one, zero), cast(op->type, x)) ||
+                     rewriter(select(x, zero, one), cast(op->type, !x))))) {
+            return mutate(rewriter.result);
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
