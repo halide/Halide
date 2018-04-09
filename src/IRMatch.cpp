@@ -312,7 +312,7 @@ bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
     return true;
 }
 
-bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) {
+bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     switch(a.node_type) {
     case IRNodeType::IntImm:
         return ((const IntImm &)a).value == ((const IntImm &)b).value;
@@ -400,7 +400,6 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) {
     case IRNodeType::Prefetch:
         ;
     }
-    internal_error << "Unreachable";
     return false;
 }
 }
