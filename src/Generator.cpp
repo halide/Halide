@@ -271,7 +271,6 @@ private:
             if (p->name == "target" ||
                 p->name == "auto_schedule" ||
                 p->name == "machine_params") continue;
-            if (p->is_synthetic_param()) continue;
             out.push_back(p);
         }
         return out;
@@ -292,6 +291,15 @@ std::string StubEmitter::indent() {
     return o.str();
 }
 
+std::string gp_name(Internal::GeneratorParamBase *gp) {
+    // 'synthetic' GeneratorParams (e.g., some_buffer.type) have a period
+    // in the name, which isn't legal syntax for a C++ struct member.
+    // Since GeneratorParams explicitly forbid a double-underscore as part of a legal
+    // name, we'll use that as a substitute, to allow these to be specified
+    // in the struct (thus, "some_buffer.type" -> "some_buffer__type")
+    return replace_all(gp->name, ".", "__");
+}
+
 void StubEmitter::emit_generator_params_struct() {
     const auto &v = generator_params;
     std::string name = "GeneratorParams";
@@ -299,7 +307,7 @@ void StubEmitter::emit_generator_params_struct() {
     indent_level++;
     if (!v.empty()) {
         for (auto p : v) {
-            stream << indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
+            stream << indent() << p->get_c_type() << " " << gp_name(p) << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
     }
@@ -312,7 +320,7 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         std::string comma = "";
         for (auto p : v) {
-            stream << indent() << comma << p->get_c_type() << " " << p->name << "\n";
+            stream << indent() << comma << p->get_c_type() << " " << gp_name(p) << "\n";
             comma = ", ";
         }
         indent_level--;
@@ -320,7 +328,7 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         comma = "";
         for (auto p : v) {
-            stream << indent() << comma << p->name << "(" << p->name << ")\n";
+            stream << indent() << comma << gp_name(p) << "(" << gp_name(p) << ")\n";
             comma = ", ";
         }
         indent_level--;
@@ -337,9 +345,9 @@ void StubEmitter::emit_generator_params_struct() {
     for (auto p : v) {
         stream << indent() << comma << "{\"" << p->name << "\", ";
         if (p->is_looplevel_param()) {
-            stream << p->name << "}\n";
+            stream << gp_name(p) << "}\n";
         } else {
-            stream << p->call_to_string(p->name) << "}\n";
+            stream << p->call_to_string(gp_name(p)) << "}\n";
         }
         comma = ", ";
     }
@@ -1195,7 +1203,10 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
                     gp->second->set(key_value.second.loop_level);
                 }
             } else {
-                gp->second->set_from_string(key_value.second.string_value);
+                // If string is empty, just ignore and don't try to set
+                if (!key_value.second.string_value.empty()) {
+                    gp->second->set_from_string(key_value.second.string_value);
+                }
             }
             continue;
         }
@@ -1469,9 +1480,9 @@ bool GIOBase::array_size_defined() const {
 }
 
 size_t GIOBase::array_size() const {
-    internal_assert(array_size_defined()) << "ArraySize is unspecified for " << name()
-        << "; you need to explicit set it via the resize() method or by setting "
-        << name() << ".size = value in your build rules.";
+    user_assert(array_size_defined()) << "ArraySize is unspecified for " << name()
+        << "; you need to explicitly set it by calling the resize() method or by specifying "
+        << name() << ".size=value in your build rules.";
     return (size_t) array_size_;
 }
 
@@ -1492,7 +1503,9 @@ bool GIOBase::types_defined() const {
 }
 
 const std::vector<Type> &GIOBase::types() const {
-    internal_assert(types_defined()) << "Type is unspecified for " << name() << "\n";
+    user_assert(types_defined()) << "Type is unspecified for " << name()
+        << "; you need to explicitly set it by specifying "
+        << name() << ".type=value in your build rules.";
     return types_;
 }
 
@@ -1506,6 +1519,9 @@ bool GIOBase::dims_defined() const {
 }
 
 int GIOBase::dims() const {
+    user_assert(dims_defined()) << "Dimensions are unspecified for " << name()
+        << "; you need to explicitly set this by specifying "
+        << name() << ".dim=value in your build rules.";
     internal_assert(dims_defined()) << "Dimensions unspecified for " << name() << "\n";
     return dims_;
 }

@@ -166,7 +166,7 @@ def test_complexstub():
                     array_input=[ input, input ],
                     float_arg=float_arg,
                     int_arg=[ int_arg, int_arg ],
-                    untyped_buffer_output_type="uint8",
+                    untyped_buffer_output__type="uint8",
                     vectorize=True)
 
     # return value is a tuple; unpack separately to avoid

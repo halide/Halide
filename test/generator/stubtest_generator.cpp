@@ -19,7 +19,6 @@ Halide::Buffer<Type> make_image(int extra) {
 
 class StubTest : public Halide::Generator<StubTest> {
 public:
-    GeneratorParam<Type> untyped_buffer_output_type{ "untyped_buffer_output_type", Float(32) };
     GeneratorParam<float> float_param{ "float_param", 3.1415926535f };
     GeneratorParam<BagType> bag_type{ "bag_type",
                                       BagType::Paper,
@@ -48,11 +47,7 @@ public:
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
         typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
-        // Note that if we are being invoked via a Stub, "untyped_buffer_output.type()" will
-        // assert-fail, because there is no type constraint set: the type
-        // will end up as whatever we infer from the values put into it. We'll use an
-        // explicit GeneratorParam to allow us to set it.
-        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output_type, untyped_buffer_input(x, y, c));
+        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output.type(), untyped_buffer_input(x, y, c));
 
         for (int i = 0; i < 2; ++i) {
             array_buffer_output[i](x, y, c) = array_buffer_input[i](x, y,c) + 1 + i;

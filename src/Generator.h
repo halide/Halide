@@ -2372,18 +2372,33 @@ public:
     }
 
     std::string get_default_value() const override {
-        internal_error;
-        return std::string();
+        if (which == Dim || which == ArraySize) {
+            return "-1";
+        } else {
+            // There is no "undefined" Halide::Type, but Handle is
+            // essentially invalid here, so we'll use it as a placeholder
+            return "Halide::Handle()";
+        }
     }
 
     std::string call_to_string(const std::string &v) const override {
-        internal_error;
-        return std::string();
+        std::ostringstream oss;
+        if (which == Dim || which == ArraySize) {
+            // return an empty string if the default value wasn't overridden.
+            oss << "(" << v << " < 0 ? std::string() : std::to_string(" << v << "))";
+        } else {
+            // return an empty string if the default value wasn't overridden.
+            oss << "(" << v << ".is_handle() ? std::string() : Halide::Internal::halide_type_to_enum_string(" + v + "))";
+        }
+        return oss.str();
     }
 
     std::string get_c_type() const override {
-        internal_error;
-        return std::string();
+        if (which == Dim || which == ArraySize) {
+            return "int";
+        } else {
+            return "Type";
+        }
     }
 
     bool is_synthetic_param() const override {
