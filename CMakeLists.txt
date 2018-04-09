@@ -428,7 +428,8 @@ foreach(F mex_halide.m
           halide_benchmark.h
           halide_image.h
           halide_image_io.h
-          halide_image_info.h)
+          halide_image_info.h
+          halide_trace_config.h)
   install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
           DESTINATION tools)
 endforeach()
