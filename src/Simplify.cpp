@@ -1884,7 +1884,6 @@ private:
         auto overflow = IRMatcher::intrin(Call::signed_integer_overflow);
         int lanes = op->type.lanes();
         Expr expr;
-        auto mutated = IRMatcher::div(a, b);
 
         // Check for bounded numerators divided by constant
         // denominators.
@@ -1895,94 +1894,89 @@ private:
             return make_const(op->type, div_imp(num_max, den));
         }
 
-        if (rewrite(mutated, expr,
-                    rule(indet / x, a),
-                    rule(x / indet, b),
-                    rule(overflow / x, a),
-                    rule(x / overflow, b),
-                    rule(x / 0, indeterminate_expression_error(op->type), !op->type.is_float()),
-                    rule(x / 1, a),
-                    rule(0 / x, a),
-                    rule(x / x, make_one(op->type)),
-                    rule(c0 / c1, fold(c0 / c1)))) {
-            return expr;
-        } else if (rewrite(mutated, expr,
-                           rule(broadcast(x) / broadcast(y), broadcast(x / y, lanes)))) {
-            return mutate(expr);
-        } else if (no_overflow(op->type) &&
-                   rewrite(mutated, expr,
-                           // Fold repeated division
-                           rule((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0),
-                           rule((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2),   c0 > 0 && c2 > 0),
-                           rule((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c1 > 0),
-                           // Pull out terms that are a multiple of the denominator
-                           rule((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0),
+        auto rewriter = IRMatcher::rewriter(IRMatcher::div(a, b));
 
-                           rule((x * c0 + y) / c1, x * fold(c0 / c1) + y / c1,             c0 % c1 == 0 && c1 > 0),
-                           rule((x * c0 - y) / c1, x * fold(c0 / c1) + (-y) / c1,          c0 % c1 == 0 && c1 > 0),
-                           rule((y + x * c0) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0),
-                           rule((y - x * c0) / c1, y / c1 - x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0),
+        if (rewriter(indet / x, a) ||
+            rewriter(x / indet, b) ||
+            rewriter(overflow / x, a) ||
+            rewriter(x / overflow, b) ||
+            (!op->type.is_float() &&
+             rewriter(x / 0, indeterminate_expression_error(op->type))) ||
+            rewriter(x / 1, a) ||
+            rewriter(0 / x, a) ||
+            rewriter(x / x, make_one(op->type)) ||
+            rewriter(c0 / c1, fold(c0 / c1))) {
+            return rewriter.result;
+        } else if (rewriter(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
+                   (no_overflow(op->type) &&
+                    (// Fold repeated division
+                     rewriter((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0) ||
+                     rewriter((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2),   c0 > 0 && c2 > 0) ||
+                     rewriter((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c1 > 0) ||
+                     // Pull out terms that are a multiple of the denominator
+                     rewriter((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
 
-                           rule(((x * c0 + y) + z) / c1, x * fold(c0 / c1) + (y + z) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule(((x * c0 - y) + z) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule(((x * c0 + y) - z) / c1, x * fold(c0 / c1) + (y - z) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule(((x * c0 - y) - z) / c1, x * fold(c0 / c1) - (y + z) / c1, c0 % c1 == 0 && c1 > 0),
+                     rewriter((x * c0 + y) / c1, x * fold(c0 / c1) + y / c1,             c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((x * c0 - y) / c1, x * fold(c0 / c1) + (-y) / c1,          c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((y + x * c0) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((y - x * c0) / c1, y / c1 - x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
 
-                           rule(((y + x * c0) + z) / c1, x * fold(c0 / c1) + (y + z) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule(((y + x * c0) - z) / c1, x * fold(c0 / c1) + (y - z) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule(((y - x * c0) - z) / c1, (y - z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0),
-                           rule(((y - x * c0) + z) / c1, (y + z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0),
+                     rewriter(((x * c0 + y) + z) / c1, x * fold(c0 / c1) + (y + z) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter(((x * c0 - y) + z) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter(((x * c0 + y) - z) / c1, x * fold(c0 / c1) + (y - z) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter(((x * c0 - y) - z) / c1, x * fold(c0 / c1) - (y + z) / c1, c0 % c1 == 0 && c1 > 0) ||
 
-                           rule((z + (x * c0 + y)) / c1, x * fold(c0 / c1) + (z + y) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule((z + (x * c0 - y)) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule((z - (x * c0 - y)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0),
-                           rule((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0),
+                     rewriter(((y + x * c0) + z) / c1, x * fold(c0 / c1) + (y + z) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter(((y + x * c0) - z) / c1, x * fold(c0 / c1) + (y - z) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter(((y - x * c0) - z) / c1, (y - z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                     rewriter(((y - x * c0) + z) / c1, (y + z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-                           rule((z + (y + x * c0)) / c1, x * fold(c0 / c1) + (z + y) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule((z - (y + x * c0)) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0),
-                           rule((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0),
-                           rule((z - (y - x * c0)) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0),
+                     rewriter((z + (x * c0 + y)) / c1, x * fold(c0 / c1) + (z + y) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((z + (x * c0 - y)) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((z - (x * c0 - y)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-                           rule((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0),
-                           rule((x + y)/x, y/x + 1),
-                           rule((y + x)/x, y/x + 1),
-                           rule((x - y)/x, (-y)/x + 1),
-                           rule((y - x)/x, y/x - 1),
-                           rule(((x + y) + z)/x, (y + z)/x + 1),
-                           rule(((y + x) + z)/x, (y + z)/x + 1),
-                           rule((z + (x + y))/x, (z + y)/x + 1),
-                           rule((z + (y + x))/x, (z + y)/x + 1),
-                           rule((x*y)/x, y),
-                           rule((y*x)/x, y),
-                           rule((x*y + z)/x, y + z/x),
-                           rule((y*x + z)/x, y + z/x),
-                           rule((z + x*y)/x, z/x + y),
-                           rule((z + y*x)/x, z/x + y),
-                           rule((x*y - z)/x, y + (-z)/x),
-                           rule((y*x - z)/x, y + (-z)/x),
-                           rule((z - x*y)/x, z/x - y),
-                           rule((z - y*x)/x, z/x - y),
-                           rule(x/c0, x * fold(1/c0), op->type.is_float()))) {
-            return mutate(expr);
-        } else if (no_overflow_int(op->type) &&
-                   rewrite(mutated, expr,
-                           rule(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes),
-                                c0 % c1 == 0),
-                           rule(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
-                                // First and last lanes are the same when...
-                                can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) {
-            return mutate(expr);
-        } else if (no_overflow_scalar_int(op->type) &&
-                   rewrite(mutated, expr,
-                           rule(x / -1, -x),
-                           rule(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1),
-                           // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
-                           // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
-                           rule((x * c0 + c1) / c2, (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
-                                c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1),
-                           // A very specific pattern that comes up in bounds in upsampling code.
-                           rule((x % 2 + c0) / 2, x % 2 + c0 / 2, c0 % 2 == 1))) {
-            return mutate(expr);
+                     rewriter((z + (y + x * c0)) / c1, x * fold(c0 / c1) + (z + y) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((z - (y + x * c0)) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                     rewriter((z - (y - x * c0)) / c1, x * fold(c0 / c1) + (z - y) / c1, c0 % c1 == 0 && c1 > 0) ||
+
+                     rewriter((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0) ||
+                     rewriter((x + y)/x, y/x + 1) ||
+                     rewriter((y + x)/x, y/x + 1) ||
+                     rewriter((x - y)/x, (-y)/x + 1) ||
+                     rewriter((y - x)/x, y/x - 1) ||
+                     rewriter(((x + y) + z)/x, (y + z)/x + 1) ||
+                     rewriter(((y + x) + z)/x, (y + z)/x + 1) ||
+                     rewriter((z + (x + y))/x, (z + y)/x + 1) ||
+                     rewriter((z + (y + x))/x, (z + y)/x + 1) ||
+                     rewriter((x*y)/x, y) ||
+                     rewriter((y*x)/x, y) ||
+                     rewriter((x*y + z)/x, y + z/x) ||
+                     rewriter((y*x + z)/x, y + z/x) ||
+                     rewriter((z + x*y)/x, z/x + y) ||
+                     rewriter((z + y*x)/x, z/x + y) ||
+                     rewriter((x*y - z)/x, y + (-z)/x) ||
+                     rewriter((y*x - z)/x, y + (-z)/x) ||
+                     rewriter((z - x*y)/x, z/x - y) ||
+                     rewriter((z - y*x)/x, z/x - y) ||
+                     (op->type.is_float() && rewriter(x/c0, x * fold(1/c0))))) ||
+                   (no_overflow_int(op->type) &&
+                    (rewriter(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes),
+                              c0 % c1 == 0) ||
+                     rewriter(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
+                              // First and last lanes are the same when...
+                              can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
+                   (no_overflow_scalar_int(op->type) &&
+                    (rewriter(x / -1, -x) ||
+                     rewriter(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1) ||
+                     // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
+                     // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
+                     rewriter((x * c0 + c1) / c2, (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
+                              c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1) ||
+                     // A very specific pattern that comes up in bounds in upsampling code.
+                     rewriter((x % 2 + c0) / 2, x % 2 + c0 / 2, c0 % 2 == 1)))) {
+            return mutate(rewriter.result);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {

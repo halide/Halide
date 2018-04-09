@@ -70,7 +70,8 @@ constexpr int max_wild = 4;
  * consumed when constructing a replacement Expr.
  */
 struct MatcherState {
-    const BaseExprNode *bindings[max_wild] {nullptr, nullptr, nullptr, nullptr};
+    // Align the bindings to a 16-byte boundary so that they can be cleared with simd instructions
+    HALIDE_ATTRIBUTE_ALIGN(16) const BaseExprNode *bindings[max_wild] = {nullptr, nullptr, nullptr, nullptr};
 
     HALIDE_ALWAYS_INLINE
     void set_binding(int i, const BaseExprNode &n) {
@@ -138,6 +139,12 @@ struct MatcherState {
 
     HALIDE_ALWAYS_INLINE
     MatcherState() {}
+
+    HALIDE_ALWAYS_INLINE
+    void reset() {
+        memset(bindings, 0, sizeof(bindings));
+        const_bound_mask = 0;
+    }
 };
 
 template<typename T,
@@ -1986,6 +1993,112 @@ bool rewrite(Instance &&in, Expr &result, Rule &&rule, Rules&&... rules) {
         return rewrite(std::forward<Instance>(in), result,
                        std::forward<Rules>(rules)...);
     }
+}
+
+template<typename Instance>
+struct Rewriter {
+    Instance instance;
+    Expr result;
+    MatcherState state;
+
+    HALIDE_ALWAYS_INLINE
+    Rewriter(Instance &&instance) : instance(std::forward<Instance>(instance)) {}
+
+    template<typename Before,
+             typename After,
+             typename = typename enable_if_pattern<Before>::type,
+             typename = typename enable_if_pattern<After>::type>
+    HALIDE_ALWAYS_INLINE
+    bool operator()(Before &&before, After &&after) {
+        state.reset();
+        if (before.match(instance, state)) {
+            result = to_expr(after, state);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    template<typename Before,
+             typename = typename enable_if_pattern<Before>::type>
+    HALIDE_ALWAYS_INLINE
+    bool operator()(Before &&before, const Expr &after) {
+        state.reset();
+        if (before.match(instance, state)) {
+            result = after;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    template<typename Before,
+             typename = typename enable_if_pattern<Before>::type>
+    HALIDE_ALWAYS_INLINE
+    bool operator()(Before &&before, Expr &&after) {
+        state.reset();
+        if (before.match(instance, state)) {
+            result = std::move(after);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    template<typename Before,
+             typename After,
+             typename Predicate,
+             typename = typename enable_if_pattern<Before>::type,
+             typename = typename enable_if_pattern<After>::type,
+             typename = typename enable_if_pattern<Predicate>::type>
+    HALIDE_ALWAYS_INLINE
+    bool operator()(Before &&before, After &&after, Predicate &&pred) {
+        state.reset();
+        if (before.match(instance, state) &&
+            evaluate_predicate(std::forward<Predicate>(pred), state)) {
+            result = to_expr(std::forward<After>(after), state);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    template<typename Before,
+             typename Predicate,
+             typename = typename enable_if_pattern<Before>::type,
+             typename = typename enable_if_pattern<Predicate>::type>
+    HALIDE_ALWAYS_INLINE
+    bool operator()(Before &&before, const Expr &after, Predicate &&pred) {
+        state.reset();
+        if (before.match(instance, state) &&
+            evaluate_predicate(std::forward<Predicate>(pred), state)) {
+            result = after;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    template<typename Before,
+             typename Predicate,
+             typename = typename enable_if_pattern<Before>::type,
+             typename = typename enable_if_pattern<Predicate>::type>
+    HALIDE_ALWAYS_INLINE
+    bool operator()(Before &&before, Expr &&after, Predicate &&pred) {
+        state.reset();
+        if (before.match(instance, state) &&
+            evaluate_predicate(std::forward<Predicate>(pred), state)) {
+            result = std::move(after);
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
+
+template<typename Instance>
+Rewriter<Instance> rewriter(Instance &&instance) {
+    return Rewriter<Instance>(std::forward<Instance>(instance));
 }
 
 }
