@@ -1058,6 +1058,11 @@ BinOp<Mod, Const, B> operator%(int a, B b) {
     return {Const(a), b};
 }
 
+HALIDE_ALWAYS_INLINE
+BinOp<Mod, const BaseExprNode &, const BaseExprNode &> mod(const Expr &a, const Expr &b) {
+    return {*a.get(), *b.get()};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Mod>(halide_type_t &t, int64_t a, int64_t b) {
@@ -1668,8 +1673,8 @@ std::ostream &operator<<(std::ostream &s, const RampOp<A, B> &op) {
 
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-RampOp<A, B> ramp(A &&a, B &&b, int lanes = -1) { // -1 => matches any number of lanes
-    return RampOp<A, B>{std::forward<A>(a), std::forward<B>(b), lanes};
+RampOp<A, B> ramp(A a, B b, int lanes = -1) { 
+    return {a, b, lanes};
 }
 
 template<typename A>
@@ -1788,8 +1793,6 @@ Fold<A> fold(A a) {
     return {a};
 }
 
-
-
 template<typename A, typename Prover>
 struct CanProve {
     struct pattern_tag {};
@@ -1809,6 +1812,7 @@ struct CanProve {
 template<typename A,
          typename Prover,
          typename = typename enable_if_pattern<A>::type>
+HALIDE_ALWAYS_INLINE
 CanProve<A, Prover> can_prove(A a, Prover *s) {
     return {a, s};
 }
@@ -1835,6 +1839,7 @@ template<typename A,
          typename B,
          typename = typename enable_if_pattern<A>::type,
          typename = typename enable_if_pattern<B>::type>
+HALIDE_ALWAYS_INLINE
 GCDOp<A, B> gcd(A a, B b) {
     return {a, b};
 }
