@@ -17,7 +17,7 @@ BIN=bin
 APP_TARGET=arm-64-android
 
 # Build the app.
-make bin/${APP_TARGET}/process
+make clean bin/${APP_TARGET}/process
 
 # Make a folder on device for the app and our dependencies.
 adb shell mkdir -p ${DEVICE_PATH}
