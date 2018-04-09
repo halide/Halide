@@ -180,12 +180,12 @@ WEAK void CacheEntry::destroy() {
 WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
     uint32_t h = 5381;
     for (size_t i = 0; i < key_size; i++) {
-      h = (h << 5) + h + key[i];
+        h = (h << 5) + h + key[i];
     }
     return h;
 }
 
-WEAK halide_mutex memoization_lock;
+WEAK halide_mutex memoization_lock = { { 0 } };
 
 const size_t kHashTableSize = 256;
 
@@ -558,7 +558,6 @@ WEAK void halide_memoization_cache_cleanup() {
     current_cache_size = 0;
     most_recently_used = NULL;
     least_recently_used = NULL;
-    halide_mutex_destroy(&memoization_lock);
 }
 
 namespace {

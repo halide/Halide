@@ -127,7 +127,9 @@ bool test(int lanes, int seed) {
     Buffer<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
-            input(x, y) = (A)(dis(rng)*0.125 + 1.0);
+            // We must ensure that the result of casting is not out-of-range:
+            // float->int casts are UB if the result doesn't fit.
+            input(x, y) = (A)(dis(rng)*0.0625 + 1.0);
             if ((A)(-1) < 0) {
                 input(x, y) -= 10;
             }

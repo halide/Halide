@@ -222,7 +222,7 @@ extern void qurt_mutex_unlock(qurt_mutex_t *lock); /* unlock */
 
 extern void qurt_cond_init(qurt_cond_t *cond);
 extern void qurt_cond_destroy(qurt_cond_t *cond);
-extern void qurt_cond_broadcast(qurt_cond_t *cond);
+extern void qurt_cond_signal(qurt_cond_t *cond);
 extern void qurt_cond_wait(qurt_cond_t *cond, qurt_mutex_t *mutex);
 
 typedef enum {

@@ -42,6 +42,10 @@ std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 /** Emit a halide LoopLevel in a human readable form */
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
 
+struct Target;
+/** Emit a halide Target in a human readable form */
+std::ostream &operator<<(std::ostream &stream, const Target &);
+
 namespace Internal {
 
 struct AssociativePattern;

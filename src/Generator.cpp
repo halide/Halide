@@ -329,7 +329,7 @@ void StubEmitter::emit_generator_params_struct() {
         stream << "\n";
     }
 
-    stream << indent() << "inline NO_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
+    stream << indent() << "inline HALIDE_NO_USER_CODE_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
     indent_level++;
     stream << indent() << "return {\n";
     indent_level++;
@@ -578,7 +578,7 @@ void StubEmitter::emit() {
     stream << indent() << "};\n";
     stream << "\n";
 
-    stream << indent() << "NO_INLINE static Outputs generate(\n";
+    stream << indent() << "HALIDE_NO_USER_CODE_INLINE static Outputs generate(\n";
     indent_level++;
     stream << indent() << "const GeneratorContext& context,\n";
     stream << indent() << "const Inputs& inputs,\n";
@@ -1969,7 +1969,7 @@ void generator_test() {
         static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), const Func &>::value, "type mismatch");
         static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), const ImageParam>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
         static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), const Func &>::value, "type mismatch");
     }
 

@@ -198,6 +198,14 @@ void do_test() {
             Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions(), 0);
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
             test_round_trip(cb4, format);
+
+            // Here we test matching strides
+            Buffer<T> funky_buf = f.realize(10, 10, 1, 3);
+            funky_buf.fill(42);
+
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
+            test_round_trip(funky_buf, format);
+
             continue;
         }
         if (format != "pgm") {
