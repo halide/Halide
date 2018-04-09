@@ -123,6 +123,9 @@ class WrapExternStages : public IRMutator2 {
             Function f(op->func);
             internal_assert(f.has_extern_definition());
             if (f.extern_definition_uses_old_buffer_t()) {
+                user_assert(module.target().has_feature(Target::LegacyBufferWrappers))
+                    << "You must specify the legacy_buffer_wrappers feature in the Target "
+                    << "when passing uses_old_buffer_t = true to define_extern().";
                 vector<Expr> new_args;
                 for (Expr e : op->args) {
                     new_args.push_back(mutate(e));
@@ -145,10 +148,6 @@ public:
 }
 
 void wrap_legacy_extern_stages(Module m) {
-    if (!m.target().has_feature(Target::LegacyBufferWrappers)) {
-        return;
-    }
-
     WrapExternStages wrap(m);
     // We'll be appending new functions to the module as we traverse
     // its functions, so we have to iterate with some care.
