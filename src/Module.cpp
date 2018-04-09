@@ -435,7 +435,7 @@ void Module::compile(const Outputs &output_files_arg) const {
     }
 }
 
-Outputs compile_standalone_runtime(const Outputs &output_files, Target t) {
+Outputs compile_standalone_runtime(const Outputs &output_files, const Target &t) {
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.
@@ -444,9 +444,7 @@ Outputs compile_standalone_runtime(const Outputs &output_files, Target t) {
     return actual_outputs;
 }
 
-void compile_standalone_runtime(const std::string &object_filename, Target t) {
-    compile_standalone_runtime(Outputs().object(object_filename), t);
-}
+namespace Internal {
 
 void compile_multitarget(const std::string &fn_name,
                          const Outputs &output_files,
@@ -649,5 +647,7 @@ void compile_multitarget(const std::string &fn_name,
         create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
     }
 }
+
+}  // namespace Internal
 
 }  // namespace Halide

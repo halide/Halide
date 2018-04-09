@@ -154,24 +154,23 @@ public:
 /** Link a set of modules together into one module. */
 Module link_modules(const std::string &name, const std::vector<Module> &modules);
 
-/** Create an object file containing the Halide runtime for a given
- * target. For use with Target::NoRuntime. */
-void compile_standalone_runtime(const std::string &object_filename, Target t);
-
 /** Create an object and/or static library file containing the Halide runtime for a given
  * target. For use with Target::NoRuntime. Return an Outputs with just the actual
  * outputs filled in (typically, object_name and/or static_library_name).
  */
-Outputs compile_standalone_runtime(const Outputs &output_files, Target t);
+Outputs compile_standalone_runtime(const Outputs &output_files, const Target &t);
 
-typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
+namespace Internal {
+
+using ModuleProducer = std::function<Module(const std::string &, const Target &)>;
 
 void compile_multitarget(const std::string &fn_name,
                          const Outputs &output_files,
                          const std::vector<Target> &targets,
                          ModuleProducer module_producer,
                          const std::map<std::string, std::string> &suffixes = {});
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif
