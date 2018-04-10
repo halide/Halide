@@ -244,7 +244,7 @@ void check_algebra() {
     check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
     check(((x*4 - y) + z) / 2, x*2 + (z - y)/2);
     check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
-    check(((x*4 - y) - z) / 2, x*2 + (0 - y - z)/2);
+    check(((x*4 - y) - z) / 2, x*2 - (y + z)/2);
     check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
     check(((x + y*4) + z) / 2, y*2 + (x + z)/2);
     check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
