@@ -1604,8 +1604,8 @@ private:
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost))) {
-                    // TODO: does this also need to handle Call::strict_float?
+                             call->is_intrinsic(Call::likely_if_innermost) ||
+                             call->is_intrinsic(Call::strict_float))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
@@ -1634,7 +1634,6 @@ private:
                         // to the condition is probably unnecessary,
                         // which means the mins/maxes below should
                         // probably just be the LHS.
-                        // TODO: does this also need to handle Call::strict_float?
                         Interval likely_i = i;
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
@@ -1666,7 +1665,6 @@ private:
                     } else if (var_b && scope.contains(var_b->name)) {
                         Interval i = scope.get(var_b->name);
 
-                        // TODO: does this also need to handle Call::strict_float?
                         Interval likely_i = i;
                         if (call && call->is_intrinsic(Call::likely)) {
                             likely_i.min = likely(i.min);
