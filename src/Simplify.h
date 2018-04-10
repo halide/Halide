@@ -36,8 +36,6 @@ bool can_prove(Expr e);
  * stage in lowering than full simplification of a stmt. */
 Stmt simplify_exprs(Stmt);
 
-void simplify_test();
-
 }
 }
 

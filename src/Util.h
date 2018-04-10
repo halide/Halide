@@ -18,6 +18,9 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <limits>
+
+#include "runtime/HalideRuntime.h"
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
@@ -33,13 +36,9 @@
 
 // If we're in user code, we don't want certain functions to be inlined.
 #if defined(COMPILING_HALIDE) || defined(BUILDING_PYTHON)
-#define NO_INLINE
+#define HALIDE_NO_USER_CODE_INLINE
 #else
-#ifdef _WIN32
-#define NO_INLINE __declspec(noinline)
-#else
-#define NO_INLINE __attribute__((noinline))
-#endif
+#define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
 // On windows, Halide needs a larger stack than the default MSVC provides
@@ -49,6 +48,47 @@
 
 namespace Halide {
 namespace Internal {
+
+/** Some numeric conversions are UB if the value won't fit in the result;
+ * safe_numeric_cast<>() is meant as a drop-in replacement for a C/C++ cast
+ * that adds well-defined behavior for the UB cases, attempting to mimic
+ * common implementation behavior as much as possible.
+ */
+template<typename DST, typename SRC,
+         typename std::enable_if<std::is_floating_point<SRC>::value>::type * = nullptr>
+DST safe_numeric_cast(SRC s) {
+    if (std::is_integral<DST>::value) {
+        // Treat float -> int as a saturating cast; this is handled
+        // in different ways by different compilers, so an arbitrary but safe
+        // choice like this is reasonable.
+        if (s < (SRC) std::numeric_limits<DST>::min()) {
+          return std::numeric_limits<DST>::min();
+        }
+        if (s > (SRC) std::numeric_limits<DST>::max()) {
+          return std::numeric_limits<DST>::max();
+        }
+    }
+    return (DST) s;
+}
+
+template<typename DST, typename SRC,
+         typename std::enable_if<std::is_integral<SRC>::value>::type * = nullptr>
+DST safe_numeric_cast(SRC s) {
+    if (std::is_integral<DST>::value) {
+        // any-int -> signed-int is technically UB if value won't fit;
+        // in practice, common compilers implement such conversions as done below
+        // (as verified by exhaustive testing on Clang for x86-64). We could
+        // probably continue to rely on that behavior, but making it explicit
+        // avoids possible wrather of UBSan and similar debug helpers.
+        // (Yes, using sizeof for this comparison is a little odd for the uint->int
+        // case, but the intent is to match existing common behavior, which this does.)
+        if (std::is_integral<SRC>::value && std::is_signed<DST>::value && sizeof(DST) < sizeof(SRC)) {
+            using UnsignedSrc = typename std::make_unsigned<SRC>::type;
+            return (DST) (s & (UnsignedSrc) (-1));
+        }
+    }
+    return (DST) s;
+}
 
 /** An aggressive form of reinterpret cast used for correct type-punning. */
 template<typename DstType, typename SrcType>
@@ -139,13 +179,13 @@ T fold_right(const std::vector<T> &vec, Fn f) {
 }
 
 template <typename T1, typename T2, typename T3, typename T4 >
-inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
+inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                      const T3 &a1, const T4 &a2) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
 }
 
 template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
-inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
+inline HALIDE_NO_USER_CODE_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                    const T3 &a1, const T4 &a2, Args&&... args) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
     collect_paired_args(collected_args, std::forward<Args>(args)...);
