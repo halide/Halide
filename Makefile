@@ -159,6 +159,11 @@ LLVM_LIBS_FOR_SHARED_LIBHALIDE=$(if $(WITH_LLVM_INSIDE_SHARED_LIBHALIDE),$(LLVM_
 
 LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 
+ifeq ($(UNAME), Linux)
+# llvm-config doesn't always report -ltinfo in the system-libs. Detect it by seeing if llvm-config links to it.
+LLVM_LD_FLAGS += $(shell ldd `which $(LLVM_CONFIG)` | grep libtinfo > /dev/null && echo -ltinfo)
+endif
+
 TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
