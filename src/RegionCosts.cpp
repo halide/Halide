@@ -317,7 +317,7 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
 
     map<string, Expr> loads;
     for (const auto &iter : cost_visitor.detailed_byte_loads) {
-        loads.emplace(iter.first, iter.second);
+        loads.emplace(iter.first, Expr(iter.second));
     }
     return loads;
 }
