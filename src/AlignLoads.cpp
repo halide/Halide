@@ -174,7 +174,7 @@ private:
 }  // namespace
 
 Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder>& alignment_info) {
-  return AlignLoads(alignment, alignment_info).mutate(s);
+    return AlignLoads(alignment, alignment_info).mutate(s);
 }
 
 }
