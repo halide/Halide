@@ -4,6 +4,9 @@
 #include "Inline.h"
 #include "Simplify.h"
 #include "Var.h"
+#include "IREquality.h"
+#include "Param.h"
+#include "ImageParam.h"
 
 namespace Halide {
 namespace Internal {
@@ -19,7 +22,7 @@ class SubstituteVarEstimates: public IRMutator2 {
 
     Expr visit(const Variable *var) override {
         if (var->param.defined() && var->param.is_buffer()) {
-            // This is a var associated with an InputParam object. This
+            // This is a var associated with an ImageParam object. This
             // should be something of the form XXX.min.[dim_index] or
             // XXX.extent.[dim_index]
             std::vector<std::string> v = split_string(var->name, ".");
@@ -219,6 +222,36 @@ void disp_regions(const map<string, Box> &regions) {
         debug(0) << reg.second;
         debug(0) << "\n";
     }
+}
+
+namespace {
+void check(Expr input, Expr expected) {
+    Expr result = simplify(subsitute_var_estimates(input));
+    expected = simplify(expected);
+    if (!equal(result, expected)) {
+        internal_error
+            << "\nsubsitute_var_estimates() failure:\n"
+            << "Input: " << input << '\n'
+            << "Result: " << result << '\n'
+            << "Expected result: " << expected << '\n';
+    }
+}
+} // anonymous namespace
+
+void propagate_estimate_test() {
+    Param<int> p;
+    p.set_estimate(10);
+
+    ImageParam img(Int(32), 2);
+    img.dim(0).set_bounds_estimate(-3, 33);
+    img.dim(1).set_bounds_estimate(5, 55);
+
+    Var x("x"), y("y");
+    check(p + x + y, x + y + 10);
+    check(img.dim(0).min() + img.dim(1).min() + x, x + 2);
+    check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent()*x, 55*x + 38);
+
+    std::cout << "Propagate estimate test passed" << std::endl;
 }
 
 }

@@ -109,6 +109,8 @@ V &get_element(std::map<K, V> &m, const K &key) {
 }
 // @}
 
+void propagate_estimate_test();
+
 }
 }
 
