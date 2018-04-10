@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <stdint.h>
+#include "halide_trace_config.h"
 
 namespace {
 
@@ -180,6 +181,19 @@ public:
                     f.align_storage(x, vec);
                 }
             }
+        }
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        Halide::Trace::FuncConfig cfg;
+        cfg.pos = { 860, 340 - 220 };
+        cfg.max = 1024;
+        for (Func f : intermediates) {
+            std::string label = f.name();
+            std::replace(label.begin(), label.end(), '_', '@');
+            cfg.pos.y += 220;
+            cfg.labels = { { label, cfg.pos } };
+            f.add_trace_tag(cfg.to_trace_tag());
+
         }
     }
 
@@ -468,6 +482,44 @@ void CameraPipe::generate() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
             .bound(y, 0, (out_height/strip_size)*strip_size);
+
+        /* Optional tags to specify layout for HalideTraceViz */
+        {
+            Halide::Trace::FuncConfig cfg;
+            cfg.max = 1024;
+            cfg.pos = { 10, 348 };
+            input.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 305, 360 };
+            denoised.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 580, 120 };
+            const int y_offset = 220;
+            cfg.strides = {{1, 0}, {0, 1}, {0, y_offset}};
+            cfg.labels = {
+                { "gr", {cfg.pos.x, cfg.pos.y + 0 * y_offset} },
+                { "r",  {cfg.pos.x, cfg.pos.y + 1 * y_offset} },
+                { "b",  {cfg.pos.x, cfg.pos.y + 2 * y_offset} },
+                { "gb", {cfg.pos.x, cfg.pos.y + 3 * y_offset} },
+            };
+            deinterleaved.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.color_dim = 2;
+            cfg.strides = {{1, 0}, {0, 1}, {0, 0}};
+            cfg.pos = { 1140, 360 };
+            cfg.labels = { { "demosaiced", cfg.pos } };
+            processed.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.pos = { 1400, 360 };
+            cfg.labels = { { "color-corrected", cfg.pos } };
+            corrected.add_trace_tag(cfg.to_trace_tag());
+
+            cfg.max = 256;
+            cfg.pos = { 1660, 360 };
+            cfg.labels = { { "gamma-corrected", cfg.pos } };
+            curved.add_trace_tag(cfg.to_trace_tag());
+
+        }
     }
 };
 
