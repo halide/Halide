@@ -197,7 +197,98 @@ struct FuncConfig {
         std::istringstream is(trace_tag);
         is >> *this;
         if (is.fail() || is.get() != EOF) {
-            error("trace_tag parsing error");
+            error("FuncConfig trace_tag parsing error");
+        }
+    }
+};
+
+// Configuration for top-level visualization config settings.
+// If more than one of these is encountered, the last one wins.
+struct GlobalConfig {
+    // The size of the output frames.
+    Point frame_size = { 1920, 1080 };
+
+    // How quickly should the yellow and blue highlights decay
+    // over time. This is a two-stage exponential decay with a knee in
+    // it. decay_factor_during_compute controls the rate at which they
+    // decay while a value is in the process of being computed,
+    // and decay_factor_after_compute controls the rate at which
+    // they decay over time after the corresponding value has finished
+    // being computed. 1 means never decay, 2 means halve in opacity
+    // every frame, and 256 or larger means instant decay. The default
+    // values produce a highlight that holds while the value is being computed,
+    // and then decays slowly.
+    int decay_factor_during_compute = 1;
+    int decay_factor_after_compute = 2;
+
+    // How many frames to output after the end of the trace.
+    int hold_frames = 250;
+
+    // How many Halide computations should be covered by each frame.
+    int timestep = 10000;
+
+    static std::string tag_start_text() {
+        return std::string("htv_global_config:");
+    }
+
+    static bool match(const std::string &trace_tag) {
+        return trace_tag.find(tag_start_text()) == 0;
+    }
+
+    void dump(std::ostream &os) const {
+        os << "Global:\n"
+            << "  frame_size: " << frame_size << "\n"
+            << "  decay_factor_during_compute: " << decay_factor_during_compute << "\n"
+            << "  decay_factor_after_compute: " << decay_factor_after_compute << "\n"
+            << "  hold_frames: " << hold_frames << "\n"
+            << "  timestep: " << timestep << "\n";
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const GlobalConfig &config) {
+        // The 'format' here is intentionally simple:
+        // a space-separated iostream text string,
+        // in an assumed order rather than freeform.
+        os
+            << tag_start_text() << " "
+            << config.frame_size << " "
+            << config.decay_factor_during_compute << " "
+            << config.decay_factor_after_compute << " "
+            << config.hold_frames << " "
+            << config.timestep;
+        return os;
+    }
+
+    friend std::istream &operator>>(std::istream &is, GlobalConfig &config) {
+        std::string start_text;
+        is
+            >> start_text
+            >> config.frame_size
+            >> config.decay_factor_during_compute
+            >> config.decay_factor_after_compute
+            >> config.hold_frames
+            >> config.timestep;
+        if (start_text != tag_start_text()) {
+            is.setstate(std::ios::failbit);
+        }
+        return is;
+    }
+
+    std::string to_trace_tag() const {
+        // The 'format' here is intentionally simple:
+        // a space-separated iostream text string,
+        // in an assumed order rather than freeform.
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
+
+    GlobalConfig() = default;
+
+    explicit GlobalConfig(const std::string &trace_tag, ErrorFunc error = default_error) {
+        std::istringstream is(trace_tag);
+        is >> *this;
+        if (is.fail() || is.get() != EOF) {
+            error("GlobalConfig trace_tag parsing error");
         }
     }
 };

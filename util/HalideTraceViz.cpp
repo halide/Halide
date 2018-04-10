@@ -142,7 +142,7 @@ void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
 static constexpr int FONT_W = 12;
 static constexpr int FONT_H = 32;
 
-void draw_text(const std::string &text, const Point &pos, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+void draw_text(const std::string &text, const Point &pos, uint32_t color, uint32_t *dst, const Point &dst_size) {
     // The font array contains 96 characters of FONT_W * FONT_H letters.
     assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
 
@@ -164,9 +164,9 @@ void draw_text(const std::string &text, const Point &pos, uint32_t color, uint32
             for (int fx = 0; fx < FONT_W; fx++) {
                 int px = pos.x + FONT_W*c + fx;
                 int py = pos.y - FONT_H + fy + 1;
-                if (px < 0 || px >= dst_width ||
-                    py < 0 || py >= dst_height) continue;
-                dst[py * dst_width + px] = (font_ptr[fy * FONT_W + fx] << 24) | color;
+                if (px < 0 || px >= dst_size.x ||
+                    py < 0 || py >= dst_size.y) continue;
+                dst[py * dst_size.x + px] = (font_ptr[fy * FONT_W + fx] << 24) | color;
             }
         }
     }
@@ -293,7 +293,7 @@ void expect(bool cond, int i) {
 // Set all boxes corresponding to positions in a Func's allocation to
 // the given color. Recursive to handle arbitrary
 // dimensionalities. Used by begin and end realization events.
-void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color,
+void fill_realization(uint32_t *image, const Point &image_size, uint32_t color,
                       const FuncInfo &fi, const Packet &p,
                       int current_dimension = 0, int x_off = 0, int y_off = 0) {
     assert(p.dimensions >= 2 * fi.config.strides.size());
@@ -301,10 +301,10 @@ void fill_realization(uint32_t *image, int image_width, int image_height, uint32
         int x_min = x_off * fi.config.zoom + fi.config.pos.x;
         int y_min = y_off * fi.config.zoom + fi.config.pos.y;
         for (int y = 0; y < fi.config.zoom; y++) {
-            if (y_min + y < 0 || y_min + y >= image_height) continue;
+            if (y_min + y < 0 || y_min + y >= image_size.y) continue;
             for (int x = 0; x < fi.config.zoom; x++) {
-                if (x_min + x < 0 || x_min + x >= image_width) continue;
-                int idx = (y_min + y) * image_width + (x_min + x);
+                if (x_min + x < 0 || x_min + x >= image_size.x) continue;
+                int idx = (y_min + y) * image_size.x + (x_min + x);
                 image[idx] = color;
             }
         }
@@ -315,7 +315,7 @@ void fill_realization(uint32_t *image, int image_width, int image_height, uint32
         x_off += pt.x * min;
         y_off += pt.y * min;
         for (int i = min; i < min + extent; i++) {
-            fill_realization(image, image_width, image_height, color, fi, p,
+            fill_realization(image, image_size, color, fi, p,
                 current_dimension + 1, x_off, y_off);
             const auto &pt = fi.config.strides[current_dimension];
             x_off += pt.x;
@@ -348,6 +348,20 @@ float parse_float(const char *str) {
     return result;
 }
 
+void do_decay(int decay_factor, std::vector<uint32_t> &storage) {
+    if (decay_factor != 1) {
+        const uint32_t inv_d1 = (1 << 24) / std::max(1, decay_factor);
+        for (size_t i = 0; i < storage.size(); i++) {
+            uint32_t color = storage[i];
+            uint32_t rgb = color & 0x00ffffff;
+            uint32_t alpha = (color >> 24);
+            alpha *= inv_d1;
+            alpha &= 0xff000000;
+            storage[i] = alpha | rgb;
+        }
+    }
+}
+
 int run(int argc, char **argv) {
     if (argc == 1) {
         usage();
@@ -355,12 +369,8 @@ int run(int argc, char **argv) {
     }
 
     // State that determines how different funcs get drawn
-    int frame_width = 1920, frame_height = 1080;
-    float decay_factor[2] = {1, 2};
+    GlobalConfig global;
     map<string, FuncInfo> func_info;
-
-    int timestep = 10000;
-    int hold_frames = 250;
 
     // The struct's default values are what we want
     FuncConfig config;
@@ -373,15 +383,15 @@ int run(int argc, char **argv) {
         string next = argv[i];
         if (next == "--size") {
             expect(i + 2 < argc, i);
-            frame_width = parse_int(argv[++i]);
-            frame_height = parse_int(argv[++i]);
+            global.frame_size.x = parse_int(argv[++i]);
+            global.frame_size.y = parse_int(argv[++i]);
         } else if (next == "--func") {
             expect(i + 1 < argc, i);
             const char *func = argv[++i];
             FuncInfo &fi = func_info[func];
             fi.config.labels.swap(config.labels);
             fi.config = config;
-            //fi.config.auto_label = false;
+            fi.config.auto_label = false;
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
@@ -451,14 +461,14 @@ int run(int argc, char **argv) {
             func_info[func].config.labels.push_back(l);
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
-            timestep = parse_int(argv[++i]);
+            global.timestep = parse_int(argv[++i]);
         } else if (next == "--decay") {
             expect(i + 2 < argc, i);
-            decay_factor[0] = parse_float(argv[++i]);
-            decay_factor[1] = parse_float(argv[++i]);
+            global.decay_factor_during_compute = parse_int(argv[++i]);
+            global.decay_factor_after_compute = parse_int(argv[++i]);
         } else if (next == "--hold") {
             expect(i + 1 < argc, i);
-            hold_frames = parse_int(argv[++i]);
+            global.hold_frames = parse_int(argv[++i]);
         } else if (next == "--uninit") {
             expect(i + 3 < argc, i);
             int r = parse_int(argv[++i]);
@@ -475,16 +485,25 @@ int run(int argc, char **argv) {
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
-    bool func_info_dumped = false;
+    bool info_dumped = false;
+    bool seen_global_config_tag = false;
 
     // There are three layers - image data, an animation on top of
     // it, and text labels. These layers get composited.
-    const int frame_elems = frame_width * frame_height;
-    std::vector<uint32_t> image(frame_elems, 0),
-                          anim(frame_elems, 0),
-                          anim_decay(frame_elems, 0),
-                          text(frame_elems, 0),
-                          blend(frame_elems, 0);
+    struct Buffers {
+        std::vector<uint32_t> image, anim, anim_decay, text, blend;
+
+        void resize(const Point &frame_size) {
+            const int frame_elems = frame_size.x * frame_size.y;
+            image.resize(frame_elems, 0);
+            anim.resize(frame_elems, 0);
+            anim_decay.resize(frame_elems, 0);
+            text.resize(frame_elems, 0);
+            blend.resize(frame_elems, 0);
+        }
+    } buffers;
+
+    buffers.resize(global.frame_size);
 
     struct PipelineInfo {
         string name;
@@ -499,23 +518,23 @@ int run(int argc, char **argv) {
     for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
-            halide_clock += timestep;
-            if (end_counter == (size_t)hold_frames) {
+            halide_clock += global.timestep;
+            if (end_counter >= (size_t) global.hold_frames) {
                 break;
             }
         }
 
-        if (halide_clock >= video_clock) {
-            const ssize_t frame_bytes = 4 * frame_elems;
+        if (halide_clock > video_clock) {
+            const ssize_t frame_bytes = buffers.image.size() * sizeof(uint32_t);
 
-            while (halide_clock >= video_clock) {
+            while (halide_clock > video_clock) {
                 // Composite text over anim over image
-                for (int i = 0; i < frame_elems; i++) {
-                    uint8_t *anim_decay_px  = (uint8_t *)(anim_decay.data() + i);
-                    uint8_t *anim_px  = (uint8_t *)(anim.data() + i);
-                    uint8_t *image_px = (uint8_t *)(image.data() + i);
-                    uint8_t *text_px  = (uint8_t *)(text.data() + i);
-                    uint8_t *blend_px = (uint8_t *)(blend.data() + i);
+                for (int i = 0; i < buffers.image.size(); i++) {
+                    uint8_t *anim_decay_px  = (uint8_t *)(buffers.anim_decay.data() + i);
+                    uint8_t *anim_px  = (uint8_t *)(buffers.anim.data() + i);
+                    uint8_t *image_px = (uint8_t *)(buffers.image.data() + i);
+                    uint8_t *text_px  = (uint8_t *)(buffers.text.data() + i);
+                    uint8_t *blend_px = (uint8_t *)(buffers.blend.data() + i);
                     // anim over anim_decay
                     composite(anim_decay_px, anim_px, anim_decay_px);
                     // anim_decay over image
@@ -525,41 +544,23 @@ int run(int argc, char **argv) {
                 }
 
                 // Dump the frame
-                ssize_t bytes_written = write(1, blend.data(), frame_bytes);
+                ssize_t bytes_written = write(1, buffers.blend.data(), frame_bytes);
                 if (bytes_written < frame_bytes) {
                     std::cerr << "Could not write frame to stdout.\n";
                     return -1;
                 }
 
-                video_clock += timestep;
+                video_clock += global.timestep;
 
                 // Decay the anim_decay
-                if (decay_factor[1] != 1) {
-                    const uint32_t inv_d1 = (1 << 24) / decay_factor[1];
-                    for (int i = 0; i < frame_elems; i++) {
-                        uint32_t color = anim_decay[i];
-                        uint32_t rgb = color & 0x00ffffff;
-                        uint32_t alpha = (color >> 24);
-                        alpha *= inv_d1;
-                        alpha &= 0xff000000;
-                        anim_decay[i] = alpha | rgb;
-                    }
-                }
+                do_decay(global.decay_factor_after_compute, buffers.anim_decay);
 
                 // Also decay the anim
-                const uint32_t inv_d0 = (1 << 24) / decay_factor[0];
-                for (int i = 0; i < frame_elems; i++) {
-                    uint32_t color = anim[i];
-                    uint32_t rgb = color & 0x00ffffff;
-                    uint32_t alpha = (color >> 24);
-                    alpha *= inv_d0;
-                    alpha &= 0xff000000;
-                    anim[i] = alpha | rgb;
-                }
+                do_decay(global.decay_factor_during_compute, buffers.anim);
             }
 
             // Blank anim
-            std::fill(anim.begin(), anim.end(), 0);
+            std::fill(buffers.anim.begin(), buffers.anim.end(), 0);
         }
 
         // Read a tracing packet
@@ -582,24 +583,40 @@ int run(int argc, char **argv) {
             // If there are trace tags, they will come immediately after the pipeline's
             // halide_trace_begin_pipeline but before any realizations.
             if (FuncConfig::match(p.trace_tag())) {
-                Halide::Trace::FuncConfig cfg(p.trace_tag());
+                FuncConfig cfg(p.trace_tag());
                 func_info[p.func()].config = cfg;
                 func_info[p.func()].configured = true;
+            } else if (GlobalConfig::match(p.trace_tag())) {
+                if (halide_clock != 0 || video_clock != 0) {
+                    // Messing with timestamp, framesize, etc partway thru
+                    // a visualization would be bad.
+                    // TODO: May need to check parent_id here, as nested
+                    // pipelines called via define_extern can emit these.
+                    std::cerr << "GlobalConfig trace_tags are only allowed at the start of a visualization.\n";
+                    exit(1);
+                }
+                if (seen_global_config_tag) {
+                    std::cerr << "Warning, saw multiple GlobalConfig trace_tags, some will be ignored.\n";
+                }
+                global = GlobalConfig(p.trace_tag());
+                buffers.resize(global.frame_size);
+                seen_global_config_tag = true;
             } else {
                 std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
             }
             continue;
         }
 
-        if (!func_info_dumped) {
+        if (!info_dumped) {
             // dump after any tags are handled
+            global.dump(std::cerr);
             for (const auto &p : func_info) {
                 const auto &fi = p.second;
                 if (fi.configured) {
                     fi.config.dump(std::cerr, p.first);
                 }
             }
-            func_info_dumped = true;
+            info_dumped = true;
         }
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
@@ -650,16 +667,16 @@ int run(int argc, char **argv) {
         for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
             const Label &label = it->first;
             int first_draw_clock = it->second;
-            int frames_since_first_draw = (halide_clock - first_draw_clock) / timestep;
+            int frames_since_first_draw = (halide_clock - first_draw_clock) / global.timestep;
             if (frames_since_first_draw < label.fade_in_frames) {
                 uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
                 if (color > 255) color = 255;
                 color *= 0x10101;
-                draw_text(label.text, label.pos, color, text.data(), frame_width, frame_height);
+                draw_text(label.text, label.pos, color, buffers.text.data(), global.frame_size);
                 ++it;
             } else {
                 // Once we reach or exceed the final frame, draw at 100% opacity, then remove
-                draw_text(label.text, label.pos, 0xffffff, text.data(), frame_width, frame_height);
+                draw_text(label.text, label.pos, 0xffffff, buffers.text.data(), global.frame_size);
                 it = labels_being_drawn.erase(it);
             }
         }
@@ -697,10 +714,10 @@ int run(int argc, char **argv) {
                     }
 
                     // The box to draw must be entirely on-screen
-                    if (y < 0 || y >= frame_height ||
-                        x < 0 || x >= frame_width ||
-                        y + z - 1 < 0 || y + z - 1 >= frame_height ||
-                        x + z - 1 < 0 || x + z - 1 >= frame_width) {
+                    if (y < 0 || y >= global.frame_size.y ||
+                        x < 0 || x >= global.frame_size.x ||
+                        y + z - 1 < 0 || y + z - 1 >= global.frame_size.y ||
+                        x + z - 1 < 0 || x + z - 1 >= global.frame_size.x) {
                         continue;
                     }
 
@@ -718,7 +735,7 @@ int run(int argc, char **argv) {
                         update_image = true;
                         // Get the old color, in case we're only
                         // updating one of the color channels.
-                        image_color = image[frame_width * y + x];
+                        image_color = buffers.image[global.frame_size.x * y + x];
 
                         double value = p.get_value_as<double>(lane);
 
@@ -745,10 +762,10 @@ int run(int argc, char **argv) {
                     // Draw the pixel
                     for (int dy = 0; dy < fi.config.zoom; dy++) {
                         for (int dx = 0; dx < fi.config.zoom; dx++) {
-                            int px = frame_width * (y + dy) + x + dx;
-                            anim[px] = color;
+                            int px = global.frame_size.x * (y + dy) + x + dx;
+                            buffers.anim[px] = color;
                             if (update_image) {
-                                image[px] = image_color;
+                                buffers.image[px] = image_color;
                             }
                         }
                     }
@@ -758,11 +775,11 @@ int run(int argc, char **argv) {
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            fill_realization(image.data(), frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
+            fill_realization(buffers.image.data(), global.frame_size, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
             if (fi.config.blank_on_end_realization) {
-                fill_realization(image.data(), frame_width, frame_height, 0, fi, p);
+                fill_realization(buffers.image.data(), global.frame_size, 0, fi, p);
             }
             break;
         case halide_trace_produce:

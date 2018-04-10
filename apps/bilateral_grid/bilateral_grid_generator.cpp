@@ -148,6 +148,20 @@ public:
             cfg.pos.y = 700;
             blury.add_trace_tag(cfg.to_trace_tag());
         }
+        {
+            // GlobalConfig applies to the entire visualization pipeline;
+            // you can set this tag on any Func that is realized, but only
+            // the last one seen will be used. (Since the tags are emitted in
+            // an arbitrary order, emitting only one such tag is the best practice).
+            // Note also that since the global settings are often context-dependent
+            // (eg the output size and timestep may vary depending on the
+            // input data), it's often more useful to specify these on the
+            // command line.
+            Halide::Trace::GlobalConfig global_cfg;
+            global_cfg.timestep = 1000;
+
+            bilateral_grid.add_trace_tag(global_cfg.to_trace_tag());
+        }
     }
 };
 
