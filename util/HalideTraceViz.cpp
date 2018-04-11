@@ -362,16 +362,7 @@ void do_decay(int decay_factor, std::vector<uint32_t> &storage) {
     }
 }
 
-int run(int argc, char **argv) {
-    if (argc == 1) {
-        usage();
-        return 0;
-    }
-
-    // State that determines how different funcs get drawn
-    GlobalConfig global;
-    map<string, FuncInfo> func_info;
-
+void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncInfo> &func_info) {
     // The struct's default values are what we want
     FuncConfig config;
 
@@ -480,12 +471,23 @@ int run(int argc, char **argv) {
         }
         i++;
     }
+}
+
+int run(int argc, char **argv) {
+    if (argc == 1) {
+        usage();
+        return 0;
+    }
+
+    // State that determines how different funcs get drawn
+    GlobalConfig global;
+    map<string, FuncInfo> func_info;
 
     // halide_clock counts halide events. video_clock counts how many
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
-    bool info_dumped = false;
+    bool all_args_final = false;
     bool seen_global_config_tag = false;
 
     // There are three layers - image data, an animation on top of
@@ -503,7 +505,8 @@ int run(int argc, char **argv) {
         }
     } buffers;
 
-    buffers.resize(global.frame_size);
+    // Leave buffers unallocated for now;
+    // we'll allocate once all tags and flags are processed
 
     struct PipelineInfo {
         string name;
@@ -525,6 +528,7 @@ int run(int argc, char **argv) {
         }
 
         if (halide_clock > video_clock) {
+            assert(all_args_final);
             const ssize_t frame_bytes = buffers.image.size() * sizeof(uint32_t);
 
             while (halide_clock > video_clock) {
@@ -582,24 +586,23 @@ int run(int argc, char **argv) {
         } else if (p.event == halide_trace_tag) {
             // If there are trace tags, they will come immediately after the pipeline's
             // halide_trace_begin_pipeline but before any realizations.
+            if (halide_clock != 0 || video_clock != 0) {
+                // Messing with timestamp, framesize, etc partway thru
+                // a visualization would be bad.
+                // TODO: May need to check parent_id here, as nested
+                // pipelines called via define_extern could emit these.
+                std::cerr << "trace_tags are only expected at the start of a visualization.\n";
+                exit(1);
+            }
             if (FuncConfig::match(p.trace_tag())) {
                 FuncConfig cfg(p.trace_tag());
                 func_info[p.func()].config = cfg;
                 func_info[p.func()].configured = true;
             } else if (GlobalConfig::match(p.trace_tag())) {
-                if (halide_clock != 0 || video_clock != 0) {
-                    // Messing with timestamp, framesize, etc partway thru
-                    // a visualization would be bad.
-                    // TODO: May need to check parent_id here, as nested
-                    // pipelines called via define_extern can emit these.
-                    std::cerr << "GlobalConfig trace_tags are only allowed at the start of a visualization.\n";
-                    exit(1);
-                }
                 if (seen_global_config_tag) {
                     std::cerr << "Warning, saw multiple GlobalConfig trace_tags, some will be ignored.\n";
                 }
                 global = GlobalConfig(p.trace_tag());
-                buffers.resize(global.frame_size);
                 seen_global_config_tag = true;
             } else {
                 std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
@@ -607,7 +610,15 @@ int run(int argc, char **argv) {
             continue;
         }
 
-        if (!info_dumped) {
+        if (!all_args_final) {
+            // We wait until now to process the cmd-line args;
+            // this allows us to override trace-tag specifications
+            // via the commandline, which is handy for experimentations.
+            process_args(argc, argv, global, func_info);
+
+            // allocate the buffers after all tags and flags are processed
+            buffers.resize(global.frame_size);
+
             // dump after any tags are handled
             global.dump(std::cerr);
             for (const auto &p : func_info) {
@@ -616,7 +627,7 @@ int run(int argc, char **argv) {
                     fi.config.dump(std::cerr, p.first);
                 }
             }
-            info_dumped = true;
+            all_args_final = true;
         }
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
