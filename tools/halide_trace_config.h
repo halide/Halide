@@ -87,7 +87,7 @@ struct Label {
     int fade_in_frames = 0;
 
     Label() = default;
-    Label(const std::string &text, const Point &pos, int fade_in_frames = 0) : text(text), pos(pos), fade_in_frames(fade_in_frames) {}
+    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0) : text(text), pos(pos), fade_in_frames(fade_in_frames) {}
 
     friend std::ostream &operator<<(std::ostream &os, const Label &label) {
         os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames;
@@ -110,6 +110,9 @@ struct FuncConfig {
     std::vector<Point> strides = { {1, 0}, {0, 1} };
     int color_dim = -1;
     float min = 0.f, max = 1.f;
+    // Label(s) to be rendered with the Func. The Label's position
+    // is an offset from the Func's position, so (0, 0) means render
+    // at the top-left of the Func itself.
     std::vector<Label> labels;
     bool auto_label = true;  // if there are no labels, add one matching the func name
     bool blank_on_end_realization = false;
