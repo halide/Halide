@@ -445,11 +445,15 @@ std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
 struct Const {
     struct pattern_tag {};
     int val;
+    halide_type_t type;
 
     constexpr static uint32_t binds = 0;
 
     HALIDE_ALWAYS_INLINE
     Const(int v) : val(v) {}
+
+    HALIDE_ALWAYS_INLINE
+    Const(int v, halide_type_t t) : val(v), type(t) {}
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
@@ -473,6 +477,11 @@ struct Const {
     HALIDE_ALWAYS_INLINE
     bool match(const Const &b, MatcherState & __restrict__ state) const noexcept {
         return val == b.val;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState & __restrict__ state) const {
+        return make_const(type, val);
     }
 };
 
@@ -1585,7 +1594,7 @@ struct Intrin {
 };
 
 template<typename... Args>
-inline std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
+std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
     s << op.intrin << "(";
     op.print_args(s);
     s << ")";
@@ -1596,6 +1605,87 @@ template<typename... Args>
 HALIDE_ALWAYS_INLINE
 Intrin<Args...> intrin(Call::ConstString name, Args&&... args) noexcept {
     return Intrin<Args...>(name, std::forward<Args>(args)...);
+}
+
+struct IndeterminateOp {
+    struct pattern_tag {};
+
+    halide_type_t type;
+
+    static constexpr uint32_t binds = 0;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
+        if (e.node_type != IRNodeType::Call) {
+            return false;
+        }
+        const Call &c = (const Call &)e;
+        return c.is_intrinsic(Call::indeterminate_expression);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState & __restrict__ state) const {
+        halide_type_t ty = type;
+        ty.lanes |= MatcherState::indeterminate_expression;
+        return to_special_expr(ty);
+    }
+};
+
+HALIDE_ALWAYS_INLINE
+IndeterminateOp indet(halide_type_t type) {
+    return {type};
+}
+
+HALIDE_ALWAYS_INLINE
+IndeterminateOp indet() {
+    return IndeterminateOp();
+}
+
+inline std::ostream &operator<<(std::ostream &s, const IndeterminateOp &op) {
+    s << "indeterminate_expression()";
+    return s;
+}
+
+
+struct OverflowOp {
+    struct pattern_tag {};
+
+    halide_type_t type;
+
+    static constexpr uint32_t binds = 0;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
+        if (e.node_type != IRNodeType::Call) {
+            return false;
+        }
+        const Call &c = (const Call &)e;
+        return c.is_intrinsic(Call::signed_integer_overflow);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState & __restrict__ state) const {
+        halide_type_t ty = type;
+        ty.lanes |= MatcherState::signed_integer_overflow;
+        return to_special_expr(ty);
+    }
+};
+
+HALIDE_ALWAYS_INLINE
+OverflowOp overflow(halide_type_t type) {
+    return {type};
+}
+
+HALIDE_ALWAYS_INLINE
+OverflowOp overflow() {
+    return OverflowOp();
+}
+
+inline std::ostream &operator<<(std::ostream &s, const OverflowOp &op) {
+    s << "signed_integer_overflow()";
+    return s;
 }
 
 template<typename A>
@@ -1787,10 +1877,18 @@ std::ostream &operator<<(std::ostream &s, const RampOp<A, B> &op) {
     return s;
 }
 
-template<typename A, typename B>
+template<typename A,
+         typename B,
+         typename = typename enable_if_pattern<A>::type,
+         typename = typename enable_if_pattern<B>::type>
 HALIDE_ALWAYS_INLINE
 RampOp<A, B> ramp(A a, B b, int lanes = -1) noexcept {
     return {a, b, lanes};
+}
+
+HALIDE_ALWAYS_INLINE
+RampOp<const BaseExprNode &, const BaseExprNode &> ramp(Expr a, Expr b, int lanes = -1) noexcept {
+    return {*a.get(), *b.get(), lanes};
 }
 
 template<typename A>
@@ -2126,21 +2224,6 @@ struct Rewriter {
     }
 
     template<typename Before,
-             typename = typename enable_if_pattern<Before>::type>
-    HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, Expr &&after) noexcept {
-        state.reset();
-        if (before.template match<0>(instance, state)) {
-            result = std::move(after);
-            // debug(0) << instance << " -> " << result << " via " << before << "\n";
-            return true;
-        } else {
-            // debug(0) << "No match: " << instance << " vs " << before << "\n";
-            return false;
-        }
-    }
-
-    template<typename Before,
              typename After,
              typename Predicate,
              typename = typename enable_if_pattern<Before>::type,
@@ -2177,24 +2260,6 @@ struct Rewriter {
             return false;
         }
     }
-
-    template<typename Before,
-             typename Predicate,
-             typename = typename enable_if_pattern<Before>::type,
-             typename = typename enable_if_pattern<Predicate>::type>
-    HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, Expr &&after, Predicate &&pred) {
-        state.reset();
-        if (before.template match<0>(instance, state) &&
-            evaluate_predicate(pred, state)) {
-            result = std::move(after);
-            // debug(0) << instance << " -> " << result << " via " << before << " when " << pred << "\n";
-            return true;
-        } else {
-            // debug(0) << "No match: " << instance << " vs " << before << "\n";
-            return false;
-        }
-    }
 };
 
 template<typename Instance>
@@ -2202,7 +2267,6 @@ HALIDE_ALWAYS_INLINE
 Rewriter<Instance> rewriter(Instance &&instance) noexcept {
     return Rewriter<Instance>(std::forward<Instance>(instance));
 }
-
 }
 
 }
