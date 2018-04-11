@@ -296,7 +296,6 @@ void expect(bool cond, int i) {
 void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color,
                       const FuncInfo &fi, const Packet &p,
                       int current_dimension = 0, int x_off = 0, int y_off = 0) {
-    assert(p.dimensions >= 2 * fi.config.strides.size());
     if (2 * current_dimension == p.dimensions) {
         int x_min = x_off * fi.config.zoom + fi.config.pos.x;
         int y_min = y_off * fi.config.zoom + fi.config.pos.y;
@@ -311,13 +310,13 @@ void fill_realization(uint32_t *image, int image_width, int image_height, uint32
     } else {
         int min = p.get_coord(current_dimension * 2 + 0);
         int extent = p.get_coord(current_dimension * 2 + 1);
-        const auto &pt = fi.config.strides[current_dimension];
+        // If we don't have enough strides, assume subsequent dimensions have stride (0, 0)
+        const Point pt = current_dimension < fi.config.strides.size() ? fi.config.strides[current_dimension] : Point{0, 0};
         x_off += pt.x * min;
         y_off += pt.y * min;
         for (int i = min; i < min + extent; i++) {
             fill_realization(image, image_width, image_height, color, fi, p,
                 current_dimension + 1, x_off, y_off);
-            const auto &pt = fi.config.strides[current_dimension];
             x_off += pt.x;
             y_off += pt.y;
         }
@@ -678,78 +677,73 @@ int run(int argc, char **argv) {
                 fi.stats.observe_load(p);
             }
 
-            // Check the tracing packet contained enough information
-            // given the number of dimensions the user claims this
-            // Func has.
-            assert(p.dimensions >= p.type.lanes * fi.config.strides.size());
-            if (p.dimensions >= p.type.lanes * fi.config.strides.size()) {
-                for (int lane = 0; lane < p.type.lanes; lane++) {
+            // zero- or one-dimensional Funcs can have dimensions < strides
+            const int dims = std::min(p.dimensions/p.type.lanes, (int) fi.config.strides.size());
+            for (int lane = 0; lane < p.type.lanes; lane++) {
+                // Compute the screen-space x, y coord to draw this.
+                int x = fi.config.pos.x;
+                int y = fi.config.pos.y;
+                const float z = fi.config.zoom;
+                for (int d = 0; d < dims; d++) {
+                    const int coord = d * p.type.lanes + lane;
+                    assert(coord < p.dimensions);
+                    const int a = p.get_coord(coord);
+                    const auto &stride = fi.config.strides[d];
+                    x += z * stride.x * a;
+                    y += z * stride.y * a;
+                }
 
-                    // Compute the screen-space x, y coord to draw this.
-                    int x = fi.config.pos.x;
-                    int y = fi.config.pos.y;
-                    const float z = fi.config.zoom;
-                    for (int d = 0; d < fi.config.strides.size(); d++) {
-                        int a = p.get_coord(d * p.type.lanes + lane);
-                        const auto &pt = fi.config.strides[d];
-                        x += z * pt.x * a;
-                        y += z * pt.y * a;
+                // The box to draw must be entirely on-screen
+                if (y < 0 || y >= frame_height ||
+                    x < 0 || x >= frame_width ||
+                    y + z - 1 < 0 || y + z - 1 >= frame_height ||
+                    x + z - 1 < 0 || x + z - 1 >= frame_width) {
+                    continue;
+                }
+
+                // Stores are orange, loads are blue.
+                uint32_t color = p.event == halide_trace_load ? 0xffffdd44 : 0xff44ddff;
+
+                uint32_t image_color;
+                bool update_image = false;
+
+                // Update one or more of the color channels of the
+                // image layer in case it's a store or a load from
+                // the input.
+                if (p.event == halide_trace_store ||
+                    fi.stats.num_realizations == 0 /* load from an input */) {
+                    update_image = true;
+                    // Get the old color, in case we're only
+                    // updating one of the color channels.
+                    image_color = image[frame_width * y + x];
+
+                    double value = p.get_value_as<double>(lane);
+
+                    // Normalize it.
+                    value = std::max(0.0, std::min(255.0, 255.0 * (value - fi.config.min) / (fi.config.max - fi.config.min)));
+
+                    // Convert to 8-bit color.
+                    uint8_t int_value = (uint8_t)value;
+
+                    if (fi.config.color_dim < 0) {
+                        // Grayscale
+                        image_color = (int_value * 0x00010101) | 0xff000000;
+                    } else {
+                        // Color
+                        uint32_t channel = p.get_coord(fi.config.color_dim * p.type.lanes + lane);
+                        uint32_t mask = ~(255 << (channel * 8));
+                        image_color &= mask;
+                        image_color |= int_value << (channel * 8);
                     }
+                }
 
-                    // The box to draw must be entirely on-screen
-                    if (y < 0 || y >= frame_height ||
-                        x < 0 || x >= frame_width ||
-                        y + z - 1 < 0 || y + z - 1 >= frame_height ||
-                        x + z - 1 < 0 || x + z - 1 >= frame_width) {
-                        continue;
-                    }
-
-                    // Stores are orange, loads are blue.
-                    uint32_t color = p.event == halide_trace_load ? 0xffffdd44 : 0xff44ddff;
-
-                    uint32_t image_color;
-                    bool update_image = false;
-
-                    // Update one or more of the color channels of the
-                    // image layer in case it's a store or a load from
-                    // the input.
-                    if (p.event == halide_trace_store ||
-                        fi.stats.num_realizations == 0 /* load from an input */) {
-                        update_image = true;
-                        // Get the old color, in case we're only
-                        // updating one of the color channels.
-                        image_color = image[frame_width * y + x];
-
-                        double value = p.get_value_as<double>(lane);
-
-                        // Normalize it.
-                        value = 255 * (value - fi.config.min) / (fi.config.max - fi.config.min);
-                        if (value < 0) value = 0;
-                        if (value > 255) value = 255;
-
-                        // Convert to 8-bit color.
-                        uint8_t int_value = (uint8_t)value;
-
-                        if (fi.config.color_dim < 0) {
-                            // Grayscale
-                            image_color = (int_value * 0x00010101) | 0xff000000;
-                        } else {
-                            // Color
-                            uint32_t channel = p.get_coord(fi.config.color_dim * p.type.lanes + lane);
-                            uint32_t mask = ~(255 << (channel * 8));
-                            image_color &= mask;
-                            image_color |= int_value << (channel * 8);
-                        }
-                    }
-
-                    // Draw the pixel
-                    for (int dy = 0; dy < fi.config.zoom; dy++) {
-                        for (int dx = 0; dx < fi.config.zoom; dx++) {
-                            int px = frame_width * (y + dy) + x + dx;
-                            anim[px] = color;
-                            if (update_image) {
-                                image[px] = image_color;
-                            }
+                // Draw the pixel
+                for (int dy = 0; dy < fi.config.zoom; dy++) {
+                    for (int dx = 0; dx < fi.config.zoom; dx++) {
+                        int px = frame_width * (y + dy) + x + dx;
+                        anim[px] = color;
+                        if (update_image) {
+                            image[px] = image_color;
                         }
                     }
                 }

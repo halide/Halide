@@ -165,6 +165,17 @@ public:
             gray.add_trace_tag(cfg.to_trace_tag());
         }
 
+        {
+            // This is positioned a little awkwardly, but is useful
+            // to show how the LUT is accessed (and to verify that 1d Funcs
+            // render properly in visualizer)
+            Halide::Trace::FuncConfig cfg;
+            cfg.pos.x = 1000;
+            cfg.pos.y = 32;
+            cfg.labels = { { "remap LUT", {1000, 32} } };
+            remap.add_trace_tag(cfg.to_trace_tag());
+        }
+
         for (int i = 0; i < pyramid_levels; ++i) {
             int y = 100;
             for (int j = 0; j < i; ++j) {
