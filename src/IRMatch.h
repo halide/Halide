@@ -485,6 +485,23 @@ struct Const {
     }
 };
 
+// Convert a provided pattern, expr, or constant int into the internal
+// representation we use in the matcher trees.
+template<typename T,
+         typename = typename std::remove_reference<T>::type::pattern_tag>
+HALIDE_ALWAYS_INLINE
+T pattern_arg(T t) {
+    return t;
+}
+HALIDE_ALWAYS_INLINE
+Const pattern_arg(int x) {
+    return Const(x);
+}
+HALIDE_ALWAYS_INLINE
+const BaseExprNode &pattern_arg(const Expr &e) {
+    return *e.get();
+}
+
 inline std::ostream &operator<<(std::ostream &s, const Const &op) {
     s << op.val;
     return s;
@@ -892,33 +909,15 @@ std::ostream &operator<<(std::ostream &s, const BinOp<Mod, A, B> &op) {
     return s;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Add, A, B> operator+(A a, B b) noexcept {
-    return {a, b};
+auto operator+(A a, B b) noexcept -> BinOp<Add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Add, A, Const> operator+(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Add, Const, B> operator+(int a, B b) noexcept {
-    return {Const(a), b};
-}
-
-HALIDE_ALWAYS_INLINE
-BinOp<Add, const BaseExprNode &, const BaseExprNode &> add(const Expr &a, const Expr &b) noexcept {
-    return {*a.get(), *b.get()};
-}
+auto add(A a, B b) -> decltype(IRMatcher::operator+(a, b)) {return IRMatcher::operator+(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -942,33 +941,15 @@ double constant_fold_bin_op<Add>(halide_type_t &t, double a, double b) noexcept 
     return a + b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Sub, A, B> operator-(A a, B b) noexcept {
-    return {a, b};
+auto operator-(A a, B b) noexcept -> BinOp<Sub, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Sub, A, Const> operator-(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Sub, Const, B> operator-(int a, B b) noexcept {
-    return {Const(a), b};
-}
-
-HALIDE_ALWAYS_INLINE
-BinOp<Sub, const BaseExprNode &, const BaseExprNode &> sub(const Expr &a, const Expr &b) noexcept {
-    return {*a.get(), *b.get()};
-}
+auto sub(A a, B b) -> decltype(IRMatcher::operator-(a, b)) {return IRMatcher::operator-(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -992,34 +973,16 @@ double constant_fold_bin_op<Sub>(halide_type_t &t, double a, double b) noexcept 
     return a - b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Mul, A, B> operator*(A a, B b) noexcept {
-    return {a, b};
+auto operator*(A a, B b) noexcept -> BinOp<Mul, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Mul, A, Const> operator*(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Mul, Const, B> operator*(int a, B b) noexcept {
-    return {Const(a), b};
-}
-
-HALIDE_ALWAYS_INLINE
-BinOp<Mul, const BaseExprNode &, const BaseExprNode &> mul(const Expr &a, const Expr &b) noexcept {
-    return {*a.get(), *b.get()};
-}
+auto mul(A a, B b) -> decltype(IRMatcher::operator*(a, b)) {return IRMatcher::operator*(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1043,33 +1006,15 @@ double constant_fold_bin_op<Mul>(halide_type_t &t, double a, double b) noexcept 
     return a * b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Div, A, B> operator/(A a, B b) noexcept {
-    return {a, b};
+auto operator/(A a, B b) noexcept -> BinOp<Div, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Div, A, Const> operator/(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Div, Const, B> operator/(int a, B b) noexcept {
-    return {Const(a), b};
-}
-
-HALIDE_ALWAYS_INLINE
-BinOp<Div, const BaseExprNode &, const BaseExprNode &> div(const Expr &a, const Expr &b) noexcept {
-    return {*a.get(), *b.get()};
-}
+auto div(A a, B b) -> decltype(IRMatcher::operator/(a, b)) {return IRMatcher::operator/(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1099,33 +1044,15 @@ double constant_fold_bin_op<Div>(halide_type_t &t, double a, double b) noexcept 
     return a / b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Mod, A, B> operator%(A a, B b) noexcept {
-    return {a, b};
+auto operator%(A a, B b) noexcept -> BinOp<Mod, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Mod, A, Const> operator%(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Mod, Const, B> operator%(int a, B b) noexcept {
-    return {Const(a), b};
-}
-
-HALIDE_ALWAYS_INLINE
-BinOp<Mod, const BaseExprNode &, const BaseExprNode &> mod(const Expr &a, const Expr &b) noexcept {
-    return {*a.get(), *b.get()};
-}
+auto mod(A a, B b) -> decltype(IRMatcher::operator%(a, b)) {return IRMatcher::operator%(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1155,27 +1082,10 @@ double constant_fold_bin_op<Mod>(halide_type_t &t, double a, double b) noexcept 
     return mod_imp(a, b);
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Min, A, B> min(A a, B b) noexcept {
-    return {a, b};
-}
-
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Min, A, Const> min(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Min, Const, B> min(int a, B b) noexcept {
-    return {Const(a), b};
+auto min(A a, B b) noexcept -> BinOp<Min, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
 template<>
@@ -1196,28 +1106,10 @@ double constant_fold_bin_op<Min>(halide_type_t &t, double a, double b) noexcept 
     return std::min(a, b);
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Max, A, B> max(A a, B b) noexcept {
-    return {a, b};
-}
-
-
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Max, A, Const> max(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename B,
-         typename = typename enable_if_pattern<B>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Max, Const, B> max(int a, B b) noexcept {
-    return {Const(a), b};
+auto max(A a, B b) noexcept -> BinOp<Max, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
 template<>
@@ -1238,21 +1130,15 @@ double constant_fold_bin_op<Max>(halide_type_t &t, double a, double b) noexcept 
     return std::max(a, b);
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<LT, A, B> operator<(A a, B b) noexcept {
-    return {a, b};
+auto operator<(A a, B b) noexcept -> CmpOp<LT, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<LT, A, Const> operator<(A a, int b) noexcept {
-    return {a, b};
-}
+auto lt(A a, B b) -> decltype(IRMatcher::operator<(a, b)) {return IRMatcher::operator<(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1272,21 +1158,15 @@ uint64_t constant_fold_cmp_op<LT>(double a, double b) noexcept {
     return a < b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<GT, A, B> operator>(A a, B b) noexcept {
-    return {a, b};
+auto operator>(A a, B b) noexcept -> CmpOp<GT, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<GT, A, Const> operator>(A a, int b) noexcept {
-    return {a, Const(b)};
-}
+auto gt(A a, B b) -> decltype(IRMatcher::operator>(a, b)) {return IRMatcher::operator>(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1306,21 +1186,15 @@ uint64_t constant_fold_cmp_op<GT>(double a, double b) noexcept {
     return a > b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<LE, A, B> operator<=(A a, B b) noexcept {
-    return {a, b};
+auto operator<=(A a, B b) noexcept -> CmpOp<LE, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<LE, A, Const> operator<=(A a, int b) noexcept {
-    return {a, Const(b)};
-}
+auto le(A a, B b) -> decltype(IRMatcher::operator<=(a, b)) {return IRMatcher::operator<=(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1340,22 +1214,15 @@ uint64_t constant_fold_cmp_op<LE>(double a, double b) noexcept {
     return a <= b;
 }
 
-
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<GE, A, B> operator>=(A a, B b) noexcept {
-    return {a, b};
+auto operator>=(A a, B b) noexcept -> CmpOp<GE, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<GE, A, Const> operator>=(A a, int b) noexcept {
-    return {a, Const(b)};
-}
+auto ge(A a, B b) -> decltype(IRMatcher::operator>=(a, b)) {return IRMatcher::operator>=(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1375,21 +1242,15 @@ uint64_t constant_fold_cmp_op<GE>(double a, double b) noexcept {
     return a >= b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<EQ, A, B> operator==(A a, B b) noexcept {
-    return {a, b};
+auto operator==(A a, B b) noexcept -> CmpOp<EQ, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<EQ, A, Const> operator==(A a, int b) noexcept {
-    return {a, Const(b)};
-}
+auto eq(A a, B b) -> decltype(IRMatcher::operator==(a, b)) {return IRMatcher::operator==(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1409,21 +1270,15 @@ uint64_t constant_fold_cmp_op<EQ>(double a, double b) noexcept {
     return a == b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<NE, A, B> operator!=(A a, B b) noexcept {
-    return {a, b};
+auto operator!=(A a, B b) noexcept -> CmpOp<NE, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-CmpOp<NE, A, Const> operator!=(A a, int b) noexcept {
-    return {a, Const(b)};
-}
+auto ne(A a, B b) -> decltype(IRMatcher::operator!=(a, b)) {return IRMatcher::operator!=(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1443,28 +1298,15 @@ uint64_t constant_fold_cmp_op<NE>(double a, double b) noexcept {
     return a != b;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Or, A, B> operator||(A a, B b) noexcept {
-    return {a, b};
+auto operator||(A a, B b) noexcept -> BinOp<Or, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<Or, A, Const> operator||(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<Or, A, Const> operator||(int b, A a) noexcept {
-    return {a, Const(b)};
-}
+auto or_op(A a, B b) -> decltype(IRMatcher::operator||(a, b)) {return IRMatcher::operator||(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1484,28 +1326,15 @@ double constant_fold_bin_op<Or>(halide_type_t &t, double a, double b) noexcept {
     return 0;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<And, A, B> operator&&(A a, B b) noexcept {
-    return {a, b};
+auto operator&&(A a, B b) noexcept -> BinOp<And, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-BinOp<And, A, Const> operator&&(A a, int b) noexcept {
-    return {a, Const(b)};
-}
-
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
-HALIDE_ALWAYS_INLINE
-BinOp<And, A, Const> operator&&(int b, A a) noexcept {
-    return {a, Const(b)};
-}
+auto and_op(A a, B b) -> decltype(IRMatcher::operator&&(a, b)) {return IRMatcher::operator&&(a, b);}
 
 template<>
 HALIDE_ALWAYS_INLINE
@@ -1722,12 +1551,15 @@ struct NotOp {
     }
 };
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A>
 HALIDE_ALWAYS_INLINE
-NotOp<A> operator!(A a) noexcept {
-    return {a};
+auto operator!(A a) noexcept -> NotOp<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
 }
+
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto not_op(A a) -> decltype(IRMatcher::operator!(a)) {return IRMatcher::operator!(a);}
 
 template<typename A>
 inline std::ostream &operator<<(std::ostream &s, const NotOp<A> &op) {
@@ -1773,20 +1605,10 @@ std::ostream &operator<<(std::ostream &s, const SelectOp<C, T, F> &op) {
     return s;
 }
 
-template<typename C,
-         typename T,
-         typename F,
-         typename = typename enable_if_pattern<C>::type,
-         typename = typename enable_if_pattern<T>::type,
-         typename = typename enable_if_pattern<F>::type>
+template<typename C, typename T, typename F>
 HALIDE_ALWAYS_INLINE
-SelectOp<C, T, F> select(C c, T t, F f) noexcept {
-    return {c, t, f};
-}
-
-HALIDE_ALWAYS_INLINE
-SelectOp<const BaseExprNode &, const BaseExprNode &, const BaseExprNode &> select(const Expr &c, const Expr &t, const Expr &f) noexcept {
-    return {*c.get(), *t.get(), *f.get()};
+auto select(C c, T t, F f) noexcept -> SelectOp<decltype(pattern_arg(c)), decltype(pattern_arg(t)), decltype(pattern_arg(f))> {
+    return {pattern_arg(c), pattern_arg(t), pattern_arg(f)};
 }
 
 template<typename A>
@@ -1832,8 +1654,8 @@ inline std::ostream &operator<<(std::ostream &s, const BroadcastOp<A> &op) {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-BroadcastOp<A> broadcast(A &&a, int lanes = -1) noexcept { // -1 => matches any number of lanes
-    return BroadcastOp<A>{std::forward<A>(a), lanes};
+auto broadcast(A a, int lanes = -1) noexcept -> BroadcastOp<decltype(pattern_arg(a))> {
+    return {pattern_arg(a), lanes};
 }
 
 template<typename A, typename B>
@@ -1877,18 +1699,10 @@ std::ostream &operator<<(std::ostream &s, const RampOp<A, B> &op) {
     return s;
 }
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-RampOp<A, B> ramp(A a, B b, int lanes = -1) noexcept {
-    return {a, b, lanes};
-}
-
-HALIDE_ALWAYS_INLINE
-RampOp<const BaseExprNode &, const BaseExprNode &> ramp(Expr a, Expr b, int lanes = -1) noexcept {
-    return {*a.get(), *b.get(), lanes};
+auto ramp(A a, B b, int lanes = -1) noexcept -> RampOp<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b), lanes};
 }
 
 template<typename A>
@@ -1954,12 +1768,15 @@ std::ostream &operator<<(std::ostream &s, const NegateOp<A> &op) {
     return s;
 }
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A>
 HALIDE_ALWAYS_INLINE
-NegateOp<A> operator-(A a) noexcept {
-    return {a};
+auto operator-(A a) noexcept -> NegateOp<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
 }
+
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto negate(A a) -> decltype(IRMatcher::operator-(a)) {return IRMatcher::operator-(a);}
 
 template<typename A>
 struct IsConstOp {
@@ -1979,10 +1796,10 @@ struct IsConstOp {
     }
 };
 
-template<typename A,
-         typename = typename enable_if_pattern<A>::type>
-IsConstOp<A> is_const(A a) noexcept {
-    return {a};
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto is_const(A a) noexcept -> IsConstOp<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
 }
 
 template<typename A>
@@ -2026,8 +1843,8 @@ std::ostream &operator<<(std::ostream &s, const CastOp<A> &op) {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-CastOp<A> cast(Type t, A &&a) noexcept {
-    return CastOp<A>{t, std::forward<A>(a)};
+auto cast(halide_type_t t, A a) noexcept -> CastOp<decltype(pattern_arg(a))> {
+    return {t, pattern_arg(a)};
 }
 
 template<typename A>
@@ -2048,8 +1865,8 @@ struct FoldOp {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-FoldOp<A> fold(A a) noexcept {
-    return {a};
+auto fold(A a) noexcept -> FoldOp<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
 }
 
 template<typename A>
@@ -2077,12 +1894,10 @@ struct CanProveOp {
     };
 };
 
-template<typename A,
-         typename Prover,
-         typename = typename enable_if_pattern<A>::type>
+template<typename A, typename Prover>
 HALIDE_ALWAYS_INLINE
-CanProveOp<A, Prover> can_prove(A a, Prover *s) noexcept {
-    return {a, s};
+auto can_prove(A a, Prover *p) noexcept -> CanProveOp<decltype(pattern_arg(a)), Prover> {
+    return {pattern_arg(a), p};
 }
 
 template<typename A, typename Prover>
@@ -2112,13 +1927,10 @@ struct GCDOp {
     };
 };
 
-template<typename A,
-         typename B,
-         typename = typename enable_if_pattern<A>::type,
-         typename = typename enable_if_pattern<B>::type>
+template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-GCDOp<A, B> gcd(A a, B b) noexcept {
-    return {a, b};
+auto gcd(A a, B b) noexcept -> GCDOp<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
 template<typename A, typename B>
@@ -2146,12 +1958,10 @@ struct BindOp {
     };
 };
 
-template<int i,
-         typename A,
-         typename = typename enable_if_pattern<A>::type>
+template<int i, typename A>
 HALIDE_ALWAYS_INLINE
-BindOp<i, A> bind(WildConst<i> c, A a) noexcept {
-    return {a};
+auto bind(WildConst<i> c, A a) noexcept -> BindOp<i, decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
 }
 
 template<int i, typename A>

@@ -1577,8 +1577,7 @@ private:
               rewrite((z - y*x)/x, z/x - y) ||
               (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
             (no_overflow_int(op->type) &&
-             (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes),
-                      c0 % c1 == 0) ||
+             (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0) ||
               rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
                       // First and last lanes are the same when...
                       can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
@@ -1587,7 +1586,8 @@ private:
               rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1) ||
               // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
               // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
-              rewrite((x * c0 + c1) / c2, (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
+              rewrite((x * c0 + c1) / c2,
+                      (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
                       c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1) ||
               // A very specific pattern that comes up in bounds in upsampling code.
               rewrite((x % 2 + c0) / 2, x % 2 + c0 / 2, c0 % 2 == 1)))) {
@@ -3658,16 +3658,14 @@ private:
         IRMatcher::Wild<1> y;
         IRMatcher::Wild<2> z;
         IRMatcher::Wild<3> w;
-        IRMatcher::Const zero(0);
-        IRMatcher::Const one(1);
         auto indet = IRMatcher::indet(op->type);
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value));
 
         if (rewrite(select(indet, x, y), indet) ||
             rewrite(select(x, indet, y), indet) ||
             rewrite(select(x, y, indet), indet) ||
-            rewrite(select(one, x, y), x) ||
-            rewrite(select(zero, x, y), y) ||
+            rewrite(select(1, x, y), x) ||
+            rewrite(select(0, x, y), y) ||
             rewrite(select(x, y, y), y) ||
             rewrite(select(x, intrin(Call::likely, y), y), true_value) ||
             rewrite(select(x, y, intrin(Call::likely, y)), false_value)) {
@@ -3698,8 +3696,8 @@ private:
             rewrite(select(x, z * y, y * w), y * select(x, z, w)) ||
             rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
             (op->type.is_bool() &&
-             (rewrite(select(x, one, zero), cast(op->type, x)) ||
-              rewrite(select(x, zero, one), cast(op->type, !x))))) {
+             (rewrite(select(x, 1, 0), cast(op->type, x)) ||
+              rewrite(select(x, 0, 1), cast(op->type, !x))))) {
             return mutate(std::move(rewrite.result));
         }
 
