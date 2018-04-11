@@ -149,8 +149,8 @@ void check_algebra() {
     check(x + (3 - x), 3);
     check(x*y + x*z, x*(y+z));
     check(x*y + z*x, x*(y+z));
-    check(y*x + x*z, x*(y+z));
-    check(y*x + z*x, x*(y+z));
+    check(y*x + x*z, (y+z)*x);
+    check(y*x + z*x, (y+z)*x);
 
     check(x - 0, x);
     check((x/y) - (x/y), 0);
@@ -643,13 +643,13 @@ void check_bounds() {
     check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
 
     // Additions that cancel a term inside a min or max
-    check(x + min(y - x, z), min(y, z + x));
-    check(x + max(y - x, z), max(y, z + x));
+    check(x + min(y - x, z), min(y, x + z));
+    check(x + max(y - x, z), max(y, x + z));
     check(min(y + (-2), z) + 2, min(y, z + 2));
     check(max(y + (-2), z) + 2, max(y, z + 2));
 
-    check(x + min(y - x, z), min(y, z + x));
-    check(x + max(y - x, z), max(y, z + x));
+    check(x + min(y - x, z), min(y, x + z));
+    check(x + max(y - x, z), max(y, x + z));
     check(min(y + (-2), z) + 2, min(y, z + 2));
     check(max(y + (-2), z) + 2, max(y, z + 2));
 
@@ -882,7 +882,7 @@ void check_bounds() {
     check(min(x, y) + max(x, y), x + y);
     check(min(x, y) + max(y, x), x + y);
     check(max(x, y) + min(x, y), x + y);
-    check(max(y, x) + min(x, y), x + y);
+    check(max(y, x) + min(x, y), y + x);
 
     // Check max(min(x, y), max(x, y)) gets simplified into max(x, y)
     check(max(min(x, y), max(x, y)), max(x, y));

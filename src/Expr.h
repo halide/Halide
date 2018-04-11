@@ -151,7 +151,10 @@ struct StmtNode : public BaseStmtNode {
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
 struct IRHandle : public IntrusivePtr<const IRNode> {
+    HALIDE_ALWAYS_INLINE
     IRHandle() : IntrusivePtr<const IRNode>() {}
+
+    HALIDE_ALWAYS_INLINE
     IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
 
     /** Dispatch to the correct visitor method for this node. E.g. if
@@ -278,9 +281,11 @@ struct StringImm : public ExprNode<StringImm> {
  * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
+    HALIDE_ALWAYS_INLINE
     Expr() : Internal::IRHandle() {}
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
+    HALIDE_ALWAYS_INLINE
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
     /** Make an expression representing numeric constants of various types. */
@@ -302,11 +307,13 @@ struct Expr : public Internal::IRHandle {
     Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
 
     /** Override get() to return a BaseExprNode * instead of an IRNode * */
+    HALIDE_ALWAYS_INLINE
     const Internal::BaseExprNode *get() const {
         return (const Internal::BaseExprNode *)ptr;
     }
 
     /** Get the type of this expression node */
+    HALIDE_ALWAYS_INLINE
     Type type() const {
         return get()->type;
     }
@@ -401,6 +408,7 @@ struct Stmt : public IRHandle {
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
 
     /** Override get() to return a BaseStmtNode * instead of an IRNode * */
+    HALIDE_ALWAYS_INLINE
     const BaseStmtNode *get() const {
         return (const Internal::BaseStmtNode *)ptr;
     }

@@ -63,31 +63,14 @@ void expr_match_test();
  */
 namespace IRMatcher {
 
-constexpr int max_wild = 4;
+constexpr int max_wild = 5;
 
 /** To save stack space, the matcher objects are largely stateless and
  * immutable. This state object is built up during matching and then
  * consumed when constructing a replacement Expr.
  */
 struct MatcherState {
-    // Align the bindings to a 16-byte boundary so that they can be cleared with simd instructions
-    HALIDE_ATTRIBUTE_ALIGN(16) const BaseExprNode *bindings[max_wild] = {nullptr, nullptr, nullptr, nullptr};
-
-    HALIDE_ALWAYS_INLINE
-    void set_binding(int i, const BaseExprNode &n) noexcept {
-        bindings[i] = &n;
-    }
-
-    HALIDE_ALWAYS_INLINE
-    bool is_bound(int i) const noexcept {
-        return bindings[i] != nullptr;
-    }
-
-    HALIDE_ALWAYS_INLINE
-    const BaseExprNode *get_binding(int i) const noexcept {
-        return bindings[i];
-    }
-
+    const BaseExprNode *bindings[max_wild];
     halide_scalar_value_t bound_const[max_wild];
 
     // values of the lanes field with special meaning.
@@ -96,34 +79,39 @@ struct MatcherState {
     static constexpr uint16_t special_values_mask = 0xc000;
 
     halide_type_t bound_const_type[max_wild];
-    uint32_t const_bound_mask = 0;
+
+    HALIDE_ALWAYS_INLINE
+    void set_binding(int i, const BaseExprNode &n) noexcept {
+        bindings[i] = &n;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    const BaseExprNode *get_binding(int i) const noexcept {
+        return bindings[i];
+    }
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, int64_t s, halide_type_t t) noexcept {
         bound_const[i].u.i64 = s;
         bound_const_type[i] = t;
-        const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, uint64_t u, halide_type_t t) noexcept {
         bound_const[i].u.u64 = u;
         bound_const_type[i] = t;
-        const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, double f, halide_type_t t) noexcept {
         bound_const[i].u.f64 = f;
         bound_const_type[i] = t;
-        const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
     void set_bound_const(int i, halide_scalar_value_t val, halide_type_t t) noexcept {
         bound_const[i] = val;
         bound_const_type[i] = t;
-        const_bound_mask |= (1 << i);
     }
 
     HALIDE_ALWAYS_INLINE
@@ -133,17 +121,11 @@ struct MatcherState {
     }
 
     HALIDE_ALWAYS_INLINE
-    bool is_bound_const(int i) const noexcept {
-        return (const_bound_mask & (1 << i)) != 0;
-    }
-
-    HALIDE_ALWAYS_INLINE
     MatcherState() noexcept {}
 
     HALIDE_ALWAYS_INLINE
     void reset() noexcept {
-        memset(bindings, 0, sizeof(bindings));
-        const_bound_mask = 0;
+        // TODO: delete me
     }
 };
 
@@ -153,19 +135,29 @@ struct enable_if_pattern {
     struct type {};
 };
 
+template<typename T>
+struct bindings {
+    constexpr static uint32_t mask = std::remove_reference<T>::type::binds;
+};
+
+template<>
+struct bindings<const BaseExprNode &> {
+    constexpr static uint32_t mask = 0;
+};
+
 template<typename Pattern,
          typename = typename enable_if_pattern<Pattern>::type>
 HALIDE_ALWAYS_INLINE
-Expr to_expr(Pattern &&p, MatcherState &state) {
+Expr to_expr(Pattern &&p, MatcherState & __restrict__ state) {
     return p.make(state);
 }
 
 HALIDE_ALWAYS_INLINE
-Expr to_expr(const BaseExprNode &e, MatcherState &state) {
+Expr to_expr(const BaseExprNode &e, MatcherState & __restrict__ state) {
     return Expr(&e);
 }
 
-inline NO_INLINE
+inline HALIDE_NEVER_INLINE
 Expr to_special_expr(halide_type_t ty) {
     const uint16_t flags = ty.lanes & MatcherState::special_values_mask;
     ty.lanes &= ~MatcherState::special_values_mask;
@@ -180,7 +172,7 @@ Expr to_special_expr(halide_type_t ty) {
 }
 
 HALIDE_ALWAYS_INLINE
-Expr to_expr(halide_scalar_value_t val, halide_type_t ty, MatcherState &state) {
+Expr to_expr(halide_scalar_value_t val, halide_type_t ty, MatcherState & __restrict__ state) {
     halide_type_t scalar_type = ty;
     if (scalar_type.lanes & MatcherState::special_values_mask) {
         return to_special_expr(scalar_type);
@@ -230,8 +222,12 @@ bool equal(const BaseExprNode &a, const BaseExprNode &b) noexcept {
 template<int i>
 struct WildConstInt {
     struct pattern_tag {};
+
+    constexpr static uint32_t binds = 1 << i;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
@@ -241,7 +237,7 @@ struct WildConstInt {
             return false;
         }
         int64_t value = ((const IntImm *)op)->value;
-        if (state.is_bound_const(i)) {
+        if (bound & binds) {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
@@ -252,7 +248,7 @@ struct WildConstInt {
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
@@ -260,7 +256,7 @@ struct WildConstInt {
     }
 
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -274,8 +270,12 @@ std::ostream &operator<<(std::ostream &s, const WildConstInt<i> &c) {
 template<int i>
 struct WildConstUInt {
     struct pattern_tag {};
+
+    constexpr static uint32_t binds = 1 << i;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
@@ -285,7 +285,7 @@ struct WildConstUInt {
             return false;
         }
         uint64_t value = ((const UIntImm *)op)->value;
-        if (state.is_bound_const(i)) {
+        if (bound & binds) {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
@@ -296,7 +296,7 @@ struct WildConstUInt {
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
@@ -304,7 +304,7 @@ struct WildConstUInt {
     }
 
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -318,8 +318,12 @@ std::ostream &operator<<(std::ostream &s, const WildConstUInt<i> &c) {
 template<int i>
 struct WildConstFloat {
     struct pattern_tag {};
+
+    constexpr static uint32_t binds = 1 << i;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         halide_type_t ty = e.type;
         const BaseExprNode *op = &e;
@@ -330,7 +334,7 @@ struct WildConstFloat {
             return false;
         }
         double value = ((const FloatImm *)op)->value;
-        if (state.is_bound_const(i)) {
+        if (bound & binds) {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
@@ -341,7 +345,7 @@ struct WildConstFloat {
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
@@ -349,7 +353,7 @@ struct WildConstFloat {
     }
 
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -364,8 +368,12 @@ std::ostream &operator<<(std::ostream &s, const WildConstFloat<i> &c) {
 template<int i>
 struct WildConst {
     struct pattern_tag {};
+
+    constexpr static uint32_t binds = 1 << i;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         static_assert(i >= 0 && i < max_wild, "Wild with out-of-range index");
         const BaseExprNode *op = &e;
         if (op->node_type == IRNodeType::Broadcast) {
@@ -373,18 +381,18 @@ struct WildConst {
         }
         switch (op->node_type) {
         case IRNodeType::IntImm:
-            return WildConstInt<i>().match(e, state);
+            return WildConstInt<i>().template match<bound>(e, state);
         case IRNodeType::UIntImm:
-            return WildConstUInt<i>().match(e, state);
+            return WildConstUInt<i>().template match<bound>(e, state);
         case IRNodeType::FloatImm:
-            return WildConstFloat<i>().match(e, state);
+            return WildConstFloat<i>().template match<bound>(e, state);
         default:
             return false;
         }
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
@@ -392,7 +400,7 @@ struct WildConst {
     }
 
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         state.get_bound_const(i, val, ty);
     }
 };
@@ -407,9 +415,13 @@ std::ostream &operator<<(std::ostream &s, const WildConst<i> &c) {
 template<int i>
 struct Wild {
     struct pattern_tag {};
+
+    constexpr static uint32_t binds = 1 << (i + 16);
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
-        if (state.is_bound(i)) {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
+        if (bound & binds) {
             return equal(*state.get_binding(i), e);
         }
         state.set_binding(i, e);
@@ -417,7 +429,7 @@ struct Wild {
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return state.get_binding(i);
     }
 };
@@ -431,14 +443,17 @@ std::ostream &operator<<(std::ostream &s, const Wild<i> &op) {
 // Matches a specific constant or broadcast of that constant. The
 // constant must be representable as an int.
 struct Const {
+    struct pattern_tag {};
     int val;
+
+    constexpr static uint32_t binds = 0;
 
     HALIDE_ALWAYS_INLINE
     Const(int v) : val(v) {}
 
-    struct pattern_tag {};
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         const BaseExprNode *op = &e;
         if (e.node_type == IRNodeType::Broadcast) {
             op = ((const Broadcast *)op)->value.get();
@@ -456,7 +471,7 @@ struct Const {
     }
 
     HALIDE_ALWAYS_INLINE
-    bool match(const Const &b, MatcherState &state) const noexcept {
+    bool match(const Const &b, MatcherState & __restrict__ state) const noexcept {
         return val == b.val;
     }
 };
@@ -478,10 +493,17 @@ double constant_fold_bin_op(halide_type_t &, double, double) noexcept;
 template<typename Op, typename A, typename B>
 struct BinOpFolder {
     HALIDE_ALWAYS_INLINE
-    static void make_folded_const(const A &a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) noexcept {
+    static void make_folded_const(const A &a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) noexcept {
         halide_scalar_value_t val_a, val_b;
         halide_type_t type_a, type_b;
         a.make_folded_const(val_a, type_a, state);
+        if ((std::is_same<Op, And>::value && val_a.u.u64 == 0) ||
+            (std::is_same<Op, Or>::value && val_a.u.u64 == 1)) {
+            // Short circuit
+            ty = type_a;
+            val = val_a;
+            return;
+        }
         b.make_folded_const(val_b, type_b, state);
         // The types are known to match except possibly for overflow flags in the lanes field
         ty = type_a;
@@ -503,7 +525,7 @@ struct BinOpFolder {
     }
 
     HALIDE_ALWAYS_INLINE
-    static Expr make(const A &a, const B &b, MatcherState &state) noexcept {
+    static Expr make(const A &a, const B &b, MatcherState & __restrict__ state) noexcept {
         Expr ea = to_expr(a, state), eb = to_expr(b, state);
         // We sometimes mix vectors and scalars in the rewrite rules,
         // so insert a broadcast if necessary.
@@ -520,7 +542,7 @@ struct BinOpFolder {
 template<typename Op, typename A>
 struct BinOpFolder<Op, A, Const> {
     HALIDE_ALWAYS_INLINE
-    static void make_folded_const(const A &a, Const b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) noexcept {
+    static void make_folded_const(const A &a, Const b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) noexcept {
         a.make_folded_const(val, ty, state);
         switch (ty.code) {
         case halide_type_int:
@@ -539,7 +561,7 @@ struct BinOpFolder<Op, A, Const> {
     }
 
     HALIDE_ALWAYS_INLINE
-    static Expr make(const A &a, Const b, MatcherState &state) {
+    static Expr make(const A &a, Const b, MatcherState & __restrict__ state) {
         Expr ea = to_expr(a, state);
         Expr eb = make_const(ea.type(), b.val);
         return Op::make(std::move(ea), std::move(eb));
@@ -549,7 +571,7 @@ struct BinOpFolder<Op, A, Const> {
 template<typename Op, typename B>
 struct BinOpFolder<Op, Const, B> {
     HALIDE_ALWAYS_INLINE
-    static void make_folded_const(Const a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) noexcept {
+    static void make_folded_const(Const a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) noexcept {
         b.make_folded_const(val, ty, state);
         switch (ty.code) {
         case halide_type_int:
@@ -568,7 +590,7 @@ struct BinOpFolder<Op, Const, B> {
     }
 
     HALIDE_ALWAYS_INLINE
-    static Expr make(Const a, const B &b, MatcherState &state) {
+    static Expr make(Const a, const B &b, MatcherState & __restrict__ state) {
         Expr eb = to_expr(b, state);
         Expr ea = make_const(eb.type(), a.val);
         return Op::make(std::move(ea), std::move(eb));
@@ -582,30 +604,37 @@ struct BinOp {
     struct pattern_tag {};
     A a;
     B b;
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         if (e.node_type != Op::_node_type) {
             return false;
         }
         const Op &op = (const Op &)e;
-        return a.match(*op.a.get(), state) && b.match(*op.b.get(), state);
+        return (a.template match<bound>(*op.a.get(), state) &&
+                b.template match<bound | bindings<A>::mask>(*op.b.get(), state));
     }
 
-    template<typename Op2, typename A2, typename B2>
+    template<uint32_t bound, typename Op2, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE
-    bool match(const BinOp<Op2, A2, B2> &op, MatcherState &state) const noexcept {
-        return std::is_same<Op, Op2>::value && a.match(op.a, state) && b.match(op.b, state);
+    bool match(const BinOp<Op2, A2, B2> &op, MatcherState & __restrict__ state) const noexcept {
+        return (std::is_same<Op, Op2>::value &&
+                a.template match<bound>(op.a, state) &&
+                b.template match<bound | bindings<A>::mask>(op.b, state));
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return BinOpFolder<Op, A, B>::make(a, b, state);
     }
 
 
     template<typename A1 = A, typename B1 = B>
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         BinOpFolder<Op, A1, B1>::make_folded_const(a, b, val, ty, state);
     }
 };
@@ -622,7 +651,7 @@ uint64_t constant_fold_cmp_op(double, double) noexcept;
 template<typename Op, typename A, typename B>
 struct CmpOpFolder {
     HALIDE_ALWAYS_INLINE
-    static void make_folded_const(const A &a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) noexcept {
+    static void make_folded_const(const A &a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) noexcept {
         halide_scalar_value_t val_a, val_b;
         halide_type_t type_a, type_b;
         a.make_folded_const(val_a, type_a, state);
@@ -647,7 +676,7 @@ struct CmpOpFolder {
     }
 
     HALIDE_ALWAYS_INLINE
-    static Expr make(const A &a, const B &b, MatcherState &state) {
+    static Expr make(const A &a, const B &b, MatcherState & __restrict__ state) {
         Expr ea = to_expr(a, state), eb = to_expr(b, state);
         // We sometimes mix vectors and scalars in the rewrite rules,
         // so insert a broadcast if necessary.
@@ -664,7 +693,7 @@ struct CmpOpFolder {
 template<typename Op, typename B>
 struct CmpOpFolder<Op, Const, B> {
     HALIDE_ALWAYS_INLINE
-    static void make_folded_const(Const a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) noexcept {
+    static void make_folded_const(Const a, const B &b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) noexcept {
         b.make_folded_const(val, ty, state);
         switch (ty.code) {
         case halide_type_int:
@@ -685,7 +714,7 @@ struct CmpOpFolder<Op, Const, B> {
     }
 
     HALIDE_ALWAYS_INLINE
-    static Expr make(Const a, const B &b, MatcherState &state) {
+    static Expr make(Const a, const B &b, MatcherState & __restrict__ state) {
         Expr eb = to_expr(b, state);
         Expr ea = make_const(eb.type(), a.val);
         return Op::make(std::move(ea), std::move(eb));
@@ -695,7 +724,7 @@ struct CmpOpFolder<Op, Const, B> {
 template<typename Op, typename A>
 struct CmpOpFolder<Op, A, Const> {
     HALIDE_ALWAYS_INLINE
-    static void make_folded_const(const A &a, Const b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) noexcept {
+    static void make_folded_const(const A &a, Const b, halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) noexcept {
         a.make_folded_const(val, ty, state);
         switch (ty.code) {
         case halide_type_int:
@@ -716,7 +745,7 @@ struct CmpOpFolder<Op, A, Const> {
     }
 
     HALIDE_ALWAYS_INLINE
-    static Expr make(const A &a, Const b, MatcherState &state) {
+    static Expr make(const A &a, Const b, MatcherState & __restrict__ state) {
         Expr ea = to_expr(a, state);
         Expr eb = make_const(ea.type(), b.val);
         return Op::make(std::move(ea), std::move(eb));
@@ -729,30 +758,37 @@ struct CmpOp {
     struct pattern_tag {};
     A a;
     B b;
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         if (e.node_type != Op::_node_type) {
             return false;
         }
         const Op &op = (const Op &)e;
-        return a.match(*op.a.get(), state) && b.match(*op.b.get(), state);
+        return (a.template match<bound>(*op.a.get(), state) &&
+                b.template match<bound | bindings<A>::mask>(*op.b.get(), state));
     }
 
-    template<typename Op2, typename A2, typename B2>
+    template<uint32_t bound, typename Op2, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE
-    bool match(const CmpOp<Op2, A2, B2> &op, MatcherState &state) const noexcept {
-        return std::is_same<Op, Op2>::value && a.match(op.a, state) && b.match(op.b, state);
+    bool match(const CmpOp<Op2, A2, B2> &op, MatcherState & __restrict__ state) const noexcept {
+        return (std::is_same<Op, Op2>::value &&
+                a.template match<bound>(op.a, state) &&
+                b.template match<bound | bindings<A>::mask>(op.b, state));
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return CmpOpFolder<Op, A, B>::make(a, b, state);
     }
 
     template<typename A1 = A,
              typename B1 = B>
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         CmpOpFolder<Op, A, B>::make_folded_const(a, b, val, ty, state);
     }
 };
@@ -870,12 +906,18 @@ BinOp<Add, Const, B> operator+(int a, B b) noexcept {
     return {Const(a), b};
 }
 
+HALIDE_ALWAYS_INLINE
+BinOp<Add, const BaseExprNode &, const BaseExprNode &> add(const Expr &a, const Expr &b) noexcept {
+    return {*a.get(), *b.get()};
+}
+
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
-    uint64_t ones = (uint64_t)(-1);
-    return (a + b) & (ones >> (64 - t.bits));
+    int dead_bits = 64 - t.bits;
+    // Drop the high bits then sign-extend them back
+    return ((a + b) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -923,8 +965,9 @@ template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Sub>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
-    uint64_t ones = (uint64_t)(-1);
-    return (a - b) & (ones >> (64 - t.bits));
+    int dead_bits = 64 - t.bits;
+    // Drop the high bits then sign-extend them back
+    return ((a - b) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -973,8 +1016,9 @@ template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Mul>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
-    uint64_t ones = (uint64_t)(-1);
-    return (a * b) & (ones >> (64 - t.bits));
+    int dead_bits = 64 - t.bits;
+    // Drop the high bits then sign-extend them back
+    return ((a * b) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -1472,32 +1516,47 @@ double constant_fold_bin_op<And>(halide_type_t &t, double a, double b) noexcept 
     return 0;
 }
 
+constexpr inline uint32_t bitwise_or_reduce() {
+    return 0;
+}
+
+template<typename... Args>
+constexpr uint32_t bitwise_or_reduce(uint32_t first, Args... rest) {
+    return first | bitwise_or_reduce(rest...);
+}
+
 template<typename... Args>
 struct Intrin {
     struct pattern_tag {};
     Call::ConstString intrin;
     std::tuple<Args...> args;
 
+    static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
+
     template<int i,
+             uint32_t bound,
              typename = typename std::enable_if<(i < sizeof...(Args))>::type>
     HALIDE_ALWAYS_INLINE
-    bool match_args(int, const Call &c, MatcherState &state) const noexcept {
-        return std::get<i>(args).match(*c.args[i].get(), state) && match_args<i + 1>(0, c, state);
+    bool match_args(int, const Call &c, MatcherState & __restrict__ state) const noexcept {
+        using T = decltype(std::get<i>(args));
+        return (std::get<i>(args).template match<bound>(*c.args[i].get(), state) &&
+                match_args<i + 1, bound | bindings<T>::mask>(0, c, state));
     }
 
-    template<int i>
+    template<int i, uint32_t binds>
     HALIDE_ALWAYS_INLINE
-    bool match_args(double, const Call &c, MatcherState &state) const noexcept {
+    bool match_args(double, const Call &c, MatcherState & __restrict__ state) const noexcept {
         return true;
     }
 
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         if (e.node_type != IRNodeType::Call) {
             return false;
         }
         const Call &c = (const Call &)e;
-        return (c.is_intrinsic(intrin) && match_args<0>(0, c, state));
+        return (c.is_intrinsic(intrin) && match_args<0, bound>(0, c, state));
     }
 
     template<int i,
@@ -1539,37 +1598,49 @@ Intrin<Args...> intrin(Call::ConstString name, Args&&... args) noexcept {
     return Intrin<Args...>(name, std::forward<Args>(args)...);
 }
 
-template<typename Op, typename A>
-struct UnaryOp {
+template<typename A>
+struct NotOp {
     struct pattern_tag {};
     A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
-        const Op &op = (const Op &)e;
-        return (op.node_type == Op::_node_type &&
-                a.match(*op.a.get(), state));
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
+        const Not &op = (const Not &)e;
+        return (e.node_type == IRNodeType::Not &&
+                a.template match<bound>(*op.a.get(), state));
     }
 
-    template<typename Op2, typename A2>
+    template<uint32_t bound, typename A2>
     HALIDE_ALWAYS_INLINE
-    bool match(const UnaryOp<Op2, A2> &op, MatcherState &state) const noexcept {
-        return std::is_same<Op, Op2>::value && a.match(op.a, state);
+    bool match(const NotOp<A2> &op, MatcherState & __restrict__ state) const noexcept {
+        return a.template match<bound>(op.a, state);
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
-        return Op::make(to_expr(a, state));
+    Expr make(MatcherState & __restrict__ state) const {
+        return Not::make(to_expr(a, state));
+    }
+
+    template<typename A1 = A>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        a.make_folded_const(val, ty, state);
+        val.u.u64 = (val.u.u64 == 0) ? 1 : 0;
     }
 };
 
-template<typename A>
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
 HALIDE_ALWAYS_INLINE
-UnaryOp<Not, A> operator!(A &&a) noexcept {
-    return UnaryOp<Not, A>{std::forward<A>(a)};
+NotOp<A> operator!(A a) noexcept {
+    return {a};
 }
 
 template<typename A>
-inline std::ostream &operator<<(std::ostream &s, const UnaryOp<Not, A> &op) {
+inline std::ostream &operator<<(std::ostream &s, const NotOp<A> &op) {
     s << "!(" << op.a << ")";
     return s;
 }
@@ -1580,28 +1651,28 @@ struct SelectOp {
     C c;
     T t;
     F f;
+
+    constexpr static uint32_t binds = bindings<C>::mask | bindings<T>::mask | bindings<F>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         const Select &op = (const Select &)e;
         return (e.node_type == Select::_node_type &&
-                c.match(*op.condition.get(), state) &&
-                t.match(*op.true_value.get(), state) &&
-                f.match(*op.false_value.get(), state));
+                c.template match<bound>(*op.condition.get(), state) &&
+                t.template match<bound | bindings<C>::mask>(*op.true_value.get(), state) &&
+                f.template match<bound | bindings<C>::mask | bindings<T>::mask>(*op.false_value.get(), state));
     }
-    template<typename C2, typename T2, typename F2>
+    template<uint32_t bound, typename C2, typename T2, typename F2>
     HALIDE_ALWAYS_INLINE
-    bool match(const SelectOp<C2, T2, F2> &instance, MatcherState &state) const noexcept {
-        return (c.match(instance.c, state) &&
-                t.match(instance.t, state) &&
-                f.match(instance.f, state));
+    bool match(const SelectOp<C2, T2, F2> &instance, MatcherState & __restrict__ state) const noexcept {
+        return (c.template match<bound>(instance.c, state) &&
+                t.template match<bound | bindings<C>::mask>(instance.t, state) &&
+                f.template match<bound | bindings<C>::mask | bindings<T>::mask>(instance.f, state));
     }
-    template<typename Pattern,
-             typename = typename enable_if_pattern<Pattern>::type>
+
     HALIDE_ALWAYS_INLINE
-    bool match(const Pattern &p, MatcherState &state) const noexcept {
-        return false;
-    }
-    HALIDE_ALWAYS_INLINE Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return Select::make(to_expr(c, state), to_expr(t, state), to_expr(f, state));
     }
 };
@@ -1633,26 +1704,31 @@ struct BroadcastOp {
     struct pattern_tag {};
     A a;
     int lanes;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         if (e.node_type == Broadcast::_node_type) {
             const Broadcast &op = (const Broadcast &)e;
             if ((lanes == -1 || lanes == op.lanes) &&
-                a.match(*op.value.get(), state)) {
+                a.template match<bound>(*op.value.get(), state)) {
                 return true;
             }
         }
         return false;
     }
 
-    template<typename A2>
+    template<uint32_t bound, typename A2>
     HALIDE_ALWAYS_INLINE
-    bool match(const BroadcastOp<A2> &op, MatcherState &state) const noexcept {
-        return a.match(op.a, state) && (lanes == op.lanes || lanes == -1 || op.lanes == -1);
+    bool match(const BroadcastOp<A2> &op, MatcherState & __restrict__ state) const noexcept {
+        return (a.template match<bound>(op.a, state) &&
+                (lanes == op.lanes || lanes == -1 || op.lanes == -1));
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return Broadcast::make(to_expr(a, state), lanes);
     }
 
@@ -1676,27 +1752,31 @@ struct RampOp {
     A a;
     B b;
     int lanes;
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         const Ramp &op = (const Ramp &)e;
         if (op.node_type == Ramp::_node_type &&
-            a.match(*op.base.get(), state) &&
-            b.match(*op.stride.get(), state)) {
+            a.template match<bound>(*op.base.get(), state) &&
+            b.template match<bound | bindings<A>::mask>(*op.stride.get(), state)) {
             return true;
         } else {
             return false;
         }
     }
 
-    template<typename A2, typename B2>
+    template<uint32_t bound, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE
-    bool match(const RampOp<A2, B2> &op, MatcherState &state) const noexcept {
-        return (a.match(op.a, state) &&
-                b.match(op.b, state));
+    bool match(const RampOp<A2, B2> &op, MatcherState & __restrict__ state) const noexcept {
+        return (a.template match<bound>(op.a, state) &&
+                b.template match<bound | bindings<A>::mask>(op.b, state));
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return Ramp::make(to_expr(a, state), to_expr(b, state), lanes);
     }
 };
@@ -1717,20 +1797,26 @@ template<typename A>
 struct NegateOp {
     struct pattern_tag {};
     A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         const Sub &op = (const Sub &)e;
         return (op.node_type == Sub::_node_type &&
-                a.match(*op.b.get(), state) &&
+                a.template match<bound>(*op.b.get(), state) &&
                 is_zero(op.a));
     }
+
+    template<uint32_t bound, typename A2>
     HALIDE_ALWAYS_INLINE
-    bool match(NegateOp<A> &&p, MatcherState &state) const noexcept {
-        return a.match(p.a, state);
+    bool match(NegateOp<A2> &&p, MatcherState & __restrict__ state) const noexcept {
+        return a.template match<bound>(p.a, state);
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         Expr ea = to_expr(a, state);
         Expr z = make_zero(ea.type());
         return Sub::make(std::move(z), std::move(ea));
@@ -1738,19 +1824,21 @@ struct NegateOp {
 
     template<typename A1 = A>
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         a.make_folded_const(val, ty, state);
+        int dead_bits = 64 - ty.bits;
         switch (ty.code) {
         case halide_type_int:
             if (ty.bits >= 32 && val.u.i64 && !(val.u.i64 << (65 - ty.bits))) {
                 // Trying to negate the most negative signed int for a no-overflow type.
                 ty.lanes |= MatcherState::signed_integer_overflow;
             } else {
-                val.u.i64 = -val.u.i64;
+                // Negate, drop the high bits, and then sign-extend them back
+                val.u.i64 = ((-val.u.i64) << dead_bits) >> dead_bits;
             }
             break;
         case halide_type_uint:
-            val.u.u64 = -val.u.u64; // Let it overflow
+            val.u.u64 = ((-val.u.u64) << dead_bits) >> dead_bits;
             break;
         case halide_type_float:
             val.u.f64 = -val.u.f64;
@@ -1772,7 +1860,37 @@ template<typename A,
          typename = typename enable_if_pattern<A>::type>
 HALIDE_ALWAYS_INLINE
 NegateOp<A> operator-(A a) noexcept {
-    return NegateOp<A>{a};
+    return {a};
+}
+
+template<typename A>
+struct IsConstOp {
+    struct pattern_tag {};
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    A a;
+    template<typename A1 = A>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        Expr e = a.make(state);
+        ty.code = halide_type_uint;
+        ty.bits = 64;
+        ty.lanes = 1;
+        val.u.u64 = is_const(e) ? 1 : 0;
+    }
+};
+
+template<typename A,
+         typename = typename enable_if_pattern<A>::type>
+IsConstOp<A> is_const(A a) noexcept {
+    return {a};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsConstOp<A> &op) {
+    s << "is_const(" << op.a << ")";
+    return s;
 }
 
 template<typename A>
@@ -1780,20 +1898,24 @@ struct CastOp {
     struct pattern_tag {};
     Type type;
     A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
-    bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+    bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         const Cast &op = (const Cast &)e;
         return (op.node_type == Cast::_node_type &&
-                a.match(*op.value.get(), state));
+                a.template match<bound>(*op.value.get(), state));
     }
-    template<typename A2>
+    template<uint32_t bound, typename A2>
     HALIDE_ALWAYS_INLINE
-    bool match(const CastOp<A2> &op, MatcherState &state) const noexcept {
-        return a.match(op.a, state);
+    bool match(const CastOp<A2> &op, MatcherState & __restrict__ state) const noexcept {
+        return a.template match<bound>(op.a, state);
     }
 
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const {
+    Expr make(MatcherState & __restrict__ state) const {
         return cast(type, to_expr(a, state));
     }
 };
@@ -1811,11 +1933,14 @@ CastOp<A> cast(Type t, A &&a) noexcept {
 }
 
 template<typename A>
-struct Fold {
+struct FoldOp {
     struct pattern_tag {};
     A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
     HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state) const noexcept {
+    Expr make(MatcherState & __restrict__ state) const noexcept {
         halide_scalar_value_t c;
         halide_type_t ty;
         a.make_folded_const(c, ty, state);
@@ -1825,17 +1950,26 @@ struct Fold {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-Fold<A> fold(A a) noexcept {
+FoldOp<A> fold(A a) noexcept {
     return {a};
 }
 
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const FoldOp<A> &op) {
+    s << "fold(" << op.a << ")";
+    return s;
+}
+
 template<typename A, typename Prover>
-struct CanProve {
+struct CanProveOp {
     struct pattern_tag {};
     A a;
     Prover *prover;  // An existing simplifying mutator
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         Expr condition = a.make(state);
         condition = prover->mutate(condition);
         val.u.u64 = is_one(condition);
@@ -1849,8 +1983,14 @@ template<typename A,
          typename Prover,
          typename = typename enable_if_pattern<A>::type>
 HALIDE_ALWAYS_INLINE
-CanProve<A, Prover> can_prove(A a, Prover *s) noexcept {
+CanProveOp<A, Prover> can_prove(A a, Prover *s) noexcept {
     return {a, s};
+}
+
+template<typename A, typename Prover>
+std::ostream &operator<<(std::ostream &s, const CanProveOp<A, Prover> &op) {
+    s << "can_prove(" << op.a << ")";
+    return s;
 }
 
 template<typename A, typename B>
@@ -1858,8 +1998,11 @@ struct GCDOp {
     struct pattern_tag {};
     A a;
     B b;
+
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         halide_scalar_value_t val_a, val_b;
         halide_type_t type_a, type_b;
         a.make_folded_const(val_a, type_a, state);
@@ -1880,12 +2023,21 @@ GCDOp<A, B> gcd(A a, B b) noexcept {
     return {a, b};
 }
 
+template<typename A, typename B>
+std::ostream &operator<<(std::ostream &s, const GCDOp<A, B> &op) {
+    s << "gcd(" << op.a << ", " << op.b << ")";
+    return s;
+}
+
 template<int i, typename A>
 struct BindOp {
     struct pattern_tag {};
     A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask | (1 << i);
+
     HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         a.make_folded_const(val, ty, state);
         state.set_bound_const(i, val, ty);
         // The bind node evaluates to true
@@ -1904,6 +2056,12 @@ BindOp<i, A> bind(WildConst<i> c, A a) noexcept {
     return {a};
 }
 
+template<int i, typename A>
+std::ostream &operator<<(std::ostream &s, const BindOp<i, A> &op) {
+    s << "bind(_" << i << " = " << op.a << ")";
+    return s;
+}
+
 // Statically verify properties of each rewrite rule
 template<typename Before, typename After>
 HALIDE_ALWAYS_INLINE
@@ -1912,14 +2070,14 @@ void validate_rule() noexcept {
 }
 
 HALIDE_ALWAYS_INLINE
-bool evaluate_predicate(bool x, MatcherState &) noexcept {
+bool evaluate_predicate(bool x, MatcherState & __restrict__ ) noexcept {
     return x;
 }
 
 template<typename Pattern,
          typename = typename enable_if_pattern<Pattern>::type>
 HALIDE_ALWAYS_INLINE
-bool evaluate_predicate(Pattern &&p, MatcherState &state) {
+bool evaluate_predicate(Pattern &&p, MatcherState & __restrict__ state) {
     halide_scalar_value_t c;
     halide_type_t ty;
     p.make_folded_const(c, ty, state);
@@ -1942,10 +2100,12 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before &&before, After &&after) {
         state.reset();
-        if (before.match(instance, state)) {
+        if (before.template match<0>(instance, state)) {
             result = after.make(state);
+            // debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             return true;
         } else {
+            // debug(0) << "No match: " << instance << " vs " << before << "\n";
             return false;
         }
     }
@@ -1955,10 +2115,12 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before &&before, const Expr &after) noexcept {
         state.reset();
-        if (before.match(instance, state)) {
+        if (before.template match<0>(instance, state)) {
             result = after;
+            // debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             return true;
         } else {
+            // debug(0) << "No match: " << instance << " vs " << before << "\n";
             return false;
         }
     }
@@ -1968,10 +2130,12 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before &&before, Expr &&after) noexcept {
         state.reset();
-        if (before.match(instance, state)) {
+        if (before.template match<0>(instance, state)) {
             result = std::move(after);
+            // debug(0) << instance << " -> " << result << " via " << before << "\n";
             return true;
         } else {
+            // debug(0) << "No match: " << instance << " vs " << before << "\n";
             return false;
         }
     }
@@ -1985,11 +2149,13 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before &&before, After &&after, Predicate &&pred) {
         state.reset();
-        if (before.match(instance, state) &&
+        if (before.template match<0>(instance, state) &&
             evaluate_predicate(std::forward<Predicate>(pred), state)) {
             result = after.make(state);
+            // debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
         } else {
+            // debug(0) << "No match: " << instance << " vs " << before << "\n";
             return false;
         }
     }
@@ -2001,11 +2167,13 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before &&before, const Expr &after, Predicate &&pred) {
         state.reset();
-        if (before.match(instance, state) &&
+        if (before.template match<0>(instance, state) &&
             evaluate_predicate(std::forward<Predicate>(pred), state)) {
             result = after;
+            // debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
         } else {
+            // debug(0) << "No match: " << instance << " vs " << before << "\n";
             return false;
         }
     }
@@ -2017,11 +2185,13 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before &&before, Expr &&after, Predicate &&pred) {
         state.reset();
-        if (before.match(instance, state) &&
-            evaluate_predicate(std::forward<Predicate>(pred), state)) {
+        if (before.template match<0>(instance, state) &&
+            evaluate_predicate(pred, state)) {
             result = std::move(after);
+            // debug(0) << instance << " -> " << result << " via " << before << " when " << pred << "\n";
             return true;
         } else {
+            // debug(0) << "No match: " << instance << " vs " << before << "\n";
             return false;
         }
     }
