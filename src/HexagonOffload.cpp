@@ -616,7 +616,7 @@ public:
 
     Relocation relocate(uint64_t fixup_offset, char *fixup_addr, uint64_t type,
                         const Elf::Symbol *sym, uint64_t sym_offset, int64_t addend,
-                        Elf::Section &got) override {
+                        Elf::Section &got, uint64_t got_offset) override {
         if (type == R_HEX_32) {
             // Don't do this relocation, generate a new R_HEX_RELATIVE relocation instead.
             return Relocation(R_HEX_RELATIVE, fixup_offset, sym_offset + addend, nullptr);

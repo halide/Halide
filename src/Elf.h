@@ -369,7 +369,7 @@ public:
      * to is writable at runtime. */
     virtual Relocation relocate(uint64_t fixup_offset, char *fixup_addr, uint64_t type,
                                 const Symbol *sym, uint64_t sym_offset, int64_t addend,
-                                Section &got) = 0;
+                                Section &got, uint64_t got_offset = 0) = 0;
 
 };
 

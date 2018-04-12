@@ -602,7 +602,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // We need to define the GOT symbol.
     uint64_t max_got_size = obj.symbols_size() * 2 * sizeof(addr_t);
     Section got(".got", Section::SHT_PROGBITS);
-    got.set_alignment(4);
+    got.set_alignment(sizeof(addr_t));
     got.set_size(max_got_size);
     got.set_flags(Section::SHF_ALLOC);
     Symbol got_sym("_GLOBAL_OFFSET_TABLE_");

@@ -108,7 +108,7 @@ void do_reloc_32(char *addr, uintptr_t val) {
 
 void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
                    const Symbol *sym, uint32_t sym_offset, int32_t addend,
-                   Elf::Section &got) {
+                   Elf::Section &got, uint64_t got_offset) {
     // AMDGPU Relocation are defined in:
     // https://llvm.org/docs/AMDGPUUsage.html#relocation-records
 
@@ -116,6 +116,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     uint32_t S = sym_offset;
     uint32_t P = fixup_offset;
     intptr_t A = addend;
+    uint64_t GOT = got_offset;
 
     uint32_t G = got.contents_size();
     for (const Relocation &r : got.relocations()) {
@@ -129,8 +130,6 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     bool needs_got_entry = false;
 
     switch (type) {
-    case R_AMDGPU_NONE:
-        break;
     case R_AMDGPU_ABS32_LO:
         do_reloc_32(fixup_addr, intptr_t((S + A) & 0xFFFFFFFF));
         break;
@@ -138,7 +137,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         do_reloc_32(fixup_addr, intptr_t((S + A) >> 32));
         break;
     case R_AMDGPU_ABS64:
-        do_reloc_32(fixup_addr, intptr_t(S + A));
+        do_reloc_64(fixup_addr, intptr_t(S + A));
         break;
     case R_AMDGPU_REL32:
         do_reloc_32(fixup_addr, intptr_t(S + A - P));
@@ -150,7 +149,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         do_reloc_32(fixup_addr, intptr_t(S + A));
         break;
     case R_AMDGPU_GOTPCREL:
-        do_reloc_32(fixup_addr, intptr_t(G + _GLOBAL_OFFSET_TABLE_ + A - P));
+        do_reloc_32(fixup_addr, intptr_t(G + GOT + A - P));
         break;
     case R_AMDGPU_GOTPCREL32_LO:
         do_reloc_32(fixup_addr, intptr_t((G + GOT + A - P) & 0xffffffff));
@@ -213,19 +212,20 @@ public:
     }
 
     Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
-        internal_error << "Unsupported plt relocation for" << sym << "\n";
+        internal_error << "Unsupported plt relocation for amdgpu object" << "\n";
         return sym;
     }
 
     Relocation relocate(uint64_t fixup_offset, char *fixup_addr, uint64_t type,
                         const Elf::Symbol *sym, uint64_t sym_offset, int64_t addend,
-                        Elf::Section &got) override {
-        if (type == R_HEX_32) {
-            // Don't do this relocation, generate a new R_HEX_RELATIVE relocation instead.
-            return Relocation(R_HEX_RELATIVE, fixup_offset, sym_offset + addend, nullptr);
+                        Elf::Section &got, uint64_t got_offset) override {
+        do_relocation(fixup_offset, fixup_addr, type, sym, sym_offset, addend, got, got_offset);
+
+        if (type == R_AMDGPU_ABS64 && sym->is_defined()) {
+            return Relocation(R_AMDGPU_RELATIVE64, fixup_offset, sym_offset + addend, nullptr);
+        } else if (type == R_AMDGPU_ABS32_LO || type == R_AMDGPU_ABS32_HI || type == R_AMDGPU_ABS32 || type == R_AMDGPU_ABS64) {
+            return Relocation(type, fixup_offset, addend, sym);
         }
-        do_relocation(fixup_offset, fixup_addr, type, sym, sym_offset, addend, got);
-        return Relocation();
     }
 };
 
