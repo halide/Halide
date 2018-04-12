@@ -175,10 +175,6 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     }
 }
 
-bool needs_plt_entry(const Relocation &r) override {
-    return false;
-}
-
 class AMDGPULinker : public Linker {
 public:
     uint32_t flags;
@@ -213,7 +209,7 @@ public:
     }
 
     bool needs_plt_entry(const Relocation &r) override {
-        return maybe_branch_inst(r.get_type());
+        return false;
     }
 
     Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
