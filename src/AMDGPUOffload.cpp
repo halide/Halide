@@ -57,45 +57,11 @@ enum {
     R_AMDGPU_RELATIVE64 = 13,
 };
 
-std::string hex(uint32_t x) {
-    char buffer[100];
-    snprintf(buffer, sizeof(buffer), "0x%08x", x);
-    return buffer;
-}
+extern std::string hex(uint32_t x);
 
-std::string section_type_string(Section::Type type) {
-    switch(type) {
-    case Section::SHT_NULL: return "SHT_NULL";
-    case Section::SHT_PROGBITS: return "SHT_PROGBITS";
-    case Section::SHT_SYMTAB: return "SHT_SYMTAB";
-    case Section::SHT_STRTAB: return "SHT_STRTAB";
-    case Section::SHT_RELA: return "SHT_RELA";
-    case Section::SHT_HASH: return "SHT_HASH";
-    case Section::SHT_DYNAMIC: return "SHT_DYNAMIC";
-    case Section::SHT_NOTE: return "SHT_NOTE";
-    case Section::SHT_NOBITS: return "SHT_NOBITS";
-    case Section::SHT_REL: return "SHT_REL";
-    case Section::SHT_SHLIB: return "SHT_SHLIB";
-    case Section::SHT_DYNSYM: return "SHT_DYNSYM";
-    case Section::SHT_LOPROC: return "SHT_LOPROC";
-    case Section::SHT_HIPROC: return "SHT_HIPROC";
-    case Section::SHT_LOUSER: return "SHT_LOUSER";
-    case Section::SHT_HIUSER: return "SHT_HIUSER";
-    default:
-        return "UNKNOWN TYPE";
-    }
-}
-std::string print_sections(const Object &obj) {
-    std::ostringstream oss;
-    if (obj.sections_size() == 0) {
-        oss << "No sections in object\n";
-        return oss.str();
-    }
-    for (const Section &s: obj.sections()) {
-        oss << s.get_name() << ", Type = " << section_type_string(s.get_type()) << ", Size = " << hex(s.get_size()) << ", Alignment = " << s.get_alignment() << "\n";
-    }
-    return oss.str();
-}
+extern std::string section_type_string(Section::Type type);
+
+extern std::string print_sections(const Object &obj);
 
 void do_reloc_64(char *addr, uintptr_t val) {
     *((uint64_t*)addr) = (uint64_t)val;
@@ -223,9 +189,10 @@ public:
 
         if (type == R_AMDGPU_ABS64 && sym->is_defined()) {
             return Relocation(R_AMDGPU_RELATIVE64, fixup_offset, sym_offset + addend, nullptr);
-        } else if (type == R_AMDGPU_ABS32_LO || type == R_AMDGPU_ABS32_HI || type == R_AMDGPU_ABS32 || type == R_AMDGPU_ABS64) {
+        } if (type == R_AMDGPU_ABS32_LO || type == R_AMDGPU_ABS32_HI || type == R_AMDGPU_ABS32 || type == R_AMDGPU_ABS64) {
             return Relocation(type, fixup_offset, addend, sym);
         }
+        return Relocation();
     }
 };
 
@@ -552,13 +519,6 @@ Buffer<uint8_t> compile_module_to_amdgpu_shared_object(const Module &device_code
     // Make .bss a real section.
     auto bss = obj->find_section(".bss");
     if (bss != obj->sections_end()) {
-        bss->set_alignment(128);
-        // TODO: We should set the type to SHT_NOBITS
-        // This will cause a difference in MemSize and FileSize like so:
-        //        FileSize = (MemSize - size_of_bss)
-        // When the Amdgpu loader is used on 8998 and later targets,
-        // the difference is filled with zeroes thereby initializing the .bss
-        // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
         std::fill(bss->contents_begin(), bss->contents_end(), 0);
     }

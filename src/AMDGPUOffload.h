@@ -12,7 +12,7 @@
 namespace Halide {
 namespace Internal {
 
-/** Pull loops marked with the Hexagon device API to a separate
+/** Pull loops marked with the AMDGPU device API to a separate
  * module, and call them through the Amdgpu host runtime module. */
 Stmt inject_amdgpu_rpc(Stmt s, const Target &host_target, Module &module);
 
