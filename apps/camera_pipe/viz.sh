@@ -16,6 +16,7 @@ $1/viz/process ../images/bayer_small.png 3700 1.8 50 1 1 $1/out.png |
 --down 220 --label deinterleaved "b" 10 \
 --down 220 --label deinterleaved "gb" 10 \
 --strides 1 0 0 1 \
+--move 580 1000 --func curve --label curve "tone curve LUT" 10 \
 --move 720 120 --func r_gr --label r_gr "r@gr" 10 \
 --right 140 --func g_gr --label g_gr "g@gr" 10 \
 --right 140 --func b_gr --label b_gr "b@gr" 10 \
