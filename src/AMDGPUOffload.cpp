@@ -36,9 +36,7 @@ enum {
     EF_AMDGPU_MACH_AMDGCN_GFX801 = 0x028, //       gfx801
     EF_AMDGPU_MACH_AMDGCN_GFX802 = 0x029, //       gfx802
     EF_AMDGPU_MACH_AMDGCN_GFX803 = 0x02a, //       gfx803
-    EF_AMDGPU_MACH_AMDGCN_GFX810 = 0x02b, //       gfx810
     EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c, //       gfx900
-    EF_AMDGPU_MACH_AMDGCN_GFX902 = 0x02d, //       gfx902
     EF_AMDGPU_XNACK = 0x100
 };
 
@@ -111,8 +109,8 @@ void do_reloc_32(char *addr, uintptr_t val) {
 void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
                    const Symbol *sym, uint32_t sym_offset, int32_t addend,
                    Elf::Section &got) {
-    // Amdgpu relocations are specified in section 11.5 in
-    // the Amdgpu Application Binary Interface spec.
+    // AMDGPU Relocation are defined in:
+    // https://llvm.org/docs/AMDGPUUsage.html#relocation-records
 
     // Now we can define the variables from Table 11-5.
     uint32_t S = sym_offset;
@@ -152,7 +150,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         do_reloc_32(fixup_addr, intptr_t(S + A));
         break;
     case R_AMDGPU_GOTPCREL:
-        do_reloc_32(fixup_addr, intptr_t(G + GOT + A - P));
+        do_reloc_32(fixup_addr, intptr_t(G + _GLOBAL_OFFSET_TABLE_ + A - P));
         break;
     case R_AMDGPU_GOTPCREL32_LO:
         do_reloc_32(fixup_addr, intptr_t((G + GOT + A - P) & 0xffffffff));
@@ -166,8 +164,6 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     case R_AMDGPU_REL32_HI:
         do_reloc_32(fixup_addr, intptr_t((S + A - P) >> 32));
         break;
-    case R_AMDGPU_RELATIVE64:
-        break;
     default:
         internal_error << "Unhandled relocation type " << type << "\n";
     }
@@ -177,6 +173,10 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         got.append_contents((uint64_t)0);
         got.add_relocation(Relocation(R_AMDGPU_RELATIVE64, G, 0, sym));
     }
+}
+
+bool needs_plt_entry(const Relocation &r) override {
+    return false;
 }
 
 class AMDGPULinker : public Linker {
@@ -217,44 +217,8 @@ public:
     }
 
     Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
-        if (got.contents_empty()) {
-            // The PLT hasn't been started, initialize it now.
-            plt.set_alignment(16);
-
-            std::vector<char> padding(64, (char)0);
-            // TODO: Make a .plt0 entry that supports lazy binding.
-            plt.set_contents(padding.begin(), padding.end());
-        }
-
-        static const uint8_t hexagon_plt1[] = {
-            0x00, 0x40, 0x00, 0x00, // { immext (#0) (Relocation:R_HEX_B32_PCREL_X)
-            0x0e, 0xc0, 0x49, 0x6a, //   r14 = add (pc, ##GOTn@PCREL) }  (Relocation:R_HEX_6_PCREL_X)
-            0x1c, 0xc0, 0x8e, 0x91, //   r28 = memw (r14)
-            0x00, 0xc0, 0x9c, 0x52, //   jumpr r28
-        };
-
-        debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
-
-        // Add a GOT entry for this symbol.
-        uint64_t got_offset = got.contents_size();
-        got.append_contents((uint32_t)0);
-        got.add_relocation(Elf::Relocation(R_HEX_JMP_SLOT, got_offset, 0, &sym));
-
-        // Add the PLT code.
-        uint32_t plt_offset = plt.get_size();
-        plt.append_contents(hexagon_plt1, hexagon_plt1 + sizeof(hexagon_plt1));
-
-        plt.add_relocation(Relocation(R_HEX_B32_PCREL_X, plt_offset + 0, got_offset, &got_sym));
-        plt.add_relocation(Relocation(R_HEX_6_PCREL_X, plt_offset + 4, got_offset + 4, &got_sym));
-
-        // Make a symbol for the PLT entry.
-        Symbol plt_sym("plt_" + sym.get_name());
-        plt_sym
-            .set_type(Symbol::STT_FUNC)
-            .set_binding(Symbol::STB_LOCAL)
-            .define(&plt, plt_offset, sizeof(hexagon_plt1));
-
-        return plt_sym;
+        internal_error << "Unsupported plt relocation for" << sym << "\n";
+        return sym;
     }
 
     Relocation relocate(uint64_t fixup_offset, char *fixup_addr, uint64_t type,
