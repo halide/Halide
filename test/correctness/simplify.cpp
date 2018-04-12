@@ -173,8 +173,8 @@ void check_algebra() {
     check((0 - x) + y, y - x);
     check(x*y - x*z, x*(y-z));
     check(x*y - z*x, x*(y-z));
-    check(y*x - x*z, x*(y-z));
-    check(y*x - z*x, x*(y-z));
+    check(y*x - x*z, (y-z)*x);
+    check(y*x - z*x, (y-z)*x);
     check(x - y*-2, x + y*2);
     check(x + y*-2, x - y*2);
     check(x*-2 + y, y - x*2);
@@ -580,13 +580,13 @@ void check_bounds() {
 
     check(x - min(x + y, z), max(-y, x-z));
     check(x - min(y + x, z), max(-y, x-z));
-    check(x - min(z, x + y), max(-y, x-z));
-    check(x - min(z, y + x), max(-y, x-z));
+    check(x - min(z, x + y), max(x-z, -y));
+    check(x - min(z, y + x), max(x-z, -y));
 
     check(min(x + y, z) - x, min(y, z-x));
     check(min(y + x, z) - x, min(y, z-x));
-    check(min(z, x + y) - x, min(y, z-x));
-    check(min(z, y + x) - x, min(y, z-x));
+    check(min(z, x + y) - x, min(z-x, y));
+    check(min(z, y + x) - x, min(z-x, y));
 
     check(min(x + y, z + y), min(x, z) + y);
     check(min(y + x, z + y), min(x, z) + y);
