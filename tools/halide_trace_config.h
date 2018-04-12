@@ -114,7 +114,6 @@ struct FuncConfig {
     // is an offset from the Func's position, so (0, 0) means render
     // at the top-left of the Func itself.
     std::vector<Label> labels;
-    bool auto_label = true;  // if there are no labels, add one matching the func name
     bool blank_on_end_realization = false;
     uint32_t uninitialized_memory_color = 0xff000000;
 
@@ -137,7 +136,6 @@ struct FuncConfig {
             << "  color_dim: " << color_dim << "\n"
             << "  min: " << min << " max: " << max << "\n"
             << "  labels: " << labels << "\n"
-            << "  auto_label: " << auto_label << "\n"
             << "  blank: " << blank_on_end_realization << "\n"
             << "  uninit: " << uninitialized_memory_color << "\n";
     }
@@ -157,7 +155,6 @@ struct FuncConfig {
             << config.min << " "
             << config.max << " "
             << config.labels << " "
-            << config.auto_label << " "
             << config.blank_on_end_realization << " "
             << config.uninitialized_memory_color;
         return os;
@@ -176,7 +173,6 @@ struct FuncConfig {
             >> config.min
             >> config.max
             >> config.labels
-            >> config.auto_label
             >> config.blank_on_end_realization
             >> config.uninitialized_memory_color;
         if (start_text != tag_start_text()) {

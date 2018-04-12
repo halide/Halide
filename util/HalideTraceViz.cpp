@@ -381,7 +381,6 @@ void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncI
             FuncInfo &fi = func_info[func];
             fi.config.labels.swap(config.labels);
             fi.config = config;
-            fi.config.auto_label = false;
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
@@ -665,9 +664,6 @@ int run(int argc, char **argv) {
 
         if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
-            if (fi.config.labels.empty() && fi.config.auto_label) {
-                fi.config.labels.push_back({p.func()});
-            }
             for (const auto &label : fi.config.labels) {
                 // Convert offset to absolute position before enqueuing
                 Label l = label;
