@@ -446,8 +446,12 @@ int run(int argc, char **argv) {
             char *func = argv[++i];
             char *text = argv[++i];
             int n = parse_int(argv[++i]);
-            Label l = {text, config.pos, n};
-            func_info[func].config.labels.push_back(l);
+            FuncInfo &fi = func_info[func];
+            // A Label's position is relative to its Func's position;
+            // the --label flag has always expected an absolute position,
+            // so convert it to an offset.
+            Point offset = { config.pos.x - fi.config.pos.x, config.pos.y - fi.config.pos.y };
+            fi.config.labels.push_back({text, offset, n});
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
             timestep = parse_int(argv[++i]);
@@ -634,10 +638,14 @@ int run(int argc, char **argv) {
         if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
             if (fi.config.labels.empty() && fi.config.auto_label) {
-                fi.config.labels.push_back({p.func(), fi.config.pos});
+                fi.config.labels.push_back({p.func()});
             }
             for (const auto &label : fi.config.labels) {
-                labels_being_drawn.push_back({label, halide_clock});
+                // Convert offset to absolute position before enqueuing
+                Label l = label;
+                l.pos.x += fi.config.pos.x;
+                l.pos.y += fi.config.pos.y;
+                labels_being_drawn.push_back({l, halide_clock});
             }
         }
 
