@@ -677,7 +677,11 @@ int run(int argc, char **argv) {
                 fi.stats.observe_load(p);
             }
 
-            // zero- or one-dimensional Funcs can have dimensions < strides
+            // zero- or one-dimensional Funcs can have dimensions < strides.size().
+            // This may seem confusing, so keep in mind:
+            // fi.config.strides are provided by the --stride flag, so it can contain anything; i
+            // if you don't specify them at all, they default to {{1,0},{0,1} (aka size=2).
+            // So if we have excess strides, just ignore them.
             const int dims = std::min(p.dimensions/p.type.lanes, (int) fi.config.strides.size());
             for (int lane = 0; lane < p.type.lanes; lane++) {
                 // Compute the screen-space x, y coord to draw this.
