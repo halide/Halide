@@ -4,9 +4,9 @@ using namespace Halide;
 
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
-    Input<Buffer<uint16_t>> input{"input", 3};
-    Output<Buffer<uint16_t>> output_y{"output_y", 3};
-    Output<Buffer<uint16_t>> output_uv{"output_uv", 3};
+    Input<Buffer<uint8_t>> input{"input", 3};
+    Output<Buffer<uint8_t>> output_y{"output_y", 3};
+    Output<Buffer<uint8_t>> output_uv{"output_uv", 3};
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
@@ -53,4 +53,4 @@ public:
 
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline_p010)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline_nv12)

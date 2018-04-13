@@ -40,20 +40,20 @@ dma_device_handle *malloc_device_handle() {
 }
 
 typedef struct desc_pool {
-    void* descriptor;
+    void *descriptor;
     bool used;
-    struct desc_pool* next;
+    struct desc_pool *next;
 } desc_pool_t;
 
-typedef desc_pool_t* pdesc_pool;
+typedef desc_pool_t *pdesc_pool;
 static pdesc_pool dma_desc_pool = NULL;
 #define descriptor_size 64
 
-static void* desc_pool_get (void* user_context) {
-    //TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
+static void *desc_pool_get (void *user_context) {
+    // TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
     pdesc_pool temp = dma_desc_pool;
     pdesc_pool prev = NULL;
-    //Walk the list
+    // Walk the list
     while (temp != NULL) {
         if (!temp->used) {
             temp->used = true;
@@ -69,7 +69,7 @@ static void* desc_pool_get (void* user_context) {
         error(user_context) << "malloc failed\n";
         return NULL;
     }
-    uint8_t* desc = (uint8_t *)HAP_cache_lock(sizeof(char)*descriptor_size*2, NULL);
+    uint8_t *desc = (uint8_t *)HAP_cache_lock(sizeof(char) * descriptor_size * 2, NULL);
     if (desc == NULL) {
         free(temp);
         error(user_context) << "HAP_cache_lock failed\n";
@@ -78,14 +78,14 @@ static void* desc_pool_get (void* user_context) {
     temp->descriptor = (void *)desc;
     temp->used = true;
 
-    //Now allocate the second element in list
+    // Now allocate the second element in list
     temp->next = (pdesc_pool) malloc(sizeof(desc_pool_t));
     if (temp->next != NULL) {
         (temp->next)->descriptor = (void *)(desc+descriptor_size);
         (temp->next)->used = false;
         (temp->next)->next = NULL;
     } else {
-        //no need to throw error since we allocate two descriptor at a time
+        // no need to throw error since we allocate two descriptor at a time
         // but only use one
         debug(user_context) << "malloc failed\n" ;
     }
@@ -98,7 +98,7 @@ static void* desc_pool_get (void* user_context) {
     return (void *) temp->descriptor;
 }
 
-static void desc_pool_put (void* user_context, void *desc) {
+static void desc_pool_put (void *user_context, void *desc) {
     halide_assert(user_context, desc);
     pdesc_pool temp = dma_desc_pool;
     while (temp != NULL) {
@@ -108,9 +108,9 @@ static void desc_pool_put (void* user_context, void *desc) {
         temp=temp->next;
     }
 }
-//2 descriptor at a time
-static void desc_pool_free (void* user_context) {
-    //TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
+// Two descriptors at a time
+static void desc_pool_free (void *user_context) {
+    // TODO: Add Mutex locking for access to dma_desc_pool ( To be Thread safe )
     pdesc_pool temp = dma_desc_pool;
     while (temp != NULL) {
         pdesc_pool temp2 = temp;
@@ -127,7 +127,7 @@ static void desc_pool_free (void* user_context) {
     }
 }
 
-static inline void copy_from_cache(uint8_t* src, uint8_t* dest, int roi_height,
+static inline void copy_from_cache(uint8_t *src, uint8_t *dest, int roi_height,
            int roi_stride, int dest_stride, int pixelsize, int linesize) {
      
     for (int y = 0; y < roi_height; y++) {
@@ -152,15 +152,17 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Changing the Format to Chroma or LUMA based on dimension    
     t_eDmaFmt currentFmt = dev->fmt;
+	// TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
+	halide_assert(user_context, (currentFmt == eDmaFmt_RawData) && (dst->dimensions < 3));
     if (dst->dimensions == 3) {
         if ((dev->fmt == eDmaFmt_NV12) ||
             (dev->fmt == eDmaFmt_P010) ||
             (dev->fmt == eDmaFmt_TP10) ||
             (dev->fmt == eDmaFmt_NV124R)) {
             if (dst->dim[2].min == 1) {
-                currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); //chroma format
+                currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); // chroma format
             } else {
-                currentFmt = (t_eDmaFmt)((int)dev->fmt + 1); //luma
+                currentFmt = (t_eDmaFmt)((int)dev->fmt + 1); // luma
             }
         }
     } else {
@@ -189,7 +191,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     halide_assert(user_context, (roi_stride % 256) == 0);
 
     // Return NULL if descriptor is not allocated
-    void* desc_addr = desc_pool_get(user_context);
+    void *desc_addr = desc_pool_get(user_context);
     if (desc_addr == NULL) {
         error(user_context) << "Hexagon: DMA descriptor allocation error \n";
         return halide_error_code_device_buffer_copy_failed;
@@ -197,12 +199,13 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Copy from Locked Cache to a temp DDR buffer
     // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
-    int buf_size = roi_stride * roi_height * dst->type.bytes(); //dst->size_in_bytes();
+    int buf_size = roi_stride * roi_height * dst->type.bytes(); // dst->size_in_bytes();
     debug(user_context) << " cache buffer size " << buf_size << "\n";
     if (dev->cache_buf == 0) {
         dev->cache_buf = HAP_cache_lock(buf_size, 0);
     }
-
+    // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
+	// We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format because DMA treat RAW as a flattened buffer
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
     stDmaTransferParm.eFmt                  = currentFmt; 
     stDmaTransferParm.u16FrameW             = dev->frame_width;
@@ -305,7 +308,7 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
     return halide_error_code_success;
 }
 
-WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t* buf) {
+WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_free (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -443,7 +446,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     return nRet;
 }
 
-WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t* buf) {
+WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *buf) {
     int err = halide_hexagon_dma_device_malloc(user_context, buf);
     if (err) {
         return err;
@@ -471,16 +474,16 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     halide_assert(user_context,(buf->dim[1].stride== roi_stride));
 
     // The descriptor allocation failure must return Error
-    void* desc_addr = desc_pool_get(user_context);
+    void *desc_addr = desc_pool_get(user_context);
     if (desc_addr == NULL) {
         error(user_context) << "Hexagon: DMA descriptor allocation error \n";
         return halide_error_code_copy_to_host_failed;
     }
 
-    //Here we do Locked L2 allocation for DMA Transfer
-    //Since there is allocation of temporary buffer
-    //We copy from L2 to temp buffer
-    //To Do This needs to be streamline 
+    // Here we do Locked L2 allocation for DMA Transfer
+    // Since there is allocation of temporary buffer
+    // We copy from L2 to temp buffer
+    // To Do This needs to be streamline 
     int size = buf->size_in_bytes();
     if (dev->cache_buf == 0) {
         dev->cache_buf = HAP_cache_lock((sizeof(uint8_t) * size), 0);

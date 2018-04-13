@@ -1,11 +1,10 @@
 /**
- * This file is a duplicate of the actual hexagon_dma_device_shim.cpp used to call the DMA driver functions
- * The definitions in this file a week reference so that these will be called only in case of unavailability of
+ * This file simulates the actual hexagon DMA driver functions to run the DMA Examples on host machine
+ * The definitions in this file are a weak reference so that these will be called only in case of unavailability of
  * actual DMA functions.
- * This file is need only if there is no hexagon SDK support or NO hexagon DMA support, in either csae we replace
+ * This file is needed only if there is no hexagon SDK support or NO hexagon DMA support, in either case we replace
  * the DMA operations with normal memory operations */
 
-#include "pipeline.h"
 #include "HalideRuntime.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
 #include <stdio.h>
@@ -13,10 +12,10 @@
 #include <assert.h>
 #include <memory.h>
 
-//Mock Global Descriptor
+// Mock Global Descriptor
 typedef struct {
     struct {
-        uintptr_t des_pointer   ;   // for chain to next "desc" or NULL to terminate the chain
+        uintptr_t des_pointer       ;   // for chain to next "desc" or NULL to terminate the chain
         uint32 dst_pix_fmt      :  3;
         uint32 dst_is_ubwc      :  1;
         uint32 src_pix_fmt      :  3;
@@ -43,7 +42,7 @@ typedef struct {
         uintptr_t dst_frm_base_addr;
         uint32 src_roi_start_addr  : 32;
         uint32 dst_roi_start_addr  : 32;
-        uint32 ubwc_stat_pointer   : 32;// use reserved3 for gralloc ubwc_stat_pointer
+        uint32 ubwc_stat_pointer   : 32; // use reserved3 for gralloc ubwc_stat_pointer
     } stWord1;
     struct {
         uint32 pix_fmt;
@@ -54,7 +53,7 @@ typedef struct {
 } t_st_hw_descriptor;
 
 typedef struct {
-    int x; //in case we want to keep a count
+    int x; // in case we want to keep a count
     t_st_hw_descriptor *ptr;
 } dma_handle_t;
 
@@ -85,15 +84,15 @@ static int nDmaPixelSize(int pix_fmt)
     return nRet;
 }
 
-void* HAP_cache_lock(unsigned int size, void** paddr_ptr) {
-    void * alloc = 0;
+void *HAP_cache_lock(unsigned int size, void **paddr_ptr) {
+    void *alloc = 0;
     if (size != 0) {
         alloc = malloc(size);
     }
     return alloc;
 }
 
-int HAP_cache_unlock(void* vaddr_ptr) {
+int HAP_cache_unlock(void *vaddr_ptr) {
     if (vaddr_ptr != 0) {
         free(vaddr_ptr);
         return 0;
@@ -125,7 +124,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
             unsigned char *host_addr = reinterpret_cast<unsigned char *>(desc->stWord1.src_frm_base_addr);
             unsigned char *dest_addr = reinterpret_cast<unsigned char *>(desc->stWord1.dst_frm_base_addr);
 
-#if 0 
+#ifdef HALIDE_MOCK_DMA_DEBUG
             printf("Processing descriptor %p -- host_addr: %p dest_addr: %p ROI: (X: %u, Y: %u, W: %u, H: %u) SrcRoiStride: %u, DstRoiStride %u, FrmWidth %u.\n",
                    desc, host_addr, dest_addr, desc->stWord0.roiX, desc->stWord0.roiY, desc->stWord1.roiW, desc->stWord1.roiH,
                    desc->stWord1.src_roi_stride, desc->stWord1.dst_roi_stride, desc->stWord0.frm_width);
@@ -152,7 +151,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
 int32 nDmaWrapper_Wait(t_DmaWrapper_DmaEngineHandle dma_handle) {
     dma_handle_t *desc = (dma_handle_t *)dma_handle;
     assert(desc != NULL);
-    //remove the association from descriptor
+    // remove the association from descriptor
     desc->ptr = NULL;
     return 0;
 }
@@ -160,25 +159,25 @@ int32 nDmaWrapper_Wait(t_DmaWrapper_DmaEngineHandle dma_handle) {
 int32 nDmaWrapper_FinishFrame(t_DmaWrapper_DmaEngineHandle dma_handle) {
     dma_handle_t *desc = (dma_handle_t *)dma_handle;
     assert(desc != NULL);
-    //remove the association from descriptor
+    // remove the association from descriptor
     desc->ptr = NULL;
     return 0;
 }
 
 int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt fmt, bool is_ubwc,
-                                         t_StDmaWrapper_RoiAlignInfo* walk_size) {
+                                         t_StDmaWrapper_RoiAlignInfo *walk_size) {
     walk_size->u16H = align(walk_size->u16H, 1);
     walk_size->u16W = align(walk_size->u16W, 1);
     return 0;
 }
 
 int32 nDmaWrapper_GetRecommendedIntermBufStride(t_eDmaFmt fmt,
-                                                t_StDmaWrapper_RoiAlignInfo* roi_size,
+                                                t_StDmaWrapper_RoiAlignInfo *roi_size,
                                                  bool is_ubwc) {
     return align(roi_size->u16W, 256);
 }
 
-int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaWrapper_DmaTransferSetup* dma_transfer_parm) {
+int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaWrapper_DmaTransferSetup *dma_transfer_parm) {
 
     if (handle == 0)
         return 1;
@@ -186,7 +185,7 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
     if (dma_transfer_parm->pDescBuf == NULL)
         return 1;
 
-    //Add it to the linked list of dma_handle->ptr
+    // Add it to the linked list of dma_handle->ptr
     dma_handle_t *dma_handle = (dma_handle_t *)handle;
     t_st_hw_descriptor *temp = dma_handle->ptr;
     t_st_hw_descriptor *desc = (t_st_hw_descriptor *)dma_transfer_parm->pDescBuf;
@@ -209,7 +208,7 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
         case eDmaFmt_P010_UV:
         case eDmaFmt_TP10_UV:
             {
-                //DMA Driver halves the Y offset and height so that only half the size of roi luma is transferred for chroma
+                // DMA Driver halves the Y offset and height so that only half the size of roi luma is transferred for chroma
                 // Adjusting for that behavior 
                 int pixelsize = nDmaPixelSize(dma_transfer_parm->eFmt);
                 mul_factor = 2; 
@@ -234,8 +233,8 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
     desc->stWord0.frm_height = dma_transfer_parm->u16FrameH;
     desc->stWord0.frm_width = dma_transfer_parm->u16FrameW;
     desc->stWord0.roiX = dma_transfer_parm->u16RoiX;
-    desc->stWord0.roiY = dma_transfer_parm->u16RoiY/mul_factor;
-    desc->stWord1.roiH = dma_transfer_parm->u16RoiH/mul_factor;
+    desc->stWord0.roiY = dma_transfer_parm->u16RoiY / mul_factor;
+    desc->stWord1.roiH = dma_transfer_parm->u16RoiH / mul_factor;
     desc->stWord1.roiW = dma_transfer_parm->u16RoiW;
     desc->stWord1.src_roi_stride = dma_transfer_parm->u16FrameStride;
     desc->stWord1.dst_roi_stride = dma_transfer_parm->u16RoiStride;
@@ -252,18 +251,18 @@ int32 nDmaWrapper_GetDescbuffsize(t_eDmaFmt *fmt, uint16 nsize) {
 
     int32  desc_size, yuvformat = 0;
     for (int32 i = 0; i < nsize; i++) {
-        if ((fmt[i] == eDmaFmt_NV12)||(fmt[i] == eDmaFmt_TP10)||
-            (fmt[i] == eDmaFmt_NV124R)||(fmt[i] == eDmaFmt_P010)) {
+        if ((fmt[i] == eDmaFmt_NV12) || (fmt[i] == eDmaFmt_TP10) ||
+            (fmt[i] == eDmaFmt_NV124R) || (fmt[i] == eDmaFmt_P010)) {
             yuvformat += 1;
         }
     }
-    desc_size = (nsize+yuvformat)*64;
+    desc_size = (nsize + yuvformat) * 64;
     return desc_size;
 }
 
 int32 nDmaWrapper_GetRecommendedIntermBufSize(t_eDmaFmt eFmtId, bool bUse16BitPaddingInL2,
-                                              t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
-                                               bool bIsUbwc, uint16 u16IntermBufStride) {
+                                              t_StDmaWrapper_RoiAlignInfo *pStRoiSize,
+                                              bool bIsUbwc, uint16 u16IntermBufStride) {
 
     return 0;
 }
