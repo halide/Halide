@@ -133,8 +133,8 @@ struct FuncConfig {
 
     // The position on the screen corresponding to the Func's 0, 0 coordinate.
     //
-    // Valid values: pos.x >= 0, pos.y >= 0
-    Point pos = { -1, -1 };
+    // Valid values: pos.x and pos.y > std::numeric_limits<int>::lowest()
+    Point pos = { std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest() };
 
     // Specifies the matrix that maps the coordinates of the
     // Func to screen pixels. Specified column major. For example,
@@ -191,8 +191,8 @@ struct FuncConfig {
         if (from.zoom >= 0.f) this->zoom = from.zoom;
         if (from.load_cost >= 0) this->load_cost = from.load_cost;
         if (from.store_cost > 0) this->store_cost = from.store_cost;
-        if (from.pos.x > 0) this->pos.x = from.pos.x;
-        if (from.pos.y > 0) this->pos.y = from.pos.y;
+        if (from.pos.x > std::numeric_limits<int>::lowest()) this->pos.x = from.pos.x;
+        if (from.pos.y > std::numeric_limits<int>::lowest()) this->pos.y = from.pos.y;
         if (!from.strides.empty()) this->strides = from.strides;
         if (from.color_dim >= -1) this->color_dim = from.color_dim;
         if (!std::isnan(from.min)) this->min = from.min;
