@@ -572,6 +572,7 @@ void compile_multitarget(const std::string &fn_name,
         Outputs runtime_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
         debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.static_library_name << "\n";
+        compile_standalone_runtime(runtime_out, runtime_target);
     }
 
     if (needs_wrapper) {
