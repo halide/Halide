@@ -63,7 +63,7 @@ void expr_match_test();
  */
 namespace IRMatcher {
 
-constexpr int max_wild = 5;
+constexpr int max_wild = 6;
 
 /** To save stack space, the matcher objects are largely stateless and
  * immutable. This state object is built up during matching and then
@@ -1672,6 +1672,7 @@ struct RampOp {
     bool match(const BaseExprNode &e, MatcherState & __restrict__ state) const noexcept {
         const Ramp &op = (const Ramp &)e;
         if (op.node_type == Ramp::_node_type &&
+            (lanes == op.type.lanes() || lanes == -1) &&
             a.template match<bound>(*op.base.get(), state) &&
             b.template match<bound | bindings<A>::mask>(*op.stride.get(), state)) {
             return true;
@@ -1683,7 +1684,8 @@ struct RampOp {
     template<uint32_t bound, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE
     bool match(const RampOp<A2, B2> &op, MatcherState & __restrict__ state) const noexcept {
-        return (a.template match<bound>(op.a, state) &&
+        return ((lanes == op.lanes || lanes == -1 || op.lanes == -1) &&
+                a.template match<bound>(op.a, state) &&
                 b.template match<bound | bindings<A>::mask>(op.b, state));
     }
 
@@ -1886,6 +1888,7 @@ struct CanProveOp {
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         Expr condition = a.make(state);
+        // debug(0) << "Attempting to prove " << a << " = " << condition << "\n";
         condition = prover->mutate(condition);
         val.u.u64 = is_one(condition);
         ty.code = halide_type_uint;

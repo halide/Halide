@@ -165,7 +165,7 @@ public:
 #if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e) override {
         const std::string spaces(debug_indent, ' ');
-        debug(1) << spaces << "Simplifying Expr: " << e << "\n";
+        //debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
         Expr new_e = IRMutator2::mutate(e);
         debug_indent--;
@@ -837,17 +837,6 @@ private:
               // cancels and that there is an implication in one
               // direction or the other.
 
-              // First we canonicalize some things to cut down on the number of rules
-              rewrite(min(x, y) - min(w, x + c1), min(x, y) - min(x + c1, w)) ||
-              rewrite(min(y, x) - min(x + c1, w), min(x, y) - min(x + c1, w)) ||
-              rewrite(min(y, x) - min(w, x + c1), min(x, y) - min(x + c1, w)) ||
-              rewrite(min(x + c0, y) - min(w, x), min(x + c0, y) - min(x, w)) ||
-              rewrite(min(y, x + c0) - min(x, w), min(x + c0, y) - min(x, w)) ||
-              rewrite(min(y, x + c0) - min(w, x), min(x + c0, y) - min(x, w)) ||
-              rewrite(min(x + c0, y) - min(w, x + c1), min(x + c0, y) - min(x + c1, w)) ||
-              rewrite(min(y, x + c0) - min(x + c1, w), min(x + c0, y) - min(x + c1, w)) ||
-              rewrite(min(y, x + c0) - min(w, x + c1), min(x + c0, y) - min(x + c1, w)) ||
-
               // Then the actual rules. We consider only cases where x and z differ by a constant.
               rewrite(min(x, y) - min(x, w), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
               rewrite(min(x, y) - min(x, w), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
@@ -858,20 +847,27 @@ private:
               rewrite(min(x + c0, y) - min(x + c1, w), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
               rewrite(min(x + c0, y) - min(x + c1, w), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
 
+              rewrite(min(y, x) - min(w, x), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
+              rewrite(min(y, x) - min(w, x), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
+              rewrite(min(y, x + c0) - min(w, x), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
+              rewrite(min(y, x + c0) - min(w, x), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
+              rewrite(min(y, x) - min(w, x + c1), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
+              rewrite(min(y, x) - min(w, x + c1), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
+              rewrite(min(y, x + c0) - min(w, x + c1), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
+              rewrite(min(y, x + c0) - min(w, x + c1), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
+
+              // Canonicalize some things to cut down on the number of
+              // rules above.
+              rewrite(min(x, y) - min(w, x + c1), min(x, y) - min(x + c1, w)) ||
+              rewrite(min(y, x) - min(x + c1, w), min(x, y) - min(x + c1, w)) ||
+              rewrite(min(x + c0, y) - min(w, x), min(x + c0, y) - min(x, w)) ||
+              rewrite(min(y, x + c0) - min(x, w), min(x + c0, y) - min(x, w)) ||
+              rewrite(min(x + c0, y) - min(w, x + c1), min(x + c0, y) - min(x + c1, w)) ||
+              rewrite(min(y, x + c0) - min(x + c1, w), min(x + c0, y) - min(x + c1, w)) ||
+
               // The equivalent rules for max are what you'd
               // expect. Just swap < and > and min and max (apply the
               // isomorphism x -> -x).
-
-              rewrite(max(x, y) - max(w, x + c1), max(x, y) - max(x + c1, w)) ||
-              rewrite(max(y, x) - max(x + c1, w), max(x, y) - max(x + c1, w)) ||
-              rewrite(max(y, x) - max(w, x + c1), max(x, y) - max(x + c1, w)) ||
-              rewrite(max(x + c0, y) - max(w, x), max(x + c0, y) - max(x, w)) ||
-              rewrite(max(y, x + c0) - max(x, w), max(x + c0, y) - max(x, w)) ||
-              rewrite(max(y, x + c0) - max(w, x), max(x + c0, y) - max(x, w)) ||
-              rewrite(max(x + c0, y) - max(w, x + c1), max(x + c0, y) - max(x + c1, w)) ||
-              rewrite(max(y, x + c0) - max(x + c1, w), max(x + c0, y) - max(x + c1, w)) ||
-              rewrite(max(y, x + c0) - max(w, x + c1), max(x + c0, y) - max(x + c1, w)) ||
-
               rewrite(max(x, y) - max(x, w), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
               rewrite(max(x, y) - max(x, w), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
               rewrite(max(x + c0, y) - max(x, w), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
@@ -879,7 +875,23 @@ private:
               rewrite(max(x, y) - max(x + c1, w), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
               rewrite(max(x, y) - max(x + c1, w), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
               rewrite(max(x + c0, y) - max(x + c1, w), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
-              rewrite(max(x + c0, y) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)))) ||
+              rewrite(max(x + c0, y) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
+
+              rewrite(max(y, x) - max(w, x), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
+              rewrite(max(y, x) - max(w, x), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
+              rewrite(max(y, x + c0) - max(w, x), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
+              rewrite(max(y, x + c0) - max(w, x), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
+              rewrite(max(y, x) - max(w, x + c1), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
+              rewrite(max(y, x) - max(w, x + c1), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
+              rewrite(max(y, x + c0) - max(w, x + c1), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
+              rewrite(max(y, x + c0) - max(w, x + c1), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
+
+              rewrite(max(x, y) - max(w, x + c1), max(x, y) - max(x + c1, w)) ||
+              rewrite(max(y, x) - max(x + c1, w), max(x, y) - max(x + c1, w)) ||
+              rewrite(max(x + c0, y) - max(w, x), max(x + c0, y) - max(x, w)) ||
+              rewrite(max(y, x + c0) - max(x, w), max(x + c0, y) - max(x, w)) ||
+              rewrite(max(x + c0, y) - max(w, x + c1), max(x + c0, y) - max(x + c1, w)) ||
+              rewrite(max(y, x + c0) - max(x + c1, w), max(x + c0, y) - max(x + c1, w)))) ||
 
             (no_overflow_int(op->type) &&
              (rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
@@ -3189,17 +3201,19 @@ private:
         Expr base = mutate(op->base);
         Expr stride = mutate(op->stride);
 
+        const int lanes = op->type.lanes();
+
         // A somewhat torturous way to check if the stride is zero,
         // but it helps to have as many rules as possible written as
         // formal rewrites, so that they can be formally verified,
         // etc.
         auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride));
-        if (rewrite(ramp(x, IRMatcher::Const(0)), broadcast(x, op->type.lanes()))) {
+        if (rewrite(ramp(x, 0), broadcast(x, lanes))) {
             return rewrite.result;
         }
 
         if (base.same_as(op->base) &&
-                   stride.same_as(op->stride)) {
+            stride.same_as(op->stride)) {
             return op;
         } else {
             return Ramp::make(base, stride, op->lanes);
