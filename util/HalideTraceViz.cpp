@@ -396,6 +396,7 @@ FuncConfig fix_func_config_defaults(const FuncConfig &cfg) {
     safe.blank_on_end_realization = 0;
     safe.uninitialized_memory_color = 0x00000000;
     safe.merge_from(cfg);
+    safe,uninitialized_memory_color |= 0xff000000;
     return safe;
 }
 
@@ -528,7 +529,7 @@ void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncI
             int r = parse_int(argv[++i]);
             int g = parse_int(argv[++i]);
             int b = parse_int(argv[++i]);
-            config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+            config.uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else {
             expect(false, i);
         }
