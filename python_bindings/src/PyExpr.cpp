@@ -12,8 +12,7 @@ void define_expr(py::module &m) {
         std::ostringstream o;
         o << e;
         throw py::value_error("The halide.Expr (" + o.str() + ") cannot be converted to a bool. "
-            "If you encountered this error using the 'and'/'or' keywords, "
-            "you need to use the bitwise &/| operators instead.");
+            "If this error occurs using the 'and'/'or' keywords, consider using the '&'/'|' operators instead.");
         return false;
     };
 
