@@ -7,6 +7,9 @@
  */
 #include "IR.h"
 #include "Target.h"
+#include "Scope.h"
+#include "ModulusRemainder.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -14,7 +17,7 @@ namespace Internal {
  * be aligned to instead load aligned vectors that cover the original
  * load, and then slice the original load out of the aligned
  * vectors. */
-Stmt align_loads(Stmt s, int alignment);
+Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder>& alignment_info);
 
 }
 }

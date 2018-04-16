@@ -840,7 +840,8 @@ private:
                 interval.max = Interval::pos_inf;
             }
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
+                   op->is_intrinsic(Call::likely_if_innermost) ||
+                   op->is_intrinsic(Call::strict_float)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -1603,7 +1604,8 @@ private:
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost))) {
+                             call->is_intrinsic(Call::likely_if_innermost) ||
+                             call->is_intrinsic(Call::strict_float))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
