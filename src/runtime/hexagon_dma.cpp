@@ -143,7 +143,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     dma_device_handle *dev = (dma_device_handle *)src->device;
 
     debug(user_context)
-        << "Hexagon dev handle: buffer: " << dev->buffer << " dev offset (" << dev->offset_x << ", " << dev->offset_y << ") frame_width: " << dev->frame_width
+        << "Hexagon dev handle: buffer: " << dev->buffer 
+        << " dev offset (" << dev->offset_x << ", " << dev->offset_y << ") frame_width: " << dev->frame_width
         << " frame_height: " << dev->frame_height << " frame_stride: " << dev->frame_stride << "\n";
 
     int roi_stride = 0;
@@ -152,8 +153,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Changing the Format to Chroma or LUMA based on dimension    
     t_eDmaFmt currentFmt = dev->fmt;
-	// TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
-	halide_assert(user_context, (currentFmt == eDmaFmt_RawData) && (dst->dimensions < 3));
+    // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
+    halide_assert(user_context, ((currentFmt != eDmaFmt_RawData) || (currentFmt == eDmaFmt_RawData && dst->dimensions < 3)));
     if (dst->dimensions == 3) {
         if ((dev->fmt == eDmaFmt_NV12) ||
             (dev->fmt == eDmaFmt_P010) ||
@@ -205,7 +206,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         dev->cache_buf = HAP_cache_lock(buf_size, 0);
     }
     // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
-	// We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format because DMA treat RAW as a flattened buffer
+    // We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format because DMA treat RAW as a flattened buffer
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
     stDmaTransferParm.eFmt                  = currentFmt; 
     stDmaTransferParm.u16FrameW             = dev->frame_width;
@@ -490,21 +491,21 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     }
 
     t_StDmaWrapper_DmaTransferSetup stDmaTransferParm;
-    stDmaTransferParm.eFmt = eDmaFmt_RawData;
-    stDmaTransferParm.u16FrameW = dev->frame_width;
-    stDmaTransferParm.u16FrameH = dev->frame_height;
-    stDmaTransferParm.u16FrameStride = dev->frame_stride;
-    stDmaTransferParm.u16RoiW = roi_width;
-    stDmaTransferParm.u16RoiH = roi_height;
-    stDmaTransferParm.u16RoiStride = roi_stride;
-    stDmaTransferParm.bUse16BitPaddingInL2 = 0;
-    stDmaTransferParm.bIsFmtUbwc = 0;
-    stDmaTransferParm.pDescBuf = desc_addr;
-    stDmaTransferParm.pTcmDataBuf = dev->cache_buf;
-    stDmaTransferParm.pFrameBuf = dev->buffer;
-    stDmaTransferParm.eTransferType = eDmaWrapper_DdrToL2;
-    stDmaTransferParm.u16RoiX = dev->offset_x;
-    stDmaTransferParm.u16RoiY = dev->offset_y;
+    stDmaTransferParm.eFmt                  = eDmaFmt_RawData;
+    stDmaTransferParm.u16FrameW             = dev->frame_width;
+    stDmaTransferParm.u16FrameH             = dev->frame_height;
+    stDmaTransferParm.u16FrameStride        = dev->frame_stride;
+    stDmaTransferParm.u16RoiW               = roi_width;
+    stDmaTransferParm.u16RoiH               = roi_height;
+    stDmaTransferParm.u16RoiStride          = roi_stride;
+    stDmaTransferParm.bUse16BitPaddingInL2  = 0;
+    stDmaTransferParm.bIsFmtUbwc            = 0;
+    stDmaTransferParm.pDescBuf              = desc_addr;
+    stDmaTransferParm.pTcmDataBuf           = dev->cache_buf;
+    stDmaTransferParm.pFrameBuf             = dev->buffer;
+    stDmaTransferParm.eTransferType         = eDmaWrapper_DdrToL2;
+    stDmaTransferParm.u16RoiX               = dev->offset_x;
+    stDmaTransferParm.u16RoiY               = dev->offset_y;
 
     debug(user_context) << "Hexagon:" << dev->dma_engine << "transfer" << stDmaTransferParm.pDescBuf << "\n" ;
     nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
