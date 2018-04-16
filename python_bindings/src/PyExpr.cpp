@@ -8,6 +8,15 @@ namespace Halide {
 namespace PythonBindings {
 
 void define_expr(py::module &m) {
+    auto to_bool = [](const Expr &e) -> bool {
+        std::ostringstream o;
+        o << e;
+        throw py::value_error("The halide.Expr (" + o.str() + ") cannot be converted to a bool. "
+            "If you encountered this error using the 'and'/'or' keywords, "
+            "you need to use the bitwise &/| operators instead.");
+        return false;
+    };
+
     auto expr_class =
         py::class_<Expr>(m, "Expr")
             .def(py::init<>())
@@ -25,6 +34,9 @@ void define_expr(py::module &m) {
             .def(py::init([](const RDom &r) -> Expr { return r; }))
             .def(py::init([](const RVar &r) -> Expr { return r; }))
             .def(py::init([](const Var &v) -> Expr { return v; }))
+
+            .def("__bool__", to_bool)
+            .def("__nonzero__", to_bool)
 
             .def("type", &Expr::type)
             .def("__repr__", [](const Expr &e) -> std::string {
