@@ -66,8 +66,8 @@ protected:
         if (is_no_op(body)) {
             stmt = body;
         } else {
-            stmt = Realize::make(op->name, op->types, op->bounds,
-                                 op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, body);
         }
     }
 
@@ -76,8 +76,8 @@ protected:
         if (is_no_op(body)) {
             stmt = body;
         } else {
-            stmt = Allocate::make(op->name, op->type, op->extents,
-                                  op->condition, body,
+            stmt = Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition, body,
                                   op->new_expr, op->free_function);
         }
     }
@@ -346,7 +346,8 @@ class ForkAsyncProducers : public IRMutator {
                 body = LetStmt::make(sema_name, sema_space, body);
             }
 
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, body);
         } else {
             IRMutator::visit(op);
         }
@@ -435,7 +436,9 @@ class TightenProducerConsumerNodes : public IRMutator {
         } else if (const ProducerConsumer *pc = body.as<ProducerConsumer>()) {
             return ProducerConsumer::make(pc->name, pc->is_producer, make_producer_consumer(name, is_producer, pc->body, scope));
         } else if (const Realize *r = body.as<Realize>()) {
-            return Realize::make(r->name, r->types, r->bounds, r->condition, make_producer_consumer(name, is_producer, r->body, scope));
+            return Realize::make(r->name, r->types, r->memory_type,
+                                 r->bounds, r->condition,
+                                 make_producer_consumer(name, is_producer, r->body, scope));
         } else {
             return ProducerConsumer::make(name, is_producer, body);
         }
@@ -484,9 +487,11 @@ class ExpandAcquireNodes : public IRMutator {
             // Don't do the allocation until we have the
             // semaphore. Reduces peak memory use.
             stmt = Acquire::make(a->semaphore, a->count,
-                                 mutate(Realize::make(op->name, op->types, op->bounds, op->condition, a->body)));
+                                 mutate(Realize::make(op->name, op->types, op->memory_type,
+                                                      op->bounds, op->condition, a->body)));
         } else {
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, body);
         }
     }
 
@@ -531,9 +536,11 @@ class TightenForkNodes : public IRMutator {
         } else if (lr && !stmt_uses_var(first, lr->name)) {
             return LetStmt::make(lr->name, lr->value, make_fork(first, lr->body));
         } else if (rf && !stmt_uses_var(rest, rf->name)) {
-            return Realize::make(rf->name, rf->types, rf->bounds, rf->condition, make_fork(rf->body, rest));
+            return Realize::make(rf->name, rf->types, rf->memory_type,
+                                 rf->bounds, rf->condition, make_fork(rf->body, rest));
         } else if (rr && !stmt_uses_var(first, rr->name)) {
-            return Realize::make(rr->name, rr->types, rr->bounds, rr->condition, make_fork(first, rr->body));
+            return Realize::make(rr->name, rr->types, rr->memory_type,
+                                 rr->bounds, rr->condition, make_fork(first, rr->body));
         } else {
             return Fork::make(first, rest);
         }
@@ -559,7 +566,8 @@ class TightenForkNodes : public IRMutator {
         if (in_fork && !stmt_uses_var(body, op->name) && !stmt_uses_var(body, op->name + ".buffer")) {
             stmt = body;
         } else {
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, body);
         }
     }
 

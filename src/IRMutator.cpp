@@ -299,7 +299,7 @@ void IRMutator::visit(const Allocate *op) {
         new_expr.same_as(op->new_expr)) {
         stmt = op;
     } else {
-        stmt = Allocate::make(op->name, op->type, new_extents, std::move(condition),
+        stmt = Allocate::make(op->name, op->type, op->memory_type, new_extents, std::move(condition),
                               std::move(body), std::move(new_expr), op->free_function);
     }
 }
@@ -322,7 +322,7 @@ void IRMutator::visit(const Realize *op) {
         condition.same_as(op->condition)) {
         stmt = op;
     } else {
-        stmt = Realize::make(op->name, op->types, new_bounds,
+        stmt = Realize::make(op->name, op->types, op->memory_type, new_bounds,
                              std::move(condition), std::move(body));
     }
 }
@@ -634,8 +634,9 @@ Stmt IRMutator2::visit(const Allocate *op) {
         new_expr.same_as(op->new_expr)) {
         return op;
     }
-    return Allocate::make(op->name, op->type, new_extents, std::move(condition),
-                              std::move(body), std::move(new_expr), op->free_function);
+    return Allocate::make(op->name, op->type, op->memory_type,
+                          new_extents, std::move(condition),
+                          std::move(body), std::move(new_expr), op->free_function);
 }
 
 Stmt IRMutator2::visit(const Free *op) {
@@ -656,8 +657,8 @@ Stmt IRMutator2::visit(const Realize *op) {
         condition.same_as(op->condition)) {
         return op;
     }
-    return Realize::make(op->name, op->types, new_bounds,
-                             std::move(condition), std::move(body));
+    return Realize::make(op->name, op->types, op->memory_type, new_bounds,
+                         std::move(condition), std::move(body));
 }
 
 Stmt IRMutator2::visit(const Prefetch *op) {

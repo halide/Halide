@@ -255,15 +255,17 @@ void IRVisitor::visit(const Shuffle *op) {
 }
 
 void IRGraphVisitor::include(const Expr &e) {
-    if (!visited.count(e.get())) {
-        visited.insert(e.get());
+    auto r = visited.insert(e.get());
+    if (r.second) {
+        // Was newly inserted
         e.accept(this);
     }
 }
 
 void IRGraphVisitor::include(const Stmt &s) {
-    if (!visited.count(s.get())) {
-        visited.insert(s.get());
+    auto r = visited.insert(s.get());
+    if (r.second) {
+        // Was newly inserted
         s.accept(this);
     }
 }

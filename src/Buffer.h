@@ -19,7 +19,7 @@ struct BufferContents {
     Runtime::Buffer<> buf;
 };
 
-EXPORT Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
+Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
 
 template<typename ...Args>
 struct all_ints_and_optional_name : std::false_type {};
@@ -97,12 +97,27 @@ class Buffer {
 
     template<typename T2>
     static void assert_can_convert_from(const Buffer<T2> &other) {
-        Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+        if (!other.defined()) {
+            // Avoid UB of deferencing offset of a null contents ptr
+            static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
+                        "Can't convert from a Buffer<const T> to a Buffer<T>");
+            static_assert(std::is_same<typename std::remove_const<T>::type,
+                                     typename std::remove_const<T2>::type>::value ||
+                        std::is_void<T>::value ||
+                        std::is_void<T2>::value,
+                        "type mismatch constructing Buffer");
+        } else {
+            Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+        }
     }
 
 public:
 
     typedef T ElemType;
+
+    // This class isn't final (and is subclassed from the Python binding
+    // code, at least) so it needs a virtual dtor.
+    virtual ~Buffer() {}
 
     /** Make a null Buffer, which points to no Runtime::Buffer */
     Buffer() {}

@@ -1,4 +1,5 @@
 #include "StorageFolding.h"
+#include "CSE.h"
 #include "IROperator.h"
 #include "IRMutator.h"
 #include "Simplify.h"
@@ -387,7 +388,6 @@ public:
         : func(func),
           head(head), tail(tail), loop_var(loop_var), sema_var(sema_var),
           dim(dim), storage_dim(storage_dim) {
-
     }
 };
 
@@ -457,6 +457,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             string sema_name = func.name() + ".folding_semaphore." + unique_name('_');
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), sema_name);
 
+            // Consider the initial iteration and steady state
+            // separately for all these proofs.
+            Expr loop_var = Variable::make(Int(32), op->name);
+            Expr steady_state = (op->min < loop_var);
+
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min));
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max));
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min));
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max));
+            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1));
+            Expr extent_steady = simplify(max_steady - min_steady + 1);
+            Expr extent = Max::make(extent_initial, extent_steady);
+            extent = simplify(common_subexpression_elimination(extent));
+
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
 
             Expr explicit_factor;
@@ -473,7 +487,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
-                     << "Max: " << max << '\n';
+                     << "Max: " << max << '\n'
+                     << "Extent: " << extent << '\n';
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
@@ -509,6 +524,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // some stack space to store the valid footprint,
                     // update it outside produce nodes, and check it
                     // outside consume nodes.
+
                     string head, tail;
                     if (func.schedule().async()) {
                         // If we're async, we need to keep a separate
@@ -556,11 +572,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 }
             }
 
-            // The min or max has to be monotonic with the loop
-            // variable, and should depend on the loop variable.
             internal_assert(can_fold_forwards || can_fold_backwards);
 
-            Expr extent = simplify(max - min + 1);
             Expr factor;
             if (explicit_factor.defined()) {
                 if (dynamic_footprint.empty() && !func.schedule().async()) {
@@ -647,9 +660,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     Expr fudge = simplify(substitute(op->name, loop_min, extent - to_acquire));
                     if (is_const(fudge) && can_prove(fudge <= sema.init)) {
-                        sema.init -= fudge;
+                      sema.init -= fudge;
                     } else {
-                        to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
+                      to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
                     }
 
                     // We may need dynamic assertions that a positive
@@ -685,7 +698,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 }
                 dims_folded.back().semaphore = sema;
             }
-
+  
             if (!dynamic_footprint.empty()) {
                 if (func.schedule().async()) {
                     dims_folded.back().head = dynamic_footprint + ".head";
@@ -709,6 +722,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 break;
             } else {
                 stmt = op;
+                debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                         << "min_initial = " << min_initial << "\n"
+                         << "min_steady = " << min_steady << "\n"
+                         << "max_initial = " << max_initial << "\n"
+                         << "max_steady = " << max_steady << "\n";
                 break;
             }
         }
@@ -787,7 +805,7 @@ class StorageFolding : public IRMutator2 {
         if (body.same_as(op->body)) {
             return op;
         } else if (folder.dims_folded.empty()) {
-            return Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            return Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {
             Region bounds = op->bounds;
 
@@ -800,7 +818,7 @@ class StorageFolding : public IRMutator2 {
                 bounds[d] = Range(0, f);
             }
 
-            Stmt stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
+            Stmt stmt = Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
 
             // Each fold may have an associated semaphore that needs initialization, along with some counters
             for (const auto &fold : folder.dims_folded) {
@@ -818,12 +836,12 @@ class StorageFolding : public IRMutator2 {
                 }
                 if (!fold.head.empty()) {
                     stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true()), stmt);
-                    stmt = Allocate::make(fold.head, Int(32), {}, const_true(), stmt);
+                    stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
                     stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true()), stmt);
-                    stmt = Allocate::make(fold.tail, Int(32), {}, const_true(), stmt);
+                    stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
             }
 

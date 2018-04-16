@@ -1,0 +1,43 @@
+## PYBIND TODO:
+
+- There is (apparently?) no way to override the logical "and" and "or" operators in Python to work with Expr; you must use the bitwise | and & instead. Worse, using the logical operators just short-circuits weirdly; it would be nice if we could at least make using and/or with Expr an error.
+- minimize Py dependencies in tests. (scipy?)
+- All docstrings have been removed; if we re-add them, we should find a way to import them from Doxygen output to ensure they are fresh.
+- Tutorials are incomplete and need lots of love.
+- Many error messages need to be made more informative. Many exceptions are of incorrect type.
+- Some hooks to override runtime functions (e.g. Func::set_error_handler) aren't yet implemented.
+
+- Wrappers Missing Entirely:
+    - DeviceInterface
+    - evaluate()
+    - Float16 [possible via numpy?]
+    - Generator
+- Wrappers Incomplete, Tests Incomplete:
+    - ParamMap
+- Wrappers Believed To Be Complete, But Tests Incomplete:
+    - Buffer
+    - ConciseCasts
+    - ExternFuncArgument
+    - Func
+    - FuncRef
+    - FuncTupleElementRef
+    - ImageParam
+    - InlineReductions
+    - IROperator
+    - LoopLevel
+    - MachineParams
+    - Module
+    - Outputs
+    - OutputImageParam
+    - Pipeline
+    - RDom
+    - RVar
+    - Stage
+- Wrappers Complete, Tests Complete:
+    - BoundaryConditions
+    - Expr
+    - Target
+    - Type
+    - Var
+
+

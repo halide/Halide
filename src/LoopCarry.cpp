@@ -527,7 +527,7 @@ class LoopCarry : public IRMutator2 {
             // Inject the scratch buffer allocations.
             for (const auto &alloc : carry.allocs) {
                 stmt = Block::make(substitute(op->name, op->min, alloc.initial_stores), stmt);
-                stmt = Allocate::make(alloc.name, alloc.type, {alloc.size}, const_true(), stmt);
+                stmt = Allocate::make(alloc.name, alloc.type, MemoryType::Stack, {alloc.size}, const_true(), stmt);
             }
             if (!carry.allocs.empty()) {
                 stmt = IfThenElse::make(op->extent > 0, stmt);

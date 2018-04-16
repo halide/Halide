@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import halide as hl
 
-import numpy
+import numpy as np
 import math
 
 def main():
@@ -40,8 +40,8 @@ def main():
     color_image = hl.Func()
     c = hl.Var("c")
     color_image[x, y, c] = hl.select(c == 0, 245, # Red value
-                                  c == 1, 42,  # Green value
-                                  132)        # Blue value
+                                     c == 1, 42,  # Green value
+                                     132)        # Blue value
 
     # This method is often convenient because it makes it easy to
     # operate on this hl.Func in a way that treats each item in the
@@ -88,19 +88,28 @@ def main():
     # Buffers. We call this a Realization. It's equivalent to a
     # std::vector of hl.Buffer/Image objects:
     if True:
-        (im1, im2) = multi_valued.realize(80, 60)
-        assert type(im1) is hl.Buffer_int32
-        assert type(im2) is hl.Buffer_float32
-        assert im1(30, 40) == 30 + 40
-        assert numpy.isclose(im2(30, 40), math.sin(30 * 40))
+        im1, im2 = multi_valued.realize(80, 60)
+        assert im1.type() == hl.Int(32)
+        assert im2.type() == hl.Float(32)
+        assert im1[30, 40] == 30 + 40
+        assert np.isclose(im2[30, 40], math.sin(30 * 40))
+
+    # You can also pass a tuple of pre-allocated buffers to realize()
+    # rather than having new ones created. (The Buffers must have the correct
+    # types and have identical sizes.)
+    if True:
+        im1, im2 = hl.Buffer(hl.Int(32), [80, 60]), hl.Buffer(hl.Float(32), [80, 60])
+        multi_valued.realize((im1, im2))
+        assert im1[30, 40] == 30 + 40
+        assert np.isclose(im2[30, 40], math.sin(30 * 40))
 
 
     # All Tuple elements are evaluated together over the same domain
     # in the same loop nest, but stored in distinct allocations. The
     # equivalent C++ code to the above is:
     if True:
-        multi_valued_0 = numpy.empty((80*60), dtype=numpy.int32)
-        multi_valued_1 = numpy.empty((80*60), dtype=numpy.int32)
+        multi_valued_0 = np.empty((80*60), dtype=np.int32)
+        multi_valued_1 = np.empty((80*60), dtype=np.int32)
 
         for yy in range(80):
             for xx in range(60):
@@ -145,7 +154,7 @@ def main():
         input_func = hl.Func()
         input_func[x] = hl.sin(x)
         input = input_func.realize(100)
-        assert type(input) is hl.Buffer_float32
+        assert input.type() == hl.Float(32)
 
         # Then we defined a 2-valued Tuple which tracks the maximum value
         # its index.
@@ -153,10 +162,10 @@ def main():
 
         # Pure definition.
         # (using [()] for zero-dimensional Funcs is a convention of this python interface)
-        arg_max[()] = (0, input(0))
+        arg_max[()] = (0, input[0])
 
         # Update definition.
-        r = hl.RDom(1, 99)
+        r = hl.RDom([(1, 99)])
         old_index = arg_max[()][0]
         old_max   = arg_max[()][1]
         new_index = hl.select(old_max > input[r], r, old_index)
@@ -165,12 +174,12 @@ def main():
 
         # The equivalent C++ is:
         arg_max_0 = 0
-        arg_max_1 = float(input(0))
+        arg_max_1 = float(input[0])
         for r in range(1, 100):
             old_index = arg_max_0
             old_max = arg_max_1
-            new_index = r if (old_max > input(r)) else old_index
-            new_max = max(input(r), old_max)
+            new_index = r if (old_max > input[r]) else old_index
+            new_max = max(input[r], old_max)
             # In a tuple update definition, all loads and computation
             # are done before any stores, so that all Tuple elements
             # are updated atomically with respect to recursive calls
@@ -182,12 +191,12 @@ def main():
         # Let's verify that the Halide and C++ found the same maximum
         # value and index.
         if True:
-            (r0, r1) = arg_max.realize()
+            r0, r1 = arg_max.realize()
 
-            assert type(r0) is hl.Buffer_int32
-            assert type(r1) is hl.Buffer_float32
-            assert arg_max_0 == r0(0)
-            assert numpy.isclose(arg_max_1, r1(0))
+            assert r0.type() == hl.Int(32)
+            assert r1.type() == hl.Float(32)
+            assert arg_max_0 == r0[()]
+            assert np.isclose(arg_max_1, r1[()])
 
 
         # Halide provides argmax and hl.argmin as built-in reductions
@@ -259,7 +268,7 @@ def main():
         mandelbrot[x, y, t] = Complex(0.0, 0.0)
 
         # We'll use an update definition to take 12 steps.
-        r = hl.RDom(1, 12)
+        r = hl.RDom([(1, 12)])
         current = Complex(mandelbrot[x, y, r-1])
 
         # The following line uses the complex multiplication and
@@ -285,11 +294,11 @@ def main():
 
         # Realize the pipeline and print the result as ascii art.
         result = escape.realize(61, 25)
-        assert type(result) is hl.Buffer_int32
+        assert result.type() == hl.Int(32)
         code = " .:-~*={&%#@"
         for yy in range(result.height()):
             for xx in range(result.width()):
-                index = result(xx, yy)
+                index = result[xx, yy]
                 if index < len(code):
                     print("%c" % code[index], end="")
                 else:

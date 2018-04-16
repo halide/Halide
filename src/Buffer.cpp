@@ -7,12 +7,12 @@ namespace Halide {
 namespace Internal {
 
 template<>
-EXPORT RefCount &ref_count<BufferContents>(const BufferContents *c) {
+RefCount &ref_count<BufferContents>(const BufferContents *c) {
     return c->ref_count;
 }
 
 template<>
-EXPORT void destroy<BufferContents>(const BufferContents *c) {
+void destroy<BufferContents>(const BufferContents *c) {
     delete c;
 }
 

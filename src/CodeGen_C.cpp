@@ -52,8 +52,8 @@ void halide_profiler_pipeline_end(void *, void *);
 }
 
 #ifdef _WIN32
-float roundf(float);
-double round(double);
+__declspec(dllimport) float __cdecl roundf(float);
+__declspec(dllimport) double __cdecl round(double);
 #else
 inline float asinh_f32(float x) {return asinhf(x);}
 inline float acosh_f32(float x) {return acoshf(x);}
@@ -141,7 +141,7 @@ public:
     ~HalideFreeHelper() { free(); }
     void free() {
         if (p) {
-            // TOOD: do all free_functions guarantee to ignore a null ptr?
+            // TODO: do all free_functions guarantee to ignore a nullptr?
             free_function(user_context, p);
             p = nullptr;
         }
@@ -150,7 +150,6 @@ public:
 } // namespace
 
 )INLINE_CODE";
-
 }
 
 class TypeInfoGatherer : public IRGraphVisitor {
@@ -1411,8 +1410,9 @@ void CodeGen_C::compile(const Module &input) {
             f.body.accept(&type_info);
         }
     }
-    uses_gpu_for_loops = type_info.for_types_used.count(ForType::GPUBlock) ||
-                         type_info.for_types_used.count(ForType::GPUThread);
+    uses_gpu_for_loops = (type_info.for_types_used.count(ForType::GPUBlock) ||
+                          type_info.for_types_used.count(ForType::GPUThread) ||
+                          type_info.for_types_used.count(ForType::GPULane));
 
     // Forward-declare all the types we need; this needs to happen before
     // we emit function prototypes, since those may need the types.
@@ -1445,7 +1445,7 @@ void CodeGen_C::compile(const Module &input) {
         ExternCallPrototypes e;
         for (const auto &f : input.functions()) {
             f.body.accept(&e);
-            if (f.linkage == LoweredFunc::Internal) {
+            if (f.linkage == LinkageType::Internal) {
                 // We can't tell at the call site if a LoweredFunc is intended to be internal
                 // or not, so mark them explicitly.
                 e.set_internal_linkage(f.name);
@@ -1473,7 +1473,7 @@ void CodeGen_C::compile(const Module &input) {
 
 void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
-    if (is_header() && f.linkage == LoweredFunc::Internal) {
+    if (is_header() && f.linkage == LinkageType::Internal) {
         return;
     }
 
@@ -1508,7 +1508,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     // Emit the function prototype
-    if (f.linkage == LoweredFunc::Internal) {
+    if (f.linkage == LinkageType::Internal) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
@@ -1562,7 +1562,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
@@ -1578,7 +1578,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "\n";
     }
 
-    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // C syntax for function-that-returns-function-pointer is fun.
         const string getter = R"INLINE_CODE(
 
@@ -2137,6 +2137,10 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        internal_assert(op->args.size() == 1);
+        string arg0 = print_expr(op->args[0]);
+        rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
@@ -2486,7 +2490,9 @@ void CodeGen_C::visit(const Allocate *op) {
                            << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
                 size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
-                if (can_allocation_fit_on_stack(stack_bytes)) {
+                if (op->memory_type == MemoryType::Stack ||
+                    (op->memory_type == MemoryType::Auto &&
+                     can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;
                 }
             }
@@ -2666,14 +2672,14 @@ void CodeGen_C::test() {
     Stmt s = Store::make("buf", e, x, Parameter(), const_true());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), {127}, const_true(), s);
+    s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), {43, beta}, const_true(), s);
+    s = Allocate::make("tmp.heap", Int(32), MemoryType::Heap, {43, beta}, const_true(), s);
     Expr buf = Variable::make(Handle(), "buf.buffer");
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
     Module m("", get_host_target());
-    m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
+    m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
     ostringstream source;
     {

@@ -1,63 +1,62 @@
+## Differences from C++ API
+
+The Python bindings attempt to mimic the Halide C++ API as closely as possible, with some differences where the C++ idiom is either inappropriate or impossible:
+
+- Most APIs that take a variadic argumentlist of ints in C++ take an explicit list in Python. For instance, the usual version of the `Buffer` ctor in C++ offers variadic and list versions:
+```
+Buffer<>(Type t, int extent_dim_0, int extent_dim_1, ...., extent_dim_N, string name = "")
+Buffer<>(Type t, vector<int> extents, string name = "")
+```
+in Python, only the second variant is provided.
+- `Func` and `Buffer` access is done using `[]` rather than `()`
+- Some classes in the Halide API aren't provided because they are 'wrapped' with standard Python idioms:
+    - `Halide::Tuple` doesn't exist in the Python bindings; an ordinary Python tuple of `Halide::Expr` is used instead.
+    - `Halide::Realization` doesn't exist in the Python bindings; an ordinary Python tuple of `Halide::Buffer` is used instead.
+    - `Halide::Error` and friends don't exist; standard Python error handling is used instead.
+- static and instance method overloads with the same name in the same class aren't allowed, so some convenience methods are missing from `Halide::Var`
+- Templated types (notably `Halide::Buffer<>` and `Halide::Param<>`) aren't provided, for obvious reasons; only the equivalents of `Halide::Buffer<void>` and `Halide::Param<void>` are supported.
+- Only things in the `Halide` namespace are supported; classes and methods that involve using the `Halide::Internal` namespace are not provided.
+- The functions in `Halide::ConciseCasts` are present in the toplevel Halide module in Python, rather than a submodule: e.g., use `hl.i8_sat()`, not `hl.ConciseCasts.i8_sat()`.
+- No mechanism is provided for overriding any runtime functions from Python.
+- No mechanism is provided for supporting `Func::define_extern`.
+- `Buffer::for_each_value()` is hard to implement well in Python; it's omitted entirely for now.
+
+## Enhancements to the C++ API
+
+- The `Buffer` supports the Python Buffer Protocol (https://www.python.org/dev/peps/pep-3118/) and thus is easily and cheaply converted to and from other compatible objects (e.g., NumPy's `ndarray`), with storage being shared.
 
 ## Prerequisites ##
 
+The bindings (and demonstration applications) should work well both for python2.7 and python3.4 (or higher), on Linux and OSX platforms. Windows is not yet supported, but could be with CMake work. (The Makefile defaults to using Python 3.x; to use Python 2, set `PYTHON = python` before building.)
 
-The bindings (and demonstration applications) should work well both for python2.7 and python3.4 (or higher),
-and across platforms.
-
-(Currently only tested on Ubuntu 14.04 and OS X 10.10 with python3.4 and a Halide source build).
 
 #### Python requirements:
  See requirements.txt (to be used with `pip`: `pip install --user requirements.txt`)
 
 #### C++ requirements:
- Halide compiled (assuming `halide_git_clone_path/build`).
- For a better python experience make sure Halide was compiled with `WITH_EXCEPTIONS`
- Boost.python (already available in most boost distributions)
- Recommended (used for I/O): Boost.Numpy https://github.com/ndarray/Boost.NumPy
+- Halide compiled to a distribution (e.g. `make distrib` or similar), with the `HALIDE_DISTRIB_PATH` env var pointing to it
+- The PyBind11 package (https://github.com/pybind/pybind11), v2.2.1 or later, with the `PYBIND11_PATH` env var pointing to it
+
 
 ## Compilation instructions ##
 
 Build using:
 ```bash
-  make 
+  make
 ```
 
 ## Documentation and Examples ##
 
 The Python API reflects directly the [C++ Halide API](http://halide-lang.org/docs).
-Consult the [module documentation](http://googledrive.com/host/0B6LzqcYZJN2cfnZKZno2MmI2TDFsWkh0M3pUOHNnaUdkV2l2dmR2eDlnV2JmeF9NeEI0cTA).
 
 Check out the code for the example applications in the `apps/` and `tutorial/` subdirectory.
 
-You can run them as a batch via:
-```bash
-    run_apps.sh
-    run_tutorial.sh
-```
+You can run them as a batch via `make test_apps` or `make test_tutorial`.
 
-To run these examples, make sure the `PYTHONPATH` environment variable points to your build directory (e.g. `export PYTHONPATH=halide_source/python_bindings/build:$PYTHONPATH`).
+To run these examples, make sure the `PYTHONPATH` environment variable points to your build directory (e.g. `export PYTHONPATH=halide_source/python_bindings/bin:$PYTHONPATH`).
 
 ## License ##
 
 The Python bindings use the same [MIT license](https://github.com/halide/Halide/blob/master/LICENSE.txt) as Halide.
 
-Python bindings provided by Connelly Barnes (2012-2013), Fred Rotbart (2014), Rodrigo Benenson (2015)
-and the Halide open-source community.
-
-## Why did we move from SWIG to Boost.Python ? ##
-
-Problems with (old) SWIG bindings:
-
-- P1) SWIG cannot parse C++15, and it will always lag
-- P2) Python code is not compiled/tested together with C++ codebase
-- P3) Albeit SWIG is ment to provide "automagic" conversion, current code base has explicit code for every class (and class member) of interest
-- P4) Old swig bindings `__init__.py` file has a lot of "python magic" to get things running, code is spread around multiple pieces (`py_util.cpp`, `cHalide.i`, and `__init__.py`)
-- P5) Old swig python bindings did not work anymore (swig issues, compilation issues)
-
-The boost python approach helps because:
-- a) P1 is solved out of the box, since no C++ parsing is involved
-- b) P2 is mitigated since python bindings are also in C++. Any miss-match with generate a compilation error.
-- c) P3, P4 and P5 are expected to be handled by having less spaghetti and aiming for tighter integration with rest of code-base (point b)
-
-
+Python bindings provided by Connelly Barnes (2012-2013), Fred Rotbart (2014), Rodrigo Benenson (2015) and the Halide open-source community.

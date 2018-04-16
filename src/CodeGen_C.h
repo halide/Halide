@@ -44,7 +44,7 @@ public:
     /** The target we're generating code for */
     const Target &get_target() const { return target; }
 
-    EXPORT static void test();
+    static void test();
 
 protected:
 

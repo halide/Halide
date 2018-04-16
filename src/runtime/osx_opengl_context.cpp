@@ -15,10 +15,6 @@ extern "C" unsigned char aglSetCurrentContext(void *);
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
 WEAK halide_mutex cgl_functions_mutex;
-__attribute__((constructor)) 
-WEAK void init_cgl_functions_mutex() {
-    halide_mutex_init(&cgl_functions_mutex);
-}
 WEAK bool cgl_initialized = false;
 WEAK int (*CGLChoosePixelFormat)(int *attributes, void **pixel_format_result, int *num_formats);
 WEAK int (*CGLCreateContext)(void *pixel_format, void *share_context, void **context_Result);

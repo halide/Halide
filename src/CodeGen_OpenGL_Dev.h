@@ -90,7 +90,7 @@ public:
                     std::string name,
                     const std::vector<DeviceArgument> &args);
 
-    EXPORT static void test();
+    static void test();
 
 protected:
     using CodeGen_C::visit;

@@ -637,7 +637,7 @@ Stmt build_produce(Function f, const Target &target) {
             const char *fn = (cropped_buffers.size() == 1 ?
                               "_halide_buffer_retire_crop_after_extern_stage" :
                               "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), {},
+            check = Allocate::make(destructor_name, Handle(), MemoryType::Stack, {},
                                    const_true(), check, cleanup_struct, fn);
         }
 
@@ -888,7 +888,7 @@ private:
                 bounds.push_back(Range(min, extent));
             }
 
-            s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
         // This is also the point at which we inject explicit bounds
@@ -1575,7 +1575,7 @@ private:
                 bounds.push_back(Range(min, extent));
             }
 
-            s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
         // This is also the point at which we inject explicit bounds
@@ -1763,6 +1763,14 @@ class StmtUsesFunc : public IRVisitor {
         }
         IRVisitor::visit(op);
     }
+    void visit(const Variable *op) {
+        if (op->type.is_handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
+            result = true;
+        }
+        IRVisitor::visit(op);
+    }
 public:
     bool result = false;
     StmtUsesFunc(string f) : func(f) {}
@@ -1823,6 +1831,18 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const Call *op) {
         if (op->name == func) {
+            do_indent();
+            stream << caller << " uses " << func << "\n";
+            last_print_was_ellipsis = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (op->type.is_handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
             do_indent();
             stream << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;

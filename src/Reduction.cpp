@@ -130,10 +130,10 @@ struct ReductionDomainContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
+RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
 
 template<>
-EXPORT void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
+void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
 
 ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
     contents(new ReductionDomainContents) {

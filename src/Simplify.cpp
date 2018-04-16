@@ -60,8 +60,7 @@ bool is_var_relop_simple_const(const Expr &e, string* name) {
                 *name = v->name;
                 return true;
             }
-        }
-        else if (is_simple_const(r->a)) {
+        } else if (is_simple_const(r->a)) {
             const Variable *v = r->b.template as<Variable>();
             if (v) {
                 *name = v->name;
@@ -79,14 +78,18 @@ bool is_var_simple_const_comparison(const Expr &e, string* name) {
            is_var_relop_simple_const<NE>(e, name);
 }
 
-// Returns true iff t is a scalar integral type where overflow is undefined
+// Returns true iff t is an integral type where overflow is undefined
+bool no_overflow_int(Type t) {
+    return t.is_int() && t.bits() >= 32;
+}
+
 bool no_overflow_scalar_int(Type t) {
-    return (t.is_scalar() && t.is_int() && t.bits() >= 32);
+    return t.is_scalar() && no_overflow_int(t);
 }
 
 // Returns true iff t does not have a well defined overflow behavior.
 bool no_overflow(Type t) {
-    return t.is_float() || no_overflow_scalar_int(t.element_of());
+    return t.is_float() || no_overflow_int(t);
 }
 
 // Make a poison value used when overflow is detected during constant
@@ -144,7 +147,7 @@ static int debug_indent = 0;
 class Simplify : public IRMutator2 {
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
-        simplify_lets(r) {
+        remove_dead_lets(r), no_float_simplify(false) {
         alignment_info.set_containing_scope(ai);
 
         // Only respect the constant bounds from the containing scope.
@@ -170,6 +173,7 @@ public:
                 << spaces << "Before: " << e << "\n"
                 << spaces << "After:  " << new_e << "\n";
         }
+        internal_assert(e.type() == new_e.type());
         return new_e;
     }
 #endif
@@ -193,7 +197,8 @@ public:
 
 
 private:
-    bool simplify_lets;
+    bool remove_dead_lets;
+    bool no_float_simplify;
 
     struct VarInfo {
         Expr replacement;
@@ -434,6 +439,15 @@ private:
 
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
+        if (no_float_simplify &&
+            (op->type.is_float() || value.type().is_float())) {
+            if (value.same_as(op->value)) {
+                return op;
+            } else {
+                return Cast::make(op->type, value);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(value, op->type, &expr)) {
             return expr;
@@ -526,6 +540,13 @@ private:
     }
 
     Expr visit(const Variable *op) override {
+        if (bounds_info.contains(op->name)) {
+            std::pair<int64_t, int64_t> bounds = bounds_info.get(op->name);
+            if (bounds.first == bounds.second) {
+                return make_const(op->type, bounds.first);
+            }
+        }
+
         if (var_info.contains(op->name)) {
             VarInfo &info = var_info.ref(op->name);
 
@@ -556,6 +577,15 @@ private:
 
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Add::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -605,6 +635,8 @@ private:
         const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): nullptr;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): nullptr;
         const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): nullptr;
+        const Div *div_a_b = add_a ? add_a->b.as<Div>() : nullptr;
+        const Add *add_a_b_a = div_a_b ? div_a_b->a.as<Add>() : nullptr;
 
         const Max *max_b = b.as<Max>();
 
@@ -618,8 +650,11 @@ private:
         sub_a_b = max_a ? max_a->b.as<Sub>() : sub_a_b;
         add_a_a = max_a ? max_a->a.as<Add>() : add_a_a;
         add_a_b = max_a ? max_a->b.as<Add>() : add_a_b;
-
+        add_a_a = mul_a ? mul_a->a.as<Add>() : add_a_a;
         add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
+
+        const Div *div_a_a_a = add_a_a ? add_a_a->a.as<Div>() : nullptr;
+        const Div *div_a_a_b = add_a_a ? add_a_a->b.as<Div>() : nullptr;
 
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
@@ -746,6 +781,7 @@ private:
             // a + b*-x -> a - b*x
             return mutate(a - mul_b->a * (-mul_b->b));
         } else if (mul_a &&
+                   !is_const(b) && // Leave constants on the right
                    is_negative_negatable_const(mul_a->b)) {
             // a*-x + b -> b - a*x
             return mutate(b - mul_a->a * (-mul_a->b));
@@ -780,6 +816,15 @@ private:
                    is_simple_const(b)) {
             // (y + c1)/c2 + c3 -> (y + (c1 + c2*c3))/c2
             return mutate((add_div_a_a->a + (add_div_a_a->b + div_a->b*b))/div_a->b);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   div_a_b &&
+                   add_a_b_a &&
+                   is_simple_const(add_a_b_a->b) &&
+                   is_simple_const(div_a_b->b) &&
+                   is_simple_const(b)) {
+            // (x + (y + c1)/c2) + c3 -> x + (y + (c1 + c2*c3))/c2
+            return mutate(add_a->a + (add_a_b_a->a + (add_a_b_a->b + div_a_b->b*b))/div_a_b->b);
         } else if (no_overflow(op->type) &&
                    div_a && sub_div_a_a &&
                    !is_zero(sub_div_a_a->a) &&
@@ -932,12 +977,24 @@ private:
                    mul_b &&
                    equal(mul_a->a, mul_b->b)) {
             return mutate(mul_a->a * (mul_a->b + mul_b->a));
+        } else if (mul_a &&
+                   mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia % ib == 0 || ib % ia == 0)) {
+            if (ia % ib == 0) {
+                Expr factor = make_const(op->type, div_imp(ia, ib));
+                return mutate((mul_a->a * factor + mul_b->a) * mul_b->b);
+            } else {
+                Expr factor = make_const(op->type, div_imp(ib, ia));
+                return mutate((mul_a->a + mul_b->a * factor) * mul_a->b);
+            }
         } else if (mod_a &&
                    mul_b &&
                    equal(mod_a->b, mul_b->b)) {
             // (x%3) + y*3 -> y*3 + x%3
             return mutate(b + a);
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_int(op->type) &&
                    mul_a &&
                    mod_b &&
                    div_a_a &&
@@ -946,7 +1003,27 @@ private:
                    equal(div_a_a->a, mod_b->a)) {
             // (x/3)*3 + x%3 -> x
             return div_a_a->a;
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_int(op->type) &&
+                   mul_a &&
+                   mod_b &&
+                   add_a_a &&
+                   div_a_a_b &&
+                   equal(mul_a->b, div_a_a_b->b) &&
+                   equal(mul_a->b, mod_b->b) &&
+                   equal(div_a_a_b->a, mod_b->a)) {
+            // (y + (x/3))*3 + x%3 -> y*3 + x
+            return mutate(add_a_a->a * mul_a->b + mod_b->a);
+        } else if (no_overflow_int(op->type) &&
+                   mul_a &&
+                   mod_b &&
+                   add_a_a &&
+                   div_a_a_a &&
+                   equal(mul_a->b, div_a_a_a->b) &&
+                   equal(mul_a->b, mod_b->b) &&
+                   equal(div_a_a_a->a, mod_b->a)) {
+            // ((x/3) + y)*3 + x%3 -> x + y*3
+            return mutate(mod_b->a + add_a_a->b * mul_a->b);
+        } else if (no_overflow_int(op->type) &&
                    add_a &&
                    mul_a_a &&
                    mod_b &&
@@ -954,7 +1031,7 @@ private:
                    (!mod_a_b || !equal(mod_a_b->b, mod_b->b))) {
             // ((x*3) + y) + z%3 -> (x*3 + z%3) + y
             return mutate((add_a->a + b) + add_a->b);
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_int(op->type) &&
                    add_a &&
                    mod_a_a &&
                    mul_b &&
@@ -962,7 +1039,7 @@ private:
                    (!mod_a_b || !equal(mod_a_b->b, mul_b->b))) {
             // ((x%3) + y) + z*3 -> (z*3 + x%3) + y
             return mutate((b + add_a->a) + add_a->b);
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_int(op->type) &&
                    add_a &&
                    mul_a_b &&
                    mod_b &&
@@ -970,7 +1047,7 @@ private:
                    (!mod_a_a || !equal(mod_a_a->b, mod_b->b))) {
             // (y + (x*3)) + z%3 -> y + (x*3 + z%3)
             return mutate(add_a->a + (add_a->b + b));
-        } else if (no_overflow(op->type) &&
+        } else if (no_overflow_int(op->type) &&
                    add_a &&
                    mod_a_b &&
                    mul_b &&
@@ -985,6 +1062,22 @@ private:
             // x*4 + y*2 -> (x*2 + y)*2
             Expr ratio = make_const(a.type(), div_imp(ia, ib));
             return mutate((mul_a->a * ratio + mul_b->a) * mul_b->b);
+        } else if (no_overflow_int(op->type) &&
+                   div_a &&
+                   mod_b &&
+                   is_two(div_a->b) &&
+                   is_two(mod_b->b) &&
+                   equal(div_a->a, mod_b->a)) {
+            // x / 2 + x % 2 -> (x + 1) / 2
+            return mutate((div_a->a + make_one(op->type)) / div_a->b);
+        } else if (no_overflow_int(op->type) &&
+                   div_b &&
+                   mod_a &&
+                   is_two(div_b->b) &&
+                   is_two(mod_a->b) &&
+                   equal(div_b->a, mod_a->a)) {
+            // x % 2 + x / 2 -> (x + 1) / 2
+            return mutate((div_b->a + make_one(op->type)) / div_b->b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             // If we've made no changes, and can't find a rule to apply, return the operator unchanged.
             return op;
@@ -996,6 +1089,15 @@ private:
     Expr visit(const Sub *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Sub::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -1038,6 +1140,11 @@ private:
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : nullptr;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : nullptr;
 
+        if (add_a) {
+            add_a_a = add_a->a.as<Add>();
+            add_a_b = add_a->b.as<Add>();
+        }
+
         if (div_a) {
             add_a_a = div_a->a.as<Add>();
             add_a_b = div_a->b.as<Add>();
@@ -1055,6 +1162,10 @@ private:
 
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
+
+        int64_t a_round_up_factor = 0, b_round_up_factor = 0;
+        Expr a_round_up = is_round_up(a, &a_round_up_factor);
+        Expr b_round_up = is_round_up(b, &b_round_up_factor);
 
         if (is_zero(b)) {
             return a;
@@ -1278,6 +1389,26 @@ private:
                    equal(add_a->b, add_b->a)) {
             // (b + a) - (a + c) -> b - c
             return mutate(add_a->a - add_b->b);
+        } else if (add_a &&
+                   add_a_a &&
+                   equal(add_a_a->a, b)) {
+            // ((a + b) + c) - a -> b + c
+            return mutate(add_a_a->b + add_a->b);
+        } else if (add_a &&
+                   add_a_a &&
+                   equal(add_a_a->b, b)) {
+            // ((a + b) + c) - b -> a + c
+            return mutate(add_a_a->a + add_a->b);
+        } else if (add_a &&
+                   add_a_b &&
+                   equal(add_a_b->a, b)) {
+            // (a + (b + c)) - b -> a + c
+            return mutate(add_a->a + add_a_b->b);
+        } else if (add_a &&
+                   add_a_b &&
+                   equal(add_a_b->b, b)) {
+            // (a + (b + c)) - c -> a + b
+            return mutate(add_a->a + add_a_b->a);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
                    is_simple_const(a) &&
@@ -1451,6 +1582,34 @@ private:
                    equal(div_b_a->a, a)) {
             // x - (x/4)*4 -> x%4
             return mutate(a % mul_b->b);
+        } else if (no_overflow_int(op->type) &&
+                   a_round_up.defined() &&
+                   a_round_up_factor == 2 &&
+                   equal(a_round_up, b)) {
+            // ((x + 1)/2)*2 - x -> x%2
+            return mutate(b % make_const(op->type, a_round_up_factor));
+        } else if (no_overflow_int(op->type) &&
+                   b_round_up.defined() &&
+                   b_round_up_factor == 2 &&
+                   equal(b_round_up, a)) {
+            // x - ((x + 1)/2)*2 -> -(x%2)
+            return mutate(make_zero(op->type) - (a % make_const(op->type, b_round_up_factor)));
+        } else if (mul_a &&
+                   mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   ib % ia == 0) {
+            // x * a - y * (a * b) -> (x - y * b) * a
+            Expr ratio = make_const(a.type(), div_imp(ib, ia));
+            return mutate((mul_a->a - mul_b->a * ratio) * mul_a->b);
+        } else if (mul_a &&
+                   mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   ia % ib == 0) {
+            // x * (a * b) - y * a -> (x * b - y) * a
+            Expr ratio = make_const(a.type(), div_imp(ia, ib));
+            return mutate((mul_a->a * ratio - mul_b->a) * mul_b->b);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1642,6 +1801,15 @@ private:
     Expr visit(const Mul *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Mul::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -1746,12 +1914,21 @@ private:
     Expr visit(const Div *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Div::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
         }
 
-        int64_t ia = 0, ib = 0, ic = 0;
+        int64_t ia = 0, ib = 0, ic = 0, id = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
 
@@ -1767,8 +1944,10 @@ private:
         const Sub *sub_a_a = nullptr;
         const Sub *sub_a_b = nullptr;
         const Mul *mul_a_a_a = nullptr;
+        const Mul *mul_a_a_b = nullptr;
         const Mul *mul_a_b_a = nullptr;
         const Mul *mul_a_b_b = nullptr;
+        const Mod *mod_a_a = nullptr;
 
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
@@ -1782,6 +1961,7 @@ private:
             add_a_b = add_a->b.as<Add>();
             sub_a_a = add_a->a.as<Sub>();
             sub_a_b = add_a->b.as<Sub>();
+            mod_a_a = add_a->a.as<Mod>();
         } else if (sub_a) {
             mul_a_a = sub_a->a.as<Mul>();
             mul_a_b = sub_a->b.as<Mul>();
@@ -1793,8 +1973,10 @@ private:
 
         if (add_a_a) {
             mul_a_a_a = add_a_a->a.as<Mul>();
+            mul_a_a_b = add_a_a->b.as<Mul>();
         } else if (sub_a_a) {
             mul_a_a_a = sub_a_a->a.as<Mul>();
+            mul_a_a_b = sub_a_a->b.as<Mul>();
         }
 
         if (add_a_b) {
@@ -1868,9 +2050,11 @@ private:
                    broadcast_b &&
                    const_int(broadcast_b->value, &ib) &&
                    ib != 0 &&
-                   mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
-            // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
+                   (ic = gcd(mod_rem.modulus, ib)) > 1 &&
+                   div_imp((int64_t)mod_rem.remainder, ic) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ic)) {
+            // ramp(k*(a*c) + x, y, w) / (b*c) = broadcast(k/b, w) if x/c == (x + (w-1)*y)/c
+            // The ramp lanes can't actually change the result, so we
+            // can just divide the base and broadcast it.
             return mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->lanes));
         } else if (no_overflow(op->type) &&
                    div_a &&
@@ -1960,6 +2144,17 @@ private:
             return mutate((mul_a_a_a->a * ratio) + (add_a_a->b  + add_a->b) / b);
         } else if (no_overflow(op->type) &&
                    add_a &&
+                   add_a_a &&
+                   mul_a_a_b &&
+                   const_int(mul_a_a_b->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib > 0 &&
+                   (ia % ib == 0)) {
+            // ((x + y*4) + z) / 2 -> y*2 + (x + z)/2
+            Expr ratio = make_const(op->type, div_imp(ia, ib));
+            return mutate((mul_a_a_b->a * ratio) + (add_a_a->a  + add_a->b) / b);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
                    sub_a_a &&
                    mul_a_a_a &&
                    const_int(mul_a_a_a->b, &ia) &&
@@ -2045,6 +2240,20 @@ private:
             // (y + 8) / 2 -> y/2 + 4
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             return mutate((add_a->a / b) + ratio);
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   const_int(add_a->b, &ib) &&
+                   mul_a_a &&
+                   const_int(mul_a_a->b, &ia) &&
+                   const_int(b, &ic) &&
+                   ic > 0 &&
+                   (id = gcd(ia, ic)) != 1) {
+            // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
+            // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
+            ia = div_imp(ia, id);
+            ib = div_imp(ib, id);
+            ic = div_imp(ic, id);
+            return mutate((mul_a_a->a * make_const(op->type, ia) + make_const(op->type, ib)) / make_const(op->type, ic));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    equal(add_a->a, b)) {
@@ -2149,7 +2358,16 @@ private:
                    equal(mul_a_b->a, b)) {
             // (y - a*x) / a -> y/a - x
             return mutate((sub_a->a / b) - mul_a_b->b);
-
+        } else if (no_overflow_int(op->type) &&
+                   is_two(b) &&
+                   add_a &&
+                   is_const(add_a->b) &&
+                   mod_a_a &&
+                   is_two(mod_a_a->b)) {
+            // A very specific pattern that comes up in bounds in upsampling code.
+            // ((x % 2) + c)/2 -> (x % 2) + c / 2   (for odd c)
+            // We know c is odd or a rule above would have triggered
+            return mutate(add_a->a + add_a->b / b);
         } else if (b.type().is_float() && is_simple_const(b)) {
             // Convert const float division to multiplication
             // x / 2 -> x * 0.5
@@ -2164,6 +2382,16 @@ private:
     Expr visit(const Mod *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Mod::make(a, b);
+            }
+        }
+
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -2229,6 +2457,16 @@ private:
                    (ia % ib == 0)) {
             // (x * (b*a)) % b -> 0
             return make_zero(op->type);
+        } else if (no_overflow(op->type) &&
+                   mul_a &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   const_int(mul_a->b, &ia) &&
+                   ia > 0 &&
+                   (ib % ia == 0)) {
+            // (x * a) % (a * b) -> (x % b) * a
+            Expr ratio = make_const(a.type(), div_imp(ib, ia));
+            return mutate((mul_a->a % ratio) * mul_a->b);
         } else if (no_overflow(op->type) &&
                    add_a &&
                    mul_a_a &&
@@ -2303,6 +2541,15 @@ private:
     Expr visit(const Min *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Min::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -2330,10 +2577,16 @@ private:
         const Add *add_b = b.as<Add>();
         const Add *add_b_a = add_b ? add_b->a.as<Add>() : nullptr;
         const Add *add_b_b = add_b ? add_b->b.as<Add>() : nullptr;
-        const Div *div_a = a.as<Div>();
-        const Div *div_b = b.as<Div>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
+        const Mul *mul_b_a = add_b ? add_b->a.as<Mul>() : nullptr;
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
+        const Div *div_a_a = add_a ? add_a->a.as<Div>() : mul_a ? mul_a->a.as<Div>() : nullptr;
+        const Div *div_b_a = add_b ? add_b->a.as<Div>() : mul_b ? mul_b->a.as<Div>() : nullptr;
+        const Div *div_a_a_a = mul_a_a ? mul_a_a->a.as<Div>() : nullptr;
+        const Div *div_b_a_a = mul_b_a ? mul_b_a->a.as<Div>() : nullptr;
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Min *min_a = a.as<Min>();
@@ -2475,6 +2728,44 @@ private:
                    equal(b_round_up, max_a->a) &&
                    is_const(max_a->b, b_round_up_factor)) {
             // min(max(a, 4), ((a + 3)/4)*4) -> max(a, 4)
+            return a;
+        } else if (mul_a &&
+                   div_a_a &&
+                   is_positive_const(mul_a->b) &&
+                   equal(mul_a->b, div_a_a->b) &&
+                   equal(div_a_a->a, b)) {
+            // min((a/4)*4, a) -> (a/4)*4
+            return a;
+        } else if (mul_b &&
+                   div_b_a &&
+                   is_positive_const(mul_b->b) &&
+                   equal(mul_b->b, div_b_a->b) &&
+                   equal(div_b_a->a, a)) {
+            // min(a, (a/4)*4) -> (a/4)*4
+            return b;
+        } else if (add_a &&
+                   const_int(add_a->b, &ia) &&
+                   mul_a_a &&
+                   div_a_a_a &&
+                   const_int(mul_a_a->b, &ib) &&
+                   const_int(div_a_a_a->b, &ic) &&
+                   ib > 0 &&
+                   ib == ic &&
+                   ia >= ib - 1 &&
+                   equal(div_a_a_a->a, b)) {
+            // min((b/4)*4 + c, b) -> b (where c >= 3)
+            return b;
+        } else if (add_b &&
+                   const_int(add_b->b, &ia) &&
+                   mul_b_a &&
+                   div_b_a_a &&
+                   const_int(mul_b_a->b, &ib) &&
+                   const_int(div_b_a_a->b, &ic) &&
+                   ib > 0 &&
+                   ib == ic &&
+                   ia >= ib - 1 &&
+                   equal(div_b_a_a->a, b)) {
+            // min(a, (a/4)*4 + c) -> a (where c >= 3)
             return a;
         } else if (max_a &&
                    min_b &&
@@ -2669,6 +2960,38 @@ private:
                 return mutate(max(div_a->a, div_b->a) / factor);
             }
         } else if (no_overflow(op->type) &&
+                   add_a &&
+                   is_simple_const(add_a->b) &&
+                   div_a_a &&
+                   div_b &&
+                   const_int(div_a_a->b, &ia) &&
+                   ia &&
+                   const_int(div_b->b, &ib) &&
+                   (ia == ib)) {
+            // min(a / 4 + c, b / 4) -> min(a + c*4, b) / 4
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(min(div_a_a->a + (add_a->b * factor), div_b->a) / factor);
+            } else {
+                return mutate(max(div_a_a->a + (add_a->b * factor), div_b->a) / factor);
+            }
+        } else if (no_overflow(op->type) &&
+                   add_b &&
+                   is_simple_const(add_b->b) &&
+                   div_b_a &&
+                   div_a &&
+                   const_int(div_b_a->b, &ia) &&
+                   ia &&
+                   const_int(div_a->b, &ib) &&
+                   (ia == ib)) {
+            // min(a / 4, b / 4 + c) -> min(a, b + c*4) / 4
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(min(div_a->a, div_b_a->a + (add_b->b * factor)) / factor);
+            } else {
+                return mutate(max(div_a->a, div_b_a->a + (add_b->b * factor)) / factor);
+            }
+        } else if (no_overflow(op->type) &&
                    mul_a &&
                    mul_b &&
                    const_int(mul_a->b, &ia) &&
@@ -2693,6 +3016,40 @@ private:
                 return mutate(min(mul_a->a, ratio) * factor);
             } else {
                 return mutate(max(mul_a->a, ratio) * factor);
+            }
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   const_int(add_a->b, &ic) &&
+                   mul_a_a &&
+                   mul_b &&
+                   const_int(mul_a_a->b, &ia) &&
+                   ia &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia == ib) &&
+                   (ic % ia == 0)) {
+            // min(a * 4 + c, b * 4) -> min(a + c / 4, b) * 4 when c % 4 == 0
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(min(mul_a_a->a + (add_a->b / factor), mul_b->a) * factor);
+            } else {
+                return mutate(max(mul_a_a->a + (add_a->b / factor), mul_b->a) * factor);
+            }
+        } else if (no_overflow(op->type) &&
+                   add_b &&
+                   const_int(add_b->b, &ic) &&
+                   mul_b_a &&
+                   mul_a &&
+                   const_int(mul_b_a->b, &ia) &&
+                   ia &&
+                   const_int(mul_a->b, &ib) &&
+                   (ia == ib) &&
+                   (ic % ia == 0)) {
+            // min(a * 4, b * 4 + c) -> min(a, b + c/4) * 4 when c % 4 == 0
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(min(mul_a->a, mul_b_a->a + (add_b->b / factor)) * factor);
+            } else {
+                return mutate(max(mul_a->a, mul_b_a->a + (add_b->b / factor)) * factor);
             }
         } else if (call_a &&
                    call_a->is_intrinsic(Call::likely) &&
@@ -2732,7 +3089,17 @@ private:
     }
 
     Expr visit(const Max *op) override {
-        Expr a = mutate(op->a), b = mutate(op->b);
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return Max::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -2760,10 +3127,16 @@ private:
         const Add *add_b = b.as<Add>();
         const Add *add_b_a = add_b ? add_b->a.as<Add>() : nullptr;
         const Add *add_b_b = add_b ? add_b->b.as<Add>() : nullptr;
-        const Div *div_a = a.as<Div>();
-        const Div *div_b = b.as<Div>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
+        const Mul *mul_b_a = add_b ? add_b->a.as<Mul>() : nullptr;
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
+        const Div *div_a_a = add_a ? add_a->a.as<Div>() : mul_a ? mul_a->a.as<Div>() : nullptr;
+        const Div *div_b_a = add_b ? add_b->a.as<Div>() : mul_b ? mul_b->a.as<Div>() : nullptr;
+        const Div *div_a_a_a = mul_a_a ? mul_a_a->a.as<Div>() : nullptr;
+        const Div *div_b_a_a = mul_b_a ? mul_b_a->a.as<Div>() : nullptr;
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Max *max_a = a.as<Max>();
@@ -2782,6 +3155,11 @@ private:
         const Broadcast *broadcast_a_b = max_a ? max_a->b.as<Broadcast>() : nullptr;
 
         max_a_a = min_a ? min_a->a.as<Max>() : max_a_a;
+
+        // Detect if the lhs or rhs is a rounding-up operation
+        int64_t a_round_up_factor = 0, b_round_up_factor = 0;
+        Expr a_round_up = is_round_up(a, &a_round_up_factor);
+        Expr b_round_up = is_round_up(b, &b_round_up_factor);
 
         int64_t ramp_min, ramp_max;
 
@@ -2881,6 +3259,52 @@ private:
             } else {
                 return b;
             }
+        } else if (a_round_up.defined() &&
+                   equal(a_round_up, b)) {
+            // max(((a + 3)/4)*4, a) -> ((a + 3)/4)*4
+            return a;
+        } else if (b_round_up.defined() &&
+                   equal(b_round_up, a)) {
+            // max(a, ((a + 3)/4)*4) -> ((a + 3)/4)*4
+            return b;
+        } else if (mul_a &&
+                   div_a_a &&
+                   is_positive_const(mul_a->b) &&
+                   equal(mul_a->b, div_a_a->b) &&
+                   equal(div_a_a->a, b)) {
+            // max((a/4)*4, a) -> a;
+            return b;
+        } else if (mul_b &&
+                   div_b_a &&
+                   is_positive_const(mul_b->b) &&
+                   equal(mul_b->b, div_b_a->b) &&
+                   equal(div_b_a->a, a)) {
+            // max(a, (a/4)*4) -> a
+            return a;
+        } else if (add_a &&
+                   const_int(add_a->b, &ia) &&
+                   mul_a_a &&
+                   div_a_a_a &&
+                   const_int(mul_a_a->b, &ib) &&
+                   const_int(div_a_a_a->b, &ic) &&
+                   ib > 0 &&
+                   ib == ic &&
+                   ia >= ib - 1 &&
+                   equal(div_a_a_a->a, b)) {
+            // max((b/4)*4 + c, b) -> (b/4)*4 + c (where c >= 3)
+            return a;
+        } else if (add_b &&
+                   const_int(add_b->b, &ia) &&
+                   mul_b_a &&
+                   div_b_a_a &&
+                   const_int(mul_b_a->b, &ib) &&
+                   const_int(div_b_a_a->b, &ic) &&
+                   ib > 0 &&
+                   ib == ic &&
+                   ia >= ib - 1 &&
+                   equal(div_b_a_a->a, b)) {
+            // max(a, (a/4)*4 + c) -> (a/4)*4 + c (where c >= 3)
+            return b;
         } else if (min_a &&
                    max_b &&
                    equal(min_a->a, max_b->a) &&
@@ -3071,6 +3495,38 @@ private:
                 return mutate(min(div_a->a, div_b->a) / factor);
             }
         } else if (no_overflow(op->type) &&
+                   add_a &&
+                   is_simple_const(add_a->b) &&
+                   div_a_a &&
+                   div_b &&
+                   const_int(div_a_a->b, &ia) &&
+                   ia &&
+                   const_int(div_b->b, &ib) &&
+                   (ia == ib)) {
+            // max(a / 4 + c, b / 4) -> max(a + c*4, b) / 4
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(max(div_a_a->a + (add_a->b * factor), div_b->a) / factor);
+            } else {
+                return mutate(min(div_a_a->a + (add_a->b * factor), div_b->a) / factor);
+            }
+        } else if (no_overflow(op->type) &&
+                   add_b &&
+                   is_simple_const(add_b->b) &&
+                   div_b_a &&
+                   div_a &&
+                   const_int(div_b_a->b, &ia) &&
+                   ia &&
+                   const_int(div_a->b, &ib) &&
+                   (ia == ib)) {
+            // max(a / 4, b / 4 + c) -> max(a, b + c*4) / 4
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(max(div_a->a, div_b_a->a + (add_b->b * factor)) / factor);
+            } else {
+                return mutate(min(div_a->a, div_b_a->a + (add_b->b * factor)) / factor);
+            }
+        } else if (no_overflow(op->type) &&
                    mul_a &&
                    mul_b &&
                    const_int(mul_a->b, &ia) &&
@@ -3095,6 +3551,40 @@ private:
                 return mutate(max(mul_a->a, ratio) * factor);
             } else {
                 return mutate(min(mul_a->a, ratio) * factor);
+            }
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   const_int(add_a->b, &ic) &&
+                   mul_a_a &&
+                   mul_b &&
+                   const_int(mul_a_a->b, &ia) &&
+                   ia &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia == ib) &&
+                   (ic % ia == 0)) {
+            // max(a * 4 + c, b * 4) -> max(a + c / 4, b) * 4 when c % 4 == 0
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(max(mul_a_a->a + (add_a->b / factor), mul_b->a) * factor);
+            } else {
+                return mutate(min(mul_a_a->a + (add_a->b / factor), mul_b->a) * factor);
+            }
+        } else if (no_overflow(op->type) &&
+                   add_b &&
+                   const_int(add_b->b, &ic) &&
+                   mul_b_a &&
+                   mul_a &&
+                   const_int(mul_b_a->b, &ia) &&
+                   ia &&
+                   const_int(mul_a->b, &ib) &&
+                   (ia == ib) &&
+                   (ic % ia == 0)) {
+            // max(a * 4, b * 4 + c) -> max(a, b + c/4) * 4 when c % 4 == 0
+            Expr factor = make_const(op->type, ia);
+            if (ia > 0) {
+                return mutate(max(mul_a->a, mul_b_a->a + (add_b->b / factor)) * factor);
+            } else {
+                return mutate(min(mul_a->a, mul_b_a->a + (add_b->b / factor)) * factor);
             }
         } else if (call_a &&
                    call_a->is_intrinsic(Call::likely) &&
@@ -3134,7 +3624,18 @@ private:
     }
 
     Expr visit(const EQ *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return EQ::make(a, b);
+            }
+        }
+
         Expr delta = mutate(op->a - op->b);
+
         Expr expr;
         if (propagate_indeterminate_expression(delta, op->type, &expr)) {
             return expr;
@@ -3223,11 +3724,31 @@ private:
     }
 
     Expr visit(const NE *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return NE::make(a, b);
+            }
+        }
+
         return mutate(Not::make(op->a == op->b));
     }
 
     Expr visit(const LT *op) override {
-        Expr a = mutate(op->a), b = mutate(op->b);
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (no_float_simplify && op->type.is_float()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return LT::make(a, b);
+            }
+        }
+
         Expr expr;
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return expr;
@@ -3268,6 +3789,7 @@ private:
 
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
+        double fa, fb;
 
         ModulusRemainder mod_rem(0, 1);
         if (delta_ramp &&
@@ -3286,6 +3808,9 @@ private:
         } else if (const_uint(a, &ua) &&
                    const_uint(b, &ub)) {
             return make_bool(ua < ub, op->type.lanes());
+        } else if (const_float(a, &fa) &&
+                   const_float(b, &fb)) {
+            return make_bool(fa < fb, op->type.lanes());
         } else if (const_int(a, &ia) &&
                    a.type().is_max(ia)) {
             // Comparing maximum of type < expression of type.  This can never be true.
@@ -3294,13 +3819,10 @@ private:
                    b.type().is_min(ib)) {
             // Comparing expression of type < minimum of type.  This can never be true.
             return const_false(op->type.lanes());
-        } else if (is_zero(delta) ||
-                   (no_overflow(delta.type()) &&
-                    is_positive_const(delta))) {
-            return const_false(op->type.lanes());
         } else if (no_overflow(delta.type()) &&
-                   is_negative_const(delta)) {
-            return const_true(op->type.lanes());
+                   const_int_bounds(delta, &ia, &ib) &&
+                   (ia >= 0 || ib < 0)) {
+            return make_bool(ib < 0, op->type.lanes());
         } else if (broadcast_a &&
                    broadcast_b) {
             // Push broadcasts outwards
@@ -3551,14 +4073,47 @@ private:
     }
 
     Expr visit(const LE *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return LE::make(a, b);
+            }
+        }
+
         return mutate(!(op->b < op->a));
     }
 
     Expr visit(const GT *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return GT::make(a, b);
+            }
+        }
+
         return mutate(op->b < op->a);
     }
 
     Expr visit(const GE *op) override {
+        if (no_float_simplify && op->type.is_float()) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return GE::make(a, b);
+            }
+        }
+
         return mutate(!(op->a < op->b));
     }
 
@@ -4052,6 +4607,14 @@ private:
                    equal(sel_f->true_value, true_value)) {
             // select(a, d, select(b, d, c)) -> select(a || b, d, c)
             return mutate(Select::make(condition || sel_f->condition, true_value, sel_f->false_value));
+        } else if (sel_t &&
+                   equal(sel_t->condition, condition)) {
+            // select(a, select(a, b, c), d) -> select(a, b, d)
+            return mutate(Select::make(condition, sel_t->true_value, false_value));
+        } else if (sel_f &&
+                   equal(sel_f->condition, condition)) {
+            // select(a, b, select(a, c, d)) -> select(a, b, d)
+            return mutate(Select::make(condition, true_value, sel_f->false_value));
         } else if (add_t &&
                    add_f &&
                    equal(add_t->a, add_f->a)) {
@@ -4305,7 +4868,10 @@ private:
             found_buffer_reference(op->name, op->args.size());
         }
 
-        if (op->is_intrinsic(Call::shift_left) ||
+        if (op->is_intrinsic(Call::strict_float)) {
+            ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
+            return IRMutator2::visit(op);
+        } else if (op->is_intrinsic(Call::shift_left) ||
             op->is_intrinsic(Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             Expr expr;
@@ -4349,11 +4915,17 @@ private:
                 return expr;
             }
 
-            int64_t ib = 0;
-            uint64_t ub = 0;
+            int64_t ia, ib = 0;
+            uint64_t ua, ub = 0;
             int bits;
 
-            if (const_int(b, &ib) &&
+            if (const_int(a, &ia) &&
+                const_int(b, &ib)) {
+                return make_const(op->type, ia & ib);
+            } else if (const_uint(a, &ua) &&
+                       const_uint(b, &ub)) {
+                return make_const(op->type, ua & ub) ;
+            } else if (const_int(b, &ib) &&
                 !b.type().is_max(ib) &&
                 is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
                 return Mod::make(a, make_const(a.type(), ib + 1));
@@ -4374,10 +4946,57 @@ private:
             if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
                 return expr;
             }
-            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            int64_t ia, ib;
+            uint64_t ua, ub;
+            if (const_int(a, &ia) &&
+                const_int(b, &ib)) {
+                return make_const(op->type, ia | ib);
+            } else if (const_uint(a, &ua) &&
+                       const_uint(b, &ub)) {
+                return make_const(op->type, ua | ub);
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 return op;
             } else {
                 return a | b;
+            }
+        } else if (op->is_intrinsic(Call::bitwise_not)) {
+            Expr a = mutate(op->args[0]);
+            Expr expr;
+            if (propagate_indeterminate_expression(a, op->type, &expr)) {
+                return expr;
+            }
+            int64_t ia;
+            uint64_t ua;
+            if (const_int(a, &ia)) {
+                return make_const(op->type, ~ia);
+            } else if (const_uint(a, &ua)) {
+                return make_const(op->type, ~ua);
+            } else if (a.same_as(op->args[0])) {
+                return op;
+            } else {
+                return ~a;
+            }
+        } else if (op->is_intrinsic(Call::reinterpret)) {
+            Expr a = mutate(op->args[0]);
+            Expr expr;
+            if (propagate_indeterminate_expression(a, op->type, &expr)) {
+                return expr;
+            }
+            int64_t ia;
+            uint64_t ua;
+            bool vector = op->type.is_vector() || a.type().is_vector();
+            if (op->type == a.type()) {
+                return a;
+            } else if (const_int(a, &ia) && op->type.is_uint() && !vector) {
+                // int -> uint
+                return make_const(op->type, (uint64_t)ia);
+            } else if (const_uint(a, &ua) && op->type.is_int() && !vector) {
+                // uint -> int
+                return make_const(op->type, (int64_t)ua);
+            } else if (a.same_as(op->args[0])) {
+                return op;
+            } else {
+                return reinterpret(op->type, a);
             }
         } else if (op->is_intrinsic(Call::abs)) {
             // Constant evaluate abs(x).
@@ -4909,6 +5528,7 @@ private:
             const Variable *var_b = nullptr;
             const Variable *var_a = nullptr;
             if (add) {
+                var_a = add->a.as<Variable>();
                 var_b = add->b.as<Variable>();
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
@@ -4930,6 +5550,9 @@ private:
             } else if (add && (is_const(add->b) || var_b)) {
                 replacement = substitute(new_name, Add::make(new_var, add->b), replacement);
                 new_value = add->a;
+            } else if (add && var_a) {
+                replacement = substitute(new_name, Add::make(add->a, new_var), replacement);
+                new_value = add->b;
             } else if (mul && (is_const(mul->b) || var_b)) {
                 replacement = substitute(new_name, Mul::make(new_var, mul->b), replacement);
                 new_value = mul->a;
@@ -5051,7 +5674,7 @@ private:
             result = T::make(new_name, new_value, result);
         }
 
-        if (info.old_uses > 0) {
+        if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
             result = T::make(op->name, value, result);
         }
@@ -5072,19 +5695,11 @@ private:
 
 
     Expr visit(const Let *op) override {
-        if (simplify_lets) {
-            return simplify_let<Let, Expr>(op);
-        } else {
-            return IRMutator2::visit(op);
-        }
+        return simplify_let<Let, Expr>(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        if (simplify_lets) {
-            return simplify_let<LetStmt, Stmt>(op);
-        } else {
-            return IRMutator2::visit(op);
-        }
+        return simplify_let<LetStmt, Stmt>(op);
     }
 
     Stmt visit(const AssertStmt *op) override {
@@ -5190,9 +5805,9 @@ private:
             equal(op->condition, body_if->condition)) {
             // We can move the allocation into the if body case. The
             // else case must not use it.
-            Stmt stmt = Allocate::make(op->name, op->type, new_extents,
-                                  condition, body_if->then_case,
-                                  new_expr, op->free_function);
+            Stmt stmt = Allocate::make(op->name, op->type, op->memory_type,
+                                       new_extents, condition, body_if->then_case,
+                                       new_expr, op->free_function);
             return IfThenElse::make(body_if->condition, stmt, body_if->else_case);
         } else if (all_extents_unmodified &&
                    body.same_as(op->body) &&
@@ -5200,8 +5815,8 @@ private:
                    new_expr.same_as(op->new_expr)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, new_extents,
-                                  condition, body,
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body,
                                   new_expr, op->free_function);
         }
     }
@@ -5327,16 +5942,16 @@ private:
     }
 };
 
-Expr simplify(Expr e, bool simplify_lets,
+Expr simplify(Expr e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(simplify_lets, &bounds, &alignment).mutate(e);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e);
 }
 
-Stmt simplify(Stmt s, bool simplify_lets,
+Stmt simplify(Stmt s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(simplify_lets, &bounds, &alignment).mutate(s);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator2 {
@@ -5540,6 +6155,11 @@ void check_algebra() {
     check(xf + yf*-2.0f, xf - y*2.0f);
     check(xf*-2.0f + yf, yf - x*2.0f);
 
+    check((x * 8) - (y * 4), (x * 2 - y) * 4);
+    check((x * 4) - (y * 8), (x - y * 2) * 4);
+
+    check((x * 2) % 6, (x % 3) * 2);
+
     check(x - (x/8)*8, x % 8);
     check((x/8)*8 - x, -(x % 8));
     check((x/8)*8 < x + y, 0 < x%8 + y);
@@ -5585,9 +6205,13 @@ void check_algebra() {
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
+    check((x + (y + 3)/5) + 5, x + (y + 28)/5);
     check((x + 8)/2, x/2 + 4);
     check((x - y)*-2, (y - x)*2);
     check((xf - yf)*-2.0f, (yf - xf)*2.0f);
+
+    check(x*3 + y*9, (x + y*3)*3);
+    check(x*9 + y*3, (x*3 + y)*3);
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
     check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
@@ -5595,9 +6219,14 @@ void check_algebra() {
     check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
     check(((x*4 - y) - z) / 2, x*2 + (0 - y - z)/2);
     check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
+    check(((x + y*4) + z) / 2, y*2 + (x + z)/2);
     check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
     check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
     check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
+
+    // Pull out the gcd of the numerator and divisor
+    check((x * 12 + 5) / 9, (x * 4 + 1) / 3);
+    check((x * 12 + 19) / 9, (x * 4) / 3 + 2);
 
     // Cancellations in non-const integer divisions
     check((x*y)/x, y);
@@ -5632,6 +6261,11 @@ void check_algebra() {
     check((x - y) - (z - y), x - z);
     check((y - z) - (y - x), x - z);
 
+    check(((x + y) + z) - x, y + z);
+    check(((x + y) + z) - y, x + z);
+    check((x + (y + z)) - y, x + z);
+    check((x + (y + z)) - z, x + y);
+
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
     check((y + 8) % 4, y % 4);
@@ -5644,10 +6278,19 @@ void check_algebra() {
     check(x%3 + (x/3)*3, x);
 
     check(((x/3)*3 + y) + x%3, x + y);
+    check(((x/3) + y)*3 + x%3, x + y*3);
     check((x%3 + y) + (x/3)*3, x + y);
 
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
+    check((y + (x/3))*3 + x%3, y*3 + x);
+
+    check(x/2 + x%2, (x + 1)/2);
+    check(x%2 + x/2, (x + 1)/2);
+    check(((x+1)/2)*2 - x, x%2);
+    check(x - ((x+1)/2)*2, -(x%2));
+    check((x%2 + 4)/2, 2);
+    check((x%2 + 5)/2, x%2 + 2);
 
     // Almost-cancellations through integer divisions. These rules all
     // deduplicate x and wrap it in a modulo operator, neutering it
@@ -5872,6 +6515,24 @@ void check_bounds() {
     check(min(x/(-4), y/(-4)), max(x, y)/(-4));
     check(max(x/(-4), y/(-4)), min(x, y)/(-4));
 
+    check(min(x/4 + 2, y/4), min(x + 8, y)/4);
+    check(max(x/4 + 2, y/4), max(x + 8, y)/4);
+    check(min(x/4, y/4 + 2), min(x, y + 8)/4);
+    check(max(x/4, y/4 + 2), max(x, y + 8)/4);
+    check(min(x/(-4) + 2, y/(-4)), max(x + -8, y)/(-4));
+    check(max(x/(-4) + 2, y/(-4)), min(x + -8, y)/(-4));
+    check(min(x/(-4), y/(-4) + 2), max(x, y + -8)/(-4));
+    check(max(x/(-4), y/(-4) + 2), min(x, y + -8)/(-4));
+
+    check(min(x*4 + 8, y*4), min(x + 2, y)*4);
+    check(max(x*4 + 8, y*4), max(x + 2, y)*4);
+    check(min(x*4, y*4 + 8), min(x, y + 2)*4);
+    check(max(x*4, y*4 + 8), max(x, y + 2)*4);
+    check(min(x*(-4) + 8, y*(-4)), max(x + -2, y)*(-4));
+    check(max(x*(-4) + 8, y*(-4)), min(x + -2, y)*(-4));
+    check(min(x*(-4), y*(-4) + 8), max(x, y + -2)*(-4));
+    check(max(x*(-4), y*(-4) + 8), min(x, y + -2)*(-4));
+
     // Min and max of clamped expressions
     check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
     check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
@@ -5896,6 +6557,14 @@ void check_bounds() {
     // Mins of expressions and rounded up versions of them
     check(min(((x+7)/8)*8, x), x);
     check(min(x, ((x+7)/8)*8), x);
+    check(max(((x+7)/8)*8, x), ((x+7)/8)*8);
+    check(max(x, ((x+7)/8)*8), ((x+7)/8)*8);
+
+    // And rounded down...
+    check(max((x/8)*8, x), x);
+    check(max(x, (x/8)*8), x);
+    check(min((x/8)*8, x), (x/8)*8);
+    check(min(x, (x/8)*8), (x/8)*8);
 
     check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
     check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
@@ -6087,7 +6756,7 @@ void check_bounds() {
     check(min(x + (z + y), y + w), min(x + z, w) + y);
     check(min(x + y, z + (x + w)), min(y, z + w) + x);
     check(min(x + y, z + (w + x)), min(y, z + w) + x);
-    check(min(x + y/2 + 13, x + (0 - y)/2), min(y/2 + 13, (0 - y)/2) + x);
+    check(min(x + y/2 + 13, x + (0 - y)/2), min(y + 26, 0 - y)/2 + x);
 
     check(max((x + y) + z, x + w), max(y + z, w) + x);
     check(max((y + x) + z, x + w), max(y + z, w) + x);
@@ -6143,6 +6812,9 @@ void check_boolean() {
 
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
+
+    check(select(x < 5, select(x < 5, 0, 1), 2), select(x < 5, 0, 2));
+    check(select(x < 5, 0, select(x < 5, 1, 2)), select(x < 5, 0, 2));
 
     check((1 - xf)*6 < 3, 0.5f < xf);
 
@@ -6685,6 +7357,10 @@ void simplify_test() {
     // TODO: more coverage of bitwise_and and bitwise_or.
     check(cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa),
           cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
+
+    // Check constant-folding of bitwise ops (and indirectly, reinterpret)
+    check(Let::make(x.as<Variable>()->name, 5, ((~x) & 3) | 16), (~5 & 3) | 16);
+    check(Let::make(x.as<Variable>()->name, 5, ((~cast<uint8_t>(x)) & 3) | 16), make_const(UInt(8), (~5 & 3) | 16));
 
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.

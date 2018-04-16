@@ -1,6 +1,9 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
 
+// TODO: consider getting rid of this
+#define MAX_THREADS 256
+
 extern "C" {
 
 #ifdef BITS_64
@@ -18,7 +21,7 @@ typedef struct {
 
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
 extern WIN32API void InitializeConditionVariable(ConditionVariable *);
-extern WIN32API void WakeAllConditionVariable(ConditionVariable *);
+extern WIN32API void WakeConditionVariable(ConditionVariable *);
 extern WIN32API void SleepConditionVariableCS(ConditionVariable *, CriticalSection *, int);
 extern WIN32API void InitializeCriticalSection(CriticalSection *);
 extern WIN32API void DeleteCriticalSection(CriticalSection *);
@@ -45,6 +48,16 @@ WEAK void *spawn_thread_helper(void *arg) {
 
 extern "C" {
 
+WEAK int halide_host_cpu_count() {
+    // Apparently a standard windows environment variable
+    char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+    if (num_cores) {
+        return atoi(num_cores);
+    } else {
+        return 8;
+    }
+}
+
 WEAK halide_thread *halide_spawn_thread(void(*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
@@ -59,56 +72,60 @@ WEAK void halide_join_thread(halide_thread *thread_arg) {
     free(thread);
 }
 
-WEAK void halide_mutex_init(halide_mutex *mutex_arg) {
-    CriticalSection *mutex = (CriticalSection *)mutex_arg;
-    InitializeCriticalSection(mutex);    
-}
-
-WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
-    CriticalSection *mutex = (CriticalSection *)mutex_arg;
-    DeleteCriticalSection(mutex);
-}
-
-WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
-    CriticalSection *mutex = (CriticalSection *)mutex_arg;
-    EnterCriticalSection(mutex);
-}
-
-WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
-    CriticalSection *mutex = (CriticalSection *)mutex_arg;
-    LeaveCriticalSection(mutex);
-}
-
-WEAK void halide_cond_init(struct halide_cond *cond_arg) {
-    ConditionVariable *cond = (ConditionVariable *)cond_arg;
-    InitializeConditionVariable(cond);
-}
-
-WEAK void halide_cond_destroy(struct halide_cond *cond_arg) {
-    // On windows we do not currently destroy condition
-    // variables. We're still figuring out mysterious deadlocking
-    // issues at process exit.
-}
-
-WEAK void halide_cond_broadcast(struct halide_cond *cond_arg) {
-    ConditionVariable *cond = (ConditionVariable *)cond_arg;
-    WakeAllConditionVariable(cond);
-}
-
-WEAK void halide_cond_wait(struct halide_cond *cond_arg, struct halide_mutex *mutex_arg) {
-    ConditionVariable *cond = (ConditionVariable *)cond_arg;
-    CriticalSection *mutex = (CriticalSection *)mutex_arg;
-    SleepConditionVariableCS(cond, mutex, -1);
-}
-
-WEAK int halide_host_cpu_count() {
-    // Apparently a standard windows environment variable
-    char *num_cores = getenv("NUMBER_OF_PROCESSORS");
-    if (num_cores) {
-        return atoi(num_cores);
-    } else {
-        return 8;
-    }
-}
-
 } // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal {
+
+namespace Synchronization {
+
+struct thread_parker {
+    CriticalSection critical_section;
+    ConditionVariable condvar;
+    bool should_park;
+
+#if __cplusplus >= 201103L
+    thread_parker(const thread_parker &) = delete;
+#endif
+
+    __attribute__((always_inline)) thread_parker() : should_park(false) {
+        InitializeCriticalSection(&critical_section);
+        InitializeConditionVariable(&condvar);
+        should_park = false;
+    }
+
+    __attribute__((always_inline)) ~thread_parker() {
+        // Windows ConditionVariable objects do not need to be deleted. There is no API to do so.
+        DeleteCriticalSection(&critical_section);
+    }
+
+    __attribute__((always_inline)) void prepare_park() {
+        should_park = true;
+    }
+
+    __attribute__((always_inline)) void park() {
+        EnterCriticalSection(&critical_section);
+        while (should_park) {
+            SleepConditionVariableCS(&condvar, &critical_section, -1);
+        } 
+        LeaveCriticalSection(&critical_section);
+    }
+
+    __attribute__((always_inline)) void unpark_start() {
+        EnterCriticalSection(&critical_section);
+    }
+
+    __attribute__((always_inline)) void unpark() {
+        should_park = false;
+        WakeConditionVariable(&condvar);
+    }
+
+    __attribute__((always_inline)) void unpark_finish() {
+        LeaveCriticalSection(&critical_section);
+    }
+};
+
+}}}} // namespace Halide::Runtime::Internal::Synchronization
+
+#include "synchronization_common.h"
+
+#include "thread_pool_common.h"

@@ -2,10 +2,12 @@
 #include <sstream>
 
 #include "IRPrinter.h"
+
+#include "Associativity.h"
+#include "AssociativeOpsTable.h"
 #include "IROperator.h"
 #include "Module.h"
-#include "AssociativeOpsTable.h"
-#include "Associativity.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -99,10 +101,35 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     return out;
 }
 
+std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
+    switch (t) {
+    case MemoryType::Auto:
+        out << "Auto";
+        break;
+    case MemoryType::Heap:
+        out << "Heap";
+        break;
+    case MemoryType::Stack:
+        out << "Stack";
+        break;
+    case MemoryType::Register:
+        out << "Register";
+        break;
+    case MemoryType::GPUShared:
+        out << "GPUShared";
+        break;
+    }
+    return out;
+}
+
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
         << (loop_level.defined() ? loop_level.to_string() : "undefined")
         << ")";
+}
+
+ostream &operator<<(ostream &stream, const Target &target) {
+    return stream << "target(" << target.to_string() << ")";
 }
 
 namespace Internal {
@@ -134,12 +161,12 @@ void IRPrinter::test() {
                                                          {string("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, {1023}, const_true(), let_stmt);
+    Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
 
     ostringstream source;
     source << allocate;
     std::string correct_source = \
-        "allocate buf[float32 * 1023]\n"
+        "allocate buf[float32 * 1023] in Stack\n"
         "let y = 17\n"
         "assert((y >= 3), halide_error_param_too_small_i64(\"y\", y, 3))\n"
         "produce buf {\n"
@@ -202,6 +229,9 @@ ostream &operator<<(ostream &out, const ForType &type) {
     case ForType::GPUThread:
         out << "gpu_thread";
         break;
+    case ForType::GPULane:
+        out << "gpu_lane";
+        break;
     }
     return out;
 }
@@ -247,15 +277,15 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 }
 
 
-std::ostream &operator<<(std::ostream &stream, const LoweredFunc::LinkageType &type) {
+std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
-    case LoweredFunc::ExternalPlusMetadata:
+    case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
-    case LoweredFunc::External:
+    case LinkageType::External:
         stream << "external";
         break;
-    case LoweredFunc::Internal:
+    case LinkageType::Internal:
         stream << "internal";
         break;
     }
@@ -640,6 +670,9 @@ void IRPrinter::visit(const Allocate *op) {
         print(op->extents[i]);
     }
     stream << "]";
+    if (op->memory_type != MemoryType::Auto) {
+        stream << " in " << op->memory_type;
+    }
     if (!is_one(op->condition)) {
         stream << " if ";
         print(op->condition);
@@ -676,6 +709,9 @@ void IRPrinter::visit(const Realize *op) {
         if (i < op->bounds.size() - 1) stream << ", ";
     }
     stream << ")";
+    if (op->memory_type != MemoryType::Auto) {
+        stream << " in " << op->memory_type;
+    }
     if (!is_one(op->condition)) {
         stream << " if ";
         print(op->condition);

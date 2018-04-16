@@ -86,18 +86,15 @@ def main():
         # over a domain shifted inwards by one pixel, we won't be
         # asking the Halide routine to read out of bounds. We saw how
         # to do this in the previous lesson:
-        result = hl.Buffer(hl.UInt(8), input.width() - 2, input.height() - 2, 3)
-        result.set_min(1, 1)
+        result = hl.Buffer(hl.UInt(8), [input.width() - 2, input.height() - 2, 3])
+        result.set_min([1, 1])
         output.realize(result)
 
         # Save the result. It should look like a slightly blurry
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
 
-        result_data = hl.buffer_to_ndarray(result)
-        print("result.shape", result_data.shape)
-
-        imsave("blurry_parrot_1.png", result_data)
+        imsave("blurry_parrot_1.png", result)
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
@@ -131,7 +128,7 @@ def main():
         # using a helper function from the BoundaryConditions
         # namespace like so:
         #
-        # clamped = BoundaryConditions::hl.repeat_edge(input)
+        # clamped = hl.BoundaryConditions.repeat_edge(input)
         #
         # These are important to use for other boundary conditions,
         # because they are expressed in the way that Halide can best
@@ -165,10 +162,7 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-        result_data = hl.buffer_to_ndarray(result)
-        print("result.shape", result_data.shape)
-
-        imsave("blurry_parrot_2.png", result_data)
+        imsave("blurry_parrot_2.png", result)
         print("Created blurry_parrot_2.png")
 
     print("Success!")

@@ -1,6 +1,4 @@
-#include "printer.h"
-
-extern "C" int pthread_self();
+extern "C" void * pthread_self();
 
 namespace Halide { namespace Runtime { namespace Internal {
 
@@ -72,6 +70,13 @@ struct work_queue_t {
     // all fields are protected by this mutex.
     halide_mutex mutex;
 
+    // The desired number threads doing work.
+    int desired_num_threads;
+
+    // All fields after this must be zero in the initial state. See assert_zeroed
+    // Field serves both to mark the offset in struct and as layout padding.
+    int zero_marker;
+
     // Singly linked list for job stack
     work *jobs;
 
@@ -104,13 +109,33 @@ struct work_queue_t {
     // Global flags indicating the threadpool should shut down, and
     // whether the thread pool has been initialized.
     bool shutdown, initialized;
-};
-WEAK work_queue_t work_queue;
 
-__attribute__((constructor))
-WEAK void initialize_work_queue() {
-    halide_mutex_init(&work_queue.mutex);
-}
+    bool running() const {
+        return !shutdown;
+    }
+
+    // Used to check initial state is correct.
+    void assert_zeroed() const {
+        // Assert that all fields except the mutex and desired hreads count are zeroed.
+        const char *bytes = ((const char *)&this->zero_marker);
+        const char *limit = ((const char *)this) + sizeof(work_queue_t);
+        while (bytes < limit && *bytes == 0) {
+            bytes++;
+        }
+        halide_assert(NULL, bytes == limit && "Logic error in thread pool work queue initialization.\n");
+    }
+
+    // Return the work queue to initial state. Must be called while locked
+    // and queue will remain locked.
+    void reset() {
+        // Ensure all fields except the mutex and desired hreads count are zeroed.
+        char *bytes = ((char *)&this->zero_marker);
+        char *limit = ((char *)this) + sizeof(work_queue_t);
+        memset(bytes, 0, limit - bytes);
+    }
+};
+
+WEAK work_queue_t work_queue = {};
 
 WEAK void worker_thread(void *);
 
@@ -238,8 +263,6 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // We are no longer active on this job
         job->active_workers--;
 
-        //print(NULL) << pthread_self() << " Completed part of " << job->task.name << "\n";
-
         if (!job->running() && job->owner_is_sleeping) {
             // The job is done. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
@@ -255,11 +278,7 @@ WEAK void worker_thread(void *arg) {
 
 WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
     if (!work_queue.initialized) {
-        work_queue.shutdown = false;
-        halide_cond_init(&work_queue.wake_a_team);
-        halide_cond_init(&work_queue.wake_b_team);
-        halide_cond_init(&work_queue.wake_owners);
-        work_queue.jobs = NULL;
+        work_queue.assert_zeroed();
 
         // Compute the desired number of threads to use. Other code
         // can also mess with this value, but only when the work queue
@@ -268,11 +287,6 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
             work_queue.desired_threads_working = default_desired_num_threads();
         }
         work_queue.desired_threads_working = clamp_num_threads(work_queue.desired_threads_working);
-        work_queue.a_team_size = 0;
-        work_queue.target_a_team_size = 0;
-        work_queue.threads_created = 0;
-        work_queue.workers_sleeping = 0;
-        work_queue.owners_sleeping = 0;
         work_queue.initialized = true;
     }
 
@@ -357,11 +371,26 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
     }
 }
 
+WEAK halide_do_task_t custom_do_task = halide_default_do_task;
+WEAK halide_do_loop_task_t custom_do_loop_task = halide_default_do_loop_task;
+WEAK halide_do_par_for_t custom_do_par_for = halide_default_do_par_for;
+WEAK halide_do_parallel_tasks_t custom_do_parallel_tasks = halide_default_do_parallel_tasks;
+WEAK halide_semaphore_init_t custom_semaphore_init = halide_default_semaphore_init;
+WEAK halide_semaphore_try_acquire_t custom_semaphore_try_acquire = halide_default_semaphore_try_acquire;
+WEAK halide_semaphore_release_t custom_semaphore_release = halide_default_semaphore_release;
+ 
 }}}  // namespace Halide::Runtime::Internal
 
 using namespace Halide::Runtime::Internal;
 
 extern "C" {
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_thread_pool_cleanup() {
+    halide_shutdown_thread_pool();
+}
+}
 
 WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                 uint8_t *closure) {
@@ -464,11 +493,11 @@ WEAK void halide_shutdown_thread_pool() {
         // Wake everyone up and tell them the party's over and it's time
         // to go home
         halide_mutex_lock(&work_queue.mutex);
-        work_queue.shutdown = true;
 
+        work_queue.shutdown = true;
+        halide_cond_broadcast(&work_queue.wake_owners);
         halide_cond_broadcast(&work_queue.wake_a_team);
         halide_cond_broadcast(&work_queue.wake_b_team);
-        halide_cond_broadcast(&work_queue.wake_owners);
         halide_mutex_unlock(&work_queue.mutex);
 
         // Wait until they leave
@@ -477,11 +506,7 @@ WEAK void halide_shutdown_thread_pool() {
         }
 
         // Tidy up
-        halide_mutex_destroy(&work_queue.mutex);
-        halide_cond_destroy(&work_queue.wake_a_team);
-        halide_cond_destroy(&work_queue.wake_b_team);
-        halide_cond_destroy(&work_queue.wake_owners);
-        work_queue.initialized = false;
+        work_queue.reset();
     }
 }
 
@@ -520,6 +545,74 @@ WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
     }
     //print(NULL) << "Acquire " << s << " " << n << "\n";
     return true;
+}
+
+WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
+    halide_do_task_t result = custom_do_task;
+    custom_do_task = f;
+    return result;
+}
+
+WEAK halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t f) {
+    halide_do_loop_task_t result = custom_do_loop_task;
+    custom_do_loop_task = f;
+    return result;
+}
+  
+WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
+    halide_do_par_for_t result = custom_do_par_for;
+    custom_do_par_for = f;
+    return result;
+}
+
+WEAK void halide_set_custom_parallel_runtime(
+    halide_do_par_for_t do_par_for,
+    halide_do_task_t do_task,
+    halide_do_loop_task_t do_loop_task,
+    halide_do_parallel_tasks_t do_parallel_tasks,
+    halide_semaphore_init_t semaphore_init,
+    halide_semaphore_try_acquire_t semaphore_try_acquire,
+    halide_semaphore_release_t semaphore_release) {
+
+    custom_do_par_for = do_par_for;
+    custom_do_task = do_task;
+    custom_do_loop_task = do_loop_task;
+    custom_do_parallel_tasks = do_parallel_tasks;
+    custom_semaphore_init = semaphore_init;
+    custom_semaphore_try_acquire = semaphore_try_acquire;
+    custom_semaphore_release = semaphore_release;
+}
+
+WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
+                        uint8_t *closure) {
+    return (*custom_do_task)(user_context, f, idx, closure);
+}
+
+WEAK int halide_do_par_for(void *user_context, halide_task_t f,
+                           int min, int size, uint8_t *closure) {
+    return (*custom_do_par_for)(user_context, f, min, size, closure);
+}
+
+WEAK int halide_do_loop_task(void *user_context, halide_loop_task_t f,
+                             int min, int size, uint8_t *closure){
+    return custom_do_loop_task(user_context, f, min, size, closure);
+}
+
+WEAK int halide_do_parallel_tasks(void *user_context, int num_tasks,
+                                  struct halide_parallel_task_t *tasks) {
+    return custom_do_parallel_tasks(user_context, num_tasks, tasks);
+}
+
+WEAK int halide_semaphore_init(struct halide_semaphore_t *sema, int count) {
+    return custom_semaphore_init(sema, count);
+}
+
+WEAK int halide_semaphore_release(struct halide_semaphore_t *sema, int count) {
+    return custom_semaphore_release(sema, count);
+}
+
+WEAK bool halide_semaphore_try_acquire(struct halide_semaphore_t *sema, int count) {
+    return custom_semaphore_try_acquire(sema, count);
 }
 
 }

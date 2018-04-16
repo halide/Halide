@@ -86,7 +86,7 @@ protected:
      * call to end_func with the same arguments, to generate the
      * appropriate cleanup code. */
     // @{
-    virtual void begin_func(LoweredFunc::LinkageType linkage, const std::string &simple_name,
+    virtual void begin_func(LinkageType linkage, const std::string &simple_name,
                             const std::string &extern_name, const std::vector<LoweredArgument> &args);
     virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
@@ -119,6 +119,7 @@ protected:
     static bool llvm_NVPTX_enabled;
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
+    static bool llvm_AMDGPU_enabled;
 
     const Module *input_module;
     std::unique_ptr<llvm::Module> module;
@@ -127,6 +128,8 @@ protected:
     llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
+    llvm::MDNode *default_fp_math_md;
+    llvm::MDNode *strict_fp_math_md;
     std::vector<LoweredArgument> current_function_args;
     //@}
 
@@ -480,6 +483,9 @@ private:
      * to this block. */
     llvm::BasicBlock *destructor_block;
 
+    /** Turn off all unsafe math flags in scopes while this is set. */
+    bool strict_float;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage. Note that the return value is a function-returning-
@@ -503,8 +509,8 @@ private:
 }
 
 /** Given a Halide module, generate an llvm::Module. */
-EXPORT std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
-                                                  llvm::LLVMContext &context);
+std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
+                                           llvm::LLVMContext &context);
 
 }
 

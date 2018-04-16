@@ -36,12 +36,24 @@ class InjectThreadBarriers : public IRMutator2 {
     Stmt barrier;
 
     Stmt visit(const For *op) override {
-        ScopedValue<bool> old_in_threads(in_threads);
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
-            in_threads = true;
-        }
+        ScopedValue<bool> old_in_threads(in_threads,
+                                         (in_threads ||
+                                          op->for_type == ForType::GPUThread ||
+                                          op->for_type == ForType::GPULane));
 
-        return IRMutator2::visit(op);
+        if (op->for_type == ForType::Serial) {
+            Stmt body = mutate(op->body);
+            // Serial for loops at the block level with internal
+            // synchronization also need synchronization after each
+            // loop iteration.
+            if (!in_threads && !body.same_as(op->body)) {
+                body = Block::make(body, barrier);
+            }
+            return For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+        } else {
+            return IRMutator2::visit(op);
+        }
     }
 
     Stmt visit(const Block *op) override {
@@ -330,9 +342,17 @@ class ExtractSharedAllocations : public IRMutator2 {
         user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
 
-        if (in_threads) {
+        if (in_threads ||
+            op->memory_type == MemoryType::Stack ||
+            op->memory_type == MemoryType::Register) {
+            // TODO: Support shared allocations inside loops over threads by giving each loop iteration a unique slice.
             return IRMutator2::visit(op);
         }
+
+        user_assert(op->memory_type == MemoryType::Auto ||
+                    op->memory_type == MemoryType::GPUShared)
+            << "Allocation " << op->name << " must live in shared memory, "
+            << "but is scheduled to live in " << op->memory_type << " memory.\n";
 
         shared.emplace(op->name, IntInterval(barrier_stage, barrier_stage));
         Stmt stmt = IRMutator2::visit(op);
@@ -525,7 +545,8 @@ public:
             // Individual shared allocations.
             for (SharedAllocation alloc : allocations) {
                 s = Allocate::make(shared_mem_name + "_" + alloc.name,
-                                   alloc.type, {alloc.size}, const_true(), s);
+                                   alloc.type, MemoryType::GPUShared,
+                                   {alloc.size}, const_true(), s);
             }
         } else {
             // One big combined shared allocation.
@@ -551,7 +572,8 @@ public:
 
             // Add a dummy allocation at the end to get the total size
             Expr total_size = Variable::make(Int(32), "group_" + std::to_string(mem_allocs.size()-1) + ".shared_offset");
-            s = Allocate::make(shared_mem_name, UInt(8), {total_size}, const_true(), s);
+            s = Allocate::make(shared_mem_name, UInt(8), MemoryType::GPUShared,
+                               {total_size}, const_true(), s);
 
             // Define an offset for each allocation. The offsets are in
             // elements, not bytes, so that the stores and loads can use
@@ -581,6 +603,148 @@ public:
     ExtractSharedAllocations(DeviceAPI d) : in_threads(false), barrier_stage(0), device_api(d) {}
 };
 
+
+// Pull out any allocate node outside of the innermost thread
+// block. Should only be run after shared allocations have already
+// been extracted.
+class ExtractRegisterAllocations : public IRMutator {
+    using IRMutator::visit;
+
+    struct RegisterAllocation {
+        string name;
+        string loop_var; // The nearest enclosing loop over threads. Empty if it's at block level.
+        Type type;
+        Expr size;
+        MemoryType memory_type; // Should be Auto, Stack, or Register
+    };
+
+    bool in_lane_loop = false;
+
+    void visit(const For *op) {
+        string old_loop_var = loop_var;
+
+        if (op->for_type == ForType::GPULane) {
+            loop_var = op->name;
+            internal_assert(!in_lane_loop);
+            in_lane_loop = true;
+            IRMutator::visit(op);
+            in_lane_loop = false;
+            has_lane_loop = true;
+        } else {
+            if (op->for_type == ForType::GPUThread) {
+                has_thread_loop = true;
+                loop_var = op->name;
+            }
+
+            // Set aside the allocations we've found so far.
+            vector<RegisterAllocation> old;
+            old.swap(allocations);
+
+            // Find allocations inside the loop body
+            Stmt body = mutate(op->body);
+
+            // Expand any new register allocations found in the body using the loop bounds.
+            Scope<Interval> scope;
+            scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
+                                          Variable::make(Int(32), op->name + ".loop_max")));
+
+            // Expand the inner allocations using the loop bounds.
+            for (RegisterAllocation &s : allocations) {
+                if (expr_uses_var(s.size, op->name)) {
+                    s.size = bounds_of_expr_in_scope(s.size, scope).max;
+                }
+            }
+
+            // Add back on the allocations we set aside.
+            if (!allocations.empty()) {
+                allocations.insert(allocations.end(), old.begin(), old.end());
+            } else {
+                allocations.swap(old);
+            }
+
+            stmt = For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+        }
+        loop_var = old_loop_var;
+    }
+
+    void visit(const Allocate *op) {
+        if (in_lane_loop) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        user_assert(op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
+                    op->memory_type == MemoryType::Auto)
+            << "Allocation " << op->name << " is scheduled inside a loop over GPU threads, so "
+            << "it must live in stack memory or registers. "
+            << "Shared allocations at this loop level are not yet supported.\n";
+
+        register_allocations.push(op->name, 0);
+        RegisterAllocation alloc;
+        alloc.name = op->name;
+        alloc.type = op->type;
+        alloc.size = 1;
+        alloc.loop_var = loop_var;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            alloc.size *= op->extents[i];
+        }
+        alloc.size = simplify(alloc.size);
+        alloc.memory_type = op->memory_type;
+
+        allocations.push_back(alloc);
+        stmt = mutate(op->body);
+        register_allocations.pop(op->name);
+    }
+
+    template<typename ExprOrStmt, typename LetOrLetStmt>
+    ExprOrStmt visit_let(const LetOrLetStmt *op) {
+        ExprOrStmt body = op->body;
+
+        body = mutate(op->body);
+
+        for (RegisterAllocation &s : allocations) {
+            if (expr_uses_var(s.size, op->name)) {
+                s.size = simplify(Let::make(op->name, op->value, s.size));
+            }
+        }
+
+        if (op->body.same_as(body)) {
+            return op;
+        } else {
+            return LetOrLetStmt::make(op->name, op->value, body);
+        }
+    }
+
+    void visit(const Let *op) {
+        expr = visit_let<Expr>(op);
+    }
+
+    void visit(const LetStmt *op) {
+        stmt = visit_let<Stmt>(op);
+    }
+
+
+    Scope<int> register_allocations;
+    string loop_var;
+
+public:
+    vector<RegisterAllocation> allocations;
+
+    Stmt rewrap(Stmt body, const string &loop_var) {
+        for (RegisterAllocation &alloc : allocations) {
+            if ((!loop_var.empty() && ends_with(alloc.loop_var, loop_var)) |
+                (loop_var.empty() && alloc.loop_var.empty())) {
+                body = Allocate::make(alloc.name, alloc.type, alloc.memory_type, {alloc.size}, const_true(), body);
+            }
+        }
+        return body;
+    }
+
+    bool has_lane_loop = false;
+    bool has_thread_loop = false;
+};
+
 class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
     using IRMutator2::visit;
     const ExtractBlockSize &block_size;
@@ -598,8 +762,23 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
 
-            InjectThreadBarriers i;
-            body = i.mutate(body);
+            Expr block_size_x = block_size.dimensions() ? block_size.extent(0) : 1;
+            ExtractRegisterAllocations register_allocs;
+            ForType innermost_loop_type = ForType::GPUThread;
+            if (block_size.dimensions()) {
+                body = register_allocs.mutate(body);
+                if (register_allocs.has_lane_loop) {
+                    innermost_loop_type = ForType::GPULane;
+                }
+            }
+
+            debug(3) << "Extracted register-level allocations:\n" << body << "\n\n";
+
+            if (register_allocs.has_thread_loop) {
+                // If there's no loop over threads, everything is already synchronous.
+                InjectThreadBarriers i;
+                body = i.mutate(body);
+            }
 
             debug(3) << "Injected synchronization:\n" << body << "\n\n";
 
@@ -608,15 +787,20 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator2 {
 
             debug(3) << "Replaced for with if:\n" << body << "\n\n";
 
-            // Rewrap the whole thing in the loop over threads
-            for (int i = 0; i < block_size.dimensions(); i++) {
+            // There is always a loop over thread_id_x
+            string thread_id = "." + thread_names[0];
+            // Add back in any register-level allocations
+            body = register_allocs.rewrap(body, thread_id);
+            body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->device_api, body);
+
+            // Rewrap the whole thing in other loops over threads
+            for (int i = 1; i < block_size.dimensions(); i++) {
+                thread_id = "." + thread_names[i];
+                body = register_allocs.rewrap(body, thread_id);
                 body = For::make("." + thread_names[i], 0, block_size.extent(i), ForType::GPUThread, op->device_api, body);
             }
-
-            // There at least needs to be a loop over __thread_id_x as a marker for codegen
-            if (block_size.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, ForType::GPUThread, op->device_api, body);
-            }
+            thread_id.clear();
+            body = register_allocs.rewrap(body, thread_id);
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
 

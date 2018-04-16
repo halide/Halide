@@ -125,7 +125,7 @@ public:
             if (containing_scope) {
                 return containing_scope->get(name);
             } else {
-                internal_error << "Symbol '" << name << "' not found\n";
+                internal_error << "Name not in Scope: " << name << "\n";
             }
         }
         return iter->second.top();
@@ -137,7 +137,7 @@ public:
     T2 &ref(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            internal_error << "Symbol '" << name << "' not found\n";
+            internal_error << "Name not in Scope: " << name << "\n";
         }
         return iter->second.top_ref();
     }
@@ -175,7 +175,7 @@ public:
      * same name in an outer scope) */
     void pop(const std::string &name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
-        internal_assert(iter != table.end()) << "Name not in symbol table: " << name << "\n";
+        internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
@@ -286,13 +286,22 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
  * a name within the scope of this helper's lifetime. */
 template<typename T = void>
 struct ScopedBinding {
-    Scope<T> &scope;
+    Scope<T> *scope;
     std::string name;
-    ScopedBinding(Scope<T> &scope, const std::string &name, const T &value) : scope(scope), name(name) {
-        scope.push(name, value);
+    ScopedBinding(Scope<T> &s, const std::string &n, const T &value) :
+        scope(&s), name(n) {
+        scope->push(name, value);
+    }
+    ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value) :
+        scope(condition ? &s : nullptr), name(n) {
+        if (condition) {
+            scope->push(name, value);
+        }
     }
     ~ScopedBinding() {
-        scope.pop(name);
+        if (scope) {
+            scope->pop(name);
+        }
     }
 };
 

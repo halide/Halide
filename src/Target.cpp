@@ -264,6 +264,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"strict_float", Target::StrictFloat},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -556,7 +557,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 
 namespace Internal {
 
-EXPORT void target_test() {
+void target_test() {
     Target t;
     for (const auto &feature : feature_name_map) {
         t.set_feature(feature.second);
