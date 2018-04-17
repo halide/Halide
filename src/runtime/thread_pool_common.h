@@ -70,8 +70,8 @@ struct work_queue_t {
     // all fields are protected by this mutex.
     halide_mutex mutex;
 
-    // The desired number threads doing work.
-    int desired_num_threads;
+    // The desired number threads doing work (HL_NUM_THREADS).
+    int desired_threads_working;
 
     // All fields after this must be zero in the initial state. See assert_zeroed
     // Field serves both to mark the offset in struct and as layout padding.
@@ -82,9 +82,6 @@ struct work_queue_t {
 
     // The number threads created
     int threads_created;
-
-    // The desired number threads doing work (HL_NUM_THREADS).
-    int desired_threads_working;
 
     // Workers sleep on one of two condition variables, to make it
     // easier to wake up the right number if a small number of tasks
