@@ -32,12 +32,12 @@ void *libadsprpc = load_libadsprpc();
 template <typename T>
 T get_libadsprpc_symbol(const char *sym) {
     if (!libadsprpc) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to load lib*dsprpc.so");
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to load libcdsprpc.so or libadsprpc.so");
         return NULL;
     }
     T ret = (T)dlsym(libadsprpc, sym);
     if (!ret) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to get lib*dsprpc.so symbol %s", sym);
+        __android_log_print(ANDROID_LOG_ERROR, "halide", "Failed to get libcdsprpc.so or libadsprpc.so symbol %s", sym);
     }
     return ret;
 }
