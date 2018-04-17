@@ -895,6 +895,7 @@ private:
         } else if (op->is_intrinsic(Call::popcount) ||
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
+            internal_assert(op->args.size() == 1);
             interval = Interval(0, op->args[0].type().bits());
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
