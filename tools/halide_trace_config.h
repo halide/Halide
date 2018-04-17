@@ -1,8 +1,10 @@
 #ifndef HALIDE_TRACE_CONFIG_H
 #define HALIDE_TRACE_CONFIG_H
 
+#include <cmath>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -101,22 +103,104 @@ struct Label {
     }
 };
 
-// Configuration for how a func should be rendered in HalideTraceViz
+// Configuration for how a func should be rendered in HalideTraceViz.
 struct FuncConfig {
-    float zoom = 1.f;
-    int load_cost = 0;
-    int store_cost = 1;
-    Point pos;
-    std::vector<Point> strides = { {1, 0}, {0, 1} };
-    int color_dim = -1;
-    float min = 0.f, max = 1.f;
+    // Note that every field in this struct is initialized to a value which
+    // means "no value specified"; this is allows us to merge configs
+    // from several sources (auto-layout, embedded trace-tags, and command-line)
+    // in a way that we can selectively add or override some-but-not-all configuration
+    // values (e.g., use auto-layout's positioning, but customizing labels
+    // and changing rgb vs gray rendering). In all cases, if a field is
+    // the initial "no value specified" value at rendering time, HalideTraceViz
+    // will choose a reasonable value for that field.
+
+    // Each value of a Func will draw as a zoom x zoom
+    // box in the output. Fractional values are allowed.
+    //
+    // Valid values: 0.0 < zoom <= HUGEVAL or so
+    float zoom = -1.f;
+
+    // Each load from a Func costs the given number of ticks.
+    // Legal values are 0.0 < zoom <= 1000 or so
+    //
+    // Valid values: load_cost >= 0
+    int load_cost = -1;
+
+    // Each store to a Func costs the given number of ticks.
+    //
+    // Valid values: store_cost >= 0
+    int store_cost = -1;
+
+    // The position on the screen corresponding to the Func's 0, 0 coordinate.
+    //
+    // Valid values: pos.x and pos.y > std::numeric_limits<int>::lowest()
+    Point pos = { std::numeric_limits<int>::lowest(), std::numeric_limits<int>::lowest() };
+
+    // Specifies the matrix that maps the coordinates of the
+    // Func to screen pixels. Specified column major. For example,
+    // { {1, 0}, {0, 1}, {0, 0} } specifies that the Func has three
+    // dimensions where the first one maps to screen-space x
+    // coordinates, the second one maps to screen-space y coordinates,
+    // and the third one does not affect screen-space coordinates.
+    //
+    // Valid values: strize.size() > 0
+    std::vector<Point> strides;
+
+    // Specify the dimension to use for rendering the color channels of the Func.
+    //
+    // Valid values: color_dim == -1 -> render as grayscale
+    //               color_dim >= 0  -> render as RGB using that dimension as color channel
+    int color_dim = -2;
+
+    // The minimum value taken on by a Func; maps to black.
+    // TODO: this doesn't give enough range to allow for the full range of int64 or uint64. Do we care?
+    //
+    // Valid values: min-of-type <= min <= max-of-type
+    double min = std::numeric_limits<double>::quiet_NaN();
+
+    // The maximum value taken on by a Func; maps to white.
+    // TODO: this doesn't give enough range to allow for the full range of int64 or uint64. Do we care?
+    //
+    // Valid values: min-of-type <= min <= max-of-type
+    double max = std::numeric_limits<double>::quiet_NaN();
+
     // Label(s) to be rendered with the Func. The Label's position
     // is an offset from the Func's position, so (0, 0) means render
     // at the top-left of the Func itself.
+    //
+    // Valid values: Any
     std::vector<Label> labels;
-    bool auto_label = true;  // if there are no labels, add one matching the func name
-    bool blank_on_end_realization = false;
-    uint32_t uninitialized_memory_color = 0xff000000;
+
+    // If blank_on_end_realization > 0, the output occupied by a Func will be set to
+    // black on its end-realization event; if blank_on_end_realization == 0, the
+    // Func's values will be left on the screen.
+    //
+    // Valid values: 0 or 1.
+    int blank_on_end_realization = -1;
+
+    // Specifies the on-screen color corresponding to uninitialized memory,
+    // in 0x00BBGGRR format.
+    //
+    // Valid values: Any uint32 with 0x00 in the upper 8 bits.
+    uint32_t uninitialized_memory_color = 0xFFFFFFFF;
+
+    // For each field in 'from':
+    // -- if it has a well-defined value, replace the corresponding field in 'this'
+    // -- if it does not have a well-defined value, leave untouched the corresponding field in 'this'
+    void merge_from(const FuncConfig &from) {
+        if (from.zoom >= 0.f) this->zoom = from.zoom;
+        if (from.load_cost >= 0) this->load_cost = from.load_cost;
+        if (from.store_cost > 0) this->store_cost = from.store_cost;
+        if (from.pos.x > std::numeric_limits<int>::lowest()) this->pos.x = from.pos.x;
+        if (from.pos.y > std::numeric_limits<int>::lowest()) this->pos.y = from.pos.y;
+        if (!from.strides.empty()) this->strides = from.strides;
+        if (from.color_dim >= -1) this->color_dim = from.color_dim;
+        if (!std::isnan(from.min)) this->min = from.min;
+        if (!std::isnan(from.max)) this->max = from.max;
+        if (!from.labels.empty()) this->labels = from.labels;
+        if (from.blank_on_end_realization >= 0) this->blank_on_end_realization = from.blank_on_end_realization;
+        if (!(from.uninitialized_memory_color & 0xff000000)) this->uninitialized_memory_color = from.uninitialized_memory_color;
+    }
 
     static std::string tag_start_text() {
         return std::string("htv_func_config:");
@@ -137,7 +221,6 @@ struct FuncConfig {
             << "  color_dim: " << color_dim << "\n"
             << "  min: " << min << " max: " << max << "\n"
             << "  labels: " << labels << "\n"
-            << "  auto_label: " << auto_label << "\n"
             << "  blank: " << blank_on_end_realization << "\n"
             << "  uninit: " << uninitialized_memory_color << "\n";
     }
@@ -157,7 +240,6 @@ struct FuncConfig {
             << config.min << " "
             << config.max << " "
             << config.labels << " "
-            << config.auto_label << " "
             << config.blank_on_end_realization << " "
             << config.uninitialized_memory_color;
         return os;
@@ -176,7 +258,6 @@ struct FuncConfig {
             >> config.min
             >> config.max
             >> config.labels
-            >> config.auto_label
             >> config.blank_on_end_realization
             >> config.uninitialized_memory_color;
         if (start_text != tag_start_text()) {

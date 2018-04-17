@@ -19,6 +19,7 @@ typedef int64_t ssize_t;
 #endif
 #include <string>
 #include <list>
+#include <set>
 
 #include "inconsolata.h"
 #include "HalideRuntime.h"
@@ -39,6 +40,7 @@ using std::queue;
 using std::array;
 using std::pair;
 using std::list;
+using std::set;
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
@@ -276,7 +278,10 @@ Funcs.
      appears with its bottom left corner at the current coordinates
      and fades in over n frames.
 
-)USAGE";
+ --rlabel func label dx dy n: Like "--label", but relative to the Func's
+     position, using dx and dy as an offset.
+
+))USAGE";
 }
 
 // If the condition is false, print usage and exit with error.
@@ -347,6 +352,18 @@ float parse_float(const char *str) {
     return result;
 }
 
+double parse_double(const char *str) {
+    char *endptr = nullptr;
+    errno = 0;
+    double result = strtod(str, &endptr);
+    if (errno == ERANGE || str == endptr) {
+        std::cerr << "Unable to parse '" << str << "' as a double\n";
+        usage();
+        exit(-1);
+    }
+    return result;
+}
+
 void do_decay(int decay_factor, std::vector<uint32_t> &storage) {
     if (decay_factor != 1) {
         const uint32_t inv_d1 = (1 << 24) / std::max(1, decay_factor);
@@ -361,11 +378,33 @@ void do_decay(int decay_factor, std::vector<uint32_t> &storage) {
     }
 }
 
+// Given a FuncConfig, check each field for "use some reasonable default"
+// value and fill in something reasonable.
+FuncConfig fix_func_config_defaults(const FuncConfig &cfg) {
+    // Make a FuncConfig with 'safe' defaults for everything,
+    // then merge the existing cfg into it.
+    FuncConfig safe;
+    safe.zoom = 1.f;
+    safe.load_cost = 0;
+    safe.store_cost = 1;
+    safe.pos = {0, 0};
+    safe.strides = { {1, 0}, {0, 1} };
+    safe.color_dim = -1;
+    safe.min = 0.0;
+    safe.max = 1.0;
+    safe.labels = {};
+    safe.blank_on_end_realization = 0;
+    safe.uninitialized_memory_color = 0x00000000;
+    safe.merge_from(cfg);
+    safe,uninitialized_memory_color |= 0xff000000;
+    return safe;
+}
+
 void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncInfo> &func_info) {
     // The struct's default values are what we want
     FuncConfig config;
-
     vector<Point> pos_stack;
+    set<string> labels_seen;
 
     // Parse command line args
     int i = 1;
@@ -379,16 +418,14 @@ void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncI
             expect(i + 1 < argc, i);
             const char *func = argv[++i];
             FuncInfo &fi = func_info[func];
-            fi.config.labels.swap(config.labels);
-            fi.config = config;
-            fi.config.auto_label = false;
+            fi.config.merge_from(config);
             fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
-            config.min = parse_float(argv[++i]);
+            config.min = parse_double(argv[++i]);
         } else if (next == "--max") {
             expect(i + 1 < argc, i);
-            config.max = parse_float(argv[++i]);
+            config.max = parse_double(argv[++i]);
         } else if (next == "--move") {
             expect(i + 2 < argc, i);
             config.pos.x = parse_int(argv[++i]);
@@ -417,9 +454,9 @@ void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncI
         } else if (next == "--gray") {
             config.color_dim = -1;
         } else if (next == "--blank") {
-            config.blank_on_end_realization = true;
+            config.blank_on_end_realization = 1;
         } else if (next == "--no-blank") {
-            config.blank_on_end_realization = false;
+            config.blank_on_end_realization = 0;
         } else if (next == "--zoom") {
             expect(i + 1 < argc, i);
             config.zoom = parse_float(argv[++i]);
@@ -452,6 +489,30 @@ void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncI
             // the --label flag has always expected an absolute position,
             // so convert it to an offset.
             Point offset = { config.pos.x - fi.config.pos.x, config.pos.y - fi.config.pos.y };
+            if (!labels_seen.count(func)) {
+                // If there is at least one --label specified for a Func,
+                // it overrides the entire previous set of labels, rather
+                // than simply appending.
+                fi.config.labels.clear();
+                labels_seen.insert(func);
+            }
+            fi.config.labels.push_back({text, offset, n});
+        } else if (next == "--rlabel") {
+            expect(i + 5 < argc, i);
+            char *func = argv[++i];
+            char *text = argv[++i];
+            int dx = parse_int(argv[++i]);
+            int dy = parse_int(argv[++i]);
+            int n = parse_int(argv[++i]);
+            FuncInfo &fi = func_info[func];
+            Point offset = { dx, dy };
+            if (!labels_seen.count(func)) {
+                // If there is at least one --label specified for a Func,
+                // it overrides the entire previous set of labels, rather
+                // than simply appending.
+                fi.config.labels.clear();
+                labels_seen.insert(func);
+            }
             fi.config.labels.push_back({text, offset, n});
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
@@ -468,7 +529,7 @@ void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncI
             int r = parse_int(argv[++i]);
             int g = parse_int(argv[++i]);
             int b = parse_int(argv[++i]);
-            config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+            config.uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else {
             expect(false, i);
         }
@@ -619,6 +680,11 @@ int run(int argc, char **argv) {
             // via the commandline, which is handy for experimentations.
             process_args(argc, argv, global, func_info);
 
+            // Ensure that all FuncConfigs have reasonable values.
+            for (auto &p : func_info) {
+                p.second.config = fix_func_config_defaults(p.second.config);
+            }
+
             // allocate the buffers after all tags and flags are processed
             buffers.resize(global.frame_size);
 
@@ -665,9 +731,6 @@ int run(int argc, char **argv) {
 
         if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
-            if (fi.config.labels.empty() && fi.config.auto_label) {
-                fi.config.labels.push_back({p.func()});
-            }
             for (const auto &label : fi.config.labels) {
                 // Convert offset to absolute position before enqueuing
                 Label l = label;
@@ -795,7 +858,7 @@ int run(int argc, char **argv) {
             fill_realization(buffers.image.data(), global.frame_size, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
-            if (fi.config.blank_on_end_realization) {
+            if (fi.config.blank_on_end_realization > 0) {
                 fill_realization(buffers.image.data(), global.frame_size, 0, fi, p);
             }
             break;
