@@ -4,8 +4,9 @@ using namespace Halide;
 
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 3};
-    Output<Buffer<uint8_t>> output_y{"output_y", 3};
+    Input<Buffer<uint8_t>> input_y{"input_y", 2};
+    Input<Buffer<uint8_t>> input_uv{"input_uv", 3};
+    Output<Buffer<uint8_t>> output_y{"output_y", 2};
     Output<Buffer<uint8_t>> output_uv{"output_uv", 3};
 
     void generate() {
@@ -15,12 +16,16 @@ public:
         // multiply update in tiles.
         Func copy_y("copy_y");
         Func copy_uv("copy_uv");
+        Func uv_de_interleaved("uv_de_interleaved");
+        Func processed_uv("processed_uv");
 
-        copy_y(x, y, c) = input(x, y, c);
-        copy_uv(x, y, c) = input(x, y, c);
+        copy_y(x, y) = input_y(x, y);
+        copy_uv(x, y, c) = input_uv(x, y, c);
+        uv_de_interleaved(x, y, c) = copy_uv(x/2*2, y/2, c);
 
-        output_y(x, y, c) = copy_y(x, y, c) * 2;
-        output_uv(x, y, c) = copy_uv(x, y, c) * 2;
+        output_y(x, y) = copy_y(x, y) * 2;
+        processed_uv(x, y, c) = uv_de_interleaved(x, y, c) * 2;
+        output_uv(x, y, c) = select(x%2 == 0, processed_uv(x, y, 0), processed_uv(x, y, 1));
 
         Var tx("tx"), ty("ty");
 

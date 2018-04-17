@@ -47,11 +47,19 @@ int main(int argc, char **argv) {
     // The Last parameter 0 indicate DMA Read
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_NV12);
 
-    Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
+    //Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
+    Halide::Runtime::Buffer<uint8_t> output(width, (3 * height) / 2);
+    output.embed(2, 0);
+    output.raw_buffer()->dim[1].extent = height;
+    output.raw_buffer()->dim[2].extent = 2;
+    output.raw_buffer()->dim[2].stride = width * height;
+      
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
     Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<uint8_t> input_y  = input.cropped(2, 0, 1);    // Luma plane only
+    Halide::Runtime::Buffer<uint8_t> input_c  = input.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
 
-    int result = pipeline_nv12(input, output_y, output_c);
+    int result = pipeline_nv12(input_y, input_c, output_y, output_c);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
