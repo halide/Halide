@@ -23,15 +23,19 @@
 #include "runtime/HalideRuntime.h"
 
 #ifndef HALIDE_EXPORT
-#if defined(_MSC_VER)
-#ifdef Halide_EXPORTS
-#define HALIDE_EXPORT __declspec(dllexport)
-#else
-#define HALIDE_EXPORT __declspec(dllimport)
-#endif
-#else
-#define HALIDE_EXPORT
-#endif
+	#if defined(_MSC_VER)
+		#ifdef Halide_SHARED
+			#ifdef Halide_EXPORTS
+				#define HALIDE_EXPORT __declspec(dllexport)
+			#else
+				#define HALIDE_EXPORT __declspec(dllimport)
+			#endif
+		#else
+			#define HALIDE_EXPORT
+		#endif
+	#else
+		#define HALIDE_EXPORT
+	#endif
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.
