@@ -101,7 +101,11 @@ namespace {
 // will get suffixes that falsely hint that they are not.
 
 const int num_unique_name_counters = (1 << 14);
-std::atomic<int> unique_name_counters[num_unique_name_counters];
+
+// We want to init these to zero, but cannot use = {0} because that
+// would invoke a (deleted) copy ctor; this syntax should force
+// the correct behavior.
+std::atomic<int> unique_name_counters[num_unique_name_counters] = {};
 
 int unique_count(size_t h) {
     h = h & (num_unique_name_counters - 1);

@@ -52,11 +52,6 @@ def test_type():
     assert f32.can_represent(b1)
     assert not b1.can_represent(f32)
 
-    assert b1.max() == 1
-    assert b1.min() == 0
-    assert i32.max() == 2147483647
-    assert i32.min() == -2147483648
-
     assert not b1.is_max(2)
     assert b1.is_max(1)
     assert b1.is_min(0)
