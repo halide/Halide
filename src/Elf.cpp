@@ -771,8 +771,6 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         }
     );
 
-
-    // TODO: This map with pointers as the key will lead to non-deterministic builds...
     std::map<const Symbol *, uint16_t> symbol_idxs;
     uint64_t local_count = 0;
     for (bool is_local : {true, false}) {
