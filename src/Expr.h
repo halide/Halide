@@ -27,13 +27,14 @@ enum class IRNodeType {
     UIntImm,
     FloatImm,
     StringImm,
+    Broadcast,
     Cast,
     Variable,
     Add,
     Sub,
+    Mod,
     Mul,
     Div,
-    Mod,
     Min,
     Max,
     EQ,
@@ -48,7 +49,6 @@ enum class IRNodeType {
     Select,
     Load,
     Ramp,
-    Broadcast,
     Call,
     Let,
     LetStmt,
@@ -177,6 +177,10 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
             return (const T *)ptr;
         }
         return nullptr;
+    }
+
+    IRNodeType node_type() const {
+        return ptr->node_type;
     }
 };
 
