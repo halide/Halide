@@ -48,7 +48,7 @@ __attribute__((always_inline)) bool cas_strong_sequentially_consistent_helper(ui
  __attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
      return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
-      
+
 __attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
      return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
@@ -95,7 +95,7 @@ __attribute__((always_inline))  uintptr_t atomic_and_fetch_release(uintptr_t *ad
 __attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
     return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
-      
+
 __attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
     return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
@@ -135,7 +135,7 @@ __attribute__((always_inline)) void atomic_thread_fence_acquire() {
 #endif
 
 }
- 
+
 class spin_control {
     int spin_count;
 
@@ -372,7 +372,7 @@ struct queue_data {
 
 struct hash_bucket {
     word_lock mutex;
-    
+
     queue_data *head; // Is this queue_data or thread_data?
     queue_data *tail; // Is this queue_data or thread_data?
 };
@@ -381,14 +381,14 @@ struct hash_bucket {
 // a class with a constructor is used, clang generates a COMDAT
 // which cannot be lowered for Mac OS due to MachO. A better
 // solution is desired of course.
-#define HASH_TABLE_BITS 10
+#define HASH_TABLE_BITS (sizeof(unsigned int) * 8 - __builtin_clz(MAX_THREADS * LOAD_FACTOR) - 1)
 struct hash_table {
     hash_bucket buckets[MAX_THREADS * LOAD_FACTOR];
 };
 WEAK char table_storage[sizeof(hash_table)];
-#define table (*(hash_table *)table_storage) 
+#define table (*(hash_table *)table_storage)
 
-inline void check_hash(uintptr_t hash) {
+__attribute__((always_inline)) void check_hash(uintptr_t hash) {
     halide_assert(NULL, hash < sizeof(table.buckets)/sizeof(table.buckets[0]));
 }
 
@@ -783,7 +783,7 @@ class fast_mutex {
                 atomic_load_relaxed(&state, &expected);
                 continue;
             }
-            
+
             // Mark mutex as having parked threads if not already done.
             if ((expected & parked_bit) == 0) {
                 uintptr_t desired = expected | parked_bit;

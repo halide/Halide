@@ -2,7 +2,7 @@
 #include "mini_qurt.h"
 
 // TODO: consider getting rid of this
-#define MAX_THREADS 256
+#define MAX_THREADS 64
 
 using namespace Halide::Runtime::Internal::Qurt;
 
