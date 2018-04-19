@@ -382,7 +382,6 @@ struct hash_bucket {
 // which cannot be lowered for Mac OS due to MachO. A better
 // solution is desired of course.
 #define HASH_TABLE_BITS (sizeof(unsigned int) * 8 - __builtin_clz(MAX_THREADS * LOAD_FACTOR) - 1)
-static_assert(HASH_TABLE_BITS==8,"sdf");
 struct hash_table {
     hash_bucket buckets[MAX_THREADS * LOAD_FACTOR];
 };
