@@ -32,7 +32,7 @@ using std::pair;
 using std::ostringstream;
 using std::vector;
 
-#define LOG_EXPR_MUTATIONS 0
+#define LOG_EXPR_MUTATIONS 1
 #define LOG_STMT_MUTATIONS 0
 
 namespace {
@@ -80,15 +80,18 @@ bool is_var_simple_const_comparison(const Expr &e, string* name) {
 }
 
 // Returns true iff t is an integral type where overflow is undefined
+HALIDE_ALWAYS_INLINE
 bool no_overflow_int(Type t) {
     return t.is_int() && t.bits() >= 32;
 }
 
+HALIDE_ALWAYS_INLINE
 bool no_overflow_scalar_int(Type t) {
     return t.is_scalar() && no_overflow_int(t);
 }
 
 // Returns true iff t does not have a well defined overflow behavior.
+HALIDE_ALWAYS_INLINE
 bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
 }
@@ -168,13 +171,14 @@ public:
         bool min_defined, max_defined;
     } bounds = {0, 0, false, false};
 
-#if 0 && LOG_EXPR_MUTATIONS
+#if LOG_EXPR_MUTATIONS
     // TODO: track bounds
-    Expr mutate(const Expr &e) override {
+    Expr mutate(const Expr &e, ConstBounds *b) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
         Expr new_e = IRMutator2::mutate(e);
+        if (b) *b = bounds;
         debug_indent--;
         if (!new_e.same_as(e)) {
             debug(1)
@@ -183,6 +187,10 @@ public:
         }
         internal_assert(e.type() == new_e.type());
         return new_e;
+    }
+
+    Expr mutate(const Expr &e) override {
+        return mutate(e, nullptr);
     }
 #else
 
@@ -597,12 +605,12 @@ private:
     Expr visit(const Variable *op) override {
         if (bounds_info.contains(op->name)) {
             std::pair<int64_t, int64_t> b = bounds_info.get(op->name);
-            if (b.first == b.second) {
-                return make_const(op->type, b.first);
-            }
             bounds.min_defined = bounds.max_defined = true;
             bounds.min = b.first;
             bounds.max = b.second;
+            if (b.first == b.second) {
+                return make_const(op->type, b.first);
+            }
         } else {
             bounds.min_defined = bounds.max_defined = false;
         }
@@ -1498,12 +1506,6 @@ private:
         }
 
         // Order commutative operations by node type
-        if (a.node_type() < b.node_type()) {
-            std::swap(a, b);
-            std::swap(a_bounds, b_bounds);
-        }
-
-                // Order commutative operations by node type
         if (a.node_type() < b.node_type()) {
             std::swap(a, b);
             std::swap(a_bounds, b_bounds);
@@ -2756,6 +2758,8 @@ private:
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
+        bounds.min_defined = bounds.max_defined = false;
+
         const Broadcast *b_index = index.as<Broadcast>();
         const Broadcast *b_pred = predicate.as<Broadcast>();
         if (is_zero(predicate)) {
@@ -2773,6 +2777,12 @@ private:
     }
 
     Expr visit(const Call *op) override {
+        Expr result = visit_call(op);
+        bounds.min_defined = bounds.max_defined = false;
+        return result;
+    }
+
+    Expr visit_call(const Call *op) {
         // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
             found_buffer_reference(op->name, op->args.size());
@@ -3411,7 +3421,8 @@ private:
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
-        Expr value = mutate(op->value);
+        ConstBounds value_bounds;
+        Expr value = mutate(op->value, &value_bounds);
         Body body = op->body;
 
         // Iteratively peel off certain operations from the let value and push them inside.
@@ -3539,9 +3550,10 @@ private:
                 alignment_info.push(new_name, mod_rem);
                 new_value_alignment_tracked = true;
             }
-            int64_t val_min, val_max;
-            if (const_int_bounds(new_value, &val_min, &val_max)) {
-                bounds_info.push(new_name, { val_min, val_max });
+            ConstBounds new_value_bounds;
+            new_value = mutate(new_value, &new_value_bounds);
+            if (new_value_bounds.min_defined && new_value_bounds.max_defined) {
+                bounds_info.push(new_name, { new_value_bounds.min, new_value_bounds.max });
                 new_value_bounds_tracked = true;
             }
         }
@@ -3552,9 +3564,8 @@ private:
                 alignment_info.push(op->name, mod_rem);
                 value_alignment_tracked = true;
             }
-            int64_t val_min, val_max;
-            if (const_int_bounds(value, &val_min, &val_max)) {
-                bounds_info.push(op->name, { val_min, val_max });
+            if (value_bounds.min_defined && value_bounds.max_defined) {
+                bounds_info.push(op->name, { value_bounds.min, value_bounds.max });
                 value_bounds_tracked = true;
             }
         }
