@@ -33,10 +33,10 @@ int main(int argc, char **argv) {
     // Timing code
 
     // Manually-tuned version
-    double best_manual = benchmark(timing, 1, [&]() {
+    /*double best_manual = benchmark(timing, 1, [&]() {
         local_laplacian(input, levels, alpha/(levels-1), beta, output);
     });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
+    printf("Manually-tuned time: %gms\n", best_manual * 1e3);*/
 
     #ifndef NO_AUTO_SCHEDULE
     // Auto-scheduled version

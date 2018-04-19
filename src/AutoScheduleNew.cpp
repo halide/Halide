@@ -36,9 +36,17 @@ double cost_of_cold_load(double buffer_size, const MachineParams &params) {
     //return params.balance * std::log2(1 + buffer_size / params.last_level_cache_size);
 }
 
-bool use_random_dropout() {
-    static bool v = !get_env_variable("HL_RANDOM_DROPOUT").empty();
-    return v;
+bool random_dropout() {
+    string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
+    int threshold = 0;
+    if (!random_dropout_str.empty()) {
+        threshold = atoi(random_dropout_str.c_str());
+    } else {
+        return false;
+    }
+    internal_assert(threshold >= 0 && threshold <= 100);
+    const int val = rand() % 100;
+    return val > threshold;
 }
 
 // A representation of the function DAG. The nodes and edges are both
@@ -790,8 +798,8 @@ struct PartialScheduleNode {
             for (auto t : tilings) {
 
                 // Random dropout. Uncomment to get a random family of plausible schedules.
-                if (use_random_dropout()) {
-                    if (rand() & 3) continue;
+                if (random_dropout()) {
+                    continue;
                 }
 
                 if (parent->is_root()) {
