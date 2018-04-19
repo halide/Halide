@@ -2,7 +2,7 @@
 #include "runtime_internal.h"
 
 // TODO: consider getting rid of this
-#define MAX_THREADS 256
+#define MAX_THREADS 64
 
 extern "C" {
 
@@ -107,7 +107,7 @@ struct thread_parker {
         EnterCriticalSection(&critical_section);
         while (should_park) {
             SleepConditionVariableCS(&condvar, &critical_section, -1);
-        } 
+        }
         LeaveCriticalSection(&critical_section);
     }
 
