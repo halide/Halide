@@ -1384,7 +1384,9 @@ struct halide_scalar_value_t {
         double f64;
         void *handle;
     } u;
+    #ifdef __cplusplus
     HALIDE_ALWAYS_INLINE halide_scalar_value_t() {u.u64 = 0;}
+    #endif
 };
 
 enum halide_argument_kind_t {

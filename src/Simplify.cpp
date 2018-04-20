@@ -110,10 +110,18 @@ public:
 
         // Only respect the constant bounds from the containing scope.
         for (Scope<Interval>::const_iterator iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-            int64_t i_min, i_max;
-            if (const_int(iter.value().min, &i_min) &&
-                const_int(iter.value().max, &i_max)) {
-                bounds_info.push(iter.name(), { i_min, i_max });
+            ConstBounds bounds;
+            if (const int64_t *i_min = as_const_int(iter.value().min)) {
+                bounds.min_defined = true;
+                bounds.min = *i_min;
+            }
+            if (const int64_t *i_max = as_const_int(iter.value().max)) {
+                bounds.max_defined = true;
+                bounds.max = *i_max;
+            }
+
+            if (bounds.min_defined || bounds.max_defined) {
+                bounds_info.push(iter.name(), bounds);
             }
         }
 
@@ -182,7 +190,7 @@ public:
     };
 
     Scope<VarInfo> var_info;
-    Scope<pair<int64_t, int64_t>> bounds_info;
+    Scope<ConstBounds> bounds_info;
     Scope<ModulusRemainder> alignment_info;
 
     // Symbols used by rewrite rules
@@ -380,17 +388,13 @@ public:
 
     Expr visit(const Variable *op, ConstBounds *bounds) {
         if (bounds_info.contains(op->name)) {
-            std::pair<int64_t, int64_t> b = bounds_info.get(op->name);
+            const ConstBounds &b = bounds_info.get(op->name);
             if (bounds) {
-                bounds->min_defined = bounds->max_defined = true;
-                bounds->min = b.first;
-                bounds->max = b.second;
+                *bounds = b;
             }
-            if (b.first == b.second) {
-                return make_const(op->type, b.first);
+            if (b.min_defined && b.max_defined && b.min == b.max) {
+                return make_const(op->type, b.min);
             }
-        } else if (bounds) {
-            bounds->min_defined = bounds->max_defined = false;
         }
 
         if (var_info.contains(op->name)) {
@@ -584,6 +588,7 @@ public:
                 rewrite((x + y) - y, x) ||
                 rewrite(x - (x + y), -y) ||
                 rewrite(y - (x + y), -x) ||
+                rewrite((x - y) - x, -y) ||
                 rewrite((x + c0) - c1, x + fold(c0 - c1)) ||
                 rewrite((x + c0) - (c1 - y), (x + y) + fold(c0 - c1)) ||
                 rewrite((x + c0) - (y + c1), (x - y) + fold(c0 - c1)) ||
@@ -791,15 +796,28 @@ public:
         Expr b = mutate(op->b, &b_bounds);
 
         if (bounds && no_overflow_int(op->type)) {
-            bounds->min_defined = bounds->max_defined =
-                (a_bounds.min_defined && b_bounds.min_defined &&
-                 a_bounds.max_defined && b_bounds.min_defined);
-            int64_t v1 = a_bounds.min * b_bounds.min;
-            int64_t v2 = a_bounds.min * b_bounds.max;
-            int64_t v3 = a_bounds.max * b_bounds.min;
-            int64_t v4 = a_bounds.max * b_bounds.max;
-            bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
-            bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
+            bool a_positive = a_bounds.min_defined && a_bounds.min > 0;
+            bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
+            bool a_bounded = a_bounds.min_defined && a_bounds.max_defined;
+            bool b_bounded = b_bounds.min_defined && b_bounds.max_defined;
+
+            if (a_bounded && b_bounded) {
+                bounds->min_defined = bounds->max_defined = true;
+                int64_t v1 = a_bounds.min * b_bounds.min;
+                int64_t v2 = a_bounds.min * b_bounds.max;
+                int64_t v3 = a_bounds.max * b_bounds.min;
+                int64_t v4 = a_bounds.max * b_bounds.max;
+                bounds->min = std::min(std::min(v1, v2), std::min(v3, v4));
+                bounds->max = std::max(std::max(v1, v2), std::max(v3, v4));
+            } else if ((a_bounds.max_defined && b_bounded && b_positive) ||
+                       (b_bounds.max_defined && a_bounded && a_positive)) {
+                bounds->max_defined = true;
+                bounds->max = a_bounds.max * b_bounds.max;
+            } else if ((a_bounds.min_defined && b_bounded && b_positive) ||
+                       (b_bounds.min_defined && a_bounded && a_positive)) {
+                bounds->min_defined = true;
+                bounds->min = a_bounds.min * b_bounds.min;
+            }
         }
 
         if (may_simplify(op->type)) {
@@ -2313,7 +2331,7 @@ public:
         Expr true_value = mutate(op->true_value, &t_bounds);
         Expr false_value = mutate(op->false_value, &f_bounds);
 
-        if (bounds && no_overflow_int(op->type)) {
+        if (bounds) {
             bounds->min_defined = t_bounds.min_defined && f_bounds.min_defined;
             bounds->max_defined = t_bounds.max_defined && f_bounds.max_defined;
             bounds->min = std::min(t_bounds.min, f_bounds.min);
@@ -3315,8 +3333,8 @@ public:
             }
             ConstBounds new_value_bounds;
             new_value = mutate(new_value, &new_value_bounds);
-            if (new_value_bounds.min_defined && new_value_bounds.max_defined) {
-                bounds_info.push(new_name, { new_value_bounds.min, new_value_bounds.max });
+            if (new_value_bounds.min_defined || new_value_bounds.max_defined) {
+                bounds_info.push(new_name, new_value_bounds);
                 new_value_bounds_tracked = true;
             }
         }
@@ -3327,8 +3345,8 @@ public:
                 alignment_info.push(op->name, mod_rem);
                 value_alignment_tracked = true;
             }
-            if (value_bounds.min_defined && value_bounds.max_defined) {
-                bounds_info.push(op->name, { value_bounds.min, value_bounds.max });
+            if (value_bounds.min_defined || value_bounds.max_defined) {
+                bounds_info.push(op->name, value_bounds);
                 value_bounds_tracked = true;
             }
         }
@@ -3418,10 +3436,11 @@ public:
         Expr new_extent = mutate(op->extent, &extent_bounds);
 
         bool bounds_tracked = false;
-        if (min_bounds.min_defined && min_bounds.max_defined && extent_bounds.max_defined) {
-            // TODO: track bounds when only one is bounded (use Scope<ConstBounds>)
+        if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
+            min_bounds.max += extent_bounds.max - 1;
+            min_bounds.max_defined &= extent_bounds.max_defined;
             bounds_tracked = true;
-            bounds_info.push(op->name, { min_bounds.min, min_bounds.max + extent_bounds.max - 1 });
+            bounds_info.push(op->name, min_bounds);
         }
 
         Stmt new_body = mutate(op->body);

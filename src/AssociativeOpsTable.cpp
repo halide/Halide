@@ -185,6 +185,7 @@ void populate_ops_table_double_general_sub(const vector<Type> &types, vector<Ass
     declare_vars_double(types);
     if (types[0] == types[1]) {
         table.push_back({{x0 * y0 - x1 * y1, x1 * y0 + x0 * y1}, {one_0, zero_1}, true});
+        table.push_back({{x0 * y0 - y1 * x1, x1 * y0 + y1 * x0}, {one_0, zero_1}, true});
     }
 }
 
