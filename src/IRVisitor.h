@@ -151,26 +151,8 @@ private:
 
     template<typename... Args>
     ExprRet dispatch_expr(const BaseExprNode *node, Args&&... args) {
-        if (node == nullptr) return node;
+        if (node == nullptr) return ExprRet {};
         switch (node->node_type) {
-            // Explicitly list the Stmt types rather than using a
-            // default case so that when new IR nodes are added we
-            // don't miss them here.
-        case IRNodeType::LetStmt:
-        case IRNodeType::AssertStmt:
-        case IRNodeType::ProducerConsumer:
-        case IRNodeType::For:
-        case IRNodeType::Store:
-        case IRNodeType::Provide:
-        case IRNodeType::Allocate:
-        case IRNodeType::Free:
-        case IRNodeType::Realize:
-        case IRNodeType::Block:
-        case IRNodeType::IfThenElse:
-        case IRNodeType::Evaluate:
-        case IRNodeType::Prefetch:
-            internal_error << "Unreachable";
-            // Fall-through to get the right return type
         case IRNodeType::IntImm:
             return ((T *)this)->visit((const IntImm *)node, std::forward<Args>(args)...);
         case IRNodeType::UIntImm:
@@ -229,12 +211,30 @@ private:
             return ((T *)this)->visit((const Let *)node, std::forward<Args>(args)...);
         case IRNodeType::Shuffle:
             return ((T *)this)->visit((const Shuffle *)node, std::forward<Args>(args)...);
+            // Explicitly list the Stmt types rather than using a
+            // default case so that when new IR nodes are added we
+            // don't miss them here.
+        case IRNodeType::LetStmt:
+        case IRNodeType::AssertStmt:
+        case IRNodeType::ProducerConsumer:
+        case IRNodeType::For:
+        case IRNodeType::Store:
+        case IRNodeType::Provide:
+        case IRNodeType::Allocate:
+        case IRNodeType::Free:
+        case IRNodeType::Realize:
+        case IRNodeType::Block:
+        case IRNodeType::IfThenElse:
+        case IRNodeType::Evaluate:
+        case IRNodeType::Prefetch:
+            internal_error << "Unreachable";
         }
+        return ExprRet {};
     }
 
     template<typename... Args>
     StmtRet dispatch_stmt(const BaseStmtNode *node, Args&&... args) {
-        if (node == nullptr) return node;
+        if (node == nullptr) return StmtRet {};
         switch (node->node_type) {
         case IRNodeType::IntImm:
         case IRNodeType::UIntImm:
@@ -266,7 +266,7 @@ private:
         case IRNodeType::Let:
         case IRNodeType::Shuffle:
             internal_error << "Unreachable";
-            // Fall-through to get the right return type
+            break;
         case IRNodeType::LetStmt:
             return ((T *)this)->visit((const LetStmt *)node, std::forward<Args>(args)...);
         case IRNodeType::AssertStmt:
@@ -294,6 +294,7 @@ private:
         case IRNodeType::Prefetch:
             return ((T *)this)->visit((const Prefetch *)node, std::forward<Args>(args)...);
         }
+        return StmtRet {};
     }
 public:
 
