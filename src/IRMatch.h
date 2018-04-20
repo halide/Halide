@@ -1891,7 +1891,7 @@ struct CanProveOp {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         Expr condition = a.make(state);
         // debug(0) << "Attempting to prove " << a << " = " << condition << "\n";
-        condition = prover->mutate(condition);
+        condition = prover->mutate(condition, nullptr);
         val.u.u64 = is_one(condition);
         ty.code = halide_type_uint;
         ty.bits = 1;

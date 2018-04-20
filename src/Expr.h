@@ -23,6 +23,7 @@ class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
 enum class IRNodeType {
+    // Exprs, in order of strength
     IntImm,
     UIntImm,
     FloatImm,
@@ -51,6 +52,8 @@ enum class IRNodeType {
     Ramp,
     Call,
     Let,
+    Shuffle,
+    // Stmts
     LetStmt,
     AssertStmt,
     ProducerConsumer,
@@ -63,7 +66,6 @@ enum class IRNodeType {
     Block,
     IfThenElse,
     Evaluate,
-    Shuffle,
     Prefetch,
 };
 
