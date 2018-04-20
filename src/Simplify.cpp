@@ -550,6 +550,9 @@ public:
         Expr b = mutate(op->b, &b_bounds);
 
         if (bounds && no_overflow_int(op->type)) {
+            // Doesn't account for correlated a, b, so any
+            // cancellation rule that exploits that should always
+            // remutate to recalculate the bounds.
             bounds->min_defined = a_bounds.min_defined && b_bounds.max_defined;
             bounds->max_defined = a_bounds.max_defined && b_bounds.min_defined;
             bounds->min = a_bounds.min - b_bounds.max;
@@ -564,17 +567,17 @@ public:
             auto zero = IRMatcher::Const(0, op->type);
             const int lanes = op->type.lanes();
 
-            if (rewrite(x - 0, x) ||
+            if (rewrite(x - 0, a) ||
                 rewrite(overflow - x, overflow) ||
                 rewrite(x - overflow, overflow) ||
                 rewrite(indet - x, indet) ||
                 rewrite(x - indet, indet) ||
-                rewrite(x - x, zero) ||
                 rewrite(c0 - c1, fold(c0 - c1))) {
                 return rewrite.result;
             }
 
             if ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0))) ||
+                rewrite(x - x, zero) || // We want to remutate this just to get better bounds
                 rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
                 rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
                 rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
@@ -2899,11 +2902,6 @@ public:
                     cond = c->args[0];
                 }
             }
-            Expr arg = mutate(op->args[1], bounds);
-
-            if (is_one(cond)) {
-                return arg;
-            }
 
             if (is_zero(cond)) {
                 // (We could simplify this to avoid evaluating the provably-false
@@ -2912,10 +2910,23 @@ public:
                              << Expr(op) << "\n";
             }
 
-            if (cond.same_as(op->args[0]) && arg.same_as(op->args[1])) {
+            Expr result = mutate(op->args[1], bounds);
+
+            if (is_one(cond)) {
+                return result;
+            }
+
+            Expr message = mutate(op->args[2], nullptr);
+
+            if (cond.same_as(op->args[0]) &&
+                result.same_as(op->args[1]) &&
+                message.same_as(op->args[2])) {
                 return op;
             } else {
-                return require(cond, arg);
+                return Internal::Call::make(op->type,
+                                            Internal::Call::require,
+                                            {std::move(cond), std::move(result), std::move(message)},
+                                            Internal::Call::PureIntrinsic);
             }
         } else {
             vector<Expr> new_args(op->args.size());
