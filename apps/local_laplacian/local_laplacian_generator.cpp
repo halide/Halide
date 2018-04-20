@@ -161,7 +161,7 @@ public:
             cfg.store_cost = 5;
             cfg.pos.x = 370;
             cfg.pos.y = 100;
-            cfg.labels = { { "input pyramid", {280, 32} } };
+            cfg.labels = { { "input pyramid", {-90, -68} } };
             gray.add_trace_tag(cfg.to_trace_tag());
         }
 
@@ -176,7 +176,6 @@ public:
                 Halide::Trace::FuncConfig cfg;
                 cfg.pos = {x, y};
                 cfg.store_cost = store_cost;
-                cfg.auto_label = false;
                 inGPyramid[i].add_trace_tag(cfg.to_trace_tag());
             }
             if (i > 0) {
@@ -186,9 +185,8 @@ public:
                 cfg.strides = {{1, 0}, {0, 1}, {200, 0}};
                 cfg.pos = {x, y};
                 cfg.store_cost = store_cost;
-                cfg.auto_label = false;
                 if (i == 1) {
-                    cfg.labels = { { "differently curved intermediate pyramids", {x, 100} } };
+                    cfg.labels = { { "differently curved intermediate pyramids" } };
                     cfg.pos = {x, 100};
                 }
                 gPyramid[i].add_trace_tag(cfg.to_trace_tag());
@@ -199,9 +197,8 @@ public:
                 Halide::Trace::FuncConfig cfg;
                 cfg.pos = {x, y};
                 cfg.store_cost = store_cost;
-                cfg.auto_label = false;
                 if (i == 0) {
-                    cfg.labels = { { "output pyramids", {x, 100} } };
+                    cfg.labels = { { "output pyramids" } };
                     cfg.pos = {x, 100};
                 }
                 outGPyramid[i].add_trace_tag(cfg.to_trace_tag());
