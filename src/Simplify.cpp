@@ -420,6 +420,12 @@ public:
         }
     }
 
+    // Put the args to a commutative op in a canonical order
+    HALIDE_ALWAYS_INLINE
+    bool should_commute(const Expr &a, const Expr &b) {
+        return a.node_type() < b.node_type();
+    }
+
     Expr visit(const Add *op, ConstBounds *bounds) {
         ConstBounds a_bounds, b_bounds;
         Expr a = mutate(op->a, &a_bounds);
@@ -435,7 +441,7 @@ public:
         if (may_simplify(op->type)) {
 
             // Order commutative operations by node type
-            if (a.node_type() < b.node_type()) {
+            if (should_commute(a, b)) {
                 std::swap(a, b);
                 std::swap(a_bounds, b_bounds);
             }
@@ -774,6 +780,8 @@ public:
                   // *almost* cancel the x.  The right thing to do depends
                   // on which of a or b is a constant, and we also need to
                   // catch the cases where that constant is zero.
+                  rewrite(((x + y) + z)/c0 - ((y + x) + w)/c0, ((x + y) + z)/c0 - ((x + y) + w)/c0, c0 > 0) ||
+                  rewrite((x + y)/c0 - (y + x)/c0, 0) ||
                   rewrite((x + y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) + (y - c1))/c0, c0 > 0) ||
                   rewrite((x + c1)/c0 - (x + y)/c0, ((fold(c0 + c1 - 1) - y) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
                   rewrite((x - y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) - y - c1)/c0, c0 > 0) ||
@@ -826,11 +834,10 @@ public:
         if (may_simplify(op->type)) {
 
             // Order commutative operations by node type
-            if (a.node_type() < b.node_type()) {
+            if (should_commute(a, b)) {
                 std::swap(a, b);
                 std::swap(a_bounds, b_bounds);
             }
-
 
             auto indet = IRMatcher::indet(op->type);
             auto overflow = IRMatcher::overflow(op->type);
@@ -1097,7 +1104,7 @@ public:
         if (may_simplify(op->type)) {
 
             // Order commutative operations by node type
-            if (a.node_type() < b.node_type()) {
+            if (should_commute(a, b)) {
                 std::swap(a, b);
                 std::swap(a_bounds, b_bounds);
             }
@@ -1183,6 +1190,9 @@ public:
 
                 (no_overflow(op->type) &&
                  (rewrite(min(x + c0, c1), min(x, fold(c1 - c0)) + c0) ||
+
+                  rewrite(min(x + c0, y + c1), min(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
+                  rewrite(min(x + c0, y + c1), min(x + fold(c0 - c1), y) + c1, c0 > c1) ||
 
                   rewrite(min(x + y, x + z), x + min(y, z)) ||
                   rewrite(min(x + y, z + x), x + min(y, z)) ||
@@ -1374,6 +1384,9 @@ public:
 
                 (no_overflow(op->type) &&
                  (rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
+
+                  rewrite(max(x + c0, y + c1), max(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
+                  rewrite(max(x + c0, y + c1), max(x + fold(c0 - c1), y) + c1, c0 > c1) ||
 
                   rewrite(max(x + y, x + z), x + max(y, z)) ||
                   rewrite(max(x + y, z + x), x + max(y, z)) ||
