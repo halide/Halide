@@ -257,6 +257,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
+    {"tsan", Target::TSAN},
     {"avx512", Target::AVX512},
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
@@ -294,6 +295,9 @@ Target get_jit_target_from_environment() {
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
     host.set_feature(Target::MSAN);
+#endif
+#if __has_feature(thread_sanitizer)
+    host.set_feature(Target::TSAN);
 #endif
 #endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
