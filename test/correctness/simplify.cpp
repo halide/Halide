@@ -1342,7 +1342,9 @@ void check_overflow() {
 void check_ind_expr(Expr e, bool expect_error) {
     Expr e2 = simplify(e);
     class CheckInd : public Internal::IRVisitor {
-        void visit(const Call *call) {
+        using IRVisitor::visit;
+
+        void visit(const Call *call) override {
             found = call->is_intrinsic(Call::indeterminate_expression);
             IRVisitor::visit(call);
         }
