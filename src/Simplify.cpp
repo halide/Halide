@@ -1466,7 +1466,6 @@ public:
     }
 
     Expr visit(const EQ *op, ConstBounds *bounds) {
-
         if (!may_simplify(op->a.type())) {
             Expr a = mutate(op->a, nullptr);
             Expr b = mutate(op->b, nullptr);
@@ -1479,88 +1478,54 @@ public:
 
         ConstBounds delta_bounds;
         Expr delta = mutate(op->a - op->b, &delta_bounds);
-
+        const int lanes = op->type.lanes();
+        
+        // Attempt to disprove using bounds analysis
         if (delta_bounds.min_defined && delta_bounds.min > 0) {
-            return const_false(op->type.lanes());
+            return const_false(lanes);
         }
 
         if (delta_bounds.max_defined && delta_bounds.max < 0) {
-            return const_false(op->type.lanes());
+            return const_false(lanes);
         }
 
-        const Broadcast *broadcast = delta.as<Broadcast>();
-        const Add *add = delta.as<Add>();
-        const Sub *sub = delta.as<Sub>();
-        const Mul *mul = delta.as<Mul>();
-        const Select *sel = delta.as<Select>();
-
-        Expr zero = make_zero(delta.type());
-
-        if (is_zero(delta)) {
-            return const_true(op->type.lanes());
-        } else if (is_const(delta)) {
-            bool t = true;
-            bool f = true;
-            for (int i = 0; i < delta.type().lanes(); i++) {
-                Expr deltai = extract_lane(delta, i);
-                if (is_zero(deltai)) {
-                    f = false;
-                } else {
-                    t = false;
-                }
-            }
-            if (t) {
-                return const_true(op->type.lanes());
-            } else if (f) {
-                return const_false(op->type.lanes());
-            }
-        } else if (no_overflow_scalar_int(delta.type())) {
-            // Attempt to disprove using modulus remainder analysis
+        // Attempt to disprove using modulus remainder analysis
+        if (no_overflow_scalar_int(delta.type())) {
             ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
             if (mod_rem.remainder) {
                 return const_false();
+            }            
+        }
+        
+        auto rewrite = IRMatcher::rewriter(delta);
+
+        // We're rewriting based on the difference between the LHS and
+        // the RHS, so there's an implicit == 0 on the LHS of the
+        // rules below.
+        if (rewrite(c0, fold(c0 == 0)) ||
+            rewrite(x + c0, x == fold(-c0)) ||
+            rewrite(c0 - x, x == c0)) {
+            return rewrite.result;
+        }
+
+        if (rewrite(broadcast(x), broadcast(x == 0, lanes)) ||
+            (no_overflow(delta.type()) && rewrite(x * y, (x == 0) || (y == 0))) ||
+            rewrite(select(x, 0, y), x || (y == 0)) ||
+            rewrite(select(x, c0, y), !x && (y == 0)) ||
+            rewrite(select(x, y, 0), !x || (y == 0)) ||
+            rewrite(select(x, y, c0), x && (y == 0))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (const Sub *s = delta.as<Sub>()) {
+            if (s->a.same_as(op->a) && s->b.same_as(op->b)) {
+                return op;
+            } else {
+                return EQ::make(s->a, s->b);
             }
         }
 
-        if (broadcast) {
-            // Push broadcasts outwards
-            return Broadcast::make(mutate(broadcast->value ==
-                                          make_zero(broadcast->value.type()), bounds),
-                                   broadcast->lanes);
-        } else if (add && is_const(add->b)) {
-            // x + const = 0 -> x = -const
-            return (add->a == mutate(make_zero(delta.type()) - add->b, nullptr));
-        } else if (sub) {
-            if (is_const(sub->a)) {
-                // const - x == 0 -> x == const
-                return sub->b == sub->a;
-            } else if (sub->a.same_as(op->a) && sub->b.same_as(op->b)) {
-                return op;
-            } else {
-                // x - y == 0 -> x == y
-                return (sub->a == sub->b);
-            }
-        } else if (mul &&
-                   no_overflow(mul->type)) {
-            // Restrict to int32 and greater, because, e.g. 64 * 4 == 0 as a uint8.
-            return mutate(mul->a == zero || mul->b == zero, bounds);
-        } else if (sel && is_zero(sel->true_value)) {
-            // select(c, 0, f) == 0 -> c || (f == 0)
-            return mutate(sel->condition || (sel->false_value == zero), bounds);
-        } else if (sel &&
-                   (is_positive_const(sel->true_value) || is_negative_const(sel->true_value))) {
-            // select(c, 4, f) == 0 -> !c && (f == 0)
-            return mutate((!sel->condition) && (sel->false_value == zero), bounds);
-        } else if (sel && is_zero(sel->false_value)) {
-            // select(c, t, 0) == 0 -> !c || (t == 0)
-            return mutate((!sel->condition) || (sel->true_value == zero), bounds);
-        } else if (sel &&
-                   (is_positive_const(sel->false_value) || is_negative_const(sel->false_value))) {
-            // select(c, t, 4) == 0 -> c && (t == 0)
-            return mutate((sel->condition) && (sel->true_value == zero), bounds);
-        } else {
-            return (delta == make_zero(delta.type()));
-        }
+        return delta == make_zero(op->a.type());
     }
 
     Expr visit(const NE *op, ConstBounds *bounds) {
@@ -1574,7 +1539,7 @@ public:
             }
         }
 
-        return mutate(Not::make(op->a == op->b), bounds);
+        return mutate(Not::make(EQ::make(op->a, op->b)), bounds);
     }
 
     Expr visit(const LT *op, ConstBounds *bounds) {

@@ -2077,8 +2077,8 @@ struct Rewriter {
 
 template<typename Instance>
 HALIDE_ALWAYS_INLINE
-Rewriter<Instance> rewriter(Instance &&instance) noexcept {
-    return Rewriter<Instance>(std::forward<Instance>(instance));
+auto rewriter(Instance &&instance) noexcept -> Rewriter<decltype(pattern_arg(std::forward<Instance>(instance)))> {
+    return {pattern_arg(std::forward<Instance>(instance))};
 }
 }
 
