@@ -1479,7 +1479,7 @@ public:
         ConstBounds delta_bounds;
         Expr delta = mutate(op->a - op->b, &delta_bounds);
         const int lanes = op->type.lanes();
-        
+
         // Attempt to disprove using bounds analysis
         if (delta_bounds.min_defined && delta_bounds.min > 0) {
             return const_false(lanes);
@@ -1494,9 +1494,9 @@ public:
             ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
             if (mod_rem.remainder) {
                 return const_false();
-            }            
+            }
         }
-        
+
         auto rewrite = IRMatcher::rewriter(delta);
 
         // We're rewriting based on the difference between the LHS and
@@ -1543,313 +1543,271 @@ public:
     }
 
     Expr visit(const LT *op, ConstBounds *bounds) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
+        ConstBounds a_bounds, b_bounds;
+        Expr a = mutate(op->a, &a_bounds);
+        Expr b = mutate(op->b, &b_bounds);
 
-        if (may_simplify(op->a.type())) {
+        const int lanes = op->type.lanes();
+        Type ty = a.type();
 
-            ConstBounds delta_bounds;
-            Expr delta = mutate(a - b, &delta_bounds);
+        if (may_simplify(ty)) {
 
-            if (delta_bounds.min_defined && delta_bounds.min >= 0) {
-                return const_false(op->type.lanes());
-            }
-            if (delta_bounds.max_defined && delta_bounds.max < 0) {
-                return const_true(op->type.lanes());
-            }
-
-            const Ramp *ramp_a = a.as<Ramp>();
-            const Ramp *ramp_b = b.as<Ramp>();
-            const Ramp *delta_ramp = delta.as<Ramp>();
-            const Broadcast *broadcast_a = a.as<Broadcast>();
-            const Broadcast *broadcast_b = b.as<Broadcast>();
-            const Add *add_a = a.as<Add>();
-            const Add *add_b = b.as<Add>();
-            const Sub *sub_a = a.as<Sub>();
-            const Sub *sub_b = b.as<Sub>();
-            const Mul *mul_a = a.as<Mul>();
-            const Mul *mul_b = b.as<Mul>();
-            const Div *div_a = a.as<Div>();
-            const Div *div_b = b.as<Div>();
-            const Min *min_a = a.as<Min>();
-            const Min *min_b = b.as<Min>();
-            const Max *max_a = a.as<Max>();
-            const Max *max_b = b.as<Max>();
-            const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
-            const Add *add_a_a_a = div_a_a ? div_a_a->a.as<Add>() : nullptr;
-
-            int64_t ia = 0, ib = 0, ic = 0;
-            uint64_t ua = 0, ub = 0;
-            double fa, fb;
-
-            ModulusRemainder mod_rem(0, 1);
-            if (delta_ramp &&
-                no_overflow_scalar_int(delta_ramp->base.type())) {
-                // Do modulus remainder analysis on the base.
-                mod_rem = modulus_remainder(delta_ramp->base, alignment_info);
+            // Prove or disprove using bounds analysis
+            if (a_bounds.max_defined && b_bounds.min_defined && a_bounds.max < b_bounds.min) {
+                return const_true(lanes);
             }
 
-            // Note that the computation of delta could be incorrect if
-            // ia and/or ib are large unsigned integer constants, especially when
-            // int is 32 bits on the machine.
-            // Explicit comparison is preferred.
-            if (const_int(a, &ia) &&
-                const_int(b, &ib)) {
-                return make_bool(ia < ib, op->type.lanes());
-            } else if (const_uint(a, &ua) &&
-                       const_uint(b, &ub)) {
-                return make_bool(ua < ub, op->type.lanes());
-            } else if (const_float(a, &fa) &&
-                       const_float(b, &fb)) {
-                return make_bool(fa < fb, op->type.lanes());
-            } else if (const_int(a, &ia) &&
-                       a.type().is_max(ia)) {
-                // Comparing maximum of type < expression of type.  This can never be true.
-                return const_false(op->type.lanes());
-            } else if (const_int(b, &ib) &&
-                       b.type().is_min(ib)) {
-                // Comparing expression of type < minimum of type.  This can never be true.
-                return const_false(op->type.lanes());
-            } else if (broadcast_a &&
-                       broadcast_b) {
-                // Push broadcasts outwards
-                return mutate(Broadcast::make(broadcast_a->value < broadcast_b->value, broadcast_a->lanes), bounds);
+            if (a_bounds.min_defined && b_bounds.max_defined && a_bounds.min >= b_bounds.max) {
+                return const_false(lanes);
             }
 
-            if (no_overflow(delta.type())) {
-                if (ramp_a &&
-                    ramp_b &&
-                    equal(ramp_a->stride, ramp_b->stride)) {
-                    // Ramps with matching stride
-                    Expr bases_lt = (ramp_a->base < ramp_b->base);
-                    return mutate(Broadcast::make(bases_lt, ramp_a->lanes), bounds);
-                } else if (add_a &&
-                           add_b &&
-                           equal(add_a->a, add_b->a)) {
-                    // Subtract a term from both sides
-                    return mutate(add_a->b < add_b->b, bounds);
-                } else if (add_a &&
-                           add_b &&
-                           equal(add_a->a, add_b->b)) {
-                    return mutate(add_a->b < add_b->a, bounds);
-                } else if (add_a &&
-                           add_b &&
-                           equal(add_a->b, add_b->a)) {
-                    return mutate(add_a->a < add_b->b, bounds);
-                } else if (add_a &&
-                           add_b &&
-                           equal(add_a->b, add_b->b)) {
-                    return mutate(add_a->a < add_b->a, bounds);
-                } else if (sub_a &&
-                           sub_b &&
-                           equal(sub_a->a, sub_b->a)) {
-                    // Add a term to both sides and negate.
-                    return mutate(sub_b->b < sub_a->b, bounds);
-                } else if (sub_a &&
-                           sub_b &&
-                           equal(sub_a->b, sub_b->b)) {
-                    return mutate(sub_a->a < sub_b->a, bounds);
-                } else if (add_a) {
-                    // Rearrange so that all adds and subs are on the rhs to cut down on further cases
-                    return mutate(add_a->a < (b - add_a->b), bounds);
-                } else if (sub_a) {
-                    return mutate(sub_a->a < (b + sub_a->b), bounds);
-                } else if (add_b &&
-                           equal(add_b->a, a)) {
-                    // Subtract a term from both sides
-                    return mutate(make_zero(add_b->b.type()) < add_b->b, bounds);
-                } else if (add_b &&
-                           equal(add_b->b, a)) {
-                    return mutate(make_zero(add_b->a.type()) < add_b->a, bounds);
-                } else if (add_b &&
-                           is_simple_const(a) &&
-                           is_simple_const(add_b->b)) {
-                    // a < x + b -> (a - b) < x
-                    return mutate((a - add_b->b) < add_b->a, bounds);
-                } else if (sub_b &&
-                           equal(sub_b->a, a)) {
-                    // Subtract a term from both sides
-                    return mutate(sub_b->b < make_zero(sub_b->b.type()), bounds);
-                } else if (sub_b &&
-                           is_const(a) &&
-                           is_const(sub_b->a) &&
-                           !is_const(sub_b->b)) {
-                    // (c1 < c2 - x) -> (x < c2 - c1)
-                    return mutate(sub_b->b < (sub_b->a - a), bounds);
-                } else if (mul_a &&
-                           mul_b &&
-                           is_positive_const(mul_a->b) &&
-                           is_positive_const(mul_b->b) &&
-                           equal(mul_a->b, mul_b->b)) {
-                    // Divide both sides by a constant
-                    return mutate(mul_a->a < mul_b->a, bounds);
-                } else if (mul_a &&
-                           is_positive_const(mul_a->b) &&
-                           is_const(b)) {
-                    if (mul_a->type.is_int()) {
-                        // (a * c1 < c2) <=> (a < (c2 - 1) / c1 + 1)
-                        return mutate(mul_a->a < (((b - 1) / mul_a->b) + 1), bounds);
-                    } else {
-                        // (a * c1 < c2) <=> (a < c2 / c1)
-                        return mutate(mul_a->a < (b / mul_a->b), bounds);
-                    }
-                } else if (mul_b &&
-                           is_positive_const(mul_b->b) &&
-                           is_simple_const(mul_b->b) &&
-                           is_simple_const(a)) {
-                    // (c1 < b * c2) <=> ((c1 / c2) < b)
-                    return mutate((a / mul_b->b) < mul_b->a, bounds);
-                } else if (a.type().is_int() &&
-                           div_a &&
-                           is_positive_const(div_a->b) &&
-                           is_const(b)) {
-                    // a / c1 < c2 <=> a < c1*c2
-                    return mutate(div_a->a < (div_a->b * b), bounds);
-                } else if (a.type().is_int() &&
-                           div_b &&
-                           is_positive_const(div_b->b) &&
-                           is_const(a)) {
-                    // c1 < b / c2 <=> (c1+1)*c2-1 < b
-                    Expr one = make_one(a.type());
-                    return mutate((a + one)*div_b->b - one < div_b->a, bounds);
-                } else if (min_a) {
-                    // (min(a, b) < c) <=> (a < c || b < c)
-                    // See if that would simplify usefully:
-                    Expr lt_a = mutate(min_a->a < b, nullptr);
-                    Expr lt_b = mutate(min_a->b < b, nullptr);
-                    if (is_const(lt_a) || is_const(lt_b)) {
-                        return mutate(lt_a || lt_b, bounds);
-                    } else if (a.same_as(op->a) && b.same_as(op->b)) {
-                        return op;
-                    } else {
-                        return LT::make(a, b);
-                    }
-                } else if (max_a) {
-                    // (max(a, b) < c) <=> (a < c && b < c)
-                    Expr lt_a = mutate(max_a->a < b, nullptr);
-                    Expr lt_b = mutate(max_a->b < b, nullptr);
-                    if (is_const(lt_a) || is_const(lt_b)) {
-                        return mutate(lt_a && lt_b, bounds);
-                    } else if (a.same_as(op->a) && b.same_as(op->b)) {
-                        return op;
-                    } else {
-                        return LT::make(a, b);
-                    }
-                } else if (min_b) {
-                    // (a < min(b, c)) <=> (a < b && a < c)
-                    Expr lt_a = mutate(a < min_b->a, nullptr);
-                    Expr lt_b = mutate(a < min_b->b, nullptr);
-                    if (is_const(lt_a) || is_const(lt_b)) {
-                        return mutate(lt_a && lt_b, bounds);
-                    } else if (a.same_as(op->a) && b.same_as(op->b)) {
-                        return op;
-                    } else {
-                        return LT::make(a, b);
-                    }
-                } else if (max_b) {
-                    // (a < max(b, c)) <=> (a < b || a < c)
-                    Expr lt_a = mutate(a < max_b->a, nullptr);
-                    Expr lt_b = mutate(a < max_b->b, nullptr);
-                    if (is_const(lt_a) || is_const(lt_b)) {
-                        return mutate(lt_a || lt_b, bounds);
-                    } else if (a.same_as(op->a) && b.same_as(op->b)) {
-                        return op;
-                    } else {
-                        return LT::make(a, b);
-                    }
-                } else if (mul_a &&
-                           div_a_a &&
-                           const_int(div_a_a->b, &ia) &&
-                           const_int(mul_a->b, &ib) &&
-                           ia > 0 &&
-                           ia == ib &&
-                           equal(div_a_a->a, b)) {
-                    // subtract (x/c1)*c1 from both sides
-                    // (x/c1)*c1 < x -> 0 < x % c1
-                    return mutate(0 < b % make_const(a.type(), ia), bounds);
-                } else if (mul_a &&
-                           div_a_a &&
-                           add_b &&
-                           const_int(div_a_a->b, &ia) &&
-                           const_int(mul_a->b, &ib) &&
-                           ia > 0 &&
-                           ia == ib &&
-                           equal(div_a_a->a, add_b->a)) {
-                    // subtract (x/c1)*c1 from both sides
-                    // (x/c1)*c1 < x + y -> 0 < x % c1 + y
-                    return mutate(0 < add_b->a % div_a_a->b + add_b->b, bounds);
-                } else if (mul_a &&
-                           div_a_a &&
-                           sub_b &&
-                           const_int(div_a_a->b, &ia) &&
-                           const_int(mul_a->b, &ib) &&
-                           ia > 0 &&
-                           ia == ib &&
-                           equal(div_a_a->a, sub_b->a)) {
-                    // subtract (x/c1)*c1 from both sides
-                    // (x/c1)*c1 < x - y -> y < x % c1
-                    return mutate(sub_b->b < sub_b->a % div_a_a->b, bounds);
-                } else if (mul_a &&
-                           div_a_a &&
-                           add_a_a_a &&
-                           const_int(div_a_a->b, &ia) &&
-                           const_int(mul_a->b, &ib) &&
-                           const_int(add_a_a_a->b, &ic) &&
-                           ia > 0 &&
-                           ia == ib &&
-                           equal(add_a_a_a->a, b)) {
-                    // subtract ((x+c2)/c1)*c1 from both sides
-                    // ((x+c2)/c1)*c1 < x -> c2 < (x+c2) % c1
-                    return mutate(add_a_a_a->b < div_a_a->a % div_a_a->b, bounds);
-                } else if (mul_a &&
-                           div_a_a &&
-                           add_b &&
-                           add_a_a_a &&
-                           const_int(div_a_a->b, &ia) &&
-                           const_int(mul_a->b, &ib) &&
-                           const_int(add_a_a_a->b, &ic) &&
-                           ia > 0 &&
-                           ia == ib &&
-                           equal(add_a_a_a->a, add_b->a)) {
-                    // subtract ((x+c2)/c1)*c1 from both sides
-                    // ((x+c2)/c1)*c1 < x + y -> c2 < (x+c2) % c1 + y
-                    return mutate(add_a_a_a->b < div_a_a->a % div_a_a->b + add_b->b, bounds);
-                } else if (mul_a &&
-                           div_a_a &&
-                           add_a_a_a &&
-                           sub_b &&
-                           const_int(div_a_a->b, &ia) &&
-                           const_int(mul_a->b, &ib) &&
-                           const_int(add_a_a_a->b, &ic) &&
-                           ia > 0 &&
-                           ia == ib &&
-                           equal(add_a_a_a->a, sub_b->a)) {
-                    // subtract ((x+c2)/c1)*c1 from both sides
-                    // ((x+c2)/c1)*c1 < x - y -> y < (x+c2) % c1 + (-c2)
-                    return mutate(sub_b->b < div_a_a->a % div_a_a->b + make_const(a.type(), -ic), bounds);
-                } else if (delta_ramp &&
-                           is_positive_const(delta_ramp->stride) &&
-                           is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) < 0, nullptr))) {
-                    return const_true(delta_ramp->lanes);
-                } else if (delta_ramp &&
-                           is_positive_const(delta_ramp->stride) &&
-                           is_one(mutate(delta_ramp->base >= 0, nullptr))) {
-                    return const_false(delta_ramp->lanes);
-                } else if (delta_ramp &&
-                           is_negative_const(delta_ramp->stride) &&
-                           is_one(mutate(delta_ramp->base < 0, nullptr))) {
-                    return const_true(delta_ramp->lanes);
-                } else if (delta_ramp &&
-                           is_negative_const(delta_ramp->stride) &&
-                           is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) >= 0, nullptr))) {
-                    return const_false(delta_ramp->lanes);
-                } else if (delta_ramp && mod_rem.modulus > 0 &&
-                           const_int(delta_ramp->stride, &ia) &&
-                           0 <= ia * (delta_ramp->lanes - 1) + mod_rem.remainder &&
-                           ia * (delta_ramp->lanes - 1) + mod_rem.remainder < mod_rem.modulus) {
-                    // ramp(x, a, b) < 0 -> broadcast(x < 0, b)
-                    return Broadcast::make(mutate(LT::make(delta_ramp->base / mod_rem.modulus, 0), bounds), delta_ramp->lanes);
-                }
+            auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b));
+
+            auto t = IRMatcher::Const(1, op->type);
+            auto f = IRMatcher::Const(0, op->type);
+
+            // TODO: check we have coverage of all the Sub patterns here. For many it should be simpler (e.g. we can multiply things out)
+            if (rewrite(c0 < c1, fold(c0 < c1)) ||
+                rewrite(x < x, f) ||
+                rewrite(x < ty.min(), f) ||
+                rewrite(ty.max() < x, f) ||
+
+                rewrite(max(x, y) < x, f) ||
+                rewrite(max(y, x) < x, f) ||
+                rewrite(x < min(x, y), f) ||
+                rewrite(y < min(y, x), f) ||
+
+                // Comparisons of ramps and broadcasts. If the first
+                // and last lanes are provably < or >= the broadcast
+                // we can collapse the comparison.
+                rewrite(ramp(x, c1) < broadcast(z), t, can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
+                rewrite(ramp(x, c1) < broadcast(z), f, can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
+                rewrite(broadcast(z) < ramp(x, c1), t, can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
+                rewrite(broadcast(z) < ramp(x, c1), f, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))) {
+                return rewrite.result;
+            }
+
+            if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
+                (no_overflow(ty) &&
+                 (rewrite(ramp(x, y) < ramp(z, y), x < z) ||
+                  // Move constants to the RHS
+                  rewrite(x + c0 < y, x < y + fold(-c0)) ||
+
+                  // Merge RHS constant additions with a constant LHS
+                  rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
+
+                  // Normalize subtractions to additions to cut down on cases to consider
+                  rewrite(x - y < z, x < z + y) ||
+                  rewrite(z < x - y, z + y < x) ||
+
+                  rewrite((x - y) + z < w, x + z < y + w) ||
+                  rewrite(z + (x - y) < w, x + z < y + w) ||
+                  rewrite(w < (x - y) + z, w + y < x + z) ||
+                  rewrite(w < z + (x - y), w + y < x + z) ||
+
+                  rewrite(((x - y) + z) + u < w, x + z + u < w + y) ||
+                  rewrite((z + (x - y)) + u < w, x + z + u < w + y) ||
+                  rewrite(u + ((x - y) + z) < w, x + z + u < w + y) ||
+                  rewrite(u + (z + (x - y)) < w, x + z + u < w + y) ||
+
+                  rewrite(w < ((x - y) + z) + u, w + y < x + z + u) ||
+                  rewrite(w < (z + (x - y)) + u, w + y < x + z + u) ||
+                  rewrite(w < u + ((x - y) + z), w + y < x + z + u) ||
+                  rewrite(w < u + (z + (x - y)), w + y < x + z + u) ||
+
+                  // Cancellations in linear expressions
+                  // 1 < 2
+                  rewrite(x < x + y, 0 < y) ||
+
+                  // 2 < 1
+                  rewrite(x + y < x, y < 0) ||
+
+                  // 2 < 2
+                  rewrite(x + y < x + z, y < z) ||
+                  rewrite(x + y < z + x, y < z) ||
+                  rewrite(y + x < x + z, y < z) ||
+                  rewrite(y + x < z + x, y < z) ||
+
+                  // 3 < 2
+                  rewrite((x + y) + w < x + z, y + w < z) ||
+                  rewrite((y + x) + w < x + z, y + w < z) ||
+                  rewrite(w + (x + y) < x + z, y + w < z) ||
+                  rewrite(w + (y + x) < x + z, y + w < z) ||
+                  rewrite((x + y) + w < z + x, y + w < z) ||
+                  rewrite((y + x) + w < z + x, y + w < z) ||
+                  rewrite(w + (x + y) < z + x, y + w < z) ||
+                  rewrite(w + (y + x) < z + x, y + w < z) ||
+
+                  // 2 < 3
+                  rewrite(x + z < (x + y) + w, z < y + w) ||
+                  rewrite(x + z < (y + x) + w, z < y + w) ||
+                  rewrite(x + z < w + (x + y), z < y + w) ||
+                  rewrite(x + z < w + (y + x), z < y + w) ||
+                  rewrite(z + x < (x + y) + w, z < y + w) ||
+                  rewrite(z + x < (y + x) + w, z < y + w) ||
+                  rewrite(z + x < w + (x + y), z < y + w) ||
+                  rewrite(z + x < w + (y + x), z < y + w) ||
+
+                  // 3 < 3
+                  rewrite((x + y) + w < (x + z) + u, y + w < z + u) ||
+                  rewrite((y + x) + w < (x + z) + u, y + w < z + u) ||
+                  rewrite((x + y) + w < (z + x) + u, y + w < z + u) ||
+                  rewrite((y + x) + w < (z + x) + u, y + w < z + u) ||
+                  rewrite(w + (x + y) < (x + z) + u, y + w < z + u) ||
+                  rewrite(w + (y + x) < (x + z) + u, y + w < z + u) ||
+                  rewrite(w + (x + y) < (z + x) + u, y + w < z + u) ||
+                  rewrite(w + (y + x) < (z + x) + u, y + w < z + u) ||
+                  rewrite((x + y) + w < u + (x + z), y + w < z + u) ||
+                  rewrite((y + x) + w < u + (x + z), y + w < z + u) ||
+                  rewrite((x + y) + w < u + (z + x), y + w < z + u) ||
+                  rewrite((y + x) + w < u + (z + x), y + w < z + u) ||
+                  rewrite(w + (x + y) < u + (x + z), y + w < z + u) ||
+                  rewrite(w + (y + x) < u + (x + z), y + w < z + u) ||
+                  rewrite(w + (x + y) < u + (z + x), y + w < z + u) ||
+                  rewrite(w + (y + x) < u + (z + x), y + w < z + u) ||
+
+                  // Cancel a multiplication
+                  rewrite(x * c0 < y * c0, x < y, c0 > 0) ||
+                  rewrite(x * c0 < y * c0, y < x, c0 < 0) ||
+
+                  (ty.is_int()   && rewrite(x * c0 < c1, x < fold((c1 + c0 - 1) / c0), c0 > 0)) ||
+                  (ty.is_float() && rewrite(x * c0 < c1, x < fold(c1 / c0), c0 > 0)) ||
+                  rewrite(c1 < x * c0, fold(c1 / c0) < x, c0 > 0) ||
+
+                  // Multiply-out a division
+                  rewrite(x / c0 < c1, x < c1 * c0, c0 > 0) ||
+                  (ty.is_int() && rewrite(c0 < x / c1, fold((c0 + 1) * c1 - 1) < x, c0 > 0)) ||
+                  (ty.is_float() && rewrite(c0 < x / c1, fold(c0 * c1) < x, c0 > 0)) ||
+
+                  // We want to break max(x, y) < z into x < z && y <
+                  // z in cases where one of those two terms is going
+                  // to fold.
+                  rewrite(min(x + c0, y) < x + c1, fold(c0 < c1) || y < x + c1) ||
+                  rewrite(min(y, x + c0) < x + c1, fold(c0 < c1) || y < x + c1) ||
+                  rewrite(max(x + c0, y) < x + c1, fold(c0 < c1) && y < x + c1) ||
+                  rewrite(max(y, x + c0) < x + c1, fold(c0 < c1) && y < x + c1) ||
+
+                  rewrite(x < min(x + c0, y) + c1, fold(c0 < c1) && x < y + c1) ||
+                  rewrite(x < min(y, x + c0) + c1, fold(c0 < c1) && x < y + c1) ||
+                  rewrite(x < max(x + c0, y) + c1, fold(c0 < c1) || x < y + c1) ||
+                  rewrite(x < max(y, x + c0) + c1, fold(c0 < c1) || x < y + c1) ||
+
+                  // Special cases where c0 == 0
+                  rewrite(min(x, y) < x + c1, fold(0 < c1) || y < x + c1) ||
+                  rewrite(min(y, x) < x + c1, fold(0 < c1) || y < x + c1) ||
+                  rewrite(max(x, y) < x + c1, fold(0 < c1) && y < x + c1) ||
+                  rewrite(max(y, x) < x + c1, fold(0 < c1) && y < x + c1) ||
+
+                  rewrite(x < min(x, y) + c1, fold(0 < c1) && x < y + c1) ||
+                  rewrite(x < min(y, x) + c1, fold(0 < c1) && x < y + c1) ||
+                  rewrite(x < max(x, y) + c1, fold(0 < c1) || x < y + c1) ||
+                  rewrite(x < max(y, x) + c1, fold(0 < c1) || x < y + c1) ||
+
+                  // Special cases where c1 == 0
+                  rewrite(min(x + c0, y) < x, fold(c0 < 0) || y < x) ||
+                  rewrite(min(y, x + c0) < x, fold(c0 < 0) || y < x) ||
+                  rewrite(max(x + c0, y) < x, fold(c0 < 0) && y < x) ||
+                  rewrite(max(y, x + c0) < x, fold(c0 < 0) && y < x) ||
+
+                  rewrite(x < min(x + c0, y), fold(c0 < 0) && x < y) ||
+                  rewrite(x < min(y, x + c0), fold(c0 < 0) && x < y) ||
+                  rewrite(x < max(x + c0, y), fold(c0 < 0) || x < y) ||
+                  rewrite(x < max(y, x + c0), fold(c0 < 0) || x < y) ||
+
+                  // Special cases where c0 == c1 == 0
+                  rewrite(min(x, y) < x, y < x) ||
+                  rewrite(min(y, x) < x, y < x) ||
+                  rewrite(x < max(x, y), x < y) ||
+                  rewrite(x < max(y, x), x < y) ||
+
+                  // Special case where x is constant
+                  rewrite(min(y, c0) < c1, fold(c0 < c1) || y < c1) ||
+                  rewrite(max(y, c0) < c1, fold(c0 < c1) && y < c1) ||
+                  rewrite(c1 < min(y, c0), fold(c1 < c0) && c1 < y) ||
+                  rewrite(c1 < max(y, c0), fold(c1 < c0) || c1 < y) ||
+
+                  // Normalize comparison of ramps to a comparison of a ramp and a broadacst
+                  rewrite(ramp(x, y) < ramp(z, w), ramp(x - y, z - w, lanes) < 0))) ||
+
+                (no_overflow_int(ty) &&
+                 (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
+                  rewrite(x * c0 < y * c1, x * fold(c0 / c1) < y, c0 % c1 == 0 && c1 > 0) ||
+
+                  // Comparison of stair-step functions. The basic transformation is:
+                  //   ((x + y)/c1)*c1 < x
+                  // = (x + y) - (x + y) % c1 < x (when c1 > 0)
+                  // = y - (x + y) % c1 < 0
+                  // = y < (x + y) % c1
+                  // This cancels x but duplicates y, so we only do it when y is a constant.
+
+                  // A more general version with extra terms w and z
+                  rewrite(((x + c0)/c1)*c1 + w < x + z, (w + c0) < ((x + c0) % c1) + z, c1 > 0) ||
+                  rewrite(w + ((x + c0)/c1)*c1 < x + z, (w + c0) < ((x + c0) % c1) + z, c1 > 0) ||
+                  rewrite(((x + c0)/c1)*c1 + w < z + x, (w + c0) < ((x + c0) % c1) + z, c1 > 0) ||
+                  rewrite(w + ((x + c0)/c1)*c1 < z + x, (w + c0) < ((x + c0) % c1) + z, c1 > 0) ||
+                  rewrite(x + z < ((x + c0)/c1)*c1 + w, ((x + c0) % c1) + z < w + c0, c1 > 0) ||
+                  rewrite(x + z < w + ((x + c0)/c1)*c1, ((x + c0) % c1) + z < w + c0, c1 > 0) ||
+                  rewrite(z + x < ((x + c0)/c1)*c1 + w, ((x + c0) % c1) + z < w + c0, c1 > 0) ||
+                  rewrite(z + x < w + ((x + c0)/c1)*c1, ((x + c0) % c1) + z < w + c0, c1 > 0) ||
+
+                  // w = 0
+                  rewrite(((x + c0)/c1)*c1 < x + z, c0 < ((x + c0) % c1) + z, c1 > 0) ||
+                  rewrite(((x + c0)/c1)*c1 < z + x, c0 < ((x + c0) % c1) + z, c1 > 0) ||
+                  rewrite(x + z < ((x + c0)/c1)*c1, ((x + c0) % c1) + z < c0, c1 > 0) ||
+                  rewrite(z + x < ((x + c0)/c1)*c1, ((x + c0) % c1) + z < c0, c1 > 0) ||
+
+                  // z = 0
+                  rewrite(((x + c0)/c1)*c1 + w < x, (w + c0) < ((x + c0) % c1), c1 > 0) ||
+                  rewrite(w + ((x + c0)/c1)*c1 < x, (w + c0) < ((x + c0) % c1), c1 > 0) ||
+                  rewrite(x < ((x + c0)/c1)*c1 + w, ((x + c0) % c1) < w + c0, c1 > 0) ||
+                  rewrite(x < w + ((x + c0)/c1)*c1, ((x + c0) % c1) < w + c0, c1 > 0) ||
+
+                  // c0 = 0
+                  rewrite((x/c1)*c1 + w < x + z, w < (x % c1) + z, c1 > 0) ||
+                  rewrite(w + (x/c1)*c1 < x + z, w < (x % c1) + z, c1 > 0) ||
+                  rewrite((x/c1)*c1 + w < z + x, w < (x % c1) + z, c1 > 0) ||
+                  rewrite(w + (x/c1)*c1 < z + x, w < (x % c1) + z, c1 > 0) ||
+                  rewrite(x + z < (x/c1)*c1 + w, (x % c1) + z < w, c1 > 0) ||
+                  rewrite(x + z < w + (x/c1)*c1, (x % c1) + z < w, c1 > 0) ||
+                  rewrite(z + x < (x/c1)*c1 + w, (x % c1) + z < w, c1 > 0) ||
+                  rewrite(z + x < w + (x/c1)*c1, (x % c1) + z < w, c1 > 0) ||
+
+                  // w = 0, z = 0
+                  rewrite(((x + c0)/c1)*c1 < x, c0 < ((x + c0) % c1), c1 > 0) ||
+                  rewrite(x < ((x + c0)/c1)*c1, ((x + c0) % c1) < c0, c1 > 0) ||
+
+                  // w = 0, c0 = 0
+                  rewrite((x/c1)*c1 < x + z, 0 < (x % c1) + z, c1 > 0) ||
+                  rewrite((x/c1)*c1 < z + x, 0 < (x % c1) + z, c1 > 0) ||
+                  rewrite(x + z < (x/c1)*c1, (x % c1) + z < 0, c1 > 0) ||
+                  rewrite(z + x < (x/c1)*c1, (x % c1) + z < 0, c1 > 0) ||
+
+                  // z = 0, c0 = 0
+                  rewrite((x/c1)*c1 + w < x, w < (x % c1), c1 > 0) ||
+                  rewrite(w + (x/c1)*c1 < x, w < (x % c1), c1 > 0) ||
+                  rewrite(x < (x/c1)*c1 + w, (x % c1) < w, c1 > 0) ||
+                  rewrite(x < w + (x/c1)*c1, (x % c1) < w, c1 > 0) ||
+
+                  // z = 0, c0 = 0, w = 0
+                  rewrite((x/c1)*c1 < x, (x % c1) != 0, c1 > 0) ||
+                  rewrite(x < (x/c1)*c1, f, c1 > 0) ||
+
+                  // Comparison of aligned ramps can simplify to a comparison of the base
+                  rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
+                          broadcast(x * fold(c3/c0) + fold(c2/c0) < z, lanes),
+                          c0 > 0 && (c3 % c0 == 0) &&
+                          (c2 % c0) + c1 * (lanes - 1) < c0 &&
+                          (c2 % c0) + c1 * (lanes - 1) >= 0) ||
+                  // c2 = 0
+                  rewrite(ramp(x * c3, c1) < broadcast(z * c0),
+                          broadcast(x * fold(c3/c0) < z, lanes),
+                          c0 > 0 && (c3 % c0 == 0) &&
+                          c1 * (lanes - 1) < c0 &&
+                          c1 * (lanes - 1) >= 0)))) {
+
+
+
+                return mutate(std::move(rewrite.result), bounds);
             }
         }
 

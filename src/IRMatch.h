@@ -1998,6 +1998,7 @@ bool evaluate_predicate(Pattern &&p, MatcherState & __restrict__ state) {
 }
 
 #define HALIDE_DEBUG_MATCHED_RULES 0
+#define HALIDE_DEBUG_UNMATCHED_RULES 0
 
 template<typename Instance>
 struct Rewriter {
@@ -2020,6 +2021,7 @@ struct Rewriter {
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             return true;
         } else {
+            if (HALIDE_DEBUG_UNMATCHED_RULES) debug(0) << instance << " does not match " << before << "\n";
             return false;
         }
     }
@@ -2034,6 +2036,7 @@ struct Rewriter {
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             return true;
         } else {
+            if (HALIDE_DEBUG_UNMATCHED_RULES) debug(0) << instance << " does not match " << before << "\n";
             return false;
         }
     }
@@ -2053,6 +2056,7 @@ struct Rewriter {
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
         } else {
+            if (HALIDE_DEBUG_UNMATCHED_RULES) debug(0) << instance << " does not match " << before << "\n";
             return false;
         }
     }
@@ -2070,6 +2074,7 @@ struct Rewriter {
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
         } else {
+            if (HALIDE_DEBUG_UNMATCHED_RULES) debug(0) << instance << " does not match " << before << "\n";
             return false;
         }
     }

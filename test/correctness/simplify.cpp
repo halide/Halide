@@ -191,7 +191,7 @@ void check_algebra() {
     check((x/8)*8 - x, -(x % 8));
     check((x/8)*8 < x + y, 0 < x%8 + y);
     check((x/8)*8 < x - y, y < x%8);
-    check((x/8)*8 < x, 0 < x%8);
+    check((x/8)*8 < x, x%8 != 0);
     check(((x+3)/8)*8 < x + y, 3 < (x+3)%8 + y);
     check(((x+3)/8)*8 < x - y, y < (x+3)%8 + (-3));
     check(((x+3)/8)*8 < x, 3 < (x+3)%8);
@@ -1564,11 +1564,9 @@ int main(int argc, char **argv) {
         check(e, e);
     }
 
-    // These expressions are used to cause infinite recursion.
+    // This expression used to cause infinite recursion.
     check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
           Broadcast::make(-15, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2)));
-    check((ramp(-71, 39, 2)/Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2))) >= Broadcast::make(23, 2),
-          (Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2)) * Broadcast::make(23, 2)) <= ramp(-71, 39, 2));
 
     {
         // Verify that integer types passed to min() and max() are coerced to match
