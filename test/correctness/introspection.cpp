@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
     // TODO:
     check(&(obj->inner.i_array[10]), "int", "inner.i_array[10]", __FILE__, __LINE__);
     check(&(obj->inner2_array[4].a[2]), "int", "inner2_array[4].a[2]", __FILE__, __LINE__);
-    check(&(obj->inner.i_array), "int \\[20\\]", "inner.i_array", __FILE__, __LINE__);
+    check(&(obj->inner.i_array), "int .20.", "inner.i_array", __FILE__, __LINE__);
     Halide::Internal::Introspection::deregister_heap_object(obj, sizeof(HeapObject));
     delete obj;
 
