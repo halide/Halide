@@ -59,7 +59,7 @@ public:
      */
     // @{
     template <typename... Args>
-    NO_INLINE Expr operator()(Args&&... args) const {
+    HALIDE_NO_USER_CODE_INLINE Expr operator()(Args&&... args) const {
         return func(std::forward<Args>(args)...);
     }
     Expr operator()(std::vector<Expr>) const;
@@ -131,6 +131,9 @@ public:
 
     /** Trace all loads from this ImageParam by emitting calls to halide_trace. */
     void trace_loads();
+
+    /** Add a trace tag to this ImageParam's Func. */
+    ImageParam &add_trace_tag(const std::string &trace_tag);
 };
 
 }

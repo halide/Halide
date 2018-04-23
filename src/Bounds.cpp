@@ -840,7 +840,8 @@ private:
                 interval.max = Interval::pos_inf;
             }
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
+                   op->is_intrinsic(Call::likely_if_innermost) ||
+                   op->is_intrinsic(Call::strict_float)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -891,6 +892,12 @@ private:
             // loop to check perfect nesting.
             interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
                                 Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
+        } else if (op->is_intrinsic(Call::popcount) ||
+                   op->is_intrinsic(Call::count_leading_zeros) ||
+                   op->is_intrinsic(Call::count_trailing_zeros)) {
+            internal_assert(op->args.size() == 1);
+            interval = Interval(make_zero(op->type),
+                                make_const(op->type, op->args[0].type().bits()));
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
@@ -1603,7 +1610,8 @@ private:
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost))) {
+                             call->is_intrinsic(Call::likely_if_innermost) ||
+                             call->is_intrinsic(Call::strict_float))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();

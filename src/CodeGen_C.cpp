@@ -218,14 +218,16 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                << "// Metadata describing the arguments to the generated function.\n"
                << "// Used to construct calls to the _argv version of the function.\n"
                << "struct halide_filter_metadata_t;\n"
-               << "\n"
-               << "// The legacy buffer type. Do not use in new code.\n"
-               << "struct buffer_t;\n"
                << "\n";
         // We just forward declared the following types:
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
-        forward_declared.insert(type_of<buffer_t *>().handle_type);
+        if (t.has_feature(Target::LegacyBufferWrappers)) {
+            stream << "// The legacy buffer type. Do not use in new code.\n"
+                   << "struct buffer_t;\n"
+                   << "\n";
+            forward_declared.insert(type_of<buffer_t *>().handle_type);
+        }
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -2137,6 +2139,10 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        internal_assert(op->args.size() == 1);
+        string arg0 = print_expr(op->args[0]);
+        rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';

@@ -48,7 +48,7 @@ public:
     //@}
 
     /** Construct a Tuple from a vector of Exprs */
-    explicit NO_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
+    explicit HALIDE_NO_USER_CODE_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
         user_assert(e.size() > 0) << "Tuples must have at least one element\n";
     }
 
