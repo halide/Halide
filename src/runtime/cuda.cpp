@@ -104,7 +104,8 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
 
-    if (context == NULL) {
+    CUcontext local_val = context;
+    if (local_val == NULL) {
         if (!create) {
             *ctx = NULL;
             return 0;
@@ -112,13 +113,15 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 
         {
             ScopedSpinLock spinlock(&context_lock);
-            if (context == NULL) {
+            local_val = context;
+            if (local_val == NULL) {
+                CUcontext local_val;
                 CUresult error = create_cuda_context(user_context, &local_val);
                 if (error != CUDA_SUCCESS) {
                     return error;
                 }
-                context = local_val;
             }
+            context = local_val;
         }  // spinlock
     }
 
