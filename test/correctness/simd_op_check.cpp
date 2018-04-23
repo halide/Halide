@@ -1440,6 +1440,7 @@ struct Test {
         }
 
         bool is_v62 = target.has_feature(Target::HVX_v62);
+        bool is_v65 = target.has_feature(Target::HVX_v65);
 
         // Verify that unaligned loads use the right instructions, and don't try to use
         // immediates of more than 3 bits.
@@ -1554,6 +1555,10 @@ struct Test {
         check("vnavg(v*.ub,v*.ub)", hvx_width/1, i8_sat((i16(u8_1) - i16(u8_2))/2));
         check("vnavg(v*.h,v*.h)", hvx_width/2, i16_sat((i32(i16_1) - i32(i16_2))/2));
         check("vnavg(v*.w,v*.w)", hvx_width/4, i32_sat((i64(i32_1) - i64(i32_2))/2));
+        if (is_v65) {
+            check("vavg(v*.b,v*.b)", hvx_width/1, i8((i16(i8_1) + i16(i8_2))/2));
+            check("vavg(v*.uw,v*.uw)", hvx_width/4, u32((u64(u32_1) + u64(u32_2))/2));
+        }
 
         // The behavior of shifts larger than the type behave differently
         // on HVX vs. the scalar processor, so we clamp.
@@ -1783,6 +1788,9 @@ struct Test {
 
         check("vabs(v*.h)", hvx_width/2, abs(i16_1));
         check("vabs(v*.w)", hvx_width/4, abs(i32_1));
+        if (is_v65) {
+            check("vabs(v*.b)", hvx_width/1, abs(i8_1));
+        }
 
         check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_2));
         check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));
@@ -1837,6 +1845,11 @@ struct Test {
         check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
         check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(i8_1) * i16(u8_2));
         check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
+
+        if(is_v65) {
+           check("v*.w += vmpy(v*.h, r*.h)", hvx_width/1, i32_1 + i32(i16_1)*32767);
+           check("v*.w += vmpy(v*.h, r*.h)", hvx_width/1, i32_1 + 32767*i32(i16_1));
+        }
 
         check("v*.uh += vmpy(v*.ub,r*.ub)", hvx_width/1, u16_1 + u16(u8_1) * 255);
         check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 + i16(u8_1) * 127);
@@ -1947,6 +1960,14 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 << (y % 32)));
         check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 >> (y % 32)));
+
+        if(is_v65) {
+           check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 << i16(y % 16)));
+           check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 >> i16(y % 16)));
+           check("v*.h += vasl(v*.h,r*)", hvx_width/2, u16_1 + (u16_2 * 16));
+           check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 * 16));
+           check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 / 16));
+        }
 
         check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
         check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));

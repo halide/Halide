@@ -493,6 +493,9 @@ void CodeGen_Hexagon::init_module() {
         // Absolute value:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsh),   u16v1, "abs.vh", {i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsw),   u32v1, "abs.vw", {i32v1} },
+#if LLVM_VERSION >= 50
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vabsb),   u8v1, "abs_v65.vb", {i8v1} },
+#endif
 
         // Absolute difference:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vabsdiffub),  u8v1,  "absd.vub.vub", {u8v1,  u8v1} },
@@ -514,7 +517,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgub), i8v1,  "navg.vub.vub", {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgh),  i16v1, "navg.vh.vh",   {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnavgw),  i32v1, "navg.vw.vw",   {i32v1, i32v1} },
-
+#if LLVM_VERSION >= 50
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavgb),  i8v1,  "avg.vb.vb",   {i8v1, i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1} },
+#endif
         // Non-widening multiplication:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyih),  i16v1, "mul.vh.vh",   {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyihb), i16v1, "mul.vh.b",    {i16v1, i8}, HvxIntrinsic::BroadcastScalarsToWords },
@@ -638,7 +644,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  u32v1, "shl.vuw.uw", {u32v1, u32} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh),  i16v1, "shl.vh.h",   {i16v1, i16} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw),  i32v1, "shl.vw.w",   {i32v1, i32} },
-
+#if LLVM_VERSION >= 50
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vasrh_acc), i16v1, "add_shr.vh.vh.h", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaslh_acc), i16v1, "add_shl.vh.vh.h", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+#endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_vasrw_acc), i32v1, "add_shr.vw.vw.w", {i32v1, i32v1, i32} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaslw_acc), i32v1, "add_shl.vw.vw.w", {i32v1, i32v1, i32} },
 
@@ -1749,7 +1758,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
     // Map Halide functions to Hexagon intrinsics, plus a boolean
     // indicating if the intrinsic has signed variants or not.
     static std::map<string, std::pair<string, bool>> functions = {
-        { Call::abs, { "halide.hexagon.abs", true } },
         { Call::absd, { "halide.hexagon.absd", true } },
         { Call::bitwise_and, { "halide.hexagon.and", false } },
         { Call::bitwise_or, { "halide.hexagon.or", false } },
@@ -1809,6 +1817,19 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 "halide.hexagon.mux" +
                                 type_suffix(op->args[1], op->args[2], false),
                                 op->args);
+            return;
+        } else if (op->is_intrinsic(Call::abs)) {
+            string v65orLater_suffix = "";
+            internal_assert(op->args.size() == 1);
+            Type ty = op->args[0].type();
+            if (ty.is_vector() && ty.is_int() && (ty.bits() == 8)) {
+                if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+                    v65orLater_suffix = "_v65";
+                } else {
+                    internal_error << "vabs(i8) not supported for this target feature\n";
+                }
+            }
+            value = call_intrin(op->type, "halide.hexagon.abs" + v65orLater_suffix + type_suffix(op->args[0]), op->args);
             return;
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
