@@ -830,10 +830,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::ARM) {
-                if (t.bits != 64) {
-                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
-                } else {
+                if (t.bits == 64) {
                     modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
             }
             if (t.arch == Target::MIPS) {
