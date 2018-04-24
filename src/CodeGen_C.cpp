@@ -53,8 +53,8 @@ void halide_profiler_pipeline_end(void *, void *);
 }
 
 #ifdef _WIN32
-float roundf(float);
-double round(double);
+__declspec(dllimport) float __cdecl roundf(float);
+__declspec(dllimport) double __cdecl round(double);
 #else
 inline float asinh_f32(float x) {return asinhf(x);}
 inline float acosh_f32(float x) {return acoshf(x);}
@@ -142,7 +142,7 @@ public:
     ~HalideFreeHelper() { free(); }
     void free() {
         if (p) {
-            // TOOD: do all free_functions guarantee to ignore a null ptr?
+            // TODO: do all free_functions guarantee to ignore a nullptr?
             free_function(user_context, p);
             p = nullptr;
         }
@@ -151,7 +151,6 @@ public:
 } // namespace
 
 )INLINE_CODE";
-
 }
 
 class TypeInfoGatherer : public IRGraphVisitor {
@@ -220,14 +219,16 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                << "// Metadata describing the arguments to the generated function.\n"
                << "// Used to construct calls to the _argv version of the function.\n"
                << "struct halide_filter_metadata_t;\n"
-               << "\n"
-               << "// The legacy buffer type. Do not use in new code.\n"
-               << "struct buffer_t;\n"
                << "\n";
         // We just forward declared the following types:
         forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
         forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
-        forward_declared.insert(type_of<buffer_t *>().handle_type);
+        if (t.has_feature(Target::LegacyBufferWrappers)) {
+            stream << "// The legacy buffer type. Do not use in new code.\n"
+                   << "struct buffer_t;\n"
+                   << "\n";
+            forward_declared.insert(type_of<buffer_t *>().handle_type);
+        }
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -1450,7 +1451,7 @@ void CodeGen_C::compile(const Module &input) {
         ExternCallPrototypes e;
         for (const auto &f : input.functions()) {
             f.body.accept(&e);
-            if (f.linkage == LoweredFunc::Internal) {
+            if (f.linkage == LinkageType::Internal) {
                 // We can't tell at the call site if a LoweredFunc is intended to be internal
                 // or not, so mark them explicitly.
                 e.set_internal_linkage(f.name);
@@ -1478,7 +1479,7 @@ void CodeGen_C::compile(const Module &input) {
 
 void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
-    if (is_header() && f.linkage == LoweredFunc::Internal) {
+    if (is_header() && f.linkage == LinkageType::Internal) {
         return;
     }
 
@@ -1513,7 +1514,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     // Emit the function prototype
-    if (f.linkage == LoweredFunc::Internal) {
+    if (f.linkage == LinkageType::Internal) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
@@ -1567,7 +1568,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
@@ -1583,7 +1584,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "\n";
     }
 
-    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
         // C syntax for function-that-returns-function-pointer is fun.
         const string getter = R"INLINE_CODE(
 
@@ -2142,6 +2143,10 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        internal_assert(op->args.size() == 1);
+        string arg0 = print_expr(op->args[0]);
+        rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
@@ -2642,7 +2647,7 @@ void CodeGen_C::test() {
     s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
 
     Module m("", get_host_target());
-    m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
+    m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
     ostringstream source;
     {

@@ -323,7 +323,11 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
     llvm::raw_svector_ostream clone_ostream(clone_buffer);
+#if LLVM_VERSION >= 70
+    WriteBitcodeToFile(module_in, clone_ostream);
+#else
     WriteBitcodeToFile(&module_in, clone_ostream);
+#endif
 
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
@@ -392,7 +396,11 @@ void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out) {
+#if LLVM_VERSION >= 70
+    WriteBitcodeToFile(module, out);
+#else
     WriteBitcodeToFile(&module, out);
+#endif
 }
 
 void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {

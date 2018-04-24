@@ -21,10 +21,10 @@ namespace Internal {
  * repeated variable names.
  */
 // @{
-Stmt simplify(Stmt, bool simplify_lets = true,
+Stmt simplify(Stmt, bool remove_dead_lets = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
-Expr simplify(Expr, bool simplify_lets = true,
+Expr simplify(Expr, bool remove_dead_lets = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
@@ -94,9 +94,6 @@ template<> inline float div_imp<float>(float a, float b) {
 template<> inline double div_imp<double>(double a, double b) {
     return a/b;
 }
-
-
-void simplify_test();
 
 }
 }

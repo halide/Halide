@@ -101,6 +101,12 @@ using std::stack;
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
+#ifdef WITH_AMDGPU
+#define InitializeAMDGPUTarget()        InitializeTarget(AMDGPU)
+#define InitializeAMDGPUAsmParser()     InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUAsmPrinter()    InitializeAsmParser(AMDGPU)
+#endif
+
 #ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
@@ -128,15 +134,15 @@ using std::stack;
 namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
-llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
+llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // TODO(dsharlet): For some reason, marking internal functions as
     // private linkage on OSX is causing some of the static tests to
     // fail. Figure out why so we can remove this.
     return llvm::GlobalValue::ExternalLinkage;
 
     switch (t) {
-    case LoweredFunc::ExternalPlusMetadata:
-    case LoweredFunc::External:
+    case LinkageType::ExternalPlusMetadata:
+    case LinkageType::External:
         return llvm::GlobalValue::ExternalLinkage;
     default:
         return llvm::GlobalValue::PrivateLinkage;
@@ -151,6 +157,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     builder(nullptr),
     value(nullptr),
     very_likely_branch(nullptr),
+    default_fp_math_md(nullptr),
+    strict_fp_math_md(nullptr),
     target(t),
     void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
     i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
@@ -250,7 +258,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
-    destructor_block(nullptr) {
+    destructor_block(nullptr),
+    strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
 }
 
@@ -373,6 +382,23 @@ void CodeGen_LLVM::init_context() {
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
     very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
+    default_fp_math_md = md_builder.createFPMath(0.0);
+    strict_fp_math_md = md_builder.createFPMath(0.0);
+    builder->setDefaultFPMathTag(default_fp_math_md);
+    llvm::FastMathFlags fast_flags;
+    fast_flags.setNoNaNs();
+    fast_flags.setNoInfs();
+    fast_flags.setNoSignedZeros();
+    // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
+    // fast_flags.setAllowReciprocal();
+    #if LLVM_VERSION >= 60
+    // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
+    // turns on all the flags.
+    fast_flags.setAllowReassoc();
+    fast_flags.setAllowContract(true);
+    fast_flags.setApproxFunc();
+    #endif
+    builder->setFastMathFlags(fast_flags);
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
@@ -442,7 +468,7 @@ struct MangledNames {
 };
 
 MangledNames get_mangled_names(const std::string &name,
-                               LoweredFunc::LinkageType linkage,
+                               LinkageType linkage,
                                NameMangling mangling,
                                const std::vector<LoweredArgument> &args,
                                const Target &target) {
@@ -453,7 +479,7 @@ MangledNames get_mangled_names(const std::string &name,
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    if (linkage != LoweredFunc::Internal &&
+    if (linkage != LinkageType::Internal &&
         ((mangling == NameMangling::Default &&
           target.has_feature(Target::CPlusPlusMangling)) ||
          mangling == NameMangling::CPlusPlus)) {
@@ -495,6 +521,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -535,7 +562,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());
@@ -562,7 +589,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 
-void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
+void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
                               const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     current_function_args = args;
 
@@ -672,7 +699,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
 
     // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
     // happen for every output buffer if the function succeeds.
-    if (f.linkage != LoweredFunc::Internal &&
+    if (f.linkage != LinkageType::Internal &&
         target.has_feature(Target::MSAN)) {
         llvm::Function *annotate_buffer_fn =
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
@@ -2544,7 +2571,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
             if (!sub_fn) {
                 extern_sub_fn_name = get_mangled_names(sub_fn_name,
-                                                       LoweredFunc::External,
+                                                       LinkageType::External,
                                                        NameMangling::Default,
                                                        current_function_args,
                                                        get_target()).extern_name;
@@ -2657,6 +2684,13 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+        value = codegen(op->args[0]);
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
@@ -2677,6 +2711,23 @@ void CodeGen_LLVM::visit(const Call *op) {
                (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
+
+        /* NaNs are not supposed to exist in "no NaNs" compilation
+         * mode, but it appears llvm special cases the unordered
+         * compare instruction when the global NoNaNsFPMath option is
+         * set and still checks for a NaN. However if the nnan flag is
+         * set on the instruction itself, llvm treats the comparison
+         * as always false. Thus we always turn off the per-instruction
+         * fast-math flags for this instruction. I.e. it is always
+         * treated as strict. Note that compilation may still be in
+         * fast-math mode due to global options, but that's ok due to
+         * the aforementioned special casing. */
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+
         value = builder->CreateFCmpUNO(a, a);
     } else {
         // It's an extern call.

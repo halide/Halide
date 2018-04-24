@@ -111,7 +111,7 @@ class WrapExternStages : public IRMutator2 {
 
         // Add the wrapper to the module
         debug(2) << "Wrapped extern call to " << op->name << ":\n" << body << "\n\n";
-        LoweredFunc wrapper(wrapper_name, args, body, LoweredFunc::Internal, NameMangling::C);
+        LoweredFunc wrapper(wrapper_name, args, body, LinkageType::Internal, NameMangling::C);
         module.append(wrapper);
 
         // Return the name
@@ -123,6 +123,9 @@ class WrapExternStages : public IRMutator2 {
             Function f(op->func);
             internal_assert(f.has_extern_definition());
             if (f.extern_definition_uses_old_buffer_t()) {
+                user_assert(module.target().has_feature(Target::LegacyBufferWrappers))
+                    << "You must specify the legacy_buffer_wrappers feature in the Target "
+                    << "when passing uses_old_buffer_t = true to define_extern().";
                 vector<Expr> new_args;
                 for (Expr e : op->args) {
                     new_args.push_back(mutate(e));
@@ -159,6 +162,10 @@ void wrap_legacy_extern_stages(Module m) {
 }
 
 void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
+    if (!module.target().has_feature(Target::LegacyBufferWrappers)) {
+        return;
+    }
+
     // Build the arguments to the wrapper function
     vector<LoweredArgument> args;
     vector<Stmt> upgrades, downgrades;
@@ -240,7 +247,7 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
 
     // Add the wrapper to the module.
     debug(2) << "Added legacy wrapper for " << fn.name << ":\n" << body << "\n\n";
-    LoweredFunc wrapper(name, args, body, LoweredFunc::External, NameMangling::Default);
+    LoweredFunc wrapper(name, args, body, LinkageType::External, NameMangling::Default);
     module.append(wrapper);
 }
 

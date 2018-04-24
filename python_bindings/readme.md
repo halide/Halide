@@ -16,6 +16,7 @@ in Python, only the second variant is provided.
 - static and instance method overloads with the same name in the same class aren't allowed, so some convenience methods are missing from `Halide::Var`
 - Templated types (notably `Halide::Buffer<>` and `Halide::Param<>`) aren't provided, for obvious reasons; only the equivalents of `Halide::Buffer<void>` and `Halide::Param<void>` are supported.
 - Only things in the `Halide` namespace are supported; classes and methods that involve using the `Halide::Internal` namespace are not provided.
+- The functions in `Halide::ConciseCasts` are present in the toplevel Halide module in Python, rather than a submodule: e.g., use `hl.i8_sat()`, not `hl.ConciseCasts.i8_sat()`.
 - No mechanism is provided for overriding any runtime functions from Python.
 - No mechanism is provided for supporting `Func::define_extern`.
 - `Buffer::for_each_value()` is hard to implement well in Python; it's omitted entirely for now.
@@ -41,7 +42,7 @@ The bindings (and demonstration applications) should work well both for python2.
 
 Build using:
 ```bash
-  make 
+  make
 ```
 
 ## Documentation and Examples ##

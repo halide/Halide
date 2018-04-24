@@ -16,6 +16,15 @@
 #include "Target.h"
 
 namespace Halide {
+
+/** Type of linkage a function in a lowered Halide module can have. 
+    Also controls whether auxiliary functions and metadata are generated. */
+enum class LinkageType {
+    External, ///< Visible externally.
+    ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
+    Internal, ///< Not visible externally, similar to 'static' linkage in C.
+};
+
 namespace Internal {
 
 /** Definition of an argument to a LoweredFunc. This is similar to
@@ -45,13 +54,6 @@ struct LoweredFunc {
 
     /** Body of this function. */
     Stmt body;
-
-    /** Type of linkage a function can have. */
-    enum LinkageType {
-        External, ///< Visible externally.
-        ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
-        Internal, ///< Not visible externally, similar to 'static' linkage in C.
-    };
 
     /** The linkage of this function. */
     LinkageType linkage;
@@ -97,6 +99,9 @@ public:
      * for that schedule. */
     const std::string &auto_schedule() const;
 
+    /** Return whether this module uses strict floating-point anywhere. */
+    bool any_strict_float() const;
+
     /** The declarations contained in this module. */
     // @{
     const std::vector<Buffer<>> &buffers() const;
@@ -141,6 +146,9 @@ public:
     /** Set the auto_schedule text for the Module. It is an error to call this
      * multiple times for a given Module. */
     void set_auto_schedule(const std::string &auto_schedule);
+
+    /** Set whether this module uses strict floating-point directives anywhere. */
+    void set_any_strict_float(bool any_strict_float);
 };
 
 /** Link a set of modules together into one module. */

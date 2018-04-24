@@ -479,13 +479,10 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // Substitute parameter estimates into the bounds and add them to the
                     // current scope.
                     for (int d = 0; d < (int)dims.size() - 1; d++) {
-                        string var_name = dims[d].var;
-                        internal_assert(curr_bounds.find(var_name) != curr_bounds.end());
-
-                        Expr lower = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).min);
-                        Expr upper = SubstituteVarEstimates().mutate(get_element(curr_bounds, dims[d].var).max);
-                        Interval simple_bounds = Interval(simplify(lower), simplify(upper));
-                        curr_scope.push(var_name, simple_bounds);
+                        Interval simple_bounds = get_element(curr_bounds, dims[d].var);
+                        simple_bounds.min = simplify(SubstituteVarEstimates().mutate(simple_bounds.min));
+                        simple_bounds.max = simplify(SubstituteVarEstimates().mutate(simple_bounds.max));
+                        curr_scope.push(dims[d].var, simple_bounds);
                     }
 
                     // Find the regions required for each value of the current function stage,
@@ -547,12 +544,13 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
             auto iter = env.find(f_reg.first);
             bool in_env = (iter != env.end());
 
+
             if (!lower.as<IntImm>() && in_env) {
                 const Function &curr_f = iter->second;
                 for (const auto &b : curr_f.schedule().estimates()) {
                     size_t num_pure_args = curr_f.args().size();
                     if ((i < num_pure_args) && (b.var == curr_f.args()[i])) {
-                        lower = Expr(b.min.as<IntImm>()->value);
+                        lower = b.min;
                     }
                 }
             }
@@ -564,7 +562,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     if ((i < num_pure_args) && (b.var == curr_f.args()[i])) {
                         const IntImm *bmin = b.min.as<IntImm>();
                         const IntImm *bextent = b.extent.as<IntImm>();
-                        upper = Expr(bmin->value + bextent->value - 1);
+                        upper = IntImm::make(Int(32), bmin->value + bextent->value - 1);
                     }
                 }
             }
@@ -687,9 +685,9 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
             for (i = estimates.size() - 1; i >= 0; --i) {
                 const auto &est = estimates[i];
                 if ((est.var == arg) && est.min.defined() && est.extent.defined()) {
-                    Interval I = Interval(est.min, simplify(est.min + est.extent - 1));
-                    pure_bounds.emplace(arg, I);
-                    out_box.push_back(I);
+                    Interval in = Interval(est.min, simplify(est.min + est.extent - 1));
+                    pure_bounds.emplace(arg, in);
+                    out_box.push_back(in);
                     break;
                 }
             }
@@ -730,8 +728,8 @@ struct AutoSchedule {
 
     const map<string, Function> &env;
 
-    // Contain maps from function name to realization order.
-    map<string, size_t> realization_order;
+    // Contain maps from function name to the topological order of the pipeline.
+    map<string, size_t> topological_order;
 
     // Cache for storing all internal vars/rvars that have been declared during
     // the course of schedule generation, to ensure that we don't introduce any
@@ -748,7 +746,7 @@ struct AutoSchedule {
 
     AutoSchedule(const map<string, Function> &env, const vector<string> &order) : env(env) {
         for (size_t i = 0; i < order.size(); ++i) {
-            realization_order.emplace(order[i], i);
+            topological_order.emplace(order[i], i);
         }
         // Allocate a slot in 'used_vars' for each function stages in the pipeline
         for (const auto &iter : env) {
@@ -761,7 +759,7 @@ struct AutoSchedule {
     // Given a function name, return a string representation of getting the
     // function handle
     string get_func_handle(const string &name) const {
-        size_t index = get_element(realization_order, name);
+        size_t index = get_element(topological_order, name);
         return "pipeline.get_func(" + std::to_string(index) + ")";
     }
 
@@ -3330,12 +3328,12 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         iter.second.lock_loop_levels();
     }
 
-    // Compute the realization order, before any trivial inlining (i.e. before
-    // we remove any functions from 'env'). We need the full realization
+    // Compute the topological order, before any trivial inlining (i.e. before
+    // we remove any functions from 'env'). We need the full topological
     // order to pass to get_func() when generating the string representation
     // of the schedule.
-    debug(2) << "Computing full realization order...\n";
-    vector<string> full_order = realization_order(outputs, env).first;
+    debug(2) << "Computing topological order...\n";
+    vector<string> top_order = topological_order(outputs, env);
 
     // Validate that none of the functions in the pipeline have partial schedules.
     debug(2) << "Validating no partial schedules...\n";
@@ -3353,7 +3351,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // computing a Func is about the same as calling that Func, we should
     // just inline it).
     debug(2) << "Inlining all trivial functions...\n";
-    if (inline_all_trivial_functions(outputs, full_order, env)) {
+    if (inline_all_trivial_functions(outputs, top_order, env)) {
         // If any of the Funcs is inlined, we need to recompute 'env', since some
         // of the Funcs are no longer used and need to be removed from 'env'.
         //
@@ -3499,7 +3497,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     debug(2) << "Initializing AutoSchedule...\n";
-    AutoSchedule sched(env, full_order);
+    AutoSchedule sched(env, top_order);
     debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(target, sched);
 

@@ -82,4 +82,15 @@ Func ImageParam::in() {
     return func.in();
 }
 
+void ImageParam::trace_loads() {
+    internal_assert(func.defined());
+    func.trace_loads();
+}
+
+ImageParam &ImageParam::add_trace_tag(const std::string &trace_tag) {
+    internal_assert(func.defined());
+    func.add_trace_tag(trace_tag);
+    return *this;
+}
+
 }

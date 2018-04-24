@@ -2,12 +2,13 @@
 #define HALIDE_ELF_H
 
 #include <algorithm>
-#include <memory>
-#include <vector>
-#include <list>
-#include <string>
 #include <iterator>
 #include <limits>
+#include <list>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace Halide {
 namespace Internal {

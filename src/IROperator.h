@@ -1721,17 +1721,17 @@ inline Expr random_int(Expr seed = Expr()) {
 
 // Secondary args to print can be Exprs or const char *
 namespace Internal {
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args&&... more_args) {
     args.push_back(Expr(std::string(arg)));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename ...Args>
-inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args&&... more_args) {
     args.push_back(std::move(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
@@ -1745,7 +1745,7 @@ inline NO_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args
 Expr print(const std::vector<Expr> &values);
 
 template <typename... Args>
-inline NO_INLINE Expr print(Expr a, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
@@ -1758,7 +1758,7 @@ inline NO_INLINE Expr print(Expr a, Args&&... args) {
 Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(std::move(condition), collected_args);
@@ -1791,7 +1791,7 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
 Expr require(Expr condition, const std::vector<Expr> &values);
 
 template<typename ...Args>
-inline NO_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
     std::vector<Expr> collected_args = {std::move(value)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return require(std::move(condition), collected_args);
@@ -1861,7 +1861,7 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
  * on the digest. */
 // @{
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args&&... args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
     return Internal::memoize_tag_helper(std::move(result), collected_args);
 }
@@ -1894,7 +1894,6 @@ inline Expr likely_if_innermost(Expr e) {
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
-
 /** Cast an expression to the halide type corresponding to the C++
  * type T clamping to the minimum and maximum values of the result
  * type. */
@@ -1906,6 +1905,17 @@ Expr saturating_cast(Expr e) {
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
 Expr saturating_cast(Type t, Expr e);
+
+/** Makes a best effort attempt to preserve IEEE floating-point
+ * semantics in evaluating an expression. May not be implemented for
+ * all backends. (E.g. it is difficult to do this for C++ code
+ * generation as it depends on the compiler flags used to compile the
+ * generated code. */
+inline Expr strict_float(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::strict_float,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
+}
 
 }
 

@@ -331,7 +331,7 @@ public:
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args&&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
@@ -660,7 +660,7 @@ public:
 
     /** Construct a new Func to wrap a Buffer. */
     template<typename T>
-    NO_INLINE explicit Func(Buffer<T> &im) : Func() {
+    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -735,16 +735,18 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size, int z_size, int w_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size, int z_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size, int y_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(int x_size,
-                        const Target &target = Target(), const ParamMap &param_map = ParamMap());
-    Realization realize(const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, int y_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(int x_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -753,7 +755,8 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    void realize(Realization dst, const Target &target = Target(), const ParamMap &param_map = ParamMap());
+    void realize(Pipeline::RealizationArg outputs, const Target &target = Target(),
+                 const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -779,8 +782,10 @@ public:
      * to evaulate f over a 10x10 region.
      */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0, const ParamMap &param_map = ParamMap());
-    void infer_input_bounds(Realization dst, const ParamMap &param_map = ParamMap());
+    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(Pipeline::RealizationArg outputs,
+                            const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
@@ -1022,18 +1027,15 @@ public:
     template<typename T>
     void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
-        // cast it to a deleter that takes a IRMutator2 *. The custom
-        // deleter lives in user code, so that deletion is on the same
-        // heap as construction (I hate Windows).
-        void (*deleter)(Internal::IRMutator2 *) =
-            (void (*)(Internal::IRMutator2 *))(&delete_lowering_pass<T>);
-        add_custom_lowering_pass(pass, deleter);
+        // wrap in a lambda. The custom deleter lives in user code, so
+        // that deletion is on the same heap as construction (I hate Windows).
+        add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
     /** Add a custom pass to be used during lowering, with the
      * function that will be called to delete it also passed in. Set
      * it to nullptr if you wish to retain ownership of the object. */
-    void add_custom_lowering_pass(Internal::IRMutator2 *pass, void (*deleter)(Internal::IRMutator2 *));
+    void add_custom_lowering_pass(Internal::IRMutator2 *pass, std::function<void()> deleter);
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
@@ -1229,7 +1231,7 @@ public:
     FuncRef operator()(std::vector<Var>) const;
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
     operator()(Args&&... args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
@@ -1246,7 +1248,7 @@ public:
     FuncRef operator()(std::vector<Expr>) const;
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
     operator()(Expr x, Args&&... args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
@@ -1514,7 +1516,7 @@ public:
     Func &reorder(const std::vector<VarOrRVar> &vars);
 
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
     reorder(VarOrRVar x, VarOrRVar y, Args&&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
@@ -1901,7 +1903,7 @@ public:
 
     Func &reorder_storage(Var x, Var y);
     template <typename... Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
     reorder_storage(Var x, Var y, Args&&... args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
@@ -2038,6 +2040,8 @@ public:
     // @{
     Func &compute_with(Stage s, VarOrRVar var, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
     Func &compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align = LoopAlignStrategy::Auto);
+    Func &compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align);
+    Func &compute_with(LoopLevel loop_level, LoopAlignStrategy align = LoopAlignStrategy::Auto);
 
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :
@@ -2243,6 +2247,13 @@ public:
      * halide_trace. */
     Func &trace_realizations();
 
+    /** Add a string of arbitrary text that will be passed thru to trace
+     * inspection code if the Func is realized in trace mode. (Funcs that are
+     * inlined won't have their tags emitted.) Ignored entirely if
+     * tracing is not enabled for the Func (or globally).
+     */
+    Func &add_trace_tag(const std::string &trace_tag);
+
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */
@@ -2317,7 +2328,7 @@ inline void assign_results(Realization &r, int idx, First first, Second second, 
  * expression. This can be thought of as a scalar version of
  * \ref Func::realize */
 template<typename T>
-NO_INLINE T evaluate(Expr e) {
+HALIDE_NO_USER_CODE_INLINE T evaluate(Expr e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
@@ -2330,7 +2341,7 @@ NO_INLINE T evaluate(Expr e) {
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template <typename First, typename... Rest>
-NO_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
@@ -2360,7 +2371,7 @@ inline void schedule_scalar(Func f) {
  * specifies one.
  */
 template<typename T>
-NO_INLINE T evaluate_may_gpu(Expr e) {
+HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(Expr e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
@@ -2376,7 +2387,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
  *  use GPU if jit target from environment specifies one. */
 // @{
 template <typename First, typename... Rest>
-NO_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&... rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
