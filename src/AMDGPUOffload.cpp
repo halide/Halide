@@ -186,10 +186,10 @@ public:
                         const Elf::Symbol *sym, uint64_t sym_offset, int64_t addend,
                         Elf::Section &got, uint64_t got_offset) override {
         do_relocation(fixup_offset, fixup_addr, type, sym, sym_offset, addend, got, got_offset);
-
         if (type == R_AMDGPU_ABS64 && sym->is_defined()) {
             return Relocation(R_AMDGPU_RELATIVE64, fixup_offset, sym_offset + addend, nullptr);
-        } if (type == R_AMDGPU_ABS32_LO || type == R_AMDGPU_ABS32_HI || type == R_AMDGPU_ABS32 || type == R_AMDGPU_ABS64) {
+        }
+        if (type == R_AMDGPU_ABS32_LO || type == R_AMDGPU_ABS32_HI || type == R_AMDGPU_ABS32 || type == R_AMDGPU_ABS64) {
             return Relocation(type, fixup_offset, addend, sym);
         }
         return Relocation();

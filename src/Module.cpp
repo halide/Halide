@@ -254,6 +254,10 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
         return compile_module_to_hexagon_shared_object(*this);
     }
 
+    if (target().has_feature(Target::AMDGPUGFX900)) {
+        return compile_module_to_amdgpu_shared_object(*this);
+    }
+
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
@@ -275,6 +279,11 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
 }
 
 Module Module::resolve_submodules() const {
+    if(target().has_feature(Target::AMDGPUGFX900)) {
+        Module lowered_module(name(), target());
+        lowered_module.append(this->compile_to_buffer());
+        return lowered_module;
+    }
     if (submodules().empty()) {
         return *this;
     }
