@@ -121,6 +121,12 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
                     return error;
                 }
             }
+            // Normally in double-checked locking you need a release
+            // fence here that synchronizes with an acquire fence
+            // above to ensure context is fully constructed before
+            // assigning to the global, but there's no way that
+            // create_cuda_context can access the "context" global, so
+            // we should be OK just storing to it here.
             context = local_val;
         }  // spinlock
     }
