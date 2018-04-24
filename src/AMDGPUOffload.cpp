@@ -178,7 +178,7 @@ public:
     }
 
     Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
-        internal_error << "Unsupported plt relocation for amdgpu object" << "\n";
+        internal_error << "Unsupported plt relocation for amdgpu object" << sym.get_name() <<"\n";
         return sym;
     }
 
