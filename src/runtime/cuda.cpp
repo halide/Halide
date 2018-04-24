@@ -104,6 +104,11 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
 
+    // Note that this null-check of the context is *not* locked with
+    // respect to device_release, so we may get a non-null context
+    // that's in the process of being destroyed. Things will go badly
+    // in general if you call device_release while other Halide code
+    // is running though.
     CUcontext local_val = context;
     if (local_val == NULL) {
         if (!create) {
@@ -115,7 +120,6 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
             ScopedSpinLock spinlock(&context_lock);
             local_val = context;
             if (local_val == NULL) {
-                CUcontext local_val;
                 CUresult error = create_cuda_context(user_context, &local_val);
                 if (error != CUDA_SUCCESS) {
                     return error;
