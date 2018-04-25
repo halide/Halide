@@ -18,7 +18,7 @@ struct TraceEventBuilder {
     vector<Expr> coordinates;
     Type type;
     enum halide_trace_event_code_t event;
-    Expr parent_id, value_index, dimensions;
+    Expr parent_id, value_index;
 
     Expr build() {
         Expr values = Call::make(type_of<void *>(), Call::make_struct,
