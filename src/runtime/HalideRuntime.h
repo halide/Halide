@@ -572,7 +572,9 @@ struct halide_device_interface_t {
 /** Release all data associated with the given device interface, in
  * particular all resources (memory, texture, context handles)
  * allocated by Halide. Must be called explicitly when using AOT
- * compilation. */
+ * compilation. This is *not* thread-safe with respect to actively
+ * running Halide code. Ensure all pipelines are finished before
+ * calling this. */
 extern void halide_device_release(void *user_context,
                                   const struct halide_device_interface_t *device_interface);
 

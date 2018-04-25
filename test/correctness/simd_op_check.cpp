@@ -1845,11 +1845,8 @@ struct Test {
         check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
         check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(i8_1) * i16(u8_2));
         check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
-
-        if(is_v65) {
-           check("v*.w += vmpy(v*.h, r*.h)", hvx_width/1, i32_1 + i32(i16_1)*32767);
-           check("v*.w += vmpy(v*.h, r*.h)", hvx_width/1, i32_1 + 32767*i32(i16_1));
-        }
+        check("v*.w += vmpy(v*.h, r*.h):sat", hvx_width/1, i32_1 + i32(i16_1)*32767);
+        check("v*.w += vmpy(v*.h, r*.h):sat", hvx_width/1, i32_1 + 32767*i32(i16_1));
 
         check("v*.uh += vmpy(v*.ub,r*.ub)", hvx_width/1, u16_1 + u16(u8_1) * 255);
         check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 + i16(u8_1) * 127);
@@ -1961,12 +1958,15 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 << (y % 32)));
         check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 >> (y % 32)));
 
-        if(is_v65) {
-           check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 << i16(y % 16)));
-           check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 >> i16(y % 16)));
-           check("v*.h += vasl(v*.h,r*)", hvx_width/2, u16_1 + (u16_2 * 16));
-           check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 * 16));
-           check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 / 16));
+        if (is_v65) {
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 << i16(y % 16)));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16(y % 16) << i16_2));
+            check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 >> i16(y % 16)));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, u16_1 + (u16_2 * 16));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 * 16));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, u16_1 + (16 * u16_2));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (16 * i16_2));
+            check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 / 16));
         }
 
         check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
