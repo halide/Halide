@@ -5,6 +5,9 @@
 #include <mutex>
 #include <future>
 
+// This code is 64-bit x86 only due to inline asm for coroutine implementation.
+#ifdef __x86_64__
+
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
@@ -61,7 +64,9 @@ void switch_context(execution_context *from, execution_context *to) {
         "pushq %%r13\n"
         "pushq %%r14\n"
         "pushq %%r15\n"
-        "pushq $return_loc%=\n"
+        "leaq return_loc%=(%%rip), %%r15\n"
+        "pushq %%r15\n"
+        "movq 8(%%rsp), %%r15\n"
         "movq %%rsp, (%0)\n" // Save the stack pointer for the 'from' context
         "movq %1, %%rsp\n"   // Restore the stack pointer for the 'to' context
         "ret\n"              // Return into the 'to' context
@@ -132,7 +137,9 @@ void call_in_new_context(execution_context *from,
         "pushq %%r13\n"
         "pushq %%r14\n"
         "pushq %%r15\n"
-        "pushq $return_loc%=\n"
+        "leaq return_loc%=(%%rip), %%r15\n"
+        "pushq %%r15\n"
+        "movq 8(%%rsp), %%r15\n"
         "movq %%rsp, (%0)\n" // Save the stack pointer for the 'from' context
         "movq %1, %%rsp\n"   // Restore the stack pointer for the 'to' context
         "movq %2, %%rdi\n"   // Set the args for the function call
@@ -442,3 +449,9 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
+#else
+int main(int argc, char **argv) {
+    printf("Test skipped as it is x86_64 specific.\n");
+    return 0;
+}
+#endif
