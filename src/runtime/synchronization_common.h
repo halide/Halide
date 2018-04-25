@@ -53,6 +53,10 @@ __attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *a
      return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
 
+__attribute__((always_inline)) bool atomic_cas_weak_relacq_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
+}
+
 __attribute__((always_inline)) bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
      return cas_strong_sequentially_consistent_helper(addr, expected, desired);
 }
@@ -96,6 +100,10 @@ __attribute__((always_inline)) bool atomic_cas_strong_release_relaxed(uintptr_t 
     return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
       
+__attribute__((always_inline)) bool atomic_cas_weak_relacq_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
+    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
+}
+
 __attribute__((always_inline)) bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
     return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
 }
@@ -313,7 +321,7 @@ WEAK void word_lock::unlock_full() {
         // that currently holds the lock do the wakeup
         if (expected & lock_bit) {
             uintptr_t desired = expected & ~(uintptr_t)queue_lock_bit;
-            if (atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
+            if (atomic_cas_weak_relacq_relaxed(&state, &expected, &desired)) {
                 return;
             }
             atomic_thread_fence_acquire();
@@ -325,7 +333,7 @@ WEAK void word_lock::unlock_full() {
             bool continue_outer = false;
             while (!continue_outer) {
                 uintptr_t desired = expected & lock_bit;
-                if (atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
+                if (atomic_cas_weak_relacq_relaxed(&state, &expected, &desired)) {
                     break;
                 }
                 if ((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) == 0) {
