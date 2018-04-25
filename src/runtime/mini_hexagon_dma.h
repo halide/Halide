@@ -278,6 +278,36 @@ typedef HALIDE_HEXAGON_ENUM {
                                                          t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
                                                          bool bIsUbwc);
 
+
+  /*!
+   * @brief       Get the recommended intermediate buffer size
+   *
+   * @description Get the recommended intermediate buffer size for the L2 cache
+   *              that is used to transfer data to/from DDR.
+   *
+   * @input       eFmtId - Format ID
+   * @input       bUse16BitPaddingInL2 - Is padding to 16 bits done in the L2 (TRUE/FALSE)
+   * @input       pStRoiSize - The ROI that will be used (should be aligned with
+   *                           DMA requirements for the format). The Chroma ROI must
+   *                           follow the standing convention that the provided
+   *                           width and height must be specified in terms of the
+   *                           Luma plane also such that when the width is divided
+   *                           by 2 it specifies the number of interleaved Chroma
+   *                           pixels.
+   * @input               bIsUbwc - Is the format UBWC (TRUE/FALSE), note that this should
+   *                        be set to TRUE if either the DDR input or output will
+   *                        be UBWC
+   * @input               u16IntermBufStride - The stride (in pixels) to use, the minimum
+   *                                   stride may be obtained by calling
+   *                                   nDmaWrapper_GetRecommendedIntermBufStride
+   *
+   * @return      Success: The intermediate buffer size in bytes
+   * @n           Failure: ERR
+   */
+   extern int32 nDmaWrapper_GetRecommendedIntermBufSize(t_eDmaFmt eFmtId, bool bUse16BitPaddingInL2,
+                                                     t_StDmaWrapper_RoiAlignInfo* pStRoiSize,
+                                                     bool bIsUbwc, uint16 u16IntermBufStride);
+
   /*!
    * @brief       Dma transfer parameters per HW descriptor
    *

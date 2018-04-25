@@ -2,21 +2,23 @@
 
 using namespace Halide;
 
+#define DIM 3
+
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 2};
-    Output<Buffer<uint8_t>> output{"output", 2};
+    Input<Buffer<uint8_t>> input{"input", DIM};
+    Output<Buffer<uint8_t>> output{"output", DIM};
 
     void generate() {
-        Var x{"x"}, y{"y"};
+        Var x{"x"}, y{"y"}, z("z");
 
         // We need a wrapper for the output so we can schedule the
         // multiply update in tiles.
         Func copy("copy");
 
-        copy(x, y) = input(x, y);
+        copy(x, y, z) = input(x, y, z);
 
-        output(x, y) = copy(x, y) * 2;
+        output(x, y, z) = copy(x, y, z) * 2;
 
         Var tx("tx"), ty("ty");
 
@@ -39,4 +41,4 @@ public:
 
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline_err)

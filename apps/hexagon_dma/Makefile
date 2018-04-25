@@ -25,18 +25,42 @@ LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
 BIN ?= bin
 
-all: $(BIN)/process-host
+all: $(BIN)/process-host $(BIN)/process_nv12-host $(BIN)/process_p010-host $(BIN)/process_err-host
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+$(BIN)/pipeline_nv12: pipeline_nv12.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+$(BIN)/pipeline_p010: pipeline_p010.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+$(BIN)/pipeline_err: pipeline_err.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/pipeline.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -g dma_pipeline -o $(BIN)/$* -e o,h -f pipeline target=$*-hexagon_dma
+	$^ -g dma_pipeline -o $(BIN)/$* -e o,h,html -f pipeline target=$*-hexagon_dma
+$(BIN)/%/pipeline_nv12.o: $(BIN)/pipeline_nv12
+	@mkdir -p $(@D)
+	$^ -g dma_pipeline_nv12 -o $(BIN)/$* -e o,h,html -f pipeline_nv12 target=$*-hexagon_dma
+$(BIN)/%/pipeline_p010.o: $(BIN)/pipeline_p010
+	@mkdir -p $(@D)
+	$^ -g dma_pipeline_p010 -o $(BIN)/$* -e o,h,html -f pipeline_p010 target=$*-hexagon_dma
+$(BIN)/%/pipeline_err.o: $(BIN)/pipeline_err
+	@mkdir -p $(@D)
+	$^ -g dma_pipeline_err -o $(BIN)/$* -e o,h,html -f pipeline_err target=$*-hexagon_dma
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline.o -o $(BIN)/process-$* $(LDFLAGS-$*)
+$(BIN)/process_nv12-%: process_nv12.cpp $(BIN)/%/pipeline_nv12.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12.o -o $(BIN)/process_nv12-$* $(LDFLAGS-$*)
+$(BIN)/process_p010-%: process_p010.cpp $(BIN)/%/pipeline_p010.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010.o -o $(BIN)/process_p010-$* $(LDFLAGS-$*)
+$(BIN)/process_err-%: process_err.cpp $(BIN)/%/pipeline_err.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_err.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_err.o -o $(BIN)/process_err-$* $(LDFLAGS-$*)
 
 run-host: $(BIN)/process-host
 	$(BIN)/process-host 2048 1024
