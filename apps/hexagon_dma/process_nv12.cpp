@@ -18,6 +18,7 @@ int main(int argc, char **argv) {
     const int height = atoi(argv[2]);
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
+    
     const int buf_size = width * height * 1.5;
     uint8_t *memory_to_dma_from = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
@@ -25,64 +26,68 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<uint8_t> input_validation(memory_to_dma_from, width, height, 2);
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 2);
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, (3*height) / 2);
 
-    // TODO: We shouldn't need to allocate a host buffer here, but the
-    // current implementation of cropping + halide_buffer_copy needs
-    // it to work correctly.
-    input.allocate();
-
-    // Give the input the buffer we want to DMA from.
-    input.device_wrap_native(halide_hexagon_dma_device_interface(),
-                             reinterpret_cast<uint64_t>(memory_to_dma_from));
-    input.set_device_dirty();
-
-    // In order to actually do a DMA transfer, we need to allocate a
-    // DMA engine.
     void *dma_engine = nullptr;
     halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
 
-    // We then need to prepare for copying to host. Attempting to copy
-    // to host without doing this is an error.
-    // The Last parameter 0 indicate DMA Read
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_NV12);
+    Halide::Runtime::Buffer<uint8_t> input_y = input.cropped(1, 0, height);    // Luma plane only
+    Halide::Runtime::Buffer<uint8_t> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
 
-    //Halide::Runtime::Buffer<uint8_t> output(width, height, 2);
-    Halide::Runtime::Buffer<uint8_t> output(width, (3 * height) / 2);
-    output.embed(2, 0);
-    output.raw_buffer()->dim[1].extent = height;
-    output.raw_buffer()->dim[2].extent = 2;
-    output.raw_buffer()->dim[2].stride = width * height;
-      
-    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(2, 0, 1);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
-    Halide::Runtime::Buffer<uint8_t> input_y  = input.cropped(2, 0, 1);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> input_c  = input.cropped(2, 1, 1).cropped(1, 0, (height/2));  // Chroma plane only, with reduced height
+    input_uv.allocate();
+    input_y.allocate();
 
-    int result = pipeline_nv12(input_y, input_c, output_y, output_c);
+    input_uv.embed(2, 0);
+    input_uv.raw_buffer()->dim[2].extent = 2;
+    input_uv.raw_buffer()->dim[2].stride = 1;
+
+    input_uv.raw_buffer()->dim[0].stride = 2;
+    input_uv.raw_buffer()->dim[0].extent = width / 2;
+   
+
+    input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
+                             reinterpret_cast<uint64_t>(memory_to_dma_from));
+
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, eDmaFmt_NV12_UV);
+
+    input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
+                             reinterpret_cast<uint64_t>(memory_to_dma_from));
+
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, eDmaFmt_NV12_Y);
+
+    input_y.set_device_dirty();
+    input_uv.set_device_dirty();
+    
+    Halide::Runtime::Buffer<uint8_t> output(width, (height * 1.5));
+    Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);    // Luma plane only
+    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(1, height, (height/2));  // Chroma plane only, with reduced height
+
+    output_c.embed(2, 0);
+    output_c.raw_buffer()->dim[2].extent = 2;
+    output_c.raw_buffer()->dim[2].stride = 1;
+
+    output_c.raw_buffer()->dim[0].stride = 2;
+    output_c.raw_buffer()->dim[0].extent = width / 2;
+
+
+    int result = pipeline_nv12(input_y, input_uv, output_y, output_c);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
 
-    output.copy_to_host();
-    const int plane_start = 0;
-    const int plane_end = 2;
-    printf("plane start=%d end=%d\n", plane_start, plane_end);
-    for (int c = plane_start; c < plane_end; c++) {
-        int height_c = (c==1) ? height/2 : height;
-        for (int y = 0; y < height_c; y++) {
-            for (int x = 0; x < width; x++) {
-                uint8_t correct = memory_to_dma_from[x + y*width + c*width*height] * 2;
-                if (correct != output(x, y, c)) {
-                    static int cnt = 0;
-                    printf("Mismatch at x=%d y=%d c=%d : %d != %d\n", x, y, c, correct, output(x, y, c));
-                    if (++cnt > 20) abort();
-                }
+    for (int y = 0; y < 1.5 * height; y++) {
+        for (int x = 0; x < width; x++) {
+            uint8_t correct = memory_to_dma_from[x + y*width] * 2;
+            if (correct != output(x, y)) {
+                static int cnt = 0;
+                printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, output(x, y));
+                if (++cnt > 20) abort();
             }
         }
     }
-
-    halide_hexagon_dma_unprepare(nullptr, input);
+    
+    halide_hexagon_dma_unprepare(nullptr, input_y);
+    halide_hexagon_dma_unprepare(nullptr, input_uv);
 
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.

@@ -153,31 +153,18 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Changing the Format to Chroma or LUMA based on dimension    
     t_eDmaFmt currentFmt = dev->fmt;
+    if ((dev->fmt == eDmaFmt_NV12_UV) ||
+        (dev->fmt == eDmaFmt_P010_UV) ||
+        (dev->fmt == eDmaFmt_TP10_UV) ||
+        (dev->fmt == eDmaFmt_NV124R_UV)) {
+        halide_assert(user_context, src->dimensions == 3);
+        halide_assert(user_context, src->dim[0].stride == 2);
+        halide_assert(user_context, src->dim[2].stride == 1);
+        halide_assert(user_context, src->dim[2].min == 0);
+        halide_assert(user_context, src->dim[2].extent == 2);
+    }
     // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
-    halide_assert(user_context, ((currentFmt != eDmaFmt_RawData) || (currentFmt == eDmaFmt_RawData && dst->dimensions < 3)));
-    if (dst->dimensions == 3) {
-        if ((dev->fmt == eDmaFmt_NV12) ||
-            (dev->fmt == eDmaFmt_P010) ||
-            (dev->fmt == eDmaFmt_TP10) ||
-            (dev->fmt == eDmaFmt_NV124R)) {
-            if (dst->dim[2].min == 1) {
-                currentFmt = (t_eDmaFmt)((int)dev->fmt + 2); // chroma format
-            } else {
-                currentFmt = (t_eDmaFmt)((int)dev->fmt + 1); // luma
-            }
-        }
-    } else {
-        // 2-D Buffer Case
-        if ((dev->fmt == eDmaFmt_NV12)   ||
-            (dev->fmt == eDmaFmt_P010)   ||
-            (dev->fmt == eDmaFmt_NV124R) ||
-            (dev->fmt == eDmaFmt_TP10)) {
-            error(user_context) << "Hexagon: DMA pixel format not match Halide Buffer dimension \n";
-            return halide_error_code_device_buffer_copy_failed;
-        } 
-    }        
- 
-    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent), static_cast<uint16>(dst->dim[1].extent)};
+    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent * dst->dim[0].stride), static_cast<uint16>(dst->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(dev->fmt, dev->is_ubwc, &stWalkSize);
 
     roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(currentFmt, &stWalkSize, dev->is_ubwc);
@@ -187,6 +174,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     debug(user_context) << " roi_width " << roi_width;
     debug(user_context) << " roi_height " << roi_height;
     debug(user_context) << " roi_stride " << roi_stride;
+    halide_assert(user_context,(dst->dim[1].stride >= roi_stride));
 
     // DMA driver Expect the Stride to be 256 Byte Aligned
     halide_assert(user_context, (roi_stride % 256) == 0);
@@ -234,8 +222,9 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         (currentFmt == eDmaFmt_P010_UV) ||
         (currentFmt == eDmaFmt_TP10_UV) ||
         (currentFmt == eDmaFmt_NV124R_UV)) {
+        stDmaTransferParm.u16RoiW = roi_width * dst->dim[0].stride;
         stDmaTransferParm.u16RoiH = roi_height * 2;
-        stDmaTransferParm.u16RoiY = stDmaTransferParm.u16RoiY * 2;
+        stDmaTransferParm.u16RoiY = (stDmaTransferParm.u16RoiY - dev->frame_height) * 2;
     }
 
     debug(user_context) << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n" ;
@@ -345,7 +334,6 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_deallocate_engine (user_context: " << user_context
         << ", dma_engine: " << dma_engine << ")\n";
-      
     debug(user_context) << "    dma_free_dma_engine\n";
     halide_assert(user_context, dma_engine);
     nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
@@ -361,6 +349,12 @@ inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf,
     dev->is_ubwc = is_ubwc;
     dev->fmt = (t_eDmaFmt) fmt;
     dev->is_write = is_write;
+    if ((dev->fmt == eDmaFmt_NV12_UV) ||
+        (dev->fmt == eDmaFmt_P010_UV) ||
+        (dev->fmt == eDmaFmt_TP10_UV) ||
+        (dev->fmt == eDmaFmt_NV124R_UV)) {
+        dev->frame_height = dev->frame_height * 2;
+    }
     return halide_error_code_success;
 
 }
@@ -466,7 +460,7 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     halide_assert(user_context, buf->host && buf->device);
     dma_device_handle *dev = (dma_device_handle *)buf->device;
 
-    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(buf->dim[0].extent), static_cast<uint16>(buf->dim[1].extent)};
+    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(buf->dim[0].extent * buf->dim[0].stride), static_cast<uint16>(buf->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(eDmaFmt_RawData, false, &stWalkSize);
     int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(eDmaFmt_RawData, &stWalkSize, false);
     int roi_width = stWalkSize.u16W;
@@ -598,7 +592,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
     halide_assert(user_context, dev);
     dev->buffer = reinterpret_cast<uint8_t*>(handle);
     dev->dma_engine = 0;
-    dev->frame_width = buf->dim[0].extent;
+    dev->frame_width = buf->dim[0].extent * buf->dim[0].stride;
     dev->frame_height = buf->dim[1].extent;
     dev->frame_stride = buf->dim[1].stride;
     buf->device = reinterpret_cast<uint64_t>(dev);
