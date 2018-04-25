@@ -88,6 +88,7 @@ struct Target {
         TraceRealizations = halide_target_feature_trace_realizations,
         D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
+        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

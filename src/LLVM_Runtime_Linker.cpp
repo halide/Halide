@@ -689,6 +689,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
+                modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_yield(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
@@ -754,8 +755,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
-            modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
+
+
+            // Note that we deliberately include this module, even if Target::LegacyBufferWrappers
+            // isn't enabled: it isn't much code, and it makes it much easier to
+            // intermingle code that is built with this flag with code that is
+            // built without.
+            modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
 
             // MIPS doesn't support the atomics the profiler requires.
             if (t.arch != Target::MIPS && t.os != Target::NoOS &&
@@ -828,9 +835,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
-                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
-                } else {
                     modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
             }
             if (t.arch == Target::MIPS) {
