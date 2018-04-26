@@ -1421,6 +1421,17 @@ struct Intrin {
     }
 
     HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState & __restrict__ state) const {
+        if (intrin == Call::likely) {
+            return likely(std::get<0>(args).make(state));
+        } else if (intrin == Call::likely_if_innermost) {
+            return likely_if_innermost(std::get<0>(args).make(state));
+        }
+        internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
+        return Expr();
+    }
+
+    HALIDE_ALWAYS_INLINE
     Intrin(Call::ConstString intrin, Args... args) noexcept : intrin(intrin), args(args...) {}
 };
 
@@ -1434,8 +1445,8 @@ std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
 
 template<typename... Args>
 HALIDE_ALWAYS_INLINE
-Intrin<Args...> intrin(Call::ConstString name, Args&&... args) noexcept {
-    return Intrin<Args...>(name, std::forward<Args>(args)...);
+auto intrin(Call::ConstString name, Args... args) noexcept -> Intrin<decltype(pattern_arg(args))...> {
+    return {name, pattern_arg(args)...};
 }
 
 struct IndeterminateOp {
@@ -1911,6 +1922,35 @@ std::ostream &operator<<(std::ostream &s, const CanProveOp<A, Prover> &op) {
     return s;
 }
 
+template<typename A>
+struct IsFloatOp {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
+        Type t = a.make(state).type();
+        val.u.u64 = t.is_float();
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    };
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto is_float(A a) noexcept -> IsFloatOp<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsFloatOp<A> &op) {
+    s << "is_float(" << op.a << ")";
+    return s;
+}
+
 template<typename A, typename B>
 struct GCDOp {
     struct pattern_tag {};
@@ -2085,6 +2125,7 @@ HALIDE_ALWAYS_INLINE
 auto rewriter(Instance &&instance) noexcept -> Rewriter<decltype(pattern_arg(std::forward<Instance>(instance)))> {
     return {pattern_arg(std::forward<Instance>(instance))};
 }
+
 }
 
 }

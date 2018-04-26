@@ -199,6 +199,7 @@ public:
     IRMatcher::Wild<2> z;
     IRMatcher::Wild<3> w;
     IRMatcher::Wild<4> u;
+    IRMatcher::Wild<5> v;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
@@ -423,7 +424,16 @@ public:
     // Put the args to a commutative op in a canonical order
     HALIDE_ALWAYS_INLINE
     bool should_commute(const Expr &a, const Expr &b) {
-        return a.node_type() < b.node_type();
+        if (a.node_type() < b.node_type()) return true;
+        if (a.node_type() > b.node_type()) return false;
+
+        if (a.node_type() == IRNodeType::Variable) {
+            const Variable *va = a.as<Variable>();
+            const Variable *vb = b.as<Variable>();
+            return va->name.compare(vb->name) > 0;
+        }
+
+        return false;
     }
 
     Expr visit(const Add *op, ConstBounds *bounds) {
@@ -469,6 +479,16 @@ public:
                 rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
                 rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
                 rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
+
+                rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
+                rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
+                rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
+                rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
+                rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
+                rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
+                rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
+                rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
+
                 rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
                 rewrite((x + c0) + y, (x + y) + c0) ||
                 rewrite(x + (y + c0), (x + y) + c0) ||
@@ -598,6 +618,12 @@ public:
                 rewrite(x - (x + y), -y) ||
                 rewrite(y - (x + y), -x) ||
                 rewrite((x - y) - x, -y) ||
+                rewrite((select(x, y, z) + w) - select(x, u, v), select(x, y - u, z - v) + w) ||
+                rewrite((w + select(x, y, z)) - select(x, u, v), select(x, y - u, z - v) + w) ||
+                rewrite(select(x, y, z) - (select(x, u, v) + w), select(x, y - u, z - v) - w) ||
+                rewrite(select(x, y, z) - (w + select(x, u, v)), select(x, y - u, z - v) - w) ||
+                rewrite((select(x, y, z) - w) - select(x, u, v), select(x, y - u, z - v) - w) ||
+                rewrite(c0 - select(x, c1, c2), select(x, fold(c0 - c1), fold(c0 - c2))) ||
                 rewrite((x + c0) - c1, x + fold(c0 - c1)) ||
                 rewrite((x + c0) - (c1 - y), (x + y) + fold(c0 - c1)) ||
                 rewrite((x + c0) - (y + c1), (x - y) + fold(c0 - c1)) ||
@@ -935,6 +961,7 @@ public:
             }
 
             if (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
+                rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
                 (no_overflow(op->type) &&
                  (// Fold repeated division
                   rewrite((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0) ||
@@ -967,6 +994,16 @@ public:
                   rewrite((z - (y + x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                   rewrite((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                   rewrite((z - (y - x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+
+                  // For the next depth, stick to addition
+                  rewrite((((x * c0 + y) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite((((y + x * c0) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite(((z + (x * c0 + y)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite(((z + (y + x * c0)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite((w + ((x * c0 + y) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                  rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
                   rewrite((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0) ||
                   rewrite((x + y)/x, y/x + 1) ||
@@ -1301,7 +1338,7 @@ public:
         if (may_simplify(op->type)) {
 
             // Order commutative operations by node type
-            if (a.node_type() < b.node_type()) {
+            if (should_commute(a, b)) {
                 std::swap(a, b);
                 std::swap(a_bounds, b_bounds);
             }
@@ -1470,6 +1507,21 @@ public:
             Expr a = mutate(op->a, nullptr);
             Expr b = mutate(op->b, nullptr);
             if (a.same_as(op->a) && b.same_as(op->b)) {
+                return op;
+            } else {
+                return EQ::make(a, b);
+            }
+        }
+
+        if (op->a.type().is_bool()) {
+            Expr a = mutate(op->a, nullptr);
+            Expr b = mutate(op->b, nullptr);
+            auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b));
+            if (rewrite(x == 1, x)) {
+                return rewrite.result;
+            } else if (rewrite(x == 0, !x)) {
+                return mutate(std::move(rewrite.result), bounds);
+            } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 return op;
             } else {
                 return EQ::make(a, b);
@@ -1860,192 +1912,142 @@ public:
         return mutate(!(op->a < op->b), bounds);
     }
 
+    struct ScopedFact {
+        Scope<VarInfo> &var_info;
+        vector<const Variable *> pop_list;
+
+        void learn_false(const Expr &fact) {
+            VarInfo info;
+            info.old_uses = info.new_uses = 0;
+            if (const Variable *v = fact.as<Variable>()) {
+                info.replacement = const_false(fact.type().lanes());
+                var_info.push(v->name, info);
+                pop_list.push_back(v);
+            } else if (const NE *ne = fact.as<NE>()) {
+                const Variable *v = ne->a.as<Variable>();
+                if (v && is_const(ne->b)) {
+                    info.replacement = ne->b;
+                    var_info.push(v->name, info);
+                    pop_list.push_back(v);
+                }
+            } else if (const Or *o = fact.as<Or>()) {
+                // Two things to learn!
+                learn_false(o->a);
+                learn_false(o->b);
+            } else if (const Not *n = fact.as<Not>()) {
+                learn_true(n->a);
+            }
+        }
+
+        void learn_true(const Expr &fact) {
+            VarInfo info;
+            info.old_uses = info.new_uses = 0;
+            if (const Variable *v = fact.as<Variable>()) {
+                info.replacement = const_true(fact.type().lanes());
+                var_info.push(v->name, info);
+                pop_list.push_back(v);
+            } else if (const EQ *eq = fact.as<EQ>()) {
+                const Variable *v = eq->a.as<Variable>();
+                if (v && is_const(eq->b)) {
+                    info.replacement = eq->b;
+                    var_info.push(v->name, info);
+                    pop_list.push_back(v);
+                }
+            } else if (const And *a = fact.as<And>()) {
+                // Two things to learn!
+                learn_true(a->a);
+                learn_true(a->b);
+            } else if (const Not *n = fact.as<Not>()) {
+                learn_false(n->a);
+            }
+        }
+
+        ScopedFact(Scope<VarInfo> &var_info) : var_info(var_info) {
+        }
+
+        ~ScopedFact() {
+            for (auto v : pop_list) {
+                var_info.pop(v->name);
+            }
+        }
+    };
+
+    // Tell the simplifier to learn from and exploit a boolean
+    // condition, over the lifetime of the returned object.
+    ScopedFact scoped_truth(const Expr &fact) {
+        ScopedFact f(var_info);
+        f.learn_true(fact);
+        return f;
+    }
+
+    // Tell the simplifier to assume a boolean condition is false over the lifetime of the returned object.
+    ScopedFact scoped_falsehood(const Expr &fact) {
+        ScopedFact f(var_info);
+        f.learn_false(fact);
+        return f;
+    }
+
     Expr visit(const And *op, ConstBounds *bounds) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
+        // Exploit the assumed truth of the second side while mutating
+        // the first. Then assume the mutated first side while
+        // mutating the second.
+        Expr a, b;
+        {
+            auto fact = scoped_truth(op->b);
+            a = mutate(op->a, nullptr);
+        }
+        {
+            // Note that we assume the *mutated* a here. The transformation
+            // A && B == A && (B | A) is legal (where | means "given")
+            // As is
+            // A && B = (A | B) && B
+            // But the transformation
+            // A && B == (A | B) && (B | A) is not
+            auto fact = scoped_truth(a);
+            b = mutate(op->b, nullptr);
+        }
 
-        const Broadcast *broadcast_a = a.as<Broadcast>();
-        const Broadcast *broadcast_b = b.as<Broadcast>();
-        const LE *le_a = a.as<LE>();
-        const LE *le_b = b.as<LE>();
-        const LT *lt_a = a.as<LT>();
-        const LT *lt_b = b.as<LT>();
-        const EQ *eq_a = a.as<EQ>();
-        const EQ *eq_b = b.as<EQ>();
-        const NE *neq_a = a.as<NE>();
-        const NE *neq_b = b.as<NE>();
-        const Not *not_a = a.as<Not>();
-        const Not *not_b = b.as<Not>();
-        const Variable *var_a = a.as<Variable>();
-        const Variable *var_b = b.as<Variable>();
-        int64_t ia = 0, ib = 0;
+        // Order commutative operations by node type
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+        }
 
-        if (is_one(a)) {
-            return b;
-        } else if (is_one(b)) {
-            return a;
-        } else if (is_zero(a)) {
-            return a;
-        } else if (is_zero(b)) {
-            return b;
-        } else if (equal(a, b)) {
-            // a && a -> a
-            return a;
-        } else if (le_a &&
-                   le_b &&
-                   equal(le_a->a, le_b->a)) {
-            // (x <= foo && x <= bar) -> x <= min(foo, bar)
-            return mutate(le_a->a <= min(le_a->b, le_b->b), bounds);
-        } else if (le_a &&
-                   le_b &&
-                   equal(le_a->b, le_b->b)) {
-            // (foo <= x && bar <= x) -> max(foo, bar) <= x
-            return mutate(max(le_a->a, le_b->a) <= le_a->b, bounds);
-        } else if (lt_a &&
-                   lt_b &&
-                   equal(lt_a->a, lt_b->a)) {
-            // (x < foo && x < bar) -> x < min(foo, bar)
-            return mutate(lt_a->a < min(lt_a->b, lt_b->b), bounds);
-        } else if (lt_a &&
-                   lt_b &&
-                   equal(lt_a->b, lt_b->b)) {
-            // (foo < x && bar < x) -> max(foo, bar) < x
-            return mutate(max(lt_a->a, lt_b->a) < lt_a->b, bounds);
-        } else if (eq_a &&
-                   neq_b &&
-                   ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
-                    (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
-            // a == b && a != b
-            return const_false(op->type.lanes());
-        } else if (eq_b &&
-                   neq_a &&
-                   ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
-                    (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
-            // a != b && a == b
-            return const_false(op->type.lanes());
-        } else if ((not_a && equal(not_a->a, b)) ||
-                   (not_b && equal(not_b->a, a))) {
-            // a && !a
-            return const_false(op->type.lanes());
-        } else if (le_a &&
-                   lt_b &&
-                   equal(le_a->a, lt_b->b) &&
-                   equal(le_a->b, lt_b->a)) {
-            // a <= b && b < a
-            return const_false(op->type.lanes());
-        } else if (lt_a &&
-                   le_b &&
-                   equal(lt_a->a, le_b->b) &&
-                   equal(lt_a->b, le_b->a)) {
-            // a < b && b <= a
-            return const_false(op->type.lanes());
-        } else if (lt_a &&
-                   lt_b &&
-                   equal(lt_a->a, lt_b->b) &&
-                   const_int(lt_a->b, &ia) &&
-                   const_int(lt_b->a, &ib) &&
-                   ib + 1 >= ia) {
-            // (a < ia && ib < a) where there is no integer a s.t. ib < a < ia
-            return const_false(op->type.lanes());
-        } else if (lt_a &&
-                   lt_b &&
-                   equal(lt_a->b, lt_b->a) &&
-                   const_int(lt_b->b, &ia) &&
-                   const_int(lt_a->a, &ib) &&
-                   ib + 1 >= ia) {
-            // (ib < a && a < ia) where there is no integer a s.t. ib < a < ia
-            return const_false(op->type.lanes());
+        auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b));
 
-        } else if (le_a &&
-                   lt_b &&
-                   equal(le_a->a, lt_b->b) &&
-                   const_int(le_a->b, &ia) &&
-                   const_int(lt_b->a, &ib) &&
-                   ib >= ia) {
-            // (a <= ia && ib < a) where there is no integer a s.t. ib < a <= ia
-            return const_false(op->type.lanes());
-        } else if (le_a &&
-                   lt_b &&
-                   equal(le_a->b, lt_b->a) &&
-                   const_int(lt_b->b, &ia) &&
-                   const_int(le_a->a, &ib) &&
-                   ib >= ia) {
-            // (ib <= a && a < ia) where there is no integer a s.t. ib < a <= ia
-            return const_false(op->type.lanes());
+        auto f = IRMatcher::Const(0, op->type);
 
-        } else if (lt_a &&
-                   le_b &&
-                   equal(lt_a->a, le_b->b) &&
-                   const_int(lt_a->b, &ia) &&
-                   const_int(le_b->a, &ib) &&
-                   ib >= ia) {
-            // (a < ia && ib <= a) where there is no integer a s.t. ib <= a < ia
-            return const_false(op->type.lanes());
-        } else if (lt_a &&
-                   le_b &&
-                   equal(lt_a->b, le_b->a) &&
-                   const_int(le_b->b, &ia) &&
-                   const_int(lt_a->a, &ib) &&
-                   ib >= ia) {
-            // (ib < a && a <= ia) where there is no integer a s.t. ib <= a < ia
-            return const_false(op->type.lanes());
+        if (rewrite(x && 1, a) ||
+            rewrite(x && 0, b) ||
+            rewrite(x && x, a) ||
+            rewrite(x != y && x == y, f) ||
+            rewrite(x != y && y == x, f) ||
+            rewrite(x && !x, f) ||
+            rewrite(!x && x, f) ||
+            rewrite(y <= x && x < y, f) ||
+            // Note: In the predicate below, if undefined overflow
+            // occurs, the predicate counts as false. If well-defined
+            // overflow occurs, the condition couldn't possibly
+            // trigger because c0 + 1 will be the smallest possible
+            // value.
+            rewrite(c0 < x && x < c1, f, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(x < c1 && c0 < x, f, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(x <= c1 && c0 < x, f, c1 <= c0) ||
+            rewrite(c0 <= x && x < c1, f, c1 <= c0) ||
+            rewrite(c0 <= x && x <= c1, f, c1 < c0) ||
+            rewrite(x <= c1 && c0 <= x, f, c1 < c0) ||
+            rewrite(c0 < x && c1 < x, fold(max(c0, c1)) < x) ||
+            rewrite(c0 <= x && c1 <= x, fold(max(c0, c1)) <= x) ||
+            rewrite(x < c0 && x < c1, x < fold(min(c0, c1))) ||
+            rewrite(x <= c0 && x <= c1, x <= fold(min(c0, c1)))) {
+            return rewrite.result;
+        }
 
-        } else if (le_a &&
-                   le_b &&
-                   equal(le_a->a, le_b->b) &&
-                   const_int(le_a->b, &ia) &&
-                   const_int(le_b->a, &ib) &&
-                   ib > ia) {
-            // (a <= ia && ib <= a) where there is no integer a s.t. ib <= a <= ia
-            return const_false(op->type.lanes());
-        } else if (le_a &&
-                   le_b &&
-                   equal(le_a->b, le_b->a) &&
-                   const_int(le_b->b, &ia) &&
-                   const_int(le_a->a, &ib) &&
-                   ib > ia) {
-            // (ib <= a && a <= ia) where there is no integer a s.t. ib <= a <= ia
-            return const_false(op->type.lanes());
+        if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes()))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
 
-        } else if (eq_a &&
-                   neq_b &&
-                   equal(eq_a->a, neq_b->a) &&
-                   is_simple_const(eq_a->b) &&
-                   is_simple_const(neq_b->b)) {
-            // (a == k1) && (a != k2) -> (a == k1) && (k1 != k2)
-            // (second term always folds away)
-            return mutate(And::make(a, NE::make(eq_a->b, neq_b->b)), bounds);
-        } else if (neq_a &&
-                   eq_b &&
-                   equal(neq_a->a, eq_b->a) &&
-                   is_simple_const(neq_a->b) &&
-                   is_simple_const(eq_b->b)) {
-            // (a != k1) && (a == k2) -> (a == k2) && (k1 != k2)
-            // (second term always folds away)
-            return mutate(And::make(b, NE::make(neq_a->b, eq_b->b)), bounds);
-        } else if (eq_a &&
-                   eq_a->a.as<Variable>() &&
-                   is_simple_const(eq_a->b) &&
-                   expr_uses_var(b, eq_a->a.as<Variable>()->name)) {
-            // (somevar == k) && b -> (somevar == k) && substitute(somevar, k, b)
-            return mutate(And::make(a, substitute(eq_a->a.as<Variable>(), eq_a->b, b)), bounds);
-        } else if (eq_b &&
-                   eq_b->a.as<Variable>() &&
-                   is_simple_const(eq_b->b) &&
-                   expr_uses_var(a, eq_b->a.as<Variable>()->name)) {
-            // a && (somevar == k) -> substitute(somevar, k1, a) && (somevar == k)
-            return mutate(And::make(substitute(eq_b->a.as<Variable>(), eq_b->b, a), b), bounds);
-        } else if (broadcast_a &&
-                   broadcast_b &&
-                   broadcast_a->lanes == broadcast_b->lanes) {
-            // x8(a) && x8(b) -> x8(a && b)
-            return Broadcast::make(mutate(And::make(broadcast_a->value, broadcast_b->value), bounds), broadcast_a->lanes);
-        } else if (var_a && expr_uses_var(b, var_a->name)) {
-            return mutate(a && substitute(var_a->name, make_one(a.type()), b), bounds);
-        } else if (var_b && expr_uses_var(a, var_b->name)) {
-            return mutate(substitute(var_b->name, make_one(b.type()), a) && b, bounds);
-        } else if (a.same_as(op->a) &&
-                   b.same_as(op->b)) {
+        if (a.same_as(op->a) &&
+            b.same_as(op->b)) {
             return op;
         } else {
             return And::make(a, b);
@@ -2053,175 +2055,52 @@ public:
     }
 
     Expr visit(const Or *op, ConstBounds *bounds) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
+        // An appropriately rewritten version of the And mutator.
+        Expr a, b;
+        {
+            auto fact = scoped_falsehood(op->b);
+            a = mutate(op->a, nullptr);
+        }
+        {
+            auto fact = scoped_falsehood(a);
+            b = mutate(op->b, nullptr);
+        }
 
-        const Broadcast *broadcast_a = a.as<Broadcast>();
-        const Broadcast *broadcast_b = b.as<Broadcast>();
-        const EQ *eq_a = a.as<EQ>();
-        const EQ *eq_b = b.as<EQ>();
-        const NE *neq_a = a.as<NE>();
-        const NE *neq_b = b.as<NE>();
-        const Not *not_a = a.as<Not>();
-        const Not *not_b = b.as<Not>();
-        const LE *le_a = a.as<LE>();
-        const LE *le_b = b.as<LE>();
-        const LT *lt_a = a.as<LT>();
-        const LT *lt_b = b.as<LT>();
-        const Variable *var_a = a.as<Variable>();
-        const Variable *var_b = b.as<Variable>();
-        const And *and_a = a.as<And>();
-        const And *and_b = b.as<And>();
-        string name_a, name_b, name_c;
-        int64_t ia = 0, ib = 0;
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+        }
 
-        if (is_one(a)) {
-            return a;
-        } else if (is_one(b)) {
-            return b;
-        } else if (is_zero(a)) {
-            return b;
-        } else if (is_zero(b)) {
-            return a;
-        } else if (equal(a, b)) {
-            return a;
-        } else if (eq_a &&
-                   neq_b &&
-                   ((equal(eq_a->a, neq_b->a) && equal(eq_a->b, neq_b->b)) ||
-                    (equal(eq_a->a, neq_b->b) && equal(eq_a->b, neq_b->a)))) {
-            // a == b || a != b
-            return const_true(op->type.lanes());
-        } else if (neq_a &&
-                   eq_b &&
-                   ((equal(eq_b->a, neq_a->a) && equal(eq_b->b, neq_a->b)) ||
-                    (equal(eq_b->a, neq_a->b) && equal(eq_b->b, neq_a->a)))) {
-            // a != b || a == b
-            return const_true(op->type.lanes());
-        } else if ((not_a && equal(not_a->a, b)) ||
-                   (not_b && equal(not_b->a, a))) {
-            // a || !a
-            return const_true(op->type.lanes());
-        } else if (le_a &&
-                   lt_b &&
-                   equal(le_a->a, lt_b->b) &&
-                   equal(le_a->b, lt_b->a)) {
-            // a <= b || b < a
-            return const_true(op->type.lanes());
-        } else if (lt_a &&
-                   le_b &&
-                   equal(lt_a->a, le_b->b) &&
-                   equal(lt_a->b, le_b->a)) {
-            // a < b || b <= a
-            return const_true(op->type.lanes());
-        } else if (lt_a &&
-                   lt_b &&
-                   equal(lt_a->a, lt_b->b) &&
-                   const_int(lt_a->b, &ia) &&
-                   const_int(lt_b->a, &ib) &&
-                   ib < ia) {
-            // (a < ia || ib < a) where ib < ia
-            return const_true(op->type.lanes());
-        } else if (lt_a &&
-                   lt_b &&
-                   equal(lt_a->b, lt_b->a) &&
-                   const_int(lt_b->b, &ia) &&
-                   const_int(lt_a->a, &ib) &&
-                   ib < ia) {
-            // (ib < a || a < ia) where ib < ia
-            return const_true(op->type.lanes());
-        } else if (le_a &&
-                   lt_b &&
-                   equal(le_a->a, lt_b->b) &&
-                   const_int(le_a->b, &ia) &&
-                   const_int(lt_b->a, &ib) &&
-                   ib <= ia) {
-            // (a <= ia || ib < a) where ib <= ia
-            return const_true(op->type.lanes());
-        } else if (le_a &&
-                   lt_b &&
-                   equal(le_a->b, lt_b->a) &&
-                   const_int(lt_b->b, &ia) &&
-                   const_int(le_a->a, &ib) &&
-                   ib <= ia) {
-            // (ib <= a || a < ia) where ib <= ia
-            return const_true(op->type.lanes());
-        } else if (lt_a &&
-                   le_b &&
-                   equal(lt_a->a, le_b->b) &&
-                   const_int(lt_a->b, &ia) &&
-                   const_int(le_b->a, &ib) &&
-                   ib <= ia) {
-            // (a < ia || ib <= a) where ib <= ia
-            return const_true(op->type.lanes());
-        } else if (lt_a &&
-                   le_b &&
-                   equal(lt_a->b, le_b->a) &&
-                   const_int(le_b->b, &ia) &&
-                   const_int(lt_a->a, &ib) &&
-                   ib <= ia) {
-            // (ib < a || a <= ia) where ib <= ia
-            return const_true(op->type.lanes());
-        } else if (le_a &&
-                   le_b &&
-                   equal(le_a->a, le_b->b) &&
-                   const_int(le_a->b, &ia) &&
-                   const_int(le_b->a, &ib) &&
-                   ib <= ia + 1) {
-            // (a <= ia || ib <= a) where ib <= ia + 1
-            return const_true(op->type.lanes());
-        } else if (le_a &&
-                   le_b &&
-                   equal(le_a->b, le_b->a) &&
-                   const_int(le_b->b, &ia) &&
-                   const_int(le_a->a, &ib) &&
-                   ib <= ia + 1) {
-            // (ib <= a || a <= ia) where ib <= ia + 1
-            return const_true(op->type.lanes());
+        auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b));
 
-        } else if (broadcast_a &&
-                   broadcast_b &&
-                   broadcast_a->lanes == broadcast_b->lanes) {
-            // x8(a) || x8(b) -> x8(a || b)
-            return Broadcast::make(mutate(Or::make(broadcast_a->value, broadcast_b->value), bounds), broadcast_a->lanes);
-        } else if (eq_a &&
-                   neq_b &&
-                   equal(eq_a->a, neq_b->a) &&
-                   is_simple_const(eq_a->b) &&
-                   is_simple_const(neq_b->b)) {
-            // (a == k1) || (a != k2) -> (a != k2) || (k1 == k2)
-            // (second term always folds away)
-            return mutate(Or::make(b, EQ::make(eq_a->b, neq_b->b)), bounds);
-        } else if (neq_a &&
-                   eq_b &&
-                   equal(neq_a->a, eq_b->a) &&
-                   is_simple_const(neq_a->b) &&
-                   is_simple_const(eq_b->b)) {
-            // (a != k1) || (a == k2) -> (a != k1) || (k1 == k2)
-            // (second term always folds away)
-            return mutate(Or::make(a, EQ::make(neq_a->b, eq_b->b)), bounds);
-        } else if (var_a && expr_uses_var(b, var_a->name)) {
-            return mutate(a || substitute(var_a->name, make_zero(a.type()), b), bounds);
-        } else if (var_b && expr_uses_var(a, var_b->name)) {
-            return mutate(substitute(var_b->name, make_zero(b.type()), a) || b, bounds);
-        } else if (is_var_simple_const_comparison(b, &name_c) &&
-                   and_a &&
-                   ((is_var_simple_const_comparison(and_a->a, &name_a) && name_a == name_c) ||
-                    (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
-            // (a && b) || (c) -> (a || c) && (b || c)
-            // iff c and at least one of a or b is of the form
-            //     (var == const) or (var != const)
-            // (and the vars are the same)
-            return mutate(And::make(Or::make(and_a->a, b), Or::make(and_a->b, b)), bounds);
-        } else if (is_var_simple_const_comparison(a, &name_c) &&
-                   and_b &&
-                   ((is_var_simple_const_comparison(and_b->a, &name_a) && name_a == name_c) ||
-                    (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
-            // (c) || (a && b) -> (a || c) && (b || c)
-            // iff c and at least one of a or b is of the form
-            //     (var == const) or (var != const)
-            // (and the vars are the same)
-            return mutate(And::make(Or::make(and_b->a, a), Or::make(and_b->b, a)), bounds);
-        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+        auto t = IRMatcher::Const(1, op->type);
+
+        if (rewrite(x || 1, b) ||
+            rewrite(x || 0, a) ||
+            rewrite(x || x, a) ||
+            rewrite(x != y || x == y, t) ||
+            rewrite(x != y || y == x, t) ||
+            rewrite(x || !x, t) ||
+            rewrite(!x || x, t) ||
+            rewrite(y <= x || x < y, t) ||
+            rewrite(x <= c0 || c1 <= x, t, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(c1 <= x || x <= c0, t, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(x <= c0 || c1 < x, t, c1 <= c0) ||
+            rewrite(c1 <= x || x < c0, t, c1 <= c0) ||
+            rewrite(x < c0 || c1 < x, t, c1 < c0) ||
+            rewrite(c1 < x || x < c0, t, c1 < c0) ||
+            rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
+            rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
+            rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
+            rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1)))) {
+            return rewrite.result;
+        }
+
+        if (rewrite(broadcast(x) || broadcast(y), broadcast(x || y, op->type.lanes()))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (a.same_as(op->a) &&
+            b.same_as(op->b)) {
             return op;
         } else {
             return Or::make(a, b);
@@ -2231,32 +2110,26 @@ public:
     Expr visit(const Not *op, ConstBounds *bounds) {
         Expr a = mutate(op->a, nullptr);
 
-        const Call *c;
-        if (is_one(a)) {
-            return make_zero(a.type());
-        } else if (is_zero(a)) {
-            return make_one(a.type());
-        } else if (const Not *n = a.as<Not>()) {
-            // Double negatives cancel
-            return n->a;
-        } else if (const LE *n = a.as<LE>()) {
-            return LT::make(n->b, n->a);
-        } else if (const GE *n = a.as<GE>()) {
-            return LT::make(n->a, n->b);
-        } else if (const LT *n = a.as<LT>()) {
-            return LE::make(n->b, n->a);
-        } else if (const GT *n = a.as<GT>()) {
-            return LE::make(n->a, n->b);
-        } else if (const NE *n = a.as<NE>()) {
-            return EQ::make(n->a, n->b);
-        } else if (const EQ *n = a.as<EQ>()) {
-            return NE::make(n->a, n->b);
-        } else if (const Broadcast *n = a.as<Broadcast>()) {
-            return mutate(Broadcast::make(!n->value, n->lanes), bounds);
-        } else if ((c = a.as<Call>()) != nullptr && c->is_intrinsic(Call::likely)) {
-            // !likely(e) -> likely(!e)
-            return likely(mutate(Not::make(c->args[0]), bounds));
-        } else if (a.same_as(op->a)) {
+        auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a));
+
+        if (rewrite(!c0, fold(!c0)) ||
+            rewrite(!(x < y), y <= x) ||
+            rewrite(!(x <= y), y < x) ||
+            rewrite(!(x > y), y >= x) ||
+            rewrite(!(x >= y), y > x) ||
+            rewrite(!(x == y), x != y) ||
+            rewrite(!(x != y), x == y) ||
+            rewrite(!!x, x)) {
+            return rewrite.result;
+        }
+
+        if (rewrite(!broadcast(x), broadcast(!x, op->type.lanes())) ||
+            rewrite(!intrin(Call::likely, x), intrin(Call::likely, !x)) ||
+            rewrite(!intrin(Call::likely_if_innermost, x), intrin(Call::likely_if_innermost, !x))) {
+            return mutate(std::move(rewrite.result), bounds);
+        }
+
+        if (a.same_as(op->a)) {
             return op;
         } else {
             return Not::make(a);
@@ -2267,8 +2140,15 @@ public:
 
         ConstBounds t_bounds, f_bounds;
         Expr condition = mutate(op->condition, nullptr);
-        Expr true_value = mutate(op->true_value, &t_bounds);
-        Expr false_value = mutate(op->false_value, &f_bounds);
+        Expr true_value, false_value;
+        {
+            auto fact = scoped_truth(condition);
+            true_value = mutate(op->true_value, &t_bounds);
+        }
+        {
+            auto fact = scoped_falsehood(condition);
+            false_value = mutate(op->false_value, &f_bounds);
+        }
 
         if (bounds) {
             bounds->min_defined = t_bounds.min_defined && f_bounds.min_defined;
@@ -2284,11 +2164,17 @@ public:
             if (rewrite(select(indet, x, y), indet) ||
                 rewrite(select(x, indet, y), indet) ||
                 rewrite(select(x, y, indet), indet) ||
+                rewrite(select(IRMatcher::intrin(Call::likely, 1), x, y), x) ||
+                rewrite(select(IRMatcher::intrin(Call::likely, 0), x, y), y) ||
+                rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, 1), x, y), x) ||
+                rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, 0), x, y), y) ||
                 rewrite(select(1, x, y), x) ||
                 rewrite(select(0, x, y), y) ||
                 rewrite(select(x, y, y), y) ||
                 rewrite(select(x, intrin(Call::likely, y), y), true_value) ||
-                rewrite(select(x, y, intrin(Call::likely, y)), false_value)) {
+                rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
+                rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
+                rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value)) {
                 return rewrite.result;
             }
 
@@ -2317,7 +2203,11 @@ public:
                 rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
                 (op->type.is_bool() &&
                  (rewrite(select(x, 1, 0), cast(op->type, x)) ||
-                  rewrite(select(x, 0, 1), cast(op->type, !x))))) {
+                  rewrite(select(x, 0, 1), cast(op->type, !x)) ||
+                  rewrite(select(x, y, 0), x && y) ||
+                  rewrite(select(x, y, 1), !x || y) ||
+                  rewrite(select(x, 0, y), !x && y) ||
+                  rewrite(select(x, 1, y), x || y)))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -2372,88 +2262,28 @@ public:
 
         // If (false) ...
         if (is_zero(condition)) {
-            Stmt stmt = mutate(op->else_case);
-            if (!stmt.defined()) {
-                // Emit a noop
-                stmt = Evaluate::make(0);
+            if (op->else_case.defined()) {
+                return mutate(op->else_case);
+            } else {
+                return Evaluate::make(0);
             }
-            return stmt;
         }
 
-        Stmt then_case = mutate(op->then_case);
-        Stmt else_case = mutate(op->else_case);
+        Stmt then_case, else_case;
+        {
+            auto f = scoped_truth(op->condition);
+            // Also substitute the entire condition
+            then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
+            then_case = mutate(then_case);
+        }
+        {
+            auto f = scoped_falsehood(op->condition);
+            else_case = mutate(op->else_case);
+        }
 
         // If both sides are no-ops, bail out.
         if (is_no_op(then_case) && is_no_op(else_case)) {
             return then_case;
-        }
-
-        // Remember the statements before substitution.
-        Stmt then_nosubs = then_case;
-        Stmt else_nosubs = else_case;
-
-        // Mine the condition for useful constraints to apply (eg var == value && bool_param).
-        vector<Expr> stack;
-        stack.push_back(condition);
-        bool and_chain = false, or_chain = false;
-        while (!stack.empty()) {
-            Expr next = stack.back();
-            stack.pop_back();
-
-            if (!or_chain) {
-                then_case = substitute(next, const_true(), then_case);
-            }
-            if (!and_chain) {
-                else_case = substitute(next, const_false(), else_case);
-            }
-
-            if (const And *a = next.as<And>()) {
-                if (!or_chain) {
-                    stack.push_back(a->b);
-                    stack.push_back(a->a);
-                    and_chain = true;
-                }
-            } else if (const Or *o = next.as<Or>()) {
-                if (!and_chain) {
-                    stack.push_back(o->b);
-                    stack.push_back(o->a);
-                    or_chain = true;
-                }
-            } else {
-                const EQ *eq = next.as<EQ>();
-                const NE *ne = next.as<NE>();
-                const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
-
-                if (eq && var) {
-                    if (!or_chain) {
-                        then_case = substitute(var->name, eq->b, then_case);
-                    }
-                    if (!and_chain && eq->b.type().is_bool()) {
-                        else_case = substitute(var->name, !eq->b, else_case);
-                    }
-                } else if (var) {
-                    if (!or_chain) {
-                        then_case = substitute(var->name, const_true(), then_case);
-                    }
-                    if (!and_chain) {
-                        else_case = substitute(var->name, const_false(), else_case);
-                    }
-                } else if (eq && is_const(eq->b) && !or_chain) {
-                    // some_expr = const
-                    then_case = substitute(eq->a, eq->b, then_case);
-                } else if (ne && is_const(ne->b) && !and_chain) {
-                    // some_expr != const
-                    else_case = substitute(ne->a, ne->b, else_case);
-                }
-            }
-        }
-
-        // If substitutions have been made, simplify again.
-        if (!then_case.same_as(then_nosubs)) {
-            then_case = mutate(then_case);
-        }
-        if (!else_case.same_as(else_nosubs)) {
-            else_case = mutate(else_case);
         }
 
         if (condition.same_as(op->condition) &&
@@ -3174,8 +3004,10 @@ public:
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
             const Shuffle *shuffle = new_value.as<Shuffle>();
+            const Call *call = new_value.as<Call>();
             const Variable *var_b = nullptr;
             const Variable *var_a = nullptr;
+
             if (add) {
                 var_a = add->a.as<Variable>();
                 var_b = add->b.as<Variable>();
@@ -3250,6 +3082,9 @@ public:
                 Expr op_b = var_a ? new_var : shuffle->vectors[1];
                 replacement = substitute(new_name, Shuffle::make_concat({op_a, op_b}), replacement);
                 new_value = var_a ? shuffle->vectors[1] : shuffle->vectors[0];
+            } else if (call && (call->is_intrinsic(Call::likely) || call->is_intrinsic(Call::likely_if_innermost))) {
+                replacement = substitute(new_name, Call::make(call->type, call->name, {new_var}, Call::PureIntrinsic), replacement);
+                new_value = call->args[0];
             } else {
                 break;
             }
@@ -3675,6 +3510,37 @@ bool can_prove(Expr e) {
             e = c->args[0];
         }
     }
+
+    // Dump all failed proof attempts
+    /*
+    if (!is_const(e)) {
+        struct RenameVariables : public IRMutator2 {
+            using IRMutator2::visit;
+
+            Expr visit(const Variable *op) {
+                auto it = vars.find(op->name);
+                if (it == vars.end()) {
+                    std::string name = "v" + std::to_string(vars.size());
+                    vars[op->name] = name;
+                    return Variable::make(op->type, name);
+                } else {
+                    return Variable::make(op->type, it->second);
+                }
+            }
+
+            Expr visit(const Let *op) {
+                std::string name = "v" + std::to_string(vars.size());
+                vars[op->name] = name;
+                return Let::make(name, mutate(op->value), mutate(op->body));
+            }
+
+            std::map<string, string> vars;
+        };
+
+        debug(0) << "Failed to prove: " << RenameVariables().mutate(e) << "\n";
+    }
+    */
+
     return is_one(e);
 }
 
