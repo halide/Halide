@@ -502,6 +502,11 @@ class VectorSubs : public IRMutator2 {
             // records the number of vector lanes in the type being
             // stored.
             new_args[5] = max_lanes;
+            // One of the arguments to the trace helper
+            // records the number entries in the coordinates (which we just widened)
+            if (max_lanes > 1) {
+                new_args[9] = new_args[9] * max_lanes;
+            }
             return Call::make(op->type, Call::trace, new_args, op->call_type);
         } else {
             // Widen the args to have the same lanes as the max lanes found
