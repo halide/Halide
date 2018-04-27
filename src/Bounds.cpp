@@ -1600,13 +1600,27 @@ private:
         scope.pop(name);
     }
 
+    vector<const Variable *> find_free_vars(Expr e) {
+        class FindFreeVars : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Variable *op) {
+                if (scope.contains(op->name)) {
+                    result.push_back(op);
+                }
+            }
+        public:
+            const Scope<Interval> &scope;
+            vector<const Variable *> result;
+            FindFreeVars(const Scope<Interval> &s) : scope(s) {}
+        } finder(scope);
+        e.accept(&finder);
+        return finder.result;
+    }
+
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
             if (!op->else_case.defined() || is_no_op(op->else_case)) {
-                // Trim the scope down to represent the fact that the
-                // condition is true. We only understand certain types
-                // of conditions for now.
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
@@ -1614,96 +1628,92 @@ private:
                              call->is_intrinsic(Call::strict_float))) {
                     c = call->args[0];
                 }
-                const LT *lt = c.as<LT>();
-                const LE *le = c.as<LE>();
-                const GT *gt = c.as<GT>();
-                const GE *ge = c.as<GE>();
-                const EQ *eq = c.as<EQ>();
-                Expr a, b;
-                if (lt) {a = lt->a; b = lt->b;}
-                if (le) {a = le->a; b = le->b;}
-                if (gt) {a = gt->a; b = gt->b;}
-                if (ge) {a = ge->a; b = ge->b;}
-                if (eq) {a = eq->a; b = eq->b;}
-                const Variable *var_a = a.as<Variable>();
-                const Variable *var_b = b.as<Variable>();
 
-                string var_to_pop;
-                vector<LetBound> let_bounds;
-                if (a.defined() && b.defined() && a.type() == Int(32)) {
-                    Expr inner_min, inner_max;
-                    if (var_a && scope.contains(var_a->name)) {
-                        Interval i = scope.get(var_a->name);
+                // Find the vars that vary, and solve for each in turn
+                // in order to bound it using the RHS. Maintain a list
+                // of the things we need to pop from scope once we're
+                // done.
+                struct RestrictedVar {
+                    // This variable
+                    const Variable *v;
+                    // Takes on this range
+                    Interval i;
+                    // Implying that these other variables also have a restricted range
+                    vector<LetBound> let_bounds;
+                };
+                vector<RestrictedVar> to_pop;
+                auto vars = find_free_vars(op->condition);
+                for (auto v : vars) {
+                    auto result = solve_expression(c, v->name);
+                    if (!result.fully_solved) continue;
+                    Expr solved = result.result;
 
-                        // If the original condition is likely, then
-                        // the additional trimming of the domain due
-                        // to the condition is probably unnecessary,
-                        // which means the mins/maxes below should
-                        // probably just be the LHS.
-                        Interval likely_i = i;
-                        if (call && call->is_intrinsic(Call::likely)) {
-                            likely_i.min = likely(i.min);
-                            likely_i.max = likely(i.max);
-                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
-                            likely_i.min = likely_if_innermost(i.min);
-                            likely_i.max = likely_if_innermost(i.max);
-                        }
+                    // Trim the scope down to represent the fact that the
+                    // condition is true. We only understand certain types
+                    // of conditions for now.
 
-                        Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
-                        if (bi.has_upper_bound()) {
-                            if (lt) {
-                                i.max = min(likely_i.max, bi.max - 1);
-                            }
-                            if (le || eq) {
-                                i.max = min(likely_i.max, bi.max);
-                            }
-                        }
-                        if (bi.has_lower_bound()) {
-                            if (gt) {
-                                i.min = max(likely_i.min, bi.min + 1);
-                            }
-                            if (ge || eq) {
-                                i.min = max(likely_i.min, bi.min);
-                            }
-                        }
-                        trim_scope_push(var_a->name, i, let_bounds);
-                        var_to_pop = var_a->name;
-                    } else if (var_b && scope.contains(var_b->name)) {
-                        Interval i = scope.get(var_b->name);
+                    const LT *lt = solved.as<LT>();
+                    const LE *le = solved.as<LE>();
+                    const GT *gt = solved.as<GT>();
+                    const GE *ge = solved.as<GE>();
+                    const EQ *eq = solved.as<EQ>();
+                    Expr rhs;
+                    if (lt) {rhs = lt->b;}
+                    if (le) {rhs = le->b;}
+                    if (gt) {rhs = gt->b;}
+                    if (ge) {rhs = ge->b;}
+                    if (eq) {rhs = eq->b;}
 
-                        Interval likely_i = i;
-                        if (call && call->is_intrinsic(Call::likely)) {
-                            likely_i.min = likely(i.min);
-                            likely_i.max = likely(i.max);
-                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
-                            likely_i.min = likely_if_innermost(i.min);
-                            likely_i.max = likely_if_innermost(i.max);
-                        }
-
-                        Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
-                        if (ai.has_upper_bound()) {
-                            if (gt) {
-                                i.max = min(likely_i.max, ai.max - 1);
-                            }
-                            if (ge || eq) {
-                                i.max = min(likely_i.max, ai.max);
-                            }
-                        }
-                        if (ai.has_lower_bound()) {
-                            if (lt) {
-                                i.min = max(likely_i.min, ai.min + 1);
-                            }
-                            if (le || eq) {
-                                i.min = max(likely_i.min, ai.min);
-                            }
-                        }
-                        trim_scope_push(var_b->name, i, let_bounds);
-                        var_to_pop = var_b->name;
+                    if (!rhs.defined() || rhs.type() != Int(32)) {
+                        continue;
                     }
+
+                    Expr inner_min, inner_max;
+                    Interval i = scope.get(v->name);
+
+                    // If the original condition is likely, then
+                    // the additional trimming of the domain due
+                    // to the condition is probably unnecessary,
+                    // which means the mins/maxes below should
+                    // probably just be the LHS.
+                    Interval likely_i = i;
+                    if (call && call->is_intrinsic(Call::likely)) {
+                        likely_i.min = likely(i.min);
+                        likely_i.max = likely(i.max);
+                    } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                        likely_i.min = likely_if_innermost(i.min);
+                        likely_i.max = likely_if_innermost(i.max);
+                    }
+
+                    Interval bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
+                    if (bi.has_upper_bound()) {
+                        if (lt) {
+                            i.max = min(likely_i.max, bi.max - 1);
+                        }
+                        if (le || eq) {
+                            i.max = min(likely_i.max, bi.max);
+                        }
+                    }
+                    if (bi.has_lower_bound()) {
+                        if (gt) {
+                            i.min = max(likely_i.min, bi.min + 1);
+                        }
+                        if (ge || eq) {
+                            i.min = max(likely_i.min, bi.min);
+                        }
+                    }
+                    RestrictedVar p;
+                    p.v = v;
+                    p.i = i;
+                    to_pop.emplace_back(std::move(p));
+                }
+                for (auto &p : to_pop) {
+                    trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
                 op->then_case.accept(this);
-                if (!var_to_pop.empty()) {
-                    trim_scope_pop(var_to_pop, let_bounds);
+                while (!to_pop.empty()) {
+                    trim_scope_pop(to_pop.back().v->name, to_pop.back().let_bounds);
+                    to_pop.pop_back();
                 }
             } else {
                 // Just take the union over the branches
