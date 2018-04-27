@@ -1009,7 +1009,7 @@ public:
                     internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f_args[i];
 
-                    if (box[i].is_single_point()){
+                    if (box[i].is_single_point()) {
                         body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                     } else {
                         body = LetStmt::make(var + ".max", box[i].max, body);
