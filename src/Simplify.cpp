@@ -1779,7 +1779,7 @@ public:
                   rewrite(c1 < max(y, c0), fold(c1 < c0) || c1 < y) ||
 
                   // Normalize comparison of ramps to a comparison of a ramp and a broadacst
-                  rewrite(ramp(x, y) < ramp(z, w), ramp(x - y, z - w, lanes) < 0))) ||
+                  rewrite(ramp(x, y) < ramp(z, w), ramp(x - z, y - w, lanes) < 0))) ||
 
                 (no_overflow_int(ty) &&
                  (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
