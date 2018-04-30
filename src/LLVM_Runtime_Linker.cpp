@@ -93,8 +93,6 @@ DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(mingw_math)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
-DECLARE_CPP_INITMOD(msan)
-DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(old_buffer_t)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -768,12 +766,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_profiler(c, bits_64, debug));
                 }
-            }
-
-            if (t.has_feature(Target::MSAN)) {
-                modules.push_back(get_initmod_msan(c, bits_64, debug));
-            } else {
-                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
             }
         }
 

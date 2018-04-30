@@ -696,26 +696,6 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
-    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
-    // happen for every output buffer if the function succeeds.
-    if (f.linkage != LinkageType::Internal &&
-        target.has_feature(Target::MSAN)) {
-        llvm::Function *annotate_buffer_fn =
-            module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
-        internal_assert(annotate_buffer_fn)
-            << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
-        #if LLVM_VERSION < 50
-        annotate_buffer_fn->setDoesNotAlias(1);
-        #else
-        annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
-        #endif
-        for (const auto &arg : f.args) {
-            if (arg.kind == Argument::OutputBuffer) {
-                register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
-            }
-        }
-    }
-
      // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
@@ -1070,6 +1050,14 @@ void CodeGen_LLVM::optimize_module() {
         TM->adjustPassManager(b);
     }
 #endif
+
+    if (get_target().has_feature(Target::MSAN)) {
+        auto addMemorySanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createMemorySanitizerPass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addMemorySanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addMemorySanitizerPass);
+    }
 
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);

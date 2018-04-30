@@ -102,9 +102,6 @@ public:
     // Use it like a stringstream.
     const char *str() {
         if (buf) {
-            if (type == StringStreamPrinter) {
-                msan_annotate_is_initialized();
-            }
             return buf;
         } else {
             return allocation_error();
@@ -139,15 +136,10 @@ public:
         return "Printer buffer allocation failed.\n";
     }
 
-    void msan_annotate_is_initialized() {
-        halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
-    }
-
     ~Printer() {
         if (!buf) {
             halide_error(user_context, allocation_error());
         } else {
-            msan_annotate_is_initialized();
             if (type == ErrorPrinter) {
                 halide_error(user_context, buf);
             } else if (type == BasicPrinter) {
