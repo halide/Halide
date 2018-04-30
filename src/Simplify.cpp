@@ -466,8 +466,8 @@ public:
             const int lanes = op->type.lanes();
 
             if (rewrite(c0 + c1, fold(c0 + c1)) ||
-                rewrite(x + 0, a) ||
-                rewrite(0 + x, b)) {
+                rewrite(x + 0, x) ||
+                rewrite(0 + x, x)) {
                 return rewrite.result;
             }
 
@@ -590,7 +590,7 @@ public:
             auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b));
             const int lanes = op->type.lanes();
 
-            if (rewrite(x - 0, a) ||
+            if (rewrite(x - 0, x) ||
                 rewrite(c0 - c1, fold(c0 - c1))) {
                 return rewrite.result;
             }
@@ -860,10 +860,10 @@ public:
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b));
             if (rewrite(c0 * c1, fold(c0 * c1)) ||
-                rewrite(0 * x, a) ||
-                rewrite(1 * x, b) ||
-                rewrite(x * 0, b) ||
-                rewrite(x * 1, a)) {
+                rewrite(0 * x, 0) ||
+                rewrite(1 * x, x) ||
+                rewrite(x * 0, 0) ||
+                rewrite(x * 1, x)) {
                 return rewrite.result;
             }
 
@@ -932,8 +932,8 @@ public:
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b));
 
-            if (rewrite(x / 1, a) ||
-                rewrite(0 / x, a) ||
+            if (rewrite(x / 1, x) ||
+                rewrite(0 / x, 0) ||
                 rewrite(x / x, 1) ||
                 rewrite(c0 / c1, fold(c0 / c1)) ||
                 (!op->type.is_float() &&
@@ -1053,8 +1053,8 @@ public:
             auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b));
 
             if (rewrite(c0 % c1, fold(c0 % c1)) ||
-                rewrite(0 % x, a) ||
-                rewrite(x % c0, a, c0 > 0 && a_bounds.min_defined && a_bounds.max_defined && a_bounds.min >= 0 && a_bounds.max < c0) ||
+                rewrite(0 % x, 0) ||
+                rewrite(x % c0, x, c0 > 0 && a_bounds.min_defined && a_bounds.max_defined && a_bounds.min >= 0 && a_bounds.max < c0) ||
                 (!op->type.is_float() &&
                  (rewrite(x % 0, IRMatcher::Indeterminate()) ||
                   rewrite(x % 1, 0)))) {
@@ -1124,12 +1124,12 @@ public:
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b));
 
-            if (rewrite(min(x, x), a) ||
+            if (rewrite(min(x, x), x) ||
                 rewrite(min(c0, c1), fold(min(c0, c1))) ||
 
                 // Cases where one side dominates:
                 rewrite(min(x, op->type.min()), b) ||
-                rewrite(min(x, op->type.max()), a) ||
+                rewrite(min(x, op->type.max()), x) ||
                 rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
                 rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
                 rewrite(min(min(x, y), x), a) ||
@@ -1315,12 +1315,12 @@ public:
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b));
 
-            if (rewrite(max(x, x), a) ||
+            if (rewrite(max(x, x), x) ||
                 rewrite(max(c0, c1), fold(max(c0, c1))) ||
 
                 // Cases where one side dominates:
                 rewrite(max(x, op->type.max()), b) ||
-                rewrite(max(x, op->type.min()), a) ||
+                rewrite(max(x, op->type.min()), x) ||
                 rewrite(max((x/c0)*c0, x), b, c0 > 0) ||
                 rewrite(max(x, (x/c0)*c0), a, c0 > 0) ||
                 rewrite(max(max(x, y), x), a) ||
