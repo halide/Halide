@@ -1587,7 +1587,7 @@ public:
                 rewrite(max(x, y) < x, false) ||
                 rewrite(max(y, x) < x, false) ||
                 rewrite(x < min(x, y), false) ||
-                rewrite(y < min(y, x), false) ||
+                rewrite(x < min(y, x), false) ||
 
                 // Comparisons of ramps and broadcasts. If the first
                 // and last lanes are provably < or >= the broadcast

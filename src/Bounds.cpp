@@ -1205,7 +1205,7 @@ bool box_contains(const Box &outer, const Box &inner) {
             return false;
         }
     }
-    return is_one(simplify(condition));
+    return can_prove(condition);
 }
 
 class FindInnermostVar : public IRVisitor {
