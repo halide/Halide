@@ -546,6 +546,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
+# The simplifier must be compiled with optimizations, or the stack frames blow up
+set_source_files_properties(Simplify.cpp PROPERTIES COMPILE_FLAGS -O3)
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Ensure that these tools are build first

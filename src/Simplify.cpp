@@ -596,7 +596,6 @@ public:
             auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b));
             auto overflow = IRMatcher::overflow(op->type);
             auto indet = IRMatcher::indet(op->type);
-            auto zero = IRMatcher::Const(0, op->type);
             const int lanes = op->type.lanes();
 
             if (rewrite(x - 0, a) ||
@@ -609,16 +608,16 @@ public:
             }
 
             if ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0))) ||
-                rewrite(x - x, zero) || // We want to remutate this just to get better bounds
+                rewrite(x - x, 0) || // We want to remutate this just to get better bounds
                 rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
                 rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
                 rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
                 rewrite(broadcast(x) - broadcast(y), broadcast(x - y, lanes)) ||
                 rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
-                rewrite(select(x, y, z) - y, select(x, zero, z - y)) ||
-                rewrite(select(x, y, z) - z, select(x, y - z, zero)) ||
-                rewrite(y - select(x, y, z), select(x, zero, y - z)) ||
-                rewrite(z - select(x, y, z), select(x, z - y, zero)) ||
+                rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
+                rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
+                rewrite(y - select(x, y, z), select(x, 0, y - z)) ||
+                rewrite(z - select(x, y, z), select(x, z - y, 0)) ||
                 rewrite((x + y) - x, y) ||
                 rewrite((x + y) - y, x) ||
                 rewrite(x - (x + y), -y) ||
@@ -653,14 +652,14 @@ public:
                 rewrite((z + (x + y)) - x, z + y) ||
                 rewrite((z + (y + x)) - x, z + y) ||
                 (no_overflow(op->type) &&
-                 (rewrite(max(x, y) - x, max(zero, y - x)) ||
-                  rewrite(min(x, y) - x, min(zero, y - x)) ||
-                  rewrite(max(x, y) - y, max(x - y, zero)) ||
-                  rewrite(min(x, y) - y, min(x - y, zero)) ||
-                  rewrite(x - max(x, y), min(zero, x - y), !is_const(x)) ||
-                  rewrite(x - min(x, y), max(zero, x - y), !is_const(x)) ||
-                  rewrite(y - max(x, y), min(y - x, zero), !is_const(y)) ||
-                  rewrite(y - min(x, y), max(y - x, zero), !is_const(y)) ||
+                 (rewrite(max(x, y) - x, max(0, y - x)) ||
+                  rewrite(min(x, y) - x, min(0, y - x)) ||
+                  rewrite(max(x, y) - y, max(x - y, 0)) ||
+                  rewrite(min(x, y) - y, min(x - y, 0)) ||
+                  rewrite(x - max(x, y), min(0, x - y), !is_const(x)) ||
+                  rewrite(x - min(x, y), max(0, x - y), !is_const(x)) ||
+                  rewrite(y - max(x, y), min(y - x, 0), !is_const(y)) ||
+                  rewrite(y - min(x, y), max(y - x, 0), !is_const(y)) ||
                   rewrite(x*y - x, x*(y - 1)) ||
                   rewrite(x*y - y, (x - 1)*y) ||
                   rewrite(x - x*y, x*(1 - y)) ||
@@ -683,7 +682,7 @@ public:
                   rewrite(min(y + x, z) - x, min(y, z - x)) ||
                   rewrite(min(z, x + y) - x, min(z - x, y)) ||
                   rewrite(min(z, y + x) - x, min(z - x, y)) ||
-                  rewrite(min(x, y) - min(y, x), zero) ||
+                  rewrite(min(x, y) - min(y, x), 0) ||
                   rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
                   rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
 
@@ -695,7 +694,7 @@ public:
                   rewrite(max(y + x, z) - x, max(y, z - x)) ||
                   rewrite(max(z, x + y) - x, max(z - x, y)) ||
                   rewrite(max(z, y + x) - x, max(z - x, y)) ||
-                  rewrite(max(x, y) - max(y, x), zero) ||
+                  rewrite(max(x, y) - max(y, x), 0) ||
                   rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w, this)) ||
                   rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w, this)) ||
 
@@ -961,7 +960,7 @@ public:
                 (!op->type.is_float() && rewrite(x / 0, indet)) ||
                 rewrite(x / 1, a) ||
                 rewrite(0 / x, a) ||
-                rewrite(x / x, IRMatcher::Const(1, op->type)) ||
+                rewrite(x / x, 1) ||
                 rewrite(c0 / c1, fold(c0 / c1))) {
                 return rewrite.result;
             }
@@ -1088,7 +1087,7 @@ public:
                   rewrite(x % overflow, b) ||
                   rewrite(overflow % x, a) ||
                   rewrite(x % 0, indet) ||
-                  rewrite(x % 1, IRMatcher::Const(0, op->type))))) {
+                  rewrite(x % 1, 0)))) {
                 return rewrite.result;
             }
 
@@ -1555,7 +1554,7 @@ public:
             }
         }
 
-        auto rewrite = IRMatcher::rewriter(delta);
+        auto rewrite = IRMatcher::rewriter(delta, op->type);
 
         // We're rewriting based on the difference between the LHS and
         // the RHS, so there's an implicit == 0 on the LHS of the
@@ -1621,27 +1620,24 @@ public:
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b));
 
-            auto t = IRMatcher::Const(1, op->type);
-            auto f = IRMatcher::Const(0, op->type);
-
             // TODO: check we have coverage of all the Sub patterns here. For many it should be simpler (e.g. we can multiply things out)
             if (rewrite(c0 < c1, fold(c0 < c1)) ||
-                rewrite(x < x, f) ||
-                rewrite(x < ty.min(), f) ||
-                rewrite(ty.max() < x, f) ||
+                rewrite(x < x, false) ||
+                rewrite(x < ty.min(), false) ||
+                rewrite(ty.max() < x, false) ||
 
-                rewrite(max(x, y) < x, f) ||
-                rewrite(max(y, x) < x, f) ||
-                rewrite(x < min(x, y), f) ||
-                rewrite(y < min(y, x), f) ||
+                rewrite(max(x, y) < x, false) ||
+                rewrite(max(y, x) < x, false) ||
+                rewrite(x < min(x, y), false) ||
+                rewrite(y < min(y, x), false) ||
 
                 // Comparisons of ramps and broadcasts. If the first
                 // and last lanes are provably < or >= the broadcast
                 // we can collapse the comparison.
-                rewrite(ramp(x, c1) < broadcast(z), t, can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
-                rewrite(ramp(x, c1) < broadcast(z), f, can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
-                rewrite(broadcast(z) < ramp(x, c1), t, can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
-                rewrite(broadcast(z) < ramp(x, c1), f, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))) {
+                rewrite(ramp(x, c1) < broadcast(z), true, can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
+                rewrite(ramp(x, c1) < broadcast(z), false, can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
+                rewrite(broadcast(z) < ramp(x, c1), true, can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
+                rewrite(broadcast(z) < ramp(x, c1), false, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))) {
                 return rewrite.result;
             }
 
@@ -1848,7 +1844,7 @@ public:
 
                   // z = 0, c0 = 0, w = 0
                   rewrite((x/c1)*c1 < x, (x % c1) != 0, c1 > 0) ||
-                  rewrite(x < (x/c1)*c1, f, c1 > 0) ||
+                  rewrite(x < (x/c1)*c1, false, c1 > 0) ||
 
                   // Comparison of aligned ramps can simplify to a comparison of the base
                   rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
@@ -2021,27 +2017,25 @@ public:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b));
 
-        auto f = IRMatcher::Const(0, op->type);
-
-        if (rewrite(x && 1, a) ||
-            rewrite(x && 0, b) ||
+        if (rewrite(x && true, a) ||
+            rewrite(x && false, b) ||
             rewrite(x && x, a) ||
-            rewrite(x != y && x == y, f) ||
-            rewrite(x != y && y == x, f) ||
-            rewrite(x && !x, f) ||
-            rewrite(!x && x, f) ||
-            rewrite(y <= x && x < y, f) ||
+            rewrite(x != y && x == y, false) ||
+            rewrite(x != y && y == x, false) ||
+            rewrite(x && !x, false) ||
+            rewrite(!x && x, false) ||
+            rewrite(y <= x && x < y, false) ||
             // Note: In the predicate below, if undefined overflow
             // occurs, the predicate counts as false. If well-defined
             // overflow occurs, the condition couldn't possibly
             // trigger because c0 + 1 will be the smallest possible
             // value.
-            rewrite(c0 < x && x < c1, f, !is_float(x) && c1 <= c0 + 1) ||
-            rewrite(x < c1 && c0 < x, f, !is_float(x) && c1 <= c0 + 1) ||
-            rewrite(x <= c1 && c0 < x, f, c1 <= c0) ||
-            rewrite(c0 <= x && x < c1, f, c1 <= c0) ||
-            rewrite(c0 <= x && x <= c1, f, c1 < c0) ||
-            rewrite(x <= c1 && c0 <= x, f, c1 < c0) ||
+            rewrite(c0 < x && x < c1, false, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(x < c1 && c0 < x, false, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(x <= c1 && c0 < x, false, c1 <= c0) ||
+            rewrite(c0 <= x && x < c1, false, c1 <= c0) ||
+            rewrite(c0 <= x && x <= c1, false, c1 < c0) ||
+            rewrite(x <= c1 && c0 <= x, false, c1 < c0) ||
             rewrite(c0 < x && c1 < x, fold(max(c0, c1)) < x) ||
             rewrite(c0 <= x && c1 <= x, fold(max(c0, c1)) <= x) ||
             rewrite(x < c0 && x < c1, x < fold(min(c0, c1))) ||
@@ -2079,22 +2073,20 @@ public:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b));
 
-        auto t = IRMatcher::Const(1, op->type);
-
-        if (rewrite(x || 1, b) ||
-            rewrite(x || 0, a) ||
+        if (rewrite(x || true, b) ||
+            rewrite(x || false, a) ||
             rewrite(x || x, a) ||
-            rewrite(x != y || x == y, t) ||
-            rewrite(x != y || y == x, t) ||
-            rewrite(x || !x, t) ||
-            rewrite(!x || x, t) ||
-            rewrite(y <= x || x < y, t) ||
-            rewrite(x <= c0 || c1 <= x, t, !is_float(x) && c1 <= c0 + 1) ||
-            rewrite(c1 <= x || x <= c0, t, !is_float(x) && c1 <= c0 + 1) ||
-            rewrite(x <= c0 || c1 < x, t, c1 <= c0) ||
-            rewrite(c1 <= x || x < c0, t, c1 <= c0) ||
-            rewrite(x < c0 || c1 < x, t, c1 < c0) ||
-            rewrite(c1 < x || x < c0, t, c1 < c0) ||
+            rewrite(x != y || x == y, true) ||
+            rewrite(x != y || y == x, true) ||
+            rewrite(x || !x, true) ||
+            rewrite(!x || x, true) ||
+            rewrite(y <= x || x < y, true) ||
+            rewrite(x <= c0 || c1 <= x, true, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(c1 <= x || x <= c0, true, !is_float(x) && c1 <= c0 + 1) ||
+            rewrite(x <= c0 || c1 < x, true, c1 <= c0) ||
+            rewrite(c1 <= x || x < c0, true, c1 <= c0) ||
+            rewrite(x < c0 || c1 < x, true, c1 < c0) ||
+            rewrite(c1 < x || x < c0, true, c1 < c0) ||
             rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
             rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
             rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
@@ -2171,10 +2163,10 @@ public:
             if (rewrite(select(indet, x, y), indet) ||
                 rewrite(select(x, indet, y), indet) ||
                 rewrite(select(x, y, indet), indet) ||
-                rewrite(select(IRMatcher::intrin(Call::likely, 1), x, y), x) ||
-                rewrite(select(IRMatcher::intrin(Call::likely, 0), x, y), y) ||
-                rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, 1), x, y), x) ||
-                rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, 0), x, y), y) ||
+                rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
+                rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
+                rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, true), x, y), x) ||
+                rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, false), x, y), y) ||
                 rewrite(select(1, x, y), x) ||
                 rewrite(select(0, x, y), y) ||
                 rewrite(select(x, y, y), y) ||
@@ -2209,12 +2201,12 @@ public:
                 rewrite(select(x, z * y, y * w), y * select(x, z, w)) ||
                 rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
                 (op->type.is_bool() &&
-                 (rewrite(select(x, 1, 0), cast(op->type, x)) ||
-                  rewrite(select(x, 0, 1), cast(op->type, !x)) ||
-                  rewrite(select(x, y, 0), x && y) ||
-                  rewrite(select(x, y, 1), !x || y) ||
-                  rewrite(select(x, 0, y), !x && y) ||
-                  rewrite(select(x, 1, y), x || y)))) {
+                 (rewrite(select(x, true, false), cast(op->type, x)) ||
+                  rewrite(select(x, false, true), cast(op->type, !x)) ||
+                  rewrite(select(x, y, false), x && y) ||
+                  rewrite(select(x, y, true), !x || y) ||
+                  rewrite(select(x, false, y), !x && y) ||
+                  rewrite(select(x, true, y), x || y)))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -2246,7 +2238,7 @@ public:
         // but it helps to have as many rules as possible written as
         // formal rewrites, so that they can be formally verified,
         // etc.
-        auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::ramp(base, stride, lanes));
         if (rewrite(ramp(x, 0), broadcast(x, lanes))) {
             return rewrite.result;
         }

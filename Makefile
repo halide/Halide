@@ -850,6 +850,11 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+# The simplifier really really must have optimizations on, or stack frames are nuts
+$(BUILD_DIR)/Simplify.o: $(SRC_DIR)/Simplify.cpp $(SRC_DIR)/Simplify.h $(BUILD_DIR)/llvm_ok
+	@mkdir -p $(@D)
+	$(CXX) $(CXX_FLAGS) -O3 -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/Simplify.d -MT $@
+
 .PHONY: clean
 clean:
 	rm -rf $(LIB_DIR)
