@@ -1066,20 +1066,19 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
         filter_params.push_back(rp);
     }
 
-    const auto add_synthetic_params = [this](GIOBase *gio) {
+    const auto add_synthetic_params = [this, generator](GIOBase *gio) {
         const std::string &n = gio->name();
+        const std::string &gn = generator->generator_registered_name;
+
         if (gio->kind() != IOKind::Scalar) {
-            if (!gio->types_defined()) {
-                owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<Type>(n + ".type", *gio, GeneratorParam_Synthetic<Type>::Type));
-                generator_params.push_back(owned_synthetic_params.back().get());
-            }
-            if (!gio->dims_defined()) {
-                owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<int>(n + ".dim", *gio, GeneratorParam_Synthetic<int>::Dim));
-                generator_params.push_back(owned_synthetic_params.back().get());
-            }
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+            generator_params.push_back(owned_synthetic_params.back().get());
+
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
+            generator_params.push_back(owned_synthetic_params.back().get());
         }
-        if (gio->is_array() && !gio->array_size_defined()) {
-            owned_synthetic_params.emplace_back(new GeneratorParam_Synthetic<size_t>(n + ".size", *gio, GeneratorParam_Synthetic<size_t>::ArraySize));
+        if (gio->is_array()) {
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<size_t>::make(generator, gn, n + ".size", *gio, SyntheticParamType::ArraySize, gio->array_size_defined()));
             generator_params.push_back(owned_synthetic_params.back().get());
         }
     };
@@ -1199,7 +1198,7 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
             }
             continue;
         }
-        user_error << "Generator has no GeneratorParam named: " << key_value.first << "\n";
+        user_error << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
     }
 }
 
