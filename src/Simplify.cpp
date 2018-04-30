@@ -2277,7 +2277,8 @@ public:
         }
         {
             auto f = scoped_falsehood(op->condition);
-            else_case = mutate(op->else_case);
+            else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
+            else_case = mutate(else_case);
         }
 
         // If both sides are no-ops, bail out.
