@@ -103,6 +103,8 @@ static int debug_indent = 0;
 }
 
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
+    using Super = VariadicVisitor<Simplify, Expr, Stmt>;
+
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
         remove_dead_lets(r), no_float_simplify(false) {
@@ -138,7 +140,7 @@ public:
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
-        Expr new_e = VariadicVisitor<Simplify, Expr, Stmt>::dispatch(e, b);
+        Expr new_e = Super::dispatch(e, b);
         debug_indent--;
         if (!new_e.same_as(e)) {
             debug(1)
@@ -152,7 +154,7 @@ public:
 #else
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ConstBounds *b) {
-        return VariadicVisitor<Simplify, Expr, Stmt>::dispatch(e, b);
+        return Super::dispatch(e, b);
     }
 #endif
 
@@ -161,7 +163,7 @@ public:
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
-        Stmt new_s = VariadicVisitor<Simplify, Expr, Stmt>::dispatch(s);
+        Stmt new_s = Super::dispatch(s);
         debug_indent--;
         if (!new_s.same_as(s)) {
             debug(1)
@@ -172,7 +174,7 @@ public:
     }
 #else
     Stmt mutate(const Stmt &s) {
-        return VariadicVisitor<Simplify, Expr, Stmt>::dispatch(s);
+        return Super::dispatch(s);
     }
 #endif
 
@@ -272,6 +274,10 @@ public:
     }
 
     Expr visit(const UIntImm *op, ConstBounds *bounds) {
+        if (bounds && Int(64).can_represent(op->value)) {
+            bounds->min_defined = bounds->max_defined = true;
+            bounds->min = bounds->max = (int64_t)(op->value);
+        }
         return op;
     }
 
@@ -1739,10 +1745,10 @@ public:
                   rewrite(max(x + c0, y) < x + c1, fold(c0 < c1) && y < x + c1) ||
                   rewrite(max(y, x + c0) < x + c1, fold(c0 < c1) && y < x + c1) ||
 
-                  rewrite(x < min(x + c0, y) + c1, fold(c0 < c1) && x < y + c1) ||
-                  rewrite(x < min(y, x + c0) + c1, fold(c0 < c1) && x < y + c1) ||
-                  rewrite(x < max(x + c0, y) + c1, fold(c0 < c1) || x < y + c1) ||
-                  rewrite(x < max(y, x + c0) + c1, fold(c0 < c1) || x < y + c1) ||
+                  rewrite(x < min(x + c0, y) + c1, fold(0 < c0 + c1) && x < y + c1) ||
+                  rewrite(x < min(y, x + c0) + c1, fold(0 < c0 + c1) && x < y + c1) ||
+                  rewrite(x < max(x + c0, y) + c1, fold(0 < c0 + c1) || x < y + c1) ||
+                  rewrite(x < max(y, x + c0) + c1, fold(0 < c0 + c1) || x < y + c1) ||
 
                   // Special cases where c0 == 0
                   rewrite(min(x, y) < x + c1, fold(0 < c1) || y < x + c1) ||
@@ -1761,10 +1767,10 @@ public:
                   rewrite(max(x + c0, y) < x, fold(c0 < 0) && y < x) ||
                   rewrite(max(y, x + c0) < x, fold(c0 < 0) && y < x) ||
 
-                  rewrite(x < min(x + c0, y), fold(c0 < 0) && x < y) ||
-                  rewrite(x < min(y, x + c0), fold(c0 < 0) && x < y) ||
-                  rewrite(x < max(x + c0, y), fold(c0 < 0) || x < y) ||
-                  rewrite(x < max(y, x + c0), fold(c0 < 0) || x < y) ||
+                  rewrite(x < min(x + c0, y), fold(0 < c0) && x < y) ||
+                  rewrite(x < min(y, x + c0), fold(0 < c0) && x < y) ||
+                  rewrite(x < max(x + c0, y), fold(0 < c0) || x < y) ||
+                  rewrite(x < max(y, x + c0), fold(0 < c0) || x < y) ||
 
                   // Special cases where c0 == c1 == 0
                   rewrite(min(x, y) < x, y < x) ||
@@ -1940,6 +1946,7 @@ public:
         }
 
         void learn_true(const Expr &fact) {
+            // TODO: Also exploit < and > by updating bounds_info
             VarInfo info;
             info.old_uses = info.new_uses = 0;
             if (const Variable *v = fact.as<Variable>()) {
