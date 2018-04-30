@@ -505,6 +505,7 @@ void compile_multitarget(const std::string &fn_name,
             Target::Matlab,
             Target::MSAN,
             Target::NoRuntime,
+            Target::TSAN,
             Target::UserContext,
         }};
         for (auto f : must_match_features) {
