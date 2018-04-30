@@ -462,16 +462,10 @@ public:
                 std::swap(a_bounds, b_bounds);
             }
 
-            auto indet = IRMatcher::indet(op->type);
-            auto overflow = IRMatcher::overflow(op->type);
             auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b));
             const int lanes = op->type.lanes();
 
-            if (rewrite(x + indet, b) ||
-                rewrite(indet + x, a) ||
-                rewrite(x + overflow, b) ||
-                rewrite(overflow + x, a) ||
-                rewrite(c0 + c1, fold(c0 + c1)) ||
+            if (rewrite(c0 + c1, fold(c0 + c1)) ||
                 rewrite(x + 0, a) ||
                 rewrite(0 + x, b)) {
                 return rewrite.result;
@@ -594,15 +588,9 @@ public:
         if (may_simplify(op->type)) {
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b));
-            auto overflow = IRMatcher::overflow(op->type);
-            auto indet = IRMatcher::indet(op->type);
             const int lanes = op->type.lanes();
 
             if (rewrite(x - 0, a) ||
-                rewrite(overflow - x, overflow) ||
-                rewrite(x - overflow, overflow) ||
-                rewrite(indet - x, indet) ||
-                rewrite(x - indet, indet) ||
                 rewrite(c0 - c1, fold(c0 - c1))) {
                 return rewrite.result;
             }
@@ -870,19 +858,12 @@ public:
                 std::swap(a_bounds, b_bounds);
             }
 
-            auto indet = IRMatcher::indet(op->type);
-            auto overflow = IRMatcher::overflow(op->type);
-
             auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b));
             if (rewrite(c0 * c1, fold(c0 * c1)) ||
                 rewrite(0 * x, a) ||
                 rewrite(1 * x, b) ||
                 rewrite(x * 0, b) ||
-                rewrite(x * 1, a) ||
-                rewrite(overflow * x, a) ||
-                rewrite(x * overflow, b) ||
-                rewrite(indet * x, a) ||
-                rewrite(x * indet, b)) {
+                rewrite(x * 1, a)) {
                 return rewrite.result;
             }
 
@@ -947,21 +928,16 @@ public:
 
         if (may_simplify(op->type)) {
 
-            auto indet = IRMatcher::indet(op->type);
-            auto overflow = IRMatcher::overflow(op->type);
             int lanes = op->type.lanes();
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b));
 
-            if (rewrite(indet / x, a) ||
-                rewrite(x / indet, b) ||
-                rewrite(overflow / x, a) ||
-                rewrite(x / overflow, b) ||
-                (!op->type.is_float() && rewrite(x / 0, indet)) ||
-                rewrite(x / 1, a) ||
+            if (rewrite(x / 1, a) ||
                 rewrite(0 / x, a) ||
                 rewrite(x / x, 1) ||
-                rewrite(c0 / c1, fold(c0 / c1))) {
+                rewrite(c0 / c1, fold(c0 / c1)) ||
+                (!op->type.is_float() &&
+                 rewrite(x / 0, IRMatcher::Indeterminate()))) {
                 return rewrite.result;
             }
 
@@ -1072,8 +1048,6 @@ public:
 
         if (may_simplify(op->type)) {
 
-            auto indet = IRMatcher::indet(op->type);
-            auto overflow = IRMatcher::overflow(op->type);
             int lanes = op->type.lanes();
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b));
@@ -1082,11 +1056,7 @@ public:
                 rewrite(0 % x, a) ||
                 rewrite(x % c0, a, c0 > 0 && a_bounds.min_defined && a_bounds.max_defined && a_bounds.min >= 0 && a_bounds.max < c0) ||
                 (!op->type.is_float() &&
-                 (rewrite(x % indet, b) ||
-                  rewrite(indet % x, a) ||
-                  rewrite(x % overflow, b) ||
-                  rewrite(overflow % x, a) ||
-                  rewrite(x % 0, indet) ||
+                 (rewrite(x % 0, IRMatcher::Indeterminate()) ||
                   rewrite(x % 1, 0)))) {
                 return rewrite.result;
             }
@@ -1151,16 +1121,10 @@ public:
                 std::swap(a_bounds, b_bounds);
             }
 
-            auto indet = IRMatcher::indet(op->type);
-            auto overflow = IRMatcher::overflow(op->type);
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b));
 
             if (rewrite(min(x, x), a) ||
-                rewrite(min(indet, x), a) ||
-                rewrite(min(x, indet), b) ||
-                rewrite(min(overflow, x), a) ||
-                rewrite(min(x, overflow), b) ||
                 rewrite(min(c0, c1), fold(min(c0, c1))) ||
 
                 // Cases where one side dominates:
@@ -1348,16 +1312,10 @@ public:
                 std::swap(a_bounds, b_bounds);
             }
 
-            auto indet = IRMatcher::indet(op->type);
-            auto overflow = IRMatcher::overflow(op->type);
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b));
 
             if (rewrite(max(x, x), a) ||
-                rewrite(max(indet, x), a) ||
-                rewrite(max(x, indet), b) ||
-                rewrite(max(overflow, x), a) ||
-                rewrite(max(x, overflow), b) ||
                 rewrite(max(c0, c1), fold(max(c0, c1))) ||
 
                 // Cases where one side dominates:
@@ -2157,13 +2115,9 @@ public:
         }
 
         if (may_simplify(op->type)) {
-            auto indet = IRMatcher::indet(op->type);
             auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value));
 
-            if (rewrite(select(indet, x, y), indet) ||
-                rewrite(select(x, indet, y), indet) ||
-                rewrite(select(x, y, indet), indet) ||
-                rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
+            if (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
                 rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
                 rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, true), x, y), x) ||
                 rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, false), x, y), y) ||

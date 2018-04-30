@@ -1435,104 +1435,6 @@ auto intrin(Call::ConstString name, Args... args) noexcept -> Intrin<decltype(pa
     return {name, pattern_arg(args)...};
 }
 
-template<bool known_type>
-struct IndeterminateOp {
-    struct pattern_tag {};
-
-    halide_type_t t;
-
-    static constexpr uint32_t binds = 0;
-
-    template<uint32_t bound>
-    HALIDE_ALWAYS_INLINE
-    bool match(SpecificExpr e, MatcherState & __restrict__ state) const noexcept {
-        if (e.expr.node_type != IRNodeType::Call) {
-            return false;
-        }
-        const Call &c = (const Call &)e.expr;
-        return c.is_intrinsic(Call::indeterminate_expression);
-    }
-
-    HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
-        halide_type_t ty = t;
-        ty.lanes |= MatcherState::indeterminate_expression;
-        return make_const_special_expr(ty);
-    }
-
-    constexpr static bool typed = known_type;
-
-    HALIDE_ALWAYS_INLINE
-    halide_type_t type() const {
-        return t;
-    }
-};
-
-HALIDE_ALWAYS_INLINE
-IndeterminateOp<true> indet(halide_type_t type) {
-    return {type};
-}
-
-HALIDE_ALWAYS_INLINE
-IndeterminateOp<false> indet() {
-    return {};
-}
-
-template<bool known_type>
-std::ostream &operator<<(std::ostream &s, const IndeterminateOp<known_type> &op) {
-    s << "indeterminate_expression()";
-    return s;
-}
-
-template<bool known_type>
-struct OverflowOp {
-    struct pattern_tag {};
-
-    halide_type_t t;
-
-    static constexpr uint32_t binds = 0;
-
-    template<uint32_t bound>
-    HALIDE_ALWAYS_INLINE
-    bool match(SpecificExpr e, MatcherState & __restrict__ state) const noexcept {
-        if (e.expr.node_type != IRNodeType::Call) {
-            return false;
-        }
-        const Call &c = (const Call &)e.expr;
-        return c.is_intrinsic(Call::signed_integer_overflow);
-    }
-
-    HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
-        halide_type_t ty = t;
-        ty.lanes |= MatcherState::signed_integer_overflow;
-        return make_const_special_expr(ty);
-    }
-
-    constexpr static bool typed = known_type;
-
-    HALIDE_ALWAYS_INLINE
-    halide_type_t type() const {
-        return t;
-    }
-};
-
-HALIDE_ALWAYS_INLINE
-OverflowOp<true> overflow(halide_type_t type) {
-    return {type};
-}
-
-HALIDE_ALWAYS_INLINE
-OverflowOp<false> overflow() {
-    return {};
-}
-
-template<bool known_type>
-std::ostream &operator<<(std::ostream &s, const OverflowOp<known_type> &op) {
-    s << "signed_integer_overflow()";
-    return s;
-}
-
 template<typename A>
 struct NotOp {
     struct pattern_tag {};
@@ -1963,6 +1865,28 @@ auto fold(A a) noexcept -> FoldOp<decltype(pattern_arg(a))> {
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const FoldOp<A> &op) {
     s << "fold(" << op.a << ")";
+    return s;
+}
+
+struct Indeterminate {
+    struct pattern_tag {};
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
+        type_hint.lanes |= MatcherState::indeterminate_expression;
+        return make_const_special_expr(type_hint);
+    }
+
+    constexpr static bool typed = false;
+
+    HALIDE_ALWAYS_INLINE
+    halide_type_t type() const {
+        return {};
+    }
+};
+
+inline std::ostream &operator<<(std::ostream &s, const Indeterminate &op) {
+    s << "indeterminate()";
     return s;
 }
 
