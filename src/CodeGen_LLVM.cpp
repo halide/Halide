@@ -1065,6 +1065,9 @@ void CodeGen_LLVM::optimize_module() {
     // Run optimization passes
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::MSAN)) {
+            i->addFnAttr(Attribute::SanitizeMemory);
+        }
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
