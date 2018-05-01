@@ -249,6 +249,20 @@ ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
 endif
 
+# TODO: this is horrible hackery; we should really add the relevant
+# support libs for the sanitizer(s) as weak symbols in Codegen_LLVM
+ifneq (,$(findstring asan,$(HL_TARGET)))
+TEST_CXX_FLAGS += -fsanitize=address
+TEST_LD_FLAGS += -fsanitize=address
+GEN_AOT_LD_FLAGS += -fsanitize=address
+endif
+
+ifneq (,$(findstring asan,$(HL_JIT_TARGET)))
+TEST_CXX_FLAGS += -fsanitize=address
+TEST_LD_FLAGS += -fsanitize=address
+GEN_AOT_LD_FLAGS += -fsanitize=address
+endif
+
 # Compiling the tutorials requires libpng
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)

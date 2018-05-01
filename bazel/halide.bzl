@@ -219,10 +219,15 @@ def halide_config_settings():
           values=values,
           visibility=["//visibility:public"])
 
-  # Config settings for Sanitizers (currently, only MSAN)
+  # Config settings for Sanitizers
   native.config_setting(
       name="halide_config_msan",
       values={"compiler": "msan"},
+      visibility=["//visibility:public"])
+
+  native.config_setting(
+      name="halide_config_asan",
+      values={"compiler": "asan"},
       visibility=["//visibility:public"])
 
 
@@ -539,6 +544,7 @@ def _define_halide_library_runtime(halide_target_features = []):
         generator_closure="halide_library_runtime.generator_closure",
         halide_target=["-".join([halide_target] + _discard_useless_features(halide_target_features))],
         sanitizer=select({
+            "@halide//:halide_config_asan": "asan",
             "@halide//:halide_config_msan": "msan",
             "//conditions:default": "",
         }),
@@ -563,6 +569,7 @@ def _define_halide_library_runtime(halide_target_features = []):
 def _standard_library_runtime_features():
   standard_features = [
       [],
+      ["asan"],
       ["c_plus_plus_name_mangling"],
       ["cuda"],
       ["cuda", "matlab"],
@@ -721,6 +728,7 @@ def halide_library_from_generator(name,
         halide_target=multitarget,
         halide_function_name=function_name,
         sanitizer=select({
+            "@halide//:halide_config_asan": "asan",
             "@halide//:halide_config_msan": "msan",
             "//conditions:default": "",
         }),
