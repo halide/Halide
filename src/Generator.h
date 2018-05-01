@@ -1241,11 +1241,13 @@ public:
     IOKind kind() const;
 
     bool types_defined() const;
-    const std::vector<Type> &types() const;
-    Type type() const;
+    // non-const because Type may be lazily updated if initially unspecified
+    const std::vector<Type> &types();
+    Type type();
 
     bool dims_defined() const;
-    int dims() const;
+    // non-const because Type may be lazily updated if initially unspecified
+    int dims();
 
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
@@ -1281,10 +1283,11 @@ protected:
 
     std::string array_name(size_t i) const;
 
-    virtual void verify_internals() const;
+    virtual void verify_internals();
 
     void check_matching_array_size(size_t size);
-    void check_matching_type_and_dim(const std::vector<Type> &t, int d);
+    void check_matching_types(const std::vector<Type> &t);
+    void check_matching_dims(int d);
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
@@ -1337,7 +1340,7 @@ protected:
 
     virtual void set_def_min_max();
 
-    void verify_internals() const override;
+    void verify_internals() override;
 
     friend class StubEmitter;
 

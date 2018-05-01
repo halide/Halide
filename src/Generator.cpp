@@ -1492,22 +1492,39 @@ bool GIOBase::types_defined() const {
     return !types_.empty();
 }
 
-const std::vector<Type> &GIOBase::types() const {
+const std::vector<Type> &GIOBase::types() {
+    // If types aren't defined, but we have one Func that is,
+    // we probably just set an Output<Func> and should propagate the types.
+    if (!types_defined()) {
+        const auto &f = funcs();
+        if (f.size() == 1 && f.at(0).defined()) {
+            check_matching_types(f.at(0).output_types());
+        }
+    }
     user_assert(types_defined()) << "Type is not defined for " << input_or_output() <<
         " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
     return types_;
 }
 
-Type GIOBase::type() const {
-    internal_assert(types().size() == 1) << "Expected types_.size() == 1, saw " << types_.size() << " for " << name() << "\n";
-    return types_.at(0);
+Type GIOBase::type() {
+    const auto &t = types();
+    internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
+    return t.at(0);
 }
 
 bool GIOBase::dims_defined() const {
     return dims_ != -1;
 }
 
-int GIOBase::dims() const {
+int GIOBase::dims() {
+    // If types aren't defined, but we have one Func that is,
+    // we probably just set an Output<Func> and should propagate the types.
+    if (!dims_defined()) {
+        const auto &f = funcs();
+        if (f.size() == 1 && f.at(0).defined()) {
+            check_matching_dims(funcs().at(0).dimensions());
+        }
+    }
     user_assert(dims_defined()) << "Dimensions are not defined for " << input_or_output() <<
         " '" << name() << "'; you may need to specify '" << name() << ".dim' as a GeneratorParam.\n";
     return dims_;
@@ -1523,7 +1540,7 @@ const std::vector<Expr> &GIOBase::exprs() const {
     return exprs_;
 }
 
-void GIOBase::verify_internals() const {
+void GIOBase::verify_internals() {
     user_assert(dims_ >= 0) << "Generator Input/Output Dimensions must have positive values";
 
     if (kind() != IOKind::Scalar) {
@@ -1567,8 +1584,7 @@ std::string GIOBase::array_name(size_t i) const {
 
 // If our type(s) are defined, ensure it matches the ones passed in, asserting if not.
 // If our type(s) are not defined, just set to the ones passed in.
-// (Ditto for dims.)
-void GIOBase::check_matching_type_and_dim(const std::vector<Type> &t, int d) {
+void GIOBase::check_matching_types(const std::vector<Type> &t) {
     if (types_defined()) {
         user_assert(types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << types().size() << " types but saw " << t.size();
         for (size_t i = 0; i < t.size(); ++i) {
@@ -1577,6 +1593,11 @@ void GIOBase::check_matching_type_and_dim(const std::vector<Type> &t, int d) {
     } else {
         types_ = t;
     }
+}
+
+// If our dims are defined, ensure it matches the one passed in, asserting if not.
+// If our dims are not defined, just set to the one passed in.
+void GIOBase::check_matching_dims(int d) {
     internal_assert(d >= 0);
     if (dims_defined()) {
         user_assert(dims() == d) << "Dimensions mismatch for " << name() << ": expected " << dims() << " saw " << d;
@@ -1624,7 +1645,7 @@ Parameter GeneratorInputBase::parameter() const {
     return parameters_.at(0);
 }
 
-void GeneratorInputBase::verify_internals() const {
+void GeneratorInputBase::verify_internals() {
     GIOBase::verify_internals();
 
     const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
@@ -1669,17 +1690,20 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
             auto f = in.func();
-            check_matching_type_and_dim(f.output_types(), f.dimensions());
+            check_matching_types(f.output_types());
+            check_matching_dims(f.dimensions());
             funcs_.push_back(f);
             parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true);
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
-            check_matching_type_and_dim({p.type()}, p.dimensions());
+            check_matching_types({p.type()});
+            check_matching_dims(p.dimensions());
             funcs_.push_back(make_param_func(p, name()));
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
-            check_matching_type_and_dim({e.type()}, 0);
+            check_matching_types({e.type()});
+            check_matching_dims(0);
             exprs_.push_back(e);
             parameters_.emplace_back(e.type(), false, 0, array_name(i), true);
         }
