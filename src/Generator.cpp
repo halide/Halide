@@ -1152,7 +1152,8 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
 Func GeneratorBase::get_output(const std::string &n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
-    user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
+    // Call for the side-effect of asserting if the value isn't defined.
+    (void) output->array_size();
     user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_array_output()\n";
     Func f = output->funcs().at(0);
     user_assert(f.defined()) << "Output " << n << " was not defined.\n";
@@ -1162,7 +1163,8 @@ Func GeneratorBase::get_output(const std::string &n) {
 std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
-    user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
+    // Call for the side-effect of asserting if the value isn't defined.
+    (void) output->array_size();
     for (const auto &f : output->funcs()) {
         user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
     }
@@ -1468,9 +1470,9 @@ bool GIOBase::array_size_defined() const {
 }
 
 size_t GIOBase::array_size() const {
-    internal_assert(array_size_defined()) << "ArraySize is unspecified for " << name()
-        << "; you need to explicit set it via the resize() method or by setting "
-        << name() << ".size = value in your build rules.";
+    user_assert(array_size_defined()) << "ArraySize is unspecified for " << input_or_output() <<
+        "'" << name() << "'; you need to explicitly set it via the resize() method or by setting '"
+        << name() << ".size' in your build rules.";
     return (size_t) array_size_;
 }
 
@@ -1491,12 +1493,13 @@ bool GIOBase::types_defined() const {
 }
 
 const std::vector<Type> &GIOBase::types() const {
-    internal_assert(types_defined()) << "Type is unspecified for " << name() << "\n";
+    user_assert(types_defined()) << "Type is not defined for " << input_or_output() <<
+        " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
     return types_;
 }
 
 Type GIOBase::type() const {
-    internal_assert(types_.size() == 1) << "Expected types_.size() == 1, saw " << types_.size() << " for " << name() << "\n";
+    internal_assert(types().size() == 1) << "Expected types_.size() == 1, saw " << types_.size() << " for " << name() << "\n";
     return types_.at(0);
 }
 
@@ -1505,7 +1508,8 @@ bool GIOBase::dims_defined() const {
 }
 
 int GIOBase::dims() const {
-    internal_assert(dims_defined()) << "Dimensions unspecified for " << name() << "\n";
+    user_assert(dims_defined()) << "Dimensions are not defined for " << input_or_output() <<
+        " '" << name() << "'; you may need to specify '" << name() << ".dim' as a GeneratorParam.\n";
     return dims_;
 }
 
@@ -1629,12 +1633,10 @@ void GeneratorInputBase::verify_internals() const {
 }
 
 void GeneratorInputBase::init_internals() {
-    user_assert(array_size_defined()) << "ArraySize is not defined for Input "
-        << name() << "; you may need to specify '" << name() << ".size' as a GeneratorParam.\n";
-    user_assert(types_defined()) << "Type is not defined for Input "
-        << name() << "; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
-    user_assert(dims_defined()) << "Dimensions are not defined for Input "
-        << name() << "; you may need to specify '" << name() << ".dim' as a GeneratorParam.\n";
+    // Call these for the side-effect of asserting if the values aren't defined.
+    (void) array_size();
+    (void) types();
+    (void) dims();
 
     parameters_.clear();
     exprs_.clear();

@@ -1291,6 +1291,8 @@ protected:
 
     virtual void check_value_writable() const = 0;
 
+    virtual const char *input_or_output() const = 0;
+
 private:
     template<typename T> friend class GeneratorParam_Synthetic;
 
@@ -1342,6 +1344,8 @@ protected:
     virtual std::string get_c_type() const = 0;
 
     void check_value_writable() const override;
+
+    const char *input_or_output() const override { return "Input"; }
 
     void estimate_impl(Var var, Expr min, Expr extent);
 };
@@ -1966,6 +1970,8 @@ protected:
     }
 
     void check_value_writable() const override;
+
+    const char *input_or_output() const override { return "Output"; }
 };
 
 template<typename T>
