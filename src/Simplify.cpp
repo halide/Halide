@@ -40,7 +40,7 @@ using std::vector;
 // of temporary objects when they are built and matched against. If we
 // wrap the expressions that imply lots of temporaries in a lambda, we
 // can get these large frames out of the recursive path.
-#define EVAL_IN_NEW_STACK_FRAME(x) (([&]() {return (x);})())
+#define EVAL_IN_LAMBDA(x) (([&]() {return (x);})())
 
 namespace {
 
@@ -478,83 +478,83 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(x + x, x * 2) ||
-                rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
-                rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
-                rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
-                rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
-                rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
-                rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
-                rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
+                 rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
+                 rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
+                 rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
+                 rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
+                 rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
+                 rewrite(select(x, y, c1) + c2, select(x, y + c2, fold(c1 + c2))) ||
+                 rewrite(select(x, c0, y) + c2, select(x, fold(c0 + c2), y + c2)) ||
 
-                rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
-                rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
-                rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
-                rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
-                rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
-                rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
-                rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
-                rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
+                 rewrite((select(x, y, z) + w) + select(x, u, v), select(x, y + u, z + v) + w) ||
+                 rewrite((w + select(x, y, z)) + select(x, u, v), select(x, y + u, z + v) + w) ||
+                 rewrite(select(x, y, z) + (select(x, u, v) + w), select(x, y + u, z + v) + w) ||
+                 rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
+                 rewrite((select(x, y, z) - w) + select(x, u, v), select(x, y + u, z + v) - w) ||
+                 rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
+                 rewrite((w - select(x, y, z)) + select(x, u, v), select(x, u - y, v - z) + w) ||
+                 rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
 
-                rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
-                rewrite((x + c0) + y, (x + y) + c0) ||
-                rewrite(x + (y + c0), (x + y) + c0) ||
-                rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
-                rewrite((c0 - x) + y, (y - x) + c0) ||
-                rewrite((x - y) + y, x) ||
-                rewrite(x + (y - x), y) ||
-                rewrite(x + (c0 - y), (x - y) + c0) ||
-                rewrite((x - y) + (y - z), x - z) ||
-                rewrite((x - y) + (z - x), z - y) ||
-                rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
-                rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
-                rewrite(x*y + z*y, (x + z)*y) ||
-                rewrite(x*y + y*z, (x + z)*y) ||
-                rewrite(y*x + z*y, y*(x + z)) ||
-                rewrite(y*x + y*z, y*(x + z)) ||
-                rewrite(x*c0 + y*c1, (x + y*fold(c1/c0)) * c0, c1 % c0 == 0) ||
-                rewrite(x*c0 + y*c1, (x*fold(c0/c1) + y) * c1, c0 % c1 == 0) ||
-                (no_overflow(op->type) &&
-                 (rewrite(x + x*y, x * (y + 1)) ||
-                  rewrite(x + y*x, (y + 1) * x) ||
-                  rewrite(x*y + x, x * (y + 1)) ||
-                  rewrite(y*x + x, (y + 1) * x, !is_const(x)) ||
-                  rewrite((x + c0)/c1 + c2, (x + fold(c0 + c1*c2))/c1) ||
-                  rewrite((x + (y + c0)/c1) + c2, x + (y + (c0 + c1*c2))/c1) ||
-                  rewrite(((y + c0)/c1 + x) + c2, x + (y + (c0 + c1*c2))/c1) ||
-                  rewrite((c0 - x)/c1 + c2, (fold(c0 + c1*c2) - x)/c1, c0 != 0) ||
-                  rewrite(x + (x + y)/c0, (fold(c0 + 1)*x + y)/c0) ||
-                  rewrite(x + (y + x)/c0, (fold(c0 + 1)*x + y)/c0) ||
-                  rewrite(x + (y - x)/c0, (fold(c0 - 1)*x + y)/c0) ||
-                  rewrite(x + (x - y)/c0, (fold(c0 + 1)*x - y)/c0) ||
-                  rewrite((x - y)/c0 + x, (fold(c0 + 1)*x - y)/c0) ||
-                  rewrite((y - x)/c0 + x, (y + fold(c0 - 1)*x)/c0) ||
-                  rewrite((x + y)/c0 + x, (fold(c0 + 1)*x + y)/c0) ||
-                  rewrite((y + x)/c0 + x, (y + fold(c0 + 1)*x)/c0) ||
-                  rewrite(min(x, y - z) + z, min(x + z, y)) ||
-                  rewrite(min(y - z, x) + z, min(y, x + z)) ||
-                  rewrite(min(x, y + c0) + c1, min(x + c1, y), c0 + c1 == 0) ||
-                  rewrite(min(y + c0, x) + c1, min(y, x + c1), c0 + c1 == 0) ||
-                  rewrite(z + min(x, y - z), min(z + x, y)) ||
-                  rewrite(z + min(y - z, x), min(y, z + x)) ||
-                  rewrite(z + max(x, y - z), max(z + x, y)) ||
-                  rewrite(z + max(y - z, x), max(y, z + x)) ||
-                  rewrite(max(x, y - z) + z, max(x + z, y)) ||
-                  rewrite(max(y - z, x) + z, max(y, x + z)) ||
-                  rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
-                  rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
-                  rewrite(max(x, y) + min(x, y), x + y) ||
-                  rewrite(max(x, y) + min(y, x), x + y))) ||
-                (no_overflow_int(op->type) &&
-                 (rewrite((x/y)*y + x%y, x) ||
-                  rewrite((z + x/y)*y + x%y, z*y + x) ||
-                  rewrite((x/y + z)*y + x%y, x + z*y) ||
-                  rewrite(y%c0 + (z + x*c0), z + (x*c0 + y%c0)) ||
-                  rewrite(y%c0 + (x*c0 + z), z + (x*c0 + y%c0)) ||
-                  rewrite(y*c0 + (z + x%c0), z + (y*c0 + x%c0)) ||
-                  rewrite(y*c0 + (x%c0 + z), z + (y*c0 + x%c0)) ||
-                  rewrite(x/2 + x%2, (x + 1) / 2))))) {
+                 rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
+                 rewrite((x + c0) + y, (x + y) + c0) ||
+                 rewrite(x + (y + c0), (x + y) + c0) ||
+                 rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
+                 rewrite((c0 - x) + y, (y - x) + c0) ||
+                 rewrite((x - y) + y, x) ||
+                 rewrite(x + (y - x), y) ||
+                 rewrite(x + (c0 - y), (x - y) + c0) ||
+                 rewrite((x - y) + (y - z), x - z) ||
+                 rewrite((x - y) + (z - x), z - y) ||
+                 rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
+                 rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
+                 rewrite(x*y + z*y, (x + z)*y) ||
+                 rewrite(x*y + y*z, (x + z)*y) ||
+                 rewrite(y*x + z*y, y*(x + z)) ||
+                 rewrite(y*x + y*z, y*(x + z)) ||
+                 rewrite(x*c0 + y*c1, (x + y*fold(c1/c0)) * c0, c1 % c0 == 0) ||
+                 rewrite(x*c0 + y*c1, (x*fold(c0/c1) + y) * c1, c0 % c1 == 0) ||
+                 (no_overflow(op->type) &&
+                  (rewrite(x + x*y, x * (y + 1)) ||
+                   rewrite(x + y*x, (y + 1) * x) ||
+                   rewrite(x*y + x, x * (y + 1)) ||
+                   rewrite(y*x + x, (y + 1) * x, !is_const(x)) ||
+                   rewrite((x + c0)/c1 + c2, (x + fold(c0 + c1*c2))/c1) ||
+                   rewrite((x + (y + c0)/c1) + c2, x + (y + (c0 + c1*c2))/c1) ||
+                   rewrite(((y + c0)/c1 + x) + c2, x + (y + (c0 + c1*c2))/c1) ||
+                   rewrite((c0 - x)/c1 + c2, (fold(c0 + c1*c2) - x)/c1, c0 != 0) ||
+                   rewrite(x + (x + y)/c0, (fold(c0 + 1)*x + y)/c0) ||
+                   rewrite(x + (y + x)/c0, (fold(c0 + 1)*x + y)/c0) ||
+                   rewrite(x + (y - x)/c0, (fold(c0 - 1)*x + y)/c0) ||
+                   rewrite(x + (x - y)/c0, (fold(c0 + 1)*x - y)/c0) ||
+                   rewrite((x - y)/c0 + x, (fold(c0 + 1)*x - y)/c0) ||
+                   rewrite((y - x)/c0 + x, (y + fold(c0 - 1)*x)/c0) ||
+                   rewrite((x + y)/c0 + x, (fold(c0 + 1)*x + y)/c0) ||
+                   rewrite((y + x)/c0 + x, (y + fold(c0 + 1)*x)/c0) ||
+                   rewrite(min(x, y - z) + z, min(x + z, y)) ||
+                   rewrite(min(y - z, x) + z, min(y, x + z)) ||
+                   rewrite(min(x, y + c0) + c1, min(x + c1, y), c0 + c1 == 0) ||
+                   rewrite(min(y + c0, x) + c1, min(y, x + c1), c0 + c1 == 0) ||
+                   rewrite(z + min(x, y - z), min(z + x, y)) ||
+                   rewrite(z + min(y - z, x), min(y, z + x)) ||
+                   rewrite(z + max(x, y - z), max(z + x, y)) ||
+                   rewrite(z + max(y - z, x), max(y, z + x)) ||
+                   rewrite(max(x, y - z) + z, max(x + z, y)) ||
+                   rewrite(max(y - z, x) + z, max(y, x + z)) ||
+                   rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
+                   rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
+                   rewrite(max(x, y) + min(x, y), x + y) ||
+                   rewrite(max(x, y) + min(y, x), x + y))) ||
+                 (no_overflow_int(op->type) &&
+                  (rewrite((x/y)*y + x%y, x) ||
+                   rewrite((z + x/y)*y + x%y, z*y + x) ||
+                   rewrite((x/y + z)*y + x%y, x + z*y) ||
+                   rewrite(y%c0 + (z + x*c0), z + (x*c0 + y%c0)) ||
+                   rewrite(y%c0 + (x*c0 + z), z + (x*c0 + y%c0)) ||
+                   rewrite(y*c0 + (z + x%c0), z + (y*c0 + x%c0)) ||
+                   rewrite(y*c0 + (x%c0 + z), z + (y*c0 + x%c0)) ||
+                   rewrite(x/2 + x%2, (x + 1) / 2))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
 
@@ -603,221 +603,221 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0))) ||
-                rewrite(x - x, 0) || // We want to remutate this just to get better bounds
-                rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
-                rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
-                rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
-                rewrite(broadcast(x) - broadcast(y), broadcast(x - y, lanes)) ||
-                rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
-                rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
-                rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
-                rewrite(y - select(x, y, z), select(x, 0, y - z)) ||
-                rewrite(z - select(x, y, z), select(x, z - y, 0)) ||
-                rewrite((x + y) - x, y) ||
-                rewrite((x + y) - y, x) ||
-                rewrite(x - (x + y), -y) ||
-                rewrite(y - (x + y), -x) ||
-                rewrite((x - y) - x, -y) ||
-                rewrite((select(x, y, z) + w) - select(x, u, v), select(x, y - u, z - v) + w) ||
-                rewrite((w + select(x, y, z)) - select(x, u, v), select(x, y - u, z - v) + w) ||
-                rewrite(select(x, y, z) - (select(x, u, v) + w), select(x, y - u, z - v) - w) ||
-                rewrite(select(x, y, z) - (w + select(x, u, v)), select(x, y - u, z - v) - w) ||
-                rewrite((select(x, y, z) - w) - select(x, u, v), select(x, y - u, z - v) - w) ||
-                rewrite(c0 - select(x, c1, c2), select(x, fold(c0 - c1), fold(c0 - c2))) ||
-                rewrite((x + c0) - c1, x + fold(c0 - c1)) ||
-                rewrite((x + c0) - (c1 - y), (x + y) + fold(c0 - c1)) ||
-                rewrite((x + c0) - (y + c1), (x - y) + fold(c0 - c1)) ||
-                rewrite((x + c0) - y, (x - y) + c0) ||
-                rewrite((c0 - x) - (c1 - y), (y - x) + fold(c0 - c1)) ||
-                rewrite((c0 - x) - (y + c1), fold(c0 - c1) - (x + y)) ||
-                rewrite(x - (y - z), x + (z - y)) ||
-                rewrite(x - y*c0, x + y*fold(-c0), c0 < 0 && -c0 > 0) ||
-                rewrite(x - (y + c0), (x - y) - c0) ||
-                rewrite((c0 - x) - c1, fold(c0 - c1) - x) ||
-                rewrite(x*y - z*y, (x - z)*y) ||
-                rewrite(x*y - y*z, (x - z)*y) ||
-                rewrite(y*x - z*y, y*(x - z)) ||
-                rewrite(y*x - y*z, y*(x - z)) ||
-                rewrite((x + y) - (x + z), y - z) ||
-                rewrite((x + y) - (z + x), y - z) ||
-                rewrite((y + x) - (x + z), y - z) ||
-                rewrite((y + x) - (z + x), y - z) ||
-                rewrite(((x + y) + z) - x, y + z) ||
-                rewrite(((y + x) + z) - x, y + z) ||
-                rewrite((z + (x + y)) - x, z + y) ||
-                rewrite((z + (y + x)) - x, z + y) ||
-                (no_overflow(op->type) &&
-                 (rewrite(max(x, y) - x, max(0, y - x)) ||
-                  rewrite(min(x, y) - x, min(0, y - x)) ||
-                  rewrite(max(x, y) - y, max(x - y, 0)) ||
-                  rewrite(min(x, y) - y, min(x - y, 0)) ||
-                  rewrite(x - max(x, y), min(0, x - y), !is_const(x)) ||
-                  rewrite(x - min(x, y), max(0, x - y), !is_const(x)) ||
-                  rewrite(y - max(x, y), min(y - x, 0), !is_const(y)) ||
-                  rewrite(y - min(x, y), max(y - x, 0), !is_const(y)) ||
-                  rewrite(x*y - x, x*(y - 1)) ||
-                  rewrite(x*y - y, (x - 1)*y) ||
-                  rewrite(x - x*y, x*(1 - y)) ||
-                  rewrite(x - y*x, (1 - y)*x) ||
-                  rewrite(c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0) ||
-                  rewrite(c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0) ||
-                  rewrite(x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
-                  rewrite(x - (x - y)/c0, (x*fold(c0 - 1) + y + fold(c0 - 1))/c0, c0 > 0) ||
-                  rewrite(x - (y + x)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
-                  rewrite(x - (y - x)/c0, (x*fold(c0 + 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
-                  rewrite((x + y)/c0 - x, (x*fold(1 - c0) + y)/c0) ||
-                  rewrite((y + x)/c0 - x, (y + x*fold(1 - c0))/c0) ||
-                  rewrite((x - y)/c0 - x, (x*fold(1 - c0) - y)/c0) ||
-                  rewrite((y - x)/c0 - x, (y - x*fold(1 + c0))/c0) ||
-                  rewrite(x - min(x + y, z), max(-y, x - z)) ||
-                  rewrite(x - min(y + x, z), max(-y, x - z)) ||
-                  rewrite(x - min(z, x + y), max(x - z, -y)) ||
-                  rewrite(x - min(z, y + x), max(x - z, -y)) ||
-                  rewrite(min(x + y, z) - x, min(y, z - x)) ||
-                  rewrite(min(y + x, z) - x, min(y, z - x)) ||
-                  rewrite(min(z, x + y) - x, min(z - x, y)) ||
-                  rewrite(min(z, y + x) - x, min(z - x, y)) ||
-                  rewrite(min(x, y) - min(y, x), 0) ||
-                  rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
-                  rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
+                 rewrite(x - x, 0) || // We want to remutate this just to get better bounds
+                 rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
+                 rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
+                 rewrite(broadcast(x) - ramp(z, w), ramp(x - z, -w, lanes)) ||
+                 rewrite(broadcast(x) - broadcast(y), broadcast(x - y, lanes)) ||
+                 rewrite(select(x, y, z) - select(x, w, u), select(x, y - w, z - u)) ||
+                 rewrite(select(x, y, z) - y, select(x, 0, z - y)) ||
+                 rewrite(select(x, y, z) - z, select(x, y - z, 0)) ||
+                 rewrite(y - select(x, y, z), select(x, 0, y - z)) ||
+                 rewrite(z - select(x, y, z), select(x, z - y, 0)) ||
+                 rewrite((x + y) - x, y) ||
+                 rewrite((x + y) - y, x) ||
+                 rewrite(x - (x + y), -y) ||
+                 rewrite(y - (x + y), -x) ||
+                 rewrite((x - y) - x, -y) ||
+                 rewrite((select(x, y, z) + w) - select(x, u, v), select(x, y - u, z - v) + w) ||
+                 rewrite((w + select(x, y, z)) - select(x, u, v), select(x, y - u, z - v) + w) ||
+                 rewrite(select(x, y, z) - (select(x, u, v) + w), select(x, y - u, z - v) - w) ||
+                 rewrite(select(x, y, z) - (w + select(x, u, v)), select(x, y - u, z - v) - w) ||
+                 rewrite((select(x, y, z) - w) - select(x, u, v), select(x, y - u, z - v) - w) ||
+                 rewrite(c0 - select(x, c1, c2), select(x, fold(c0 - c1), fold(c0 - c2))) ||
+                 rewrite((x + c0) - c1, x + fold(c0 - c1)) ||
+                 rewrite((x + c0) - (c1 - y), (x + y) + fold(c0 - c1)) ||
+                 rewrite((x + c0) - (y + c1), (x - y) + fold(c0 - c1)) ||
+                 rewrite((x + c0) - y, (x - y) + c0) ||
+                 rewrite((c0 - x) - (c1 - y), (y - x) + fold(c0 - c1)) ||
+                 rewrite((c0 - x) - (y + c1), fold(c0 - c1) - (x + y)) ||
+                 rewrite(x - (y - z), x + (z - y)) ||
+                 rewrite(x - y*c0, x + y*fold(-c0), c0 < 0 && -c0 > 0) ||
+                 rewrite(x - (y + c0), (x - y) - c0) ||
+                 rewrite((c0 - x) - c1, fold(c0 - c1) - x) ||
+                 rewrite(x*y - z*y, (x - z)*y) ||
+                 rewrite(x*y - y*z, (x - z)*y) ||
+                 rewrite(y*x - z*y, y*(x - z)) ||
+                 rewrite(y*x - y*z, y*(x - z)) ||
+                 rewrite((x + y) - (x + z), y - z) ||
+                 rewrite((x + y) - (z + x), y - z) ||
+                 rewrite((y + x) - (x + z), y - z) ||
+                 rewrite((y + x) - (z + x), y - z) ||
+                 rewrite(((x + y) + z) - x, y + z) ||
+                 rewrite(((y + x) + z) - x, y + z) ||
+                 rewrite((z + (x + y)) - x, z + y) ||
+                 rewrite((z + (y + x)) - x, z + y) ||
+                 (no_overflow(op->type) &&
+                  (rewrite(max(x, y) - x, max(0, y - x)) ||
+                   rewrite(min(x, y) - x, min(0, y - x)) ||
+                   rewrite(max(x, y) - y, max(x - y, 0)) ||
+                   rewrite(min(x, y) - y, min(x - y, 0)) ||
+                   rewrite(x - max(x, y), min(0, x - y), !is_const(x)) ||
+                   rewrite(x - min(x, y), max(0, x - y), !is_const(x)) ||
+                   rewrite(y - max(x, y), min(y - x, 0), !is_const(y)) ||
+                   rewrite(y - min(x, y), max(y - x, 0), !is_const(y)) ||
+                   rewrite(x*y - x, x*(y - 1)) ||
+                   rewrite(x*y - y, (x - 1)*y) ||
+                   rewrite(x - x*y, x*(1 - y)) ||
+                   rewrite(x - y*x, (1 - y)*x) ||
+                   rewrite(c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0) ||
+                   rewrite(c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0) ||
+                   rewrite(x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite(x - (x - y)/c0, (x*fold(c0 - 1) + y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite(x - (y + x)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite(x - (y - x)/c0, (x*fold(c0 + 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite((x + y)/c0 - x, (x*fold(1 - c0) + y)/c0) ||
+                   rewrite((y + x)/c0 - x, (y + x*fold(1 - c0))/c0) ||
+                   rewrite((x - y)/c0 - x, (x*fold(1 - c0) - y)/c0) ||
+                   rewrite((y - x)/c0 - x, (y - x*fold(1 + c0))/c0) ||
+                   rewrite(x - min(x + y, z), max(-y, x - z)) ||
+                   rewrite(x - min(y + x, z), max(-y, x - z)) ||
+                   rewrite(x - min(z, x + y), max(x - z, -y)) ||
+                   rewrite(x - min(z, y + x), max(x - z, -y)) ||
+                   rewrite(min(x + y, z) - x, min(y, z - x)) ||
+                   rewrite(min(y + x, z) - x, min(y, z - x)) ||
+                   rewrite(min(z, x + y) - x, min(z - x, y)) ||
+                   rewrite(min(z, y + x) - x, min(z - x, y)) ||
+                   rewrite(min(x, y) - min(y, x), 0) ||
+                   rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
+                   rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
 
-                  rewrite(x - max(x + y, z), min(-y, x - z)) ||
-                  rewrite(x - max(y + x, z), min(-y, x - z)) ||
-                  rewrite(x - max(z, x + y), min(x - z, -y)) ||
-                  rewrite(x - max(z, y + x), min(x - z, -y)) ||
-                  rewrite(max(x + y, z) - x, max(y, z - x)) ||
-                  rewrite(max(y + x, z) - x, max(y, z - x)) ||
-                  rewrite(max(z, x + y) - x, max(z - x, y)) ||
-                  rewrite(max(z, y + x) - x, max(z - x, y)) ||
-                  rewrite(max(x, y) - max(y, x), 0) ||
-                  rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w, this)) ||
-                  rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w, this)) ||
+                   rewrite(x - max(x + y, z), min(-y, x - z)) ||
+                   rewrite(x - max(y + x, z), min(-y, x - z)) ||
+                   rewrite(x - max(z, x + y), min(x - z, -y)) ||
+                   rewrite(x - max(z, y + x), min(x - z, -y)) ||
+                   rewrite(max(x + y, z) - x, max(y, z - x)) ||
+                   rewrite(max(y + x, z) - x, max(y, z - x)) ||
+                   rewrite(max(z, x + y) - x, max(z - x, y)) ||
+                   rewrite(max(z, y + x) - x, max(z - x, y)) ||
+                   rewrite(max(x, y) - max(y, x), 0) ||
+                   rewrite(max(x, y) - max(z, w), y - w, can_prove(x - y == z - w, this)) ||
+                   rewrite(max(x, y) - max(w, z), y - w, can_prove(x - y == z - w, this)) ||
 
-                  // When you have min(x, y) - min(z, w) and no further
-                  // information, there are four possible ways for the
-                  // mins to resolve. However if you can prove that the
-                  // decisions are correlated (i.e. x < y implies z < w or
-                  // vice versa), then there are simplifications to be
-                  // made that tame x. Whether or not these
-                  // simplifications are profitable depends on what terms
-                  // end up being constant.
+                   // When you have min(x, y) - min(z, w) and no further
+                   // information, there are four possible ways for the
+                   // mins to resolve. However if you can prove that the
+                   // decisions are correlated (i.e. x < y implies z < w or
+                   // vice versa), then there are simplifications to be
+                   // made that tame x. Whether or not these
+                   // simplifications are profitable depends on what terms
+                   // end up being constant.
 
-                  // If x < y implies z < w:
-                  //   min(x, y) - min(z, w)
-                  // = min(x - min(z, w), y - min(z, w))   using the distributive properties of min/max
-                  // = min(x - z, y - min(z, w))           using the implication
-                  // This duplicates z, so it's good if x - z causes some cancellation (e.g. they are equal)
+                   // If x < y implies z < w:
+                   //   min(x, y) - min(z, w)
+                   // = min(x - min(z, w), y - min(z, w))   using the distributive properties of min/max
+                   // = min(x - z, y - min(z, w))           using the implication
+                   // This duplicates z, so it's good if x - z causes some cancellation (e.g. they are equal)
 
-                  // If, on the other hand, z < w implies x < y:
-                  //   min(x, y) - min(z, w)
-                  // = max(min(x, y) - z, min(x, y) - w)   using the distributive properties of min/max
-                  // = max(x - z, min(x, y) - w)           using the implication
-                  // Again, this is profitable when x - z causes some cancellation
+                   // If, on the other hand, z < w implies x < y:
+                   //   min(x, y) - min(z, w)
+                   // = max(min(x, y) - z, min(x, y) - w)   using the distributive properties of min/max
+                   // = max(x - z, min(x, y) - w)           using the implication
+                   // Again, this is profitable when x - z causes some cancellation
 
-                  // What follows are special cases of this general
-                  // transformation where it is easy to see that x - z
-                  // cancels and that there is an implication in one
-                  // direction or the other.
+                   // What follows are special cases of this general
+                   // transformation where it is easy to see that x - z
+                   // cancels and that there is an implication in one
+                   // direction or the other.
 
-                  // Then the actual rules. We consider only cases where x and z differ by a constant.
-                  rewrite(min(x, y) - min(x, w), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
-                  rewrite(min(x, y) - min(x, w), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
-                  rewrite(min(x + c0, y) - min(x, w), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
-                  rewrite(min(x + c0, y) - min(x, w), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
-                  rewrite(min(x, y) - min(x + c1, w), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
-                  rewrite(min(x, y) - min(x + c1, w), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
-                  rewrite(min(x + c0, y) - min(x + c1, w), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
-                  rewrite(min(x + c0, y) - min(x + c1, w), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
+                   // Then the actual rules. We consider only cases where x and z differ by a constant.
+                   rewrite(min(x, y) - min(x, w), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
+                   rewrite(min(x, y) - min(x, w), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
+                   rewrite(min(x + c0, y) - min(x, w), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
+                   rewrite(min(x + c0, y) - min(x, w), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
+                   rewrite(min(x, y) - min(x + c1, w), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
+                   rewrite(min(x, y) - min(x + c1, w), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
+                   rewrite(min(x + c0, y) - min(x + c1, w), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
+                   rewrite(min(x + c0, y) - min(x + c1, w), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
 
-                  rewrite(min(y, x) - min(w, x), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
-                  rewrite(min(y, x) - min(w, x), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
-                  rewrite(min(y, x + c0) - min(w, x), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
-                  rewrite(min(y, x + c0) - min(w, x), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
-                  rewrite(min(y, x) - min(w, x + c1), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
-                  rewrite(min(y, x) - min(w, x + c1), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
-                  rewrite(min(y, x + c0) - min(w, x + c1), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
-                  rewrite(min(y, x + c0) - min(w, x + c1), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(min(y, x) - min(w, x), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
+                   rewrite(min(y, x) - min(w, x), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
+                   rewrite(min(y, x + c0) - min(w, x), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
+                   rewrite(min(y, x + c0) - min(w, x), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
+                   rewrite(min(y, x) - min(w, x + c1), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
+                   rewrite(min(y, x) - min(w, x + c1), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
+                   rewrite(min(y, x + c0) - min(w, x + c1), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
+                   rewrite(min(y, x + c0) - min(w, x + c1), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
 
-                  rewrite(min(x, y) - min(w, x), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
-                  rewrite(min(x, y) - min(w, x), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
-                  rewrite(min(x + c0, y) - min(w, x), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
-                  rewrite(min(x + c0, y) - min(w, x), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
-                  rewrite(min(x, y) - min(w, x + c1), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
-                  rewrite(min(x, y) - min(w, x + c1), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
-                  rewrite(min(x + c0, y) - min(w, x + c1), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
-                  rewrite(min(x + c0, y) - min(w, x + c1), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(min(x, y) - min(w, x), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
+                   rewrite(min(x, y) - min(w, x), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
+                   rewrite(min(x + c0, y) - min(w, x), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
+                   rewrite(min(x + c0, y) - min(w, x), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
+                   rewrite(min(x, y) - min(w, x + c1), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
+                   rewrite(min(x, y) - min(w, x + c1), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
+                   rewrite(min(x + c0, y) - min(w, x + c1), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
+                   rewrite(min(x + c0, y) - min(w, x + c1), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
 
-                  rewrite(min(y, x) - min(x, w), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
-                  rewrite(min(y, x) - min(x, w), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
-                  rewrite(min(y, x + c0) - min(x, w), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
-                  rewrite(min(y, x + c0) - min(x, w), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
-                  rewrite(min(y, x) - min(x + c1, w), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
-                  rewrite(min(y, x) - min(x + c1, w), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
-                  rewrite(min(y, x + c0) - min(x + c1, w), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
-                  rewrite(min(y, x + c0) - min(x + c1, w), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(min(y, x) - min(x, w), min(0, y - min(x, w)), can_prove(y <= w, this)) ||
+                   rewrite(min(y, x) - min(x, w), max(0, min(x, y) - w), can_prove(y >= w, this)) ||
+                   rewrite(min(y, x + c0) - min(x, w), min(c0, y - min(x, w)), can_prove(y <= w + c0, this)) ||
+                   rewrite(min(y, x + c0) - min(x, w), max(c0, min(x + c0, y) - w), can_prove(y >= w + c0, this)) ||
+                   rewrite(min(y, x) - min(x + c1, w), min(fold(-c1), y - min(x + c1, w)), can_prove(y + c1 <= w, this)) ||
+                   rewrite(min(y, x) - min(x + c1, w), max(fold(-c1), min(x, y) - w), can_prove(y + c1 >= w, this)) ||
+                   rewrite(min(y, x + c0) - min(x + c1, w), min(fold(c0 - c1), y - min(x + c1, w)), can_prove(y + c1 <= w + c0, this)) ||
+                   rewrite(min(y, x + c0) - min(x + c1, w), max(fold(c0 - c1), min(x + c0, y) - w), can_prove(y + c1 >= w + c0, this)) ||
 
-                  // The equivalent rules for max are what you'd
-                  // expect. Just swap < and > and min and max (apply the
-                  // isomorphism x -> -x).
-                  rewrite(max(x, y) - max(x, w), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
-                  rewrite(max(x, y) - max(x, w), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
-                  rewrite(max(x + c0, y) - max(x, w), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
-                  rewrite(max(x + c0, y) - max(x, w), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
-                  rewrite(max(x, y) - max(x + c1, w), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
-                  rewrite(max(x, y) - max(x + c1, w), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
-                  rewrite(max(x + c0, y) - max(x + c1, w), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
-                  rewrite(max(x + c0, y) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
+                   // The equivalent rules for max are what you'd
+                   // expect. Just swap < and > and min and max (apply the
+                   // isomorphism x -> -x).
+                   rewrite(max(x, y) - max(x, w), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
+                   rewrite(max(x, y) - max(x, w), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
+                   rewrite(max(x + c0, y) - max(x, w), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
+                   rewrite(max(x + c0, y) - max(x, w), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
+                   rewrite(max(x, y) - max(x + c1, w), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
+                   rewrite(max(x, y) - max(x + c1, w), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
+                   rewrite(max(x + c0, y) - max(x + c1, w), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(max(x + c0, y) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
 
-                  rewrite(max(y, x) - max(w, x), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
-                  rewrite(max(y, x) - max(w, x), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
-                  rewrite(max(y, x + c0) - max(w, x), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
-                  rewrite(max(y, x + c0) - max(w, x), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
-                  rewrite(max(y, x) - max(w, x + c1), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
-                  rewrite(max(y, x) - max(w, x + c1), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
-                  rewrite(max(y, x + c0) - max(w, x + c1), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
-                  rewrite(max(y, x + c0) - max(w, x + c1), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
+                   rewrite(max(y, x) - max(w, x), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
+                   rewrite(max(y, x) - max(w, x), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
+                   rewrite(max(y, x + c0) - max(w, x), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
+                   rewrite(max(y, x + c0) - max(w, x), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
+                   rewrite(max(y, x) - max(w, x + c1), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
+                   rewrite(max(y, x) - max(w, x + c1), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
+                   rewrite(max(y, x + c0) - max(w, x + c1), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(max(y, x + c0) - max(w, x + c1), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
 
-                  rewrite(max(x, y) - max(w, x), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
-                  rewrite(max(x, y) - max(w, x), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
-                  rewrite(max(x + c0, y) - max(w, x), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
-                  rewrite(max(x + c0, y) - max(w, x), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
-                  rewrite(max(x, y) - max(w, x + c1), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
-                  rewrite(max(x, y) - max(w, x + c1), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
-                  rewrite(max(x + c0, y) - max(w, x + c1), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
-                  rewrite(max(x + c0, y) - max(w, x + c1), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
+                   rewrite(max(x, y) - max(w, x), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
+                   rewrite(max(x, y) - max(w, x), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
+                   rewrite(max(x + c0, y) - max(w, x), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
+                   rewrite(max(x + c0, y) - max(w, x), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
+                   rewrite(max(x, y) - max(w, x + c1), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
+                   rewrite(max(x, y) - max(w, x + c1), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
+                   rewrite(max(x + c0, y) - max(w, x + c1), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(max(x + c0, y) - max(w, x + c1), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)) ||
 
-                  rewrite(max(y, x) - max(x, w), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
-                  rewrite(max(y, x) - max(x, w), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
-                  rewrite(max(y, x + c0) - max(x, w), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
-                  rewrite(max(y, x + c0) - max(x, w), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
-                  rewrite(max(y, x) - max(x + c1, w), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
-                  rewrite(max(y, x) - max(x + c1, w), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
-                  rewrite(max(y, x + c0) - max(x + c1, w), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
-                  rewrite(max(y, x + c0) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)))) ||
+                   rewrite(max(y, x) - max(x, w), max(0, y - max(x, w)), can_prove(y >= w, this)) ||
+                   rewrite(max(y, x) - max(x, w), min(0, max(x, y) - w), can_prove(y <= w, this)) ||
+                   rewrite(max(y, x + c0) - max(x, w), max(c0, y - max(x, w)), can_prove(y >= w + c0, this)) ||
+                   rewrite(max(y, x + c0) - max(x, w), min(c0, max(x + c0, y) - w), can_prove(y <= w + c0, this)) ||
+                   rewrite(max(y, x) - max(x + c1, w), max(fold(-c1), y - max(x + c1, w)), can_prove(y + c1 >= w, this)) ||
+                   rewrite(max(y, x) - max(x + c1, w), min(fold(-c1), max(x, y) - w), can_prove(y + c1 <= w, this)) ||
+                   rewrite(max(y, x + c0) - max(x + c1, w), max(fold(c0 - c1), y - max(x + c1, w)), can_prove(y + c1 >= w + c0, this)) ||
+                   rewrite(max(y, x + c0) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)))) ||
 
-                (no_overflow_int(op->type) &&
-                 (rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
-                  rewrite(x - (x/c0)*c0, x % c0, c0 > 0) ||
-                  rewrite(((x + c0)/c1)*c1 - x, x % c1, c1 > 0 && c0 + 1 == c1) ||
-                  rewrite(x - ((x + c0)/c1)*c1, -(x % c1), c1 > 0 && c0 + 1 == c1) ||
-                  rewrite(x * c0 - y * c1, (x * fold(c0 / c1) - y) * c1, c0 % c1 == 0) ||
-                  rewrite(x * c0 - y * c1, (x - y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
-                  // Various forms of (x +/- a)/c - (x +/- b)/c. We can
-                  // *almost* cancel the x.  The right thing to do depends
-                  // on which of a or b is a constant, and we also need to
-                  // catch the cases where that constant is zero.
-                  rewrite(((x + y) + z)/c0 - ((y + x) + w)/c0, ((x + y) + z)/c0 - ((x + y) + w)/c0, c0 > 0) ||
-                  rewrite((x + y)/c0 - (y + x)/c0, 0) ||
-                  rewrite((x + y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) + (y - c1))/c0, c0 > 0) ||
-                  rewrite((x + c1)/c0 - (x + y)/c0, ((fold(c0 + c1 - 1) - y) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
-                  rewrite((x - y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) - y - c1)/c0, c0 > 0) ||
-                  rewrite((x + c1)/c0 - (x - y)/c0, ((y + fold(c0 + c1 - 1)) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
-                  rewrite(x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0) ||
-                  rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
-                  rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
-                  rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
+                 (no_overflow_int(op->type) &&
+                  (rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
+                   rewrite(x - (x/c0)*c0, x % c0, c0 > 0) ||
+                   rewrite(((x + c0)/c1)*c1 - x, x % c1, c1 > 0 && c0 + 1 == c1) ||
+                   rewrite(x - ((x + c0)/c1)*c1, -(x % c1), c1 > 0 && c0 + 1 == c1) ||
+                   rewrite(x * c0 - y * c1, (x * fold(c0 / c1) - y) * c1, c0 % c1 == 0) ||
+                   rewrite(x * c0 - y * c1, (x - y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
+                   // Various forms of (x +/- a)/c - (x +/- b)/c. We can
+                   // *almost* cancel the x.  The right thing to do depends
+                   // on which of a or b is a constant, and we also need to
+                   // catch the cases where that constant is zero.
+                   rewrite(((x + y) + z)/c0 - ((y + x) + w)/c0, ((x + y) + z)/c0 - ((x + y) + w)/c0, c0 > 0) ||
+                   rewrite((x + y)/c0 - (y + x)/c0, 0) ||
+                   rewrite((x + y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) + (y - c1))/c0, c0 > 0) ||
+                   rewrite((x + c1)/c0 - (x + y)/c0, ((fold(c0 + c1 - 1) - y) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
+                   rewrite((x - y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) - y - c1)/c0, c0 > 0) ||
+                   rewrite((x + c1)/c0 - (x - y)/c0, ((y + fold(c0 + c1 - 1)) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
+                   rewrite(x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0) ||
+                   rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
+                   rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
+                   rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -950,87 +950,87 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
-                rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
-                (no_overflow(op->type) &&
-                 (// Fold repeated division
-                  rewrite((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0) ||
-                  rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2),   c0 > 0 && c2 > 0) ||
-                  rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c1 > 0) ||
-                  // Pull out terms that are a multiple of the denominator
-                  rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
+                 rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
+                 (no_overflow(op->type) &&
+                  (// Fold repeated division
+                   rewrite((x / c0) / c2, x / fold(c0 * c2),                          c0 > 0 && c2 > 0) ||
+                   rewrite((x / c0 + c1) / c2, (x + fold(c1 * c0)) / fold(c0 * c2),   c0 > 0 && c2 > 0) ||
+                   rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c1 > 0) ||
+                   // Pull out terms that are a multiple of the denominator
+                   rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
 
-                  rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((x * c0 - y) / c1, (-y) / c1 + x * fold(c0 / c1),          c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((x * c0 - y) / c1, (-y) / c1 + x * fold(c0 / c1),          c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((y + x * c0) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((y - x * c0) / c1, y / c1 - x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
 
-                  rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((x * c0 + y) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((x * c0 - y) - z) / c1, x * fold(c0 / c1) - (y + z) / c1, c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((x * c0 + y) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((x * c0 - y) - z) / c1, x * fold(c0 / c1) - (y + z) / c1, c0 % c1 == 0 && c1 > 0) ||
 
-                  rewrite(((y + x * c0) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((y + x * c0) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((y - x * c0) - z) / c1, (y - z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((y - x * c0) + z) / c1, (y + z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((y + x * c0) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((y + x * c0) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((y - x * c0) - z) / c1, (y - z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((y - x * c0) + z) / c1, (y + z) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-                  rewrite((z + (x * c0 + y)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((z + (x * c0 - y)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((z - (x * c0 - y)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z + (x * c0 + y)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z + (x * c0 - y)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z - (x * c0 - y)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-                  rewrite((z + (y + x * c0)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((z - (y + x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((z - (y - x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z + (y + x * c0)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z - (y + x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z - (y - x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-                  // For the next depth, stick to addition
-                  rewrite((((x * c0 + y) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((((y + x * c0) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((z + (x * c0 + y)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite(((z + (y + x * c0)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((w + ((x * c0 + y) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                  rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   // For the next depth, stick to addition
+                   rewrite((((x * c0 + y) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((((y + x * c0) + z) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((z + (x * c0 + y)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((z + (y + x * c0)) + w) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((w + ((x * c0 + y) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((w + ((y + x * c0) + z)) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-                  rewrite((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0) ||
-                  rewrite((x + y)/x, y/x + 1) ||
-                  rewrite((y + x)/x, y/x + 1) ||
-                  rewrite((x - y)/x, (-y)/x + 1) ||
-                  rewrite((y - x)/x, y/x - 1) ||
-                  rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
-                  rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
-                  rewrite((z + (x + y))/x, (z + y)/x + 1) ||
-                  rewrite((z + (y + x))/x, (z + y)/x + 1) ||
-                  rewrite((x*y)/x, y) ||
-                  rewrite((y*x)/x, y) ||
-                  rewrite((x*y + z)/x, y + z/x) ||
-                  rewrite((y*x + z)/x, y + z/x) ||
-                  rewrite((z + x*y)/x, z/x + y) ||
-                  rewrite((z + y*x)/x, z/x + y) ||
-                  rewrite((x*y - z)/x, y + (-z)/x) ||
-                  rewrite((y*x - z)/x, y + (-z)/x) ||
-                  rewrite((z - x*y)/x, z/x - y) ||
-                  rewrite((z - y*x)/x, z/x - y) ||
-                  (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
-                (no_overflow_int(op->type) &&
-                 (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0) ||
-                  rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
-                          // First and last lanes are the same when...
-                          can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
-                (no_overflow_scalar_int(op->type) &&
-                 (rewrite(x / -1, -x) ||
-                  rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1) ||
-                  // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
-                  // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
-                  rewrite((x * c0 + c1) / c2,
-                          (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
-                          c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1) ||
-                  // A very specific pattern that comes up in bounds in upsampling code.
-                  rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
+                   rewrite((x + c0) / c1, x / c1 + fold(c0 / c1),                     c0 % c1 == 0) ||
+                   rewrite((x + y)/x, y/x + 1) ||
+                   rewrite((y + x)/x, y/x + 1) ||
+                   rewrite((x - y)/x, (-y)/x + 1) ||
+                   rewrite((y - x)/x, y/x - 1) ||
+                   rewrite(((x + y) + z)/x, (y + z)/x + 1) ||
+                   rewrite(((y + x) + z)/x, (y + z)/x + 1) ||
+                   rewrite((z + (x + y))/x, (z + y)/x + 1) ||
+                   rewrite((z + (y + x))/x, (z + y)/x + 1) ||
+                   rewrite((x*y)/x, y) ||
+                   rewrite((y*x)/x, y) ||
+                   rewrite((x*y + z)/x, y + z/x) ||
+                   rewrite((y*x + z)/x, y + z/x) ||
+                   rewrite((z + x*y)/x, z/x + y) ||
+                   rewrite((z + y*x)/x, z/x + y) ||
+                   rewrite((x*y - z)/x, y + (-z)/x) ||
+                   rewrite((y*x - z)/x, y + (-z)/x) ||
+                   rewrite((z - x*y)/x, z/x - y) ||
+                   rewrite((z - y*x)/x, z/x - y) ||
+                   (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
+                 (no_overflow_int(op->type) &&
+                  (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0) ||
+                   rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
+                           // First and last lanes are the same when...
+                           can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
+                 (no_overflow_scalar_int(op->type) &&
+                  (rewrite(x / -1, -x) ||
+                   rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1) ||
+                   // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
+                   // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
+                   rewrite((x * c0 + c1) / c2,
+                           (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
+                           c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1) ||
+                   // A very specific pattern that comes up in bounds in upsampling code.
+                   rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -1071,22 +1071,22 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
-                (no_overflow_int(op->type) &&
-                 (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
-                  rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
-                  rewrite((x * c0) % c1, (x % fold(c1/c0)) * c0, c1 % c0 == 0) ||
-                  rewrite((x * c0 + y) % c1, y % c1, c0 % c1 == 0) ||
-                  rewrite((y + x * c0) % c1, y % c1, c0 % c1 == 0) ||
-                  rewrite(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0) ||
-                  rewrite(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
-                          // First and last lanes are the same when...
-                          can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)) ||
-                  rewrite(ramp(x * c0, c2) % broadcast(c1), (ramp(x * fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
-                  rewrite(ramp(x + c0, c2) % broadcast(c1), (ramp(x + fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
-                  rewrite(ramp(x * c0 + y, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0) ||
-                  rewrite(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))))) {
+                 (no_overflow_int(op->type) &&
+                  (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                   rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                   rewrite((x * c0) % c1, (x % fold(c1/c0)) * c0, c1 % c0 == 0) ||
+                   rewrite((x * c0 + y) % c1, y % c1, c0 % c1 == 0) ||
+                   rewrite((y + x * c0) % c1, y % c1, c0 % c1 == 0) ||
+                   rewrite(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0) ||
+                   rewrite(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
+                           // First and last lanes are the same when...
+                           can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)) ||
+                   rewrite(ramp(x * c0, c2) % broadcast(c1), (ramp(x * fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                   rewrite(ramp(x + c0, c2) % broadcast(c1), (ramp(x + fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
+                   rewrite(ramp(x * c0 + y, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0) ||
+                   rewrite(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -1135,30 +1135,30 @@ public:
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b));
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(min(x, x), x) ||
-                rewrite(min(c0, c1), fold(min(c0, c1))) ||
+                 rewrite(min(c0, c1), fold(min(c0, c1))) ||
 
-                // Cases where one side dominates:
-                rewrite(min(x, op->type.min()), b) ||
-                rewrite(min(x, op->type.max()), x) ||
-                rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
-                rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
-                rewrite(min(min(x, y), x), a) ||
-                rewrite(min(min(x, y), y), a) ||
-                rewrite(min(min(min(x, y), z), x), a) ||
-                rewrite(min(min(min(x, y), z), y), a) ||
-                rewrite(min(min(min(min(x, y), z), w), x), a) ||
-                rewrite(min(min(min(min(x, y), z), w), y), a) ||
-                rewrite(min(min(min(min(min(x, y), z), w), u), x), a) ||
-                rewrite(min(min(min(min(min(x, y), z), w), u), y), a) ||
-                rewrite(min(x, max(x, y)), a) ||
-                rewrite(min(x, max(y, x)), a) ||
-                rewrite(min(max(x, y), min(x, y)), b) ||
-                rewrite(min(max(x, y), min(y, x)), b) ||
-                rewrite(min(max(x, y), x), b) ||
-                rewrite(min(max(y, x), x), b) ||
-                rewrite(min(max(x, c0), c1), b, c1 <= c0) ||
+                 // Cases where one side dominates:
+                 rewrite(min(x, op->type.min()), b) ||
+                 rewrite(min(x, op->type.max()), x) ||
+                 rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
+                 rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
+                 rewrite(min(min(x, y), x), a) ||
+                 rewrite(min(min(x, y), y), a) ||
+                 rewrite(min(min(min(x, y), z), x), a) ||
+                 rewrite(min(min(min(x, y), z), y), a) ||
+                 rewrite(min(min(min(min(x, y), z), w), x), a) ||
+                 rewrite(min(min(min(min(x, y), z), w), y), a) ||
+                 rewrite(min(min(min(min(min(x, y), z), w), u), x), a) ||
+                 rewrite(min(min(min(min(min(x, y), z), w), u), y), a) ||
+                 rewrite(min(x, max(x, y)), a) ||
+                 rewrite(min(x, max(y, x)), a) ||
+                 rewrite(min(max(x, y), min(x, y)), b) ||
+                 rewrite(min(max(x, y), min(y, x)), b) ||
+                 rewrite(min(max(x, y), x), b) ||
+                 rewrite(min(max(y, x), x), b) ||
+                 rewrite(min(max(x, c0), c1), b, c1 <= c0) ||
 
                 rewrite(min(intrin(Call::likely, x), x), a) ||
                 rewrite(min(x, intrin(Call::likely, x)), b) ||
@@ -1185,7 +1185,7 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
                 rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
                 rewrite(min(min(x, y), min(x, z)), min(min(y, z), x)) ||
@@ -1328,7 +1328,7 @@ public:
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b));
 
-            if (EVAL_IN_NEW_STACK_FRAME(rewrite(max(x, x), x) ||
+            if (EVAL_IN_LAMBDA(rewrite(max(x, x), x) ||
                 rewrite(max(c0, c1), fold(max(c0, c1))) ||
 
                 // Cases where one side dominates:
@@ -1377,7 +1377,7 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
                 rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
                 rewrite(max(max(x, y), max(x, z)), max(max(y, z), x)) ||
@@ -1592,7 +1592,7 @@ public:
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b));
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(c0 < c1, fold(c0 < c1)) ||
                 rewrite(x < x, false) ||
                 rewrite(x < ty.min(), false) ||
@@ -1613,7 +1613,7 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
                 (no_overflow(ty) &&
                  (rewrite(ramp(x, y) < ramp(z, y), x < z) ||
@@ -1990,7 +1990,7 @@ public:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b));
 
-        if (EVAL_IN_NEW_STACK_FRAME
+        if (EVAL_IN_LAMBDA
             (rewrite(x && true, a) ||
             rewrite(x && false, b) ||
             rewrite(x && x, a) ||
@@ -2047,7 +2047,7 @@ public:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b));
 
-        if (EVAL_IN_NEW_STACK_FRAME
+        if (EVAL_IN_LAMBDA
             (rewrite(x || true, b) ||
             rewrite(x || false, a) ||
             rewrite(x || x, a) ||
@@ -2134,7 +2134,7 @@ public:
         if (may_simplify(op->type)) {
             auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value));
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
                 rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
                 rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, true), x, y), x) ||
@@ -2149,7 +2149,7 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_NEW_STACK_FRAME
+            if (EVAL_IN_LAMBDA
                 (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
                 rewrite(select(x != y, z, w), select(x == y, w, z)) ||
                 rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
