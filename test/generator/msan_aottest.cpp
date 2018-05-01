@@ -1,6 +1,11 @@
 #if !defined(__has_feature)
 
 #include <stdio.h>
+
+extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("MSAN unsupported on this compiler; skipping test.\n");
     return 0;
@@ -9,6 +14,11 @@ int main(int argc, char **argv) {
 #elif !__has_feature(memory_sanitizer)
 
 #include <stdio.h>
+
+extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("MSAN is not enabled for this build; skipping test.\n");
     return 0;
