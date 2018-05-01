@@ -35,9 +35,11 @@ using std::vector;
 #define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
-// On old compilers, some code below would use large stack frames. If
-// we wrap the expressions that imply lots of temporaries in a lambda,
-// we can get these large frames out of the recursive path.
+// On old compilers, some code below would use large stack frames,
+// because they use expression templates that generate large numbers
+// of temporary objects when they are built and matched against. If we
+// wrap the expressions that imply lots of temporaries in a lambda, we
+// can get these large frames out of the recursive path.
 #define EVAL_IN_NEW_STACK_FRAME(x) (([&]() {return (x);})())
 
 namespace {
