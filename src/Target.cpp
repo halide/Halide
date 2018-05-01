@@ -257,7 +257,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
-    {"tsan", Target::TSAN},
     {"avx512", Target::AVX512},
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
@@ -267,6 +266,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_realizations", Target::TraceRealizations},
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
+    {"tsan", Target::TSAN},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

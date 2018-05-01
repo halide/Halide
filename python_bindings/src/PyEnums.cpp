@@ -132,6 +132,7 @@ void define_enums(py::module &m) {
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
+        .value("TSAN", Target::Feature::TSAN)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
