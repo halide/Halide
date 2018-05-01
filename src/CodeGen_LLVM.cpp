@@ -1706,7 +1706,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             bool external = op->param.defined() || op->image.defined();
 
             // Don't read beyond the end of an external buffer.
-            if (external) {
+            // (In ASAN mode, don't read beyond the end of internal buffers either,
+            // as ASAN will complain even about harmless stack overreads.)
+            if (external || target.has_feature(Target::ASAN)) {
                 base_b -= 1;
                 shifted_b = true;
             } else {

@@ -88,12 +88,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
-        if (target.has_feature(Target::ASAN)) {
-            // ASAN will complain if we read past the end, so be sure to explicitly
-            // add the padding for this case to avoid false positives. (Only
-            // do this for ASAN builds though, to conserve stack space.)
-            stack_bytes += allocation_padding(type);
-        }
 
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
