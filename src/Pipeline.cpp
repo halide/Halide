@@ -755,16 +755,16 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
         for (size_t i = 0; i < outputs.r->size(); i++) {
             const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     } else if (outputs.buf) {
         args_result.store[arg_index++] = outputs.buf;
-        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << outputs.buf->host << "\n";
+        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
     } else {
         for (const Buffer<> &buffer : *outputs.buffer_list) {
             const halide_buffer_t *buf = buffer.raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
 
