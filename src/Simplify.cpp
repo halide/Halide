@@ -550,10 +550,12 @@ public:
                   (rewrite((x/y)*y + x%y, x) ||
                    rewrite((z + x/y)*y + x%y, z*y + x) ||
                    rewrite((x/y + z)*y + x%y, x + z*y) ||
-                   rewrite(y%c0 + (z + x*c0), z + (x*c0 + y%c0)) ||
-                   rewrite(y%c0 + (x*c0 + z), z + (x*c0 + y%c0)) ||
-                   rewrite(y*c0 + (z + x%c0), z + (y*c0 + x%c0)) ||
-                   rewrite(y*c0 + (x%c0 + z), z + (y*c0 + x%c0)) ||
+                   rewrite(x%y + ((x/y)*y + z), x + z) ||
+                   rewrite(x%y + ((x/y)*y - z), x - z) ||
+                   rewrite(x%y + (z + (x/y)*y), x + z) ||
+                   rewrite((x/y)*y + (x%y + z), x + z) ||
+                   rewrite((x/y)*y + (x%y - z), x - z) ||
+                   rewrite((x/y)*y + (z + x%y), x + z) ||
                    rewrite(x/2 + x%2, (x + 1) / 2))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
