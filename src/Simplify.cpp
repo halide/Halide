@@ -1444,8 +1444,8 @@ public:
 
                   rewrite(max(x * c0, y * c1), max(x, y * fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                   rewrite(max(x * c0, y * c1), min(x, y * fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
-                  rewrite(max(x * c0, y * c1), max(x * fold(c0 / c1), y) * c0, c1 > 0 && c0 % c1 == 0) ||
-                  rewrite(max(x * c0, y * c1), min(x * fold(c0 / c1), y) * c0, c1 < 0 && c0 % c1 == 0) ||
+                  rewrite(max(x * c0, y * c1), max(x * fold(c0 / c1), y) * c1, c1 > 0 && c0 % c1 == 0) ||
+                  rewrite(max(x * c0, y * c1), min(x * fold(c0 / c1), y) * c1, c1 < 0 && c0 % c1 == 0) ||
                   rewrite(max(x * c0, y * c0 + c1), max(x, y + fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                   rewrite(max(x * c0, y * c0 + c1), min(x, y + fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 
