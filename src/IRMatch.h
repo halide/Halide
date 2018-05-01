@@ -2073,7 +2073,7 @@ bool evaluate_predicate(bool x, MatcherState & __restrict__ ) noexcept {
 
 template<typename Pattern,
          typename = typename enable_if_pattern<Pattern>::type>
-HALIDE_NEVER_INLINE
+HALIDE_ALWAYS_INLINE
 bool evaluate_predicate(Pattern p, MatcherState & __restrict__ state) {
     halide_scalar_value_t c;
     halide_type_t ty = halide_type_of<bool>();

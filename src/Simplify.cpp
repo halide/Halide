@@ -35,6 +35,11 @@ using std::vector;
 #define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
+// On old compilers, some code below would use large stack frames. If
+// we wrap the expressions that imply lots of temporaries in a lambda,
+// we can get these large frames out of the recursive path.
+#define EVAL_IN_NEW_STACK_FRAME(x) (([&]() {return (x);})())
+
 namespace {
 
 // Things that we can constant fold: Immediates and broadcasts of immediates.
@@ -471,7 +476,8 @@ public:
                 return rewrite.result;
             }
 
-            if (rewrite(x + x, x * 2) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(x + x, x * 2) ||
                 rewrite(ramp(x, y) + ramp(z, w), ramp(x + z, y + w, lanes)) ||
                 rewrite(ramp(x, y) + broadcast(z), ramp(x + z, y, lanes)) ||
                 rewrite(broadcast(x) + broadcast(y), broadcast(x + y, lanes)) ||
@@ -546,7 +552,7 @@ public:
                   rewrite(y%c0 + (x*c0 + z), z + (x*c0 + y%c0)) ||
                   rewrite(y*c0 + (z + x%c0), z + (y*c0 + x%c0)) ||
                   rewrite(y*c0 + (x%c0 + z), z + (y*c0 + x%c0)) ||
-                  rewrite(x/2 + x%2, (x + 1) / 2)))) {
+                  rewrite(x/2 + x%2, (x + 1) / 2))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
 
@@ -595,7 +601,8 @@ public:
                 return rewrite.result;
             }
 
-            if ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0))) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0))) ||
                 rewrite(x - x, 0) || // We want to remutate this just to get better bounds
                 rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
                 rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||
@@ -808,7 +815,7 @@ public:
                   rewrite(x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0) ||
                   rewrite((x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0) ||
                   rewrite(x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0) ||
-                  rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0)))) {
+                  rewrite((x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -941,7 +948,8 @@ public:
                 return rewrite.result;
             }
 
-            if (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
                 rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
                 (no_overflow(op->type) &&
                  (// Fold repeated division
@@ -1020,7 +1028,7 @@ public:
                           (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
                           c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1) ||
                   // A very specific pattern that comes up in bounds in upsampling code.
-                  rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1)))) {
+                  rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -1061,7 +1069,8 @@ public:
                 return rewrite.result;
             }
 
-            if (rewrite(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(broadcast(x) % broadcast(y), broadcast(x % y, lanes)) ||
                 (no_overflow_int(op->type) &&
                  (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                   rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
@@ -1075,7 +1084,7 @@ public:
                   rewrite(ramp(x * c0, c2) % broadcast(c1), (ramp(x * fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                   rewrite(ramp(x + c0, c2) % broadcast(c1), (ramp(x + fold(c0 % c1), fold(c2 % c1), lanes) % c1), c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                   rewrite(ramp(x * c0 + y, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0) ||
-                  rewrite(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0)))) {
+                  rewrite(ramp(y + x * c0, c2) % broadcast(c1), ramp(y, fold(c2 % c1), lanes) % c1, c0 % c1 == 0))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
@@ -1124,7 +1133,8 @@ public:
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b));
 
-            if (rewrite(min(x, x), x) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(min(x, x), x) ||
                 rewrite(min(c0, c1), fold(min(c0, c1))) ||
 
                 // Cases where one side dominates:
@@ -1169,11 +1179,12 @@ public:
                   rewrite(min((x/c1)*c1 + c2, x), a, c1 > 0 && c2 <= 0) ||
                   rewrite(min(x, (x/c1)*c1 + c2), b, c1 > 0 && c2 <= 0) ||
                   rewrite(min(((x + c0)/c1)*c1, x), a, c1 > 0 && c0 <= 0) ||
-                  rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0)))) {
+                  rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0))))) {
                 return rewrite.result;
             }
 
-            if (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
                 rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
                 rewrite(min(min(x, y), min(x, z)), min(min(y, z), x)) ||
                 rewrite(min(min(y, x), min(x, z)), min(min(y, z), x)) ||
@@ -1252,7 +1263,7 @@ public:
 
                   rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
-                  rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1)))))) {
+                  rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))))))) {
 
                 return mutate(std::move(rewrite.result), bounds);
             }
@@ -1315,7 +1326,7 @@ public:
             int lanes = op->type.lanes();
             auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b));
 
-            if (rewrite(max(x, x), x) ||
+            if (EVAL_IN_NEW_STACK_FRAME(rewrite(max(x, x), x) ||
                 rewrite(max(c0, c1), fold(max(c0, c1))) ||
 
                 // Cases where one side dominates:
@@ -1360,11 +1371,12 @@ public:
                   rewrite(max((x/c1)*c1 + c2, x), b, c1 > 0 && c2 <= 0) ||
                   rewrite(max(x, (x/c1)*c1 + c2), a, c1 > 0 && c2 <= 0) ||
                   rewrite(max(((x + c0)/c1)*c1, x), b, c1 > 0 && c0 <= 0) ||
-                  rewrite(max(x, ((x + c0)/c1)*c1), a, c1 > 0 && c0 <= 0)))) {
+                  rewrite(max(x, ((x + c0)/c1)*c1), a, c1 > 0 && c0 <= 0))))) {
                 return rewrite.result;
             }
 
-            if (rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
                 rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
                 rewrite(max(max(x, y), max(x, z)), max(max(y, z), x)) ||
                 rewrite(max(max(y, x), max(x, z)), max(max(y, z), x)) ||
@@ -1440,7 +1452,7 @@ public:
 
                   rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
 
-                  rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1)))))) {
+                  rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 
                 return mutate(std::move(rewrite.result), bounds);
             }
@@ -1578,8 +1590,8 @@ public:
 
             auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b));
 
-            // TODO: check we have coverage of all the Sub patterns here. For many it should be simpler (e.g. we can multiply things out)
-            if (rewrite(c0 < c1, fold(c0 < c1)) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(c0 < c1, fold(c0 < c1)) ||
                 rewrite(x < x, false) ||
                 rewrite(x < ty.min(), false) ||
                 rewrite(ty.max() < x, false) ||
@@ -1595,11 +1607,12 @@ public:
                 rewrite(ramp(x, c1) < broadcast(z), true, can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
                 rewrite(ramp(x, c1) < broadcast(z), false, can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
                 rewrite(broadcast(z) < ramp(x, c1), true, can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
-                rewrite(broadcast(z) < ramp(x, c1), false, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))) {
+                 rewrite(broadcast(z) < ramp(x, c1), false, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this)))) {
                 return rewrite.result;
             }
 
-            if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
                 (no_overflow(ty) &&
                  (rewrite(ramp(x, y) < ramp(z, y), x < z) ||
                   // Move constants to the RHS
@@ -1815,7 +1828,7 @@ public:
                           broadcast(x * fold(c3/c0) < z, lanes),
                           c0 > 0 && (c3 % c0 == 0) &&
                           c1 * (lanes - 1) < c0 &&
-                          c1 * (lanes - 1) >= 0)))) {
+                          c1 * (lanes - 1) >= 0))))) {
 
 
 
@@ -1975,7 +1988,8 @@ public:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b));
 
-        if (rewrite(x && true, a) ||
+        if (EVAL_IN_NEW_STACK_FRAME
+            (rewrite(x && true, a) ||
             rewrite(x && false, b) ||
             rewrite(x && x, a) ||
             rewrite(x != y && x == y, false) ||
@@ -1997,7 +2011,7 @@ public:
             rewrite(c0 < x && c1 < x, fold(max(c0, c1)) < x) ||
             rewrite(c0 <= x && c1 <= x, fold(max(c0, c1)) <= x) ||
             rewrite(x < c0 && x < c1, x < fold(min(c0, c1))) ||
-            rewrite(x <= c0 && x <= c1, x <= fold(min(c0, c1)))) {
+             rewrite(x <= c0 && x <= c1, x <= fold(min(c0, c1))))) {
             return rewrite.result;
         }
 
@@ -2031,7 +2045,8 @@ public:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b));
 
-        if (rewrite(x || true, b) ||
+        if (EVAL_IN_NEW_STACK_FRAME
+            (rewrite(x || true, b) ||
             rewrite(x || false, a) ||
             rewrite(x || x, a) ||
             rewrite(x != y || x == y, true) ||
@@ -2048,7 +2063,7 @@ public:
             rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
             rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
             rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
-            rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1)))) {
+             rewrite(x <= c0 || x <= c1, x <= fold(max(c0, c1))))) {
             return rewrite.result;
         }
 
@@ -2117,7 +2132,8 @@ public:
         if (may_simplify(op->type)) {
             auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value));
 
-            if (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
                 rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
                 rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, true), x, y), x) ||
                 rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, false), x, y), y) ||
@@ -2127,11 +2143,12 @@ public:
                 rewrite(select(x, intrin(Call::likely, y), y), true_value) ||
                 rewrite(select(x, y, intrin(Call::likely, y)), false_value) ||
                 rewrite(select(x, intrin(Call::likely_if_innermost, y), y), true_value) ||
-                rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value)) {
+                 rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), false_value))) {
                 return rewrite.result;
             }
 
-            if (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
+            if (EVAL_IN_NEW_STACK_FRAME
+                (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
                 rewrite(select(x != y, z, w), select(x == y, w, z)) ||
                 rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
                 rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
@@ -2160,7 +2177,7 @@ public:
                   rewrite(select(x, y, false), x && y) ||
                   rewrite(select(x, y, true), !x || y) ||
                   rewrite(select(x, false, y), !x && y) ||
-                  rewrite(select(x, true, y), x || y)))) {
+                  rewrite(select(x, true, y), x || y))))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
