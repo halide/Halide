@@ -1955,7 +1955,7 @@ struct IsFloatOp {
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
-        Type t = a.make(state, {}).type(); 
+        Type t = a.make(state, {}).type();
         val.u.u64 = t.is_float();
         ty.code = halide_type_uint;
         ty.bits = 1;
@@ -2073,7 +2073,7 @@ bool evaluate_predicate(bool x, MatcherState & __restrict__ ) noexcept {
 
 template<typename Pattern,
          typename = typename enable_if_pattern<Pattern>::type>
-HALIDE_ALWAYS_INLINE
+HALIDE_NEVER_INLINE
 bool evaluate_predicate(Pattern p, MatcherState & __restrict__ state) {
     halide_scalar_value_t c;
     halide_type_t ty = halide_type_of<bool>();
@@ -2100,7 +2100,7 @@ struct Rewriter {
     void build_replacement(After after) {
         result = after.make(state, expected_type);
     }
-    
+
     template<typename Before,
              typename After,
              typename = typename enable_if_pattern<Before>::type,
