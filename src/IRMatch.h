@@ -2096,6 +2096,7 @@ struct Rewriter {
     Rewriter(Instance &&instance, halide_type_t ty) : instance(std::forward<Instance>(instance)), expected_type(ty) {}
 
     template<typename After>
+    HALIDE_NEVER_INLINE
     void build_replacement(After &&after) {
         result = after.make(state, expected_type);
     }
