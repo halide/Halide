@@ -2074,7 +2074,7 @@ bool evaluate_predicate(bool x, MatcherState & __restrict__ ) noexcept {
 template<typename Pattern,
          typename = typename enable_if_pattern<Pattern>::type>
 HALIDE_ALWAYS_INLINE
-bool evaluate_predicate(Pattern &&p, MatcherState & __restrict__ state) {
+bool evaluate_predicate(Pattern p, MatcherState & __restrict__ state) {
     halide_scalar_value_t c;
     halide_type_t ty = halide_type_of<bool>();
     p.make_folded_const(c, ty, state);
@@ -2097,7 +2097,7 @@ struct Rewriter {
 
     template<typename After>
     HALIDE_NEVER_INLINE
-    void build_replacement(After &&after) {
+    void build_replacement(After after) {
         result = after.make(state, expected_type);
     }
     
@@ -2106,9 +2106,9 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<After>::type>
     HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, After &&after) {
+    bool operator()(Before before, After after) {
         if (before.template match<0>(instance, state)) {
-            build_replacement(std::forward<After>(after));
+            build_replacement(after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             return true;
         } else {
@@ -2120,7 +2120,7 @@ struct Rewriter {
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, const Expr &after) noexcept {
+    bool operator()(Before before, const Expr &after) noexcept {
         if (before.template match<0>(instance, state)) {
             result = after;
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2134,7 +2134,7 @@ struct Rewriter {
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, int64_t after) noexcept {
+    bool operator()(Before before, int64_t after) noexcept {
         if (before.template match<0>(instance, state)) {
             result = make_const(expected_type, after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2152,10 +2152,10 @@ struct Rewriter {
              typename = typename enable_if_pattern<After>::type,
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, After &&after, Predicate &&pred) {
+    bool operator()(Before before, After after, Predicate pred) {
         if (before.template match<0>(instance, state) &&
-            evaluate_predicate(std::forward<Predicate>(pred), state)) {
-            build_replacement(std::forward<After>(after));
+            evaluate_predicate(pred, state)) {
+            build_replacement(after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
         } else {
@@ -2169,9 +2169,9 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, const Expr &after, Predicate &&pred) {
+    bool operator()(Before before, const Expr &after, Predicate pred) {
         if (before.template match<0>(instance, state) &&
-            evaluate_predicate(std::forward<Predicate>(pred), state)) {
+            evaluate_predicate(pred, state)) {
             result = after;
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
@@ -2186,9 +2186,9 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type,
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE
-    bool operator()(Before &&before, int64_t after, Predicate &&pred) {
+    bool operator()(Before before, int64_t after, Predicate pred) {
         if (before.template match<0>(instance, state) &&
-            evaluate_predicate(std::forward<Predicate>(pred), state)) {
+            evaluate_predicate(pred, state)) {
             result = make_const(expected_type, after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
@@ -2202,9 +2202,9 @@ struct Rewriter {
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
 HALIDE_ALWAYS_INLINE
-auto rewriter(Instance &&instance) noexcept -> Rewriter<decltype(pattern_arg(std::forward<Instance>(instance)))> {
+auto rewriter(Instance instance) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
     static_assert(Instance::typed, "Could not infer type of argument to rewriter");
-    return {pattern_arg(std::forward<Instance>(instance)), instance.type()};
+    return {pattern_arg(instance), instance.type()};
 }
 
 HALIDE_ALWAYS_INLINE
@@ -2215,8 +2215,8 @@ auto rewriter(const Expr &e) noexcept -> Rewriter<decltype(pattern_arg(e))> {
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
 HALIDE_ALWAYS_INLINE
-auto rewriter(Instance &&instance, halide_type_t expected_type) noexcept -> Rewriter<decltype(pattern_arg(std::forward<Instance>(instance)))> {
-    return {pattern_arg(std::forward<Instance>(instance)), expected_type};
+auto rewriter(Instance instance, halide_type_t expected_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+    return {pattern_arg(instance), expected_type};
 }
 
 HALIDE_ALWAYS_INLINE
