@@ -663,6 +663,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_tempfile \
   posix_threads \
+  posix_threads_tsan \
   powerpc_cpu_features \
   prefetch \
   profiler \
@@ -671,6 +672,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_hvx \
   qurt_init_fini \
   qurt_threads \
+  qurt_threads_tsan \
   qurt_yield \
   runtime_api \
   ssp \
@@ -684,6 +686,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_tempfile \
   windows_threads \
+  windows_threads_tsan \
   windows_yield \
   write_debug_image \
   x86_cpu_features
