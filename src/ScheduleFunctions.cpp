@@ -1912,6 +1912,8 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         }
     }
 
+    int shift_inwards_count = 0;
+    int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
         const StageSchedule &s = def.schedule();
         for (const Dim &d : s.dims()) {
@@ -1921,6 +1923,29 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
                            << " but no compatible target feature is enabled in target "
                            << target.to_string() << "\n";
             }
+        }
+        if (s.allow_race_conditions()) {
+            allow_race_conditions_count++;
+        }
+        for (const auto &split : s.splits()) {
+            if (split.tail == TailStrategy::ShiftInwards) {
+                shift_inwards_count++;
+            }
+        }
+    }
+
+    if (target.has_feature(Target::TSAN)) {
+        if (allow_race_conditions_count > 0) {
+            user_warning << "Schedule for Func '" << f.name()
+                   << "'' has one or more uses of allow_race_conditions() in its schedule;\n"
+                   << "this may report benign data races when run with ThreadSanitizer.\n\n";
+        }
+        if (shift_inwards_count > 0) {
+            user_warning << "Schedule for Func '" << f.name()
+                   << "'' has " << shift_inwards_count << " split(s) using TailStrategy::ShiftInwards;\n"
+                   << "this may report benign data races when run with ThreadSanitizer.\n"
+                   << "(Note that ShiftInwards splits may be implicitly created by\n"
+                   << "other scheduling operations, e.g. parallel() and vectorize()).\n\n";
         }
     }
 
