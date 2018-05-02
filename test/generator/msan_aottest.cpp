@@ -1,6 +1,9 @@
-#if !defined(__has_feature)
+#include "HalideRuntime.h"
+#include "HalideBuffer.h"
 
 #include <stdio.h>
+
+#if !defined(__has_feature)
 
 extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     return 0;
@@ -13,8 +16,6 @@ int main(int argc, char **argv) {
 
 #elif !__has_feature(memory_sanitizer)
 
-#include <stdio.h>
-
 extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     return 0;
 }
@@ -25,9 +26,6 @@ int main(int argc, char **argv) {
 }
 
 #else
-
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
 
 #include <iostream>
 #include <limits>
