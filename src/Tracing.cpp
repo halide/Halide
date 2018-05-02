@@ -18,7 +18,7 @@ struct TraceEventBuilder {
     vector<Expr> coordinates;
     Type type;
     enum halide_trace_event_code_t event;
-    Expr parent_id, value_index, dimensions;
+    Expr parent_id, value_index;
 
     Expr build() {
         Expr values = Call::make(type_of<void *>(), Call::make_struct,
@@ -30,6 +30,9 @@ struct TraceEventBuilder {
             idx = 0;
         }
 
+        // Note: if these arguments are changed in any meaningful way,
+        // VectorizeLoops will likely need attention; it does nontrivial
+        // special-casing of this call to get appropriate results.
         vector<Expr> args = {Expr(func),
                              values, coords,
                              (int)type.code(), (int)type.bits(), (int)type.lanes(),
@@ -200,7 +203,6 @@ private:
             builder.func = op->name;
             builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
             builder.event = halide_trace_begin_realization;
-
             for (size_t i = 0; i < op->bounds.size(); i++) {
                 builder.coordinates.push_back(op->bounds[i].min);
                 builder.coordinates.push_back(op->bounds[i].extent);
@@ -208,9 +210,11 @@ private:
 
             // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
             Expr call_before = builder.build();
+
             builder.event = halide_trace_end_realization;
             builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
             Expr call_after = builder.build();
+
             Stmt new_body = op->body;
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
