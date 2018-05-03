@@ -896,8 +896,8 @@ private:
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
             internal_assert(op->args.size() == 1);
-            interval = Interval(make_zero(op->type),
-                                make_const(op->type, op->args[0].type().bits()));
+            interval = Interval(make_zero(op->type.element_of()),
+                                make_const(op->type.element_of(), op->args[0].type().bits()));
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);

@@ -42,30 +42,34 @@ int main(int argc, char **argv) {
         mapping(i++) = v;
     }
 
-    Var x;
-    Func f;
-    f(x) = Tuple(mapping(popcount(in(x))),
-                 mapping(count_leading_zeros(in(x))),
-                 mapping(count_trailing_zeros(in(x))));
+    for (int vectorize = 0; vectorize <= 1; vectorize++) {
+        Var x;
+        Func f;
+        f(x) = Tuple(mapping(popcount(in(x))),
+                     mapping(count_leading_zeros(in(x))),
+                     mapping(count_trailing_zeros(in(x))));
 
-    std::mt19937 rng(0);
-    Buffer<uint8_t> data(16);
-    for (int32_t i = 0; i < 16; i++) {
-        data(i) = rng();
+        if (vectorize) f.vectorize(x, 8);
+
+        std::mt19937 rng(0);
+        Buffer<uint8_t> data(16);
+        for (int32_t i = 0; i < 16; i++) {
+            data(i) = rng();
+        }
+        in.set(data);
+
+        Realization result = f.realize(16);
+        Buffer<uint8_t> popc_result = result[0];
+        Buffer<uint8_t> clz_result = result[1];
+        Buffer<uint8_t> ctz_result = result[2];
+
+        for (int32_t i = 0; i < 16; i++) {
+            assert(popc_result(i) == mapping(simple_popcount(data(i))));
+            assert(clz_result(i) == mapping(simple_count_leading_zeros(data(i))));
+            assert(ctz_result(i) == mapping(simple_count_trailing_zeros(data(i))));
+        }
     }
-    in.set(data);
 
-    Realization result = f.realize(16);
-    Buffer<uint8_t> popc_result = result[0];
-    Buffer<uint8_t> clz_result = result[1];
-    Buffer<uint8_t> ctz_result = result[2];
-
-    for (int32_t i = 0; i < 16; i++) {
-        assert(popc_result(i) == mapping(simple_popcount(data(i))));
-        assert(clz_result(i) == mapping(simple_count_leading_zeros(data(i))));
-        assert(ctz_result(i) == mapping(simple_count_trailing_zeros(data(i))));
-    }
-    
     std::cout << "Success!\n";
     return 0;
 }
