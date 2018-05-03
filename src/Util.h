@@ -24,14 +24,10 @@
 
 #ifndef HALIDE_EXPORT
 #if defined(_MSC_VER)
-#ifdef Halide_SHARED
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
 #else
 #define HALIDE_EXPORT __declspec(dllimport)
-#endif
-#else
-#define HALIDE_EXPORT
 #endif
 #else
 #define HALIDE_EXPORT

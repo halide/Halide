@@ -391,9 +391,6 @@ WEAK int halide_trace_helper(void *user_context,
     event.event = (halide_trace_event_code_t)code;
     event.parent_id = parent_id;
     event.value_index = value_index;
-    if (event.type.lanes > 1) {
-        dimensions *= event.type.lanes;
-    }
     event.dimensions = dimensions;
     halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
     halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
