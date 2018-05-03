@@ -1932,18 +1932,29 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         if (s.allow_race_conditions()) {
             allow_race_conditions_count++;
         }
-        bool need_propagate_parallel = true;
-        while (need_propagate_parallel) {
-            need_propagate_parallel = false;
-            for (const auto &split : s.splits()) {
-                // For purposes of race-detection-warning, any split that
-                // is the child of a parallel var is also 'parallel'
-                if (parallel_vars.count(split.old_var) && !parallel_vars.count(split.outer)) {
-                    parallel_vars.insert(split.outer);
-                    need_propagate_parallel = true;
-                }
+
+        // For purposes of race-detection-warning, any split that
+        // is the child of a parallel var is also 'parallel'.
+        //
+        // However, there are four types of Split, and the concept of a child var varies across them:
+        // - For a vanilla split, inner and outer are the children and old_var is the parent.
+        // - For rename and purify, the outer is the child and the inner is meaningless.
+        // - For fuse, old_var is the child and inner/outer are the parents.
+        //
+        // (@abadams comments: "I acknowledge that this is gross and should be refactored.")
+
+        // (Note that the splits are ordered, so a single reverse-pass catches all these cases.)
+        for (auto split = s.splits().rbegin(); split != s.splits().rend(); split++) {
+            if (split->is_split() && (parallel_vars.count(split->outer) || parallel_vars.count(split->inner))) {
+                parallel_vars.insert(split->old_var);
+            } else if (split->is_fuse() && parallel_vars.count(split->old_var)) {
+                parallel_vars.insert(split->inner);
+                parallel_vars.insert(split->outer);
+            } else if ((split->is_rename() || split->is_purify()) && parallel_vars.count(split->outer)) {
+                parallel_vars.insert(split->outer);
             }
         }
+
         for (const auto &split : s.splits()) {
             // ShiftInwards used inside a parallel split can produce racy (though benignly so) code
             // that TSAN will complain about; issue a warning so that the user doesn't assume
