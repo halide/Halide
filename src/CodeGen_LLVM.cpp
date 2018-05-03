@@ -1086,7 +1086,14 @@ void CodeGen_LLVM::optimize_module() {
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
         if (get_target().has_feature(Target::TSAN)) {
-            i->addFnAttr(Attribute::SanitizeThread);
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
         }
         function_pass_manager.run(*i);
     }
