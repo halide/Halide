@@ -27,11 +27,46 @@
  *       be doable.
  */
 
+// Copied from tsan_interface.h
+#ifndef TSAN_ANNOTATIONS
+#define TSAN_ANNOTATIONS 0
+#endif
+
+#if TSAN_ANNOTATIONS
+extern "C" {
+  const unsigned __tsan_mutex_linker_init      = 1 << 0;
+  void __tsan_mutex_pre_lock(void *addr, unsigned flags);
+  void __tsan_mutex_post_lock(void *addr, unsigned flags, int recursion);
+  int __tsan_mutex_pre_unlock(void *addr, unsigned flags);
+  void __tsan_mutex_post_unlock(void *addr, unsigned flags);
+  void __tsan_mutex_pre_signal(void *addr, unsigned flags);
+  void __tsan_mutex_post_signal(void *addr, unsigned flags);
+}
+#endif
+
 namespace Halide { namespace Runtime { namespace Internal {
 
 namespace Synchronization {
 
 namespace {
+
+#if TSAN_ANNOTATIONS
+  __attribute__((always_inline)) void if_tsan_pre_lock(void *mutex) { __tsan_mutex_pre_lock(mutex, __tsan_mutex_linker_init); };
+  // TODO(zalman|dvyukov): Is 1 the right value for a non-recursive lock? pretty sure value is ignored.
+  __attribute__((always_inline)) void if_tsan_post_lock(void *mutex) { __tsan_mutex_post_lock(mutex, __tsan_mutex_linker_init, 1); }
+  // TODO(zalman|dvyukov): Is it safe to ignore return value here if locks are not recursive?
+  __attribute__((always_inline)) void if_tsan_pre_unlock(void *mutex) { (void)__tsan_mutex_pre_unlock(mutex, __tsan_mutex_linker_init); }
+  __attribute__((always_inline)) void if_tsan_post_unlock(void *mutex) { __tsan_mutex_post_unlock(mutex, __tsan_mutex_linker_init); }
+  __attribute__((always_inline)) void if_tsan_pre_signal(void *cond) { __tsan_mutex_pre_signal(cond, 0); }
+  __attribute__((always_inline)) void if_tsan_post_signal(void *cond) { __tsan_mutex_post_signal(cond, 0); }
+#else
+  __attribute__((always_inline)) void if_tsan_pre_lock(void *) { }
+  __attribute__((always_inline)) void if_tsan_post_lock(void *) { }
+  __attribute__((always_inline)) void if_tsan_pre_unlock(void *) { }
+  __attribute__((always_inline)) void if_tsan_post_unlock(void *) { }
+  __attribute__((always_inline)) void if_tsan_pre_signal(void *) { }
+  __attribute__((always_inline)) void if_tsan_post_signal(void *) { }
+#endif
 
 #ifdef BITS_32
 __attribute__((always_inline))  uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
@@ -211,15 +246,21 @@ class word_lock {
 public:
     word_lock() : state(0) {}
     __attribute__((always_inline)) void lock() {
+        if_tsan_pre_lock(this);
+
         uintptr_t expected = 0;
         uintptr_t desired = lock_bit;
         // Try for a fast grab of the lock bit. If this does not work, call the full adaptive looping code.
         if (!atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
             lock_full();
         }
+
+        if_tsan_post_lock(this);
     }
 
     __attribute__((always_inline)) void unlock() {
+        if_tsan_pre_unlock(this);
+
         uintptr_t val = atomic_fetch_and_release(&state, ~(uintptr_t)lock_bit);
         // If another thread is currently queueing, that thread will ensure
         // it acquires the lock or wakes a waiting thread.
@@ -229,6 +270,8 @@ public:
         if (no_thread_queuing && some_queued) {
             unlock_full();
         }
+
+        if_tsan_post_unlock(this);
     }
 
 };
@@ -987,23 +1030,30 @@ class fast_cond {
     __attribute__((always_inline)) fast_cond() : state(0) { }
 
     __attribute__((always_inline)) void signal() {
+        if_tsan_pre_signal(this);
+
         uintptr_t val;
         atomic_load_relaxed(&state, &val);
         if (val == 0) {
+            if_tsan_post_signal(this);
             return;
         }
         signal_parking_control control(&state, (fast_mutex *)val);
         unpark_one((uintptr_t)this, control);
+        if_tsan_post_signal(this);
     }
 
     __attribute__((always_inline)) void broadcast() {
+        if_tsan_pre_signal(this);
         uintptr_t val;
         atomic_load_relaxed(&state, &val);
         if (val == 0) {
+            if_tsan_post_signal(this);
             return;
         }
         broadcast_parking_control control(&state, (fast_mutex *)val);
         unpark_requeue((uintptr_t)this, val, control, 0);
+        if_tsan_post_signal(this);
     }
 
     __attribute__((always_inline)) void wait(fast_mutex *mutex) {
@@ -1011,10 +1061,15 @@ class fast_cond {
         uintptr_t result = park((uintptr_t)this, control);
         if (result != (uintptr_t)mutex) {
             mutex->lock();
-        } else { // TODO: this is debug only.
+        } else {
+            if_tsan_pre_lock(mutex);
+
+            // TODO: this is debug only.
             uintptr_t val;
             atomic_load_relaxed((uintptr_t *)mutex, &val);
             halide_assert(NULL, val & 0x1);
+
+            if_tsan_post_lock(mutex);
         }
     }
 };

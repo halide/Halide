@@ -1071,12 +1071,30 @@ void CodeGen_LLVM::optimize_module() {
     }
 #endif
 
+    if (get_target().has_feature(Target::TSAN)) {
+        auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createThreadSanitizerPass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
+    }
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
+        }
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();

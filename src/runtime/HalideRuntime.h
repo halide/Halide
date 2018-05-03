@@ -1107,7 +1107,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
     halide_target_feature_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
     halide_target_feature_legacy_buffer_wrappers = 51,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
-    halide_target_feature_end = 52, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_tsan = 52, ///< Enable hooks for TSAN support.
+    halide_target_feature_end = 53 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

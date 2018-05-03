@@ -266,6 +266,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_realizations", Target::TraceRealizations},
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
+    {"tsan", Target::TSAN},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -294,6 +295,9 @@ Target get_jit_target_from_environment() {
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
     host.set_feature(Target::MSAN);
+#endif
+#if __has_feature(thread_sanitizer)
+    host.set_feature(Target::TSAN);
 #endif
 #endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
