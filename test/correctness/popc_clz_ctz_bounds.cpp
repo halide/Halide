@@ -49,7 +49,9 @@ int main(int argc, char **argv) {
                      mapping(count_leading_zeros(in(x))),
                      mapping(count_trailing_zeros(in(x))));
 
-        if (vectorize) f.vectorize(x, 8);
+        if (vectorize) {
+            f.vectorize(x, 8);
+        }
 
         std::mt19937 rng(0);
         Buffer<uint8_t> data(16);
