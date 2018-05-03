@@ -221,13 +221,18 @@ def halide_config_settings():
 
   # Config settings for Sanitizers
   native.config_setting(
+      name="halide_config_asan",
+      values={"compiler": "asan"},
+      visibility=["//visibility:public"])
+
+  native.config_setting(
       name="halide_config_msan",
       values={"compiler": "msan"},
       visibility=["//visibility:public"])
 
   native.config_setting(
-      name="halide_config_asan",
-      values={"compiler": "asan"},
+      name="halide_config_tsan",
+      values={"compiler": "tsan"},
       visibility=["//visibility:public"])
 
 
@@ -546,6 +551,7 @@ def _define_halide_library_runtime(halide_target_features = []):
         sanitizer=select({
             "@halide//:halide_config_asan": "asan",
             "@halide//:halide_config_msan": "msan",
+            "@halide//:halide_config_tsan": "tsan",
             "//conditions:default": "",
         }),
         outputs=["o"],
@@ -577,7 +583,6 @@ def _standard_library_runtime_features():
       ["hvx_128"],
       ["matlab"],
       ["metal"],
-      ["msan"],
       ["opengl"],
   ]
   return [f for f in standard_features] + [f + ["debug"] for f in standard_features]
@@ -730,6 +735,7 @@ def halide_library_from_generator(name,
         sanitizer=select({
             "@halide//:halide_config_asan": "asan",
             "@halide//:halide_config_msan": "msan",
+            "@halide//:halide_config_tsan": "tsan",
             "//conditions:default": "",
         }),
         debug_codegen_level=debug_codegen_level,
