@@ -3603,11 +3603,9 @@ bool can_prove(Expr e) {
                     probe = c->args[0];
                 }
             }
-            if (is_zero(probe)) {
-                // Found a counter-example
+            if (!is_one(probe)) {
+                // Found a counter-example, or something that fails to fold
                 return false;
-            } else if (!is_const(probe)) {
-                debug(0) << "Didn't fold: " << probe << "\n";
             }
         }
 
