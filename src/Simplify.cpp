@@ -663,16 +663,6 @@ public:
                    rewrite(x*y - y, (x - 1)*y) ||
                    rewrite(x - x*y, x*(1 - y)) ||
                    rewrite(x - y*x, (1 - y)*x) ||
-                   rewrite(c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0) ||
-                   rewrite(c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0) ||
-                   rewrite(x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
-                   rewrite(x - (x - y)/c0, (x*fold(c0 - 1) + y + fold(c0 - 1))/c0, c0 > 0) ||
-                   rewrite(x - (y + x)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
-                   rewrite(x - (y - x)/c0, (x*fold(c0 + 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
-                   rewrite((x + y)/c0 - x, (x*fold(1 - c0) + y)/c0) ||
-                   rewrite((y + x)/c0 - x, (y + x*fold(1 - c0))/c0) ||
-                   rewrite((x - y)/c0 - x, (x*fold(1 - c0) - y)/c0) ||
-                   rewrite((y - x)/c0 - x, (y - x*fold(1 + c0))/c0) ||
                    rewrite(x - min(x + y, z), max(-y, x - z)) ||
                    rewrite(x - min(y + x, z), max(-y, x - z)) ||
                    rewrite(x - min(z, x + y), max(x - z, -y)) ||
@@ -800,7 +790,18 @@ public:
                    rewrite(max(y, x + c0) - max(x + c1, w), min(fold(c0 - c1), max(x + c0, y) - w), can_prove(y + c1 <= w + c0, this)))) ||
 
                  (no_overflow_int(op->type) &&
-                  (rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
+                  (rewrite(c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0) ||
+                   rewrite(c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0) ||
+                   rewrite(x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite(x - (x - y)/c0, (x*fold(c0 - 1) + y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite(x - (y + x)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite(x - (y - x)/c0, (x*fold(c0 + 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
+                   rewrite((x + y)/c0 - x, (x*fold(1 - c0) + y)/c0) ||
+                   rewrite((y + x)/c0 - x, (y + x*fold(1 - c0))/c0) ||
+                   rewrite((x - y)/c0 - x, (x*fold(1 - c0) - y)/c0) ||
+                   rewrite((y - x)/c0 - x, (y - x*fold(1 + c0))/c0) ||
+
+                   rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
                    rewrite(x - (x/c0)*c0, x % c0, c0 > 0) ||
                    rewrite(((x + c0)/c1)*c1 - x, x % c1, c1 > 0 && c0 + 1 == c1) ||
                    rewrite(x - ((x + c0)/c1)*c1, -(x % c1), c1 > 0 && c0 + 1 == c1) ||
@@ -971,7 +972,7 @@ public:
                    rewrite(((x * c0 + y) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                    rewrite(((x * c0 - y) + z) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                    rewrite(((x * c0 + y) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                   rewrite(((x * c0 - y) - z) / c1, x * fold(c0 / c1) - (y + z) / c1, c0 % c1 == 0 && c1 > 0) ||
+                   rewrite(((x * c0 - y) - z) / c1, (-y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
                    rewrite(((y + x * c0) + z) / c1, (y + z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                    rewrite(((y + x * c0) - z) / c1, (y - z) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
@@ -984,7 +985,7 @@ public:
                    rewrite((z - (x * c0 + y)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
                    rewrite((z + (y + x * c0)) / c1, (z + y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-                   rewrite((z - (y + x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
+                   rewrite((z - (y + x * c0)) / c1, (z - y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                    rewrite((z + (y - x * c0)) / c1, (z + y) / c1 - x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                    rewrite((z - (y - x * c0)) / c1, (z - y) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
@@ -1059,6 +1060,10 @@ public:
         }
 
         if (may_simplify(op->type)) {
+            if (a_bounds.min_defined && a_bounds.min >= 0 &&
+                a_bounds.max_defined && b_bounds.min_defined && a_bounds.max < b_bounds.min) {
+                return a;
+            }
 
             int lanes = op->type.lanes();
 
@@ -1066,7 +1071,6 @@ public:
 
             if (rewrite(c0 % c1, fold(c0 % c1)) ||
                 rewrite(0 % x, 0) ||
-                rewrite(x % c0, x, c0 > 0 && a_bounds.min_defined && a_bounds.max_defined && a_bounds.min >= 0 && a_bounds.max < c0) ||
                 (!op->type.is_float() &&
                  (rewrite(x % 0, IRMatcher::Indeterminate()) ||
                   rewrite(x % 1, 0)))) {
@@ -1227,12 +1231,12 @@ public:
                   rewrite(min(min(x + y, z), x + w), min(x + min(y, w), z)) ||
                   rewrite(min(min(z, x + y), x + w), min(x + min(y, w), z)) ||
                   rewrite(min(min(x + y, z), w + x), min(x + min(y, w), z)) ||
-                  rewrite(min(min(z, x + y), w + w), min(x + min(y, w), z)) ||
+                  rewrite(min(min(z, x + y), w + x), min(x + min(y, w), z)) ||
 
                   rewrite(min(min(y + x, z), x + w), min(min(y, w) + x, z)) ||
                   rewrite(min(min(z, y + x), x + w), min(min(y, w) + x, z)) ||
                   rewrite(min(min(y + x, z), w + x), min(min(y, w) + x, z)) ||
-                  rewrite(min(min(z, y + x), w + w), min(min(y, w) + x, z)) ||
+                  rewrite(min(min(z, y + x), w + x), min(min(y, w) + x, z)) ||
 
                   rewrite(min((x + w) + y, x + z), x + min(w + y, z)) ||
                   rewrite(min((w + x) + y, x + z), min(w + y, z) + x) ||
@@ -1255,8 +1259,8 @@ public:
 
                   rewrite(min(x * c0, y * c1), min(x, y * fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                   rewrite(min(x * c0, y * c1), max(x, y * fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
-                  rewrite(min(x * c0, y * c1), min(x * fold(c0 / c1), y) * c0, c1 > 0 && c0 % c1 == 0) ||
-                  rewrite(min(x * c0, y * c1), max(x * fold(c0 / c1), y) * c0, c1 < 0 && c0 % c1 == 0) ||
+                  rewrite(min(x * c0, y * c1), min(x * fold(c0 / c1), y) * c1, c1 > 0 && c0 % c1 == 0) ||
+                  rewrite(min(x * c0, y * c1), max(x * fold(c0 / c1), y) * c1, c1 < 0 && c0 % c1 == 0) ||
                   rewrite(min(x * c0, y * c0 + c1), min(x, y + fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                   rewrite(min(x * c0, y * c0 + c1), max(x, y + fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 
@@ -1416,12 +1420,12 @@ public:
                   rewrite(max(max(x + y, z), x + w), max(x + max(y, w), z)) ||
                   rewrite(max(max(z, x + y), x + w), max(x + max(y, w), z)) ||
                   rewrite(max(max(x + y, z), w + x), max(x + max(y, w), z)) ||
-                  rewrite(max(max(z, x + y), w + w), max(x + max(y, w), z)) ||
+                  rewrite(max(max(z, x + y), w + x), max(x + max(y, w), z)) ||
 
                   rewrite(max(max(y + x, z), x + w), max(max(y, w) + x, z)) ||
                   rewrite(max(max(z, y + x), x + w), max(max(y, w) + x, z)) ||
                   rewrite(max(max(y + x, z), w + x), max(max(y, w) + x, z)) ||
-                  rewrite(max(max(z, y + x), w + w), max(max(y, w) + x, z)) ||
+                  rewrite(max(max(z, y + x), w + x), max(max(y, w) + x, z)) ||
 
                   rewrite(max((x + w) + y, x + z), x + max(w + y, z)) ||
                   rewrite(max((w + x) + y, x + z), max(w + y, z) + x) ||
@@ -1528,23 +1532,20 @@ public:
             }
         }
 
-        auto rewrite = IRMatcher::rewriter(delta, op->type);
+        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), delta.type());
 
-        // We're rewriting based on the difference between the LHS and
-        // the RHS, so there's an implicit == 0 on the LHS of the
-        // rules below.
-        if (rewrite(c0, fold(c0 == 0)) ||
-            rewrite(x + c0, x == fold(-c0)) ||
-            rewrite(c0 - x, x == c0)) {
+        if (rewrite(c0 == 0, fold(c0 == 0)) ||
+            rewrite(x + c0 == 0, x == fold(-c0)) ||
+            rewrite(c0 - x == 0, x == c0)) {
             return rewrite.result;
         }
 
-        if (rewrite(broadcast(x), broadcast(x == 0, lanes)) ||
-            (no_overflow(delta.type()) && rewrite(x * y, (x == 0) || (y == 0))) ||
-            rewrite(select(x, 0, y), x || (y == 0)) ||
-            rewrite(select(x, c0, y), !x && (y == 0)) ||
-            rewrite(select(x, y, 0), !x || (y == 0)) ||
-            rewrite(select(x, y, c0), x && (y == 0))) {
+        if (rewrite(broadcast(x) == 0, broadcast(x == 0, lanes)) ||
+            (no_overflow(delta.type()) && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
+            rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
+            rewrite(select(x, c0, y) == 0, !x && (y == 0), c0 != 0) ||
+            rewrite(select(x, y, 0) == 0, !x || (y == 0)) ||
+            rewrite(select(x, y, c0) == 0, x && (y == 0), c0 != 0)) {
             return mutate(std::move(rewrite.result), bounds);
         }
 
@@ -1570,7 +1571,13 @@ public:
             }
         }
 
-        return mutate(Not::make(EQ::make(op->a, op->b)), bounds);
+        Expr mutated = mutate(Not::make(EQ::make(op->a, op->b)), bounds);
+        if (const NE *ne = mutated.as<NE>()) {
+            if (ne->a.same_as(op->a) && ne->b.same_as(op->b)) {
+                return op;
+            }
+        }
+        return mutated;
     }
 
     Expr visit(const LT *op, ConstBounds *bounds) {
@@ -1592,7 +1599,7 @@ public:
                 return const_false(lanes);
             }
 
-            auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b));
+            auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), ty);
 
             if (EVAL_IN_LAMBDA
                 (rewrite(c0 < c1, fold(c0 < c1)) ||
@@ -1706,8 +1713,8 @@ public:
 
                    // Multiply-out a division
                    rewrite(x / c0 < c1, x < c1 * c0, c0 > 0) ||
-                   (ty.is_int() && rewrite(c0 < x / c1, fold((c0 + 1) * c1 - 1) < x, c0 > 0)) ||
-                   (ty.is_float() && rewrite(c0 < x / c1, fold(c0 * c1) < x, c0 > 0)) ||
+                   (ty.is_int() && rewrite(c0 < x / c1, fold((c0 + 1) * c1 - 1) < x, c1 > 0)) ||
+                   (ty.is_float() && rewrite(c0 < x / c1, fold(c0 * c1) < x, c1 > 0)) ||
 
                    // We want to break max(x, y) < z into x < z && y <
                    // z in cases where one of those two terms is going
@@ -1856,7 +1863,13 @@ public:
             }
         }
 
-        return mutate(!(op->b < op->a), bounds);
+        Expr mutated = mutate(!(op->b < op->a), bounds);
+        if (const LE *le = mutated.as<LE>()) {
+            if (le->a.same_as(op->a) && le->b.same_as(op->b)) {
+                return op;
+            }
+        }
+        return mutated;
     }
 
     Expr visit(const GT *op, ConstBounds *bounds) {

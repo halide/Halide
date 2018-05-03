@@ -244,7 +244,7 @@ void check_algebra() {
     check(((x*4 + y) + z) / 2, (y + z)/2 + x*2);
     check(((x*4 - y) + z) / 2, (z - y)/2 + x*2);
     check(((x*4 + y) - z) / 2, (y - z)/2 + x*2);
-    check(((x*4 - y) - z) / 2, x*2 - (y + z)/2);
+    check(((x*4 - y) - z) / 2, (0 - y - z)/2 + x*2);
     check((x + (y*4 + z)) / 2, (x + z)/2 + y*2);
     check(((x + y*4) + z) / 2, (x + z)/2 + y*2);
     check((x + (y*4 - z)) / 2, (x - z)/2 + y*2);
@@ -1317,148 +1317,6 @@ void check_overflow() {
     }
 }
 
-void check_ind_expr(Expr e, bool expect_error) {
-    Expr e2 = simplify(e);
-    class CheckInd : public Internal::IRVisitor {
-        using IRVisitor::visit;
-
-        void visit(const Call *call) override {
-            found = call->is_intrinsic(Call::indeterminate_expression);
-            IRVisitor::visit(call);
-        }
-    public:
-        bool found = false;
-    };
-    CheckInd check;
-    e2.accept(&check);
-
-    bool is_error = check.found;
-    if (expect_error && !is_error) {
-        std::cerr << "Expression should be indeterminate: " << e << " but saw: " << e2 << "\n";
-        exit(1);
-    }
-    else if (!expect_error && is_error) {
-        std::cerr << "Expression should not be indeterminate: " << e << " but saw: " << e2 << "\n";
-        exit(1);
-    }
-}
-
-void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
-    Expr b = cast<bool>(e);
-    Expr t = const_true(), f = const_false();
-    Expr one = cast(e.type(), 1);
-    Expr zero = cast(e.type(), 0);
-
-    check_ind_expr(e, e_is_indeterminate);
-    check_ind_expr(e + e, e_is_indeterminate);
-    check_ind_expr(e - e, e_is_indeterminate);
-    check_ind_expr(e * e, e_is_indeterminate);
-    check_ind_expr(e / e, e_is_zero || e_is_indeterminate);
-    check_ind_expr((1 / e) / e, e_is_zero || e_is_indeterminate);
-    // Expr::operator% asserts if denom is constant zero.
-    if (!is_zero(e)) {
-        check_ind_expr(e % e, e_is_zero || e_is_indeterminate);
-        check_ind_expr((1 / e) % e, e_is_zero || e_is_indeterminate);
-    }
-    check_ind_expr(min(e, one), e_is_indeterminate);
-    check_ind_expr(max(e, one), e_is_indeterminate);
-    check_ind_expr(e == one, e_is_indeterminate);
-    check_ind_expr(one == e, e_is_indeterminate);
-    check_ind_expr(e < one, e_is_indeterminate);
-    check_ind_expr(one < e, e_is_indeterminate);
-    check_ind_expr(!(e == one), e_is_indeterminate);
-    check_ind_expr(!(one == e), e_is_indeterminate);
-    check_ind_expr(!(e < one), e_is_indeterminate);
-    check_ind_expr(!(one < e), e_is_indeterminate);
-    check_ind_expr(b && t, e_is_indeterminate);
-    check_ind_expr(t && b, e_is_indeterminate);
-    check_ind_expr(b || t, e_is_indeterminate);
-    check_ind_expr(t || b, e_is_indeterminate);
-    check_ind_expr(!b, e_is_indeterminate);
-    check_ind_expr(select(b, one, zero), e_is_indeterminate);
-    check_ind_expr(select(t, e, zero), e_is_indeterminate);
-    check_ind_expr(select(f, zero, e), e_is_indeterminate);
-    check_ind_expr(e << one, e_is_indeterminate);
-    check_ind_expr(e >> one, e_is_indeterminate);
-    // Avoid warnings for things like (1 << 2147483647)
-    if (e_is_indeterminate) {
-        check_ind_expr(one << e, e_is_indeterminate);
-        check_ind_expr(one >> e, e_is_indeterminate);
-    }
-    check_ind_expr(one & e, e_is_indeterminate);
-    check_ind_expr(e & one, e_is_indeterminate);
-    check_ind_expr(one | e, e_is_indeterminate);
-    check_ind_expr(e | one, e_is_indeterminate);
-    if (!e.type().is_uint()) {
-        // Avoid warnings
-        check_ind_expr(abs(e), e_is_indeterminate);
-    }
-    check_ind_expr(log(e), e_is_indeterminate);
-    check_ind_expr(sqrt(e), e_is_indeterminate);
-    check_ind_expr(exp(e), e_is_indeterminate);
-    check_ind_expr(pow(e, one), e_is_indeterminate);
-    // pow(x, y) explodes for huge integer y (Issue #1441)
-    if (e_is_indeterminate) {
-        check_ind_expr(pow(one, e), e_is_indeterminate);
-    }
-    check_ind_expr(floor(e), e_is_indeterminate);
-    check_ind_expr(ceil(e), e_is_indeterminate);
-    check_ind_expr(round(e), e_is_indeterminate);
-    check_ind_expr(trunc(e), e_is_indeterminate);
-}
-
-void check_indeterminate() {
-    const int32_t values[] = {
-        int32_t(0x80000000),
-        -2147483647,
-        -2,
-        -1,
-        0,
-        1,
-        2,
-        2147483647,
-    };
-
-    for (int32_t i1 : values) {
-        // reality-check for never-indeterminate values.
-        check_indeterminate_ops(Expr(i1), !i1, false);
-        for (int32_t i2 : values) {
-            {
-                Expr e1(i1), e2(i2);
-                Expr r = (e1 / e2);
-                bool r_is_zero = !i1 || (i2 != 0 && !div_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
-                bool r_is_ind = !i2;
-                check_indeterminate_ops(r, r_is_zero, r_is_ind);
-
-                // Expr::operator% asserts if denom is constant zero.
-                if (!is_zero(e2)) {
-                    Expr m = (e1 % e2);
-                    bool m_is_zero = !i1 || (i2 != 0 && !mod_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
-                    bool m_is_ind = !i2;
-                    check_indeterminate_ops(m, m_is_zero, m_is_ind);
-                }
-            }
-            {
-                uint32_t u1 = (uint32_t)i1;
-                uint32_t u2 = (uint32_t)i2;
-                Expr e1(u1), e2(u2);
-                Expr r = (e1 / e2);
-                bool r_is_zero = !u1 || (u2 != 0 && !div_imp(u1, u2));
-                bool r_is_ind = !u2;
-                check_indeterminate_ops(r, r_is_zero, r_is_ind);
-
-                // Expr::operator% asserts if denom is constant zero.
-                if (!is_zero(e2)) {
-                    Expr m = (e1 % e2);
-                    bool m_is_zero = !u1 || (u2 != 0 && !mod_imp(u1, u2));
-                    bool m_is_ind = !u2;
-                    check_indeterminate_ops(m, m_is_zero, m_is_ind);
-                }
-            }
-        }
-    }
-}
-
 void check_bitwise() {
     Expr x = Var("x");
 
@@ -1503,8 +1361,51 @@ void check_lets() {
 
 }
 
+void check_inv(Expr before) {
+    Expr after = simplify(before);
+    internal_assert(before.same_as(after))
+        << "Expressions should be equal by value and by identity: "
+        << " Before: " << before << "\n"
+        << " After: " << after << "\n";
+}
+
+void check_invariant() {
+    // Check a bunch of expressions *don't* simplify. These should try
+    // and then fail to match every single rule (which should trigger
+    // fuzz testing of each as a side effect). The final
+    // expression should be exactly the same object as the input.
+    for (Type t : {UInt(1), UInt(8), UInt(16), UInt(32), UInt(64),
+                Int(8), Int(16), Int(32), Int(64),
+                Float(32), Float(64)}) {
+        Expr x = Variable::make(t, "x");
+        Expr y = Variable::make(t, "y");
+        Expr z = Variable::make(t, "z");
+        Expr w = Variable::make(t, "w");
+        check_inv(x + y);
+        check_inv(x - y);
+        check_inv(x % y);
+        check_inv(x * y);
+        check_inv(x / y);
+        check_inv(min(x, y));
+        check_inv(max(x, y));
+        check_inv(x == y);
+        check_inv(x != y);
+        check_inv(x < y);
+        check_inv(x <= y);
+        if (t.is_bool()) {
+            check_inv(x && y);
+            check_inv(x || y);
+            check_inv(!x);
+        }
+        check_inv(select(x == y, z, w));
+    }
+}
+
 int main(int argc, char **argv) {
-    // check_indeterminate();
+    // Turn on rewrite rule fuzz testing
+    IRMatcher::validate_all_rewrites = true;
+
+    check_invariant();
     check_casts();
     check_algebra();
     check_vectors();

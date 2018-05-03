@@ -10,6 +10,8 @@
 #include "IROperator.h"
 #include "ModulusRemainder.h"
 
+#include <random>
+
 namespace Halide {
 namespace Internal {
 
@@ -150,7 +152,7 @@ Expr make_const_special_expr(halide_type_t ty) {
 }
 
 HALIDE_ALWAYS_INLINE
-Expr make_const_expr(halide_scalar_value_t val, halide_type_t ty, MatcherState & __restrict__ state) {
+Expr make_const_expr(halide_scalar_value_t val, halide_type_t ty) {
     halide_type_t scalar_type = ty;
     if (scalar_type.lanes & MatcherState::special_values_mask) {
         return make_const_special_expr(scalar_type);
@@ -211,6 +213,8 @@ struct SpecificExpr {
         return &expr;
     }
 
+    constexpr static bool foldable = false;
+
     constexpr static bool typed = true;
 
     HALIDE_ALWAYS_INLINE
@@ -257,8 +261,10 @@ struct WildConstInt {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
-        return make_const_expr(val, type, state);
+        return make_const_expr(val, type);
     }
+
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
@@ -312,8 +318,10 @@ struct WildConstUInt {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
-        return make_const_expr(val, type, state);
+        return make_const_expr(val, type);
     }
+
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
@@ -368,8 +376,10 @@ struct WildConstFloat {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
-        return make_const_expr(val, type, state);
+        return make_const_expr(val, type);
     }
+
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
@@ -422,8 +432,10 @@ struct WildConst {
         halide_scalar_value_t val;
         halide_type_t type;
         state.get_bound_const(i, val, type);
-        return make_const_expr(val, type, state);
+        return make_const_expr(val, type);
     }
+
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
@@ -464,6 +476,31 @@ struct Wild {
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
         return state.get_binding(i);
+    }
+
+    constexpr static bool foldable = true;
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        auto e = state.get_binding(i);
+        ty = e->type;
+        switch(e->node_type) {
+        case IRNodeType::UIntImm:
+            val.u.u64 = ((const UIntImm *)e)->value;
+            return;
+        case IRNodeType::IntImm:
+            val.u.i64 = ((const IntImm *)e)->value;
+            return;
+        case IRNodeType::FloatImm:
+            val.u.f64 = ((const FloatImm *)e)->value;
+            return;
+        default:
+            // The function is noexcept, so silent failure. You
+            // shouldn't be calling this if you haven't already
+            // checked it's going to be a constant (e.g. with
+            // is_const, or because you manually bound a constant Expr
+            // to the state).
+            val.u.u64 = 0;
+        }
     }
 
     constexpr static bool typed = false;
@@ -510,6 +547,7 @@ struct Const {
         }
     }
 
+    template<uint32_t bound>
     HALIDE_ALWAYS_INLINE
     bool match(const Const &b, MatcherState & __restrict__ state) const noexcept {
         return v == b.v;
@@ -519,6 +557,8 @@ struct Const {
     Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
         return make_const(type_hint, v);
     }
+
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
@@ -606,6 +646,8 @@ struct BinOp {
                 b.template match<bound | bindings<A>::mask>(op.b, state));
     }
 
+    constexpr static bool foldable = A::foldable && B::foldable;
+
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         halide_scalar_value_t val_a, val_b;
@@ -617,7 +659,9 @@ struct BinOp {
                 val = val_b;
                 return;
             }
+            const uint16_t l = ty.lanes;
             a.make_folded_const(val_a, ty, state);
+            ty.lanes |= l;  // Make sure the overflow bits are sticky
         } else {
             a.make_folded_const(val_a, ty, state);
             if ((std::is_same<Op, And>::value && val_a.u.u64 == 0) ||
@@ -626,7 +670,9 @@ struct BinOp {
                 val = val_a;
                 return;
             }
+            const uint16_t l = ty.lanes;
             b.make_folded_const(val_b, ty, state);
+            ty.lanes |= l;
         }
         switch (ty.code) {
         case halide_type_int:
@@ -711,16 +757,22 @@ struct CmpOp {
                 b.template match<bound | bindings<A>::mask>(op.b, state));
     }
 
+    constexpr static bool foldable = A::foldable && B::foldable;
+
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         halide_scalar_value_t val_a, val_b;
         // If one side is an untyped const, evaluate the other side first to get a type hint.
         if (std::is_same<A, Const>::value) {
             b.make_folded_const(val_b, ty, state);
+            const uint16_t l = ty.lanes;
             a.make_folded_const(val_a, ty, state);
+            ty.lanes |= l;
         } else {
             a.make_folded_const(val_a, ty, state);
+            const uint16_t l = ty.lanes;
             b.make_folded_const(val_b, ty, state);
+            ty.lanes |= l;
         }
         switch (ty.code) {
         case halide_type_int:
@@ -1271,18 +1323,19 @@ auto or_op(A a, B b) -> decltype(IRMatcher::operator||(a, b)) {return IRMatcher:
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Or>(halide_type_t &t, int64_t a, int64_t b) noexcept {
-    return 0;
+    return (a | b) & 1;
 }
 
 template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_bin_op<Or>(halide_type_t &t, uint64_t a, uint64_t b) noexcept {
-    return a | b;
+    return (a | b) & 1;
 }
 
 template<>
 HALIDE_ALWAYS_INLINE
 double constant_fold_bin_op<Or>(halide_type_t &t, double a, double b) noexcept {
+    t.lanes |= MatcherState::indeterminate_expression;
     return 0;
 }
 
@@ -1299,18 +1352,19 @@ auto and_op(A a, B b) -> decltype(IRMatcher::operator&&(a, b)) {return IRMatcher
 template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<And>(halide_type_t &t, int64_t a, int64_t b) noexcept {
-    return 0;
+    return a & b & 1;
 }
 
 template<>
 HALIDE_ALWAYS_INLINE
 uint64_t constant_fold_bin_op<And>(halide_type_t &t, uint64_t a, uint64_t b) noexcept {
-    return a & b;
+    return a & b & 1;
 }
 
 template<>
 HALIDE_ALWAYS_INLINE
 double constant_fold_bin_op<And>(halide_type_t &t, double a, double b) noexcept {
+    t.lanes |= MatcherState::indeterminate_expression;
     return 0;
 }
 
@@ -1389,6 +1443,8 @@ struct Intrin {
         return Expr();
     }
 
+    constexpr static bool foldable = false;
+
     // The args may be typed, but we don't know the return type
     constexpr static bool typed = false;
 
@@ -1441,11 +1497,15 @@ struct NotOp {
         return Not::make(a.make(state, type_hint));
     }
 
+    constexpr static bool foldable = A::foldable;
+
     template<typename A1 = A>
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         a.make_folded_const(val, ty, state);
-        val.u.u64 = (val.u.u64 == 0) ? 1 : 0;
+        val.u.u64 = ~val.u.u64;
+        val.u.u64 &= 1;
+        ty.lanes |= (ty.code == halide_type_float) ? MatcherState::indeterminate_expression : 0;
     }
 
     constexpr static bool typed = A::typed;
@@ -1501,6 +1561,22 @@ struct SelectOp {
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
         return Select::make(c.make(state, {}), t.make(state, type_hint), f.make(state, type_hint));
+    }
+
+    constexpr static bool foldable = C::foldable && T::foldable && F::foldable;
+
+    template<typename C1 = C>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        halide_scalar_value_t c_val, t_val, f_val;
+        halide_type_t c_ty;
+        c.make_folded_const(c_val, c_ty, state);
+        if ((c_val.u.u64 & 1) == 1) {
+            t.make_folded_const(val, ty, state);
+        } else {
+            f.make_folded_const(val, ty, state);
+        }
+        ty.lanes |= c_ty.lanes & MatcherState::special_values_mask;
     }
 
     constexpr static bool typed = T::typed || F::typed;
@@ -1559,6 +1635,16 @@ struct BroadcastOp {
         const int l = known_lanes ? lanes : type_hint.lanes;
         type_hint.lanes = 1;
         return Broadcast::make(a.make(state, type_hint), l);
+    }
+
+    constexpr static bool foldable = false;
+
+    template<typename A1 = A>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        uint16_t l = known_lanes ? lanes : ty.lanes;
+        a.make_folded_const(val, ty, state);
+        ty.lanes = l | (ty.lanes & MatcherState::special_values_mask);
     }
 
     constexpr static bool typed = known_lanes && A::typed;
@@ -1645,6 +1731,8 @@ struct RampOp {
         return Ramp::make(ea, eb, l);
     }
 
+    constexpr static bool foldable = false;
+
     constexpr static bool typed = known_lanes && (A::typed || B::typed);
 
     HALIDE_ALWAYS_INLINE
@@ -1714,6 +1802,8 @@ struct NegateOp {
         Expr z = make_zero(ea.type());
         return Sub::make(std::move(z), std::move(ea));
     }
+
+    constexpr static bool foldable = A::foldable;
 
     template<typename A1 = A>
     HALIDE_ALWAYS_INLINE
@@ -1793,6 +1883,8 @@ struct CastOp {
         return cast(t, a.make(state, {}));
     }
 
+    constexpr static bool foldable = false; // TODO
+
     constexpr static bool typed = true;
 
     HALIDE_ALWAYS_INLINE
@@ -1825,7 +1917,15 @@ struct FoldOp {
         halide_scalar_value_t c;
         halide_type_t ty = type_hint;
         a.make_folded_const(c, ty, state);
-        return make_const_expr(c, ty, state);
+        return make_const_expr(c, ty);
+    }
+
+    constexpr static bool foldable = A::foldable;
+
+    template<typename A1 = A>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        a.make_folded_const(val, ty, state);
     }
 
     constexpr static bool typed = A::typed;
@@ -1857,6 +1957,14 @@ struct Indeterminate {
         return make_const_special_expr(type_hint);
     }
 
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        val.u.u64 = 0;
+        ty.lanes |= MatcherState::indeterminate_expression;
+    }
+
     constexpr static bool typed = false;
 
     HALIDE_ALWAYS_INLINE
@@ -1877,6 +1985,9 @@ struct IsConstOp {
     constexpr static uint32_t binds = bindings<A>::mask;
 
     A a;
+
+    constexpr static bool foldable = true;
+
     template<typename A1 = A>
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
@@ -1915,6 +2026,8 @@ struct CanProveOp {
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
+    constexpr static bool foldable = true;
+
     HALIDE_NEVER_INLINE // Includes a raw call to an inlined make method, so don't inline.
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
         Expr condition = a.make(state, {});
@@ -1951,6 +2064,8 @@ struct IsFloatOp {
     A a;
 
     constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const {
@@ -1989,6 +2104,8 @@ struct GCDOp {
     B b;
 
     constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
+
+    constexpr static bool foldable = A::foldable && B::foldable;
 
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
@@ -2030,6 +2147,8 @@ struct BindOp {
 
     constexpr static uint32_t binds = bindings<A>::mask | (1 << i);
 
+    constexpr static bool foldable = A::foldable;
+
     HALIDE_ALWAYS_INLINE
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
         a.make_folded_const(val, ty, state);
@@ -2059,11 +2178,141 @@ std::ostream &operator<<(std::ostream &s, const BindOp<i, A> &op) {
     return s;
 }
 
-// Statically verify properties of each rewrite rule
-template<typename Before, typename After>
+// Verify properties of each rewrite rule. Currently just fuzz tests them.
+template<typename Before,
+         typename After,
+         typename Predicate,
+         typename = typename std::enable_if<std::remove_reference<Before>::type::foldable &&
+                                            std::remove_reference<After>::type::foldable>::type>
+void validate_rule(Before &&before, After &&after, Predicate &&pred,
+                   halide_type_t wildcard_type, halide_type_t output_type) noexcept {
+
+    // We only validate the rules in the scalar case
+    wildcard_type.lanes = output_type.lanes = 1;
+
+    // Track which types this rule has been tested for before
+    static std::set<uint32_t> tested;
+
+    if (!tested.insert(reinterpret_bits<uint32_t>(wildcard_type)).second) return;
+
+    debug(0) << "Testing " << before << " -> " << after << " if " << pred
+             << " with output type " << Type(output_type)
+             << " and wildcard type " << Type(wildcard_type) << "\n";
+
+    // Substitute some random constants into the before and after
+    // expressions and see if the rule holds true. This should catch
+    // silly errors, but not necessarily corner cases.
+    static std::mt19937_64 rng(0);
+    MatcherState state;
+
+    Expr exprs[max_wild];
+
+    for (int trials = 0; trials < 100; trials++) {
+        // We want to test small constants more frequently than
+        // large ones, otherwise we'll just get coverage of
+        // overflow rules.
+        int shift = (int)(rng() & (wildcard_type.bits - 1));
+
+        for (int i = 0; i < max_wild; i++) {
+            // Bind all the exprs and constants
+            switch (wildcard_type.code) {
+            case halide_type_uint:
+                {
+                    // Normalize to the type's range by adding zero
+                    uint64_t val = constant_fold_bin_op<Add>(wildcard_type, (uint64_t)rng() >> shift, 0);
+                    state.set_bound_const(i, val, wildcard_type);
+                    val = constant_fold_bin_op<Add>(wildcard_type, (uint64_t)rng() >> shift, 0);
+                    exprs[i] = make_const(wildcard_type, val);
+                    state.set_binding(i, *exprs[i].get());
+                }
+                break;
+            case halide_type_int:
+                {
+                    int64_t val = constant_fold_bin_op<Add>(wildcard_type, (int64_t)rng() >> shift, 0);
+                    state.set_bound_const(i, val, wildcard_type);
+                    val = constant_fold_bin_op<Add>(wildcard_type, (int64_t)rng() >> shift, 0);
+                    exprs[i] = make_const(wildcard_type, val);
+                }
+                break;
+            case halide_type_float:
+                {
+                    // Use a very narrow range of precise floats, so
+                    // that none of the rules a human is likely to
+                    // write have instabilities.
+                    double val = ((int64_t)(rng() & 15) - 8) / 2.0;
+                    state.set_bound_const(i, val, wildcard_type);
+                    val = ((int64_t)(rng() & 15) - 8) / 2.0;
+                    exprs[i] = make_const(wildcard_type, val);
+                }
+                break;
+            default:
+                return; // Don't care about handles
+            }
+            state.set_binding(i, *exprs[i].get());
+        }
+
+        halide_scalar_value_t val_pred, val_before, val_after;
+        halide_type_t type = output_type;
+        if (!evaluate_predicate(pred, state)) continue;
+        before.make_folded_const(val_before, type, state);
+        uint16_t lanes = type.lanes;
+        after.make_folded_const(val_after, type, state);
+        lanes |= type.lanes;
+
+        if (lanes & MatcherState::special_values_mask) continue;
+
+        bool ok = true;
+        switch (output_type.code) {
+        case halide_type_uint:
+            // Compare normalized representations
+            ok &= (constant_fold_bin_op<Add>(output_type, val_before.u.u64, 0) ==
+                   constant_fold_bin_op<Add>(output_type, val_after.u.u64, 0));
+            break;
+        case halide_type_int:
+            ok &= (constant_fold_bin_op<Add>(output_type, val_before.u.i64, 0) ==
+                   constant_fold_bin_op<Add>(output_type, val_after.u.i64, 0));
+            break;
+        case halide_type_float:
+            {
+                double error = std::abs(val_before.u.f64 - val_after.u.f64);
+                // We accept an equal bit pattern (e.g. inf vs inf),
+                // a small floating point difference, or turning a nan into not-a-nan.
+                ok &= (error < 0.01 ||
+                       val_before.u.u64 == val_after.u.u64 ||
+                       std::isnan(val_before.u.f64));
+                break;
+            }
+        default:
+            return;
+        }
+
+        if (!ok) {
+            debug(0) << "Fails with values:\n";
+            for (int i = 0; i < max_wild; i++) {
+                halide_scalar_value_t val;
+                state.get_bound_const(i, val, wildcard_type);
+                debug(0) << " c" << i << ": " << make_const_expr(val, wildcard_type) << "\n";
+            }
+            for (int i = 0; i < max_wild; i++) {
+                debug(0) << " _" << i << ": " << Expr(state.get_binding(i)) << "\n";
+            }
+            debug(0) << " Before: " << make_const_expr(val_before, output_type) << "\n";
+            debug(0) << " After:  " << make_const_expr(val_after, output_type) << "\n";
+            debug(0) << val_before.u.u64 << " " << val_after.u.u64 << "\n";
+            internal_error;
+        }
+    }
+}
+
+template<typename Before,
+         typename After,
+         typename Predicate,
+         typename = typename std::enable_if<!(std::remove_reference<Before>::type::foldable &&
+                                              std::remove_reference<After>::type::foldable)>::type>
 HALIDE_ALWAYS_INLINE
-void validate_rule() noexcept {
-    // TODO
+void validate_rule(Before &&before, After &&after, Predicate &&pred,
+                   halide_type_t, halide_type_t, int dummy = 0) noexcept {
+    // We can't verify rewrite rules that can't be constant-folded.
 }
 
 HALIDE_ALWAYS_INLINE
@@ -2085,20 +2334,27 @@ bool evaluate_predicate(Pattern p, MatcherState & __restrict__ state) {
 #define HALIDE_DEBUG_MATCHED_RULES 0
 #define HALIDE_DEBUG_UNMATCHED_RULES 0
 
+// For testing. Set to true if you want to fuzz test every rewrite
+// passed to operator() to ensure the input and the output have
+// the same value for lots of random values of the wildcards.
+HALIDE_EXPORT extern bool validate_all_rewrites;
+
 template<typename Instance>
 struct Rewriter {
     Instance instance;
     Expr result;
     MatcherState state;
-    halide_type_t expected_type;
+    halide_type_t wildcard_type, output_type;
+    bool validate;
 
     HALIDE_ALWAYS_INLINE
-    Rewriter(Instance &&instance, halide_type_t ty) : instance(std::forward<Instance>(instance)), expected_type(ty) {}
+    Rewriter(Instance &&instance, halide_type_t wt, halide_type_t ot) :
+        instance(std::forward<Instance>(instance)), wildcard_type(wt), output_type(ot), validate(validate_all_rewrites) {}
 
     template<typename After>
     HALIDE_NEVER_INLINE
     void build_replacement(After after) {
-        result = after.make(state, expected_type);
+        result = after.make(state, output_type);
     }
 
     template<typename Before,
@@ -2107,6 +2363,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<After>::type>
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, After after) {
+        if (validate) validate_rule(before, after, true, wildcard_type, output_type);
         if (before.template match<0>(instance, state)) {
             build_replacement(after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
@@ -2135,8 +2392,9 @@ struct Rewriter {
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, int64_t after) noexcept {
+        if (validate) validate_rule(before, Const(after), true, wildcard_type, output_type);
         if (before.template match<0>(instance, state)) {
-            result = make_const(expected_type, after);
+            result = make_const(output_type, after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
             return true;
         } else {
@@ -2153,6 +2411,8 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, After after, Predicate pred) {
+        static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
+        if (validate) validate_rule(before, after, pred, wildcard_type, output_type);
         if (before.template match<0>(instance, state) &&
             evaluate_predicate(pred, state)) {
             build_replacement(after);
@@ -2170,6 +2430,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, const Expr &after, Predicate pred) {
+        static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         if (before.template match<0>(instance, state) &&
             evaluate_predicate(pred, state)) {
             result = after;
@@ -2187,9 +2448,11 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, int64_t after, Predicate pred) {
+        static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
+        if (validate) validate_rule(before, Const(after), pred, wildcard_type, output_type);
         if (before.template match<0>(instance, state) &&
             evaluate_predicate(pred, state)) {
-            result = make_const(expected_type, after);
+            result = make_const(output_type, after);
             if (HALIDE_DEBUG_MATCHED_RULES) debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
             return true;
         } else {
@@ -2199,30 +2462,45 @@ struct Rewriter {
     }
 };
 
+/** Construct a rewriter for the given instance, which may be a pattern
+ * with concrete expressions as leaves, or just an expression. The
+ * second optional argument (wildcard_type) is a hint as to what the
+ * type of the wildcards is likely to be. If omitted it uses the same
+ * type as the expression itself.  They are not required to be this
+ * type, but the rule will only be tested for wildcards of that type
+ * when testing is enabled.
+ *
+ * The rewriter can be used to check to see if the instance is one of
+ * some number of patterns and if so rewrite it into another form,
+ * using its operator() method. See Simplify.cpp for a bunch of
+ * example usage.
+ */
+// @{
+template<typename Instance,
+         typename = typename enable_if_pattern<Instance>::type>
+HALIDE_ALWAYS_INLINE
+auto rewriter(Instance instance, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+    return {pattern_arg(instance), wildcard_type, instance.type()};
+}
+
 template<typename Instance,
          typename = typename enable_if_pattern<Instance>::type>
 HALIDE_ALWAYS_INLINE
 auto rewriter(Instance instance) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
-    static_assert(Instance::typed, "Could not infer type of argument to rewriter");
-    return {pattern_arg(instance), instance.type()};
+    return {pattern_arg(instance), instance.type(), instance.type()};
 }
+
+HALIDE_ALWAYS_INLINE
+auto rewriter(const Expr &e, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(e))> {
+    return {pattern_arg(e), wildcard_type, e.type()};
+}
+
 
 HALIDE_ALWAYS_INLINE
 auto rewriter(const Expr &e) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), e.type()};
+    return {pattern_arg(e), e.type(), e.type()};
 }
-
-template<typename Instance,
-         typename = typename enable_if_pattern<Instance>::type>
-HALIDE_ALWAYS_INLINE
-auto rewriter(Instance instance, halide_type_t expected_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
-    return {pattern_arg(instance), expected_type};
-}
-
-HALIDE_ALWAYS_INLINE
-auto rewriter(const Expr &e, halide_type_t expected_type) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), expected_type};
-}
+// @}
 
 }
 
