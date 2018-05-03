@@ -67,6 +67,11 @@ SANITIZER_FLAGS += -fsanitize=thread
 
 endif
 
+ifneq (,$(findstring asan,$(HL_TARGET)$(HL_JIT_TARGET)))
+OPTIMIZE += -fsanitize=address
+SANITIZER_FLAGS += -fsanitize=address
+endif
+
 COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -268,20 +273,6 @@ endif
 
 ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
-endif
-
-# TODO: this is horrible hackery; we should really add the relevant
-# support libs for the sanitizer(s) as weak symbols in Codegen_LLVM
-ifneq (,$(findstring asan,$(HL_TARGET)))
-TEST_CXX_FLAGS += -fsanitize=address
-TEST_LD_FLAGS += -fsanitize=address
-GEN_AOT_LD_FLAGS += -fsanitize=address
-endif
-
-ifneq (,$(findstring asan,$(HL_JIT_TARGET)))
-TEST_CXX_FLAGS += -fsanitize=address
-TEST_LD_FLAGS += -fsanitize=address
-GEN_AOT_LD_FLAGS += -fsanitize=address
 endif
 
 # Compiling the tutorials requires libpng

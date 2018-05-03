@@ -655,6 +655,12 @@ def halide_generator(name,
         filename=name[:-10],  # strip ".generator" suffix
         generator_closure=":%s_closure" % name,
         halide_target=stub_header_target,
+        sanitizer=select({
+            "@halide//:halide_config_asan": "asan",
+            "@halide//:halide_config_msan": "msan",
+            "@halide//:halide_config_tsan": "tsan",
+            "//conditions:default": "",
+        }),
         outputs=["cpp_stub"],
         tags=tags,
         visibility=["//visibility:private"])
@@ -712,6 +718,10 @@ def halide_library_from_generator(name,
 
   if "cpp" in extra_outputs:
     fail("halide_library('%s') doesn't support 'cpp' in extra_outputs; please depend on '%s_cc' instead." % (name, name))
+
+  for san in ["asan", "msan", "tsan"]:
+    if san in halide_target_features:
+      fail("halide_library('%s') doesn't support '%s' in halide_target_features; please build with --config=%s instead." % (name, san, san))
 
   generator_closure = "%s_closure" % generator
 
@@ -786,6 +796,12 @@ def halide_library_from_generator(name,
       halide_generator_args=generator_args,
       generator_closure=generator_closure,
       halide_target=cc_target,
+      sanitizer=select({
+          "@halide//:halide_config_asan": "asan",
+          "@halide//:halide_config_msan": "msan",
+          "@halide//:halide_config_tsan": "tsan",
+          "//conditions:default": "",
+      }),
       halide_function_name=function_name,
       outputs=["cpp"],
       tags=["manual"] + tags)
