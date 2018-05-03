@@ -1266,6 +1266,8 @@ public:
 
                   rewrite(min(x / c0, y / c0), min(x, y) / c0, c0 > 0) ||
                   rewrite(min(x / c0, y / c0), max(x, y) / c0, c0 < 0) ||
+                  rewrite(min(x / c0, c1), min(x, fold(c1 * c0)) / c0, c0 > 0) ||
+                  rewrite(min(x / c0, c1), max(x, fold(c1 * c0)) / c0, c0 < 0) ||
                   rewrite(min(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 > 0) ||
                   rewrite(min(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 < 0) ||
 
@@ -1455,6 +1457,8 @@ public:
 
                   rewrite(max(x / c0, y / c0), max(x, y) / c0, c0 > 0) ||
                   rewrite(max(x / c0, y / c0), min(x, y) / c0, c0 < 0) ||
+                  rewrite(max(x / c0, c1), max(x, fold(c1 * c0)) / c0, c0 > 0) ||
+                  rewrite(max(x / c0, c1), min(x, fold(c1 * c0)) / c0, c0 < 0) ||
                   rewrite(max(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 > 0) ||
                   rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0) ||
 
@@ -1828,6 +1832,49 @@ public:
                    // z = 0, c0 = 0, w = 0
                    rewrite((x/c1)*c1 < x, (x % c1) != 0, c1 > 0) ||
                    rewrite(x < (x/c1)*c1, false, c1 > 0) ||
+
+                   // Cancel a division
+                   rewrite((x + c1)/c0 < (x + c2)/c0, false, c0 > 0 && c1 >= c2) ||
+                   rewrite((x + c1)/c0 < (x + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
+                   // c1 == 0
+                   rewrite(x/c0 < (x + c2)/c0, false, c0 > 0 && 0 >= c2) ||
+                   rewrite(x/c0 < (x + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
+                   // c2 == 0
+                   rewrite((x + c1)/c0 < x/c0, false, c0 > 0 && c1 >= 0) ||
+                   rewrite((x + c1)/c0 < x/c0, true, c0 > 0 && c1 <= 0 - c0) ||
+
+                   // With a confounding max or min
+                   rewrite((x + c1)/c0 < (min(x, y) + c2)/c0, false, c0 > 0 && c1 >= c2) ||
+                   rewrite((x + c1)/c0 < (max(x, y) + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
+                   rewrite(x/c0 < (min(x, y) + c2)/c0, false, c0 > 0 && 0 >= c2) ||
+                   rewrite(x/c0 < (max(x, y) + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
+                   rewrite((x + c1)/c0 < min(x, y)/c0, false, c0 > 0 && c1 >= 0) ||
+                   rewrite((x + c1)/c0 < max(x, y)/c0, true, c0 > 0 && c1 <= 0 - c0) ||
+                   rewrite(x/c0 < min(x, y)/c0, false, c0 > 0) ||
+
+                   rewrite((x + c1)/c0 < (min(y, x) + c2)/c0, false, c0 > 0 && c1 >= c2) ||
+                   rewrite((x + c1)/c0 < (max(y, x) + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
+                   rewrite(x/c0 < (min(y, x) + c2)/c0, false, c0 > 0 && 0 >= c2) ||
+                   rewrite(x/c0 < (max(y, x) + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
+                   rewrite((x + c1)/c0 < min(y, x)/c0, false, c0 > 0 && c1 >= 0) ||
+                   rewrite((x + c1)/c0 < max(y, x)/c0, true, c0 > 0 && c1 <= 0 - c0) ||
+                   rewrite(x/c0 < min(y, x)/c0, false, c0 > 0) ||
+
+                   rewrite((max(x, y) + c1)/c0 < (x + c2)/c0, false, c0 > 0 && c1 >= c2) ||
+                   rewrite((min(x, y) + c1)/c0 < (x + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
+                   rewrite(max(x, y)/c0 < (x + c2)/c0, false, c0 > 0 && 0 >= c2) ||
+                   rewrite(min(x, y)/c0 < (x + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
+                   rewrite((max(x, y) + c1)/c0 < x/c0, false, c0 > 0 && c1 >= 0) ||
+                   rewrite((min(x, y) + c1)/c0 < x/c0, true, c0 > 0 && c1 <= 0 - c0) ||
+                   rewrite(max(x, y)/c0 < x/c0, false, c0 > 0) ||
+
+                   rewrite((max(y, x) + c1)/c0 < (x + c2)/c0, false, c0 > 0 && c1 >= c2) ||
+                   rewrite((min(y, x) + c1)/c0 < (x + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
+                   rewrite(max(y, x)/c0 < (x + c2)/c0, false, c0 > 0 && 0 >= c2) ||
+                   rewrite(min(y, x)/c0 < (x + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
+                   rewrite((max(y, x) + c1)/c0 < x/c0, false, c0 > 0 && c1 >= 0) ||
+                   rewrite((min(y, x) + c1)/c0 < x/c0, true, c0 > 0 && c1 <= 0 - c0) ||
+                   rewrite(max(y, x)/c0 < x/c0, false, c0 > 0) ||
 
                    // Comparison of aligned ramps can simplify to a comparison of the base
                    rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
@@ -3485,6 +3532,20 @@ Stmt simplify_exprs(Stmt s) {
 }
 
 bool can_prove(Expr e) {
+    // Remove likelies
+    struct RemoveLikelies : public IRMutator2 {
+        using IRMutator2::visit;
+        Expr visit(const Call *op) override {
+            if (op->is_intrinsic(Call::likely) ||
+                op->is_intrinsic(Call::likely_if_innermost)) {
+                return mutate(op->args[0]);
+            } else {
+                return IRMutator2::visit(op);
+            }
+        }
+    };
+    e = RemoveLikelies().mutate(e);
+
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
     e = simplify(e);
@@ -3497,8 +3558,8 @@ bool can_prove(Expr e) {
         }
     }
 
-    // Dump all failed proof attempts
-    /*
+    // Take a closer look at all failed proof attempts to hunt for
+    // simplifier weaknesses
     if (!is_const(e)) {
         struct RenameVariables : public IRMutator2 {
             using IRMutator2::visit;
@@ -3508,6 +3569,7 @@ bool can_prove(Expr e) {
                 if (it == vars.end()) {
                     std::string name = "v" + std::to_string(vars.size());
                     vars[op->name] = name;
+                    out_vars.emplace_back(op->type, name);
                     return Variable::make(op->type, name);
                 } else {
                     return Variable::make(op->type, it->second);
@@ -3517,15 +3579,41 @@ bool can_prove(Expr e) {
             Expr visit(const Let *op) {
                 std::string name = "v" + std::to_string(vars.size());
                 vars[op->name] = name;
+                out_vars.emplace_back(op->value.type(), name);
                 return Let::make(name, mutate(op->value), mutate(op->body));
             }
 
             std::map<string, string> vars;
-        };
+            std::vector<pair<Type, string>> out_vars;
+        } renamer;
 
-        debug(0) << "Failed to prove: " << RenameVariables().mutate(e) << "\n";
+        e = renamer.mutate(e);
+
+        // Look for a concrete counter-example with random probing
+        static std::mt19937 rng(0);
+        for (int i = 0; i < 100; i++) {
+            map<string, Expr> s;
+            for (auto p : renamer.out_vars) {
+                s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
+            }
+            Expr probe = simplify(substitute(s, e));
+            if (const Call *c = probe.as<Call>()) {
+                if (c->is_intrinsic(Call::likely) ||
+                    c->is_intrinsic(Call::likely_if_innermost)) {
+                    probe = c->args[0];
+                }
+            }
+            if (is_zero(probe)) {
+                // Found a counter-example
+                return false;
+            } else if (!is_const(probe)) {
+                debug(0) << "Didn't fold: " << probe << "\n";
+            }
+        }
+
+        debug(0) << "Failed to prove, but could not find a counter-example:\n " << e << "\n";
+        return false;
     }
-    */
 
     return is_one(e);
 }

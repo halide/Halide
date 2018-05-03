@@ -428,9 +428,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     if (const_max_extent && *const_max_extent <= max_fold) {
                         factor = static_cast<int>(next_power_of_two(*const_max_extent));
                     } else {
-                        debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
-                                 << "extent = " << extent << "\n"
-                                 << "max extent = " << max_extent << "\n";
+                        // Try a little harder to find a bounding power of two
+                        int e = max_fold * 2;
+                        bool success = false;
+                        while (e > 0 && can_prove(extent <= e / 2)) {
+                            success = true;
+                            e /= 2;
+                        }
+                        if (success) {
+                            factor = e;
+                        } else {
+                            debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                                     << "extent = " << extent << "\n"
+                                     << "max extent = " << max_extent << "\n";
+                        }
                     }
                 }
 
