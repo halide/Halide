@@ -1951,7 +1951,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
                 parallel_vars.insert(split->inner);
                 parallel_vars.insert(split->outer);
             } else if ((split->is_rename() || split->is_purify()) && parallel_vars.count(split->outer)) {
-                parallel_vars.insert(split->outer);
+                parallel_vars.insert(split->old_var);
             }
         }
 
