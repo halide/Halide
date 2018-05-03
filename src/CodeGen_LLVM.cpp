@@ -1073,8 +1073,8 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::ASAN)) {
         auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            // TODO: we we (also/instead) want createAddressSanitizerModulePass?
             pm.add(createAddressSanitizerFunctionPass());
+            pm.add(createAddressSanitizerModulePass());
         };
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
