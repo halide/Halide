@@ -1912,11 +1912,16 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         }
     }
 
-    int shift_inwards_count = 0;
+    int racy_shift_inwards_count = 0;
     int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
         const StageSchedule &s = def.schedule();
+        set<string> parallel_vars;
         for (const Dim &d : s.dims()) {
+            // We don't care about GPU parallelism here
+            if (d.for_type == ForType::Parallel) {
+                parallel_vars.insert(d.var);
+            }
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()
                            << " requires " << d.device_api
@@ -1927,9 +1932,24 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         if (s.allow_race_conditions()) {
             allow_race_conditions_count++;
         }
+        bool need_propagate_parallel = true;
+        while (need_propagate_parallel) {
+            need_propagate_parallel = false;
+            for (const auto &split : s.splits()) {
+                // For purposes of race-detection-warning, any split that
+                // is the child of a parallel var is also 'parallel'
+                if (parallel_vars.count(split.old_var) && !parallel_vars.count(split.outer)) {
+                    parallel_vars.insert(split.outer);
+                    need_propagate_parallel = true;
+                }
+            }
+        }
         for (const auto &split : s.splits()) {
-            if (split.tail == TailStrategy::ShiftInwards) {
-                shift_inwards_count++;
+            // ShiftInwards used inside a parallel split can produce racy (though benignly so) code
+            // that TSAN will complain about; issue a warning so that the user doesn't assume
+            // the warning is legitimate.
+            if (split.tail == TailStrategy::ShiftInwards && parallel_vars.count(split.outer)) {
+                racy_shift_inwards_count++;
             }
         }
     }
@@ -1940,9 +1960,9 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
                    << "'' has one or more uses of allow_race_conditions() in its schedule;\n"
                    << "this may report benign data races when run with ThreadSanitizer.\n\n";
         }
-        if (shift_inwards_count > 0) {
+        if (racy_shift_inwards_count > 0) {
             user_warning << "Schedule for Func '" << f.name()
-                   << "'' has " << shift_inwards_count << " split(s) using TailStrategy::ShiftInwards;\n"
+                   << "'' has " << racy_shift_inwards_count << " split(s) using TailStrategy::ShiftInwards inside a parallel loop;\n"
                    << "this may report benign data races when run with ThreadSanitizer.\n"
                    << "(Note that ShiftInwards splits may be implicitly created by\n"
                    << "other scheduling operations, e.g. parallel() and vectorize()).\n\n";
