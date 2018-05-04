@@ -122,6 +122,9 @@ Stmt add_image_checks(Stmt s,
     // Add the input buffer(s) and annotate which output buffers are
     // used on host.
     s.accept(&finder);
+    for (auto p : env) {
+        p.second.accept(&finder);
+    }
 
     Scope<Interval> empty_scope;
     map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
