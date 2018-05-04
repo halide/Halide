@@ -1051,6 +1051,15 @@ void CodeGen_LLVM::optimize_module() {
     }
 #endif
 
+    if (get_target().has_feature(Target::ASAN)) {
+        auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createAddressSanitizerFunctionPass());
+            pm.add(createAddressSanitizerModulePass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
+    }
+
     if (get_target().has_feature(Target::MSAN)) {
         auto addMemorySanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
             pm.add(createMemorySanitizerPass());
@@ -1059,14 +1068,35 @@ void CodeGen_LLVM::optimize_module() {
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addMemorySanitizerPass);
     }
 
+    if (get_target().has_feature(Target::TSAN)) {
+        auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createThreadSanitizerPass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
+    }
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
         if (get_target().has_feature(Target::MSAN)) {
             i->addFnAttr(Attribute::SanitizeMemory);
+        }
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
         }
         function_pass_manager.run(*i);
     }
@@ -1685,7 +1715,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             bool external = op->param.defined() || op->image.defined();
 
             // Don't read beyond the end of an external buffer.
-            if (external) {
+            // (In ASAN mode, don't read beyond the end of internal buffers either,
+            // as ASAN will complain even about harmless stack overreads.)
+            if (external || target.has_feature(Target::ASAN)) {
                 base_b -= 1;
                 shifted_b = true;
             } else {
