@@ -23,7 +23,7 @@
 // of temporary objects when they are built and matched against. If we
 // wrap the expressions that imply lots of temporaries in a lambda, we
 // can get these large frames out of the recursive path.
-#define EVAL_IN_LAMBDA(x) (([&]() {return (x);})())
+#define EVAL_IN_LAMBDA(x) (([&]() HALIDE_NEVER_INLINE {return (x);})())
 
 namespace Halide {
 namespace Internal {
