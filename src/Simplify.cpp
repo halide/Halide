@@ -96,51 +96,139 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
         info.replacement = const_false(fact.type().lanes());
-        var_info.push(v->name, info);
+        simplify->var_info.push(v->name, info);
         pop_list.push_back(v);
     } else if (const NE *ne = fact.as<NE>()) {
         const Variable *v = ne->a.as<Variable>();
         if (v && is_const(ne->b)) {
             info.replacement = ne->b;
-            var_info.push(v->name, info);
+            simplify->var_info.push(v->name, info);
             pop_list.push_back(v);
         }
+    } else if (const LT *lt = fact.as<LT>()) {
+        const Variable *v = lt->a.as<Variable>();
+        const int64_t *i = as_const_int(lt->b);
+        if (v && i) {
+            // !(v < i)
+            learn_lower_bound(v, *i);
+        }
+        v = lt->b.as<Variable>();
+        i = as_const_int(lt->a);
+        if (v && i) {
+            // !(i < v)
+            learn_upper_bound(v, *i);
+        }
+    } else if (const LE *le = fact.as<LE>()) {
+        const Variable *v = le->a.as<Variable>();
+        const int64_t *i = as_const_int(le->b);
+        if (v && i) {
+            // !(v <= i)
+            learn_lower_bound(v, *i + 1);
+        }
+        v = le->b.as<Variable>();
+        i = as_const_int(le->a);
+        if (v && i) {
+            // !(i <= v)
+            learn_upper_bound(v, *i - 1);
+        }
     } else if (const Or *o = fact.as<Or>()) {
-        // Two things to learn!
+        // Both must be false
         learn_false(o->a);
         learn_false(o->b);
     } else if (const Not *n = fact.as<Not>()) {
         learn_true(n->a);
+    } else if (simplify->falsehoods.insert(fact).second) {
+        falsehoods.push_back(fact);
     }
 }
 
+void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
+    ConstBounds b;
+    if (simplify->bounds_info.contains(v->name)) {
+        b = simplify->bounds_info.get(v->name);
+    }
+    if (b.max_defined && b.max < val) return;
+    b.max_defined = true;
+    b.max = val;
+    simplify->bounds_info.push(v->name, b);
+    bounds_pop_list.push_back(v);
+}
+
+void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
+    ConstBounds b;
+    if (simplify->bounds_info.contains(v->name)) {
+        b = simplify->bounds_info.get(v->name);
+    }
+    if (b.min_defined && b.min > val) return;
+    b.min_defined = true;
+    b.min = val;
+    simplify->bounds_info.push(v->name, b);
+    bounds_pop_list.push_back(v);
+}
+
 void Simplify::ScopedFact::learn_true(const Expr &fact) {
-    // TODO: Also exploit < and > by updating bounds_info
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
         info.replacement = const_true(fact.type().lanes());
-        var_info.push(v->name, info);
+        simplify->var_info.push(v->name, info);
         pop_list.push_back(v);
     } else if (const EQ *eq = fact.as<EQ>()) {
         const Variable *v = eq->a.as<Variable>();
         if (v && is_const(eq->b)) {
             info.replacement = eq->b;
-            var_info.push(v->name, info);
+            simplify->var_info.push(v->name, info);
             pop_list.push_back(v);
         }
+    } else if (const LT *lt = fact.as<LT>()) {
+        const Variable *v = lt->a.as<Variable>();
+        const int64_t *i = as_const_int(lt->b);
+        if (v && i) {
+            // v < i
+            learn_upper_bound(v, *i - 1);
+        }
+        v = lt->b.as<Variable>();
+        i = as_const_int(lt->a);
+        if (v && i) {
+            // i < v
+            learn_lower_bound(v, *i + 1);
+        }
+    } else if (const LE *le = fact.as<LE>()) {
+        const Variable *v = le->a.as<Variable>();
+        const int64_t *i = as_const_int(le->b);
+        if (v && i) {
+            // v <= i
+            learn_upper_bound(v, *i);
+        }
+        v = le->b.as<Variable>();
+        i = as_const_int(le->a);
+        if (v && i) {
+            // i <= v
+            learn_lower_bound(v, *i);
+        }
     } else if (const And *a = fact.as<And>()) {
-        // Two things to learn!
+        // Both must be true
         learn_true(a->a);
         learn_true(a->b);
     } else if (const Not *n = fact.as<Not>()) {
         learn_false(n->a);
+    } else if (simplify->truths.insert(fact).second) {
+        truths.push_back(fact);
     }
 }
 
 Simplify::ScopedFact::~ScopedFact() {
     for (auto v : pop_list) {
-        var_info.pop(v->name);
+        simplify->var_info.pop(v->name);
+    }
+    for (auto v : bounds_pop_list) {
+        simplify->bounds_info.pop(v->name);
+    }
+    for (const auto &e : truths) {
+        simplify->truths.erase(e);
+    }
+    for (const auto &e : falsehoods) {
+        simplify->falsehoods.erase(e);
     }
 }
 

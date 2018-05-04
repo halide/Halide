@@ -29,13 +29,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
     Stmt then_case, else_case;
     {
-        auto f = scoped_truth(op->condition);
+        auto f = scoped_truth(condition);
         // Also substitute the entire condition
         then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
         then_case = mutate(then_case);
     }
     {
-        auto f = scoped_falsehood(op->condition);
+        auto f = scoped_falsehood(condition);
         else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
         else_case = mutate(else_case);
     }

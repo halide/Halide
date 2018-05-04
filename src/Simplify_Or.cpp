@@ -4,6 +4,10 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Or *op, ConstBounds *bounds) {
+    if (truths.count(op)) {
+        return const_true(op->type.lanes());
+    }
+
     // An appropriately rewritten version of the And mutator.
     Expr a, b;
     {
@@ -27,6 +31,14 @@ Expr Simplify::visit(const Or *op, ConstBounds *bounds) {
          rewrite(x || x, a) ||
          rewrite(x != y || x == y, true) ||
          rewrite(x != y || y == x, true) ||
+         rewrite((z || x != y) || x == y, true) ||
+         rewrite((z || x != y) || y == x, true) ||
+         rewrite((x != y || z) || x == y, true) ||
+         rewrite((x != y || z) || y == x, true) ||
+         rewrite((z || x == y) || x != y, true) ||
+         rewrite((z || x == y) || y != x, true) ||
+         rewrite((x == y || z) || x != y, true) ||
+         rewrite((x == y || z) || y != x, true) ||
          rewrite(x || !x, true) ||
          rewrite(!x || x, true) ||
          rewrite(y <= x || x < y, true) ||

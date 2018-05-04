@@ -4,6 +4,12 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
+    if (truths.count(op)) {
+        return const_true(op->type.lanes());
+    } else if (falsehoods.count(op)) {
+        return const_false(op->type.lanes());
+    }
+
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);

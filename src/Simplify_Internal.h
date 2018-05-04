@@ -159,21 +159,28 @@ public:
         return false;
     }
 
+    std::set<Expr, IRDeepCompare> truths, falsehoods;
+
     struct ScopedFact {
-        Scope<VarInfo> &var_info;
+        Simplify *simplify;
+
         std::vector<const Variable *> pop_list;
+        std::vector<const Variable *> bounds_pop_list;
+        std::vector<Expr> truths, falsehoods;
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
+        void learn_upper_bound(const Variable *v, int64_t val);
+        void learn_lower_bound(const Variable *v, int64_t val);
 
-        ScopedFact(Scope<VarInfo> &var_info) : var_info(var_info) {}
+        ScopedFact(Simplify *s) : simplify(s) {}
         ~ScopedFact();
     };
 
     // Tell the simplifier to learn from and exploit a boolean
     // condition, over the lifetime of the returned object.
     ScopedFact scoped_truth(const Expr &fact) {
-        ScopedFact f(var_info);
+        ScopedFact f(this);
         f.learn_true(fact);
         return f;
     }
@@ -181,7 +188,7 @@ public:
     // Tell the simplifier to assume a boolean condition is false over
     // the lifetime of the returned object.
     ScopedFact scoped_falsehood(const Expr &fact) {
-        ScopedFact f(var_info);
+        ScopedFact f(this);
         f.learn_false(fact);
         return f;
     }

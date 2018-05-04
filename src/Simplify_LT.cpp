@@ -11,6 +11,12 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
     const int lanes = op->type.lanes();
     Type ty = a.type();
 
+    if (truths.count(op)) {
+        return const_true(lanes);
+    } else if (falsehoods.count(op)) {
+        return const_false(lanes);
+    }
+
     if (may_simplify(ty)) {
 
         // Prove or disprove using bounds analysis

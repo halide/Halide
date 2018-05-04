@@ -4,6 +4,10 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const And *op, ConstBounds *bounds) {
+    if (falsehoods.count(op)) {
+        return const_false(op->type.lanes());
+    }
+
     // Exploit the assumed truth of the second side while mutating
     // the first. Then assume the mutated first side while
     // mutating the second.
@@ -36,6 +40,14 @@ Expr Simplify::visit(const And *op, ConstBounds *bounds) {
          rewrite(x && x, a) ||
          rewrite(x != y && x == y, false) ||
          rewrite(x != y && y == x, false) ||
+         rewrite((z && x != y) && x == y, false) ||
+         rewrite((z && x != y) && y == x, false) ||
+         rewrite((x != y && z) && x == y, false) ||
+         rewrite((x != y && z) && y == x, false) ||
+         rewrite((z && x == y) && x != y, false) ||
+         rewrite((z && x == y) && y != x, false) ||
+         rewrite((x == y && z) && x != y, false) ||
+         rewrite((x == y && z) && y != x, false) ||
          rewrite(x && !x, false) ||
          rewrite(!x && x, false) ||
          rewrite(y <= x && x < y, false) ||
