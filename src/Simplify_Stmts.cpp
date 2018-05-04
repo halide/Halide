@@ -56,7 +56,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
 Stmt Simplify::visit(const AssertStmt *op) {
     Expr cond = mutate(op->condition, nullptr);
-    Expr message = mutate(op->message, nullptr);
+
+    // The message is only evaluated when the condition is false
+    Expr message;
+    {
+        auto f = scoped_falsehood(cond);
+        message = mutate(op->message, nullptr);
+    }
 
     if (is_zero(cond)) {
         // Usually, assert(const-false) should generate a warning;
