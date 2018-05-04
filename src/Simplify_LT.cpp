@@ -135,6 +135,9 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               rewrite(x * c0 < y * c0, x < y, c0 > 0) ||
               rewrite(x * c0 < y * c0, y < x, c0 < 0) ||
 
+              rewrite(x * c0 < y * c0 + c1, x < y + fold((c1 + c0 - 1)/c0), c0 > 0) ||
+              rewrite(x * c0 + c1 < y * c0, x + fold(c1/c0) < y, c0 > 0) ||
+
               (ty.is_int()   && rewrite(x * c0 < c1, x < fold((c1 + c0 - 1) / c0), c0 > 0)) ||
               (ty.is_float() && rewrite(x * c0 < c1, x < fold(c1 / c0), c0 > 0)) ||
               rewrite(c1 < x * c0, fold(c1 / c0) < x, c0 > 0) ||

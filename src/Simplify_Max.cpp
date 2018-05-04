@@ -149,6 +149,15 @@ namespace Internal {
                   rewrite(max(y - x, z - x), max(y, z) - x) ||
                   rewrite(max(x - y, x - z), x - min(y, z)) ||
 
+                  rewrite(max(x, x - y), x - min(0, y)) ||
+                  rewrite(max(x - y, x), x - min(0, y)) ||
+                  rewrite(max(x, (x - y) + z), x + max(0, z - y)) ||
+                  rewrite(max(x, z + (x - y)), x + max(0, z - y)) ||
+                  rewrite(max(x, (x - y) - z), x - min(0, y + z)) ||
+                  rewrite(max((x - y) + z, x), max(0, z - y) + x) ||
+                  rewrite(max(z + (x - y), x), max(0, z - y) + x) ||
+                  rewrite(max((x - y) - z, x), x - min(0, y + z)) ||
+
                   rewrite(max(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                   rewrite(max(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 

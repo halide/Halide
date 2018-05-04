@@ -153,6 +153,15 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
                rewrite(min(y - x, z - x), min(y, z) - x) ||
                rewrite(min(x - y, x - z), x - max(y, z)) ||
 
+               rewrite(min(x, x - y), x - max(0, y)) ||
+               rewrite(min(x - y, x), x - max(0, y)) ||
+               rewrite(min(x, (x - y) + z), x + min(0, z - y)) ||
+               rewrite(min(x, z + (x - y)), x + min(0, z - y)) ||
+               rewrite(min(x, (x - y) - z), x - max(0, y + z)) ||
+               rewrite(min((x - y) + z, x), min(0, z - y) + x) ||
+               rewrite(min(z + (x - y), x), min(0, z - y) + x) ||
+               rewrite(min((x - y) - z, x), x - max(0, y + z)) ||
+
                rewrite(min(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
                rewrite(min(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 

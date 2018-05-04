@@ -110,7 +110,11 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
                rewrite((x/y)*y + (x%y + z), x + z) ||
                rewrite((x/y)*y + (x%y - z), x - z) ||
                rewrite((x/y)*y + (z + x%y), x + z) ||
-               rewrite(x/2 + x%2, (x + 1) / 2))))) {
+               rewrite(x/2 + x%2, (x + 1) / 2) ||
+
+               rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
+               rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
 

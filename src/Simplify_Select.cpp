@@ -66,13 +66,32 @@ Expr Simplify::visit(const Select *op, ConstBounds *bounds) {
              rewrite(select(x, y * z, w * y), y * select(x, z, w)) ||
              rewrite(select(x, z * y, y * w), y * select(x, z, w)) ||
              rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
-             (op->type.is_bool() &&
-              (rewrite(select(x, true, false), cast(op->type, x)) ||
-               rewrite(select(x, false, true), cast(op->type, !x)) ||
-               rewrite(select(x, y, false), x && y) ||
-               rewrite(select(x, y, true), !x || y) ||
-               rewrite(select(x, false, y), !x && y) ||
-               rewrite(select(x, true, y), x || y))))) {
+
+             rewrite(select(x < y, x, y), min(x, y)) ||
+             rewrite(select(x < y, y, x), max(x, y))) ||
+
+            (no_overflow_int(op->type) &&
+             (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
+              rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
+
+              // Selects that are equivalent to mins/maxes
+              rewrite(select(c0 < x, x + c1, c2), max(x + c1, c2), c2 == c0 + c1 || c2 == c0 + c1 + 1) ||
+              rewrite(select(x < c0, c1, x + c2), max(x + c2, c1), c1 == c0 + c2 || c1 + 1 == c0 + c2) ||
+              rewrite(select(c0 < x, c1, x + c2), min(x + c2, c1), c1 == c0 + c2 || c1 == c0 + c2 + 1) ||
+              rewrite(select(x < c0, x + c1, c2), min(x + c1, c2), c2 == c0 + c1 || c2 + 1 == c0 + c1) ||
+
+              rewrite(select(c0 < x, x, c1), max(x, c1), c1 == c0 + 1) ||
+              rewrite(select(x < c0, c1, x), max(x, c1), c1 + 1 == c0) ||
+              rewrite(select(c0 < x, c1, x), min(x, c1), c1 == c0 + 1) ||
+              rewrite(select(x < c0, x, c1), min(x, c2), c1 + 1 == c0))) ||
+
+            (op->type.is_bool() &&
+             (rewrite(select(x, true, false), cast(op->type, x)) ||
+              rewrite(select(x, false, true), cast(op->type, !x)) ||
+              rewrite(select(x, y, false), x && y) ||
+              rewrite(select(x, y, true), !x || y) ||
+              rewrite(select(x, false, y), !x && y) ||
+              rewrite(select(x, true, y), x || y)))) {
             return mutate(std::move(rewrite.result), bounds);
         }
     }
