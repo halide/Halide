@@ -427,7 +427,6 @@ SOURCE_FILES = \
   Simplify_Exprs.cpp \
   Simplify_LT.cpp \
   Simplify_Let.cpp \
-  Simplify_Load.cpp \
   Simplify_Max.cpp \
   Simplify_Min.cpp \
   Simplify_Mod.cpp \

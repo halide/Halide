@@ -527,7 +527,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Simplify_Exprs.cpp
   Simplify_LT.cpp
   Simplify_Let.cpp
-  Simplify_Load.cpp
   Simplify_Max.cpp
   Simplify_Min.cpp
   Simplify_Mod.cpp
