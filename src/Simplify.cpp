@@ -3566,8 +3566,10 @@ bool can_prove(Expr e) {
 
             Expr visit(const Variable *op) {
                 auto it = vars.find(op->name);
-                if (it == vars.end()) {
-                    std::string name = "v" + std::to_string(vars.size());
+                if (lets.contains(op->name)) {
+                    return Variable::make(op->type, lets.get(op->name));
+                } else if (it == vars.end()) {
+                    std::string name = "v" + std::to_string(count++);
                     vars[op->name] = name;
                     out_vars.emplace_back(op->type, name);
                     return Variable::make(op->type, name);
@@ -3577,12 +3579,14 @@ bool can_prove(Expr e) {
             }
 
             Expr visit(const Let *op) {
-                std::string name = "v" + std::to_string(vars.size());
-                vars[op->name] = name;
+                std::string name = "v" + std::to_string(count++);
+                ScopedBinding<string> bind(lets, op->name, name);
                 return Let::make(name, mutate(op->value), mutate(op->body));
             }
 
-            std::map<string, string> vars;
+            int count = 0;
+            map<string, string> vars;
+            Scope<string> lets;
             std::vector<pair<Type, string>> out_vars;
         } renamer;
 
