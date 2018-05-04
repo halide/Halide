@@ -404,8 +404,4 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
 }
 }
 
-namespace IRMatcher {
-bool validate_all_rewrites = false;
-}
-
 }}

@@ -1372,8 +1372,8 @@ void check_inv(Expr before) {
 void check_invariant() {
     // Check a bunch of expressions *don't* simplify. These should try
     // and then fail to match every single rule (which should trigger
-    // fuzz testing of each as a side effect). The final
-    // expression should be exactly the same object as the input.
+    // fuzz testing of each as a side effect). The final expression
+    // should be exactly the same object as the input.
     for (Type t : {UInt(1), UInt(8), UInt(16), UInt(32), UInt(64),
                 Int(8), Int(16), Int(32), Int(64),
                 Float(32), Float(64)}) {
@@ -1402,9 +1402,6 @@ void check_invariant() {
 }
 
 int main(int argc, char **argv) {
-    // Turn on rewrite rule fuzz testing
-    IRMatcher::validate_all_rewrites = true;
-
     check_invariant();
     check_casts();
     check_algebra();
