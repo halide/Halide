@@ -3579,7 +3579,6 @@ bool can_prove(Expr e) {
             Expr visit(const Let *op) {
                 std::string name = "v" + std::to_string(vars.size());
                 vars[op->name] = name;
-                out_vars.emplace_back(op->value.type(), name);
                 return Let::make(name, mutate(op->value), mutate(op->body));
             }
 
