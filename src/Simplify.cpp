@@ -322,6 +322,10 @@ bool can_prove(Expr e) {
         for (int i = 0; i < 100; i++) {
             map<string, Expr> s;
             for (auto p : renamer.out_vars) {
+                if (p.first.is_handle()) {
+                    // This aint gonna work
+                    return false;
+                }
                 s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
             }
             Expr probe = simplify(substitute(s, e));
