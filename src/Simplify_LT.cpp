@@ -135,9 +135,6 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               rewrite(x * c0 < y * c0, x < y, c0 > 0) ||
               rewrite(x * c0 < y * c0, y < x, c0 < 0) ||
 
-              rewrite(x * c0 < y * c0 + c1, x < y + fold((c1 + c0 - 1)/c0), c0 > 0) ||
-              rewrite(x * c0 + c1 < y * c0, x + fold(c1/c0) < y, c0 > 0) ||
-
               (ty.is_int()   && rewrite(x * c0 < c1, x < fold((c1 + c0 - 1) / c0), c0 > 0)) ||
               (ty.is_float() && rewrite(x * c0 < c1, x < fold(c1 / c0), c0 > 0)) ||
               rewrite(c1 < x * c0, fold(c1 / c0) < x, c0 > 0) ||
@@ -200,6 +197,9 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
             (no_overflow_int(ty) && EVAL_IN_LAMBDA
              (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
               rewrite(x * c0 < y * c1, x * fold(c0 / c1) < y, c0 % c1 == 0 && c1 > 0) ||
+
+              rewrite(x * c0 < y * c0 + c1, x < y + fold((c1 + c0 - 1)/c0), c0 > 0) ||
+              rewrite(x * c0 + c1 < y * c0, x + fold(c1/c0) < y, c0 > 0) ||
 
               // Comparison of stair-step functions. The basic transformation is:
               //   ((x + y)/c1)*c1 < x
