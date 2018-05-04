@@ -1071,6 +1071,15 @@ void CodeGen_LLVM::optimize_module() {
     }
 #endif
 
+    if (get_target().has_feature(Target::ASAN)) {
+        auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createAddressSanitizerFunctionPass());
+            pm.add(createAddressSanitizerModulePass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
+    }
+
     if (get_target().has_feature(Target::TSAN)) {
         auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
             pm.add(createThreadSanitizerPass());
@@ -1085,6 +1094,9 @@ void CodeGen_LLVM::optimize_module() {
     // Run optimization passes
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has
             // tsan interface calls to mark its behavior and is much faster if
@@ -1712,7 +1724,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             bool external = op->param.defined() || op->image.defined();
 
             // Don't read beyond the end of an external buffer.
-            if (external) {
+            // (In ASAN mode, don't read beyond the end of internal buffers either,
+            // as ASAN will complain even about harmless stack overreads.)
+            if (external || target.has_feature(Target::ASAN)) {
                 base_b -= 1;
                 shifted_b = true;
             } else {

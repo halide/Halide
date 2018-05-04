@@ -267,6 +267,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"tsan", Target::TSAN},
+    {"asan", Target::ASAN},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
 };
@@ -295,6 +296,9 @@ Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
 #if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+    host.set_feature(Target::ASAN);
+#endif
 #if __has_feature(memory_sanitizer)
     host.set_feature(Target::MSAN);
 #endif

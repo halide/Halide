@@ -16,6 +16,7 @@
 #include "Interval.h"
 #include "Associativity.h"
 #include "Generator.h"
+#include "AutoScheduleUtils.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -37,6 +38,7 @@ int main(int argc, const char **argv) {
     interval_test();
     associativity_test();
     generator_test();
+    propagate_estimate_test();
 
     return 0;
 }
