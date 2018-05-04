@@ -256,7 +256,10 @@ Stmt simplify_exprs(Stmt s) {
     return SimplifyExprs().mutate(s);
 }
 
-bool can_prove(Expr e) {
+bool can_prove(Expr e, const Scope<Interval> &bounds) {
+    internal_assert(e.type().is_bool())
+        << "Argument to can_prove is not a boolean Expr: " << e << "\n";
+
     // Remove likelies
     struct RemoveLikelies : public IRMutator2 {
         using IRMutator2::visit;
@@ -271,17 +274,7 @@ bool can_prove(Expr e) {
     };
     e = RemoveLikelies().mutate(e);
 
-    internal_assert(e.type().is_bool())
-        << "Argument to can_prove is not a boolean Expr: " << e << "\n";
-    e = simplify(e);
-    // likely(const-bool) is deliberately left unsimplified, because
-    // things like max(likely(1), x) are meaningful, but we do want to
-    // have can_prove(likely(1)) return true.
-    if (const Call *c = e.as<Call>()) {
-        if (c->is_intrinsic(Call::likely)) {
-            e = c->args[0];
-        }
-    }
+    e = simplify(e, true, bounds);
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses

@@ -27,9 +27,8 @@ Expr simplify(Expr, bool remove_dead_lets = true,
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
 
-/** A common use of the simplifier is to prove boolean expressions are
- * true at compile time. Equivalent to is_one(simplify(e)) */
-bool can_prove(Expr e);
+/** Attempt to statically prove an expression is true using the simplifier. */
+bool can_prove(Expr e, const Scope<Interval> &bounds = Scope<Interval>::empty_scope());
 
 /** Simplify expressions found in a statement, but don't simplify
  * across different statements. This is safe to perform at an earlier
