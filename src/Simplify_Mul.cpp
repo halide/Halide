@@ -53,9 +53,9 @@ Expr Simplify::visit(const Mul *op, ConstBounds *bounds) {
         }
 
         if (rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1)) ||
-            rewrite((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && !overflows(-c0)) ||
+            rewrite((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0) ||
             rewrite((x * c0) * c1, x * fold(c0 * c1), !overflows(c0 * c1)) ||
-            rewrite((x * c0) * y, (x * y) * c0) ||
+            rewrite((x * c0) * y, (x * y) * c0, !is_const(y)) ||
             rewrite(x * (y * c0), (x * y) * c0) ||
             rewrite(max(x, y) * min(x, y), x * y) ||
             rewrite(max(x, y) * min(y, x), y * x) ||

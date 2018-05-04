@@ -41,6 +41,8 @@ public:
     };
 
 #if LOG_EXPR_MUTATIONS
+    static int debug_indent;
+
     Expr mutate(const Expr &e, ConstBounds *b) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";

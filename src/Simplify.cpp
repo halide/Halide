@@ -14,7 +14,7 @@ using std::ostringstream;
 using std::vector;
 
 #if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
-static int debug_indent = 0;
+int Simplify::debug_indent = 0;
 #endif
 
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
