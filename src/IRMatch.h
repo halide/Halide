@@ -1906,7 +1906,7 @@ auto cast(halide_type_t t, A a) noexcept -> CastOp<decltype(pattern_arg(a))> {
 }
 
 template<typename A>
-struct FoldOp {
+struct Fold {
     struct pattern_tag {};
     A a;
 
@@ -1938,13 +1938,53 @@ struct FoldOp {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-auto fold(A a) noexcept -> FoldOp<decltype(pattern_arg(a))> {
+auto fold(A a) noexcept -> Fold<decltype(pattern_arg(a))> {
     return {pattern_arg(a)};
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const FoldOp<A> &op) {
+std::ostream &operator<<(std::ostream &s, const Fold<A> &op) {
     s << "fold(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct Overflows {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static bool foldable = A::foldable;
+
+    template<typename A1 = A>
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        a.make_folded_const(val, ty, state);
+        ty.code = halide_type_uint;
+        ty.bits = 64;
+        val.u.u64 = (ty.lanes & MatcherState::special_values_mask) != 0;
+        ty.lanes = 1;
+    }
+
+    constexpr static bool typed = false;
+
+    HALIDE_ALWAYS_INLINE
+    halide_type_t type() const {
+        return {};
+    }
+
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE
+auto overflows(A a) noexcept -> Overflows<decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const Overflows<A> &op) {
+    s << "overflows(" << op.a << ")";
     return s;
 }
 
@@ -1979,7 +2019,7 @@ inline std::ostream &operator<<(std::ostream &s, const Indeterminate &op) {
 }
 
 template<typename A>
-struct IsConstOp {
+struct IsConst {
     struct pattern_tag {};
 
     constexpr static uint32_t binds = bindings<A>::mask;
@@ -2008,18 +2048,18 @@ struct IsConstOp {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-auto is_const(A a) noexcept -> IsConstOp<decltype(pattern_arg(a))> {
+auto is_const(A a) noexcept -> IsConst<decltype(pattern_arg(a))> {
     return {pattern_arg(a)};
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const IsConstOp<A> &op) {
+std::ostream &operator<<(std::ostream &s, const IsConst<A> &op) {
     s << "is_const(" << op.a << ")";
     return s;
 }
 
 template<typename A, typename Prover>
-struct CanProveOp {
+struct CanProve {
     struct pattern_tag {};
     A a;
     Prover *prover;  // An existing simplifying mutator
@@ -2048,18 +2088,18 @@ struct CanProveOp {
 
 template<typename A, typename Prover>
 HALIDE_ALWAYS_INLINE
-auto can_prove(A a, Prover *p) noexcept -> CanProveOp<decltype(pattern_arg(a)), Prover> {
+auto can_prove(A a, Prover *p) noexcept -> CanProve<decltype(pattern_arg(a)), Prover> {
     return {pattern_arg(a), p};
 }
 
 template<typename A, typename Prover>
-std::ostream &operator<<(std::ostream &s, const CanProveOp<A, Prover> &op) {
+std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     s << "can_prove(" << op.a << ")";
     return s;
 }
 
 template<typename A>
-struct IsFloatOp {
+struct IsFloat {
     struct pattern_tag {};
     A a;
 
@@ -2087,18 +2127,18 @@ struct IsFloatOp {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE
-auto is_float(A a) noexcept -> IsFloatOp<decltype(pattern_arg(a))> {
+auto is_float(A a) noexcept -> IsFloat<decltype(pattern_arg(a))> {
     return {pattern_arg(a)};
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const IsFloatOp<A> &op) {
+std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     s << "is_float(" << op.a << ")";
     return s;
 }
 
 template<typename A, typename B>
-struct GCDOp {
+struct GCD {
     struct pattern_tag {};
     A a;
     B b;
@@ -2130,18 +2170,18 @@ struct GCDOp {
 
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE
-auto gcd(A a, B b) noexcept -> GCDOp<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+auto gcd(A a, B b) noexcept -> GCD<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {pattern_arg(a), pattern_arg(b)};
 }
 
 template<typename A, typename B>
-std::ostream &operator<<(std::ostream &s, const GCDOp<A, B> &op) {
+std::ostream &operator<<(std::ostream &s, const GCD<A, B> &op) {
     s << "gcd(" << op.a << ", " << op.b << ")";
     return s;
 }
 
 template<int i, typename A>
-struct BindOp {
+struct Bind {
     struct pattern_tag {};
     A a;
 
@@ -2168,12 +2208,12 @@ struct BindOp {
 
 template<int i, typename A>
 HALIDE_ALWAYS_INLINE
-auto bind(WildConst<i> c, A a) noexcept -> BindOp<i, decltype(pattern_arg(a))> {
+auto bind(WildConst<i> c, A a) noexcept -> Bind<i, decltype(pattern_arg(a))> {
     return {pattern_arg(a)};
 }
 
 template<int i, typename A>
-std::ostream &operator<<(std::ostream &s, const BindOp<i, A> &op) {
+std::ostream &operator<<(std::ostream &s, const Bind<i, A> &op) {
     s << "bind(_" << i << " = " << op.a << ")";
     return s;
 }

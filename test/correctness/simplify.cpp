@@ -1430,14 +1430,15 @@ int main(int argc, char **argv) {
               Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
-    // This expression doesn't simplify, but it did cause exponential
-    // slowdown at one stage.
+    // This expression is a good stress-test. It caused exponential
+    // slowdown at one point in time, and constant folding leading to
+    // overflow at another.
     {
         Expr e = x;
         for (int i = 0; i < 100; i++) {
             e = max(e, 1)/2;
         }
-        check(e, e);
+        check(e, (max((max((max((max(x, 1073741824)/1073741824), 1073741824)/1073741824), 1073741824)/1073741824), 512)/1024));
     }
 
     // This expression used to cause infinite recursion.
