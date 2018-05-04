@@ -1627,19 +1627,18 @@ public:
                 return rewrite.result;
             }
 
-            if (EVAL_IN_LAMBDA
-                (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
-                 (no_overflow(ty) &&
-                  (rewrite(ramp(x, y) < ramp(z, y), x < z) ||
-                   // Move constants to the RHS
-                   rewrite(x + c0 < y, x < y + fold(-c0)) ||
+            if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
+                (no_overflow(ty) && EVAL_IN_LAMBDA
+                 (rewrite(ramp(x, y) < ramp(z, y), x < z) ||
+                  // Move constants to the RHS
+                  rewrite(x + c0 < y, x < y + fold(-c0)) ||
 
-                   // Merge RHS constant additions with a constant LHS
-                   rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
+                  // Merge RHS constant additions with a constant LHS
+                  rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
 
-                   // Normalize subtractions to additions to cut down on cases to consider
-                   rewrite(x - y < z, x < z + y) ||
-                   rewrite(z < x - y, z + y < x) ||
+                  // Normalize subtractions to additions to cut down on cases to consider
+                  rewrite(x - y < z, x < z + y) ||
+                  rewrite(z < x - y, z + y < x) ||
 
                    rewrite((x - y) + z < w, x + z < y + w) ||
                    rewrite(z + (x - y) < w, x + z < y + w) ||
@@ -1770,7 +1769,7 @@ public:
                    // Normalize comparison of ramps to a comparison of a ramp and a broadacst
                    rewrite(ramp(x, y) < ramp(z, w), ramp(x - z, y - w, lanes) < 0))) ||
 
-                 (no_overflow_int(ty) &&
+                 (no_overflow_int(ty) && EVAL_IN_LAMBDA
                   (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
                    rewrite(x * c0 < y * c1, x * fold(c0 / c1) < y, c0 % c1 == 0 && c1 > 0) ||
 
@@ -1887,7 +1886,7 @@ public:
                            broadcast(x * fold(c3/c0) < z, lanes),
                            c0 > 0 && (c3 % c0 == 0) &&
                            c1 * (lanes - 1) < c0 &&
-                           c1 * (lanes - 1) >= 0))))) {
+                           c1 * (lanes - 1) >= 0)))) {
                 return mutate(std::move(rewrite.result), bounds);
             }
         }
