@@ -67,6 +67,11 @@ SANITIZER_FLAGS += -fsanitize=thread
 
 endif
 
+ifneq (,$(findstring asan,$(HL_TARGET)$(HL_JIT_TARGET)))
+OPTIMIZE += -fsanitize=address
+SANITIZER_FLAGS += -fsanitize=address
+endif
+
 COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
