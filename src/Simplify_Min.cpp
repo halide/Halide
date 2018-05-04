@@ -195,7 +195,7 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return hoist_slice_vector<Min>(op);
         } else {
-            return hoist_slice_vector<Min>(min(a, b));
+            return hoist_slice_vector<Min>(Min::make(a, b));
         }
     }
 

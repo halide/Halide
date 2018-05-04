@@ -191,7 +191,7 @@ namespace Internal {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 return hoist_slice_vector<Max>(op);
             } else {
-                return hoist_slice_vector<Max>(min(a, b));
+                return hoist_slice_vector<Max>(Max::make(a, b));
             }
         }
 
