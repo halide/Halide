@@ -518,6 +518,26 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_LT.cpp
+  Simplify_Let.cpp
+  Simplify_Load.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp

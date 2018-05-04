@@ -11,6 +11,7 @@
 #include "ModulusRemainder.h"
 
 #include <random>
+#include <set>
 
 namespace Halide {
 namespace Internal {
