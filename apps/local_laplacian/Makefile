@@ -47,3 +47,10 @@ test: $(BIN)/out.png
 
 viz: $(BIN)/local_laplacian.mp4
 	mplayer $^
+
+$(BIN)/viz_auto.mp4: $(BIN)/process_viz ../support/viz_auto.sh ../../bin/HalideTraceViz
+	@mkdir -p $(@D)
+	bash ../support/viz_auto.sh "$(BIN)/process_viz $(IMAGES)/rgb_small.png 4 1 1 0 $(BIN)/out_small.png" ../../bin/HalideTraceViz $@
+
+viz_auto: $(BIN)/viz_auto.mp4
+	mplayer $^
