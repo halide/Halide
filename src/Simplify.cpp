@@ -1,29 +1,8 @@
-#include <iostream>
-#include <algorithm>
-#include <cmath>
-#include <limits>
-#include <stdio.h>
-
 #include "Simplify.h"
 #include "Simplify_Internal.h"
 
-#include "IROperator.h"
-#include "IREquality.h"
-#include "IRPrinter.h"
 #include "IRMutator.h"
-#include "Scope.h"
-#include "Var.h"
-#include "Debug.h"
-#include "ModulusRemainder.h"
 #include "Substitute.h"
-#include "Bounds.h"
-#include "Deinterleave.h"
-#include "ExprUsesVar.h"
-#include "IRMatch.h"
-
-#ifdef _MSC_VER
-#define snprintf _snprintf
-#endif
 
 namespace Halide {
 namespace Internal {
