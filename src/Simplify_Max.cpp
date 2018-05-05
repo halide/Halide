@@ -91,93 +91,97 @@ namespace Internal {
 
             if (EVAL_IN_LAMBDA
                 (rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
-                rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
-                rewrite(max(max(x, y), max(x, z)), max(max(y, z), x)) ||
-                rewrite(max(max(y, x), max(x, z)), max(max(y, z), x)) ||
-                rewrite(max(max(x, y), max(z, x)), max(max(y, z), x)) ||
-                rewrite(max(max(y, x), max(z, x)), max(max(y, z), x)) ||
-                rewrite(max(max(x, y), max(z, w)), max(max(max(x, y), z), w)) ||
-                rewrite(max(broadcast(x), broadcast(y)), broadcast(max(x, y), lanes)) ||
-                rewrite(max(broadcast(x), ramp(y, z)), max(b, a)) ||
-                rewrite(max(max(x, broadcast(y)), broadcast(z)), max(x, broadcast(max(y, z), lanes))) ||
-                rewrite(max(min(x, y), min(x, z)), min(x, max(y, z))) ||
-                rewrite(max(min(x, y), min(z, x)), min(x, max(y, z))) ||
-                rewrite(max(min(y, x), min(x, z)), min(max(y, z), x)) ||
-                rewrite(max(min(y, x), min(z, x)), min(max(y, z), x)) ||
-                rewrite(max(min(max(x, y), z), y), max(min(x, z), y)) ||
-                rewrite(max(min(max(y, x), z), y), max(y, min(x, z))) ||
-                rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
+                 rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
+                 rewrite(max(max(x, y), max(x, z)), max(max(y, z), x)) ||
+                 rewrite(max(max(y, x), max(x, z)), max(max(y, z), x)) ||
+                 rewrite(max(max(x, y), max(z, x)), max(max(y, z), x)) ||
+                 rewrite(max(max(y, x), max(z, x)), max(max(y, z), x)) ||
+                 rewrite(max(max(x, y), max(z, w)), max(max(max(x, y), z), w)) ||
+                 rewrite(max(broadcast(x), broadcast(y)), broadcast(max(x, y), lanes)) ||
+                 rewrite(max(broadcast(x), ramp(y, z)), max(b, a)) ||
+                 rewrite(max(max(x, broadcast(y)), broadcast(z)), max(x, broadcast(max(y, z), lanes))) ||
+                 rewrite(max(min(x, y), min(x, z)), min(x, max(y, z))) ||
+                 rewrite(max(min(x, y), min(z, x)), min(x, max(y, z))) ||
+                 rewrite(max(min(y, x), min(x, z)), min(max(y, z), x)) ||
+                 rewrite(max(min(y, x), min(z, x)), min(max(y, z), x)) ||
+                 rewrite(max(min(max(x, y), z), y), max(min(x, z), y)) ||
+                 rewrite(max(min(max(y, x), z), y), max(y, min(x, z))) ||
+                 rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
 
-                (no_overflow(op->type) &&
-                 (rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
+                 (no_overflow(op->type) &&
+                  (rewrite(max(x + c0, c1), max(x, fold(c1 - c0)) + c0) ||
 
-                  rewrite(max(x + c0, y + c1), max(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
-                  rewrite(max(x + c0, y + c1), max(x + fold(c0 - c1), y) + c1, c0 > c1) ||
+                   rewrite(max(x + c0, y + c1), max(x, y + fold(c1 - c0)) + c0, c1 > c0) ||
+                   rewrite(max(x + c0, y + c1), max(x + fold(c0 - c1), y) + c1, c0 > c1) ||
 
-                  rewrite(max(x + y, x + z), x + max(y, z)) ||
-                  rewrite(max(x + y, z + x), x + max(y, z)) ||
-                  rewrite(max(y + x, x + z), max(y, z) + x) ||
-                  rewrite(max(y + x, z + x), max(y, z) + x) ||
-                  rewrite(max(x, x + z), x + max(z, 0)) ||
-                  rewrite(max(x, z + x), x + max(z, 0)) ||
-                  rewrite(max(y + x, x), max(y, 0) + x) ||
-                  rewrite(max(x + y, x), x + max(y, 0)) ||
+                   rewrite(max(x + y, x + z), x + max(y, z)) ||
+                   rewrite(max(x + y, z + x), x + max(y, z)) ||
+                   rewrite(max(y + x, x + z), max(y, z) + x) ||
+                   rewrite(max(y + x, z + x), max(y, z) + x) ||
+                   rewrite(max(x, x + z), x + max(z, 0)) ||
+                   rewrite(max(x, z + x), x + max(z, 0)) ||
+                   rewrite(max(y + x, x), max(y, 0) + x) ||
+                   rewrite(max(x + y, x), x + max(y, 0)) ||
 
-                  rewrite(max(max(x + y, z), x + w), max(x + max(y, w), z)) ||
-                  rewrite(max(max(z, x + y), x + w), max(x + max(y, w), z)) ||
-                  rewrite(max(max(x + y, z), w + x), max(x + max(y, w), z)) ||
-                  rewrite(max(max(z, x + y), w + x), max(x + max(y, w), z)) ||
+                   rewrite(max(max(x + y, z), x + w), max(x + max(y, w), z)) ||
+                   rewrite(max(max(z, x + y), x + w), max(x + max(y, w), z)) ||
+                   rewrite(max(max(x + y, z), w + x), max(x + max(y, w), z)) ||
+                   rewrite(max(max(z, x + y), w + x), max(x + max(y, w), z)) ||
 
-                  rewrite(max(max(y + x, z), x + w), max(max(y, w) + x, z)) ||
-                  rewrite(max(max(z, y + x), x + w), max(max(y, w) + x, z)) ||
-                  rewrite(max(max(y + x, z), w + x), max(max(y, w) + x, z)) ||
-                  rewrite(max(max(z, y + x), w + x), max(max(y, w) + x, z)) ||
+                   rewrite(max(max(y + x, z), x + w), max(max(y, w) + x, z)) ||
+                   rewrite(max(max(z, y + x), x + w), max(max(y, w) + x, z)) ||
+                   rewrite(max(max(y + x, z), w + x), max(max(y, w) + x, z)) ||
+                   rewrite(max(max(z, y + x), w + x), max(max(y, w) + x, z)) ||
 
-                  rewrite(max((x + w) + y, x + z), x + max(w + y, z)) ||
-                  rewrite(max((w + x) + y, x + z), max(w + y, z) + x) ||
-                  rewrite(max((x + w) + y, z + x), x + max(w + y, z)) ||
-                  rewrite(max((w + x) + y, z + x), max(w + y, z) + x) ||
-                  rewrite(max((x + w) + y, x), x + max(w + y, 0)) ||
-                  rewrite(max((w + x) + y, x), x + max(w + y, 0)) ||
-                  rewrite(max(x + y, (w + x) + z), x + max(w + z, y)) ||
-                  rewrite(max(x + y, (x + w) + z), x + max(w + z, y)) ||
-                  rewrite(max(y + x, (w + x) + z), max(w + z, y) + x) ||
-                  rewrite(max(y + x, (x + w) + z), max(w + z, y) + x) ||
-                  rewrite(max(x, (w + x) + z), x + max(w + z, 0)) ||
-                  rewrite(max(x, (x + w) + z), x + max(w + z, 0)) ||
+                   rewrite(max((x + w) + y, x + z), x + max(w + y, z)) ||
+                   rewrite(max((w + x) + y, x + z), max(w + y, z) + x) ||
+                   rewrite(max((x + w) + y, z + x), x + max(w + y, z)) ||
+                   rewrite(max((w + x) + y, z + x), max(w + y, z) + x) ||
+                   rewrite(max((x + w) + y, x), x + max(w + y, 0)) ||
+                   rewrite(max((w + x) + y, x), x + max(w + y, 0)) ||
+                   rewrite(max(x + y, (w + x) + z), x + max(w + z, y)) ||
+                   rewrite(max(x + y, (x + w) + z), x + max(w + z, y)) ||
+                   rewrite(max(y + x, (w + x) + z), max(w + z, y) + x) ||
+                   rewrite(max(y + x, (x + w) + z), max(w + z, y) + x) ||
+                   rewrite(max(x, (w + x) + z), x + max(w + z, 0)) ||
+                   rewrite(max(x, (x + w) + z), x + max(w + z, 0)) ||
 
-                  rewrite(max(y - x, z - x), max(y, z) - x) ||
-                  rewrite(max(x - y, x - z), x - min(y, z)) ||
+                   rewrite(max(y - x, z - x), max(y, z) - x) ||
+                   rewrite(max(x - y, x - z), x - min(y, z)) ||
 
-                  rewrite(max(x, x - y), x - min(0, y)) ||
-                  rewrite(max(x - y, x), x - min(0, y)) ||
-                  rewrite(max(x, (x - y) + z), x + max(0, z - y)) ||
-                  rewrite(max(x, z + (x - y)), x + max(0, z - y)) ||
-                  rewrite(max(x, (x - y) - z), x - min(0, y + z)) ||
-                  rewrite(max((x - y) + z, x), max(0, z - y) + x) ||
-                  rewrite(max(z + (x - y), x), max(0, z - y) + x) ||
-                  rewrite(max((x - y) - z, x), x - min(0, y + z)) ||
+                   rewrite(max(x, x - y), x - min(0, y)) ||
+                   rewrite(max(x - y, x), x - min(0, y)) ||
+                   rewrite(max(x, (x - y) + z), x + max(0, z - y)) ||
+                   rewrite(max(x, z + (x - y)), x + max(0, z - y)) ||
+                   rewrite(max(x, (x - y) - z), x - min(0, y + z)) ||
+                   rewrite(max((x - y) + z, x), max(0, z - y) + x) ||
+                   rewrite(max(z + (x - y), x), max(0, z - y) + x) ||
+                   rewrite(max((x - y) - z, x), x - min(0, y + z)) ||
 
-                  rewrite(max(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
-                  rewrite(max(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
+                   rewrite(max(x * c0, c1), max(x, fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
+                   rewrite(max(x * c0, c1), min(x, fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 
-                  rewrite(max(x * c0, y * c1), max(x, y * fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
-                  rewrite(max(x * c0, y * c1), min(x, y * fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
-                  rewrite(max(x * c0, y * c1), max(x * fold(c0 / c1), y) * c1, c1 > 0 && c0 % c1 == 0) ||
-                  rewrite(max(x * c0, y * c1), min(x * fold(c0 / c1), y) * c1, c1 < 0 && c0 % c1 == 0) ||
-                  rewrite(max(x * c0, y * c0 + c1), max(x, y + fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
-                  rewrite(max(x * c0, y * c0 + c1), min(x, y + fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
+                   rewrite(max(x * c0, y * c1), max(x, y * fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
+                   rewrite(max(x * c0, y * c1), min(x, y * fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
+                   rewrite(max(x * c0, y * c1), max(x * fold(c0 / c1), y) * c1, c1 > 0 && c0 % c1 == 0) ||
+                   rewrite(max(x * c0, y * c1), min(x * fold(c0 / c1), y) * c1, c1 < 0 && c0 % c1 == 0) ||
+                   rewrite(max(x * c0, y * c0 + c1), max(x, y + fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
+                   rewrite(max(x * c0, y * c0 + c1), min(x, y + fold(c1 / c0)) * c0, c0 < 0 && c1 % c0 == 0) ||
 
-                  rewrite(max(x / c0, y / c0), max(x, y) / c0, c0 > 0) ||
-                  rewrite(max(x / c0, y / c0), min(x, y) / c0, c0 < 0) ||
-                  rewrite(max(x / c0, c1), max(x, fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
-                  rewrite(max(x / c0, c1), min(x, fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
-                  rewrite(max(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
-                  rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
+                   rewrite(max(x / c0, y / c0), max(x, y) / c0, c0 > 0) ||
+                   rewrite(max(x / c0, y / c0), min(x, y) / c0, c0 < 0) ||
+                  
+                   /* Causes some things to cancel, but also creates large constants and breaks peephole patterns
+                      rewrite(max(x / c0, c1), max(x, fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
+                      rewrite(max(x / c0, c1), min(x, fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
+                   */
 
-                  rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
+                   rewrite(max(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
+                   rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
+                   
+                   rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
 
-                  rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
+                   rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 
                 return mutate(std::move(rewrite.result), bounds);
             }

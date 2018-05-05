@@ -308,26 +308,6 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-    // Catch saturating i32/64 narrowings converted to another form by
-    // the simplifier.
-    if (op->value.type().is_int() && op->value.type().bits() >= 32) {
-        IRMatcher::Wild<0> x;
-        IRMatcher::WildConst<0> c0;
-        IRMatcher::WildConst<1> c1;
-        IRMatcher::WildConst<2> c2;
-        IRMatcher::WildConst<3> c3;
-        auto rewrite = IRMatcher::rewriter(op->value);
-        if (rewrite(max(min(x, c0), c1)/c2,
-                    max(min(x/c2, fold(c0/c2)), fold(c1/c2)),
-                    c0 % c2 == 0 && c1 % c2 == 0) ||
-            rewrite((max(min(x, c0), c1) + c3) / c2,
-                    max(min((x + c3)/c2, fold((c0 + c3)/c2)), fold((c1 + c3)/c2)),
-                    (c0 + c3) % c2 == 0 && (c1 + c3) % c2 == 0)) {
-            codegen(cast(t, rewrite.result));
-            return;
-        }
-    }
-
     // Catch extract-high-half-of-signed integer pattern and convert
     // it to extract-high-half-of-unsigned-integer. llvm peephole
     // optimization recognizes logical shift right but not arithemtic

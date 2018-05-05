@@ -271,37 +271,28 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               rewrite((x + c1)/c0 < x/c0, true, c0 > 0 && c1 <= 0 - c0) ||
 
               // With a confounding max or min
-              rewrite((x + c1)/c0 < (min(x, y) + c2)/c0, false, c0 > 0 && c1 >= c2) ||
-              rewrite((x + c1)/c0 < (max(x, y) + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
-              rewrite(x/c0 < (min(x, y) + c2)/c0, false, c0 > 0 && 0 >= c2) ||
-              rewrite(x/c0 < (max(x, y) + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
-              rewrite((x + c1)/c0 < min(x, y)/c0, false, c0 > 0 && c1 >= 0) ||
-              rewrite((x + c1)/c0 < max(x, y)/c0, true, c0 > 0 && c1 <= 0 - c0) ||
-              rewrite(x/c0 < min(x, y)/c0, false, c0 > 0) ||
+              rewrite((x + c1)/c0 < (min(x/c0, y) + c2), false, c0 > 0 && c1 >= c2 * c0) ||
+              rewrite((x + c1)/c0 < (max(x/c0, y) + c2), true, c0 > 0 && c1 <= c2 * c0 - c0) ||
+              rewrite((x + c1)/c0 < min((x + c2)/c0, y), false, c0 > 0 && c1 >= c2) ||
+              rewrite((x + c1)/c0 < max((x + c2)/c0, y), true, c0 > 0 && c1 <= c2 - c0) ||
+              rewrite((x + c1)/c0 < min(x/c0, y), false, c0 > 0 && c1 >= 0) ||
+              rewrite((x + c1)/c0 < max(x/c0, y), true, c0 > 0 && c1 <= 0 - c0) ||
 
-              rewrite((x + c1)/c0 < (min(y, x) + c2)/c0, false, c0 > 0 && c1 >= c2) ||
-              rewrite((x + c1)/c0 < (max(y, x) + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
-              rewrite(x/c0 < (min(y, x) + c2)/c0, false, c0 > 0 && 0 >= c2) ||
-              rewrite(x/c0 < (max(y, x) + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
-              rewrite((x + c1)/c0 < min(y, x)/c0, false, c0 > 0 && c1 >= 0) ||
-              rewrite((x + c1)/c0 < max(y, x)/c0, true, c0 > 0 && c1 <= 0 - c0) ||
-              rewrite(x/c0 < min(y, x)/c0, false, c0 > 0) ||
+              rewrite((x + c1)/c0 < (min(y, x/c0) + c2), false, c0 > 0 && c1 >= c2 * c0) ||
+              rewrite((x + c1)/c0 < (max(y, x/c0) + c2), true, c0 > 0 && c1 <= c2 * c0 - c0) ||
+              rewrite((x + c1)/c0 < min(y, (x + c2)/c0), false, c0 > 0 && c1 >= c2) ||
+              rewrite((x + c1)/c0 < max(y, (x + c2)/c0), true, c0 > 0 && c1 <= c2 - c0) ||
+              rewrite((x + c1)/c0 < min(y, x/c0), false, c0 > 0 && c1 >= 0) ||
+              rewrite((x + c1)/c0 < max(y, x/c0), true, c0 > 0 && c1 <= 0 - c0) ||
 
-              rewrite((max(x, y) + c1)/c0 < (x + c2)/c0, false, c0 > 0 && c1 >= c2) ||
-              rewrite((min(x, y) + c1)/c0 < (x + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
-              rewrite(max(x, y)/c0 < (x + c2)/c0, false, c0 > 0 && 0 >= c2) ||
-              rewrite(min(x, y)/c0 < (x + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
-              rewrite((max(x, y) + c1)/c0 < x/c0, false, c0 > 0 && c1 >= 0) ||
-              rewrite((min(x, y) + c1)/c0 < x/c0, true, c0 > 0 && c1 <= 0 - c0) ||
-              rewrite(max(x, y)/c0 < x/c0, false, c0 > 0) ||
-
-              rewrite((max(y, x) + c1)/c0 < (x + c2)/c0, false, c0 > 0 && c1 >= c2) ||
-              rewrite((min(y, x) + c1)/c0 < (x + c2)/c0, true, c0 > 0 && c1 <= c2 - c0) ||
-              rewrite(max(y, x)/c0 < (x + c2)/c0, false, c0 > 0 && 0 >= c2) ||
-              rewrite(min(y, x)/c0 < (x + c2)/c0, true, c0 > 0 && 0 <= c2 - c0) ||
-              rewrite((max(y, x) + c1)/c0 < x/c0, false, c0 > 0 && c1 >= 0) ||
-              rewrite((min(y, x) + c1)/c0 < x/c0, true, c0 > 0 && c1 <= 0 - c0) ||
-              rewrite(max(y, x)/c0 < x/c0, false, c0 > 0) ||
+              rewrite(max((x + c2)/c0, y) < (x + c1)/c0, false, c0 > 0 && c2 >= c1) ||
+              rewrite(min((x + c2)/c0, y) < (x + c1)/c0, true, c0 > 0 && c2 <= c1 - c0) ||
+              rewrite(max(x/c0, y) < (x + c1)/c0, false, c0 > 0 && 0 >= c1) ||
+              rewrite(min(x/c0, y) < (x + c1)/c0, true, c0 > 0 && 0 <= c1 - c0) ||
+              rewrite(max(y, (x + c2)/c0) < (x + c1)/c0, false, c0 > 0 && c2 >= c1) ||
+              rewrite(min(y, (x + c2)/c0) < (x + c1)/c0, true, c0 > 0 && c2 <= c1 - c0) ||
+              rewrite(max(y, x/c0) < (x + c1)/c0, false, c0 > 0 && 0 >= c1) ||
+              rewrite(min(y, x/c0) < (x + c1)/c0, true, c0 > 0 && 0 <= c1 - c0) ||
 
               // Comparison of aligned ramps can simplify to a comparison of the base
               rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),

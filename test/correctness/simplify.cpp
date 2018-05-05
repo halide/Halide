@@ -1438,7 +1438,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 100; i++) {
             e = max(e, 1)/2;
         }
-        check(e, (max((max((max((max(x, 1073741824)/1073741824), 1073741824)/1073741824), 1073741824)/1073741824), 512)/1024));
+        check(e, e);
     }
 
     // This expression used to cause infinite recursion.
