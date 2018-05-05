@@ -2121,7 +2121,7 @@ void bounds_test() {
     check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
     check(scope, Select::make(x < 4, x, x+100), 0, 110);
     check(scope, x+y, y, y+10);
-    check(scope, x*y, select(y < 0, y*10, 0), select(y < 0, 0, y*10));
+    check(scope, x*y, min(y, 0)*10, max(y, 0)*10);
     check(scope, x/(x+y), Interval::neg_inf, Interval::pos_inf);
     check(scope, 11/(x+1), 1, 11);
     check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()),
