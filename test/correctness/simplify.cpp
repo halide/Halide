@@ -252,8 +252,7 @@ void check_algebra() {
     check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
 
     // Pull out the gcd of the numerator and divisor
-    check((x * 12 + 5) / 9, (x * 4 + 1) / 3);
-    check((x * 12 + 19) / 9, (x * 4) / 3 + 2);
+    check((x * 3 + 5) / 9, (x + 1) / 3);
 
     // Cancellations in non-const integer divisions
     check((x*y)/x, y);

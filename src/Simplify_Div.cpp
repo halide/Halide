@@ -119,11 +119,12 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
              (no_overflow_scalar_int(op->type) &&
               (rewrite(x / -1, -x) ||
                rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1) ||
-               // In expressions of the form (x*a + b)/c, we can divide all the constants by gcd(a, c)
-               // E.g. (y*12 + 5)/9 = (y*4 + 2)/3
                rewrite((x * c0 + c1) / c2,
-                       (x * fold(c0 / c3) + fold(c1 / c3)) / fold(c2 / c3),
-                       c2 > 0 && bind(c3, gcd(c0, c2)) && c3 > 1) ||
+                       (x + fold(c1 / c0)) / fold(c2 / c0),
+                       c2 > 0 && c0 > 0 && c2 % c0 == 0) ||
+               rewrite((x * c0 + c1) / c2,
+                       x * fold(c0 / c2) + fold(c1 / c2),
+                       c2 > 0 && c0 % c2 == 0) ||
                // A very specific pattern that comes up in bounds in upsampling code.
                rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
             return mutate(std::move(rewrite.result), bounds);

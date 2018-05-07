@@ -2140,87 +2140,6 @@ std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
     return s;
 }
 
-template<typename A, typename B>
-struct GCD {
-    struct pattern_tag {};
-    A a;
-    B b;
-
-    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
-
-    constexpr static bool foldable = A::foldable && B::foldable;
-
-    HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
-        halide_scalar_value_t val_a, val_b;
-        a.make_folded_const(val_a, ty, state);
-        b.make_folded_const(val_b, ty, state);
-        internal_assert(ty.code == halide_type_int && ty.bits >= 32);
-        val.u.i64 = Halide::Internal::gcd(val_a.u.i64, val_b.u.i64);
-    };
-
-
-    constexpr static bool typed = A::typed || B::typed;
-
-    HALIDE_ALWAYS_INLINE
-    halide_type_t type() const {
-        if (A::typed) {
-            return a.type();
-        }
-        return b.type();
-    }
-};
-
-template<typename A, typename B>
-HALIDE_ALWAYS_INLINE
-auto gcd(A a, B b) noexcept -> GCD<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
-}
-
-template<typename A, typename B>
-std::ostream &operator<<(std::ostream &s, const GCD<A, B> &op) {
-    s << "gcd(" << op.a << ", " << op.b << ")";
-    return s;
-}
-
-template<int i, typename A>
-struct Bind {
-    struct pattern_tag {};
-    A a;
-
-    constexpr static uint32_t binds = bindings<A>::mask | (1 << i);
-
-    constexpr static bool foldable = A::foldable;
-
-    HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
-        a.make_folded_const(val, ty, state);
-        state.set_bound_const(i, val, ty);
-        // The bind node evaluates to true
-        val.u.u64 = 1;
-        ty = halide_type_of<bool>();
-    };
-
-    constexpr static bool typed = A::typed;
-
-    HALIDE_ALWAYS_INLINE
-    halide_type_t type() const {
-        return a.type();
-    }
-};
-
-template<int i, typename A>
-HALIDE_ALWAYS_INLINE
-auto bind(WildConst<i> c, A a) noexcept -> Bind<i, decltype(pattern_arg(a))> {
-    return {pattern_arg(a)};
-}
-
-template<int i, typename A>
-std::ostream &operator<<(std::ostream &s, const Bind<i, A> &op) {
-    s << "bind(_" << i << " = " << op.a << ")";
-    return s;
-}
-
 // Verify properties of each rewrite rule. Currently just fuzz tests them.
 template<typename Before,
          typename After,
@@ -2476,7 +2395,8 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, After after, Predicate pred) {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
-        static_assert(((Before::binds | Predicate::binds) & After::binds) == After::binds, "Rule result uses unbound values");
+        static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
+        static_assert((Before::binds & Predicate::binds) == Predicate::binds, "Rule predicate uses unbound values");        
         #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, pred, wildcard_type, output_type);
         #endif
