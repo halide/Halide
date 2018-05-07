@@ -1686,7 +1686,7 @@ struct NegateOp {
         int dead_bits = 64 - ty.bits;
         switch (ty.code) {
         case halide_type_int:
-            if (ty.bits >= 32 && val.u.i64 && !(val.u.i64 << (65 - ty.bits))) {
+            if (ty.bits >= 32 && val.u.i64 && (val.u.i64 << (65 - ty.bits)) == 0) {
                 // Trying to negate the most negative signed int for a no-overflow type.
                 ty.lanes |= MatcherState::signed_integer_overflow;
             } else {
