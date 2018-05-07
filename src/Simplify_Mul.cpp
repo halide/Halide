@@ -6,8 +6,6 @@ namespace Internal {
 // TODO: The fuzzer with seed 1525455315 causes an infinite loop somewhere in here
 
 Expr Simplify::visit(const Mul *op, ConstBounds *bounds) {
-    debug(0) << Expr(op) << "\n";
-
     ConstBounds a_bounds, b_bounds;
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
