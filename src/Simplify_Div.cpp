@@ -36,7 +36,11 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type);
 
-        if (rewrite(x / 1, x) ||
+        if (rewrite(IRMatcher::Indeterminate() / x, a) ||
+            rewrite(x / IRMatcher::Indeterminate(), b) ||
+            rewrite(IRMatcher::Overflow() / x, a) ||
+            rewrite(x / IRMatcher::Overflow(), b) ||
+            rewrite(x / 1, x) ||
             (!op->type.is_float() &&
              rewrite(x / 0, IRMatcher::Indeterminate())) ||
             rewrite(0 / x, 0) ||

@@ -45,6 +45,10 @@ Expr Simplify::visit(const Mul *op, ConstBounds *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
         if (rewrite(c0 * c1, fold(c0 * c1)) ||
+            rewrite(IRMatcher::Indeterminate() * x, a) ||
+            rewrite(x * IRMatcher::Indeterminate(), b) ||
+            rewrite(IRMatcher::Overflow() * x, a) ||
+            rewrite(x * IRMatcher::Overflow(), b) ||
             rewrite(0 * x, 0) ||
             rewrite(1 * x, x) ||
             rewrite(x * 0, 0) ||
