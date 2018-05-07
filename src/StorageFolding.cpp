@@ -345,10 +345,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr loop_var = Variable::make(Int(32), op->name);
             Expr steady_state = (op->min < loop_var);
 
-            Expr min_steady = simplify(substitute(steady_state, const_true(), min), true, bounds);
-            Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, bounds);
-            Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, steady_bounds);
-            Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, steady_bounds);
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min), true, steady_bounds);
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, steady_bounds);
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, bounds);
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, bounds);
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
