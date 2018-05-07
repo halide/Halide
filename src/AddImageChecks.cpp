@@ -86,6 +86,10 @@ public:
             r.dimensions = op->param.dimensions();
             r.used_on_host = false;
             buffers[op->param.name()] = r;
+        } else if (op->reduction_domain.defined()) {
+            // The bounds of reduction domains are not yet defined,
+            // and they may be the only reference to some parameters.
+            op->reduction_domain.accept(this);
         }
     }
 };
@@ -122,9 +126,6 @@ Stmt add_image_checks(Stmt s,
     // Add the input buffer(s) and annotate which output buffers are
     // used on host.
     s.accept(&finder);
-    for (auto p : env) {
-        p.second.accept(&finder);
-    }
 
     Scope<Interval> empty_scope;
     map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
