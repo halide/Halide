@@ -86,6 +86,10 @@ public:
             r.dimensions = op->param.dimensions();
             r.used_on_host = false;
             buffers[op->param.name()] = r;
+        } else if (op->reduction_domain.defined()) {
+            // The bounds of reduction domains are not yet defined,
+            // and they may be the only reference to some parameters.
+            op->reduction_domain.accept(this);
         }
     }
 };

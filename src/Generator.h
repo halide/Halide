@@ -285,7 +285,7 @@ public:
 std::vector<Expr> parameter_constraints(const Parameter &p);
 
 template <typename T>
-NO_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T& t) {
+HALIDE_NO_USER_CODE_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T& t) {
     for (auto key_value : enum_map) {
         if (t == key_value.second) {
             return key_value.first;
@@ -804,7 +804,7 @@ public:
 
         // TODO: since we generate the enums, we could probably just use a vector (or array!) rather than a map,
         // since we can ensure that the enum values are a nice tight range.
-        oss << "inline NO_INLINE const std::map<Enum_" << this->name << ", std::string>& Enum_" << this->name << "_map() {\n";
+        oss << "inline HALIDE_NO_USER_CODE_INLINE const std::map<Enum_" << this->name << ", std::string>& Enum_" << this->name << "_map() {\n";
         oss << "  static const std::map<Enum_" << this->name << ", std::string> m = {\n";
         for (auto key_value : enum_map) {
             oss << "    { Enum_" << this->name << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
@@ -1095,7 +1095,7 @@ class StubInputBuffer {
 
     Parameter parameter_;
 
-    NO_INLINE explicit StubInputBuffer(const Parameter &p) : parameter_(p) {
+    HALIDE_NO_USER_CODE_INLINE explicit StubInputBuffer(const Parameter &p) : parameter_(p) {
         // Create an empty 1-element buffer with the right runtime typing and dimensions,
         // which we'll use only to pass to can_convert_from() to verify this
         // Parameter is compatible with our constraints.
@@ -1104,7 +1104,7 @@ class StubInputBuffer {
     }
 
     template<typename T2>
-    NO_INLINE static Parameter parameter_from_buffer(const Buffer<T2> &b) {
+    HALIDE_NO_USER_CODE_INLINE static Parameter parameter_from_buffer(const Buffer<T2> &b) {
         user_assert((Buffer<T>::can_convert_from(b)));
         Parameter p(b.type(), true, b.dimensions());
         p.set_buffer(b);
@@ -1241,11 +1241,13 @@ public:
     IOKind kind() const;
 
     bool types_defined() const;
-    const std::vector<Type> &types() const;
-    Type type() const;
+    // non-const because Type may be lazily updated if initially unspecified
+    const std::vector<Type> &types();
+    Type type();
 
     bool dims_defined() const;
-    int dims() const;
+    // non-const because Type may be lazily updated if initially unspecified
+    int dims();
 
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
@@ -1281,15 +1283,18 @@ protected:
 
     std::string array_name(size_t i) const;
 
-    virtual void verify_internals() const;
+    virtual void verify_internals();
 
     void check_matching_array_size(size_t size);
-    void check_matching_type_and_dim(const std::vector<Type> &t, int d);
+    void check_matching_types(const std::vector<Type> &t);
+    void check_matching_dims(int d);
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
 
     virtual void check_value_writable() const = 0;
+
+    virtual const char *input_or_output() const = 0;
 
 private:
     template<typename T> friend class GeneratorParam_Synthetic;
@@ -1335,13 +1340,15 @@ protected:
 
     virtual void set_def_min_max();
 
-    void verify_internals() const override;
+    void verify_internals() override;
 
     friend class StubEmitter;
 
     virtual std::string get_c_type() const = 0;
 
     void check_value_writable() const override;
+
+    const char *input_or_output() const override { return "Input"; }
 
     void estimate_impl(Var var, Expr min, Expr extent);
 };
@@ -1524,12 +1531,12 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    const ImageParam operator[](size_t i) const {
+    ImageParam operator[](size_t i) const {
         return ImageParam(this->parameters_.at(i), this->funcs().at(i));
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    const ImageParam at(size_t i) const {
+    ImageParam at(size_t i) const {
         return ImageParam(this->parameters_.at(i), this->funcs().at(i));
     }
 
@@ -1559,6 +1566,8 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, width)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, height)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
     // }@
 };
 
@@ -1871,7 +1880,7 @@ namespace Internal {
 class GeneratorOutputBase : public GIOBase {
 protected:
     template<typename T2, typename std::enable_if<std::is_same<T2, Func>::value>::type * = nullptr>
-    NO_INLINE T2 as() const {
+    HALIDE_NO_USER_CODE_INLINE T2 as() const {
         static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
         internal_assert(kind() != IOKind::Scalar);
         internal_assert(exprs_.empty());
@@ -1882,6 +1891,7 @@ protected:
 public:
     /** Forward schedule-related methods to the underlying Func. */
     // @{
+    HALIDE_FORWARD_METHOD(Func, add_trace_tag)
     HALIDE_FORWARD_METHOD(Func, align_bounds)
     HALIDE_FORWARD_METHOD(Func, align_storage)
     HALIDE_FORWARD_METHOD_CONST(Func, args)
@@ -1963,6 +1973,8 @@ protected:
     }
 
     void check_value_writable() const override;
+
+    const char *input_or_output() const override { return "Output"; }
 };
 
 template<typename T>
@@ -2059,7 +2071,7 @@ class GeneratorOutput_Buffer : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
 
-    NO_INLINE void assign_from_func(const Func &f) {
+    HALIDE_NO_USER_CODE_INLINE void assign_from_func(const Func &f) {
         this->check_value_writable();
 
         internal_assert(f.defined());
@@ -2105,7 +2117,7 @@ protected:
         user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
     }
 
-    NO_INLINE std::string get_c_type() const override {
+    HALIDE_NO_USER_CODE_INLINE std::string get_c_type() const override {
         if (TBase::has_static_halide_type) {
             return "Halide::Internal::StubOutputBuffer<" +
                 halide_type_to_c_type(TBase::static_halide_type()) +
@@ -2116,7 +2128,7 @@ protected:
     }
 
     template<typename T2, typename std::enable_if<!std::is_same<T2, Func>::value>::type * = nullptr>
-    NO_INLINE T2 as() const {
+    HALIDE_NO_USER_CODE_INLINE T2 as() const {
         return (T2) *this;
     }
 
@@ -2129,7 +2141,7 @@ public:
     // using it in a Pipeline might change the dev field so it is currently
     // not considered const. We should consider how this really ought to work.
     template<typename T2>
-    NO_INLINE GeneratorOutput_Buffer<T> &operator=(Buffer<T2> &buffer) {
+    HALIDE_NO_USER_CODE_INLINE GeneratorOutput_Buffer<T> &operator=(Buffer<T2> &buffer) {
         this->check_value_writable();
 
         user_assert(T::can_convert_from(buffer))
@@ -2198,7 +2210,7 @@ class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
 
-    NO_INLINE Func &get_assignable_func_ref(size_t i) {
+    HALIDE_NO_USER_CODE_INLINE Func &get_assignable_func_ref(size_t i) {
         internal_assert(this->exprs_.empty() && this->funcs_.size() > i);
         return this->funcs_.at(i);
     }
@@ -2359,12 +2371,19 @@ T parse_scalar(const std::string &value) {
 
 std::vector<Type> parse_halide_type_list(const std::string &types);
 
+enum class SyntheticParamType { Type, Dim, ArraySize };
+
 // This is a type of GeneratorParam used internally to create 'synthetic' params
 // (e.g. image.type, image.dim); it is not possible for user code to instantiate it.
 template<typename T>
 class GeneratorParam_Synthetic : public GeneratorParamImpl<T> {
 public:
     void set_from_string(const std::string &new_value_string) override {
+        // If error_msg is not empty, this is unsettable:
+        // display error_msg as a user error.
+        if (!error_msg.empty()) {
+            user_error << error_msg;
+        }
         set_from_string_impl<T>(new_value_string);
     }
 
@@ -2390,20 +2409,34 @@ public:
 private:
     friend class GeneratorBase;
 
-    enum Which { Type, Dim, ArraySize };
-    GeneratorParam_Synthetic(const std::string &name, GIOBase &gio, Which which) : GeneratorParamImpl<T>(name, T()), gio(gio), which(which) {}
+    static std::unique_ptr<Internal::GeneratorParamBase> make(
+        GeneratorBase *generator,
+        const std::string &generator_name,
+        const std::string &gpname,
+        GIOBase &gio,
+        SyntheticParamType which,
+        bool defined
+    ) {
+        std::string error_msg = defined ?
+            "Cannot set the GeneratorParam " + gpname + " for " + generator_name + " because the value is explicitly specified in the C++ source." :
+            "";
+        return std::unique_ptr<GeneratorParam_Synthetic<T>>(
+            new GeneratorParam_Synthetic<T>(gpname, gio, which, error_msg));
+    }
+
+    GeneratorParam_Synthetic(const std::string &name, GIOBase &gio, SyntheticParamType which, const std::string &error_msg = "") : GeneratorParamImpl<T>(name, T()), gio(gio), which(which), error_msg(error_msg) {}
 
     template <typename T2 = T, typename std::enable_if<std::is_same<T2, ::Halide::Type>::value>::type * = nullptr>
     void set_from_string_impl(const std::string &new_value_string) {
-        internal_assert(which == Type);
+        internal_assert(which == SyntheticParamType::Type);
         gio.types_ = parse_halide_type_list(new_value_string);
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_integral<T2>::value>::type * = nullptr>
     void set_from_string_impl(const std::string &new_value_string) {
-        if (which == Dim) {
+        if (which == SyntheticParamType::Dim) {
             gio.dims_ = parse_scalar<T2>(new_value_string);
-        } else if (which == ArraySize) {
+        } else if (which == SyntheticParamType::ArraySize) {
             gio.array_size_ = parse_scalar<T2>(new_value_string);
         } else {
             internal_error;
@@ -2411,7 +2444,8 @@ private:
     }
 
     GIOBase &gio;
-    const Which which;
+    const SyntheticParamType which;
+    const std::string error_msg;
 };
 
 

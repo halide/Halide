@@ -1,5 +1,5 @@
 include_directories("${CMAKE_BINARY_DIR}/include")
-include_directories("${CMAKE_SOURCE_DIR}/tools")
+include_directories("${HALIDE_TOOLS_DIR}")
 
 if (MSVC)
     # Sample apps, so we can disable some of the more pedantic warnings

@@ -73,7 +73,7 @@ public:
     /** If the parameter is a scalar parameter, get its currently
      * bound value. Only relevant when jitting */
     template<typename T>
-    NO_INLINE T scalar() const {
+    HALIDE_NO_USER_CODE_INLINE T scalar() const {
         // Allow scalar<uint64_t>() for all Handle types
         user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't get Param<" << type()
@@ -88,7 +88,7 @@ public:
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
     template<typename T>
-    NO_INLINE void set_scalar(T val) {
+    HALIDE_NO_USER_CODE_INLINE void set_scalar(T val) {
         // Allow set_scalar<uint64_t>() for all Handle types
         user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't set Param<" << type()
@@ -98,7 +98,7 @@ public:
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
-    NO_INLINE void set_scalar(const Type &val_type, halide_scalar_value_t val) {
+    HALIDE_NO_USER_CODE_INLINE void set_scalar(const Type &val_type, halide_scalar_value_t val) {
         user_assert(type() == val_type || (type().is_handle() && val_type == UInt(64)))
             << "Can't set Param<" << type()
             << "> to scalar of type " << val_type << "\n";
@@ -109,6 +109,9 @@ public:
      * bound buffer. Only relevant when jitting */
     Buffer<> buffer() const;
 
+    /** Get the raw currently-bound buffer. null if unbound */
+    const halide_buffer_t *raw_buffer() const;
+
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
     void set_buffer(Buffer<> b);
@@ -116,7 +119,6 @@ public:
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
      * change. Only relevant when jitting. */
-
     void *scalar_address() const;
 
     /** Tests if this handle is the same as another handle */

@@ -23,8 +23,10 @@ extern "C" {
 // it is not necessary, and may produce warnings for some build configurations.
 #ifdef _MSC_VER
 #define HALIDE_ALWAYS_INLINE __forceinline
+#define HALIDE_NEVER_INLINE __declspec(noinline)
 #else
 #define HALIDE_ALWAYS_INLINE __attribute__((always_inline)) inline
+#define HALIDE_NEVER_INLINE __attribute__((noinline))
 #endif
 
 /** \file
@@ -87,15 +89,11 @@ typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
 
-/** Cross-platform mutex. These are allocated statically inside the
- * runtime, hence the fixed size. They must be initialized with
- * zero. The first time halide_mutex_lock is called, the lock must be
- * initialized in a thread safe manner. This incurs a small overhead
- * for a once mechanism, but makes the lock reliably easy to setup and
- * use without depending on e.g. C++ constructor logic.
+/** Cross-platform mutex. Must be initialized with zero and implementation
+ * must treat zero as an unlocked mutex with no waiters, etc.
  */
 struct halide_mutex {
-    uint64_t _private[8];
+    uintptr_t _private[1];
 };
 
 /** A basic set of mutex and condition variable functions, which call
@@ -107,7 +105,6 @@ struct halide_mutex {
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
-extern void halide_mutex_destroy(struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -325,7 +322,8 @@ enum halide_trace_event_code_t {halide_trace_load = 0,
                                 halide_trace_consume = 6,
                                 halide_trace_end_consume = 7,
                                 halide_trace_begin_pipeline = 8,
-                                halide_trace_end_pipeline = 9};
+                                halide_trace_end_pipeline = 9,
+                                halide_trace_tag = 10 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -348,6 +346,11 @@ struct halide_trace_event_t {
      * For pipeline-related events, this will be null.
      */
     int32_t *coordinates;
+
+    /** For halide_trace_tag, this points to a read-only null-terminated string
+     * of arbitrary text. For all other events, this will be null.
+     */
+    const char *trace_tag;
 
     /** If the event type is a load or a store, this is the type of
      * the data. Otherwise, the value is meaningless. */
@@ -387,6 +390,9 @@ struct halide_trace_event_t {
  * ownership hierarchy looks like:
  *
  * begin_pipeline
+ * +--trace_tag (if any)
+ * +--trace_tag (if any)
+ * ...
  * +--begin_realization
  * |  +--produce
  * |  |  +--load/store
@@ -402,6 +408,10 @@ struct halide_trace_event_t {
  * function, or many active productions for a single
  * realization. Within a single production, the ordering of events is
  * meaningful.
+ *
+ * Note that all trace_tag events (if any) will occur just after the begin_pipeline
+ * event, but before any begin_realization events. All trace_tags for a given Func
+ * will be emitted in the order added.
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
@@ -464,6 +474,27 @@ struct halide_trace_packet_t {
 
     HALIDE_ALWAYS_INLINE char *func() {
         return (char *)value() + type.lanes * type.bytes();
+    }
+
+    /** Get the trace_tag (if any), assuming this packet is laid out in memory
+     * as it was written. It comes after the func name. If there is no trace_tag,
+     * this will return a pointer to an empty string. */
+    HALIDE_ALWAYS_INLINE const char *trace_tag() const {
+        const char *f = func();
+        // strlen may not be available here
+        while (*f++) {
+            // nothing
+        }
+        return f;
+    }
+
+    HALIDE_ALWAYS_INLINE char *trace_tag() {
+        char *f = func();
+        // strlen may not be available here
+        while (*f++) {
+            // nothing
+        }
+        return f;
     }
     #endif
 };
@@ -541,7 +572,9 @@ struct halide_device_interface_t {
 /** Release all data associated with the given device interface, in
  * particular all resources (memory, texture, context handles)
  * allocated by Halide. Must be called explicitly when using AOT
- * compilation. */
+ * compilation. This is *not* thread-safe with respect to actively
+ * running Halide code. Ensure all pipelines are finished before
+ * calling this. */
 extern void halide_device_release(void *user_context,
                                   const struct halide_device_interface_t *device_interface);
 
@@ -1072,8 +1105,10 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
     halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
-    halide_target_feature_new_autoscheduler = 50, ///< Use the prototype second-generation autoscheduler
-    halide_target_feature_end = 51, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_legacy_buffer_wrappers = 51,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
+    halide_target_feature_new_autoscheduler = 52, ///< Use the prototype second-generation autoscheduler
+    halide_target_feature_end = 53, ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -1353,6 +1388,9 @@ struct halide_scalar_value_t {
         double f64;
         void *handle;
     } u;
+    #ifdef __cplusplus
+    HALIDE_ALWAYS_INLINE halide_scalar_value_t() {u.u64 = 0;}
+    #endif
 };
 
 enum halide_argument_kind_t {
@@ -1487,6 +1525,7 @@ struct halide_profiler_pipeline_stats {
 };
 
 /** The global state of the profiler. */
+
 struct halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
@@ -1515,8 +1554,8 @@ struct halide_profiler_state {
      * e.g. on a DSP. If null, it reads from the int above instead. */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
 
-    /** Is the profiler thread running. */
-    bool started;
+    /** Sampling thread reference to be joined at shutdown. */
+    struct halide_thread *sampling_thread;
 };
 
 /** Profiler func ids with special meanings. */
@@ -1537,12 +1576,20 @@ extern struct halide_profiler_state *halide_profiler_get_state();
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
-/** Reset all profiler state.
+/** Reset profiler state cheaply. May leave threads running or some
+ * memory allocated but all accumluated statistics are reset.
  * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
 extern void halide_profiler_reset();
+
+/** Reset all profiler state.
+ * WARNING: Do NOT call this method while any halide pipeline is
+ * running; halide_profiler_memory_allocate/free and
+ * halide_profiler_stack_peak_update update the profiler pipeline's
+ * state without grabbing the global profiler state's lock. */
+void halide_profiler_shutdown();
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */

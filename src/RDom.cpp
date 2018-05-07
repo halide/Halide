@@ -120,7 +120,7 @@ public:
 
 void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide::RDom", 'r');
+        name = make_entity_name(this, "Halide:.*:RDom", 'r');
     }
 
     std::vector<ReductionVariable> vars;

@@ -4,7 +4,6 @@
 #include "CodeGen_C.h"
 #include "CPlusPlusMangle.h"
 #include "Func.h"
-#include "Simplify.h"
 #include "Bounds.h"
 #include "IRMatch.h"
 #include "Deinterleave.h"
@@ -31,7 +30,6 @@ int main(int argc, const char **argv) {
     deinterleave_vector_test();
     modulus_remainder_test();
     cse_test();
-    simplify_test();
     solve_test();
     target_test();
     cplusplus_mangle_test();

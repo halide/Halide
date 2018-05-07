@@ -27,7 +27,6 @@ set(RUNTIME_CPP
   errors
   fake_thread_pool
   float16_t
-  gcd_thread_pool
   gpu_device_selection
   hexagon_cpu_features
   hexagon_host
@@ -35,6 +34,7 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  linux_yield
   matlab
   metadata
   metal
@@ -54,6 +54,7 @@ set(RUNTIME_CPP
   osx_get_symbol
   osx_host_cpu_count
   osx_opengl_context
+  osx_yield
   posix_allocator
   posix_clock
   posix_error_handler
@@ -69,10 +70,10 @@ set(RUNTIME_CPP
   qurt_allocator
   qurt_hvx
   qurt_init_fini
-  qurt_thread_pool
+  qurt_threads
+  qurt_yield
   runtime_api
   ssp
-  thread_pool
   to_string
   tracing
   windows_clock
@@ -80,8 +81,10 @@ set(RUNTIME_CPP
   windows_get_symbol
   windows_io
   windows_opencl
+  windows_profiler
   windows_tempfile
   windows_threads
+  windows_yield
   write_debug_image
   x86_cpu_features
 )
@@ -372,6 +375,7 @@ set(HEADER_FILES
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
+  StrictifyFloat.h
   Substitute.h
   Target.h
   ThreadPool.h
@@ -394,9 +398,9 @@ set(HEADER_FILES
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
-  COMMAND build_halide_h ${HEADER_FILES} HalideFooter.h > "${NATIVE_INCLUDE_PATH}Halide.h"
+  COMMAND build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-  DEPENDS build_halide_h ${HEADER_FILES})
+  DEPENDS build_halide_h "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE.txt" ${HEADER_FILES})
 add_custom_target(
     HalideIncludes
     ALL
@@ -516,6 +520,25 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_LT.cpp
+  Simplify_Let.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -524,6 +547,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp
+  StrictifyFloat.cpp
   Substitute.cpp
   Target.cpp
   Tracing.cpp
@@ -543,6 +567,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Ensure that these tools are build first

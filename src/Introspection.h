@@ -32,6 +32,14 @@ void register_heap_object(const void *obj, size_t size, const void *helper);
 /** Deregister a heap object. Not thread-safe. */
 void deregister_heap_object(const void *obj, size_t size);
 
+/** Dump the contents of the stack frame of the calling function. Used
+ * for debugging stack frame sizes inside the compiler. Returns
+ * whether or not it was able to find the relevant debug
+ * information. */
+bool dump_stack_frame();
+
+#define HALIDE_DUMP_STACK_FRAME {static bool check = Halide::Internal::Introspection::dump_stack_frame(); (void)check;}
+
 /** Return the address of a global with type T *. Call this to
  * generate something to pass as the last argument to
  * register_heap_object.
@@ -114,7 +122,7 @@ static bool test_a(const void *a_ptr, const std::string &my_name) {
     bool success = true;
     success &= Halide::Internal::check_introspection(&a->an_int, "int", my_name + ".an_int", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(&a->a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A *", my_name + ".a_b.parent", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A \\*", my_name + ".a_b.parent", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(&a->a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(a->a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__ , __LINE__);
     return success;

@@ -10,14 +10,15 @@ using std::vector;
 using std::map;
 using std::string;
 using std::pair;
+using std::set;
 
 struct TraceEventBuilder {
-    string func;
+    string func, trace_tag;
     vector<Expr> value;
     vector<Expr> coordinates;
     Type type;
     enum halide_trace_event_code_t event;
-    Expr parent_id, value_index, dimensions;
+    Expr parent_id, value_index;
 
     Expr build() {
         Expr values = Call::make(type_of<void *>(), Call::make_struct,
@@ -29,11 +30,15 @@ struct TraceEventBuilder {
             idx = 0;
         }
 
+        // Note: if these arguments are changed in any meaningful way,
+        // VectorizeLoops will likely need attention; it does nontrivial
+        // special-casing of this call to get appropriate results.
         vector<Expr> args = {Expr(func),
                              values, coords,
                              (int)type.code(), (int)type.bits(), (int)type.lanes(),
                              (int)event,
-                             parent_id, idx, (int)coordinates.size()};
+                             parent_id, idx, (int)coordinates.size(),
+                             Expr(trace_tag)};
         return Call::make(Int(32), Call::trace, args, Call::Extern);
     }
 };
@@ -42,6 +47,9 @@ class InjectTracing : public IRMutator2 {
 public:
     const map<string, Function> &env;
     const bool trace_all_loads, trace_all_stores, trace_all_realizations;
+    // We want to preserve the order, so use a vector<pair> rather than a map
+    vector<pair<string, vector<string>>> trace_tags;
+    set<string> trace_tags_added;
 
     InjectTracing(const map<string, Function> &e, const Target &t)
         : env(e),
@@ -53,13 +61,19 @@ public:
     }
 
 private:
+    void add_trace_tags(const string &name, const vector<string> &t) {
+        if (!t.empty() && !trace_tags_added.count(name)) {
+            trace_tags.push_back({name, t});
+            trace_tags_added.insert(name);
+        }
+    }
+
     using IRMutator2::visit;
 
     Expr visit(const Call *op) override {
         Expr expr = IRMutator2::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
-
         bool trace_it = false;
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
@@ -70,8 +84,28 @@ private:
 
             trace_it = f.is_tracing_loads() || trace_all_loads;
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
+            if (trace_it) {
+                add_trace_tags(op->name, f.get_trace_tags());
+            }
         } else if (op->call_type == Call::Image) {
             trace_it = trace_all_loads;
+            // If there is a Function in the env named "name_im", assume that
+            // this image is an ImageParam, so sniff that Function to see
+            // if we want to trace loads on it. (This allows us to trace
+            // loads on inputs without having to enable them globally.)
+            auto it = env.find(op->name + "_im");
+            if (it != env.end()) {
+                Function f = it->second;
+                // f could be scheduled and have actual loads from it (via ImageParam::in),
+                // so only honor trace the loads if it is inlined.
+                if ((f.is_tracing_loads() || trace_all_loads) &&
+                    f.can_be_inlined() &&
+                    f.schedule().compute_level().is_inlined()) {
+                    trace_it = true;
+                    add_trace_tags(op->name, f.get_trace_tags());
+                }
+            }
+
             trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
@@ -162,12 +196,13 @@ private:
         if (iter == env.end()) return stmt;
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
+            add_trace_tags(op->name, f.get_trace_tags());
+
             // Throw a tracing call before and after the realize body
             TraceEventBuilder builder;
             builder.func = op->name;
             builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
             builder.event = halide_trace_begin_realization;
-
             for (size_t i = 0; i < op->bounds.size(); i++) {
                 builder.coordinates.push_back(op->bounds[i].min);
                 builder.coordinates.push_back(op->bounds[i].extent);
@@ -175,13 +210,16 @@ private:
 
             // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
             Expr call_before = builder.build();
+
             builder.event = halide_trace_end_realization;
             builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
             Expr call_after = builder.build();
+
             Stmt new_body = op->body;
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
             stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
+            // Warning: 'op' may be invalid at this point
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
@@ -291,6 +329,24 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
         Expr pipeline_end = builder.build();
 
         s = Block::make(s, Evaluate::make(pipeline_end));
+
+        // All trace_tag events go at the start, immediately after begin_pipeline.
+        // For a given realization/input/output, we output them in the order
+        // we encounter them (which is to say, the order they were added); however,
+        // we don't attempt to preserve a particular order between functions.
+        for (const auto &trace_tags : tracing.trace_tags) {
+            // builder.parent_id is already set correctly
+            builder.func = trace_tags.first;  // func name
+            builder.event = halide_trace_tag;
+            // We must reverse-iterate to preserve order
+            for (auto it = trace_tags.second.rbegin(); it != trace_tags.second.rend(); ++it) {
+                user_assert(it->find('\0') == string::npos)
+                    << "add_trace_tag() may not contain the null character.";
+                builder.trace_tag = *it;
+                s = Block::make(Evaluate::make(builder.build()), s);
+            }
+        }
+
         s = LetStmt::make("pipeline.trace_id", pipeline_start, s);
     }
 

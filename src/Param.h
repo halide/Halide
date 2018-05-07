@@ -62,11 +62,11 @@ public:
      * auto-generated name */
     // @{
     Param() :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
     }
     explicit Param(Type t) :
-        param(t, false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(t, false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(!has_static_type, "Cannot use this ctor with an explicit type.");
     }
     // @}
@@ -94,7 +94,7 @@ public:
      * 'val'. Only triggers for non-pointer types. */
     template <typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
     explicit Param(not_void_T val) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set<not_void_T>(val);
     }
@@ -111,7 +111,7 @@ public:
     /** Construct a scalar parameter of type T with an initial value of 'val'
     * and a given min and max. */
     Param(not_void_T val, Expr min, Expr max) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         set_range(min, max);
         set<not_void_T>(val);
@@ -171,7 +171,7 @@ public:
     /** Get the current value of this parameter. Only meaningful when jitting.
         Asserts if type does not exactly match the Parameter's type. */
     template<typename T2 = not_void_T>
-    NO_INLINE T2 get() const {
+    HALIDE_NO_USER_CODE_INLINE T2 get() const {
         return param.scalar<T2>();
     }
 
@@ -179,7 +179,7 @@ public:
         Asserts if type is not losslessly-convertible to Parameter's type. */
     // @{
     template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
-    NO_INLINE void set(const SOME_TYPE &val) {
+    HALIDE_NO_USER_CODE_INLINE void set(const SOME_TYPE &val) {
         user_assert(Internal::IsRoundtrippable<T>::value(val))
             << "The value " << val << " cannot be losslessly converted to type " << type();
         param.set_scalar<T>(val);
@@ -189,7 +189,7 @@ public:
     // not compiletime). Note that this actually works fine for all Params; we specialize
     // it just to reduce code size for the common case of T != void.
     template <typename SOME_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
-    NO_INLINE void set(const SOME_TYPE &val) {
+    HALIDE_NO_USER_CODE_INLINE void set(const SOME_TYPE &val) {
     #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE) \
         case halide_type_code(CODE, BITS): \
             user_assert(Internal::IsRoundtrippable<TYPE>::value(val)) \

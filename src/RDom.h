@@ -30,7 +30,7 @@ class RVar {
 
 public:
     /** An empty reduction variable. */
-    RVar() : _name(Internal::make_entity_name(this, "Halide::RVar", 'r')) {}
+    RVar() : _name(Internal::make_entity_name(this, "Halide:.*:RVar", 'r')) {}
 
     /** Construct an RVar with the given name */
     explicit RVar(const std::string &n) : _name(n) {
@@ -184,7 +184,7 @@ class RDom {
     void initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "");
 
     template <typename... Args>
-    NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args&&... args) {
+    HALIDE_NO_USER_CODE_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args&&... args) {
         ranges.push_back({ min, extent });
         initialize_from_ranges(ranges, std::forward<Args>(args)...);
     }
@@ -196,12 +196,12 @@ public:
     /** Construct a multi-dimensional reduction domain with the given name. If the name
      * is left blank, a unique one is auto-generated. */
     // @{
-    NO_INLINE RDom(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "") {
+    HALIDE_NO_USER_CODE_INLINE RDom(const std::vector<std::pair<Expr, Expr>> &ranges, std::string name = "") {
         initialize_from_ranges(ranges, name);
     }
 
     template <typename... Args>
-    NO_INLINE RDom(Expr min, Expr extent, Args&&... args) {
+    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args&&... args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         std::vector<std::pair<Expr, Expr>> ranges;
@@ -216,7 +216,7 @@ public:
     RDom(const Buffer<> &);
     RDom(const OutputImageParam &);
     template<typename T>
-    NO_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
+    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */

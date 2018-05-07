@@ -264,6 +264,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"strict_float", Target::StrictFloat},
+    {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"new_autoscheduler", Target::NewAutoscheduler},
 };
 

@@ -14,7 +14,7 @@ def test_compiletime_error():
     try:
         f.realize(buf)
     except RuntimeError as e:
-        assert 'Buffer has type uint8, but Func "f" has type uint16.' in str(e)
+        assert 'Output buffer f has type uint16 but type of the buffer passed in is uint8' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -29,6 +29,30 @@ def test_runtime_error():
         f.realize(buf)
     except RuntimeError as e:
         assert 'do not cover required region' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+def test_misused_and():
+    x = hl.Var('x')
+    y = hl.Var('y')
+    f = hl.Func('f')
+    try:
+        f[x, y] = hl.print_when(x == 0 and y == 0, 0, "x=",x, "y=", y)
+        f.realize(10, 10)
+    except ValueError as e:
+        assert 'cannot be converted to a bool' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+def test_misused_or():
+    x = hl.Var('x')
+    y = hl.Var('y')
+    f = hl.Func('f')
+    try:
+        f[x, y] = hl.print_when(x == 0 or y == 0, 0, "x=",x, "y=", y)
+        f.realize(10, 10)
+    except ValueError as e:
+        assert 'cannot be converted to a bool' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -183,6 +207,8 @@ def test_operator_order():
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
+    test_misused_and()
+    test_misused_or()
     test_float_or_int()
     test_operator_order()
     test_basics()
