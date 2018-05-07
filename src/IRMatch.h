@@ -1992,6 +1992,8 @@ std::ostream &operator<<(std::ostream &s, const Overflows<A> &op) {
 struct Indeterminate {
     struct pattern_tag {};
 
+    constexpr static uint32_t binds = 0;
+
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
         type_hint.lanes |= MatcherState::indeterminate_expression;
@@ -2408,6 +2410,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<After>::type>
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, After after) {
+        static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
         #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
         #endif
@@ -2473,6 +2476,7 @@ struct Rewriter {
     HALIDE_ALWAYS_INLINE
     bool operator()(Before before, After after, Predicate pred) {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
+        static_assert(((Before::binds | Predicate::binds) & After::binds) == After::binds, "Rule result uses unbound values");
         #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, pred, wildcard_type, output_type);
         #endif

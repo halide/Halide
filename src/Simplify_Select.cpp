@@ -83,7 +83,7 @@ Expr Simplify::visit(const Select *op, ConstBounds *bounds) {
               rewrite(select(c0 < x, x, c1), max(x, c1), c1 == c0 + 1) ||
               rewrite(select(x < c0, c1, x), max(x, c1), c1 + 1 == c0) ||
               rewrite(select(c0 < x, c1, x), min(x, c1), c1 == c0 + 1) ||
-              rewrite(select(x < c0, x, c1), min(x, c2), c1 + 1 == c0))) ||
+              rewrite(select(x < c0, x, c1), min(x, c1), c1 + 1 == c0))) ||
 
             (op->type.is_bool() &&
              (rewrite(select(x, true, false), cast(op->type, x)) ||
