@@ -6,7 +6,7 @@ namespace Internal {
 Expr Simplify::visit(const Not *op, ConstBounds *bounds) {
     Expr a = mutate(op->a, nullptr);
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a));
+    auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a), op->type);
 
     if (rewrite(!c0, fold(!c0)) ||
         rewrite(!(x < y), y <= x) ||

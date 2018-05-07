@@ -20,7 +20,7 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
 
     if (may_simplify(op->type)) {
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
         const int lanes = op->type.lanes();
 
         if (rewrite(x - 0, x) ||

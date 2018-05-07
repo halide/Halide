@@ -34,7 +34,7 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
 
         int lanes = op->type.lanes();
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::div(a, b), op->type);
 
         if (rewrite(x / 1, x) ||
             (!op->type.is_float() &&

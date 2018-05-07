@@ -25,7 +25,7 @@ Expr Simplify::visit(const Mod *op, ConstBounds *bounds) {
 
         int lanes = op->type.lanes();
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
 
         if (rewrite(c0 % c1, fold(c0 % c1)) ||
             rewrite(0 % x, 0) ||

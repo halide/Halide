@@ -23,7 +23,7 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
     if (op->a.type().is_bool()) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
-        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
@@ -56,7 +56,7 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
         }
     }
 
-    auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), delta.type());
+    auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
 
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
         rewrite(x + c0 == 0, x == fold(-c0)) ||

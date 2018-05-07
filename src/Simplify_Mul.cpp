@@ -43,7 +43,7 @@ Expr Simplify::visit(const Mul *op, ConstBounds *bounds) {
             std::swap(a_bounds, b_bounds);
         }
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
         if (rewrite(c0 * c1, fold(c0 * c1)) ||
             rewrite(0 * x, 0) ||
             rewrite(1 * x, x) ||

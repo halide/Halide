@@ -23,7 +23,7 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
             std::swap(a_bounds, b_bounds);
         }
 
-        auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b));
+        auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
         const int lanes = op->type.lanes();
 
         if (rewrite(c0 + c1, fold(c0 + c1)) ||
