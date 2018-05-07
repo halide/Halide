@@ -43,7 +43,10 @@ Expr Simplify::visit(const Min *op, ConstBounds *bounds) {
         if (EVAL_IN_LAMBDA
             (rewrite(min(x, x), x) ||
              rewrite(min(c0, c1), fold(min(c0, c1))) ||
-
+             rewrite(min(IRMatcher::Indeterminate(), x), a) ||
+             rewrite(min(x, IRMatcher::Indeterminate()), b) ||
+             rewrite(min(IRMatcher::Overflow(), x), a) ||
+             rewrite(min(x,IRMatcher::Overflow()), b) ||
              // Cases where one side dominates:
              rewrite(min(x, op->type.min()), b) ||
              rewrite(min(x, op->type.max()), x) ||

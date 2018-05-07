@@ -1838,6 +1838,14 @@ struct Indeterminate {
 
     constexpr static uint32_t binds = 0;
 
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE
+    bool match(SpecificExpr e, MatcherState & __restrict__ state) const noexcept {
+        const Call &op = (const Call &)e.expr;
+        return (op.node_type == Call::_node_type &&
+                op.is_intrinsic(Call::indeterminate_expression));
+    }
+
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
         type_hint.lanes |= MatcherState::indeterminate_expression;
@@ -1855,6 +1863,39 @@ struct Indeterminate {
 
 inline std::ostream &operator<<(std::ostream &s, const Indeterminate &op) {
     s << "indeterminate()";
+    return s;
+}
+
+struct Overflow {
+    struct pattern_tag {};
+
+    constexpr static uint32_t binds = 0;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE
+    bool match(SpecificExpr e, MatcherState & __restrict__ state) const noexcept {
+        const Call &op = (const Call &)e.expr;
+        return (op.node_type == Call::_node_type &&
+                op.is_intrinsic(Call::signed_integer_overflow));
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState & __restrict__ state, halide_type_t type_hint) const {
+        type_hint.lanes |= MatcherState::signed_integer_overflow;
+        return make_const_special_expr(type_hint);
+    }
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState & __restrict__ state) const noexcept {
+        val.u.u64 = 0;
+        ty.lanes |= MatcherState::signed_integer_overflow;
+    }
+};
+
+inline std::ostream &operator<<(std::ostream &s, const Overflow &op) {
+    s << "overflow()";
     return s;
 }
 
