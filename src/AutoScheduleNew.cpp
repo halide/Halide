@@ -36,17 +36,18 @@ double cost_of_cold_load(double buffer_size, const MachineParams &params) {
     //return params.balance * std::log2(1 + buffer_size / params.last_level_cache_size);
 }
 
-bool random_dropout() {
+int get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
-    int threshold = 0;
     if (!random_dropout_str.empty()) {
-        threshold = atoi(random_dropout_str.c_str());
+        return atoi(random_dropout_str.c_str());
     } else {
-        return false;
+        return 0;
     }
-    internal_assert(threshold >= 0 && threshold <= 100);
-    const int val = rand() % 100;
-    return val > threshold;
+}
+  
+bool random_dropout() {
+    static int threshold = get_dropout_threshold();
+    return (rand() % 100) >= threshold;
 }
 
 // A representation of the function DAG. The nodes and edges are both
