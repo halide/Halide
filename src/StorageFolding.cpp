@@ -337,8 +337,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             int dim = (int)(i-1);
-            Expr min = simplify(box[dim].min);
-            Expr max = simplify(box[dim].max);
+            Expr min = simplify(common_subexpression_elimination(box[dim].min));
+            Expr max = simplify(common_subexpression_elimination(box[dim].max));
 
             // Consider the initial iteration and steady state
             // separately for all these proofs.
@@ -349,6 +349,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, steady_bounds);
             Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, bounds);
             Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, bounds);
+            Expr min_second = simplify(substitute(op->name, op->min + 1, min_steady));
+            Expr max_second = simplify(substitute(op->name, op->min + 1, max_steady));
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
@@ -367,27 +369,31 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 explicit_factor = storage_dim.fold_factor;
             }
 
-            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
+            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << " along dimension " << dim << '\n'
                      << "Min: " << min << '\n'
                      << "Max: " << max << '\n'
                      << "Min steady: " << min_steady << '\n'
                      << "Max steady: " << max_steady << '\n'
                      << "Min initial: " << min_initial << '\n'
                      << "Max initial: " << max_initial << '\n'
-                     << "Min monotonic: " << simplify(min_steady >= min_initial) << '\n'
+                     << "Min second: " << min_second << '\n'
+                     << "Max second: " << max_second << '\n'
+                     << "Min monotonic: " << simplify(common_subexpression_elimination(min_second >= min_initial), true, bounds) << '\n'
                      << "Extent: " << extent << '\n';
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
             bool min_monotonic_increasing =
                 (!explicit_only &&
-                 is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
-                 can_prove(min_steady >= min_initial, bounds));
+                 (is_monotonic(min, op->name) == Monotonic::Increasing ||
+                  (is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
+                   can_prove(min_second >= min_initial, bounds))));
 
             bool max_monotonic_decreasing =
                 (!explicit_only &&
-                 is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
-                 can_prove(max_steady <= max_initial, bounds));
+                 (is_monotonic(max, op->name) == Monotonic::Decreasing ||
+                  (is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
+                   can_prove(max_second <= max_initial, bounds))));
 
             if (explicit_factor.defined()) {
                 bool can_skip_dynamic_checks =
