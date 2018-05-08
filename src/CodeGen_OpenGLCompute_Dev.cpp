@@ -97,7 +97,6 @@ int thread_loop_workgroup_index(const string &name) {
      }
      return -1;
 }
-}
 }  // namespace
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
