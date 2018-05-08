@@ -119,7 +119,7 @@ public:
     /** Generate a schedule for the pipeline. */
     //@{
     std::string auto_schedule(const Target &target,
-                                     const MachineParams &arch_params = MachineParams::generic());
+                              const MachineParams &arch_params = MachineParams::generic());
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the

@@ -46,9 +46,9 @@ using namespace Internal;
 
 Func::Func(const string &name) : func(unique_name(name)) {}
 
-Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')) {}
+Func::Func() : func(make_entity_name(this, "Halide:.*:Func", 'f')) {}
 
-Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
+Func::Func(Expr e) : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
     (*this)(_) = e;
 }
 

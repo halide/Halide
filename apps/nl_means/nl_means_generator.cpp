@@ -37,7 +37,7 @@ public:
         d(x, y, dx, dy) = sum(dc(x, y, dx, dy, channels));
 
         // Find the patch differences by blurring the difference images
-        RDom patch_dom(-patch_size/2, patch_size);
+        RDom patch_dom(-(patch_size/2), patch_size);
         Func blur_d_y("blur_d_y");
         blur_d_y(x, y, dx, dy) = sum(d(x, y + patch_dom, dx, dy));
 
@@ -56,7 +56,7 @@ public:
                                              1.0f);
 
         // Define a reduction domain for the search area
-        RDom s_dom(-search_area/2, search_area, -search_area/2, search_area);
+        RDom s_dom(-(search_area/2), search_area, -(search_area/2), search_area);
 
         // Compute the sum of the pixels in the search area
         Func non_local_means_sum("non_local_means_sum");

@@ -396,7 +396,7 @@ FuncConfig fix_func_config_defaults(const FuncConfig &cfg) {
     safe.blank_on_end_realization = 0;
     safe.uninitialized_memory_color = 0x00000000;
     safe.merge_from(cfg);
-    safe,uninitialized_memory_color |= 0xff000000;
+    safe.uninitialized_memory_color |= 0xff000000;
     return safe;
 }
 

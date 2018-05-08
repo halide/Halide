@@ -72,7 +72,7 @@ const static int buffer_size = 1024 * 1024;
 
 class TraceBuffer {
     SharedExclusiveSpinLock lock;
-    uint32_t cursor;
+    uint32_t cursor, overage;
     uint8_t buf[buffer_size];
 
     // Attempt to atomically acquire space in the buffer to write a
@@ -82,7 +82,11 @@ class TraceBuffer {
         halide_assert(user_context, size <= buffer_size);
         uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
         if (my_cursor + size > sizeof(buf)) {
-            __sync_fetch_and_sub(&cursor, size);
+            // Don't try to back it out: instead, just allow this request to fail
+            // (along with all subsequent requests) and record the 'overage'
+            // that was added and should be ignored; then, in the next flush,
+            // remove the overage.
+            __sync_fetch_and_add(&overage, size);
             lock.release_shared();
             return NULL;
         } else {
@@ -98,8 +102,10 @@ public:
         lock.acquire_exclusive();
         bool success = true;
         if (cursor) {
+            cursor -= overage;
             success = (cursor == (uint32_t)write(fd, buf, cursor));
             cursor = 0;
+            overage = 0;
         }
         lock.release_exclusive();
         halide_assert(user_context, success && "Could not write to trace file");
@@ -126,7 +132,7 @@ public:
         lock.release_shared();
     }
 
-    TraceBuffer() : cursor(0) {}
+    TraceBuffer() : cursor(0), overage(0) {}
 };
 
 WEAK TraceBuffer *halide_trace_buffer = NULL;
@@ -385,9 +391,6 @@ WEAK int halide_trace_helper(void *user_context,
     event.event = (halide_trace_event_code_t)code;
     event.parent_id = parent_id;
     event.value_index = value_index;
-    if (event.type.lanes > 1) {
-        dimensions *= event.type.lanes;
-    }
     event.dimensions = dimensions;
     halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
     halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
