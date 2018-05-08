@@ -1425,7 +1425,7 @@ struct NotOp {
         a.make_folded_const(val, ty, state);
         val.u.u64 = ~val.u.u64;
         val.u.u64 &= 1;
-        ty.lanes |= (ty.code == halide_type_float) ? MatcherState::indeterminate_expression : 0;
+        ty.lanes |= ((int)ty.code == (int)halide_type_float) ? MatcherState::indeterminate_expression : 0;
     }
 };
 
