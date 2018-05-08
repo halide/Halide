@@ -36,18 +36,20 @@ double cost_of_cold_load(double buffer_size, const MachineParams &params) {
     //return params.balance * std::log2(1 + buffer_size / params.last_level_cache_size);
 }
 
-int get_dropout_threshold() {
+uint64_t get_dropout_threshold() {
     string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
     if (!random_dropout_str.empty()) {
         return atoi(random_dropout_str.c_str());
     } else {
-        return 0;
+        return 100;
     }
 }
-  
+
 bool random_dropout() {
-    static int threshold = get_dropout_threshold();
-    return (rand() % 100) >= threshold;
+    static uint64_t threshold = get_dropout_threshold();
+    uint64_t r = rand();
+    bool drop_it = (r % 100) >= threshold;
+    return drop_it;
 }
 
 // A representation of the function DAG. The nodes and edges are both
@@ -165,6 +167,10 @@ struct FunctionDAG {
                     leaves += op->args.size();
                     if (op->is_intrinsic(Call::likely) || op->is_intrinsic(Call::likely_if_innermost)) {
                         likely = true;
+                    }
+                    if (op->call_type == Call::PureExtern) {
+                        // Assume it's an expensive floating point intrinsic like pow or sin
+                        leaves += 100;
                     }
                     check_type(op->type);
                 }
@@ -798,11 +804,6 @@ struct PartialScheduleNode {
 
             for (auto t : tilings) {
 
-                // Random dropout. Uncomment to get a random family of plausible schedules.
-                if (random_dropout()) {
-                    continue;
-                }
-
                 if (parent->is_root()) {
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
                     int total = 1;
@@ -903,6 +904,16 @@ struct PartialScheduleNode {
                     result.emplace_back(std::move(r));
                 }
             }
+        }
+
+        if (result.empty()) {
+            // Place the computation inside this loop
+            PartialScheduleNode r = *this;
+            r.compute_here(f, dag);
+            if (!in_realization) {
+                r.store_at.insert(f);
+            }
+            result.emplace_back(std::move(r));
         }
 
         return result;
@@ -1286,8 +1297,10 @@ State optimal_schedule(FunctionDAG &dag,
 
         if (q.size() > (size_t)beam_size) {
             decltype(q) trimmed;
-            for (int i = 0; i < beam_size; i++) {
-                trimmed.push(q.top());
+            while (trimmed.size() < (size_t)beam_size && !q.empty()) {
+                if ((q.size() == 1 && trimmed.empty()) || !random_dropout()) {
+                    trimmed.push(q.top());
+                }
                 q.pop();
             }
             q.swap(trimmed);
