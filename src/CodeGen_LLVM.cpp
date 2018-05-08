@@ -1,27 +1,27 @@
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 
-#include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
+#include "CSE.h"
 #include "CodeGen_ARM.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Hexagon.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_X86.h"
-#include "CPlusPlusMangle.h"
-#include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
-#include "IntegerDivisionTable.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
 #include "JITModule.h"
-#include "Lerp.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Lerp.h"
 #include "MatlabWrapper.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -44,14 +44,14 @@ std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMConte
 namespace Internal {
 
 using namespace llvm;
-using std::ostringstream;
 using std::cout;
 using std::endl;
+using std::map;
+using std::ostringstream;
+using std::pair;
+using std::stack;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
-using std::stack;
 
 // Define a local empty inline function for each target
 // to disable initialization.
@@ -3599,4 +3599,5 @@ ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
     return modulus_remainder(e, alignment_info);
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

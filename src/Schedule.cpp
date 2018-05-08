@@ -1,8 +1,8 @@
+#include "Schedule.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
-#include "Schedule.h"
 #include "Var.h"
 
 namespace {

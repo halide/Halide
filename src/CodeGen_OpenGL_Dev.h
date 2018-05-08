@@ -5,8 +5,8 @@
  * Defines the code-generator for producing GLSL kernel code
  */
 
-#include <sstream>
 #include <map>
+#include <sstream>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
@@ -124,6 +124,7 @@ private:
     Scope<int> scalar_vars, vector_vars;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

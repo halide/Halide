@@ -14,7 +14,7 @@ namespace Internal {
  * only contain such stores. */
 Stmt remove_undef(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

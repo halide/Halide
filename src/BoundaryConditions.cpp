@@ -210,6 +210,6 @@ Func mirror_interior(const Func &source,
     return bounded;
 }
 
-}
+}  // namespace BoundaryConditions
 
-}
+}  // namespace Halide

@@ -1,29 +1,29 @@
-#include <set>
-#include <stdlib.h>
 #include <atomic>
 #include <memory>
+#include <set>
+#include <stdlib.h>
 
-#include "IR.h"
-#include "IRMutator.h"
-#include "Function.h"
-#include "Scope.h"
 #include "CSE.h"
-#include "Random.h"
-#include "Introspection.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Introspection.h"
 #include "ParallelRVar.h"
+#include "Random.h"
+#include "Scope.h"
 #include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
-using std::set;
 using std::map;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 typedef map<FunctionPtr, FunctionPtr> DeepCopyMap;
 
@@ -55,7 +55,7 @@ public:
     int count = 0;
     WeakenFunctionPtrs(FunctionContents *f) : func(f) {}
 };
-}
+}  // namespace
 
 struct FunctionContents {
     std::string name;
@@ -1012,7 +1012,7 @@ public:
         : substitutions(substitutions) {}
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
@@ -1083,6 +1083,5 @@ pair<vector<Function>, map<string, Function>> deep_copy(
     return { copy_outputs, copy_env };
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

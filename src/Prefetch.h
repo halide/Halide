@@ -23,7 +23,7 @@ Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env);
  * on the architecture), this also adds an outer loops that tile the prefetches. */
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

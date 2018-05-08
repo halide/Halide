@@ -6,13 +6,13 @@
  * Defines util functions that used by auto scheduler.
  */
 
-#include <set>
 #include <limits>
+#include <set>
 
 #include "Bounds.h"
-#include "Interval.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
@@ -35,11 +35,11 @@ class FindAllCalls : public IRVisitor {
             call->args[i].accept(this);
         }
     }
+
 public:
     std::set<std::string> funcs_called;
     std::vector<std::pair<std::string, std::vector<Expr>>> call_args;
 };
-
 
 /** Return an int representation of 's'. Throw an error on failure. */
 int string_to_int(const std::string &s);
@@ -111,7 +111,7 @@ V &get_element(std::map<K, V> &m, const K &key) {
 
 void propagate_estimate_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

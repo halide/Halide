@@ -3,8 +3,8 @@
 
 #include "IRPrinter.h"
 
-#include "Associativity.h"
 #include "AssociativeOpsTable.h"
+#include "Associativity.h"
 #include "IROperator.h"
 #include "Module.h"
 #include "Target.h"
@@ -12,9 +12,9 @@
 namespace Halide {
 
 using std::ostream;
-using std::vector;
-using std::string;
 using std::ostringstream;
+using std::string;
+using std::vector;
 
 ostream &operator<<(ostream &out, const Type &type) {
     switch (type.code()) {
@@ -796,4 +796,5 @@ void IRPrinter::visit(const Shuffle *op) {
     }
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

@@ -5,14 +5,14 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <stdint.h>
 #include <bitset>
+#include <stdint.h>
 #include <string>
 
 #include "Error.h"
+#include "Expr.h"
 #include "Type.h"
 #include "Util.h"
-#include "Expr.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -340,9 +340,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api);
 namespace Internal {
 
 void target_test();
-
 }
 
-}
+}  // namespace Halide
 
 #endif

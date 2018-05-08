@@ -1,8 +1,8 @@
 #include "RemoveUndef.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -493,5 +493,5 @@ Stmt remove_undef(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

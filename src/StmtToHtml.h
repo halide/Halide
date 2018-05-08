@@ -18,6 +18,7 @@ void print_to_html(std::string filename, Stmt s);
 /** Dump an HTML-formatted print of a Module to filename. */
 void print_to_html(std::string filename, const Module &m);
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

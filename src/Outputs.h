@@ -135,6 +135,6 @@ struct Outputs {
     }
 };
 
-}
+}  // namespace Halide
 
 #endif

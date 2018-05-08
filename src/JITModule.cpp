@@ -114,7 +114,7 @@ void load_metal() {
 #endif
 }
 
-}
+}  // namespace
 
 using namespace llvm;
 
@@ -858,5 +858,5 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

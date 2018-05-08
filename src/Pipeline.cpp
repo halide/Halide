@@ -1,16 +1,16 @@
 #include <algorithm>
 
-#include "Pipeline.h"
 #include "Argument.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "InferArguments.h"
 #include "IRVisitor.h"
+#include "InferArguments.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
 #include "ParamMap.h"
+#include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 
@@ -18,9 +18,9 @@ using namespace Halide::Internal;
 
 namespace Halide {
 
-using std::vector;
-using std::string;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -833,7 +833,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }
     } else if (outputs.buffer_list) {
-      for (const Buffer<> &buf : *outputs.buffer_list) {
+        for (const Buffer<> &buf : *outputs.buffer_list) {
             user_assert(buf.data() != nullptr)
                 << "Buffer at " << &buf << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";

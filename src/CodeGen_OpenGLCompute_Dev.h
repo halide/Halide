@@ -5,8 +5,8 @@
  * Defines the code-generator for producing GLSL kernel code for OpenGL Compute.
  */
 
-#include <sstream>
 #include <map>
+#include <sstream>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
@@ -45,8 +45,8 @@ protected:
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
-    protected:
 
+    protected:
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
         using CodeGen_C::visit;
@@ -73,6 +73,7 @@ protected:
     CodeGen_OpenGLCompute_C glc;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -16,8 +16,7 @@ Buffer<uint16_t> integer_divide_table_u16();
 Buffer<uint16_t> integer_divide_table_s16();
 Buffer<uint32_t> integer_divide_table_u32();
 Buffer<uint32_t> integer_divide_table_s32();
-}
-
+}  // namespace IntegerDivideTable
 
 /** Integer division by small values can be done exactly as multiplies
  * and shifts. This function does integer division for numerators of
@@ -46,6 +45,6 @@ Expr fast_integer_divide(Expr numerator, Expr denominator);
  */
 Expr fast_integer_modulo(Expr numerator, Expr denominator);
 
-}
+}  // namespace Halide
 
 #endif

@@ -580,7 +580,6 @@ void target_test() {
     std::cout << "Target test passed" << std::endl;
 }
 
+}  // namespace Internal
 
-}
-
-}
+}  // namespace Halide

@@ -1,25 +1,25 @@
 #include <algorithm>
 
-#include "VectorizeLoops.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IRPrinter.h"
-#include "Deinterleave.h"
-#include "Substitute.h"
-#include "IROperator.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "Solve.h"
-#include "Simplify.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Deinterleave.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Solve.h"
+#include "Substitute.h"
+#include "VectorizeLoops.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
 
 namespace {
 
@@ -983,11 +983,11 @@ public:
     VectorizeLoops(const Target &t) : target(t), in_hexagon(false) {}
 };
 
-} // Anonymous namespace
+}  // Anonymous namespace
 
 Stmt vectorize_loops(Stmt s, const Target &t) {
     return VectorizeLoops(t).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

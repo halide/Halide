@@ -6,8 +6,8 @@
  */
 
 #include <iostream>
-#include <string>
 #include <stdlib.h>
+#include <string>
 
 #include "Introspection.h"
 
@@ -65,7 +65,7 @@ public:
     static int debug_level();
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
