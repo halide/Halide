@@ -28,7 +28,6 @@ class TargetOptions;
 class Type;
 class Value;
 template<typename, typename> class IRBuilder;
-}
 }  // namespace llvm
 
 namespace Halide {
