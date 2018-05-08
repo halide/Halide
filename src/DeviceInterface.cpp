@@ -10,7 +10,7 @@ namespace Halide {
 
 namespace {
 
-template <typename fn_type>
+template<typename fn_type>
 bool lookup_runtime_routine(const std::string &name,
                             const Target &target,
                             fn_type &result) {
@@ -28,7 +28,7 @@ bool lookup_runtime_routine(const std::string &name,
     return false;
 }
 
-}
+}  // namespace
 
 const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d, const Target &t,
                                                                      const char *error_site) {
@@ -135,6 +135,6 @@ Expr make_device_interface_call(DeviceAPI device_api) {
     }
     return Call::make(type_of<const halide_device_interface_t *>(), interface_name, {}, Call::Extern);
 }
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide

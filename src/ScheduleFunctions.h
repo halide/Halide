@@ -28,8 +28,7 @@ Stmt schedule_functions(const std::vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized);
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

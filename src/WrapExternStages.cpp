@@ -1,17 +1,17 @@
 #include "WrapExternStages.h"
+#include "Argument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Argument.h"
 
 #include <set>
 
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::set;
 using std::string;
 using std::vector;
-using std::pair;
 
 namespace {
 
@@ -251,5 +251,5 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
     module.append(wrapper);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

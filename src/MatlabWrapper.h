@@ -12,7 +12,7 @@ namespace llvm {
 class Module;
 class Function;
 class Value;
-}
+}  // namespace llvm
 
 namespace Halide {
 namespace Internal {
@@ -24,7 +24,7 @@ llvm::Function *define_matlab_wrapper(llvm::Module *module,
                                       llvm::Function *pipeline_argv_wrapper,
                                       llvm::Function *metadata_getter);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -1,7 +1,7 @@
 #include "RegionCosts.h"
-#include "IRVisitor.h"
-#include "IRMutator.h"
 #include "FindCalls.h"
+#include "IRMutator.h"
+#include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
@@ -9,9 +9,9 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::set;
+using std::string;
 using std::vector;
 
 namespace {
@@ -759,5 +759,5 @@ void Cost::simplify() {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

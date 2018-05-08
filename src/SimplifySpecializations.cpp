@@ -1,14 +1,14 @@
 #include "SimplifySpecializations.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Definition.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 #include <set>
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -151,9 +151,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     return result;
 }
 
-}
-
-
+}  // namespace
 
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
@@ -164,5 +162,5 @@ void simplify_specializations(map<string, Function> &env) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

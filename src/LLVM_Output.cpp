@@ -1,12 +1,12 @@
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
-#include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -491,7 +491,7 @@ struct SetCwd {
     }
 };
 
-}
+}  // namespace
 
 void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
                            const std::string &dst_file_in, bool deterministic) {

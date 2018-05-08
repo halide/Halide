@@ -56,7 +56,7 @@ Expr substitute_in_all_lets(const Expr &expr);
 Stmt substitute_in_all_lets(const Stmt &stmt);
 // @}
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -79,6 +79,5 @@ Stmt remove_dead_allocations(Stmt s) {
     return RemoveDeadAllocations().mutate(s);
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

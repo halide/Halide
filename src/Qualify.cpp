@@ -33,5 +33,5 @@ Expr qualify(const string &prefix, Expr value) {
     return q.mutate(value);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,22 +1,22 @@
 #include <iostream>
 
-#include "CodeGen_Posix.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
-#include "LLVM_Headers.h"
+#include "CodeGen_Posix.h"
+#include "Debug.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "Debug.h"
 #include "IRPrinter.h"
+#include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -292,4 +292,5 @@ void CodeGen_Posix::visit(const Free *stmt) {
     free_allocation(stmt->name);
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

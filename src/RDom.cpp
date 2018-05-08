@@ -1,11 +1,11 @@
 #include "RDom.h"
-#include "Util.h"
-#include "ImageParam.h"
+#include "Generator.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "ImageParam.h"
 #include "Simplify.h"
-#include "Generator.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -238,4 +238,4 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     return stream;
 }
 
-}
+}  // namespace Halide
