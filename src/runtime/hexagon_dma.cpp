@@ -222,7 +222,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         (currentFmt == eDmaFmt_P010_UV) ||
         (currentFmt == eDmaFmt_TP10_UV) ||
         (currentFmt == eDmaFmt_NV124R_UV)) {
-        stDmaTransferParm.u16RoiW = roi_width * dst->dim[0].stride;
+        //stDmaTransferParm.u16RoiW = roi_width * dst->dim[0].stride;
+		stDmaTransferParm.u16RoiW = roi_width;
         stDmaTransferParm.u16RoiH = roi_height * 2;
         stDmaTransferParm.u16RoiY = (stDmaTransferParm.u16RoiY - dev->frame_height) * 2;
     }
