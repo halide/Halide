@@ -1492,7 +1492,7 @@ bool GIOBase::types_defined() const {
     return !types_.empty();
 }
 
-const std::vector<Type> &GIOBase::types() {
+const std::vector<Type> &GIOBase::types() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!types_defined()) {
@@ -1506,7 +1506,7 @@ const std::vector<Type> &GIOBase::types() {
     return types_;
 }
 
-Type GIOBase::type() {
+Type GIOBase::type() const {
     const auto &t = types();
     internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
     return t.at(0);
@@ -1516,7 +1516,7 @@ bool GIOBase::dims_defined() const {
     return dims_ != -1;
 }
 
-int GIOBase::dims() {
+int GIOBase::dims() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!dims_defined()) {
@@ -1584,7 +1584,7 @@ std::string GIOBase::array_name(size_t i) const {
 
 // If our type(s) are defined, ensure it matches the ones passed in, asserting if not.
 // If our type(s) are not defined, just set to the ones passed in.
-void GIOBase::check_matching_types(const std::vector<Type> &t) {
+void GIOBase::check_matching_types(const std::vector<Type> &t) const {
     if (types_defined()) {
         user_assert(types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << types().size() << " types but saw " << t.size();
         for (size_t i = 0; i < t.size(); ++i) {
@@ -1597,7 +1597,7 @@ void GIOBase::check_matching_types(const std::vector<Type> &t) {
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
 // If our dims are not defined, just set to the one passed in.
-void GIOBase::check_matching_dims(int d) {
+void GIOBase::check_matching_dims(int d) const {
     internal_assert(d >= 0);
     if (dims_defined()) {
         user_assert(dims() == d) << "Dimensions mismatch for " << name() << ": expected " << dims() << " saw " << d;
@@ -1606,7 +1606,7 @@ void GIOBase::check_matching_dims(int d) {
     }
 }
 
-void GIOBase::check_matching_array_size(size_t size) {
+void GIOBase::check_matching_array_size(size_t size) const {
     if (array_size_defined()) {
         user_assert(array_size() == size) << "ArraySize mismatch for " << name() << ": expected " << array_size() << " saw " << size;
     } else {

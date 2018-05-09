@@ -89,4 +89,4 @@ OutputImageParam::operator ExternFuncArgument() const {
     return param;
 }
 
-}
+}  // namespace Halide

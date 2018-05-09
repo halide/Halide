@@ -3,9 +3,9 @@
 
 /** Defines methods for manipulating and analyzing boolean expressions. */
 
+#include "Bounds.h"
 #include "IR.h"
 #include "Scope.h"
-#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -48,7 +48,7 @@ Expr and_condition_over_domain(Expr c, const Scope<Interval> &varying);
 
 void solve_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

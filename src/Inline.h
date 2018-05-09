@@ -23,8 +23,7 @@ void inline_function(Function caller, Function f);
  * if it is not. */
 void validate_schedule_inlined_function(Function f);
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -15,8 +15,7 @@ struct LoweredFunc;
 /** Injects debug prints in a LoweredFunc that describe the arguments. Mutates the given func. */
 void debug_arguments(LoweredFunc *func);
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

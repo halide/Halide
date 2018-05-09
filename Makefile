@@ -48,6 +48,32 @@ LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic 
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
+SANITIZER_FLAGS ?=
+
+# TODO: this is suboptimal hackery; we should really add the relevant
+# support libs for the sanitizer(s) as weak symbols in Codegen_LLVM.
+# (Note also that, in general, most Sanitizers work most reliably with an all-Clang
+# build system.)
+
+ifneq (,$(findstring tsan,$(HL_TARGET)$(HL_JIT_TARGET)))
+
+# Note that attempting to use TSAN with the JIT can produce false positives
+# if libHalide is not also compiled with TSAN enabled; we tack the relevant
+# flag onto OPTIMIZE here, but that's really only effective if you ensure
+# to do a clean build before testing. (In general, most of the Sanitizers
+# only work well when used in a completely clean environment.)
+OPTIMIZE += -fsanitize=thread
+SANITIZER_FLAGS += -fsanitize=thread
+
+endif
+
+ifneq (,$(findstring asan,$(HL_TARGET)$(HL_JIT_TARGET)))
+OPTIMIZE += -fsanitize=address
+SANITIZER_FLAGS += -fsanitize=address
+endif
+
+COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
+
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
@@ -164,7 +190,7 @@ ifeq ($(UNAME), Linux)
 LLVM_LD_FLAGS += $(shell ldd `which $(LLVM_CONFIG)` | grep libtinfo > /dev/null && echo -ltinfo)
 endif
 
-TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools
+TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools $(SANITIZER_FLAGS)
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
@@ -670,6 +696,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_tempfile \
   posix_threads \
+  posix_threads_tsan \
   powerpc_cpu_features \
   prefetch \
   profiler \
@@ -678,6 +705,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_hvx \
   qurt_init_fini \
   qurt_threads \
+  qurt_threads_tsan \
   qurt_yield \
   runtime_api \
   ssp \
@@ -691,6 +719,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_tempfile \
   windows_threads \
+  windows_threads_tsan \
   windows_yield \
   write_debug_image \
   x86_cpu_features
@@ -749,7 +778,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# object files in which archives it uses to resolve
 	# symbols. We only care about the libLLVM ones.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(COMMON_LD_FLAGS) 2>&1 | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1| egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
@@ -1835,4 +1864,3 @@ $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(ROOT_DIR)/util/
 
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
-

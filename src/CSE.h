@@ -31,7 +31,7 @@ Stmt common_subexpression_elimination(const Stmt &, bool lift_all = false);
 
 void cse_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

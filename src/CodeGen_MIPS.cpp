@@ -1,12 +1,12 @@
 #include "CodeGen_MIPS.h"
-#include "Util.h"
 #include "LLVM_Headers.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -41,4 +41,5 @@ int CodeGen_MIPS::native_vector_bits() const {
     return 128;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

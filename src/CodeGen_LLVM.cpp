@@ -1,27 +1,27 @@
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 
-#include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
+#include "CSE.h"
 #include "CodeGen_ARM.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Hexagon.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_X86.h"
-#include "CPlusPlusMangle.h"
-#include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
-#include "IntegerDivisionTable.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
 #include "JITModule.h"
-#include "Lerp.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Lerp.h"
 #include "MatlabWrapper.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -44,14 +44,14 @@ std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMConte
 namespace Internal {
 
 using namespace llvm;
-using std::ostringstream;
 using std::cout;
 using std::endl;
+using std::map;
+using std::ostringstream;
+using std::pair;
+using std::stack;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
-using std::stack;
 
 // Define a local empty inline function for each target
 // to disable initialization.
@@ -1071,12 +1071,42 @@ void CodeGen_LLVM::optimize_module() {
     }
 #endif
 
+    if (get_target().has_feature(Target::ASAN)) {
+        auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createAddressSanitizerFunctionPass());
+            pm.add(createAddressSanitizerModulePass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
+    }
+
+    if (get_target().has_feature(Target::TSAN)) {
+        auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createThreadSanitizerPass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
+    }
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
+        }
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
@@ -1694,7 +1724,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             bool external = op->param.defined() || op->image.defined();
 
             // Don't read beyond the end of an external buffer.
-            if (external) {
+            // (In ASAN mode, don't read beyond the end of internal buffers either,
+            // as ASAN will complain even about harmless stack overreads.)
+            if (external || target.has_feature(Target::ASAN)) {
                 base_b -= 1;
                 shifted_b = true;
             } else {
@@ -3567,4 +3599,5 @@ ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
     return modulus_remainder(e, alignment_info);
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

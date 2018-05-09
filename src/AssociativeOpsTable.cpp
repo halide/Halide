@@ -310,7 +310,7 @@ std::string print_types(const vector<Type> &types) {
     return stream.str();
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     internal_assert(!exprs.empty());
@@ -369,5 +369,5 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     return empty;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

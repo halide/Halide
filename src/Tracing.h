@@ -22,7 +22,7 @@ Stmt inject_tracing(Stmt, const std::string &pipeline_name,
                     const std::vector<Function> &outputs,
                     const Target &Target);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

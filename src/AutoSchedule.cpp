@@ -6,8 +6,8 @@
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "Inline.h"
 #include "IREquality.h"
+#include "Inline.h"
 #include "ParallelRVar.h"
 #include "RealizationOrder.h"
 #include "RegionCosts.h"
@@ -18,22 +18,30 @@
 namespace Halide {
 namespace Internal {
 
+using std::deque;
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
-using std::set;
-using std::deque;
-using std::pair;
-using std::make_pair;
 
 namespace {
 
-int string_to_int(const std::string &s) {
-    std::istringstream iss(s);
-    int i;
-    iss >> i;
-    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << s;
-    return i;
+// Substitute parameter estimates into the exprs describing the box bounds.
+void substitute_estimates_box(Box &box) {
+    box.used = subsitute_var_estimates(box.used);
+    for (auto &b : box.bounds) {
+        b.min = subsitute_var_estimates(b.min);
+        b.max = subsitute_var_estimates(b.max);
+    }
+}
+
+// Substitute parameter estimates into the boxes in 'region'.
+void substitute_estimates_region(map<string, Box> &region) {
+    for (auto &iter : region) {
+        substitute_estimates_box(iter.second);
+    }
 }
 
 // Return true if any of the box dimension is unbounded.
@@ -451,8 +459,9 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                         } else if (arg.is_expr()) {
                             // Find the boxes required for the expression and add the regions
                             // to the queue.
-                            Expr subs_arg = SubstituteVarEstimates().mutate(arg.expr);
+                            Expr subs_arg = subsitute_var_estimates(arg.expr);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
                                                     only_regions_computed, s.func.name(), visited);
                         } else if (arg.is_image_param() || arg.is_buffer()) {
@@ -480,8 +489,8 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     // current scope.
                     for (int d = 0; d < (int)dims.size() - 1; d++) {
                         Interval simple_bounds = get_element(curr_bounds, dims[d].var);
-                        simple_bounds.min = simplify(SubstituteVarEstimates().mutate(simple_bounds.min));
-                        simple_bounds.max = simplify(SubstituteVarEstimates().mutate(simple_bounds.max));
+                        simple_bounds.min = subsitute_var_estimates(simple_bounds.min);
+                        simple_bounds.max = subsitute_var_estimates(simple_bounds.max);
                         curr_scope.push(dims[d].var, simple_bounds);
                     }
 
@@ -490,16 +499,18 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
                     for (const auto &val : def.values()) {
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
-                        Expr subs_val = SubstituteVarEstimates().mutate(val);
+                        Expr subs_val = subsitute_var_estimates(val);
                         map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
+                        substitute_estimates_region(curr_regions);
 
                         // Arguments to the definition may require regions of functions.
                         // For example, update definitions in histograms where the bin is
                         // based on the value of a function.
                         Box left_reg;
                         for (const Expr &arg : def.args()) {
-                            Expr subs_arg = SubstituteVarEstimates().mutate(arg);
+                            Expr subs_arg = subsitute_var_estimates(arg);
                             map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            substitute_estimates_region(arg_regions);
 
                             // Merge the regions with the regions found while looking at
                             // the values.
@@ -3309,7 +3320,7 @@ bool inline_unbounded(const vector<Function> &outputs,
     return inlined;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // Generate schedules for all functions in the pipeline required to compute the
 // outputs. This applies the schedules and returns a string representation of
@@ -3518,10 +3529,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     return sched_string;
 }
 
-}
+}  // namespace Internal
 
 MachineParams MachineParams::generic() {
-  return MachineParams(16, 16 * 1024 * 1024, 40);
+    return MachineParams(16, 16 * 1024 * 1024, 40);
 }
 
 std::string MachineParams::to_string() const {
@@ -3541,4 +3552,4 @@ MachineParams::MachineParams(const std::string &s) {
     balance = Internal::string_to_int(v[2]);
 }
 
-}
+}  // namespace Halide

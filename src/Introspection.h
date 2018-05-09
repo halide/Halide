@@ -142,11 +142,11 @@ struct TestCompilationUnit {
         Halide::Internal::Introspection::test_compilation_unit(&test, &test_a, &offset_marker);
     }
 };
-}
+}  // namespace
 
 static TestCompilationUnit test_object;
 
-}
+}  // namespace HalideIntrospectionCanary
 
 #endif
 

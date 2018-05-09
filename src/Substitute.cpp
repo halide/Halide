@@ -1,7 +1,7 @@
 #include "Substitute.h"
-#include "Scope.h"
-#include "IRMutator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -210,5 +210,5 @@ Stmt substitute_in_all_lets(const Stmt &stmt) {
     return SubstituteInAllLets().mutate(stmt);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

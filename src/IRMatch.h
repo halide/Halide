@@ -2362,7 +2362,7 @@ auto rewriter(const Expr &e) noexcept -> Rewriter<decltype(pattern_arg(e))> {
 
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

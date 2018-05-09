@@ -1,6 +1,6 @@
 #include "IREquality.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -597,7 +597,7 @@ void check_not_equal(const Expr &a, const Expr &b) {
         << "\nand\n" << b << "\n";
 }
 
-} // namespace
+}  // namespace
 
 void ir_equality_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -622,4 +622,5 @@ void ir_equality_test() {
     debug(0) << "ir_equality_test passed\n";
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

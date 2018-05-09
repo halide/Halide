@@ -7,10 +7,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::pair;
 using std::ostringstream;
+using std::pair;
+using std::string;
 using std::vector;
 
 #if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
@@ -341,5 +341,5 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     return is_one(e);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -6,13 +6,13 @@
  * Defines util functions that used by auto scheduler.
  */
 
-#include <set>
 #include <limits>
+#include <set>
 
 #include "Bounds.h"
-#include "Interval.h"
-#include "IRVisitor.h"
 #include "IRMutator.h"
+#include "IRVisitor.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
@@ -35,25 +35,21 @@ class FindAllCalls : public IRVisitor {
             call->args[i].accept(this);
         }
     }
+
 public:
     std::set<std::string> funcs_called;
     std::vector<std::pair<std::string, std::vector<Expr>>> call_args;
 };
 
+/** Return an int representation of 's'. Throw an error on failure. */
+int string_to_int(const std::string &s);
 
-/** Substitute every variable with its estimate if specified. */
-class SubstituteVarEstimates: public IRMutator2 {
-    using IRMutator2::visit;
-
-    Expr visit(const Variable *var) override {
-        if (var->param.defined() && !var->param.is_buffer() &&
-            var->param.estimate().defined()) {
-            return var->param.estimate();
-        } else {
-            return var;
-        }
-    }
-};
+/** Substitute every variable in an Expr or a Stmt with its estimate
+ * if specified. */
+//@{
+Expr subsitute_var_estimates(Expr e);
+Stmt subsitute_var_estimates(Stmt s);
+//@}
 
 /** Return the size of an interval. Return an undefined expr if the interval
  * is unbounded. */
@@ -113,7 +109,9 @@ V &get_element(std::map<K, V> &m, const K &key) {
 }
 // @}
 
-}
-}
+void propagate_estimate_test();
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

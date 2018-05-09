@@ -232,8 +232,8 @@
 #include <type_traits>
 #include <vector>
 
-#include "Func.h"
 #include "ExternalCode.h"
+#include "Func.h"
 #include "ImageParam.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
@@ -1241,13 +1241,11 @@ public:
     IOKind kind() const;
 
     bool types_defined() const;
-    // non-const because Type may be lazily updated if initially unspecified
-    const std::vector<Type> &types();
-    Type type();
+    const std::vector<Type> &types() const;
+    Type type() const;
 
     bool dims_defined() const;
-    // non-const because Type may be lazily updated if initially unspecified
-    int dims();
+    int dims() const;
 
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
@@ -1262,13 +1260,13 @@ protected:
 
     friend class GeneratorBase;
 
-    int array_size_;           // always 1 if is_array() == false.
+    mutable int array_size_;   // always 1 if is_array() == false.
                                // -1 if is_array() == true but unspecified.
 
     const std::string name_;
     const IOKind kind_;
-    std::vector<Type> types_;  // empty if type is unspecified
-    int dims_;           // -1 if dim is unspecified
+    mutable std::vector<Type> types_;  // empty if type is unspecified
+    mutable int dims_;                 // -1 if dim is unspecified
 
     // Exactly one of these will have nonzero length
     std::vector<Func> funcs_;
@@ -1285,9 +1283,9 @@ protected:
 
     virtual void verify_internals();
 
-    void check_matching_array_size(size_t size);
-    void check_matching_types(const std::vector<Type> &t);
-    void check_matching_dims(int d);
+    void check_matching_array_size(size_t size) const;
+    void check_matching_types(const std::vector<Type> &t) const;
+    void check_matching_dims(int d) const;
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;

@@ -1,6 +1,6 @@
 #include "SelectGPUAPI.h"
-#include "IRMutator.h"
 #include "DeviceInterface.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -50,5 +50,5 @@ Stmt select_gpu_api(Stmt s, Target t) {
     return SelectGPUAPI(t).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

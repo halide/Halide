@@ -35,7 +35,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds = Scope<Interval>::empty_sc
  * stage in lowering than full simplification of a stmt. */
 Stmt simplify_exprs(Stmt);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

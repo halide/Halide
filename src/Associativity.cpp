@@ -2,13 +2,13 @@
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IROperator.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Simplify.h"
 #include "Util.h"
 
 #include <algorithm>
@@ -25,7 +25,7 @@ using std::vector;
 
 namespace {
 
-template <typename T>
+template<typename T>
 vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
     vector<T> sub;
     for (const auto &index : indices) {
@@ -825,6 +825,5 @@ void associativity_test() {
     std::cout << "Associativity test passed" << std::endl;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

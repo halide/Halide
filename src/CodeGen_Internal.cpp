@@ -8,10 +8,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -473,5 +473,5 @@ void set_function_attributes_for_target(llvm::Function *fn, Target t) {
     fn->addFnAttr("reciprocal-estimates", "none");
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

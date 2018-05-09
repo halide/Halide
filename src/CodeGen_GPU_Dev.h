@@ -5,8 +5,8 @@
  * Defines the code-generator interface for producing GPU device code
  */
 
-#include "IR.h"
 #include "DeviceArgument.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -59,6 +59,7 @@ struct CodeGen_GPU_Dev {
     static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

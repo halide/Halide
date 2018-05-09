@@ -16,7 +16,7 @@ namespace Internal {
  * scalar parameters and the buffers themselves (e.g. foo.buffer). */
 Stmt unpack_buffers(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -32,6 +32,11 @@ struct Bound {
 };
 
 map<string, Bound> stores, loads;
+// These mutexes (mutices?) are only needed for accessing stores/loads
+// from the my_trace callback (which can be called by multiple threads);
+// the ordinary code that initializes stores/loads is single-threaded
+// and has no contention.
+std::mutex stores_mutex, loads_mutex;
 
 // Return true if the coordinate values in 'coordinates' are within the bound 'b'
 bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims, int32_t lanes,
@@ -52,6 +57,7 @@ bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims,
 int my_trace(void *user_context, const halide_trace_event_t *e) {
     string fname = std::string(e->func);
     if (e->event == halide_trace_store) {
+        std::lock_guard<std::mutex> lock(stores_mutex);
         const auto &iter = stores.find(fname);
         if (iter != stores.end()) {
             const Bound &b = iter->second;
@@ -60,6 +66,7 @@ int my_trace(void *user_context, const halide_trace_event_t *e) {
             }
         }
     } else if (e->event == halide_trace_load) {
+        std::lock_guard<std::mutex> lock(loads_mutex);
         const auto &iter = loads.find(fname);
         if (iter != loads.end()) {
             const Bound &b = iter->second;
