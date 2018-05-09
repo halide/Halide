@@ -1085,7 +1085,6 @@ void CodeGen_LLVM::optimize_module() {
         b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
         b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
     }
-    }
 
     if (get_target().has_feature(Target::TSAN)) {
         auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
