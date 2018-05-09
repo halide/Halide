@@ -409,10 +409,8 @@ void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &stri
         }
     }
     if (current_dimension == 0) {
-        x->extent -= x->min;
-        y->extent -= y->min;
-        if (x->extent < 1) x->extent = 1;
-        if (y->extent < 1) y->extent = 1;
+        x->extent = std::max(1, x->extent - x->min + 1);
+        y->extent = std::max(1, y->extent - y->min + 1);
     }
 }
 
@@ -480,6 +478,8 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         globals.frame_size.x / globals.auto_layout_grid.x,
         globals.frame_size.y / globals.auto_layout_grid.y
     };
+    info() << "cell_size is " << cell_size << "\n";
+    info() << "auto_layout_pad is " << pad << "\n";
 
     int row = fi.layout_order / globals.auto_layout_grid.x;
     int col = fi.layout_order % globals.auto_layout_grid.x;
@@ -521,7 +521,6 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         float zoom_x = (float) (cell_size.x - pad.x) / (float) xr.extent;
         float zoom_y = (float) (cell_size.y - pad.y) / (float) yr.extent;
         fi.config.zoom = std::min(zoom_x, zoom_y);
-        info() << "zoom for " << func_name << " is " << zoom_x  << " " << zoom_y << "\n";
 
         // Try to choose an even-multiple zoom for better display
         // and just less weirdness.
@@ -536,6 +535,7 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
         } else if (fi.config.zoom < 1.f) {
             fi.config.zoom = ceil(fi.config.zoom * 20.f) / 20.f;
         }
+        info() << "zoom for " << func_name << " is " << zoom_x  << " " << zoom_y << " -> " << fi.config.zoom << "\n";
     }
 
     // Put the image at the top-left of the cell. (Should we try to
