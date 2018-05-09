@@ -424,6 +424,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
@@ -571,6 +572,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PythonExtensionGen.h \
   Qualify.h \
   Random.h \
   RealizationOrder.h \

@@ -13,6 +13,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Outputs.h"
+#include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
 #include "WrapExternStages.h"
 
@@ -422,6 +423,16 @@ void Module::compile(const Outputs &output_files_arg) const {
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
+    }
+    if (!output_files.python_extension_name.empty()) {
+        debug(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
+        user_assert(!output_files.c_header_name.empty()) << "Please generate .h together with python_extension";
+        std::string c_header_name = output_files.c_header_name;
+        std::ofstream file(output_files.python_extension_name);
+        Internal::PythonExtensionGen python_extension_gen(file,
+                                                          output_files.c_header_name,
+                                                          target());
+        python_extension_gen.compile(*this);
     }
     if (!output_files.schedule_name.empty()) {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
