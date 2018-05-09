@@ -95,7 +95,7 @@ template<> inline double div_imp<double>(double a, double b) {
     return a/b;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

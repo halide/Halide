@@ -28,17 +28,17 @@ class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 class GlobalVariable;
-}
+}  // namespace llvm
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 #include "IRVisitor.h"
 #include "Module.h"
-#include "Scope.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Target.h"
 
 namespace Halide {
@@ -483,12 +483,12 @@ private:
     virtual void codegen_predicated_vector_store(const Store *op);
 };
 
-}
+}  // namespace Internal
 
 /** Given a Halide module, generate an llvm::Module. */
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module,
                                            llvm::LLVMContext &context);
 
-}
+}  // namespace Halide
 
 #endif

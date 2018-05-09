@@ -28,6 +28,6 @@ std::vector<Var> make_argument_list(int dimensionality) {
     return args;
 }
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide

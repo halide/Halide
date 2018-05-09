@@ -1,17 +1,17 @@
 #include "AddImageChecks.h"
-#include "Target.h"
 #include "IRVisitor.h"
-#include "Substitute.h"
 #include "Simplify.h"
+#include "Substitute.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
+using std::make_pair;
 using std::map;
 using std::pair;
-using std::make_pair;
+using std::string;
+using std::vector;
 
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
@@ -641,5 +641,5 @@ Stmt add_image_checks(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

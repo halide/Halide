@@ -15,7 +15,7 @@ namespace Internal {
  * use nvidia's warp shuffle instructions. */
 Stmt lower_warp_shuffles(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

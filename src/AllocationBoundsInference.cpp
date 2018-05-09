@@ -1,17 +1,17 @@
 #include "AllocationBoundsInference.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Bounds.h"
 #include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::string;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -150,5 +150,5 @@ Stmt allocation_bounds_inference(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

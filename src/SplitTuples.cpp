@@ -6,10 +6,10 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::string;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -198,11 +198,11 @@ public:
     SplitTuples(const map<string, Function> &e) : env(e) {}
 };
 
-}
+}  // namespace
 
 Stmt split_tuples(Stmt s, const map<string, Function> &env) {
     return SplitTuples(env).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

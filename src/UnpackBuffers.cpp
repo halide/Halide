@@ -1,15 +1,15 @@
 #include "UnpackBuffers.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::string;
 using std::pair;
-using std::vector;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -62,7 +62,7 @@ public:
     map<string, BufferInfo> buffers;
 };
 
-}
+}  // namespace
 
 Stmt unpack_buffers(Stmt s) {
     FindBufferSymbols finder;
@@ -146,5 +146,5 @@ Stmt unpack_buffers(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

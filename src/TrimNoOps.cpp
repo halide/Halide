@@ -1,24 +1,24 @@
 #include <algorithm>
 
-#include "TrimNoOps.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
+#include "TrimNoOps.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
 
 namespace {
 
@@ -426,12 +426,12 @@ class TrimNoOps : public IRMutator2 {
     }
 };
 
-}
+}  // namespace
 
 Stmt trim_no_ops(Stmt s) {
     s = TrimNoOps().mutate(s);
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -165,7 +165,6 @@ public:
     static Var outermost() {
         return Var("__outermost");
     }
-
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
@@ -182,8 +181,8 @@ namespace Internal {
     arguments. */
 std::vector<Var> make_argument_list(int dimensionality);
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

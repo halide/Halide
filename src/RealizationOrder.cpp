@@ -1,20 +1,20 @@
 #include <algorithm>
 #include <set>
 
-#include "RealizationOrder.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "IRVisitor.h"
 #include "IREquality.h"
+#include "IRVisitor.h"
+#include "RealizationOrder.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::set;
-using std::vector;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -346,5 +346,5 @@ vector<string> topological_order(const vector<Function> &outputs,
     return order;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -8,11 +8,11 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::map;
-using std::string;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 struct TraceEventBuilder {
     string func;
@@ -453,5 +453,5 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,11 +1,11 @@
 #include "BoundsInference.h"
-#include "IRMutator.h"
-#include "Scope.h"
 #include "Bounds.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include "IREquality.h"
 
 #include <algorithm>
 #include <iterator>
@@ -13,11 +13,11 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
-using std::vector;
 using std::map;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -1130,5 +1130,5 @@ Stmt bounds_inference(Stmt s,
     return s.as<For>()->body;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

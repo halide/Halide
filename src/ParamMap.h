@@ -103,6 +103,6 @@ public:
     }
 };
 
-}
+}  // namespace Halide
 
 #endif

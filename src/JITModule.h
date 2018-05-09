@@ -156,7 +156,7 @@ public:
     static void release_all();
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

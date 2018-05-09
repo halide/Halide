@@ -1,25 +1,25 @@
 #include "HexagonOptimize.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "ConciseCasts.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Lerp.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Scope.h"
-#include "Bounds.h"
-#include "Lerp.h"
 #include <unordered_map>
 
 namespace Halide {
 namespace Internal {
 
-using std::set;
-using std::vector;
-using std::string;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 using namespace Halide::ConciseCasts;
 

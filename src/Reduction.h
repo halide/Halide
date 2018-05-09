@@ -103,7 +103,7 @@ public:
 
 void split_predicate_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

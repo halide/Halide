@@ -1,32 +1,30 @@
 #include "ScheduleFunctions.h"
-#include "IROperator.h"
-#include "Simplify.h"
-#include "Substitute.h"
-#include "ExprUsesVar.h"
-#include "Var.h"
-#include "Qualify.h"
-#include "IRMutator.h"
-#include "Target.h"
-#include "Inline.h"
+#include "ApplySplit.h"
 #include "CodeGen_GPU_Dev.h"
-#include "IRPrinter.h"
+#include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
-#include "ApplySplit.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Inline.h"
+#include "Qualify.h"
+#include "Simplify.h"
 #include "Solve.h"
+#include "Substitute.h"
+#include "Target.h"
+#include "Var.h"
 
 #include <algorithm>
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 // A structure representing a containing LetStmt, IfThenElse, or For
@@ -48,7 +46,7 @@ bool var_name_match(string v1, string v2) {
             Internal::ends_with(v2, "." + v1));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
@@ -2267,8 +2265,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
     s = RemoveLoopsOverOutermost().mutate(s);
 
     return s;
-
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,22 +1,22 @@
-#include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <stdio.h>
 
-#include "Simplify.h"
-#include "IROperator.h"
-#include "IREquality.h"
-#include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "Var.h"
-#include "Debug.h"
-#include "ModulusRemainder.h"
-#include "Substitute.h"
 #include "Bounds.h"
+#include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "Var.h"
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -25,10 +25,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::pair;
 using std::ostringstream;
+using std::pair;
+using std::string;
 using std::vector;
 
 #define LOG_EXPR_MUTATIONS 0
@@ -5937,5 +5937,5 @@ bool can_prove(Expr e) {
     return is_one(e);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

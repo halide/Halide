@@ -6,10 +6,10 @@
  * Provides Closure class.
  */
 
+#include "Buffer.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
-#include "Buffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -79,6 +79,7 @@ public:
     std::map<std::string, Buffer> buffers;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
