@@ -51,7 +51,7 @@ int64_t gcd(int64_t, int64_t);
 /** The least common multiple of two integers */
 int64_t lcm(int64_t, int64_t);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

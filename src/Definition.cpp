@@ -1,18 +1,18 @@
 #include <stdlib.h>
 
-#include "IR.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Introspection.h"
 #include "Definition.h"
+#include "IR.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Introspection.h"
 #include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
+using std::string;
+using std::vector;
 
 struct DefinitionContents {
     mutable RefCount ref_count;
@@ -207,5 +207,5 @@ const Specialization &Definition::add_specialization(Expr condition) {
     return contents->specializations.back();
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

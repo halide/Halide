@@ -32,7 +32,7 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
  */
 Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

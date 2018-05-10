@@ -2284,11 +2284,11 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
     #endif
 }
 
-}
-}
-}
+}  // namespace Introspection
+}  // namespace Internal
+}  // namespace Halide
 
-#else // WITH_INTROSPECTION
+#else  // WITH_INTROSPECTION
 
 namespace Halide {
 namespace Internal {
@@ -2313,8 +2313,8 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
                            void (*calib)()) {
 }
 
-}
-}
-}
+}  // namespace Introspection
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

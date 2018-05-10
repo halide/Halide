@@ -1,18 +1,18 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <memory>
 
-#include "HexagonOffload.h"
 #include "Closure.h"
-#include "InjectHostDevBufferCopies.h"
+#include "Elf.h"
+#include "HexagonOffload.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "LLVM_Output.h"
+#include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 #include "Param.h"
 #include "RemoveTrivialForLoops.h"
 #include "Substitute.h"
-#include "Elf.h"
 
 namespace Halide {
 namespace Internal {
@@ -218,7 +218,7 @@ std::string print_sections(const Object &obj) {
         oss << "No sections in object\n";
         return oss.str();
     }
-    for (const Section &s: obj.sections()) {
+    for (const Section &s : obj.sections()) {
         oss << s.get_name() << ", Type = " << section_type_string(s.get_type()) << ", Size = " << hex(s.get_size()) << ", Alignment = " << s.get_alignment() << "\n";
     }
     return oss.str();

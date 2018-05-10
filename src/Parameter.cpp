@@ -371,6 +371,5 @@ RegisteredParameter::~RegisteredParameter() {
     unregister_if_needed();
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

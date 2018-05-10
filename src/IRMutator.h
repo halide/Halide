@@ -201,7 +201,7 @@ std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Ar
     return {new_bounds, bounds_changed};
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

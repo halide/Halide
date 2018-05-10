@@ -191,6 +191,29 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               rewrite(c1 < min(y, c0), fold(c1 < c0) && c1 < y) ||
               rewrite(c1 < max(y, c0), fold(c1 < c0) || c1 < y) ||
 
+              // Comparisons with selects:
+              // x < select(c, t, f) == c && (x < t) || !c && (x < f)
+              // This is profitable when x < t or x < f is statically provable
+              rewrite(x < select(y, x + c0, z), !y && (x < z), c0 <= 0) ||
+              rewrite(x < select(y, x + c0, z), y || (x < z), c0 > 0) ||
+              rewrite(x < select(y, z, x + c0), y && (x < z), c0 <= 0) ||
+              rewrite(x < select(y, z, x + c0), !y || (x < z), c0 > 0) ||
+
+              rewrite(x < select(y, x + c0, z) + c1, !y && (x < z + c1), c0 + c1 <= 0) ||
+              rewrite(x < select(y, x + c0, z) + c1, y || (x < z + c1), c0 + c1 > 0) ||
+              rewrite(x < select(y, z, x + c0) + c1, y && (x < z + c1), c0 + c1 <= 0) ||
+              rewrite(x < select(y, z, x + c0) + c1, !y || (x < z + c1), c0 + c1 > 0) ||
+
+              rewrite(select(y, x + c0, z) < x, !y && (z < x), c0 >= 0) ||
+              rewrite(select(y, x + c0, z) < x, y || (z < x), c0 < 0) ||
+              rewrite(select(y, z, x + c0) < x, y && (z < x), c0 >= 0) ||
+              rewrite(select(y, z, x + c0) < x, !y || (z < x), c0 < 0) ||
+
+              rewrite(select(y, x + c0, z) < x + c1, !y && (z < x + c1), c0 >= c1) ||
+              rewrite(select(y, x + c0, z) < x + c1, y || (z < x + c1), c0 < c1) ||
+              rewrite(select(y, z, x + c0) < x + c1, y && (z < x + c1), c0 >= c1) ||
+              rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
+
               // Normalize comparison of ramps to a comparison of a ramp and a broadacst
               rewrite(ramp(x, y) < ramp(z, w), ramp(x - z, y - w, lanes) < 0))) ||
 

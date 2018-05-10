@@ -4,8 +4,8 @@
 #include "IR.h"
 #include "Util.h"
 
-#include <set>
 #include <map>
+#include <set>
 #include <string>
 
 /** \file
@@ -138,7 +138,6 @@ protected:
     void visit(const Prefetch *) override;
     // @}
 };
-
 
 /** A visitor/mutator capable of passing arbitrary arguments to the
  * visit methods using CRTP and returning any types from them. All
@@ -323,7 +322,7 @@ public:
     }
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

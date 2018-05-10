@@ -3112,6 +3112,6 @@ const int64_t table_runtime_s32[256][4] = {
     {254, 1, 2164392969LL, 7},
     {255, 1, 2155905153LL, 7},
 };
-}
-}
-}
+}  // namespace IntegerDivision
+}  // namespace Internal
+}  // namespace Halide

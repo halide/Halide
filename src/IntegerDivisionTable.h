@@ -23,8 +23,8 @@ extern const int64_t table_runtime_u16[256][4];
 extern const int64_t table_runtime_s16[256][4];
 extern const int64_t table_runtime_u32[256][4];
 extern const int64_t table_runtime_s32[256][4];
-}
-}
-}
+}  // namespace IntegerDivision
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

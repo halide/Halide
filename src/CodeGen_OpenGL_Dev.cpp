@@ -1,22 +1,22 @@
 #include "CodeGen_OpenGL_Dev.h"
+#include "Debug.h"
+#include "Deinterleave.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
-#include <map>
 #include <limits>
+#include <map>
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
-using std::map;
 
 namespace {
 
@@ -84,7 +84,7 @@ Expr call_builtin(const Type &result_type, const string &func,
     return simplify(Cast::make(result_type, val));
 }
 
-}
+}  // namespace
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
@@ -1121,4 +1121,5 @@ void CodeGen_GLSL::test() {
     std::cout << "CodeGen_GLSL test passed\n";
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

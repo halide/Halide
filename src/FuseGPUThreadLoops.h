@@ -22,7 +22,7 @@ Stmt zero_gpu_loop_mins(Stmt s);
  * array. */
 Stmt fuse_gpu_thread_loops(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

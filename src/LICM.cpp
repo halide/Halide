@@ -11,11 +11,11 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
@@ -424,7 +424,6 @@ class GroupLoopInvariants : public IRMutator2 {
         ScopedBinding<int> bind(var_depth, op->name, expr_depth(op->value));
         return IRMutator2::visit(op);
     }
-
 };
 
 // Turn for loops of size one into let statements
@@ -436,5 +435,5 @@ Stmt loop_invariant_code_motion(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

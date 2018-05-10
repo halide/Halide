@@ -14,7 +14,7 @@ namespace Internal {
  * further simplification. Done during a late stage of lowering. */
 Stmt remove_trivial_for_loops(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

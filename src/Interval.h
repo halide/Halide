@@ -86,7 +86,7 @@ struct Interval {
 
 void interval_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -1,7 +1,7 @@
 #include "IR.h"
+#include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -891,5 +891,5 @@ Call::ConstString Call::buffer_crop = "_halide_buffer_crop";
 Call::ConstString Call::buffer_set_bounds = "_halide_buffer_set_bounds";
 Call::ConstString Call::trace = "halide_trace_helper";
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

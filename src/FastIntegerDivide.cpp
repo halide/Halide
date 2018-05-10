@@ -1,8 +1,8 @@
 #include <mutex>
 
 #include "FastIntegerDivide.h"
-#include "IntegerDivisionTable.h"
 #include "IROperator.h"
+#include "IntegerDivisionTable.h"
 
 namespace Halide {
 
@@ -111,7 +111,7 @@ Buffer<uint32_t> integer_divide_table_s32() {
         return im;
     }
 }
-}
+}  // namespace IntegerDivideTable
 
 Expr fast_integer_divide(Expr numerator, Expr denominator) {
     if (is_const(denominator)) {
@@ -225,11 +225,10 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
     internal_assert(result.type() == t);
 
     return result;
-
 }
 
 Expr fast_integer_modulo(Expr numerator, Expr denominator) {
     return numerator - fast_integer_divide(numerator, denominator) * denominator;
 }
 
-}
+}  // namespace Halide

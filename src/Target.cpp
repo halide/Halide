@@ -266,7 +266,11 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_realizations", Target::TraceRealizations},
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
+    {"tsan", Target::TSAN},
+    {"asan", Target::ASAN},
     {"new_autoscheduler", Target::NewAutoscheduler},
+    // NOTE: When adding features to this map, be sure to update
+    // PyEnums.cpp and halide.cmake as well.
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -293,8 +297,14 @@ Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
 #if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+    host.set_feature(Target::ASAN);
+#endif
 #if __has_feature(memory_sanitizer)
     host.set_feature(Target::MSAN);
+#endif
+#if __has_feature(thread_sanitizer)
+    host.set_feature(Target::TSAN);
 #endif
 #endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
@@ -571,7 +581,6 @@ void target_test() {
     std::cout << "Target test passed" << std::endl;
 }
 
+}  // namespace Internal
 
-}
-
-}
+}  // namespace Halide

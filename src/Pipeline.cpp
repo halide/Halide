@@ -1,16 +1,16 @@
 #include <algorithm>
 
-#include "Pipeline.h"
 #include "Argument.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "InferArguments.h"
 #include "IRVisitor.h"
+#include "InferArguments.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
 #include "ParamMap.h"
+#include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 #include "AutoScheduleNew.h"
@@ -19,9 +19,9 @@ using namespace Halide::Internal;
 
 namespace Halide {
 
-using std::vector;
-using std::string;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -760,16 +760,16 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
         for (size_t i = 0; i < outputs.r->size(); i++) {
             const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     } else if (outputs.buf) {
         args_result.store[arg_index++] = outputs.buf;
-        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << outputs.buf->host << "\n";
+        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
     } else {
         for (const Buffer<> &buffer : *outputs.buffer_list) {
             const halide_buffer_t *buf = buffer.raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
 
@@ -838,7 +838,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }
     } else if (outputs.buffer_list) {
-      for (const Buffer<> &buf : *outputs.buffer_list) {
+        for (const Buffer<> &buf : *outputs.buffer_list) {
             user_assert(buf.data() != nullptr)
                 << "Buffer at " << &buf << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";

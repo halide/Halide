@@ -1,17 +1,17 @@
 #include <iostream>
 #include <map>
 
-#include "IRVisitor.h"
-#include "IRMatch.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::map;
 using std::string;
+using std::vector;
 
 void expr_match_test() {
     vector<Expr> matches;
@@ -402,6 +402,7 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     }
     return false;
 }
-}
 
-}}
+}  // namespace IRMatcher
+}  // namespace Internal
+}  // namespace Halide

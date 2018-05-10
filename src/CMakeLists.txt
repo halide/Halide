@@ -63,6 +63,7 @@ set(RUNTIME_CPP
   posix_print
   posix_tempfile
   posix_threads
+  posix_threads_tsan
   powerpc_cpu_features
   prefetch
   profiler
@@ -71,6 +72,7 @@ set(RUNTIME_CPP
   qurt_hvx
   qurt_init_fini
   qurt_threads
+  qurt_threads_tsan
   qurt_yield
   runtime_api
   ssp
@@ -84,6 +86,7 @@ set(RUNTIME_CPP
   windows_profiler
   windows_tempfile
   windows_threads
+  windows_threads_tsan
   windows_yield
   write_debug_image
   x86_cpu_features
