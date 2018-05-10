@@ -1072,7 +1072,7 @@ void CodeGen_LLVM::optimize_module() {
 #endif
 
     if (get_target().has_feature(Target::ASAN)) {
-      auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+        auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
             constexpr bool compile_kernel = false;   // always false for user code
             constexpr bool recover = false;          // -fsanitize-recover, always false here
 
