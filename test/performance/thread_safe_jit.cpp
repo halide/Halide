@@ -72,7 +72,7 @@ void separate_func_per_thread() {
 
 void same_func_per_thread_executor(int index, test_func &test) {
     for (int i = 0; i < 10; i++) {
-        Buffer<int32_t> result = test.f.realize(10, get_target_from_environment(),
+        Buffer<int32_t> result = test.f.realize(10, get_jit_target_from_environment(),
                                                 { { test.p, index },
                                                   { test.in, bufs[index] } });
         for (int j = 0; j < 10; j++) {
