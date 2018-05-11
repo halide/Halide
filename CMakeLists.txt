@@ -2,8 +2,10 @@
 project(Halide)
 cmake_minimum_required(VERSION 3.2)
 
+set(HALIDE_BASE_DIR   "${CMAKE_CURRENT_SOURCE_DIR}")
+
 set(CPACK_PACKAGE_VENDOR "Halide")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+set(CPACK_RESOURCE_FILE_LICENSE "${HALIDE_BASE_DIR}/LICENSE.txt")
 set(CPACK_MONOLITHIC_INSTALL OFF)
 if (WIN32)
   set(CPACK_GENERATOR "ZIP")
@@ -31,12 +33,16 @@ else()
   endif()
 endif()
 
+if("${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}" STREQUAL "40")
+  message(WARNING "*** Warning: LLVM 4.x is no longer actively tested with Halide; consider using a newer LLVM version. ***")
+endif()
+
 # Notify the user what paths and LLVM version we are using
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 if (MSVC AND NOT CMAKE_CONFIGURATION_TYPES)
-  # LLVM5.x on Windows can include "$(Configuration) in the path";
+  # LLVM5.x on Windows can include "$(Configuration)" in the path;
   # fix this so we can use the paths right away.
   string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
 endif()
@@ -94,6 +100,11 @@ function(check_tool_exists NAME PATH)
   # Need to convert to CMake path so that backslashes don't get
   # interpreted as an escape.
   file(TO_CMAKE_PATH "${PATH}" TOOL_PATH)
+  if (MSVC)
+    # LLVM5.x on Windows can include "$(Configuration)" in the path;
+    # fix this so we can use the paths right away.
+    string(REPLACE "$(Configuration)" ${CMAKE_BUILD_TYPE} TOOL_PATH "${TOOL_PATH}")
+  endif()
   if (NOT EXISTS "${TOOL_PATH}")
     message(FATAL_ERROR "Tool ${NAME} not found at ${TOOL_PATH}")
   endif()
@@ -177,8 +188,8 @@ function(halide_project name folder)
     endif()
   endif()
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
-  target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
+  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/src")
+  target_include_directories("${name}" PRIVATE "${HALIDE_BASE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
     target_link_libraries("${name}" PRIVATE Kernel32)
@@ -207,6 +218,7 @@ else()
   add_compile_options(/wd4018)  # disable "signed/unsigned mismatch"
   add_compile_options(/wd4503)  # disable "decorated name length exceeded, name was truncated"
   add_compile_options(/wd4267)  # disable "conversion from 'size_t' to 'int', possible loss of data"
+  add_compile_options(/wd4800)  # forcing value to bool 'true' or 'false' (performance warning)
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
   endif()
@@ -231,7 +243,7 @@ endif()
 # For in-tree builds, we need to set the input variables for halide.cmake
 # to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
 set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
-set(HALIDE_TOOLS_DIR "${CMAKE_SOURCE_DIR}/tools")
+set(HALIDE_TOOLS_DIR "${HALIDE_BASE_DIR}/tools")
 set(HALIDE_COMPILER_LIB Halide)
 set(HALIDE_DISTRIB_DIR "/bad-path")
 include(halide.cmake)
@@ -304,7 +316,7 @@ function(add_test TARGET)
   get_target_property(TARGET_TYPE "${TARGET}" TYPE)
   if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
     if(${args_EXPECT_FAILURE})
-      set(COMMAND "${CMAKE_SOURCE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
+      set(COMMAND "${HALIDE_BASE_DIR}/test/common/expect_failure.sh" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}")
     else()
       set(COMMAND "${TARGET}")
     endif()
@@ -370,7 +382,7 @@ find_package(Doxygen)
     message(FATAL_ERROR "Could not find Doxygen. Either install it or set WITH_DOCS to OFF")
   endif()
 
-  configure_file(${CMAKE_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
+  configure_file(${HALIDE_BASE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
   # Note documentation is not built by default, the user needs to build the "doc" target
   add_custom_target(doc
     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
@@ -416,28 +428,29 @@ foreach(F mex_halide.m
           halide_benchmark.h
           halide_image.h
           halide_image_io.h
-          halide_image_info.h)
-  install(FILES "${CMAKE_SOURCE_DIR}/tools/${F}"
+          halide_image_info.h
+          halide_trace_config.h)
+  install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
           DESTINATION tools)
 endforeach()
 
 # ---- README
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.md")
+file(GLOB FILES "${HALIDE_BASE_DIR}/*.md")
 install(FILES ${FILES}
         DESTINATION .)
 
 # ---- Bazel
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/bazel/*")
+file(GLOB FILES "${HALIDE_BASE_DIR}/bazel/*")
 install(FILES ${FILES}
         DESTINATION .)
 
 # ---- CMake
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/*.cmake")
+file(GLOB FILES "${HALIDE_BASE_DIR}/*.cmake")
 install(FILES ${FILES}
         DESTINATION .)
 
 # ---- halide_config
-file(GLOB FILES "${CMAKE_SOURCE_DIR}/tools/halide_config.*.tpl")
+file(GLOB FILES "${HALIDE_BASE_DIR}/tools/halide_config.*.tpl")
 foreach(F ${FILES})
   get_filename_component(FNAME "${F}" NAME)  # Extract filename
   string(REGEX REPLACE "\\.tpl$" "" FNAME "${FNAME}")  # Strip .tpl extension

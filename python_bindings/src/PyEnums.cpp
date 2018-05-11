@@ -20,11 +20,25 @@ void define_enums(py::module &m) {
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
 
+    py::enum_<LinkageType>(m, "LinkageType")
+        .value("External", LinkageType::External)
+        .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
+        .value("Internal", LinkageType::Internal)
+    ;
+
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
         .value("AlignStart", LoopAlignStrategy::AlignStart)
         .value("AlignEnd", LoopAlignStrategy::AlignEnd)
-        .value("AlignEnd", LoopAlignStrategy::AlignEnd)
-        .value("AlignEnd", LoopAlignStrategy::AlignEnd)
+        .value("NoAlign", LoopAlignStrategy::NoAlign)
+        .value("Auto", LoopAlignStrategy::Auto)
+    ;
+
+    py::enum_<MemoryType>(m, "MemoryType")
+        .value("Auto", MemoryType::Auto)
+        .value("Heap", MemoryType::Heap)
+        .value("Stack", MemoryType::Stack)
+        .value("Register", MemoryType::Register)
+        .value("GPUShared", MemoryType::GPUShared)
     ;
 
     py::enum_<NameMangling>(m, "NameMangling")
@@ -118,6 +132,8 @@ void define_enums(py::module &m) {
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
+        .value("TSAN", Target::Feature::TSAN)
+        .value("ASAN", Target::Feature::ASAN)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

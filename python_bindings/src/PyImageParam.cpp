@@ -76,6 +76,7 @@ void define_image_param(py::module &m) {
         .def("in", (Func (ImageParam::*)(const Func &)) &ImageParam::in)
         .def("in", (Func (ImageParam::*)(const std::vector<Func> &)) &ImageParam::in)
         .def("in", (Func (ImageParam::*)()) &ImageParam::in)
+        .def("trace_loads", &ImageParam::trace_loads)
 
         .def("__repr__", [](const ImageParam &im) -> std::string {
             std::ostringstream o;

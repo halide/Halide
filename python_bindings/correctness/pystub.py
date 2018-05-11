@@ -114,7 +114,7 @@ def test_simplestub():
         # Bad gp name
         f = simplestub.generate(target, b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
     except RuntimeError as e:
-        assert "Generator has no GeneratorParam named: nonexistent_generator_param" in str(e)
+        assert "Generator simplestub has no GeneratorParam named: nonexistent_generator_param" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 

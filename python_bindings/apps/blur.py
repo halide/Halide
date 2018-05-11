@@ -13,7 +13,7 @@ def get_blur(input):
     clamped_input = hl.BoundaryConditions.repeat_edge(input)
 
     input_uint16 = hl.Func("input_uint16")
-    input_uint16[x,y] = hl.cast(hl.UInt(16), clamped_input[x,y])
+    input_uint16[x,y] = hl.u16(clamped_input[x,y])
     ci = input_uint16
 
     blur_x = hl.Func("blur_x")

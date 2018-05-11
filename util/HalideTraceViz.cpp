@@ -17,13 +17,18 @@ typedef int64_t ssize_t;
 #else
 #include <unistd.h>
 #endif
-#include <string.h>
+#include <string>
+#include <list>
+#include <set>
 
 #include "inconsolata.h"
 #include "HalideRuntime.h"
 #include "HalideTraceUtils.h"
 
+#include "halide_trace_config.h"
+
 using namespace Halide;
+using namespace Halide::Trace;
 using namespace Internal;
 
 namespace {
@@ -34,12 +39,8 @@ using std::string;
 using std::queue;
 using std::array;
 using std::pair;
-
-// A struct specifying a text label that will appear on the screen at some point.
-struct Label {
-    const char *text;
-    int x, y, n;
-};
+using std::list;
+using std::set;
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
@@ -47,53 +48,12 @@ struct FuncInfo {
     bool configured = false;
 
     // Configuration for how the func should be drawn
-    struct Config {
-        int zoom = 0;
-        int load_cost = 0;
-        int store_cost = 0;
-        int dims = 0;
-        int x, y = 0;
-        int x_stride[16];
-        int y_stride[16];
-        int color_dim = 0;
-        float min = 0.0f, max = 0.0f;
-        vector<Label> labels;
-        bool blank_on_end_realization = false;
-        uint32_t uninitialized_memory_color = 0xff000000;
-
-        void dump(const char *name) {
-            fprintf(stderr,
-                    "Func %s:\n"
-                    " min: %f max: %f\n"
-                    " color_dim: %d\n"
-                    " blank: %d\n"
-                    " dims: %d\n"
-                    " zoom: %d\n"
-                    " load cost: %d\n"
-                    " store cost: %d\n"
-                    " x: %d y: %d\n"
-                    " x_stride: %d %d %d %d\n"
-                    " y_stride: %d %d %d %d\n",
-                    name,
-                    min, max,
-                    color_dim,
-                    blank_on_end_realization,
-                    dims,
-                    zoom, load_cost, store_cost, x, y,
-                    x_stride[0], x_stride[1], x_stride[2], x_stride[3],
-                    y_stride[0], y_stride[1], y_stride[2], y_stride[3]);
-        }
-
-        Config() {
-            memset(x_stride, 0, sizeof(x_stride));
-            memset(y_stride, 0, sizeof(y_stride));
-        }
-    } config;
+    FuncConfig config;
 
     // Information about actual observed values gathered while parsing the trace
     struct Observed {
         string qualified_name;
-        int first_draw_time = 0, first_packet_idx = 0;
+        int first_draw_time = -1, first_packet_idx = -1;
         double min_value = 0.0, max_value = 0.0;
         int min_coord[16];
         int max_coord[16];
@@ -142,30 +102,24 @@ struct FuncInfo {
         }
 
         void report() {
-            fprintf(stderr,
-                    "Func %s:\n"
-                    " bounds of domain: ", qualified_name.c_str());
+            std::cerr <<
+                    "Func " << qualified_name << ":\n";
             for (int i = 0; i < 16; i++) {
-                if (min_coord[i] == 0 && max_coord[i] == 0) break;
-                if (i > 0) {
-                    fprintf(stderr, " x ");
+                if (min_coord[i] == 0 && max_coord[i] == 0) {
+                    break;
                 }
-                fprintf(stderr, "[%d, %d)", min_coord[i], max_coord[i]);
+                if (i > 0) {
+                    std::cerr << " x ";
+                }
+                std::cerr << "[" << min_coord[i] << ", " << max_coord[i] << ")";
             }
-            // TODO: Convert this file to using std::cerr so I don't
-            // have to struggle with cross-platform printf format
-            // specifiers. (stores and loads below really shouldn't be a double)
-            fprintf(stderr,
+            std::cerr <<
                     "\n"
-                    " range of values: [%f, %f]\n"
-                    " number of realizations: %d\n"
-                    " number of productions: %d\n"
-                    " number of loads: %g\n"
-                    " number of stores: %g\n",
-                    min_value, max_value,
-                    num_realizations, num_productions,
-                    (double)loads,
-                    (double)stores);
+                    " range of values: [" << min_value << ", " << max_value << "]\n"
+                    " number of realizations: " << num_realizations << "\n"
+                    " number of productions: " << num_productions << "\n"
+                    " number of loads: " << loads << "\n"
+                    " number of stores: " << stores << "\n";
         }
 
     } stats;
@@ -187,38 +141,41 @@ void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
     }
 }
 
-#define FONT_W 12
-#define FONT_H 32
-void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, int dst_width, int dst_height) {
+static constexpr int FONT_W = 12;
+static constexpr int FONT_H = 32;
+
+void draw_text(const std::string &text, const Point &pos, uint32_t color, uint32_t *dst, const Point &dst_size) {
     // The font array contains 96 characters of FONT_W * FONT_H letters.
     assert(inconsolata_raw_len == 96 * FONT_W * FONT_H);
 
     // Drop any alpha component of color
     color &= 0xffffff;
 
-    for (int c = 0; ; c++) {
-        int chr = text[c];
-        if (chr == 0) return;
+    int c = -1;
+    for (int chr : text) {
+        ++c;
 
         // We only handle a subset of ascii
-        if (chr < 32 || chr > 127) chr = 32;
+        if (chr < 32 || chr > 127) {
+            chr = 32;
+        }
         chr -= 32;
 
         uint8_t *font_ptr = inconsolata_raw + chr * (FONT_W * FONT_H);
         for (int fy = 0; fy < FONT_H; fy++) {
             for (int fx = 0; fx < FONT_W; fx++) {
-                int px = x + FONT_W*c + fx;
-                int py = y - FONT_H + fy + 1;
-                if (px < 0 || px >= dst_width ||
-                    py < 0 || py >= dst_height) continue;
-                dst[py * dst_width + px] = (font_ptr[fy * FONT_W + fx] << 24) | color;
+                int px = pos.x + FONT_W*c + fx;
+                int py = pos.y - FONT_H + fy + 1;
+                if (px < 0 || px >= dst_size.x ||
+                    py < 0 || py >= dst_size.y) continue;
+                dst[py * dst_size.x + px] = (font_ptr[fy * FONT_W + fx] << 24) | color;
             }
         }
     }
 }
 
 void usage() {
-    fprintf(stderr,
+    std::cerr <<
             R"USAGE(
 HalideTraceViz accepts Halide-generated binary tracing packets from
 stdin, and outputs them as raw 8-bit rgba32 pixel values to
@@ -279,7 +236,7 @@ Funcs.
      screen. This is the default
 
  --zoom factor: Each value of a Func will draw as a factor x factor
-     box in the output.
+     box in the output. Fractional values are allowed.
 
  --load time: Each load from a Func costs the given number of ticks.
 
@@ -321,47 +278,262 @@ Funcs.
      appears with its bottom left corner at the current coordinates
      and fades in over n frames.
 
-)USAGE");
+ --rlabel func label dx dy n: Like "--label", but relative to the Func's
+     position, using dx and dy as an offset.
+
+))USAGE";
 }
 
 // If the condition is false, print usage and exit with error.
 void expect(bool cond, int i) {
     if (!cond) {
         if (i) {
-            fprintf(stderr, "Argument parsing failed at argument %d\n", i);
+            std::cerr << "Argument parsing failed at argument " << i << "\n";
         }
         usage();
         exit(-1);
     }
 }
 
-// See all boxes corresponding to positions in a Func's allocation to
+// Set all boxes corresponding to positions in a Func's allocation to
 // the given color. Recursive to handle arbitrary
 // dimensionalities. Used by begin and end realization events.
-void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color, const FuncInfo &fi,
-                      Packet &p, int current_dimension = 0, int x_off = 0, int y_off = 0) {
-    assert(p.dimensions >= 2 * fi.config.dims);
+void fill_realization(uint32_t *image, const Point &image_size, uint32_t color,
+                      const FuncInfo &fi, const Packet &p,
+                      int current_dimension = 0, int x_off = 0, int y_off = 0) {
     if (2 * current_dimension == p.dimensions) {
-        int x_min = x_off * fi.config.zoom + fi.config.x;
-        int y_min = y_off * fi.config.zoom + fi.config.y;
+        int x_min = x_off * fi.config.zoom + fi.config.pos.x;
+        int y_min = y_off * fi.config.zoom + fi.config.pos.y;
         for (int y = 0; y < fi.config.zoom; y++) {
-            if (y_min + y < 0 || y_min + y >= image_height) continue;
+            if (y_min + y < 0 || y_min + y >= image_size.y) continue;
             for (int x = 0; x < fi.config.zoom; x++) {
-                if (x_min + x < 0 || x_min + x >= image_width) continue;
-                int idx = (y_min + y) * image_width + (x_min + x);
+                if (x_min + x < 0 || x_min + x >= image_size.x) continue;
+                int idx = (y_min + y) * image_size.x + (x_min + x);
                 image[idx] = color;
             }
         }
     } else {
         int min = p.get_coord(current_dimension * 2 + 0);
         int extent = p.get_coord(current_dimension * 2 + 1);
-        x_off += fi.config.x_stride[current_dimension] * min;
-        y_off += fi.config.y_stride[current_dimension] * min;
+        // If we don't have enough strides, assume subsequent dimensions have stride (0, 0)
+        const Point pt = current_dimension < fi.config.strides.size() ? fi.config.strides[current_dimension] : Point{0, 0};
+        x_off += pt.x * min;
+        y_off += pt.y * min;
         for (int i = min; i < min + extent; i++) {
-            fill_realization(image, image_width, image_height, color, fi, p, current_dimension + 1, x_off, y_off);
-            x_off += fi.config.x_stride[current_dimension];
-            y_off += fi.config.y_stride[current_dimension];
+            fill_realization(image, image_size, color, fi, p,
+                current_dimension + 1, x_off, y_off);
+            x_off += pt.x;
+            y_off += pt.y;
         }
+    }
+}
+
+int parse_int(const char *str) {
+    char *endptr = nullptr;
+    errno = 0;
+    long result = strtol(str, &endptr, 0);
+    if (errno == ERANGE || str == endptr) {
+        std::cerr << "Unable to parse '" << str << "' as an int\n";
+        usage();
+        exit(-1);
+    }
+    return (int) result;
+}
+
+float parse_float(const char *str) {
+    char *endptr = nullptr;
+    errno = 0;
+    float result = strtof(str, &endptr);
+    if (errno == ERANGE || str == endptr) {
+        std::cerr << "Unable to parse '" << str << "' as a float\n";
+        usage();
+        exit(-1);
+    }
+    return result;
+}
+
+double parse_double(const char *str) {
+    char *endptr = nullptr;
+    errno = 0;
+    double result = strtod(str, &endptr);
+    if (errno == ERANGE || str == endptr) {
+        std::cerr << "Unable to parse '" << str << "' as a double\n";
+        usage();
+        exit(-1);
+    }
+    return result;
+}
+
+void do_decay(int decay_factor, std::vector<uint32_t> &storage) {
+    if (decay_factor != 1) {
+        const uint32_t inv_d1 = (1 << 24) / std::max(1, decay_factor);
+        for (size_t i = 0; i < storage.size(); i++) {
+            uint32_t color = storage[i];
+            uint32_t rgb = color & 0x00ffffff;
+            uint32_t alpha = (color >> 24);
+            alpha *= inv_d1;
+            alpha &= 0xff000000;
+            storage[i] = alpha | rgb;
+        }
+    }
+}
+
+// Given a FuncConfig, check each field for "use some reasonable default"
+// value and fill in something reasonable.
+FuncConfig fix_func_config_defaults(const FuncConfig &cfg) {
+    // Make a FuncConfig with 'safe' defaults for everything,
+    // then merge the existing cfg into it.
+    FuncConfig safe;
+    safe.zoom = 1.f;
+    safe.load_cost = 0;
+    safe.store_cost = 1;
+    safe.pos = {0, 0};
+    safe.strides = { {1, 0}, {0, 1} };
+    safe.color_dim = -1;
+    safe.min = 0.0;
+    safe.max = 1.0;
+    safe.labels = {};
+    safe.blank_on_end_realization = 0;
+    safe.uninitialized_memory_color = 0x00000000;
+    safe.merge_from(cfg);
+    safe.uninitialized_memory_color |= 0xff000000;
+    return safe;
+}
+
+void process_args(int argc, char **argv, GlobalConfig &global, map<string, FuncInfo> &func_info) {
+    // The struct's default values are what we want
+    FuncConfig config;
+    vector<Point> pos_stack;
+    set<string> labels_seen;
+
+    // Parse command line args
+    int i = 1;
+    while (i < argc) {
+        string next = argv[i];
+        if (next == "--size") {
+            expect(i + 2 < argc, i);
+            global.frame_size.x = parse_int(argv[++i]);
+            global.frame_size.y = parse_int(argv[++i]);
+        } else if (next == "--func") {
+            expect(i + 1 < argc, i);
+            const char *func = argv[++i];
+            FuncInfo &fi = func_info[func];
+            fi.config.merge_from(config);
+            fi.configured = true;
+        } else if (next == "--min") {
+            expect(i + 1 < argc, i);
+            config.min = parse_double(argv[++i]);
+        } else if (next == "--max") {
+            expect(i + 1 < argc, i);
+            config.max = parse_double(argv[++i]);
+        } else if (next == "--move") {
+            expect(i + 2 < argc, i);
+            config.pos.x = parse_int(argv[++i]);
+            config.pos.y = parse_int(argv[++i]);
+        } else if (next == "--left") {
+            expect(i + 1 < argc, i);
+            config.pos.x -= parse_int(argv[++i]);
+        } else if (next == "--right") {
+            expect(i + 1 < argc, i);
+            config.pos.x += parse_int(argv[++i]);
+        } else if (next == "--up") {
+            expect(i + 1 < argc, i);
+            config.pos.y -= parse_int(argv[++i]);
+        } else if (next == "--down") {
+            expect(i + 1 < argc, i);
+            config.pos.y += parse_int(argv[++i]);
+        } else if (next == "--push") {
+            pos_stack.push_back(config.pos);
+        } else if (next == "--pop") {
+            expect(!pos_stack.empty(), i);
+            config.pos = pos_stack.back();
+            pos_stack.pop_back();
+        } else if (next == "--rgb") {
+            expect(i + 1 < argc, i);
+            config.color_dim = parse_int(argv[++i]);
+        } else if (next == "--gray") {
+            config.color_dim = -1;
+        } else if (next == "--blank") {
+            config.blank_on_end_realization = 1;
+        } else if (next == "--no-blank") {
+            config.blank_on_end_realization = 0;
+        } else if (next == "--zoom") {
+            expect(i + 1 < argc, i);
+            config.zoom = parse_float(argv[++i]);
+        } else if (next == "--load") {
+            expect(i + 1 < argc, i);
+            config.load_cost = parse_int(argv[++i]);
+        } else if (next == "--store") {
+            expect(i + 1 < argc, i);
+            config.store_cost = parse_int(argv[++i]);
+        } else if (next == "--strides") {
+            config.strides.clear();
+            while (i + 1 < argc) {
+                const char *next_arg = argv[i + 1];
+                if (next_arg[0] == '-' &&
+                    next_arg[1] == '-') {
+                    break;
+                }
+                expect(i + 2 < argc, i);
+                int x = parse_int(argv[++i]);
+                int y = parse_int(argv[++i]);
+                config.strides.push_back({x, y});
+            }
+        } else if (next == "--label") {
+            expect(i + 3 < argc, i);
+            char *func = argv[++i];
+            char *text = argv[++i];
+            int n = parse_int(argv[++i]);
+            FuncInfo &fi = func_info[func];
+            // A Label's position is relative to its Func's position;
+            // the --label flag has always expected an absolute position,
+            // so convert it to an offset.
+            Point offset = { config.pos.x - fi.config.pos.x, config.pos.y - fi.config.pos.y };
+            if (!labels_seen.count(func)) {
+                // If there is at least one --label specified for a Func,
+                // it overrides the entire previous set of labels, rather
+                // than simply appending.
+                fi.config.labels.clear();
+                labels_seen.insert(func);
+            }
+            fi.config.labels.push_back({text, offset, n});
+        } else if (next == "--rlabel") {
+            expect(i + 5 < argc, i);
+            char *func = argv[++i];
+            char *text = argv[++i];
+            int dx = parse_int(argv[++i]);
+            int dy = parse_int(argv[++i]);
+            int n = parse_int(argv[++i]);
+            FuncInfo &fi = func_info[func];
+            Point offset = { dx, dy };
+            if (!labels_seen.count(func)) {
+                // If there is at least one --label specified for a Func,
+                // it overrides the entire previous set of labels, rather
+                // than simply appending.
+                fi.config.labels.clear();
+                labels_seen.insert(func);
+            }
+            fi.config.labels.push_back({text, offset, n});
+        } else if (next == "--timestep") {
+            expect(i + 1 < argc, i);
+            global.timestep = parse_int(argv[++i]);
+        } else if (next == "--decay") {
+            expect(i + 2 < argc, i);
+            global.decay_factor_during_compute = parse_int(argv[++i]);
+            global.decay_factor_after_compute = parse_int(argv[++i]);
+        } else if (next == "--hold") {
+            expect(i + 1 < argc, i);
+            global.hold_frames = parse_int(argv[++i]);
+        } else if (next == "--uninit") {
+            expect(i + 3 < argc, i);
+            int r = parse_int(argv[++i]);
+            int g = parse_int(argv[++i]);
+            int b = parse_int(argv[++i]);
+            config.uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+        } else {
+            expect(false, i);
+        }
+        i++;
     }
 }
 
@@ -372,157 +544,33 @@ int run(int argc, char **argv) {
     }
 
     // State that determines how different funcs get drawn
-    int frame_width = 1920, frame_height = 1080;
-    float decay_factor[2] = {1, 2};
+    GlobalConfig global;
     map<string, FuncInfo> func_info;
-
-    int timestep = 10000;
-    int hold_frames = 250;
-
-    FuncInfo::Config config;
-    config.x = config.y = 0;
-    config.zoom = 1;
-    config.color_dim = -1;
-    config.min = 0;
-    config.max = 1;
-    config.store_cost = 1;
-    config.load_cost = 0;
-    config.blank_on_end_realization = false;
-    config.dims = 2;
-    config.x_stride[0] = 1;
-    config.y_stride[0] = 0;
-    config.x_stride[1] = 0;
-    config.y_stride[1] = 1;
-    config.uninitialized_memory_color = 255 << 24;
-
-    vector<pair<int, int>> pos_stack;
-
-    // Parse command line args
-    int i = 1;
-    while (i < argc) {
-        string next = argv[i];
-        if (next == "--size") {
-            expect(i + 2 < argc, i);
-            frame_width = atoi(argv[++i]);
-            frame_height = atoi(argv[++i]);
-        } else if (next == "--func") {
-            expect(i + 1 < argc, i);
-            const char *func = argv[++i];
-            FuncInfo &fi = func_info[func];
-            fi.config.labels.swap(config.labels);
-            fi.config = config;
-            fi.config.dump(func);
-            fi.configured = true;
-        } else if (next == "--min") {
-            expect(i + 1 < argc, i);
-            config.min = atof(argv[++i]);
-        } else if (next == "--max") {
-            expect(i + 1 < argc, i);
-            config.max = atof(argv[++i]);
-        } else if (next == "--move") {
-            expect(i + 2 < argc, i);
-            config.x = atoi(argv[++i]);
-            config.y = atoi(argv[++i]);
-        } else if (next == "--left") {
-            expect(i + 1 < argc, i);
-            config.x -= atoi(argv[++i]);
-        } else if (next == "--right") {
-            expect(i + 1 < argc, i);
-            config.x += atoi(argv[++i]);
-        } else if (next == "--up") {
-            expect(i + 1 < argc, i);
-            config.y -= atoi(argv[++i]);
-        } else if (next == "--down") {
-            expect(i + 1 < argc, i);
-            config.y += atoi(argv[++i]);
-        } else if (next == "--push") {
-            pos_stack.push_back({config.x, config.y});
-        } else if (next == "--pop") {
-            expect(!pos_stack.empty(), i);
-            config.x = pos_stack.back().first;
-            config.y = pos_stack.back().second;
-            pos_stack.pop_back();
-        } else if (next == "--rgb") {
-            expect(i + 1 < argc, i);
-            config.color_dim = atoi(argv[++i]);
-        } else if (next == "--gray") {
-            config.color_dim = -1;
-        } else if (next == "--blank") {
-            config.blank_on_end_realization = true;
-        } else if (next == "--no-blank") {
-            config.blank_on_end_realization = false;
-        } else if (next == "--zoom") {
-            expect(i + 1 < argc, i);
-            config.zoom = atoi(argv[++i]);
-        } else if (next == "--load") {
-            expect(i + 1 < argc, i);
-            config.load_cost = atoi(argv[++i]);
-        } else if (next == "--store") {
-            expect(i + 1 < argc, i);
-            config.store_cost = atoi(argv[++i]);
-        } else if (next == "--strides") {
-            config.dims = 0;
-            while (i + 1 < argc) {
-                const char *next_arg = argv[i + 1];
-                if (next_arg[0] == '-' &&
-                    next_arg[1] == '-') {
-                    break;
-                }
-                expect(i + 2 < argc, i);
-                config.x_stride[config.dims] = atoi(argv[++i]);
-                config.y_stride[config.dims] = atoi(argv[++i]);
-                config.dims++;
-            }
-        } else if (next == "--label") {
-            expect(i + 3 < argc, i);
-            char *func = argv[++i];
-            char *text = argv[++i];
-            int n = atoi(argv[++i]);
-            Label l = {text, config.x, config.y, n};
-            func_info[func].config.labels.push_back(l);
-        } else if (next == "--timestep") {
-            expect(i + 1 < argc, i);
-            timestep = atoi(argv[++i]);
-        } else if (next == "--decay") {
-            expect(i + 2 < argc, i);
-            decay_factor[0] = atof(argv[++i]);
-            decay_factor[1] = atof(argv[++i]);
-        } else if (next == "--hold") {
-            expect(i + 1 < argc, i);
-            hold_frames = atoi(argv[++i]);
-        } else if (next == "--uninit") {
-            expect(i + 3 < argc, i);
-            int r = atoi(argv[++i]);
-            int g = atoi(argv[++i]);
-            int b = atoi(argv[++i]);
-            config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
-        } else {
-            expect(false, i);
-        }
-        i++;
-    }
 
     // halide_clock counts halide events. video_clock counts how many
     // of these events have been output. When halide_clock gets ahead
     // of video_clock, we emit a new frame.
     size_t halide_clock = 0, video_clock = 0;
+    bool all_args_final = false;
+    bool seen_global_config_tag = false;
 
     // There are three layers - image data, an animation on top of
     // it, and text labels. These layers get composited.
-    uint32_t *image = new uint32_t[frame_width * frame_height];
-    memset(image, 0, 4 * frame_width * frame_height);
+    struct Buffers {
+        std::vector<uint32_t> image, anim, anim_decay, text, blend;
 
-    uint32_t *anim = new uint32_t[frame_width * frame_height];
-    memset(anim, 0, 4 * frame_width * frame_height);
+        void resize(const Point &frame_size) {
+            const int frame_elems = frame_size.x * frame_size.y;
+            image.resize(frame_elems, 0);
+            anim.resize(frame_elems, 0);
+            anim_decay.resize(frame_elems, 0);
+            text.resize(frame_elems, 0);
+            blend.resize(frame_elems, 0);
+        }
+    } buffers;
 
-    uint32_t *anim_decay = new uint32_t[frame_width * frame_height];
-    memset(anim_decay, 0, 4 * frame_width * frame_height);
-
-    uint32_t *text = new uint32_t[frame_width * frame_height];
-    memset(text, 0, 4 * frame_width * frame_height);
-
-    uint32_t *blend = new uint32_t[frame_width * frame_height];
-    memset(blend, 0, 4 * frame_width * frame_height);
+    // Leave buffers unallocated for now;
+    // we'll allocate once all tags and flags are processed
 
     struct PipelineInfo {
         string name;
@@ -531,28 +579,30 @@ int run(int argc, char **argv) {
 
     map<uint32_t, PipelineInfo> pipeline_info;
 
+    list<pair<Label, int>> labels_being_drawn;
     size_t end_counter = 0;
     size_t packet_clock = 0;
     for (;;) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
-            halide_clock += timestep;
-            if (end_counter == (size_t)hold_frames) {
+            halide_clock += global.timestep;
+            if (end_counter >= (size_t) global.hold_frames) {
                 break;
             }
         }
 
-        if (halide_clock >= video_clock) {
-            const ssize_t frame_bytes = 4 * frame_width * frame_height;
+        if (halide_clock > video_clock) {
+            assert(all_args_final);
+            const ssize_t frame_bytes = buffers.image.size() * sizeof(uint32_t);
 
-            while (halide_clock >= video_clock) {
+            while (halide_clock > video_clock) {
                 // Composite text over anim over image
-                for (int i = 0; i < frame_width * frame_height; i++) {
-                    uint8_t *anim_decay_px  = (uint8_t *)(anim_decay + i);
-                    uint8_t *anim_px  = (uint8_t *)(anim + i);
-                    uint8_t *image_px = (uint8_t *)(image + i);
-                    uint8_t *text_px  = (uint8_t *)(text + i);
-                    uint8_t *blend_px = (uint8_t *)(blend + i);
+                for (int i = 0; i < buffers.image.size(); i++) {
+                    uint8_t *anim_decay_px  = (uint8_t *)(buffers.anim_decay.data() + i);
+                    uint8_t *anim_px  = (uint8_t *)(buffers.anim.data() + i);
+                    uint8_t *image_px = (uint8_t *)(buffers.image.data() + i);
+                    uint8_t *text_px  = (uint8_t *)(buffers.text.data() + i);
+                    uint8_t *blend_px = (uint8_t *)(buffers.blend.data() + i);
                     // anim over anim_decay
                     composite(anim_decay_px, anim_px, anim_decay_px);
                     // anim_decay over image
@@ -562,41 +612,23 @@ int run(int argc, char **argv) {
                 }
 
                 // Dump the frame
-                ssize_t bytes_written = write(1, blend, frame_bytes);
+                ssize_t bytes_written = write(1, buffers.blend.data(), frame_bytes);
                 if (bytes_written < frame_bytes) {
-                    fprintf(stderr, "Could not write frame to stdout.\n");
+                    std::cerr << "Could not write frame to stdout.\n";
                     return -1;
                 }
 
-                video_clock += timestep;
+                video_clock += global.timestep;
 
                 // Decay the anim_decay
-                if (decay_factor[1] != 1) {
-                    const uint32_t inv_d1 = (1 << 24) / decay_factor[1];
-                    for (int i = 0; i < frame_width * frame_height; i++) {
-                        uint32_t color = anim_decay[i];
-                        uint32_t rgb = color & 0x00ffffff;
-                        uint32_t alpha = (color >> 24);
-                        alpha *= inv_d1;
-                        alpha &= 0xff000000;
-                        anim_decay[i] = alpha | rgb;
-                    }
-                }
+                do_decay(global.decay_factor_after_compute, buffers.anim_decay);
 
                 // Also decay the anim
-                const uint32_t inv_d0 = (1 << 24) / decay_factor[0];
-                for (int i = 0; i < frame_width * frame_height; i++) {
-                    uint32_t color = anim[i];
-                    uint32_t rgb = color & 0x00ffffff;
-                    uint32_t alpha = (color >> 24);
-                    alpha *= inv_d0;
-                    alpha &= 0xff000000;
-                    anim[i] = alpha | rgb;
-                }
+                do_decay(global.decay_factor_during_compute, buffers.anim);
             }
 
             // Blank anim
-            memset(anim, 0, frame_bytes);
+            std::fill(buffers.anim.begin(), buffers.anim.end(), 0);
         }
 
         // Read a tracing packet
@@ -612,8 +644,59 @@ int run(int argc, char **argv) {
             pipeline_info[p.id] = {p.func(), p.id};
             continue;
         } else if (p.event == halide_trace_end_pipeline) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
             continue;
+        } else if (p.event == halide_trace_tag) {
+            // If there are trace tags, they will come immediately after the pipeline's
+            // halide_trace_begin_pipeline but before any realizations.
+            if (halide_clock != 0 || video_clock != 0) {
+                // Messing with timestamp, framesize, etc partway thru
+                // a visualization would be bad.
+                // TODO: May need to check parent_id here, as nested
+                // pipelines called via define_extern could emit these.
+                std::cerr << "trace_tags are only expected at the start of a visualization.\n";
+                exit(1);
+            }
+            if (FuncConfig::match(p.trace_tag())) {
+                FuncConfig cfg(p.trace_tag());
+                func_info[p.func()].config = cfg;
+                func_info[p.func()].configured = true;
+            } else if (GlobalConfig::match(p.trace_tag())) {
+                if (seen_global_config_tag) {
+                    std::cerr << "Warning, saw multiple GlobalConfig trace_tags, some will be ignored.\n";
+                }
+                global = GlobalConfig(p.trace_tag());
+                seen_global_config_tag = true;
+            } else {
+                std::cerr << "Ignoring trace_tag: (" << p.trace_tag() << ")\n";
+            }
+            continue;
+        }
+
+        if (!all_args_final) {
+            // We wait until now to process the cmd-line args;
+            // this allows us to override trace-tag specifications
+            // via the commandline, which is handy for experimentations.
+            process_args(argc, argv, global, func_info);
+
+            // Ensure that all FuncConfigs have reasonable values.
+            for (auto &p : func_info) {
+                p.second.config = fix_func_config_defaults(p.second.config);
+            }
+
+            // allocate the buffers after all tags and flags are processed
+            buffers.resize(global.frame_size);
+
+            // dump after any tags are handled
+            global.dump(std::cerr);
+            for (const auto &p : func_info) {
+                const auto &fi = p.second;
+                if (fi.configured) {
+                    fi.config.dump(std::cerr, p.first);
+                }
+            }
+            all_args_final = true;
         }
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
@@ -621,10 +704,12 @@ int run(int argc, char **argv) {
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
             p.event == halide_trace_consume) {
+            assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
                    p.event == halide_trace_end_consume) {
+            assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
         }
 
@@ -635,8 +720,8 @@ int run(int argc, char **argv) {
                 func_info[qualified_name] = func_info[p.func()];
                 func_info.erase(p.func());
             } else {
-                fprintf(stderr, "Warning: ignoring func %s event %d    \n", qualified_name.c_str(), p.event);
-                fprintf(stderr, "Parent event %d %s\n", p.parent_id, pipeline.name.c_str());
+                std::cerr << "Warning: ignoring func " << qualified_name << " event " << p.event << "\n";
+                std::cerr << "Parent event " << p.parent_id << " " << pipeline.name << "\n";
             }
         }
 
@@ -644,25 +729,36 @@ int run(int argc, char **argv) {
         FuncInfo &fi = func_info[qualified_name];
         if (!fi.configured) continue;
 
-        if (fi.stats.first_draw_time == 0) {
+        if (fi.stats.first_draw_time < 0) {
             fi.stats.first_draw_time = halide_clock;
+            for (const auto &label : fi.config.labels) {
+                // Convert offset to absolute position before enqueuing
+                Label l = label;
+                l.pos.x += fi.config.pos.x;
+                l.pos.y += fi.config.pos.y;
+                labels_being_drawn.push_back({l, halide_clock});
+            }
         }
 
-        if (fi.stats.first_packet_idx == 0) {
+        if (fi.stats.first_packet_idx < 0) {
             fi.stats.first_packet_idx = packet_clock;
             fi.stats.qualified_name = qualified_name;
         }
 
-        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
-
-        for (size_t i = 0; i < fi.config.labels.size(); i++) {
-            const Label &label = fi.config.labels[i];
-            if (frames_since_first_draw <= label.n) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
+        for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+            const Label &label = it->first;
+            int first_draw_clock = it->second;
+            int frames_since_first_draw = (halide_clock - first_draw_clock) / global.timestep;
+            if (frames_since_first_draw < label.fade_in_frames) {
+                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
                 if (color > 255) color = 255;
                 color *= 0x10101;
-
-                draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
+                draw_text(label.text, label.pos, color, buffers.text.data(), global.frame_size);
+                ++it;
+            } else {
+                // Once we reach or exceed the final frame, draw at 100% opacity, then remove
+                draw_text(label.text, label.pos, 0xffffff, buffers.text.data(), global.frame_size);
+                it = labels_being_drawn.erase(it);
             }
         }
 
@@ -680,77 +776,77 @@ int run(int argc, char **argv) {
                 fi.stats.observe_load(p);
             }
 
-            // Check the tracing packet contained enough information
-            // given the number of dimensions the user claims this
-            // Func has.
-            assert(p.dimensions >= p.type.lanes * fi.config.dims);
-            if (p.dimensions >= p.type.lanes * fi.config.dims) {
-                for (int lane = 0; lane < p.type.lanes; lane++) {
+            // zero- or one-dimensional Funcs can have dimensions < strides.size().
+            // This may seem confusing, so keep in mind:
+            // fi.config.strides are provided by the --stride flag, so it can contain anything; i
+            // if you don't specify them at all, they default to {{1,0},{0,1} (aka size=2).
+            // So if we have excess strides, just ignore them.
+            const int dims = std::min(p.dimensions/p.type.lanes, (int) fi.config.strides.size());
+            for (int lane = 0; lane < p.type.lanes; lane++) {
+                // Compute the screen-space x, y coord to draw this.
+                int x = fi.config.pos.x;
+                int y = fi.config.pos.y;
+                const float z = fi.config.zoom;
+                for (int d = 0; d < dims; d++) {
+                    const int coord = d * p.type.lanes + lane;
+                    assert(coord < p.dimensions);
+                    const int a = p.get_coord(coord);
+                    const auto &stride = fi.config.strides[d];
+                    x += z * stride.x * a;
+                    y += z * stride.y * a;
+                }
 
-                    // Compute the screen-space x, y coord to draw this.
-                    int x = fi.config.x;
-                    int y = fi.config.y;
-                    const int z = fi.config.zoom;
-                    for (int d = 0; d < fi.config.dims; d++) {
-                        int a = p.get_coord(d * p.type.lanes + lane);
-                        x += fi.config.zoom * fi.config.x_stride[d] * a;
-                        y += fi.config.zoom * fi.config.y_stride[d] * a;
+                // The box to draw must be entirely on-screen
+                if (y < 0 || y >= global.frame_size.y ||
+                    x < 0 || x >= global.frame_size.x ||
+                    y + z - 1 < 0 || y + z - 1 >= global.frame_size.y ||
+                    x + z - 1 < 0 || x + z - 1 >= global.frame_size.x) {
+                    continue;
+                }
+
+                // Stores are orange, loads are blue.
+                uint32_t color = p.event == halide_trace_load ? 0xffffdd44 : 0xff44ddff;
+
+                uint32_t image_color;
+                bool update_image = false;
+
+                // Update one or more of the color channels of the
+                // image layer in case it's a store or a load from
+                // the input.
+                if (p.event == halide_trace_store ||
+                    fi.stats.num_realizations == 0 /* load from an input */) {
+                    update_image = true;
+                    // Get the old color, in case we're only
+                    // updating one of the color channels.
+                    image_color = buffers.image[global.frame_size.x * y + x];
+
+                    double value = p.get_value_as<double>(lane);
+
+                    // Normalize it.
+                    value = std::max(0.0, std::min(255.0, 255.0 * (value - fi.config.min) / (fi.config.max - fi.config.min)));
+
+                    // Convert to 8-bit color.
+                    uint8_t int_value = (uint8_t)value;
+
+                    if (fi.config.color_dim < 0) {
+                        // Grayscale
+                        image_color = (int_value * 0x00010101) | 0xff000000;
+                    } else {
+                        // Color
+                        uint32_t channel = p.get_coord(fi.config.color_dim * p.type.lanes + lane);
+                        uint32_t mask = ~(255 << (channel * 8));
+                        image_color &= mask;
+                        image_color |= int_value << (channel * 8);
                     }
+                }
 
-                    // The box to draw must be entirely on-screen
-                    if (y < 0 || y >= frame_height ||
-                        x < 0 || x >= frame_width ||
-                        y + z - 1 < 0 || y + z - 1 >= frame_height ||
-                        x + z - 1 < 0 || x + z - 1 >= frame_width) {
-                        continue;
-                    }
-
-                    // Stores are orange, loads are blue.
-                    uint32_t color = p.event == halide_trace_load ? 0xffffdd44 : 0xff44ddff;
-
-                    uint32_t image_color;
-                    bool update_image = false;
-
-                    // Update one or more of the color channels of the
-                    // image layer in case it's a store or a load from
-                    // the input.
-                    if (p.event == halide_trace_store ||
-                        fi.stats.num_realizations == 0 /* load from an input */) {
-                        update_image = true;
-                        // Get the old color, in case we're only
-                        // updating one of the color channels.
-                        image_color = image[frame_width * y + x];
-
-                        double value = p.get_value_as<double>(lane);
-
-                        // Normalize it.
-                        value = 255 * (value - fi.config.min) / (fi.config.max - fi.config.min);
-                        if (value < 0) value = 0;
-                        if (value > 255) value = 255;
-
-                        // Convert to 8-bit color.
-                        uint8_t int_value = (uint8_t)value;
-
-                        if (fi.config.color_dim < 0) {
-                            // Grayscale
-                            image_color = (int_value * 0x00010101) | 0xff000000;
-                        } else {
-                            // Color
-                            uint32_t channel = p.get_coord(fi.config.color_dim * p.type.lanes + lane);
-                            uint32_t mask = ~(255 << (channel * 8));
-                            image_color &= mask;
-                            image_color |= int_value << (channel * 8);
-                        }
-                    }
-
-                    // Draw the pixel
-                    for (int dy = 0; dy < fi.config.zoom; dy++) {
-                        for (int dx = 0; dx < fi.config.zoom; dx++) {
-                            int px = frame_width * (y + dy) + x + dx;
-                            anim[px] = color;
-                            if (update_image) {
-                                image[px] = image_color;
-                            }
+                // Draw the pixel
+                for (int dy = 0; dy < fi.config.zoom; dy++) {
+                    for (int dx = 0; dx < fi.config.zoom; dx++) {
+                        int px = global.frame_size.x * (y + dy) + x + dx;
+                        buffers.anim[px] = color;
+                        if (update_image) {
+                            buffers.image[px] = image_color;
                         }
                     }
                 }
@@ -759,11 +855,11 @@ int run(int argc, char **argv) {
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            fill_realization(image, frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
+            fill_realization(buffers.image.data(), global.frame_size, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
-            if (fi.config.blank_on_end_realization) {
-                fill_realization(image, frame_width, frame_height, 0, fi, p);
+            if (fi.config.blank_on_end_realization > 0) {
+                fill_realization(buffers.image.data(), global.frame_size, 0, fi, p);
             }
             break;
         case halide_trace_produce:
@@ -772,17 +868,21 @@ int run(int argc, char **argv) {
         case halide_trace_end_produce:
         case halide_trace_consume:
         case halide_trace_end_consume:
+        // Note that you can get nested pipeline begin/end events when you trace
+        // something that has extern stages that are also Halide-being-traced;
+        // these should just be ignored.
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
+        case halide_trace_tag:
             break;
         default:
-            fprintf(stderr, "Unknown tracing event code: %d\n", p.event);
+            std::cerr << "Unknown tracing event code: " << p.event << "\n";
             exit(-1);
         }
 
     }
 
-    fprintf(stderr, "Total number of Funcs: %d\n", (int)func_info.size());
+    std::cerr << "Total number of Funcs: " << func_info.size() << "\n";
 
     // Print stats about the Func gleaned from the trace.
     vector<std::pair<std::string, FuncInfo> > funcs;

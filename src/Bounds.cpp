@@ -514,7 +514,7 @@ private:
         }
     }
 
-    template<typename T1, typename T2>
+    template<typename Cmp>
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
         a_expr.accept(this);
         if (!interval.is_bounded()) {
@@ -530,51 +530,149 @@ private:
         }
         Interval b = interval;
 
-        Expr always_true = T1::make(a.max, b.min);
-        Expr always_false = T2::make(b.max, a.min);
-        if (can_prove(always_true)) {
-            interval = Interval::single_point(const_true());
-        } else if (can_prove(always_false)) {
-            interval = Interval::single_point(const_false());
-        } else {
-            bounds_of_type(Bool());
-        }
+        // The returned interval should have the property that min <=
+        // val <= max. For integers it's clear what this means. For
+        // bools, treating false < true, '<=' is in fact
+        // implication. So we want conditions min and max such that
+        // min implies val implies max.  So min should be a sufficient
+        // condition, and max should be a necessary condition.
+
+        interval.min = Cmp::make(a.max, b.min);
+        interval.max = Cmp::make(a.min, b.max);
     }
 
     void visit(const LT *op) {
-        visit_compare<LT, LE>(op->a, op->b);
+        visit_compare<LT>(op->a, op->b);
     }
 
     void visit(const LE *op) {
-        visit_compare<LE, LT>(op->a, op->b);
+        visit_compare<LE>(op->a, op->b);
     }
 
     void visit(const GT *op) {
-        visit_compare<LT, LE>(op->b, op->a);
+        visit_compare<LT>(op->b, op->a);
     }
 
     void visit(const GE *op) {
-        visit_compare<LE, LT>(op->b, op->a);
+        visit_compare<LE>(op->b, op->a);
     }
 
     void visit(const EQ *op) {
-        bounds_of_type(op->type);
+        op->a.accept(this);
+        Interval a = interval;
+
+        op->b.accept(this);
+        Interval b = interval;
+
+        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+            interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min == b.min);
+        } else {
+            // If either vary, it could always be false, so we have no
+            // good sufficient condition.
+            bounds_of_type(op->type);
+            // But could it be true? A necessary condition is that the
+            // ranges overlap.
+            if (a.is_bounded() && b.is_bounded()) {
+                interval.max = a.min <= b.max && b.min <= a.max;
+            }
+        }
     }
 
     void visit(const NE *op) {
-        bounds_of_type(op->type);
+        op->a.accept(this);
+        Interval a = interval;
+
+        op->b.accept(this);
+        Interval b = interval;
+
+        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+            interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min != b.min);
+        } else {
+            // If either vary, it could always be true that they're
+            // not equal, so we have no good necessary condition.
+            bounds_of_type(op->type);
+            // But we do have a sufficient condition. If the ranges of
+            // a and b do not overlap, then they must be not equal.
+            if (a.is_bounded() && b.is_bounded()) {
+                interval.min = a.min > b.max || b.min > a.max;
+            }
+        }
+    }
+
+    Expr make_and(Expr a, Expr b) {
+        if (is_one(a)) return b;
+        if (is_one(b)) return a;
+        if (is_zero(a)) return a;
+        if (is_zero(b)) return b;
+        return a && b;
     }
 
     void visit(const And *op) {
-        bounds_of_type(op->type);
+        op->a.accept(this);
+        Interval a = interval;
+
+        op->b.accept(this);
+        Interval b = interval;
+
+        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+            interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min && b.min);
+        } else {
+            // And is monotonic increasing in both args
+            interval.min = make_and(a.min, b.min);
+            interval.max = make_and(a.max, b.max);
+        }
+    }
+
+    Expr make_or(Expr a, Expr b) {
+        if (is_one(a)) return a;
+        if (is_one(b)) return b;
+        if (is_zero(a)) return b;
+        if (is_zero(b)) return a;
+        return a || b;
     }
 
     void visit(const Or *op) {
-        bounds_of_type(op->type);
+        op->a.accept(this);
+        Interval a = interval;
+
+        op->b.accept(this);
+        Interval b = interval;
+
+        if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
+            interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min || b.min);
+        } else {
+            // Or is monotonic increasing in both args
+            interval.min = make_or(a.min, b.min);
+            interval.max = make_or(a.max, b.max);
+        }
+    }
+
+    Expr make_not(Expr e) {
+        if (is_one(e)) return make_zero(e.type());
+        if (is_zero(e)) return make_one(e.type());
+        return !e;
     }
 
     void visit(const Not *op) {
-        bounds_of_type(op->type);
+        op->a.accept(this);
+        Interval a = interval;
+
+        if (a.is_single_point(op->a)) {
+            interval = Interval::single_point(op);
+        } else if (a.is_single_point()) {
+            interval = Interval::single_point(!a.min);
+        } else {
+            interval.min = make_not(a.max);
+            interval.max = make_not(a.min);
+        }
     }
 
     void visit(const Select *op) {
@@ -605,24 +703,62 @@ private:
             }
         }
 
-        bool const_scalar_condition =
-            (op->condition.type().is_scalar() &&
-             !expr_uses_vars(op->condition, scope));
+        Type t = op->type.element_of();
 
         if (a.min.same_as(b.min)) {
             interval.min = a.min;
-        } else if (!const_bound && const_scalar_condition) {
-            interval.min = select(op->condition, a.min, b.min);
-        } else {
+        } else if (cond.is_single_point()) {
+            interval.min = select(cond.min, a.min, b.min);
+        } else if (is_zero(cond.min) && is_one(cond.max)) {
             interval.min = Interval::make_min(a.min, b.min);
+        } else if (is_one(cond.max)) {
+            // cond.min is non-trivial
+            string var_name = unique_name('t');
+            Expr var = Variable::make(t, var_name);
+            interval.min = Interval::make_min(select(cond.min, var, b.min), var);
+            interval.min = Let::make(var_name, a.min, interval.min);
+        } else if (is_zero(cond.min)) {
+            // cond.max is non-trivial
+            string var_name = unique_name('t');
+            Expr var = Variable::make(t, var_name);
+            interval.min = Interval::make_min(select(cond.max, a.min, var), var);
+            interval.min = Let::make(var_name, b.min, interval.min);
+        } else {
+            string a_var_name = unique_name('t'), b_var_name = unique_name('t');
+            Expr a_var = Variable::make(t, a_var_name);
+            Expr b_var = Variable::make(t, b_var_name);
+            interval.min = Interval::make_min(select(cond.min, a_var, b_var),
+                                              select(cond.max, a_var, b_var));
+            interval.min = Let::make(a_var_name, a.min, interval.min);
+            interval.min = Let::make(b_var_name, b.min, interval.min);
         }
 
         if (a.max.same_as(b.max)) {
             interval.max = a.max;
-        } else if (!const_bound && const_scalar_condition) {
-            interval.max = select(op->condition, a.max, b.max);
-        } else {
+        } else if (cond.is_single_point()) {
+            interval.max = select(cond.min, a.max, b.max);
+        } else if (is_zero(cond.min) && is_one(cond.max)) {
             interval.max = Interval::make_max(a.max, b.max);
+        } else if (is_one(cond.max)) {
+            // cond.min is non-trivial
+            string var_name = unique_name('t');
+            Expr var = Variable::make(t, var_name);
+            interval.max = Interval::make_max(select(cond.min, var, b.max), var);
+            interval.max = Let::make(var_name, a.max, interval.max);
+        } else if (is_zero(cond.min)) {
+            // cond.max is non-trivial
+            string var_name = unique_name('t');
+            Expr var = Variable::make(t, var_name);
+            interval.max = Interval::make_max(select(cond.max, a.max, var), var);
+            interval.max = Let::make(var_name, b.max, interval.max);
+        } else {
+            string a_var_name = unique_name('t'), b_var_name = unique_name('t');
+            Expr a_var = Variable::make(t, a_var_name);
+            Expr b_var = Variable::make(t, b_var_name);
+            interval.max = Interval::make_max(select(cond.min, a_var, b_var),
+                                              select(cond.max, a_var, b_var));
+            interval.max = Let::make(a_var_name, a.max, interval.max);
+            interval.max = Let::make(b_var_name, b.max, interval.max);
         }
     }
 
@@ -704,7 +840,8 @@ private:
                 interval.max = Interval::pos_inf;
             }
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
+                   op->is_intrinsic(Call::likely_if_innermost) ||
+                   op->is_intrinsic(Call::strict_float)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -755,6 +892,12 @@ private:
             // loop to check perfect nesting.
             interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
                                 Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
+        } else if (op->is_intrinsic(Call::popcount) ||
+                   op->is_intrinsic(Call::count_leading_zeros) ||
+                   op->is_intrinsic(Call::count_trailing_zeros)) {
+            internal_assert(op->args.size() == 1);
+            interval = Interval(make_zero(op->type.element_of()),
+                                make_const(op->type.element_of(), op->args[0].type().bits()));
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
@@ -872,15 +1015,18 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const 
     Bounds b(&scope, fb, const_bound);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
+    Type expected = expr.type().element_of();
     if (b.interval.has_lower_bound()) {
-        internal_assert(b.interval.min.type().is_scalar())
+        internal_assert(b.interval.min.type() == expected)
             << "Min of " << expr
-            << " should have been a scalar: " << b.interval.min << "\n";
+            << " should have been a scalar of type " << expected
+            << ": " << b.interval.min << "\n";
     }
     if (b.interval.has_upper_bound()) {
-        internal_assert(b.interval.max.type().is_scalar())
+        internal_assert(b.interval.max.type() == expected)
             << "Max of " << expr
-            << " should have been a scalar: " << b.interval.max << "\n";
+            << " should have been a scalar of type " << expected
+            << ": " << b.interval.max << "\n";
     }
     return b.interval;
 }
@@ -1464,7 +1610,8 @@ private:
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost))) {
+                             call->is_intrinsic(Call::likely_if_innermost) ||
+                             call->is_intrinsic(Call::strict_float))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
@@ -1701,6 +1848,7 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
     for (pair<const string, Box> &i : provides.boxes) {
         merge_boxes(calls.boxes[i.first], i.second);
     }
+
     return calls.boxes;
 }
 
@@ -1982,7 +2130,7 @@ void bounds_test() {
 
     check(scope, select(y == 5, 0, 3), select(y == 5, 0, 3), select(y == 5, 0, 3));
     check(scope, select(y == 5, x, -3*x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
-    check(scope, select(y == x, x, -3*x + 8), -22, 10);
+    check(scope, select(y == x, x, -3*x + 8), -22, select(y <= 10 && 0 <= y, 10, 8));
 
     check(scope, cast<int32_t>(abs(cast<int16_t>(x/y))), 0, 32768);
     check(scope, cast<float>(x), 0.0f, 10.0f);

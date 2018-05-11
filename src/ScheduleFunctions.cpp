@@ -1763,6 +1763,14 @@ class StmtUsesFunc : public IRVisitor {
         }
         IRVisitor::visit(op);
     }
+    void visit(const Variable *op) {
+        if (op->type.is_handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
+            result = true;
+        }
+        IRVisitor::visit(op);
+    }
 public:
     bool result = false;
     StmtUsesFunc(string f) : func(f) {}
@@ -1823,6 +1831,18 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const Call *op) {
         if (op->name == func) {
+            do_indent();
+            stream << caller << " uses " << func << "\n";
+            last_print_was_ellipsis = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (op->type.is_handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
             do_indent();
             stream << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
@@ -1892,15 +1912,71 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         }
     }
 
+    int racy_shift_inwards_count = 0;
+    int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
         const StageSchedule &s = def.schedule();
+        set<string> parallel_vars;
         for (const Dim &d : s.dims()) {
+            // We don't care about GPU parallelism here
+            if (d.for_type == ForType::Parallel) {
+                parallel_vars.insert(d.var);
+            }
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()
                            << " requires " << d.device_api
                            << " but no compatible target feature is enabled in target "
                            << target.to_string() << "\n";
             }
+        }
+        if (s.allow_race_conditions()) {
+            allow_race_conditions_count++;
+        }
+
+        // For purposes of race-detection-warning, any split that
+        // is the child of a parallel var is also 'parallel'.
+        //
+        // However, there are four types of Split, and the concept of a child var varies across them:
+        // - For a vanilla split, inner and outer are the children and old_var is the parent.
+        // - For rename and purify, the outer is the child and the inner is meaningless.
+        // - For fuse, old_var is the child and inner/outer are the parents.
+        //
+        // (@abadams comments: "I acknowledge that this is gross and should be refactored.")
+
+        // (Note that the splits are ordered, so a single reverse-pass catches all these cases.)
+        for (auto split = s.splits().rbegin(); split != s.splits().rend(); split++) {
+            if (split->is_split() && (parallel_vars.count(split->outer) || parallel_vars.count(split->inner))) {
+                parallel_vars.insert(split->old_var);
+            } else if (split->is_fuse() && parallel_vars.count(split->old_var)) {
+                parallel_vars.insert(split->inner);
+                parallel_vars.insert(split->outer);
+            } else if ((split->is_rename() || split->is_purify()) && parallel_vars.count(split->outer)) {
+                parallel_vars.insert(split->old_var);
+            }
+        }
+
+        for (const auto &split : s.splits()) {
+            // ShiftInwards used inside a parallel split can produce racy (though benignly so) code
+            // that TSAN will complain about; issue a warning so that the user doesn't assume
+            // the warning is legitimate.
+            if (split.tail == TailStrategy::ShiftInwards && parallel_vars.count(split.outer)) {
+                racy_shift_inwards_count++;
+            }
+        }
+    }
+
+    if (target.has_feature(Target::TSAN)) {
+        if (allow_race_conditions_count > 0) {
+            user_warning << "Schedule for Func '" << f.name()
+                   << "'' has one or more uses of allow_race_conditions() in its schedule;\n"
+                   << "this may report benign data races when run with ThreadSanitizer.\n\n";
+        }
+        if (racy_shift_inwards_count > 0) {
+            user_warning << "Schedule for Func '" << f.name()
+                   << "'' has " << racy_shift_inwards_count << " split(s) using TailStrategy::ShiftInwards inside a parallel loop;\n"
+                   << "this may report benign data races when run with ThreadSanitizer.\n"
+                   << "(Note that ShiftInwards splits may be implicitly created by\n"
+                   << "other scheduling operations, e.g. parallel() and vectorize()).\n\n";
         }
     }
 
