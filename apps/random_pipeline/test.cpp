@@ -27,12 +27,12 @@ int main(int argc, char **argv) {
     random_pipeline(input, output);
     input.allocate();
 
-    double best_manual = benchmark(10, 1, [&]() {
+    double best_manual = benchmark(10, 10, [&]() {
         random_pipeline(input, output);
     });
     printf("Manually-tuned time: %gms\n", best_manual * 1e3);
 
-    double best_auto = benchmark(10, 1, [&]() {
+    double best_auto = benchmark(10, 10, [&]() {
         random_pipeline_auto_schedule(input, output);
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
