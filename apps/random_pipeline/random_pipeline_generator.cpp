@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <iostream>
+#include <random>
 
 using namespace Halide;
 using std::vector;
@@ -28,10 +29,12 @@ public:
     Input<Buffer<float>>  input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
 
+    std::mt19937 rng;
+
     // Helpers to generate random values.
-    int rand_int(int min, int max) { return (rand() % (max - min + 1)) + min; }
-    bool rand_bool() { return rand() % 2 == 0; }
-    float rand_float() { return rand() / (float)RAND_MAX; }
+    int rand_int(int min, int max) { return (rng() % (max - min + 1)) + min; }
+    bool rand_bool() { return rng() % 2 == 0; }
+    float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 
     Expr rand_value(Type t) {
         if (t.is_int()) {
@@ -100,10 +103,14 @@ public:
         // 3, which is really bad.
         RDom r(0, 3);
         vector<Expr> reduction_coords = make_arguments(f.args());
-        reduction_coords[dim] = r;
+        Expr e = 0.f;
+        for (int i = 0; i < 3; i++) {
+            reduction_coords[i] = i;
+            e += f(reduction_coords) * (i + 1) * (f.args()[dim] + 1);
+        }
 
         Func all("all");
-        all(f.args()) = sum(f(reduction_coords) * (r + 1) * (f.args()[dim] + 1));
+        all(f.args()) = e;
 
         return all;
     }
@@ -137,7 +144,7 @@ public:
     }
 
     void generate() {
-        srand(seed);
+        rng.seed(seed);
 
         Func tail = input;
         for (int i = 0; i < stages; i++) {
@@ -146,8 +153,15 @@ public:
                 next.compute_root();
             }
             tail = next;
+            if (!auto_schedule) {
+                tail.compute_root().reorder(_0, _2, _1).vectorize(_0, 8).parallel(_1);
+            }
         }
         output(tail.args()) = tail(tail.args());
+
+        if (!auto_schedule) {
+            output.compute_root().reorder(_0, _2, _1).vectorize(_0, 8).parallel(_1);
+        }
 
         if (auto_schedule) {
             // This estimate of the input bounds is unlikely to be accurate.
