@@ -153,8 +153,15 @@ public:
                 next.compute_root();
             }
             tail = next;
+            if (!auto_schedule) {
+                tail.compute_root().reorder(_0, _2, _1).vectorize(_0, 8).parallel(_1);
+            }
         }
         output(tail.args()) = tail(tail.args());
+
+        if (!auto_schedule) {
+            output.compute_root().reorder(_0, _2, _1).vectorize(_0, 8).parallel(_1);
+        }
 
         if (auto_schedule) {
             // This estimate of the input bounds is unlikely to be accurate.
