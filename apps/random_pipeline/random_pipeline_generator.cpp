@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <iostream>
+#include <random>
 
 using namespace Halide;
 using std::vector;
@@ -28,10 +29,12 @@ public:
     Input<Buffer<float>>  input{"input", 3};
     Output<Buffer<float>> output{"output", 3};
 
+    std::mt19937 rng;
+
     // Helpers to generate random values.
-    int rand_int(int min, int max) { return (rand() % (max - min + 1)) + min; }
-    bool rand_bool() { return rand() % 2 == 0; }
-    float rand_float() { return rand() / (float)RAND_MAX; }
+    int rand_int(int min, int max) { return (rng() % (max - min + 1)) + min; }
+    bool rand_bool() { return rng() % 2 == 0; }
+    float rand_float() { return rand_int(0, 1 << 30) / (float)(1 << 30); }
 
     Expr rand_value(Type t) {
         if (t.is_int()) {
@@ -137,7 +140,7 @@ public:
     }
 
     void generate() {
-        srand(seed);
+        rng.seed(seed);
 
         Func tail = input;
         for (int i = 0; i < stages; i++) {
