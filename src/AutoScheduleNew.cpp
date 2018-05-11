@@ -458,6 +458,7 @@ struct PartialScheduleNode {
             for (auto p : bounds_realized.region) {
                 points *= p.second - p.first + 1;
             }
+            int64_t innermost_compute_extent = bounds_realized.region[0].second - bounds_realized.region[0].first + 1;
             const auto *node = dag.node_map.at(f);
             double compute_cost = node->compute * points * subinstances;
 
@@ -514,6 +515,19 @@ struct PartialScheduleNode {
             double bytes_cold_loaded = bytes_per_point * points;
             double mem_cost = subinstances * bytes_cold_loaded * cost_of_cold_load(allocation_size, params);
 
+            if (node_costs) {
+                debug(0) << "YYY " << f.name() << " "
+                         << subinstances << " "              // Number of times the Func is realized
+                         << node->compute << " "             // compute_cost per point
+                         << node->compute_if_inlined << " "  // compute_cost per point when inlined
+                         << innermost_compute_extent << " "  // Innermost dimension of region over which it is realized
+                         << overcompute[f] << " "            // Fraction of overcompute due to vectorization
+                         << points << " "                    // Number of points in the region
+                         << bytes_cold_loaded << " "         // Number of bytes in the region before folding
+                         << allocation_size << " "           // Number of bytes in the region after folding
+                         << "0\n"; // number of inlined calls per 'realization'
+            }
+
             for (const auto *e : dag.outgoing_edges.at(f)) {
                 if (edge_costs) {
                     (*edge_costs)[e] = mem_cost;
@@ -524,11 +538,25 @@ struct PartialScheduleNode {
 
         // Bill compute cost for all Funcs inlined in this loop
         for (auto p : inlined) {
-            double c = dag.node_map.at(p.first)->compute_if_inlined * subinstances * p.second;
+            const auto *node = dag.node_map.at(p.first);
+            double c = node->compute_if_inlined * subinstances * p.second;
             // debug(0) << "Inlined Func " << p.first.name() << " has compute cost " << c << "\n";
             result += c;
             if (inlined_costs) {
                 (*inlined_costs)[p.first] += c;
+            }
+
+            if (node_costs) {
+                debug(0) << "YYY " << p.first.name() << " "
+                         << subinstances << " "   // Number of times the Func is realized
+                         << node->compute << " "  // compute_cost per point
+                         << node->compute_if_inlined << " "  // compute_cost per point when inlined
+                         << "0 "                  // Innermost dimension of region over which it is realized
+                         << "0 "                  // Fraction of overcompute due to vectorization
+                         << "0 "                  // Number of points in the region
+                         << "0 "                  // Number of bytes in the region before folding
+                         << "0 "                  // Number of bytes in the region after folding
+                         << p.second << "\n" ;    // number of inlined calls per 'realization'
             }
 
         }
