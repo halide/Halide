@@ -6,8 +6,8 @@
  */
 
 #include "Expr.h"
-#include "Parameter.h"
 #include "FunctionPtr.h"
+#include "Parameter.h"
 
 #include <map>
 
@@ -547,7 +547,7 @@ public:
     void mutate(IRMutator2 *);
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

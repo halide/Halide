@@ -67,7 +67,7 @@ pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds) {
     return {new_bounds, bounds_changed};
 }
 
-}
+}  // namespace
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
 void IRMutator::visit(const UIntImm *op)   {expr = op;}
@@ -445,7 +445,7 @@ Expr IRMutator2::visit(const Not *op) {
     return Not::make(std::move(a));
 }
 
-Expr IRMutator2::visit(const Select *op)  {
+Expr IRMutator2::visit(const Select *op) {
     Expr cond = mutate(op->condition);
     Expr t = mutate(op->true_value);
     Expr f = mutate(op->false_value);
@@ -464,7 +464,7 @@ Expr IRMutator2::visit(const Load *op) {
         return op;
     }
     return Load::make(op->type, op->name, std::move(index),
-                          op->image, op->param, std::move(predicate));
+                      op->image, op->param, std::move(predicate));
 }
 
 Expr IRMutator2::visit(const Ramp *op) {
@@ -501,7 +501,7 @@ Expr IRMutator2::visit(const Call *op) {
         return op;
     }
     return Call::make(op->type, op->name, new_args, op->call_type,
-                          op->func, op->value_index, op->image, op->param);
+                      op->func, op->value_index, op->image, op->param);
 }
 
 Expr IRMutator2::visit(const Let *op) {
@@ -552,7 +552,7 @@ Stmt IRMutator2::visit(const For *op) {
         return op;
     }
     return For::make(op->name, std::move(min), std::move(extent),
-                         op->for_type, op->device_api, std::move(body));
+                     op->for_type, op->device_api, std::move(body));
 }
 
 Stmt IRMutator2::visit(const Store *op) {

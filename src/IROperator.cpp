@@ -1,14 +1,14 @@
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <sstream>
-#include <cmath>
-#include <algorithm>
 
+#include "CSE.h"
+#include "Debug.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IREquality.h"
 #include "Var.h"
-#include "Debug.h"
-#include "CSE.h"
 
 namespace Halide {
 
@@ -46,7 +46,7 @@ Expr evaluate_polynomial(const Expr &x, float *coeff, int n) {
         return odd_terms * std::move(x) + even_terms;
     }
 }
-}
+}  // namespace
 
 namespace Internal {
 
@@ -296,7 +296,7 @@ Expr make_const_helper(Type t, T val) {
         return Expr();
     }
 }
-}
+}  // namespace
 
 Expr make_const(Type t, int64_t val) {
     return make_const_helper(t, val);
@@ -970,4 +970,4 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
     return result;
 }
 
-}
+}  // namespace Halide

@@ -1,7 +1,7 @@
 #include "ModulusRemainder.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IR.h"
 #include "Simplify.h"
 
 // This file is largely a port of parts of src/analysis.ml
@@ -73,8 +73,6 @@ ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope)
     return mr.analyze(e);
 }
 
-
-
 bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
@@ -121,7 +119,7 @@ void check(Expr e, int m, int r) {
         exit(-1);
     }
 }
-}
+}  // namespace
 
 void modulus_remainder_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -278,10 +276,9 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
         << "unified modulus   = " << modulus << "\n"
         << "unified remainder = " << ra << "\n";
 
-
     return ModulusRemainder(modulus, ra);
 }
-}
+}  // namespace
 
 void ComputeModulusRemainder::visit(const Mod *op) {
     // We can treat x mod y as x + z*y, where we know nothing about z.
@@ -449,5 +446,5 @@ void ComputeModulusRemainder::visit(const Prefetch *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

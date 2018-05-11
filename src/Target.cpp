@@ -268,6 +268,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
+    // NOTE: When adding features to this map, be sure to update
+    // PyEnums.cpp and halide.cmake as well.
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -578,7 +580,6 @@ void target_test() {
     std::cout << "Target test passed" << std::endl;
 }
 
+}  // namespace Internal
 
-}
-
-}
+}  // namespace Halide

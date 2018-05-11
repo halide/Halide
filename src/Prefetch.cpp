@@ -2,10 +2,10 @@
 #include <map>
 #include <string>
 
-#include "Prefetch.h"
 #include "Bounds.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
+#include "Prefetch.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -374,5 +374,5 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
     return stmt;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -12,11 +12,11 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
-using std::set;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 Stmt call_extern_and_assert(const string& name, const vector<Expr>& args) {
     Expr call = Call::make(Int(32), name, args, Call::Extern);
@@ -698,5 +698,5 @@ Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -7,8 +7,8 @@
  * computing some function regions.
  */
 
-#include <set>
 #include <limits>
+#include <set>
 
 #include "AutoScheduleUtils.h"
 #include "Interval.h"
@@ -138,7 +138,7 @@ struct RegionCosts {
  * cost of calling the function directly. */
 bool is_func_trivial_to_inline(const Function &func);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

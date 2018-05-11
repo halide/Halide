@@ -93,4 +93,4 @@ ImageParam &ImageParam::add_trace_tag(const std::string &trace_tag) {
     return *this;
 }
 
-}
+}  // namespace Halide

@@ -1,16 +1,16 @@
 #include "AddParameterChecks.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "Substitute.h"
 #include "Target.h"
-#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
 
 // Find all the externally referenced scalar parameters
 class FindParameters : public IRGraphVisitor {
@@ -130,7 +130,5 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     return s;
 }
 
-
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,6 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
-#include "IRVisitor.h"
 #include "Bounds.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -45,7 +45,7 @@ public:
     IsBlockUniform() : result(true) {
     }
 };
-}
+}  // namespace
 
 bool CodeGen_GPU_Dev::is_block_uniform(Expr expr) {
     IsBlockUniform v;
@@ -86,7 +86,7 @@ public:
     IsBufferConstant(const std::string &b) : result(true), buffer(b) {
     }
 };
-}
+}  // namespace
 
 bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
                                          const std::string &buffer) {
@@ -95,4 +95,5 @@ bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
     return v.result;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

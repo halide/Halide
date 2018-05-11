@@ -1,30 +1,30 @@
 #include <iostream>
 
 #include "Bounds.h"
-#include "IRVisitor.h"
+#include "CSE.h"
+#include "Debug.h"
+#include "Deinterleave.h"
+#include "ExprUsesVar.h"
 #include "IR.h"
-#include "IROperator.h"
 #include "IREquality.h"
-#include "Simplify.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Param.h"
+#include "Simplify.h"
+#include "Solve.h"
 #include "Util.h"
 #include "Var.h"
-#include "Debug.h"
-#include "ExprUsesVar.h"
-#include "IRMutator.h"
-#include "CSE.h"
-#include "Deinterleave.h"
-#include "Param.h"
-#include "Solve.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 int static_sign(Expr x) {
@@ -42,7 +42,7 @@ int static_sign(Expr x) {
     }
     return 0;
 }
-} // anonymous namespace
+}  // anonymous namespace
 
 Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
     Interval interval = find_constant_bounds(e, scope);
@@ -2223,5 +2223,5 @@ void bounds_test() {
     std::cout << "Bounds test passed" << std::endl;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
