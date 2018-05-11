@@ -145,7 +145,6 @@ struct PacketAndPayload : public halide_trace_packet_t {
     uint8_t payload[4096];
 
     static bool read_or_die(void *buf, size_t count) {
-        int64_t bytes_read_total = 0;
         char *p = (char *)buf;
         char *p_end = p + count;
         while (p < p_end) {
