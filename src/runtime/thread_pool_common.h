@@ -1,4 +1,13 @@
 extern "C" void * pthread_self();
+extern "C" int syscall(int);
+
+namespace {
+int gettid() {
+    return syscall(186);
+}
+}
+
+#define log_message(stuff) print(NULL) << gettid() << ": " << stuff << "\n"
 
 namespace Halide { namespace Runtime { namespace Internal {
 
@@ -159,7 +168,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (may_try && enough_threads && job->make_runnable()) {
                 break;
             }
-            //print(NULL) << pthread_self() << " Passing on " << job->task.name << " " << enough_threads << " " << may_try << "\n";
+            log_message(" Passing on " << job->task.name << " " << enough_threads << " " << may_try);
             prev_ptr = &(job->next_job);
             job = job->next_job;
         }
@@ -169,7 +178,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (owned_job) {
                 work_queue.owners_sleeping++;
                 owned_job->owner_is_sleeping = true;
-                //print(NULL) << pthread_self() << " Owner sleeping\n";
+                log_message(" Owner sleeping");
                 halide_cond_wait(&work_queue.wake_owners, &work_queue.mutex);
                 owned_job->owner_is_sleeping = false;
                 work_queue.owners_sleeping--;
@@ -177,12 +186,12 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                 work_queue.workers_sleeping++;
                 if (work_queue.a_team_size > work_queue.target_a_team_size) {
                     // Transition to B team
-                    //print(NULL) << pthread_self() << " B team worker sleeping\n";
+                  log_message(" B team worker sleeping");
                     work_queue.a_team_size--;
                     halide_cond_wait(&work_queue.wake_b_team, &work_queue.mutex);
                     work_queue.a_team_size++;
                 } else {
-                    //print(NULL) << pthread_self() << " A team worker sleeping\n";
+                  log_message(" A team worker sleeping");
                     halide_cond_wait(&work_queue.wake_a_team, &work_queue.mutex);
                 }
                 work_queue.workers_sleeping--;
@@ -190,7 +199,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             continue;
         }
 
-        //print(NULL) << pthread_self() << " Working on " << job->task.name << "\n";
+        log_message(" Working on " << job->task.name);
 
         // Increment the active_worker count so that other threads
         // are aware that this job is still in progress even
@@ -205,22 +214,26 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
             // Release the lock and do the task.
             halide_mutex_unlock(&work_queue.mutex);
+            int total_iters = 0;
             int iters = 1;
             while (result == 0) {
                 // Claim as many iterations as possible
-                while (job->task.extent > iters && job->make_runnable()) {
+                while ((job->task.extent - total_iters) > iters &&
+                       job->make_runnable()) {
                     iters++;
                 }
                 if (iters == 0) break;
 
                 // Do them
                 result = halide_do_loop_task(job->user_context, job->task.fn,
-                                             job->task.min, iters, job->task.closure);
-                job->task.min += iters;
-                job->task.extent -= iters;
+                                             job->task.min + total_iters, iters, job->task.closure);
+                total_iters += iters;
                 iters = 0;
             }
             halide_mutex_lock(&work_queue.mutex);
+
+            job->task.min += total_iters;
+            job->task.extent -= total_iters;
 
             // Put it back on the job stack
             if (job->task.extent > 0) {
@@ -312,7 +325,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
         } else {
             workers_to_wake += jobs[i].task.extent;
         }
-        //print(NULL) << pthread_self() << " Enqueueing " << jobs[i].task.name << "\n";
+        log_message(" Enqueueing " << jobs[i].task.name);
     }
 
     // Spawn more threads if necessary.
@@ -325,9 +338,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
             halide_spawn_thread(worker_thread, NULL);
     }
 
-    //print(NULL) << pthread_self() << " Workers to wake: " << workers_to_wake << "\n";
-    //print(NULL) << pthread_self() << " min_threads for this task: " << min_threads << "\n";
-    //print(NULL) << pthread_self() << " Threads created: " << work_queue.threads_created << "\n";
+    log_message(" Workers to wake: " << workers_to_wake);
+    log_message(" min_threads for this task: " << min_threads);
+    log_message(" Threads created: " << work_queue.threads_created);
 
     // Store a token on the stack so that we know which jobs we
     // own. We may work on any job we own, regardless of whether it
@@ -347,7 +360,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
         work_queue.owners_sleeping ||
         (work_queue.workers_sleeping < work_queue.threads_created);
 
-    //print(NULL) << pthread_self() << " nested parallelism: " << nested_parallelism << "\n";
+    log_message(" nested parallelism: " << nested_parallelism);
 
     // Wake up an appropriate number of threads
     if (nested_parallelism || workers_to_wake > work_queue.workers_sleeping) {
@@ -357,8 +370,8 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
     } else {
         work_queue.target_a_team_size = workers_to_wake;
     }
-    //print(NULL) << pthread_self() << " A team size: " << work_queue.a_team_size << "\n";
-    //print(NULL) << pthread_self() << " Target A team size: " << work_queue.target_a_team_size << "\n";
+    log_message(" A team size: " << work_queue.a_team_size);
+    log_message(" Target A team size: " << work_queue.target_a_team_size);
     halide_cond_broadcast(&work_queue.wake_a_team);
     if (work_queue.target_a_team_size > work_queue.a_team_size) {
         halide_cond_broadcast(&work_queue.wake_b_team);
@@ -456,7 +469,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
     enqueue_work_already_locked(num_tasks, jobs);
     int exit_status = 0;
     for (int i = 0; i < num_tasks; i++) {
-        //print(NULL) << pthread_self() << " Joining task " << jobs[i].task.name << "\n";
+      log_message(" Joining task " << jobs[i].task.name);
         // It doesn't matter what order we join the tasks in, because
         // we'll happily assist with siblings too.
         worker_thread_already_locked(jobs + i);
@@ -512,15 +525,20 @@ struct halide_semaphore_impl_t {
 };
 
 WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
-    //print(NULL) << "Init " << s << " " << n << "\n";
+    log_message("halide_default_semaphore_init " << s << " " << n);
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
+#if 0
     sem->value = n;
+#else    
+    Halide::Runtime::Internal::Synchronization::atomic_store_release(&sem->value, &n);
+#endif
     return n;
 }
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
-    //print(NULL) << "Release " << s << " " << n << "\n";
+  log_message("halide_default_semaphore_release " << s << " " << n);
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
+#if 0
     int new_val = __sync_add_and_fetch(&(sem->value), n);
     if (new_val == n) {
         // We may have just made a job runnable
@@ -528,20 +546,43 @@ WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
         halide_cond_broadcast(&work_queue.wake_owners);
     }
     return new_val;
+#else
+    int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_and_add_acquire_release(&sem->value, n);
+    if (old_val == 0) {
+      log_message("halide_default_semaphore_release sending wakeups " << s << " " << n);
+        // We may have just made a job runnable
+        halide_mutex_lock(&work_queue.mutex);
+        halide_cond_broadcast(&work_queue.wake_a_team);
+        halide_cond_broadcast(&work_queue.wake_owners);
+        halide_mutex_unlock(&work_queue.mutex);
+    }
+    return old_val + n;
+#endif
 }
 
 WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
-    //print(NULL) << "  Try acquire " << s << " " << n << "\n";
+  log_message("halide_default_semaphore_try_acquire " << s << " " << n);
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     // Decrement and get new value
+#if 0
     int new_val = __sync_add_and_fetch(&(sem->value), -n);
     if (new_val < 0) {
         // Oops, increment and return failure
         __sync_add_and_fetch(&(sem->value), n);
         return false;
     }
-    //print(NULL) << "Acquire " << s << " " << n << "\n";
     return true;
+#else
+    int expected;
+    int desired;
+    Halide::Runtime::Internal::Synchronization::atomic_load_acquire(&sem->value, &expected);
+    do {
+        desired = expected - n;
+    } while (desired >= 0 &&
+             !Halide::Runtime::Internal::Synchronization::atomic_cas_weak_relacq_relaxed(&sem->value, &expected, &desired));
+    log_message("halide_default_semaphore_try_acquire result " << (desired >= 0) <<  " sema: " << s << " " << n);
+    return desired >= 0;
+#endif    
 }
 
 WEAK halide_do_task_t halide_set_custom_do_task(halide_do_task_t f) {
