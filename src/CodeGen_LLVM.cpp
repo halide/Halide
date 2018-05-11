@@ -1108,6 +1108,7 @@ void CodeGen_LLVM::optimize_module() {
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
             if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  i->getName().startswith("halide_default_can_use_target_features") ||
                   i->getName().startswith("halide_mutex_") ||
                   i->getName().startswith("halide_cond_"))) {
                 i->addFnAttr(Attribute::SanitizeThread);
