@@ -959,6 +959,10 @@ enum halide_error_code_t {
      * existed on a different device interface. Free the old one
      * first. */
     halide_error_code_incompatible_device_interface = -42,
+
+    /** An expression that would perform an integer division or modulo
+     * by zero was evaluated. */
+    halide_error_code_integer_division_by_zero = -43,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1035,7 +1039,7 @@ extern int halide_error_no_device_interface(void *user_context);
 extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
-
+extern int halide_error_integer_division_by_zero(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
