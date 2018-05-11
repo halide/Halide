@@ -1072,12 +1072,18 @@ void CodeGen_LLVM::optimize_module() {
 #endif
 
     if (get_target().has_feature(Target::ASAN)) {
-        auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            pm.add(createAddressSanitizerFunctionPass());
-            pm.add(createAddressSanitizerModulePass());
+        auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            constexpr bool compile_kernel = false;   // always false for user code
+            constexpr bool recover = false;          // -fsanitize-recover, always false here
+
+            constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+
+            constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+            pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
         };
-        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
-        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
     }
 
     if (get_target().has_feature(Target::TSAN)) {
