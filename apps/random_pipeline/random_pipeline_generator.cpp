@@ -103,10 +103,14 @@ public:
         // 3, which is really bad.
         RDom r(0, 3);
         vector<Expr> reduction_coords = make_arguments(f.args());
-        reduction_coords[dim] = r;
+        Expr e = 0.f;
+        for (int i = 0; i < 3; i++) {
+            reduction_coords[i] = i;
+            e += f(reduction_coords) * (i + 1) * (f.args()[dim] + 1);
+        }
 
         Func all("all");
-        all(f.args()) = sum(f(reduction_coords) * (r + 1) * (f.args()[dim] + 1));
+        all(f.args()) = e;
 
         return all;
     }
