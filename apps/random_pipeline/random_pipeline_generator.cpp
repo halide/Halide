@@ -101,11 +101,10 @@ public:
 
         // TODO: This just assumes that the extent of the dimension is
         // 3, which is really bad.
-        RDom r(0, 3);
         vector<Expr> reduction_coords = make_arguments(f.args());
         Expr e = 0.f;
         for (int i = 0; i < 3; i++) {
-            reduction_coords[i] = i;
+            reduction_coords[dim] = i;
             e += f(reduction_coords) * (i + 1) * (f.args()[dim] + 1);
         }
 
@@ -118,17 +117,17 @@ public:
     // Generate a random stage using f as an input.
     Func random_stage(Func f) {
         int stage_type = rand_int(0, 6);
-        if (stage_type < 4) {
+        if (stage_type < 6) {
             int dim = rand_int(0, 1);
             int kernel_min = rand_int(-5, 0);
             int kernel_max = rand_int(0, 5);
             return convolve(f, dim, kernel_min, kernel_max);
-        } else if (stage_type == 4) {
+        } else if (false && stage_type == 4) {
             // For now, only upsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = rand_int(1, 4);
             return upsample(f, dim, factor);
-        } else if (stage_type == 5) {
+        } else if (false && stage_type == 5) {
             // For now, only downsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = rand_int(1, 4);
