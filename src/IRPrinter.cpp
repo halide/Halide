@@ -524,12 +524,17 @@ void IRPrinter::visit(const Select *op) {
 }
 
 void IRPrinter::visit(const Load *op) {
+    const bool has_pred = !is_one(op->predicate);
+    if (has_pred) {
+        stream << "(";
+    }
     stream << op->name << "[";
     print(op->index);
     stream << "]";
-    if (!is_one(op->predicate)) {
+    if (has_pred) {
         stream << " if ";
         print(op->predicate);
+        stream << ")";
     }
 }
 
