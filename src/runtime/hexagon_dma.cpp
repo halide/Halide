@@ -147,9 +147,10 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         << " dev offset (" << dev->offset_x << ", " << dev->offset_y << ") frame_width: " << dev->frame_width
         << " frame_height: " << dev->frame_height << " frame_stride: " << dev->frame_stride << "\n";
 
-    int roi_stride = 0;
-    int roi_width = 0;
-    int roi_height = 0;
+    debug(user_context)
+        << "size_in_bytes() src: " << static_cast<uint32>(src->size_in_bytes())
+        << "dst: " << static_cast<uint32>(dst->size_in_bytes())
+        << "\n";
 
     // Changing the Format to Chroma or LUMA based on dimension    
     t_eDmaFmt currentFmt = dev->fmt;
@@ -167,9 +168,9 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(dst->dim[0].extent * dst->dim[0].stride), static_cast<uint16>(dst->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(dev->fmt, dev->is_ubwc, &stWalkSize);
 
-    roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(currentFmt, &stWalkSize, dev->is_ubwc);
-    roi_width = stWalkSize.u16W;
-    roi_height = stWalkSize.u16H;
+    int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(currentFmt, &stWalkSize, dev->is_ubwc);
+    int roi_width = stWalkSize.u16W;
+    int roi_height = stWalkSize.u16H;
 
     debug(user_context) << " roi_width " << roi_width;
     debug(user_context) << " roi_height " << roi_height;
@@ -213,7 +214,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     } else {
         stDmaTransferParm.eTransferType     = eDmaWrapper_DdrToL2;
     }
-    stDmaTransferParm.u16RoiX               = dev->offset_x + dst->dim[0].min;
+    stDmaTransferParm.u16RoiX               = (dev->offset_x + dst->dim[0].min) * dst->dim[0].stride;
     stDmaTransferParm.u16RoiY               = dev->offset_y + dst->dim[1].min;
 
     // DMA Driver Halves the Height and Y Offset so that only Half the ROI Size of Luma is transferred  for chroma
@@ -222,8 +223,6 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         (currentFmt == eDmaFmt_P010_UV) ||
         (currentFmt == eDmaFmt_TP10_UV) ||
         (currentFmt == eDmaFmt_NV124R_UV)) {
-        //stDmaTransferParm.u16RoiW = roi_width * dst->dim[0].stride;
-		stDmaTransferParm.u16RoiW = roi_width;
         stDmaTransferParm.u16RoiH = roi_height * 2;
         stDmaTransferParm.u16RoiY = (stDmaTransferParm.u16RoiY - dev->frame_height) * 2;
     }
@@ -337,7 +336,12 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         << ", dma_engine: " << dma_engine << ")\n";
     debug(user_context) << "    dma_free_dma_engine\n";
     halide_assert(user_context, dma_engine);
-    nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
+    desc_pool_free(user_context);
+    int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
+    if (err != 0) {
+        error(user_context) << "Freeing DMA Engine failed.\n";
+        return halide_error_code_generic_error;
+    }
     return halide_error_code_success;
 }
 
@@ -378,27 +382,24 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struc
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
-        << "Hexagon: halide_hexagon_dma_deallocate_engine (user_context: " << user_context
+        << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
     halide_assert(user_context, buf->device);
 
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
-
-    debug(user_context) << "   dma_finish_frame -> ";
-    int err = nDmaWrapper_FinishFrame(dev->dma_engine);
-    desc_pool_free(user_context);
     if (dev->cache_buf) {
         HAP_cache_unlock(dev->cache_buf);
     }
     dev->cache_buf = 0;
+    debug(user_context) << "   dma_finish_frame -> ";
+    int err = nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";
     if (err != 0) {
         error(user_context) << "dma_finish_frame failed.\n";
         return halide_error_code_generic_error;
     }
-
     return halide_error_code_success;
 }
 
@@ -449,7 +450,7 @@ WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *
     }
 
     // TODO: Implement this with dma_move_data.
-    error(user_context) << "haldie_hexagon_dma_copy_to_device not implemented.\n";
+    error(user_context) << "halide_hexagon_dma_copy_to_device not implemented.\n";
     return halide_error_code_copy_to_device_failed;
 }
 
@@ -458,10 +459,16 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
         << "Hexagon: halide_hexagon_dma_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
+#if 1
+    // TODO: Implement this with dma_move_data.
+    error(user_context) << "halide_hexagon_dma_copy_to_host not implemented.\n";
+    return halide_error_code_copy_to_device_failed;
+#else
     halide_assert(user_context, buf->host && buf->device);
     dma_device_handle *dev = (dma_device_handle *)buf->device;
 
-    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(buf->dim[0].extent * buf->dim[0].stride), static_cast<uint16>(buf->dim[1].extent)};
+    //t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(buf->dim[0].extent * buf->dim[0].stride), static_cast<uint16>(buf->dim[1].extent)};
+    t_StDmaWrapper_RoiAlignInfo stWalkSize = {static_cast<uint16>(buf->dim[0].extent), static_cast<uint16>(buf->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(eDmaFmt_RawData, false, &stWalkSize);
     int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(eDmaFmt_RawData, &stWalkSize, false);
     int roi_width = stWalkSize.u16W;
@@ -530,6 +537,7 @@ WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffe
     desc_pool_put(user_context, desc_addr);
     
     return halide_error_code_success;
+#endif
 }
 
 WEAK int halide_hexagon_dma_device_crop(void *user_context,

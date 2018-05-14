@@ -51,7 +51,7 @@ public:
             .compute_at(output_y, tx)
             .store_root()
             .fold_storage(x, tile_width * 2)
-            .copy_to_device();
+            .copy_to_host();
 
         copy_uv
             .compute_at(output_uv, tx)
