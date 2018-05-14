@@ -919,7 +919,7 @@ struct PartialScheduleNode {
                     // level to be further out.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, dag, this, params, store_here);
+                auto v = children[child]->compute_in_tiles(f, dag, this, params, in_realization || store_here);
                 for (PartialScheduleNode n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
