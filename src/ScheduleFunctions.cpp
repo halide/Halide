@@ -14,6 +14,7 @@
 #include "Substitute.h"
 #include "Target.h"
 #include "Var.h"
+#include "Prefetch.h"
 
 #include <algorithm>
 
@@ -320,7 +321,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(string func_name,
+Stmt build_provide_loop_nest(const map<string, Function> &env,
+                             string func_name,
                              string prefix,
                              int start_fuse,
                              const vector<string> &dims,
@@ -352,6 +354,7 @@ Stmt build_provide_loop_nest(string func_name,
     Stmt stmt = build_provide_loop_nest_helper(
         func_name, prefix, start_fuse, dims, site, values,
         def.split_predicate(), f_sched, def.schedule(), is_update);
+    stmt = inject_def_empty_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
@@ -361,7 +364,7 @@ Stmt build_provide_loop_nest(string func_name,
         const Definition &s_def = s.definition;
         Stmt then_case;
         if (s.failure_message.empty()) {
-            then_case = build_provide_loop_nest(func_name, prefix, start_fuse, dims,
+            then_case = build_provide_loop_nest(env, func_name, prefix, start_fuse, dims,
                                                 f_sched, s_def, is_update);
         } else {
             internal_assert(equal(c, const_true()));
@@ -386,7 +389,7 @@ Stmt build_provide_loop_nest(string func_name,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f, const Target &target) {
+Stmt build_produce(const map<string, Function> &env, Function f, const Target &target) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -656,12 +659,12 @@ Stmt build_produce(Function f, const Target &target) {
 
         string prefix = f.name() + ".s0.";
         vector<string> dims = f.args();
-        return build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
+        return build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
     }
 }
 
 // Build the loop nests that update a function (assuming it's a reduction).
-vector<Stmt> build_update(Function f) {
+vector<Stmt> build_update(const map<string, Function> &env, Function f) {
 
     vector<Stmt> updates;
 
@@ -671,16 +674,16 @@ vector<Stmt> build_update(Function f) {
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
         vector<string> dims = f.args();
-        Stmt loop = build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), def, true);
+        Stmt loop = build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), def, true);
         updates.push_back(loop);
     }
 
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(Function func, const Target &target) {
-    Stmt produce = build_produce(func, target);
-    vector<Stmt> updates = build_update(func);
+pair<Stmt, Stmt> build_production(const map<string, Function> &env, Function func, const Target &target) {
+    Stmt produce = build_produce(env, func, target);
+    vector<Stmt> updates = build_update(env, func);
 
     // Combine the update steps
     Stmt merged_updates = Block::make(updates);
@@ -847,7 +850,7 @@ private:
     }
 
     Stmt build_pipeline(Stmt consumer) {
-        pair<Stmt, Stmt> realization = build_production(func, target);
+        pair<Stmt, Stmt> realization = build_production(env, func, target);
 
         Stmt producer;
         if (realization.first.defined() && realization.second.defined()) {
@@ -1425,7 +1428,7 @@ private:
         }
 
         const vector<string> f_args = f.args();
-        Stmt produce = build_provide_loop_nest(f.name(), prefix, start_fuse, f_args,
+        Stmt produce = build_provide_loop_nest(env, f.name(), prefix, start_fuse, f_args,
                                                f.schedule(), def, is_update);
 
         // Strip off the containing lets. The bounds of the parent fused loop

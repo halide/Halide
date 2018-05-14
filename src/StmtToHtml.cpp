@@ -495,7 +495,15 @@ private:
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << matched(")");
+        if (!is_one(op->condition)) {
+            stream << " " << keyword("if") << " ";
+            print(op->condition);
+        }
         stream << close_span();
+
+        stream << open_div("PrefetchBody");
+        print(op->body);
+        stream << close_div();
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
