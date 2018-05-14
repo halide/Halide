@@ -45,7 +45,7 @@ GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --system-libs)
+HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --link-static --system-libs)
 
 ifeq ($(UNAME), Linux)
 # llvm-config doesn't always report -ltinfo in the system-libs. Detect it by seeing if llvm-config links to it.
