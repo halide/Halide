@@ -516,7 +516,11 @@ struct PartialScheduleNode {
             double mem_cost = subinstances * bytes_cold_loaded * cost_of_cold_load(allocation_size, params);
 
             if (node_costs) {
-                debug(0) << "YYY " << f.name() << " "
+                debug(0) << "YYY "
+                         << (node - dag.nodes.data()) << " " // Topological order
+                         << f.name() << " "                  // Func name
+                         << compute_cost << " "              // Hand-design compute cost
+                         << mem_cost << " "                  // Hand-design memory cost
                          << subinstances << " "              // Number of times the Func is realized
                          << node->compute << " "             // compute_cost per point
                          << node->compute_if_inlined << " "  // compute_cost per point when inlined
@@ -547,7 +551,11 @@ struct PartialScheduleNode {
             }
 
             if (node_costs) {
-                debug(0) << "YYY " << p.first.name() << " "
+                debug(0) << "YYY "
+                         << (node - dag.nodes.data()) << " "       // Topological order
+                         << p.first.name() << " "
+                         << c << " "              // Hand-designed compute cost
+                         << "0 "                  // Hand-designed memory cost
                          << subinstances << " "   // Number of times the Func is realized
                          << node->compute << " "  // compute_cost per point
                          << node->compute_if_inlined << " "  // compute_cost per point when inlined
