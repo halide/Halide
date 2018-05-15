@@ -81,10 +81,11 @@ test: all
 
 $(BIN)/viz_auto_%.mp4: $(BIN)/resize ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
+	export HL_AVCONV
 	bash ../support/viz_auto.sh \
 		"$(BIN)/resize $(IMAGES)/rgb_small.png /tmp/$*.png -p 0 -b 1 -i $* -t float32 -f 0.5" \
 		"../../bin/HalideTraceViz --timestep 1000" \
 		$@
 
 viz_auto_%: $(BIN)/viz_auto_%.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^
