@@ -321,6 +321,12 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
               rewrite(max(y, x/c0) < (x + c1)/c0, false, c0 > 0 && 0 >= c1) ||
               rewrite(min(y, x/c0) < (x + c1)/c0, true, c0 > 0 && 0 <= c1 - c0) ||
 
+              // Same as above with c1 outside the division, with redundant cases removed.
+              rewrite(max((x + c2)/c0, y) < x/c0 + c1, false, c0 > 0 && c2 >= c1 * c0) ||
+              rewrite(min((x + c2)/c0, y) < x/c0 + c1, true, c0 > 0 && c2 <= c1 * c0 - c0) ||
+              rewrite(max(y, (x + c2)/c0) < x/c0 + c1, false, c0 > 0 && c2 >= c1 * c0) ||
+              rewrite(min(y, (x + c2)/c0) < x/c0 + c1, true, c0 > 0 && c2 <= c1 * c0 - c0) ||
+
               // Same as above with c1 = 0 and the predicates and redundant cases simplified accordingly.
               rewrite(x/c0 < min((x + c2)/c0, y), false, c0 > 0 && c2 < 0) ||
               rewrite(x/c0 < max((x + c2)/c0, y), true, c0 > 0 && c0 <= c2) ||
