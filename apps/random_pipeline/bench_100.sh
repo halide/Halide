@@ -35,7 +35,7 @@ find bin -name times.txt | grep "_root_" | while read F; do grep '^Time' $F | cu
 cat files.txt | while read F; do echo $(grep '^XXX' ${F/times/stderr} | cut -d' ' -f2); done > features.txt
 
 # Extract the features
-cat files.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | sort | cut -d' ' -f2); done > features_2.txt
+cat files.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | sort | cut -d' ' -f3-); done > features_2.txt
 
 # Extract the cost according to the hand-designed model (just the sum of the features)
 cat files.txt | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1); done  > costs.txt
