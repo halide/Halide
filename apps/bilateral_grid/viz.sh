@@ -1,4 +1,5 @@
 #!/bin/bash
+echo HL_AVCONV is ${HL_AVCONV}
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
 rm -f $1/bilateral_grid.mp4

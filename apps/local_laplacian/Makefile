@@ -38,8 +38,7 @@ $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 
 $(BIN)/local_laplacian.mp4: $(BIN)/process_viz ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	export HL_AVCONV
-	bash viz.sh $(BIN)
+	HL_AVCONV=$(HL_AVCONV) bash viz.sh $(BIN)
 
 clean:
 	rm -rf $(BIN)
@@ -51,8 +50,7 @@ viz: $(BIN)/local_laplacian.mp4
 
 $(BIN)/viz_auto.mp4: $(BIN)/process_viz ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	export HL_AVCONV
-	bash ../support/viz_auto.sh "$(BIN)/process_viz $(IMAGES)/rgb_small.png 4 1 1 0 $(BIN)/out_small.png" ../../bin/HalideTraceViz $@
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/process_viz $(IMAGES)/rgb_small.png 4 1 1 0 $(BIN)/out_small.png" ../../bin/HalideTraceViz $@
 
 viz_auto: $(BIN)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^

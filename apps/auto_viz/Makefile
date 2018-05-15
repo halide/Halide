@@ -61,8 +61,7 @@ test: all
 
 $(BIN)/viz_%.mp4: $(BIN)/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	export HL_AVCONV
-	bash ../support/viz_auto.sh \
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh \
 		"$< $(IMAGES)/rgb_small.png /tmp/$*.png -s $* -f 0.5 " \
 		"../../bin/HalideTraceViz --auto_layout" \
 		$@
