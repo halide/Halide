@@ -1,19 +1,18 @@
 #!/bin/bash
 
-PIPELINES=5
-SCHEDULES=5
+PIPELINES=200
+SCHEDULES=50
 
 # Build the shared things by building one pipeline
-HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build &
+HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build
 
 # Build lots of pipelines
 for ((p=0;p<$PIPELINES;p++)); do
-    HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$p HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build &
+    echo HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$p HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build
     for ((s=0;s<$SCHEDULES;s++)); do
-        HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$p HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build &
+        echo HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$p HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build
     done
-    wait
-done
+done | xargs -P48 -I{} bash -c "{}"
 
 # Benchmark them
 for ((p=0;p<$PIPELINES;p++)); do
