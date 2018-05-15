@@ -143,7 +143,7 @@ public:
     }
 
     void generate() {
-        rng.seed(seed);
+        rng.seed((int)seed);
 
         Func tail = input;
         for (int i = 0; i < stages; i++) {

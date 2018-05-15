@@ -9,7 +9,6 @@ using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
 #include "random_pipeline.h"
-#include "random_pipeline_auto_schedule.h"
 
 int main(int argc, char **argv) {
     Buffer<float> output(1024, 1024, 3);
@@ -27,15 +26,10 @@ int main(int argc, char **argv) {
     random_pipeline(input, output);
     input.allocate();
 
-    double best_manual = benchmark(10, 10, [&]() {
+    double best = benchmark(3, 3, [&]() {
         random_pipeline(input, output);
     });
-    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
-
-    double best_auto = benchmark(10, 10, [&]() {
-        random_pipeline_auto_schedule(input, output);
-    });
-    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+    printf("Time: %g\n", best * 1e3);
 
     return 0;
 }
