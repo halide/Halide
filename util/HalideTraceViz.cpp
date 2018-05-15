@@ -548,7 +548,14 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
 
     if (fi.config.labels.empty()) {
         std::string label = func_name + " (" + std::to_string((int) (fi.config.zoom * 100)) + "%)";
-        fi.config.labels.push_back({label, {0, 0}, 10});
+        const int label_width = label.size() * inconsolata_char_width;
+        const int label_space = cell_size.x - pad.x*2;
+        float h_scale = 1.f;
+        if (label_width > label_space) {
+            h_scale = std::max(0.25f, std::min(1.f, (float) label_space / (float) label_width));
+            info() << "h_scale for label (" << label << " is " << h_scale << "\n";
+        }
+        fi.config.labels.push_back({label, {0, 0}, 10, h_scale});
     }
 
     fi.config_valid = true;
@@ -898,7 +905,7 @@ public:
         return image[frame_size.x * y + x];
     }
 
-    void draw_text(const std::string &text, const Point &pos, uint32_t color) {
+    void draw_text(const std::string &text, const Point &pos, uint32_t color, float h_scale = 1.5f) {
         uint32_t *dst = text_buf.data();
 
         // Drop any alpha component of color
@@ -915,9 +922,10 @@ public:
             chr -= 32;
 
             const uint8_t *font_ptr = inconsolata_raw + chr * (inconsolata_char_width * inconsolata_char_height);
+            const int h_scale_numerator = std::ceil(std::min(1.f, h_scale) * 256);
             for (int fy = 0; fy < inconsolata_char_height; fy++) {
                 for (int fx = 0; fx < inconsolata_char_width; fx++) {
-                    int px = pos.x + inconsolata_char_width*c + fx;
+                    int px = pos.x + (((inconsolata_char_width*c + fx) * h_scale_numerator) >> 8);
                     int py = pos.y - inconsolata_char_height + fy + 1;
                     if (px < 0 || px >= frame_size.x ||
                         py < 0 || py >= frame_size.y) continue;
@@ -1292,11 +1300,11 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
                 if (color > 255) color = 255;
                 color *= 0x10101;
-                surface->draw_text(label.text, label.pos, color);
+                surface->draw_text(label.text, label.pos, color, label.h_scale);
                 ++it;
             } else {
                 // Once we reach or exceed the final frame, draw at 100% opacity, then remove
-                surface->draw_text(label.text, label.pos, 0xffffff);
+                surface->draw_text(label.text, label.pos, 0xffffff, label.h_scale);
                 it = labels_being_drawn.erase(it);
             }
         }
