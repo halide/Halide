@@ -24,7 +24,7 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
   CodeGen_LLVM(t) {
 }
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
+Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -63,7 +63,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
     if (!is_one(size_check)) {
-        create_assertion(codegen(size_check),
+        create_assertion(codegen(size_check || !condition),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
     }
@@ -106,7 +106,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // Should have been caught in bound_small_allocations
         internal_assert(memory_type != MemoryType::Stack);
         internal_assert(memory_type != MemoryType::Register);
-        llvm_size = codegen_allocation_size(name, type, extents);
+        llvm_size = codegen_allocation_size(name, type, extents, condition);
     }
 
     // Only allocate memory if the condition is true, otherwise 0.
