@@ -151,7 +151,6 @@ private:
             return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, std::move(body));
         }
 
-        // TODO(psuriana): How do you handle no bounds?
         if (!body.same_as(op->body)) {
             return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
         } else {

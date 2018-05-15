@@ -16,8 +16,8 @@ namespace Halide {
 namespace Internal {
 
 Stmt inject_def_empty_prefetch(Stmt s, const std::map<std::string, Function> &env,
-                              const std::string &prefix,
-                              const std::vector<PrefetchDirective> &prefetches);
+                               const std::string &prefix,
+                               const std::vector<PrefetchDirective> &prefetches);
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env);
 
 /** Reduce a multi-dimensional prefetch into a prefetch of lower dimension
