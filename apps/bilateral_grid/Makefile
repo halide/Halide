@@ -31,7 +31,7 @@ $(BIN)/filter_viz: $(BIN)/viz/bilateral_grid.a filter.cpp ../../bin/HalideTraceV
 
 $(BIN)/bilateral_grid.mp4: $(BIN)/filter_viz viz.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash viz.sh $(BIN)
+	HL_AVCONV=$(HL_AVCONV) bash viz.sh $(BIN)
 
 $(BIN)/out.png: $(BIN)/filter
 	@mkdir -p $(@D)
@@ -43,11 +43,11 @@ clean:
 test: $(BIN)/out.png
 
 viz: $(BIN)/bilateral_grid.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^
 
 $(BIN)/viz_auto.mp4: $(BIN)/filter_viz ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash ../support/viz_auto.sh "$(BIN)/filter_viz $(IMAGES)/gray_small.png $(BIN)/out_small.png 0.2 0" ../../bin/HalideTraceViz $@
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/filter_viz $(IMAGES)/gray_small.png $(BIN)/out_small.png 0.2 0" ../../bin/HalideTraceViz $@
 
 viz_auto: $(BIN)/viz_auto.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^

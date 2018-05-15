@@ -33,7 +33,7 @@ $(BIN)/out.png: $(BIN)/process
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
 $(BIN)/camera_pipe.mp4: $(BIN)/viz/process viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
-	bash viz.sh $(BIN)
+	HL_AVCONV=$(HL_AVCONV) bash viz.sh $(BIN)
 
 clean:
 	rm -rf $(BIN)
@@ -41,11 +41,11 @@ clean:
 test: $(BIN)/out.png
 
 viz: $(BIN)/camera_pipe.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^
 
 $(BIN)/viz_auto.mp4: $(BIN)/viz/process ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash ../support/viz_auto.sh "$(BIN)/viz/process $(IMAGES)/bayer_small.png 3700 1.8 50 1 1 $(BIN)/out.png" ../../bin/HalideTraceViz $@
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/viz/process $(IMAGES)/bayer_small.png 3700 1.8 50 1 1 $(BIN)/out.png" ../../bin/HalideTraceViz $@
 
 viz_auto: $(BIN)/viz_auto.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^

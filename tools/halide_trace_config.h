@@ -264,6 +264,10 @@ struct FuncConfig {
 
     friend std::istream &operator>>(std::istream &is, FuncConfig &config) {
         std::string start_text;
+        // Conforming C++ implementations are allowed to fail when reading
+        // 'nan', 'inf', etc for floating-point values, so read these as
+        // text and reality-check them ourselves.
+        std::string min_text, max_text;
         is
             >> start_text
             >> config.zoom
@@ -272,11 +276,26 @@ struct FuncConfig {
             >> config.pos
             >> config.strides
             >> config.color_dim
-            >> config.min
-            >> config.max
+            >> min_text
+            >> max_text
             >> config.labels
             >> config.blank_on_end_realization
             >> config.uninitialized_memory_color;
+
+        const auto parse_double = [](const std::string &s) -> double {
+            double d;
+            std::istringstream iss(s);
+            iss >> d;
+            if (iss.fail() || iss.get() != EOF) {
+                // If it fails, just use nan for the value.
+                // (Could upgrade to guess at +-Inf if we ever care.)
+                d = std::numeric_limits<double>::quiet_NaN();
+            }
+            return d;
+        };
+        config.min = parse_double(min_text);
+        config.max = parse_double(max_text);
+
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }

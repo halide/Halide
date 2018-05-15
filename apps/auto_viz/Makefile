@@ -61,7 +61,7 @@ test: all
 
 $(BIN)/viz_%.mp4: $(BIN)/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash ../support/viz_auto.sh \
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh \
 		"$< $(IMAGES)/rgb_small.png /tmp/$*.png -s $* -f 0.5 " \
 		"../../bin/HalideTraceViz --auto_layout" \
 		$@
@@ -70,4 +70,4 @@ $(BIN)/viz_%.mp4: $(BIN)/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTr
 # make viz_lessnaive
 # make viz_complex
 viz_%: $(BIN)/viz_%.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^

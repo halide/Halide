@@ -123,3 +123,10 @@ RUNARGS ?=
 #
 $(BIN)/%.run: $(BIN)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
+
+# Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
+HL_AVCONV ?= avconv
+
+# Utility to show h264 video
+HL_VIDEOPLAYER ?= mplayer
+
