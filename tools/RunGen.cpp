@@ -903,8 +903,8 @@ int main(int argc, char **argv) {
     bool track_memory = false;
     bool describe = false;
     double benchmark_min_time = BenchmarkConfig().min_time;
-    int benchmark_min_iters = BenchmarkConfig().min_iters;
-    int benchmark_max_iters = BenchmarkConfig().max_iters;
+    uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
+    uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
