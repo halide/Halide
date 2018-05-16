@@ -18,7 +18,7 @@ $(BIN)/camera_pipe_auto_schedule.a: $(BIN)/camera_pipe.generator
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
+	$^ -g camera_pipe -o $(BIN)/viz target=$(HL_TARGET)-trace_all
 
 $(BIN)/process: process.cpp $(BIN)/camera_pipe.a $(BIN)/camera_pipe_auto_schedule.a
 	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)

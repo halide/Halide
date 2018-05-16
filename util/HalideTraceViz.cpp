@@ -286,7 +286,7 @@ stdout. You should pipe the output of HalideTraceViz into a video
 encoder or player.
 
 E.g. to encode a video:
- HL_TARGET=host-trace_stores-trace_loads-trace_realizations <command to make pipeline> && \
+ HL_TARGET=host-trace_all <command to make pipeline> && \
  HL_TRACE_FILE=/dev/stdout <command to run pipeline> | \
  HalideTraceViz -s 1920 1080 -t 10000 <the -f args> | \
  avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 output.avi
