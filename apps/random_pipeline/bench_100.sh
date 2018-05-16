@@ -1,7 +1,11 @@
 #!/bin/bash
 
-PIPELINES=200
-SCHEDULES=50
+# Start a watchdog to kill any compilations that take too long
+bash ./watchdog.sh &
+WATCHDOG_PID=$!
+
+PIPELINES=1000
+SCHEDULES=100
 
 # Build the shared things by building one pipeline
 HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build
@@ -39,3 +43,5 @@ cat files.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | cut -d' 
 
 # Extract the cost according to the hand-designed model (just the sum of the features)
 cat files.txt | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1); done  > costs.txt
+
+kill $WATCHDOG_PID
