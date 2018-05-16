@@ -104,17 +104,18 @@ struct Label {
     std::string text;
     Point pos;
     int fade_in_frames = 0;
+    float h_scale = 1.0f;
 
     Label() = default;
-    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0) : text(text), pos(pos), fade_in_frames(fade_in_frames) {}
+    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f) : text(text), pos(pos), fade_in_frames(fade_in_frames), h_scale(h_scale) {}
 
     friend std::ostream &operator<<(std::ostream &os, const Label &label) {
-        os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames;
+        os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames << " " << label.h_scale;
         return os;
     }
 
     friend std::istream &operator>>(std::istream &is, Label &label) {
-        is >> label.text >> label.pos >> label.fade_in_frames;
+        is >> label.text >> label.pos >> label.fade_in_frames >> label.h_scale;
         label.text = unescape_spaces(label.text);
         return is;
     }
