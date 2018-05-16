@@ -1630,7 +1630,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     bool is_constant = buffer.dimensions() != 0;
 
     // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
     do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
         if (i > 0) {
