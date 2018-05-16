@@ -905,7 +905,7 @@ public:
         return image[frame_size.x * y + x];
     }
 
-    void draw_text(const std::string &text, const Point &pos, uint32_t color, float h_scale = 1.5f) {
+    void draw_text(const std::string &text, const Point &pos, uint32_t color, float h_scale = 1.0f) {
         uint32_t *dst = text_buf.data();
 
         // Drop any alpha component of color
