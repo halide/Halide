@@ -1057,6 +1057,25 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             const int64_t frame_bytes = surface->frame_elems() * sizeof(uint32_t);
 
             while (halide_clock > video_clock) {
+                // Always render text last, since it's on top of everything
+                // and there's no need to re-render for every packet.
+                for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+                    const Label &label = it->first;
+                    int first_draw_clock = it->second;
+                    int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
+                    if (frames_since_first_draw < label.fade_in_frames) {
+                        uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
+                        if (color > 255) color = 255;
+                        color *= 0x10101;
+                        surface->draw_text(label.text, label.pos, color);
+                        ++it;
+                    } else {
+                        // Once we reach or exceed the final frame, draw at 100% opacity, then remove
+                        surface->draw_text(label.text, label.pos, 0xffffff);
+                        it = labels_being_drawn.erase(it);
+                    }
+                }
+
                 // Composite text over anim over image
                 surface->composite();
 
@@ -1282,23 +1301,6 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             break;
         default:
             fail() << "Unknown tracing event code: " << p.event;
-        }
-
-        for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
-            const Label &label = it->first;
-            int first_draw_clock = it->second;
-            int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
-            if (frames_since_first_draw < label.fade_in_frames) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
-                if (color > 255) color = 255;
-                color *= 0x10101;
-                surface->draw_text(label.text, label.pos, color);
-                ++it;
-            } else {
-                // Once we reach or exceed the final frame, draw at 100% opacity, then remove
-                surface->draw_text(label.text, label.pos, 0xffffff);
-                it = labels_being_drawn.erase(it);
-            }
         }
     }
 
