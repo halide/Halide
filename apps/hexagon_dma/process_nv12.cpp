@@ -21,10 +21,11 @@ int main(int argc, char **argv) {
     
     const int buf_size = width * height * 1.5;
     uint8_t *memory_to_dma_from = (uint8_t *)malloc(buf_size);
-    for (int i = 0; i < buf_size;  i++) {
-        memory_to_dma_from[i] = ((uint8_t)rand()) >> 1;
+    // Creating the Input Data so that we can catch if there are any Errors in DMA   
+    int *pDataIn = reinterpret_cast<int *>(memory_to_dma_from);
+    for (int i = 0; i < (buf_size >> 2);  i++) {
+        pDataIn[i] = i;
     }
-
     Halide::Runtime::Buffer<uint8_t> input_validation(memory_to_dma_from, width, height, 2);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, (3*height) / 2);
 
@@ -60,7 +61,7 @@ int main(int argc, char **argv) {
     
     Halide::Runtime::Buffer<uint8_t> output(width, (height * 1.5));
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(1, height, (height/2));  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
     output_c.embed(2, 0);
     output_c.raw_buffer()->dim[2].extent = 2;
@@ -77,7 +78,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < 1.5 * height; y++) {
         for (int x = 0; x < width; x++) {
-            uint8_t correct = memory_to_dma_from[x + y*width] * 2;
+            uint8_t correct = memory_to_dma_from[x + y * width] * 2;
             if (correct != output(x, y)) {
                 static int cnt = 0;
                 printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, output(x, y));

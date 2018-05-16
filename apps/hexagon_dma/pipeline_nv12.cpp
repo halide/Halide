@@ -31,9 +31,9 @@ public:
   
         // tweak stride/extent to handle UV deinterleaving
         input_uv.dim(0).set_stride(2);
-        input_uv.dim(2).set_stride(1).set_bounds(0, 2);;
+        input_uv.dim(2).set_stride(1).set_bounds(0, 2);
         output_uv.dim(0).set_stride(2);
-        output_uv.dim(2).set_stride(1).set_bounds(0, 2);;
+        output_uv.dim(2).set_stride(1).set_bounds(0, 2);
 
         output_y
             .compute_root()
