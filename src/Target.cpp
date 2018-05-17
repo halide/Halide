@@ -539,6 +539,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
     case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+    case DeviceAPI::HexagonDma:  return has_feature(Target::HexagonDma);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }
