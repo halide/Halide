@@ -8,7 +8,7 @@ complex_up complex_down
 LIBRARIES = $(foreach V,$(VARIANTS),$(BIN)/auto_viz_demo_$(V).a)
 OUTPUTS = $(foreach V,$(VARIANTS),$(BIN)/out_$(V).png)
 
-TRACE_TARGET=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
+TRACE_TARGET=$(HL_TARGET)-trace_all
 
 all: $(OUTPUTS)
 

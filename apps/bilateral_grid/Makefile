@@ -16,7 +16,7 @@ $(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid.generator
 
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid.generator
 	@mkdir -p $(@D)
-	$^ -g bilateral_grid -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
+	$^ -g bilateral_grid -o $(BIN)/viz target=$(HL_TARGET)-trace_all
 
 $(BIN)/filter: $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_auto_schedule.a filter.cpp
 	@mkdir -p $(@D)
