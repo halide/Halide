@@ -36,10 +36,12 @@ static const string remove_namespaces(const string &name) {
 }
 
 static bool can_convert(const LoweredArgument* arg) {
-  if (arg->type.is_handle() || arg->type.is_vector())
+  if (arg->type.is_handle() || arg->type.is_vector()) {
       return false;
-  if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64)
+  }
+  if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
       return false;
+  }
   return true;
 }
 
@@ -68,21 +70,18 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
 
 void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg) {
     assert(arg->is_buffer());
+    assert(arg->dimensions);
     dest << "    Py_buffer py_buffer_" << name << ";\n";
     dest << "    halide_buffer_t buffer_" << name << ";\n";
-    dest << "    if (_get_py_buffer(py_" << name << ", &py_buffer_" << name << ", ";
-    dest << (int)arg->dimensions << ", ";
-    dest << (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
-    dest << "\"" << name << "\"";
+    dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
+    dest << "    if (_convert_py_buffer_to_halide(";
+    dest << /*pyobj*/ "py_" << name << ", ";
+    dest << /*dimensions*/ (int)arg->dimensions << ", ";
+    dest << /*flags*/ (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
+    dest << /*dim*/ "dimensions_" << name << ", ";
+    dest << /*out*/ "&buffer_" << name << ",\n";
+    dest << /*name*/ "\"" << name << "\"";
     dest << ") < 0) {\n";
-    dest << "        return NULL;\n";
-    dest << "    }\n";
-    // TODO: Do we always know the number of dimensions at compile time? If so, we
-    // could declare an array of constant size, and merge _get_py_buffer and
-    // _convert_py_buffer_to_halide.
-    dest << "    halide_dimension_t dimensions_" << name << "[py_buffer_" << name << ".ndim];\n";
-    dest << "    if (!_convert_py_buffer_to_halide(&py_buffer_" << name
-         << ", dimensions_" << name << ", &buffer_" << name << ", \"" << name << "\")) {\n";
     dest << "        return NULL;\n";
     dest << "    }\n";
 }
@@ -103,29 +102,24 @@ void PythonExtensionGen::compile(const Module &module) {
 extern "C" {
 #endif
 
-static int _get_py_buffer(PyObject* pyobj, Py_buffer* buf, int dimensions, int flags,
-                          const char* name) {
+static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int flags,
+        halide_dimension_t* dim,  // array of size `dimensions`
+        halide_buffer_t* out, const char* name) {
+    Py_buffer buf;
     int ret = PyObject_GetBuffer(
-      pyobj, buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_C_CONTIGUOUS | flags);
+      pyobj, &buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_C_CONTIGUOUS | flags);
     if (ret < 0) {
       return ret;
     }
-    if (dimensions && buf->ndim != dimensions) {
+    if (dimensions && buf.ndim != dimensions) {
       PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d",
-                   name, dimensions, buf->ndim);
+                   name, dimensions, buf.ndim);
       return -1;
     }
-    return 0;
-}
-
-static bool _convert_py_buffer_to_halide(Py_buffer* in,
-                                         halide_dimension_t* dim,
-                                         halide_buffer_t* out,
-                                         const char* name) {
-    if (in->shape[0] * in->strides[0] != in->len) {  // length is in bytes, and so is strides
+    if (buf.shape[0] * buf.strides[0] != buf.len) {  // length is in bytes, and so is strides
         PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
-                     in->len, in->shape[0] * in->strides[0]);
-        return false;
+                     buf.len, buf.shape[0] * buf.strides[0]);
+        return -1;
     }
     /* We ask for PyBUF_C_CONTIGUOUS above, because numpy can't convert to F_CONTIGUOUS.
      * So we're getting a buffer where the last dimension varies the fastest
@@ -133,53 +127,55 @@ static bool _convert_py_buffer_to_halide(Py_buffer* in,
      * the fastest (has stride=1), which is what Halide needs.
      */
     int i, j;
-    for (i = 0, j = in->ndim - 1; i < in->ndim; ++i, --j) {
+    for (i = 0, j = buf.ndim - 1; i < buf.ndim; ++i, --j) {
         dim[i].min = 0;
-        dim[i].stride = in->strides[j] / in->itemsize; // strides is in bytes
-        dim[i].extent = in->shape[j];
+        dim[i].stride = buf.strides[j] / buf.itemsize; // strides is in bytes
+        dim[i].extent = buf.shape[j];
         dim[i].flags = 0;
-        if (in->suboffsets && in->suboffsets[i] >= 0) {
+        if (buf.suboffsets && buf.suboffsets[i] >= 0) {
             // Halide doesn't support arrays of pointers. But we should never see this
             // anyway, since we specified PyBUF_STRIDED.
             PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
-            return false;
+            return -1;
         }
     }
     memset(out, 0, sizeof(*out));
-    if (!in->format) {
+    if (!buf.format) {
         out->type.code = halide_type_uint;
         out->type.bits = 8;
     } else {
         /* Convert struct type code. See
          * https://docs.python.org/2/library/struct.html#module-struct */
-        char* p = in->format;
-        while (strchr("@<>!=", *p)) p++;  // ignore little/bit endian
+        char* p = buf.format;
+        while (strchr("@<>!=", *p)) {
+            p++;  // ignore little/bit endian
+        }
         if (*p == 'f' && *p <= 'd') {
-          // 'f' and 'd' are float and double, respectively.
-          out->type.code = halide_type_float;
+            // 'f' and 'd' are float and double, respectively.
+            out->type.code = halide_type_float;
         } else if (*p >= 'a' && *p <= 'z') {
-          // lowercase is signed int.
-          out->type.code = halide_type_int;
+            // lowercase is signed int.
+            out->type.code = halide_type_int;
         } else {
-          // uppercase is unsigned int.
-          out->type.code = halide_type_uint;
+            // uppercase is unsigned int.
+            out->type.code = halide_type_uint;
         }
         // 1, 2, 4 and 8 byte types, in blocks of six:
         const char* type_codes = "bB?..|hH...|iIlLf|qQd...";
         const char* type_pos = strchr(type_codes, *p);
         if (type_pos) {
-          out->type.bits = 8 << ((type_pos - type_codes) / 6);
+            out->type.bits = 8 << ((type_pos - type_codes) / 6);
         } else {
-          // We don't handle 's' and 'p' (char[]) and 'P' (void*)
-          PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, in->format);
-          return false;
+            // We don't handle 's' and 'p' (char[]) and 'P' (void*)
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, buf.format);
+            return -1;
         }
     }
     out->type.lanes = 1;
-    out->dimensions = in->ndim;
+    out->dimensions = buf.ndim;
     out->dim = dim;
-    out->host = (uint8_t*)in->buf;
-    return true;
+    out->host = (uint8_t*)buf.buf;
+    return 0;
 }
 
 )INLINE_CODE";
@@ -238,6 +234,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             /* Some arguments can't be converted to Python yet. In those
              * cases, just add a dummy function that always throws an
              * Exception. */
+            // TODO: Add support for handles and vectors.
             dest << "    PyErr_Format(PyExc_NotImplementedError, "
                  << "\"Can't convert argument " << args[i].name << " to Python\");\n";
             dest << "    return NULL;\n";
