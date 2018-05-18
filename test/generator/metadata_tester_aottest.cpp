@@ -1036,7 +1036,7 @@ int main(int argc, char **argv) {
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {Buffer<float>{0}, Buffer<float>{0}};
+    Buffer<float> output_array3[2] = {Buffer<float>::make_scalar(), Buffer<float>::make_scalar()};
     Buffer<float> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
