@@ -67,24 +67,24 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
 }
 
 void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg) {
-  assert(arg->is_buffer());
-  dest << "    Py_buffer py_buffer_" << name << ";\n";
-  dest << "    halide_buffer_t buffer_" << name << ";\n";
-  dest << "    if (_get_py_buffer(py_" << name << ", &py_buffer_" << name << ", ";
-  dest << (int)arg->dimensions << ", ";
-  dest << (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
-  dest << "\"" << name << "\"";
-  dest << ") < 0) {\n";
-  dest << "        return NULL;\n";
-  dest << "    }\n";
-  // TODO: Do we always know the number of dimensions at compile time? If so, we
-  // could declare an array of constant size, and merge _get_py_buffer and
-  // _convert_py_buffer_to_halide.
-  dest << "    halide_dimension_t dimensions_" << name << "[py_buffer_" << name << ".ndim];\n";
-  dest << "    if (!_convert_py_buffer_to_halide(&py_buffer_" << name
-       << ", dimensions_" << name << ", &buffer_" << name << ", \"" << name << "\")) {\n";
-  dest << "        return NULL;\n";
-  dest << "    }\n";
+    assert(arg->is_buffer());
+    dest << "    Py_buffer py_buffer_" << name << ";\n";
+    dest << "    halide_buffer_t buffer_" << name << ";\n";
+    dest << "    if (_get_py_buffer(py_" << name << ", &py_buffer_" << name << ", ";
+    dest << (int)arg->dimensions << ", ";
+    dest << (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
+    dest << "\"" << name << "\"";
+    dest << ") < 0) {\n";
+    dest << "        return NULL;\n";
+    dest << "    }\n";
+    // TODO: Do we always know the number of dimensions at compile time? If so, we
+    // could declare an array of constant size, and merge _get_py_buffer and
+    // _convert_py_buffer_to_halide.
+    dest << "    halide_dimension_t dimensions_" << name << "[py_buffer_" << name << ".ndim];\n";
+    dest << "    if (!_convert_py_buffer_to_halide(&py_buffer_" << name
+         << ", dimensions_" << name << ", &buffer_" << name << ", \"" << name << "\")) {\n";
+    dest << "        return NULL;\n";
+    dest << "    }\n";
 }
 
 PythonExtensionGen::PythonExtensionGen(std::ostream &dest, const std::string &header_name, Target target)
