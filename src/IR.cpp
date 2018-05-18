@@ -869,6 +869,7 @@ Call::ConstString Call::require = "require";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 Call::ConstString Call::strict_float = "strict_float";
 
+Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_extent = "_halide_buffer_get_extent";
 Call::ConstString Call::buffer_get_stride = "_halide_buffer_get_stride";
