@@ -50,7 +50,7 @@ struct Outputs {
      * output is desired. */
     std::string static_library_name;
 
-    /** The name of the emitted Python extension glue C C source file. Empty if no
+    /** The name of the emitted Python extension glue C source file. Empty if no
      * Python glue output is desired. */
     std::string python_extension_name;
 
