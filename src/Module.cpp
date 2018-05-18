@@ -81,6 +81,20 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
     return path.substr(0, found) + suffix + path.substr(found);
 }
 
+// Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
+std::string replace_extension(const std::string &path, const std::string &new_ext) {
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
+    }
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + new_ext;
+    } else {
+        return path.substr(0, dot) + new_ext;
+    }
+}
+
 Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     Outputs out;
     if (!in.object_name.empty()) out.object_name = add_suffix(in.object_name, suffix);
@@ -426,11 +440,14 @@ void Module::compile(const Outputs &output_files_arg) const {
     }
     if (!output_files.python_extension_name.empty()) {
         debug(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
-        user_assert(!output_files.c_header_name.empty()) << "Please generate .h together with python_extension";
         std::string c_header_name = output_files.c_header_name;
+        if (c_header_name.empty()) {
+          // If we we're not generating a header right now, guess the filename.
+          c_header_name = replace_extension(output_files.python_extension_name, ".h");
+        }
         std::ofstream file(output_files.python_extension_name);
         Internal::PythonExtensionGen python_extension_gen(file,
-                                                          output_files.c_header_name,
+                                                          c_header_name,
                                                           target());
         python_extension_gen.compile(*this);
     }
