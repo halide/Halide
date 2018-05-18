@@ -481,6 +481,8 @@ struct PartialScheduleNode {
             auto it = compute_site.find(f);
             internal_assert(it != compute_site.end());
 
+            bool folded_over_vector_dim = false;
+
             double discount = 1;
             if (it->second != this) {
                 const auto &bounds_computed = it->second->get_bounds(f, dag);
@@ -498,7 +500,10 @@ struct PartialScheduleNode {
                     discount = double(ec) / er;
                     if (i == 1) {
                         // By folding on the innermost dimension, you just broke vectorization. Don't do that.
-                        discount = 1e10;
+                        folded_over_vector_dim = true;
+                        if (node_costs) {
+                            debug(0) << "Warning: Folding over innermost dimension: " << f.name() << "\n";
+                        }
                     }
                     break;
                 }
@@ -529,7 +534,9 @@ struct PartialScheduleNode {
                          << points << " "                    // Number of points in the region
                          << bytes_cold_loaded << " "         // Number of bytes in the region before folding
                          << allocation_size << " "           // Number of bytes in the region after folding
-                         << "0\n"; // number of inlined calls per 'realization'
+                         << "0 " // number of inlined calls per 'realization'
+                         << (int)folded_over_vector_dim << "\n";
+
             }
 
             for (const auto *e : dag.outgoing_edges.at(f)) {
@@ -564,8 +571,9 @@ struct PartialScheduleNode {
                          << "0 "                  // Number of points in the region
                          << "0 "                  // Number of bytes in the region before folding
                          << "0 "                  // Number of bytes in the region after folding
-                         << p.second << "\n" ;    // number of inlined calls per 'realization'
-            }
+                         << p.second << " "       // number of inlined calls per 'realization'
+                         << "0\n";                // Did we fold over the vectorized dimension
+                    }
 
         }
 
@@ -917,17 +925,20 @@ struct PartialScheduleNode {
             }
         }
 
-        if (child >= 0 && !called_by_multiple_children) {
+        if (child >= 0 && !called_by_multiple_children && !in_realization) {
+            // See if it's appropriate to slide over this loop
+            int num_ones = 0;
+            for (auto s : size) {
+                num_ones += (s == 1) ? 1 : 0;
+            }
+            bool may_slide = !is_root() && (num_ones == ((int)size.size() - 1));
             for (int store_here = 0; store_here < 2; store_here++) {
-                if (store_here && (in_realization || is_root())) {
-                    // is_root: We place all our parallel loops at the
-                    // root level, so this would constrain
-                    // parallelism.
-                    // in_realization: We've already set the storage
-                    // level to be further out.
+                if (store_here && !may_slide) {
+                    // We place all our parallel loops at the root
+                    // level, so this would constrain parallelism.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, dag, this, params, in_realization || store_here);
+                auto v = children[child]->compute_in_tiles(f, dag, this, params, store_here);
                 for (PartialScheduleNode n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -936,6 +947,7 @@ struct PartialScheduleNode {
                     if (store_here) {
                         r.store_at.insert(f);
                     }
+                    r.tileable = false;
                     r.children[child] = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode(n));
                     result.emplace_back(std::move(r));
                 }
