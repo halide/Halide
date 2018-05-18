@@ -43,6 +43,23 @@ inline std::string unescape_spaces(const std::string &str) {
     return replace_all(str, "\\x20", " ");
 }
 
+inline std::ostream &operator<<(std::ostream &os, const halide_type_t &t) {
+    os << (int) t.code << " " << (int) t.bits << " " << t.lanes;
+    return os;
+}
+
+
+inline std::istream &operator>>(std::istream &is, halide_type_t &t) {
+    // type.code is an enum; type.bits is a uint8 and might be read as char.
+    int type_code, type_bits;
+    is >> type_code
+       >> type_bits
+       >> t.lanes;
+    t.code = (halide_type_code_t) type_code;
+    t.bits = (uint8_t) type_bits;
+    return is;
+}
+
 template<typename T>
 std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
     os << v.size() << " ";
@@ -87,17 +104,18 @@ struct Label {
     std::string text;
     Point pos;
     int fade_in_frames = 0;
+    float h_scale = 1.0f;
 
     Label() = default;
-    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0) : text(text), pos(pos), fade_in_frames(fade_in_frames) {}
+    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f) : text(text), pos(pos), fade_in_frames(fade_in_frames), h_scale(h_scale) {}
 
     friend std::ostream &operator<<(std::ostream &os, const Label &label) {
-        os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames;
+        os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames << " " << label.h_scale;
         return os;
     }
 
     friend std::istream &operator>>(std::istream &is, Label &label) {
-        is >> label.text >> label.pos >> label.fade_in_frames;
+        is >> label.text >> label.pos >> label.fade_in_frames >> label.h_scale;
         label.text = unescape_spaces(label.text);
         return is;
     }
@@ -247,6 +265,10 @@ struct FuncConfig {
 
     friend std::istream &operator>>(std::istream &is, FuncConfig &config) {
         std::string start_text;
+        // Conforming C++ implementations are allowed to fail when reading
+        // 'nan', 'inf', etc for floating-point values, so read these as
+        // text and reality-check them ourselves.
+        std::string min_text, max_text;
         is
             >> start_text
             >> config.zoom
@@ -255,11 +277,26 @@ struct FuncConfig {
             >> config.pos
             >> config.strides
             >> config.color_dim
-            >> config.min
-            >> config.max
+            >> min_text
+            >> max_text
             >> config.labels
             >> config.blank_on_end_realization
             >> config.uninitialized_memory_color;
+
+        const auto parse_double = [](const std::string &s) -> double {
+            double d;
+            std::istringstream iss(s);
+            iss >> d;
+            if (iss.fail() || iss.get() != EOF) {
+                // If it fails, just use nan for the value.
+                // (Could upgrade to guess at +-Inf if we ever care.)
+                d = std::numeric_limits<double>::quiet_NaN();
+            }
+            return d;
+        };
+        config.min = parse_double(min_text);
+        config.max = parse_double(max_text);
+
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }
@@ -311,6 +348,18 @@ struct GlobalConfig {
     // How many Halide computations should be covered by each frame.
     int timestep = 10000;
 
+    // If true, automatically layout every realized func we see, in left-to-right,
+    // top-to-bottom order as they are first touched.
+    bool auto_layout = false;
+
+    // If doing auto-layout, divide the frame into this many rows and columns,
+    // filling in each cell in left-to-right, top-to-bottom order. If either
+    // value is -1, calculate a cell size based on the number of boxes touched.
+    Point auto_layout_grid = { -1, -1 };
+
+    // If doing auto-layout, the padding to use between each cell.
+    Point auto_layout_pad = { 32, 32 };
+
     static std::string tag_start_text() {
         return std::string("htv_global_config:");
     }
@@ -320,12 +369,16 @@ struct GlobalConfig {
     }
 
     void dump(std::ostream &os) const {
-        os << "Global:\n"
+        os << std::boolalpha
+            << "Global:\n"
             << "  frame_size: " << frame_size << "\n"
             << "  decay_factor_during_compute: " << decay_factor_during_compute << "\n"
             << "  decay_factor_after_compute: " << decay_factor_after_compute << "\n"
             << "  hold_frames: " << hold_frames << "\n"
-            << "  timestep: " << timestep << "\n";
+            << "  timestep: " << timestep << "\n"
+            << "  auto_layout: " << auto_layout << "\n"
+            << "  auto_layout_grid: " << auto_layout_grid << "\n"
+            << "  auto_layout_pad: " << auto_layout_grid << "\n";
     }
 
     friend std::ostream &operator<<(std::ostream &os, const GlobalConfig &config) {
@@ -338,7 +391,10 @@ struct GlobalConfig {
             << config.decay_factor_during_compute << " "
             << config.decay_factor_after_compute << " "
             << config.hold_frames << " "
-            << config.timestep;
+            << config.timestep << " "
+            << config.auto_layout << " "
+            << config.auto_layout_grid << " "
+            << config.auto_layout_pad;
         return os;
     }
 
@@ -350,7 +406,10 @@ struct GlobalConfig {
             >> config.decay_factor_during_compute
             >> config.decay_factor_after_compute
             >> config.hold_frames
-            >> config.timestep;
+            >> config.timestep
+            >> config.auto_layout
+            >> config.auto_layout_grid
+            >> config.auto_layout_pad;
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }
@@ -377,6 +436,85 @@ struct GlobalConfig {
     }
 };
 
+// We don't use halide_dimension_t here because we don't want stride.
+struct Range {
+    int min = 0, extent = 0;
+
+    Range() = default;
+    Range(int min, int extent) : min(min), extent(extent) {}
+
+    friend std::ostream &operator<<(std::ostream &os, const Range &dim) {
+        os << dim.min << " " << dim.extent;
+        return os;
+    }
+
+    friend std::istream &operator>>(std::istream &is, Range &dim) {
+        is >> dim.min >> dim.extent;
+        return is;
+    }
+};
+
+// TODO name is terrible
+struct FuncTypeAndDim {
+    std::vector<halide_type_t> types;
+    std::vector<Range> dims;
+
+    static std::string tag_start_text() {
+        return std::string("func_type_and_dim:");
+    }
+
+    static bool match(const std::string &trace_tag) {
+        return trace_tag.find(tag_start_text()) == 0;
+    }
+
+    void dump(std::ostream &os, const std::string &name) const {
+        static const char * const type_name[4] = { "int", "uint", "float", "handle" };
+        os << "FuncTypeAndDim: " << name << "\n";
+        os << "  types:";
+        for (const auto &type : types) {
+            os << " " << type_name[type.code & 3] << (int) type.bits;
+            if (type.lanes > 1) {
+                os << 'x' << type.lanes;
+            }
+        }
+        os << "\n";
+        os << "  dims: " << dims << "\n";
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const FuncTypeAndDim &types_and_ranges) {
+        os << tag_start_text()
+           << " " << types_and_ranges.types
+           << " " << types_and_ranges.dims;
+        return os;
+    }
+
+    friend std::istream &operator>>(std::istream &is, FuncTypeAndDim &types_and_ranges) {
+        std::string start_text;
+        is >> start_text
+           >> types_and_ranges.types
+           >> types_and_ranges.dims;
+        if (start_text != tag_start_text()) {
+            is.setstate(std::ios::failbit);
+        }
+        return is;
+    }
+
+    std::string to_trace_tag() const {
+        std::ostringstream os;
+        os << *this;
+        return os.str();
+    }
+
+    FuncTypeAndDim() = default;
+
+    explicit FuncTypeAndDim(const std::string &trace_tag, ErrorFunc error = default_error) {
+        std::istringstream is(trace_tag);
+        is >> *this;
+        if (is.fail() || is.get() != EOF) {
+            error("FuncTypeAndDim trace_tag parsing error");
+        }
+    }
+};
 
 }  // namespace Trace
 }  // namespace Halide

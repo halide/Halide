@@ -524,12 +524,17 @@ void IRPrinter::visit(const Select *op) {
 }
 
 void IRPrinter::visit(const Load *op) {
+    const bool has_pred = !is_one(op->predicate);
+    if (has_pred) {
+        stream << "(";
+    }
     stream << op->name << "[";
     print(op->index);
     stream << "]";
-    if (!is_one(op->predicate)) {
+    if (has_pred) {
         stream << " if ";
         print(op->predicate);
+        stream << ")";
     }
 }
 
@@ -620,15 +625,20 @@ void IRPrinter::visit(const For *op) {
 
 void IRPrinter::visit(const Store *op) {
     do_indent();
+    const bool has_pred = !is_one(op->predicate);
+    if (has_pred) {
+        stream << "predicate (" << op->predicate << ")\n";
+        indent += 2;
+        do_indent();
+    }
     stream << op->name << "[";
     print(op->index);
     stream << "] = ";
     print(op->value);
-    if (!is_one(op->predicate)) {
-        stream << " if ";
-        print(op->predicate);
-    }
     stream << '\n';
+    if (has_pred) {
+        indent -= 2;
+    }
 }
 
 void IRPrinter::visit(const Provide *op) {
