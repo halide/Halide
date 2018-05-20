@@ -243,12 +243,9 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     }
     dest << "    static const char* kwlist[] = {";
     for (size_t i = 0; i < args.size(); i++) {
-        if (i > 0) {
-            dest << ", ";
-        }
-        dest << "\"" << arg_names[i] << "\"";
+        dest << "\"" << arg_names[i] << "\", ";
     }
-    dest << "};\n";
+    dest << "NULL};\n";
     for (size_t i = 0; i < args.size(); i++) {
         dest << "    " << print_type(&args[i]).second << " py_" << arg_names[i] << ";\n";
     }
