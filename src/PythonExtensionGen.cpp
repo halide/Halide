@@ -71,7 +71,6 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
 void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg) {
     assert(arg->is_buffer());
     assert(arg->dimensions);
-    dest << "    Py_buffer py_buffer_" << name << ";\n";
     dest << "    halide_buffer_t buffer_" << name << ";\n";
     dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
     dest << "    if (_convert_py_buffer_to_halide(";
@@ -79,7 +78,7 @@ void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg)
     dest << /*dimensions*/ (int)arg->dimensions << ", ";
     dest << /*flags*/ (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
     dest << /*dim*/ "dimensions_" << name << ", ";
-    dest << /*out*/ "&buffer_" << name << ",\n";
+    dest << /*out*/ "&buffer_" << name << ",";
     dest << /*name*/ "\"" << name << "\"";
     dest << ") < 0) {\n";
     dest << "        return NULL;\n";
