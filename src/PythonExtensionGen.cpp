@@ -87,7 +87,7 @@ void PythonExtensionGen::convert_buffer(string name, const LoweredArgument* arg)
     dest << /*dimensions*/ (int)arg->dimensions << ", ";
     dest << /*flags*/ (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
     dest << /*dim*/ "dimensions_" << name << ", ";
-    dest << /*out*/ "&buffer_" << name << ",";
+    dest << /*out*/ "&buffer_" << name << ", ";
     dest << /*name*/ "\"" << name << "\"";
     dest << ") < 0) {\n";
     dest << "        return NULL;\n";
@@ -165,7 +165,7 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
         while (strchr("@<>!=", *p)) {
             p++;  // ignore little/bit endian
         }
-        if (*p == 'f' && *p <= 'd') {
+        if (*p == 'f' || *p == 'd') {
             // 'f' and 'd' are float and double, respectively.
             out->type.code = halide_type_float;
         } else if (*p >= 'a' && *p <= 'z') {
