@@ -42,6 +42,11 @@ static bool can_convert(const LoweredArgument* arg) {
   if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
       return false;
   }
+  if (arg->type.is_int() &&
+      arg->type.bits() != 8 && arg->type.bits() != 16 &&
+      arg->type.bits() != 32 && arg->type.bits() != 64) {
+      return false;
+  }
   return true;
 }
 
@@ -59,6 +64,10 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
     } else if (arg->type.is_bool()) {
         // "b" expects an unsigned char, so we assume that bool == uint8.
         return std::make_pair("b", "bool");
+    } else if (arg->type.is_int() && arg->type.bits() == 64) {
+        return std::make_pair("L", "long long");
+    } else if (arg->type.is_uint() && arg->type.bits() == 64) {
+        return std::make_pair("K", "unsigned long long");
     } else if (arg->type.is_int()) {
         return std::make_pair("i", "int");
     } else if (arg->type.is_uint()) {
