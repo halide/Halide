@@ -570,7 +570,7 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
                                         struct halide_buffer_t *dst) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_crop (user_context: " << user_context
-        << " buf src: " << src << " halide_buffer_t dst: " << dst << ")\n";
+        << " src: " << src << " dst: " << dst << ")\n";
 
     dst->device_interface = src->device_interface;
 
