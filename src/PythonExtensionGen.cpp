@@ -97,6 +97,13 @@ void PythonExtensionGen::compile(const Module &module) {
     dest << "#define MODULE_NAME \"" << module.name() << "\"\n";
 
     dest << R"INLINE_CODE(
+/* Older Python versions don't set up PyMODINIT_FUNC correctly. */
+#if defined(WIN32) || defined(_WIN32)
+#    define HALIDE_PYTHON_EXPORT __declspec(dllexport)
+#else
+#    define HALIDE_PYTHON_EXPORT __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -202,13 +209,13 @@ static struct PyModuleDef _moduledef = {
     .m_size=-1,
     .m_methods=_methods,
 };
-PyMODINIT_FUNC PyInit_)INLINE_CODE";
+HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
     dest << module.name() << "(void) {";
     dest << R"INLINE_CODE(
     return PyModule_Create(&_moduledef);
 }
 #else
-PyMODINIT_FUNC init)INLINE_CODE";
+HALIDE_PYTHON_EXPORT void init)INLINE_CODE";
     dest << module.name() << "(void) {";
     dest << R"INLINE_CODE(
     Py_InitModule3(MODULE_NAME, _methods, NULL);
