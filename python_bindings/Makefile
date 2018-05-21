@@ -161,7 +161,15 @@ test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
-	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $< >/dev/null
+	@cd $(TEST_TMP); PYTHONPATH=".:$(BIN):$$PYTHONPATH" $(PYTHON) $< >/dev/null
+
+test_tutorial_lesson_10_aot_compilation_run: $(TEST_TMP)/lession_10_halide.so
+
+$(TEST_TMP)/lession_10_halide.so: test_tutorial_lesson_10_aot_compilation_generate
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $(FPIC) -shared \
+		$(TEST_TMP)/lesson_10_halide.py.c \
+		$(TEST_TMP)/lesson_10_halide.o \
+		-I $(TEST_TMP) -o $@
 
 clean:
 	rm -rf $(BIN)
