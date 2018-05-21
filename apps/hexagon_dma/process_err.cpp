@@ -22,12 +22,12 @@ int main(int argc, char **argv) {
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
     const int buf_size = width * height * PLANE;
-    uint8_t *memory_to_dma_from = (uint8_t *)malloc(buf_size);
+    uint8_t *data_in = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
-        memory_to_dma_from[i] = ((uint8_t)rand()) >> 1;
+        data_in[i] = ((uint8_t)rand()) >> 1;
     }
 
-    Halide::Runtime::Buffer<uint8_t> input_validation(memory_to_dma_from, width, height, PLANE);
+    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, PLANE);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, PLANE);
 
     // TODO: We shouldn't need to allocate a host buffer here, but the
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
     // Give the input the buffer we want to DMA from.
     input.device_wrap_native(halide_hexagon_dma_device_interface(),
-                             reinterpret_cast<uint64_t>(memory_to_dma_from));
+                             reinterpret_cast<uint64_t>(data_in));
     input.set_device_dirty();
 
     // In order to actually do a DMA transfer, we need to allocate a
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     output.copy_to_host();
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            uint8_t correct = memory_to_dma_from[x + y*width ] * 2;
+            uint8_t correct = data_in[x + y*width ] * 2;
             if (correct != output(x, y)) {
                 static int cnt = 0;
                 printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, output(x, y));
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
-    free(memory_to_dma_from);
+    free(data_in);
 
     printf("Success!\n");
     return 0;

@@ -19,14 +19,14 @@ int main(int argc, char **argv) {
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
     const int buf_size = width * height * 1.5;
-    uint16_t *memory_to_dma_from = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
+    uint16_t *data_in = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
     // Creating the Input Data so that we can catch if there are any Errors in DMA
-    int *pDataIn = reinterpret_cast<int *>(memory_to_dma_from);
+    int *pDataIn = reinterpret_cast<int *>(data_in);
     for (int i = 0; i < (buf_size >> 1);  i++) {
         pDataIn[i] = i;
     }
 
-    Halide::Runtime::Buffer<uint16_t> input_validation(memory_to_dma_from, width, height, 2);
+    Halide::Runtime::Buffer<uint16_t> input_validation(data_in, width, height, 2);
     Halide::Runtime::Buffer<uint16_t> input(nullptr, width, height, 2);
 
     // In order to actually do a DMA transfer, we need to allocate a
@@ -49,12 +49,12 @@ int main(int argc, char **argv) {
 
     // Give the input the buffer we want to DMA from.
     input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
-                   reinterpret_cast<uint64_t>(memory_to_dma_from));
+                   reinterpret_cast<uint64_t>(data_in));
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, eDmaFmt_P010);
     input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
-                   reinterpret_cast<uint64_t>(memory_to_dma_from));
+                   reinterpret_cast<uint64_t>(data_in));
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, eDmaFmt_P010);
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < 1.5 * height; y++) {
         for (int x = 0; x < width; x++) {
-            uint16_t correct = memory_to_dma_from[x + y * width] * 2;
+            uint16_t correct = data_in[x + y * width] * 2;
             if (correct != output(x, y)) {
                 static int cnt = 0;
                 printf("Mismatch at x=%d y=%d  : %d != %d\n", x, y, correct, output(x, y));
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
-    free(memory_to_dma_from);
+    free(data_in);
 
     printf("Success!\n");
     return 0;

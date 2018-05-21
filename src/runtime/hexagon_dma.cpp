@@ -467,7 +467,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
 WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_copy_to_device (user_context: " << user_context
-        << ", halide_buffer_t: " << buf << ")\n";
+        << ", buf: " << buf << ")\n";
 
     // TODO: Implement this with dma_move_data.
     error(user_context) << "halide_hexagon_dma_copy_to_device not implemented.\n";
@@ -477,7 +477,7 @@ WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *
 WEAK int halide_hexagon_dma_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_copy_to_host (user_context: " << user_context
-        << ", halide_buffer_t: " << buf << ")\n";
+        << ", buf: " << buf << ")\n";
 
 // TODO: pending cleanup to match halide_hexagon_dma_buffer_copy()'s functional correctness
 // Halide currently is not using this function.
@@ -570,7 +570,7 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
                                         struct halide_buffer_t *dst) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_crop (user_context: " << user_context
-        << " halide_buffer_t src: " << src << " halide_buffer_t dst: " << dst << ")\n";
+        << " buf src: " << src << " halide_buffer_t dst: " << dst << ")\n";
 
     dst->device_interface = src->device_interface;
 
@@ -590,7 +590,7 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
 WEAK int halide_hexagon_dma_device_release_crop(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_release_crop (user_context: " << user_context
-        << " halide_buffer_t: " << buf << ")\n";
+        << " buf: " << buf << ")\n";
 
     halide_assert(user_context, buf->device);
     free((dma_device_handle *)buf->device);
@@ -602,7 +602,7 @@ WEAK int halide_hexagon_dma_device_release_crop(void *user_context, struct halid
 WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_sync (user_context: " << user_context
-        << " halide_buffer_t: " << buf << ")\n";
+        << " buf: " << buf << ")\n";
 
     dma_device_handle *dev = (dma_device_handle *)buf->device;
     halide_assert(user_context, dev->dma_engine);
@@ -620,7 +620,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
                                                uint64_t handle) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_wrap_native (user_context: " << user_context
-        << " halide_buffer_t: " << buf << " handle: " << handle << ")\n";
+        << " buf: " << buf << " handle: " << handle << ")\n";
 
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
@@ -645,7 +645,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
 WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_detach_native (user_context: " << user_context
-        << " halide_buffer_t: " << buf << ")\n";
+        << " buf: " << buf << ")\n";
 
     if (buf->device == 0) {
         return NULL;
@@ -663,7 +663,7 @@ WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct hali
 WEAK int halide_hexagon_dma_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_and_host_malloc (user_context: " << user_context
-        << " halide_buffer_t: " << buf << ")\n";
+        << " buf: " << buf << ")\n";
 
     return halide_default_device_and_host_malloc(user_context, buf, &hexagon_dma_device_interface);
 }
@@ -671,7 +671,7 @@ WEAK int halide_hexagon_dma_device_and_host_malloc(void *user_context, struct ha
 WEAK int halide_hexagon_dma_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_and_host_free (user_context: " << user_context
-        << " halide_buffer_t: " << buf << ")\n";
+        << " buf: " << buf << ")\n";
 
     return halide_default_device_and_host_free(user_context, buf, &hexagon_dma_device_interface);
 }
