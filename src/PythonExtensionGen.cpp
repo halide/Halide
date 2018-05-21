@@ -122,7 +122,7 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
         halide_buffer_t* out, const char* name) {
     Py_buffer buf;
     int ret = PyObject_GetBuffer(
-      pyobj, &buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_C_CONTIGUOUS | flags);
+      pyobj, &buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | flags);
     if (ret < 0) {
       return ret;
     }
@@ -131,18 +131,28 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
                    name, dimensions, buf.ndim);
       return -1;
     }
-    if (buf.shape[0] * buf.strides[0] != buf.len) {  // length is in bytes, and so is strides
-        PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
-                     buf.len, buf.shape[0] * buf.strides[0]);
-        return -1;
-    }
-    /* We ask for PyBUF_C_CONTIGUOUS above, because numpy can't convert to F_CONTIGUOUS.
-     * So we're getting a buffer where the last dimension varies the fastest
-     * (i.e., has stride=1). Flip the dimensions so the first dimension varies
-     * the fastest (has stride=1), which is what Halide needs.
+    /* We'll get a buffer that's either:
+     * C_CONTIGUOUS (last dimension varies the fastest, i.e., has stride=1) or
+     * F_CONTIGUOUS (first dimension varies the fastest, i.e., has stride=1).
+     * The latter is preferred, since it's already in the format that Halide
+     * needs. It can can be achieved in numpy by passing order='F' during array
+     * creation. However, if we do get a C_CONTIGUOUS buffer, flip the dimensions
+     * (transpose) so we can process it without having to reallocate.
      */
-    int i, j;
-    for (i = 0, j = buf.ndim - 1; i < buf.ndim; ++i, --j) {
+    int i, j, j_step;
+    if (PyBuffer_IsContiguous(&buf, 'F')) {
+      j = 0;
+      j_step = 1;
+    } else if (PyBuffer_IsContiguous(&buf, 'C')) {
+      j = buf.ndim - 1;
+      j_step = -1;
+    } else {
+      /* Python checks all dimensions and strides, so this typically indicates
+       * a bug in the array's buffer protocol. */
+      PyErr_Format(PyExc_ValueError, "Invalid buffer: neither C nor Fortran contiguous");
+      return -1;
+    }
+    for (i = 0; i < buf.ndim; ++i, j += j_step) {
         dim[i].min = 0;
         dim[i].stride = buf.strides[j] / buf.itemsize; // strides is in bytes
         dim[i].extent = buf.shape[j];
@@ -153,6 +163,11 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
             PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
             return -1;
         }
+    }
+    if (dim[buf.ndim - 1].extent * dim[buf.ndim - 1].stride * buf.itemsize != buf.len) {
+        PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
+                     buf.len, buf.shape[0] * buf.strides[0]);
+        return -1;
     }
     memset(out, 0, sizeof(*out));
     if (!buf.format) {
