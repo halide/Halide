@@ -175,7 +175,7 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
             // uppercase is unsigned int.
             out->type.code = halide_type_uint;
         }
-        const char* type_codes = "bB?hHiIfqQd";  // integers and floats
+        const char* type_codes = "bB?hHiIlLqQfd";  // integers and floats
         if (strchr(type_codes, *p)) {
             out->type.bits = buf.itemsize * 8;
         } else {
