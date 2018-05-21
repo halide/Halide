@@ -175,14 +175,24 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
             // uppercase is unsigned int.
             out->type.code = halide_type_uint;
         }
-        // 1, 2, 4 and 8 byte types, in blocks of six:
-        const char* type_codes = "bB?..|hH...|iIlLf|qQd...";
+        // 1, 2, 4 and 8 byte types, in blocks of four:
+        const char* type_codes = "bB?|hH.|iIf|qQd.";
         const char* type_pos = strchr(type_codes, *p);
         if (type_pos) {
-            out->type.bits = 8 << ((type_pos - type_codes) / 6);
+            out->type.bits = 8 << ((type_pos - type_codes) / 4);
+        } else if (*p == 'l' || *p == 'L') {
+            // numpy encodes int64 / uint64 as 'l' and 'L', in violation of
+            // https://docs.python.org/2/library/struct.html
+            // Use buf.itemsize to figure out the actual number of bits.
+            out->type.bits = buf.itemsize * 8;
         } else {
             // We don't handle 's' and 'p' (char[]) and 'P' (void*)
             PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, buf.format);
+            return -1;
+        }
+        if (out->type.bits != buf.itemsize * 8) {
+            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: Item size %d, but format=\"%s\"",
+                         name, buf.itemsize, buf.format);
             return -1;
         }
     }
