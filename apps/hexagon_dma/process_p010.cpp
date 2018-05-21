@@ -21,9 +21,9 @@ int main(int argc, char **argv) {
     const int buf_size = width * height * 1.5;
     uint16_t *data_in = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
     // Creating the Input Data so that we can catch if there are any Errors in DMA
-    int *pDataIn = reinterpret_cast<int *>(data_in);
+    int *data_in_int = reinterpret_cast<int *>(data_in);
     for (int i = 0; i < (buf_size >> 1);  i++) {
-        pDataIn[i] = i;
+        data_in_int[i] = i;
     }
 
     Halide::Runtime::Buffer<uint16_t> input_validation(data_in, width, height, 2);
