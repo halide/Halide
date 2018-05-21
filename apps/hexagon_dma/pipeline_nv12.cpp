@@ -31,9 +31,9 @@ public:
   
         // tweak stride/extent to handle UV deinterleaving
         input_uv.dim(0).set_stride(2);
-        input_uv.dim(2).set_stride(1).set_bounds(0, 2);;
+        input_uv.dim(2).set_stride(1).set_bounds(0, 2);
         output_uv.dim(0).set_stride(2);
-        output_uv.dim(2).set_stride(1).set_bounds(0, 2);;
+        output_uv.dim(2).set_stride(1).set_bounds(0, 2);
 
         output_y
             .compute_root()
@@ -56,10 +56,10 @@ public:
         copy_uv
             .compute_at(output_uv, tx)
             .store_root()
-            .reorder_storage(c, x, y)
             .bound(c, 0, 2)
             .fold_storage(x, tile_width * 2)
-            .copy_to_host();
+            .copy_to_host()
+            .reorder_storage(c, x, y);
 
     }
 

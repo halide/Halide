@@ -4,8 +4,9 @@ using namespace Halide;
 
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
-    Input<Buffer<uint16_t>> input{"input", 3};
-    Output<Buffer<uint16_t>> output_y{"output_y", 3};
+    Input<Buffer<uint16_t>> input_y{"input_y", 2};
+    Input<Buffer<uint16_t>> input_uv{"input_uv", 3};
+    Output<Buffer<uint16_t>> output_y{"output_y", 2};
     Output<Buffer<uint16_t>> output_uv{"output_uv", 3};
 
     void generate() {
@@ -16,10 +17,10 @@ public:
         Func copy_y("copy_y");
         Func copy_uv("copy_uv");
 
-        copy_y(x, y, c) = input(x, y, c);
-        copy_uv(x, y, c) = input(x, y, c);
+        copy_y(x, y) = input_y(x, y);
+        copy_uv(x, y, c) = input_uv(x, y, c);
 
-        output_y(x, y, c) = copy_y(x, y, c) * 2;
+        output_y(x, y) = copy_y(x, y) * 2;
         output_uv(x, y, c) = copy_uv(x, y, c) * 2;
 
         Var tx("tx"), ty("ty");
@@ -27,6 +28,11 @@ public:
         // Break the output into tiles.
         const int tile_width = 256;
         const int tile_height = 128;
+        // tweak stride/extent to handle UV deinterleaving
+        input_uv.dim(0).set_stride(2);
+        input_uv.dim(2).set_stride(1).set_bounds(0, 2);
+        output_uv.dim(0).set_stride(2);
+        output_uv.dim(2).set_stride(1).set_bounds(0, 2); 
 
         output_y
             .compute_root()
@@ -34,6 +40,8 @@ public:
 
         output_uv
             .compute_root()
+            .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+            .bound(c, 0, 2)
             .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
         // Schedule the copy to be computed at tiles with a
@@ -48,7 +56,8 @@ public:
             .compute_at(output_uv, tx)
             .store_root()
             .fold_storage(x, tile_width * 2)
-            .copy_to_host();
+            .copy_to_host()
+            .reorder_storage(c, x, y);
     }
 
 };
