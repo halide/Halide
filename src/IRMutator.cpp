@@ -45,7 +45,6 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     }
     *stmt = nullptr;
 }
-
 }  // namespace
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}

@@ -2016,7 +2016,10 @@ void fuzz_test_rule(Before &&before, After &&after, Predicate &&pred,
     if (!tested.insert(reinterpret_bits<uint32_t>(wildcard_type)).second) return;
 
     // Print it in a form where it can be piped into a python/z3 validator
-    debug(0) << "validate('" << before << "', '" << after << "', '" << pred << "', " << Type(wildcard_type) << ", " << Type(output_type) << ")\n";
+    // debug(0) << "validate('" << before << "', '" << after << "', '" << pred << "', " << Type(wildcard_type) << ", " << Type(output_type) << ")\n";
+    if (Type(wildcard_type) == Int(32)) {
+        debug(0) << "    {" << before << ", " << after << ", " << pred << "},\n";
+    }
 
     // Substitute some random constants into the before and after
     // expressions and see if the rule holds true. This should catch

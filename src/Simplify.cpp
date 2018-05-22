@@ -274,11 +274,10 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     };
     e = RemoveLikelies().mutate(e);
 
+    Expr orig = e;
+
     e = simplify(e, true, bounds);
 
-    // Take a closer look at all failed proof attempts to hunt for
-    // simplifier weaknesses
-    if (!is_const(e)) {
         struct RenameVariables : public IRMutator2 {
             using IRMutator2::visit;
 
@@ -308,6 +307,13 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             std::vector<pair<Type, string>> out_vars;
         } renamer;
 
+    if (is_one(e)) {
+        debug(0) << "Successful proof: " << renamer.mutate(orig) << "\n";
+    }
+
+    // Take a closer look at all failed proof attempts to hunt for
+    // simplifier weaknesses
+    if (!is_const(e)) {
         e = renamer.mutate(e);
 
         // Look for a concrete counter-example with random probing
