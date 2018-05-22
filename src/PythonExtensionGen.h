@@ -2,6 +2,7 @@
 #define HALIDE_PYTHON_EXTENSION_GEN_H_
 
 #include <string>
+#include "Module.h"
 #include "Target.h"
 
 namespace Halide {
