@@ -5,7 +5,7 @@ all: $(BIN)/test
 PIPELINE_SEED ?=0
 HL_RANDOM_DROPOUT ?=100
 HL_SEED ?=0
-HL_BEAM_SIZE ?=1
+HL_BEAM_SIZE ?=2
 ID = $(HL_TARGET)/pipeline_$(PIPELINE_SEED)/schedule_$(HL_SEED)_$(HL_RANDOM_DROPOUT)_$(HL_BEAM_SIZE)
 
 ifeq ($(HL_SEED), root)
