@@ -4,8 +4,6 @@
 #include <string>
 #include "Target.h"
 
-using std::string;
-
 namespace Halide {
 
 class Module;
@@ -20,7 +18,7 @@ public:
     void compile(const Module &module);
     void compile(const LoweredFunc &f);
 private:
-    void convert_buffer(string name, const LoweredArgument* arg);
+    void convert_buffer(std::string name, const LoweredArgument* arg);
     std::ostream &dest;
     std::string header_name;
     Target target;

@@ -5,12 +5,12 @@
 #include "PythonExtensionGen.h"
 #include "Util.h"
 
+namespace Halide {
+namespace Internal {
+
 using std::ostream;
 using std::ostringstream;
 using std::string;
-
-namespace Halide {
-namespace Internal {
 
 static string sanitize_name(const string &name) {
     ostringstream oss;
