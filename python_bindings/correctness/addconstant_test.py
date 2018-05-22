@@ -6,6 +6,7 @@ ERROR_THRESHOLD = 0.0001
 
 
 def test():
+    constant_u1 = True
     constant_u8 = 3
     constant_u16 = 49153
     constant_u32 = 65537
@@ -44,6 +45,7 @@ def test():
     output_3d = numpy.zeros((2, 2, 2), dtype=numpy.int8)
 
     addconstant.addconstant(
+        constant_u1,
         constant_u8, constant_u16, constant_u32, constant_u64,
         constant_i8, constant_i16, constant_i32, constant_i64,
         constant_float, constant_double,
