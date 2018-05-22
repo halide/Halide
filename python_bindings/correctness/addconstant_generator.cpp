@@ -4,6 +4,7 @@ using namespace Halide;
 
 class AddConstantGenerator : public Halide::Generator<AddConstantGenerator> {
 public:
+    Input<bool> constant_uint1{"constant_uint1"};
     Input<uint8_t> constant_uint8{"constant_uint8"};
     Input<uint16_t> constant_uint16{"constant_uint16"};
     Input<uint32_t> constant_uint32{"constant_uint32"};

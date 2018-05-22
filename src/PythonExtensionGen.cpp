@@ -42,7 +42,12 @@ static bool can_convert(const LoweredArgument* arg) {
   if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
       return false;
   }
-  if (arg->type.is_int() &&
+  if (arg->is_buffer() && arg->type.bits() == 1) {
+      // The Python buffer API doesn't support bit arrays.
+      return false;
+  }
+  if ((arg->type.is_int() || arg->type.is_uint()) &&
+      arg->type.bits() != 1 &&
       arg->type.bits() != 8 && arg->type.bits() != 16 &&
       arg->type.bits() != 32 && arg->type.bits() != 64) {
       return false;
@@ -61,7 +66,7 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
         return std::make_pair("f", "float");
     } else if (arg->type.is_float() && arg->type.bits() == 64) {
         return std::make_pair("d", "double");
-    } else if (arg->type.is_bool()) {
+    } else if (arg->type.bits() == 1) {
         // "b" expects an unsigned char, so we assume that bool == uint8.
         return std::make_pair("b", "bool");
     } else if (arg->type.is_int() && arg->type.bits() == 64) {
@@ -264,7 +269,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
              * Exception. */
             // TODO: Add support for handles and vectors.
             dest << "    PyErr_Format(PyExc_NotImplementedError, "
-                 << "\"Can't convert argument " << args[i].name << " to Python\");\n";
+                 << "\"Can't convert argument " << args[i].name << " from Python\");\n";
             dest << "    return NULL;\n";
             dest << "}";
             return;
