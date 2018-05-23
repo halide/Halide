@@ -98,6 +98,36 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
+# Compile the generators:
+$(BIN)/%.gen: ../tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
+
+# Make the generator generate a Python extension:
+$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
+	    -g $(notdir $(basename $<)) -o $(BIN) target=host
+
+# Compile the generated Python extension(s):
+$(BIN)/%.o: $(BIN)/%.cpp
+	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
+$(BIN)/%.py.o: $(BIN)/%.py.c
+	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
+
+# The Python extension of the generator is already in $(BIN), and is named
+# the same, so put the Python extension of the function into ext/.
+# TODO: Python extensions of generators should have a _generator suffix.
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o ../bin/host/runtime.a $(LIBHALIDE)
+	@mkdir -p $(BIN)/ext
+	$(CXX) $(LDFLAGS) $^ -shared -o $@
+
+# Run the Python extension(s):
+%.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
+	PYTHONPATH="$(BIN)/ext:$$PYTHONPATH" $(PYTHON) $<
+
+# TODO: In the optimal case, we'd do %.run on all our generators. This is currently
+# blocked by https://github.com/halide/Halide/issues/2977.
+test_correctness_addconstant: addconstant.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)

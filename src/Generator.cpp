@@ -101,6 +101,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_cpp) {
         output_files.c_source_name = base_path + get_extension(".cpp", options);
     }
+    if (options.emit_python_extension) {
+        output_files.python_extension_name = base_path + get_extension(".py.c", options);
+    }
     if (options.emit_stmt) {
         output_files.stmt_name = base_path + get_extension(".stmt", options);
     }
@@ -900,6 +903,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_stmt_html = true;
             } else if (opt == "cpp") {
                 emit_options.emit_cpp = true;
+            } else if (opt == "py.c") {
+                emit_options.emit_python_extension = true;
             } else if (opt == "o") {
                 emit_options.emit_o = true;
             } else if (opt == "h") {
