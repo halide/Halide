@@ -1072,12 +1072,18 @@ void CodeGen_LLVM::optimize_module() {
 #endif
 
     if (get_target().has_feature(Target::ASAN)) {
-        auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            pm.add(createAddressSanitizerFunctionPass());
-            pm.add(createAddressSanitizerModulePass());
+        auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            constexpr bool compile_kernel = false;   // always false for user code
+            constexpr bool recover = false;          // -fsanitize-recover, always false here
+
+            constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+
+            constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+            pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
         };
-        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
-        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
     }
 
     if (get_target().has_feature(Target::TSAN)) {
@@ -1102,6 +1108,10 @@ void CodeGen_LLVM::optimize_module() {
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
             if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  // TODO: this is a benign data race that re-initializes the detected features;
+                  // we should really fix it properly inside the implementation, rather than disabling
+                  // it here as a band-aid.
+                  i->getName().startswith("halide_default_can_use_target_features") ||
                   i->getName().startswith("halide_mutex_") ||
                   i->getName().startswith("halide_cond_"))) {
                 i->addFnAttr(Attribute::SanitizeThread);
