@@ -9,6 +9,8 @@ function finish {
 }
 trap finish EXIT
 
+mkdir -p results
+
 PIPELINES=100
 SCHEDULES=100
 
