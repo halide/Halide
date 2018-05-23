@@ -170,8 +170,8 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
     }
     for (i = 0; i < buf.ndim; ++i, j += j_step) {
         dim[i].min = 0;
-        dim[i].stride = buf.strides[j] / buf.itemsize; // strides is in bytes
-        dim[i].extent = buf.shape[j];
+        dim[i].stride = (int)(buf.strides[j] / buf.itemsize); // strides is in bytes
+        dim[i].extent = (int)buf.shape[j];
         dim[i].flags = 0;
         if (buf.suboffsets && buf.suboffsets[i] >= 0) {
             // Halide doesn't support arrays of pointers. But we should never see this
