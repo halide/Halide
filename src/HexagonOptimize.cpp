@@ -188,6 +188,8 @@ bool check_pattern_target(int flags, const Target &target) {
     return true;
 }
 
+// Check if the matches satisfy the given pattern flags, and mutate the matches
+// as specified by the flags.
 bool process_match_flags(vector<Expr> &matches, int flags) {
     // The Pattern::Narrow*Op* flags are ordered such that the operand
     // corresponds to the bit (with operand 0 corresponding to the least
@@ -233,6 +235,7 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     return true;
 }
 
+// Replace an expression with the one specified by a pattern.
 Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
     x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
     if (p.flags & Pattern::InterleaveResult) {
@@ -742,6 +745,7 @@ private:
     }
 
     Expr visit(const Cast *op) override {
+        // Separate these so we can do some special handling below.
         static const vector<Pattern> trunc_mpy = {
             // Multiply keep high half
             { "halide.hexagon.trunc_mpy.vw.vw", i32((wild_i64x*wild_i64x)/wild_i64), Pattern::NarrowOps },
@@ -880,6 +884,12 @@ private:
 
         if (op->type.is_vector()) {
             Expr cast = op;
+
+            // Truncating multiplies require special care, because the
+            // simplifier can cause them to have denominators we do not expect.
+            // If the simplifier cancels a factor out of these patterns, we can
+            // still use them, but we have to inject the factor back into the
+            // expression.
             vector<Expr> matches;
             for (const Pattern &p : trunc_mpy) {
                 if (!check_pattern_target(p.flags, target)) {
