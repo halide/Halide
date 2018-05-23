@@ -125,10 +125,10 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o ../bin/host/runtime.a $(LIBHALIDE)
 %.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
 	PYTHONPATH="$(BIN)/ext:$$PYTHONPATH" $(PYTHON) $<
 
-# TODO: In the optimal case, we'd do %.run on all our generators. This is currently
-# blocked by https://github.com/halide/Halide/issues/2977.
-test_correctness_addconstant: addconstant.run ;
-test_correctness_bit: bit.run ;
+# TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
+# every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
+test_correctness_addconstant_test: addconstant.run ;
+test_correctness_bit_test: bit.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
