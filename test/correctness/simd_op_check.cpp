@@ -1854,9 +1854,9 @@ struct Test {
         for (int factor : {1, 2}) {
             check("vmpy(v*.h,v*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*i32(i16_2 * factor) + 16384)/32768));
 
-            check("vmpyo(v*.w,v*.h)", hvx_width/4, i32((i64(i32_1)*i64(i32_2))/(i64(1) << 32)));
-            check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2))/(i64(1) << 31)));
-            check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2) + (1 << 30))/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h)", hvx_width/4, i32((i64(i32_1)*i64(i32_2 * factor))/(i64(1) << 32)));
+            check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1 * factor)*i64(i32_2))/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2 * factor) + (1 << 30))/(i64(1) << 31)));
         }
 
         for (int scalar : {32766, 32767}) {
