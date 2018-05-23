@@ -831,12 +831,14 @@ struct PartialScheduleNode {
             r.compute_here(f, dag);
             if (!in_realization) {
                 r.store_at.insert(f);
-            }
+            } else {
+                r.tileable = false;
+	    }
             result.emplace_back(std::move(r));
         }
 
-        if (dag.outgoing_edges.at(f).empty()) {
-            // Can't tile outputs
+        if (in_realization || dag.outgoing_edges.at(f).empty()) {
+            // Can't tile outputs. Don't try to slide over multiple loops.
             return result;
         }
 
@@ -844,7 +846,7 @@ struct PartialScheduleNode {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_size);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), true, vector_size);
 
             for (auto t : tilings) {
 
@@ -903,29 +905,27 @@ struct PartialScheduleNode {
                 }
                 result.emplace_back(std::move(compute_at_here));
 
-                if (!in_realization) {
-                    // Also consider just storing here, but computing
-                    // further in. Currently don't have to worry about
-                    // the constraints this places on parallelism, as
-                    // we forced all the parallelism to the outer
-                    // loop.
-                    PartialScheduleNode store_at_here = std::move(outer);
-                    store_at_here.store_at.insert(f);
-                    auto v = inner->compute_in_tiles(f, dag, &store_at_here, params, true);
-                    for (PartialScheduleNode n : v) {
-                        // Once we're sliding a function over a loop,
-                        // it's best not to tile it again, or Halide's
-                        // analysis gets confused.
-                        n.tileable = false;
-                        store_at_here.children.pop_back();
-                        store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
-                        result.push_back(store_at_here);
-                    }
+		// Also consider just storing here, but computing
+		// further in. Currently don't have to worry about
+		// the constraints this places on parallelism, as
+		// we forced all the parallelism to the outer
+		// loop.
+		PartialScheduleNode store_at_here = std::move(outer);
+		store_at_here.store_at.insert(f);
+		auto v = inner->compute_in_tiles(f, dag, &store_at_here, params, true);
+		for (PartialScheduleNode n : v) {
+		  // Once we're sliding a function over a loop,
+		  // it's best not to tile it again, or Halide's
+		  // analysis gets confused.
+		  n.tileable = false;
+		  store_at_here.children.pop_back();
+		  store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
+		  result.push_back(store_at_here);
                 }
             }
         }
 
-        if (child >= 0 && !called_by_multiple_children && !in_realization) {
+        if (child >= 0 && !called_by_multiple_children) {
             // See if it's appropriate to slide over this loop
             int num_ones = 0;
             for (auto s : size) {
@@ -947,23 +947,14 @@ struct PartialScheduleNode {
                     if (store_here) {
                         r.store_at.insert(f);
                     }
-                    r.tileable = false;
                     r.children[child] = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode(n));
                     result.emplace_back(std::move(r));
                 }
             }
         }
 
-        if (result.empty()) {
-            // Place the computation inside this loop
-            PartialScheduleNode r = *this;
-            r.compute_here(f, dag);
-            if (!in_realization) {
-                r.store_at.insert(f);
-            }
-            result.emplace_back(std::move(r));
-        }
-
+	internal_assert(!result.empty());
+	
         return result;
     }
 
@@ -1176,7 +1167,7 @@ struct State {
             // Can't currently happen because we enforce adequately
             // large outer loops).
             double num_cores = p.second.num_cores;
-            VarOrRVar fused {Var()};
+            // VarOrRVar fused {Var()};
             bool any_parallel = false;
             for (int i = (int)p.second.vars.size() - 1; i >= 0 && num_cores > 1; i--) {
                 auto &v = p.second.vars[i];
@@ -1192,12 +1183,12 @@ struct State {
                     f.parallel(v.var);
                 }
                 if (!any_parallel) {
-                    fused = v.var;
+                    // fused = v.var;
                     any_parallel = true;
                 } else if (i > 1) {
                     // Use the inner name, to not invalidate any compute_ats
-                    f.fuse(v.var, fused, v.var); // To consider: fuse may break loop partitioning. Check for likelies
-                    fused = v.var;
+                    // f.fuse(v.var, fused, v.var); // To consider: fuse may break loop partitioning. Check for likelies
+                    // fused = v.var;
                 }
             }
         }
@@ -1360,13 +1351,13 @@ State optimal_schedule(FunctionDAG &dag,
             auto state = pending.top();
             pending.pop();
 
-            /*
+	    /*
               if (true || i % 1000 == 0) {
               debug(0) << "** Queue top: ";
               state->dump();
               }
-            */
-
+	    */
+	    
             if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
                 debug(0) << '\n';
                 return *state;
