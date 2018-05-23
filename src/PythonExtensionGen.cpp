@@ -35,6 +35,17 @@ static const string remove_namespaces(const string &name) {
     }
 }
 
+static bool has_legacy_buffers(const LoweredFunc& func) {
+    const std::vector<LoweredArgument> &args = func.args;
+    auto legacy_buffer_type = type_of<buffer_t *>().handle_type;
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].type.is_handle() && args[i].type.handle_type && legacy_buffer_type) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool can_convert(const LoweredArgument* arg) {
   if (arg->type.is_handle() || arg->type.is_vector()) {
       return false;
@@ -213,16 +224,22 @@ static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int fla
 
 )INLINE_CODE";
 
-    for (const auto &f : module.functions()) {
-        compile(f);
+    for (auto &f : module.functions()) {
+        if (!has_legacy_buffers(f)) {
+            compile(f);
+        }
     }
 
     dest << "\n";
     dest << "static PyMethodDef _methods[] = {\n";
-    for (const auto &f : module.functions()) {
-        const string basename = remove_namespaces(f.name);
-        dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
-             << ", METH_VARARGS|METH_KEYWORDS, NULL},\n";
+    for (auto &f : module.functions()) {
+        /* With the legacy_buffer_wrappers feature, Halide stores every function
+         * twice, once with new and once with old buffers. Ignore the latter. */
+        if (!has_legacy_buffers(f)) {
+            const string basename = remove_namespaces(f.name);
+            dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
+                 << ", METH_VARARGS|METH_KEYWORDS, NULL},\n";
+        }
     }
     dest << "    {0, 0, 0, NULL},  // sentinel\n";
     dest << "};\n";
