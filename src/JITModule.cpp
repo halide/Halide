@@ -114,6 +114,14 @@ void load_metal() {
 #endif
 }
 
+void check_target(const Target &target) {
+  user_assert(!target.has_feature(Target::MSAN))
+      << "LLVM's MemorySanitizer is not compatible with JIT compilers "
+         "(including Halide), and will produce false positives or crashes. We "
+         "recommend you only use it in conjunction with ahead-of-time "
+         "compilation in Halide.";
+}
+
 }  // namespace
 
 using namespace llvm;
@@ -253,11 +261,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
-    if (target.has_feature(Target::MSAN)) {
-        user_error << "LLVM's MemorySanitizer is not compatible with JIT compilers (including Halide), "
-                   << "and will produce false positives. We recommend you only use it in conjunction "
-                   << "with ahead-of-time compilation in Halide.";
-    }
+    check_target(target);
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
@@ -639,6 +643,8 @@ JITModule &shared_runtimes(RuntimeKind k) {
 JITModule &make_module(llvm::Module *for_module, Target target,
                        RuntimeKind runtime_kind, const std::vector<JITModule> &deps,
                        bool create) {
+    check_target(target);
+
     JITModule &runtime = shared_runtimes(runtime_kind);
     if (!runtime.compiled() && create) {
         // Ensure that JIT feature is set on target as it must be in
@@ -777,6 +783,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+
+    check_target(target);
 
     std::vector<JITModule> result;
 
