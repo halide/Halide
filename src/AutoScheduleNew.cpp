@@ -837,8 +837,8 @@ struct PartialScheduleNode {
             result.emplace_back(std::move(r));
         }
 
-        if (in_realization || dag.outgoing_edges.at(f).empty()) {
-            // Can't tile outputs. Don't try to slide over multiple loops.
+        if (dag.outgoing_edges.at(f).empty()) {
+            // Can't tile outputs
             return result;
         }
 
@@ -846,7 +846,7 @@ struct PartialScheduleNode {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), true, vector_size);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_size);
 
             for (auto t : tilings) {
 
@@ -902,30 +902,32 @@ struct PartialScheduleNode {
                 compute_at_here.compute_here(f, dag);
                 if (!in_realization) {
                     compute_at_here.store_at.insert(f);
+                } else {
+                    compute_at_here.tileable = false;
                 }
                 result.emplace_back(std::move(compute_at_here));
 
-		// Also consider just storing here, but computing
-		// further in. Currently don't have to worry about
-		// the constraints this places on parallelism, as
-		// we forced all the parallelism to the outer
-		// loop.
-		PartialScheduleNode store_at_here = std::move(outer);
-		store_at_here.store_at.insert(f);
-		auto v = inner->compute_in_tiles(f, dag, &store_at_here, params, true);
-		for (PartialScheduleNode n : v) {
-		  // Once we're sliding a function over a loop,
-		  // it's best not to tile it again, or Halide's
-		  // analysis gets confused.
-		  n.tileable = false;
-		  store_at_here.children.pop_back();
-		  store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
-		  result.push_back(store_at_here);
+                if (!in_realization) {
+                    // Also consider just storing here, but computing
+                    // further in. Currently don't have to worry about
+                    // the constraints this places on parallelism, as
+                    // we forced all the parallelism to the outer
+                    // loop.
+                    PartialScheduleNode store_at_here = std::move(outer);
+                    store_at_here.store_at.insert(f);
+                    auto v = inner->compute_in_tiles(f, dag, &store_at_here, params, true);
+                    for (PartialScheduleNode n : v) {
+                        store_at_here.children.pop_back();
+                        store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
+                        result.push_back(store_at_here);
+                    }
                 }
             }
         }
 
-        if (child >= 0 && !called_by_multiple_children) {
+        if (child >= 0 && !called_by_multiple_children && !in_realization) {
+            // Push the Func further inwards in the loop nest
+
             // See if it's appropriate to slide over this loop
             int num_ones = 0;
             for (auto s : size) {
