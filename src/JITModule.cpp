@@ -253,6 +253,12 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
+    if (target.has_feature(Target::MSAN)) {
+        user_error << "LLVM's MemorySanitizer is not compatible with JIT compilers (including Halide), "
+                   << "and will produce false positives. We recommend you only use it in conjunction "
+                   << "with ahead-of-time compilation in Halide.";
+    }
+
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
 
