@@ -3,7 +3,8 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 
 # These are set by Halide's Makefile when built via that path.
-HALIDE_DISTRIB_PATH ?= $(ROOT_DIR)/../distrib
+HALIDE_PATH=$(ROOT_DIR)/..
+HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
 PYTHON ?= python3
@@ -99,7 +100,7 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
 # Compile the generators:
-$(BIN)/%.gen: ../tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+$(BIN)/%.gen: $(HALIDE_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
 
@@ -117,7 +118,7 @@ $(BIN)/%.py.o: $(BIN)/%.py.c
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
 # TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o ../bin/host/runtime.a $(LIBHALIDE)
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(HALIDE_PATH)/bin/host/runtime.a $(LIBHALIDE)
 	@mkdir -p $(BIN)/ext
 	$(CXX) $(LDFLAGS) $^ -shared -o $@
 
