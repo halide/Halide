@@ -6,8 +6,8 @@
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "Inline.h"
 #include "IREquality.h"
+#include "Inline.h"
 #include "ParallelRVar.h"
 #include "RealizationOrder.h"
 #include "RegionCosts.h"
@@ -18,13 +18,13 @@
 namespace Halide {
 namespace Internal {
 
+using std::deque;
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
-using std::set;
-using std::deque;
-using std::pair;
-using std::make_pair;
 
 namespace {
 
@@ -3320,7 +3320,7 @@ bool inline_unbounded(const vector<Function> &outputs,
     return inlined;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // Generate schedules for all functions in the pipeline required to compute the
 // outputs. This applies the schedules and returns a string representation of
@@ -3529,10 +3529,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     return sched_string;
 }
 
-}
+}  // namespace Internal
 
 MachineParams MachineParams::generic() {
-  return MachineParams(16, 16 * 1024 * 1024, 40);
+    return MachineParams(16, 16 * 1024 * 1024, 40);
 }
 
 std::string MachineParams::to_string() const {
@@ -3552,4 +3552,4 @@ MachineParams::MachineParams(const std::string &s) {
     balance = Internal::string_to_int(v[2]);
 }
 
-}
+}  // namespace Halide

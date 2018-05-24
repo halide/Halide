@@ -14,7 +14,7 @@ namespace Internal {
  * don't have a native lerp. */
 Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -27,7 +27,7 @@ $(BIN)/out.png: $(BIN)/process
 # Build rules for generating a visualization of the pipeline using HalideTraceViz
 $(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations pyramid_levels=6
+	$^ -g local_laplacian -o $(BIN)/viz target=$(HL_TARGET)-trace_all pyramid_levels=6
 
 $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 	@mkdir -p $(@D)
@@ -38,7 +38,7 @@ $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 
 $(BIN)/local_laplacian.mp4: $(BIN)/process_viz ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash viz.sh $(BIN)
+	HL_AVCONV=$(HL_AVCONV) bash viz.sh $(BIN)
 
 clean:
 	rm -rf $(BIN)
@@ -46,4 +46,11 @@ clean:
 test: $(BIN)/out.png
 
 viz: $(BIN)/local_laplacian.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^
+
+$(BIN)/viz_auto.mp4: $(BIN)/process_viz ../support/viz_auto.sh ../../bin/HalideTraceViz
+	@mkdir -p $(@D)
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh "$(BIN)/process_viz $(IMAGES)/rgb_small.png 4 1 1 0 $(BIN)/out_small.png" ../../bin/HalideTraceViz $@
+
+viz_auto: $(BIN)/viz_auto.mp4
+	$(HL_VIDEOPLAYER) $^

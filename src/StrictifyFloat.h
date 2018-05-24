@@ -23,7 +23,7 @@ namespace Internal {
  */
 bool strictify_float(std::map<std::string, Function> &env, const Target &t);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

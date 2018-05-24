@@ -20,7 +20,7 @@ bool has_likely_tag(Expr e);
  * ramps, or the 'likely' intrinsic. */
 Stmt partition_loops(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

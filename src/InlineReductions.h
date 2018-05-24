@@ -55,7 +55,6 @@ Expr maximum(RDom, Expr, const std::string &s = "maximum");
 Expr minimum(RDom, Expr, const std::string &s = "minimum");
 // @}
 
-
 /** Returns an Expr or Tuple representing the coordinates of the point
  * in the RDom which minimizes or maximizes the expression. The
  * expression must refer to some RDom. Also returns the extreme value
@@ -67,6 +66,6 @@ Tuple argmax(RDom, Expr, const std::string &s = "argmax");
 Tuple argmin(RDom, Expr, const std::string &s = "argmin");
 // @}
 
-}
+}  // namespace Halide
 
 #endif

@@ -52,7 +52,7 @@ std::vector<ApplySplitResult> apply_split(
 std::vector<std::pair<std::string, Expr>> compute_loop_bounds_after_split(
     const Split &split, std::string prefix);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

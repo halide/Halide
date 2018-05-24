@@ -1,13 +1,13 @@
 #include "Elf.h"
 #include "Debug.h"
-#include "Util.h"
 #include "Error.h"
+#include "Util.h"
 
 #include <algorithm>
-#include <map>
 #include <array>
-#include <memory>
 #include <iomanip>
+#include <map>
+#include <memory>
 
 namespace Halide {
 namespace Internal {

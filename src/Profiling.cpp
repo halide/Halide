@@ -1,12 +1,12 @@
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <string>
-#include <limits>
 
-#include "Profiling.h"
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -337,5 +337,5 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

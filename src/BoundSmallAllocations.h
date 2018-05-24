@@ -19,8 +19,7 @@ namespace Internal {
  * calls for (provably) tiny allocations. */
 Stmt bound_small_allocations(const Stmt &s);
 
-}
-}
-
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

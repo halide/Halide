@@ -1,25 +1,25 @@
 #include <algorithm>
 #include <numeric>
 
-#include "PartitionLoops.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
 
 namespace {
 
@@ -980,7 +980,7 @@ class LowerLikelyIfInnermost : public IRMutator2 {
     }
 };
 
-}
+}  // namespace
 
 bool has_likely_tag(Expr e) {
     HasLikelyTag h;
@@ -999,5 +999,5 @@ Stmt partition_loops(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,9 +1,9 @@
 #include "Monotonic.h"
 #include "IRMutator.h"
-#include "Substitute.h"
+#include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "IROperator.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -466,6 +466,5 @@ void is_monotonic_test() {
     std::cout << "is_monotonic test passed" << std::endl;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

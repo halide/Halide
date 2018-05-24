@@ -466,6 +466,7 @@ public:
 
     /** Access the shape of the buffer */
     HALIDE_ALWAYS_INLINE Dimension dim(int i) const {
+        assert(i >= 0 && i < this->dimensions());
         return Dimension(buf.dim[i]);
     }
 
@@ -1184,6 +1185,7 @@ public:
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
+        assert(d >= 0 && d < this->dimensions());
         device_deallocate();
         buf.dim[d].min += delta;
     }
@@ -1251,6 +1253,8 @@ public:
 
     /** Transpose an image in-place */
     void transpose(int d1, int d2) {
+        assert(d1 >= 0 && d1 < this->dimensions());
+        assert(d2 >= 0 && d2 < this->dimensions());
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
@@ -1264,15 +1268,16 @@ public:
 
     /** Slice an image in-place */
     void slice(int d, int pos) {
+        assert(d >= 0 && d <= dimensions());
         // assert(pos >= dim(d).min() && pos <= dim(d).max());
         device_deallocate();
         buf.dimensions--;
-        int shift = pos - dim(d).min();
+        int shift = pos - buf.dim[d].min;
         assert(buf.device == 0 || shift == 0);
         if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
+            buf.host += shift * buf.dim[d].stride * type().bytes();
         }
-        for (int i = d; i < dimensions(); i++) {
+        for (int i = d; i < buf.dimensions; i++) {
             buf.dim[i] = buf.dim[i+1];
         }
         buf.dim[buf.dimensions] = {0, 0, 0};

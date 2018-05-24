@@ -1,8 +1,8 @@
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-#include "CodeGen_Metal_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
 #include "IROperator.h"
 
@@ -10,9 +10,9 @@ namespace Halide {
 namespace Internal {
 
 using std::ostringstream;
+using std::sort;
 using std::string;
 using std::vector;
-using std::sort;
 
 static ostringstream nil;
 
@@ -122,7 +122,7 @@ string simt_intrinsic(const string &name) {
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
 }
-}
+}  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name));
@@ -448,7 +448,7 @@ struct BufferSize {
         return size < r.size;
     }
 };
-}
+}  // namespace
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
                                                     const string &name,
@@ -654,4 +654,5 @@ std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

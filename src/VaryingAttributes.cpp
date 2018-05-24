@@ -4,8 +4,8 @@
 
 #include "CodeGen_GPU_Dev.h"
 
-#include "IRMutator.h"
 #include "CSE.h"
+#include "IRMutator.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -1255,5 +1255,5 @@ Stmt setup_gpu_vertex_buffer(Stmt s) {
     return vb.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

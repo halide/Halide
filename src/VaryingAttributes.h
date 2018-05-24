@@ -27,7 +27,7 @@ Stmt find_linear_expressions(Stmt s);
  */
 Stmt setup_gpu_vertex_buffer(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

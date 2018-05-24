@@ -6,9 +6,9 @@
  * Classes for declaring image parameters to halide pipelines
  */
 
-#include "Var.h"
-#include "OutputImageParam.h"
 #include "Func.h"
+#include "OutputImageParam.h"
+#include "Var.h"
 
 namespace Halide {
 
@@ -136,6 +136,6 @@ public:
     ImageParam &add_trace_tag(const std::string &trace_tag);
 };
 
-}
+}  // namespace Halide
 
 #endif

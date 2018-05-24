@@ -40,7 +40,7 @@ Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::strin
 
 void lower_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -29,7 +29,7 @@ Stmt rewrite_interleavings(Stmt s);
 
 void deinterleave_vector_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

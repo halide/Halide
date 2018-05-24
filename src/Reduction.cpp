@@ -1,11 +1,11 @@
-#include "Var.h"
+#include "Reduction.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
-#include "Reduction.h"
 #include "Simplify.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -41,7 +41,7 @@ void check(Expr pred, std::vector<Expr> &expected) {
     }
 }
 
-}
+}  // namespace
 
 void split_predicate_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
@@ -175,7 +175,7 @@ public:
     DropSelfReferences(Expr p, const ReductionDomain &d) :
         predicate(p), domain(d) {}
 };
-}
+}  // namespace
 
 void ReductionDomain::set_predicate(Expr p) {
     // The predicate can refer back to the RDom. We need to break
@@ -217,5 +217,5 @@ void ReductionDomain::mutate(IRMutator2 *mutator) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

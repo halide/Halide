@@ -28,13 +28,13 @@ class TargetOptions;
 class Type;
 class Value;
 template<typename, typename> class IRBuilder;
-}
+}  // namespace llvm
 
 namespace Halide {
 namespace Internal {
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
-llvm::StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_t, llvm::LLVMContext *context);
+llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *buffer_t, llvm::LLVMContext *context);
 
 /** Emit code that builds a struct containing all the externally
  * referenced state. Requires you to pass it a type and struct to fill in,
@@ -42,7 +42,7 @@ llvm::StructType *build_closure_type(const Closure& closure, llvm::StructType *b
  * the packing code. */
 void pack_closure(llvm::StructType *type,
                   llvm::Value *dst,
-                  const Closure& closure,
+                  const Closure &closure,
                   const Scope<llvm::Value *> &src,
                   llvm::StructType *buffer_t,
                   llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
@@ -51,7 +51,7 @@ void pack_closure(llvm::StructType *type,
  * referenced state into a symbol table. Requires you to pass it a
  * state struct type and value, a scope to fill, and a builder to place the
  * unpacking code. */
-void unpack_closure(const Closure& closure,
+void unpack_closure(const Closure &closure,
                     Scope<llvm::Value *> &dst,
                     llvm::StructType *type,
                     llvm::Value *src,
@@ -91,6 +91,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 /** Set the appropriate llvm Function attributes given a Target. */
 void set_function_attributes_for_target(llvm::Function *, Target);
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
