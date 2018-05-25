@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     Var xi, yi;
 
     for (int extern_on_device : {0, 1} ) {
-        zfor (int sink_on_device : {0, 1} ) {
+        for (int sink_on_device : {0, 1} ) {
             Func source("source");
             std::vector<ExternFuncArgument> args;
             args.push_back(extern_on_device);
