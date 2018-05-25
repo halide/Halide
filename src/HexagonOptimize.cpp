@@ -930,8 +930,10 @@ private:
                         matches[0] = simplify(matches[0] * (1 << shift));
                     } else {
                         // Just assume this is a constant. If it is, this will
-                        // work correctly. If not, we will probably fail to
-                        // satisfy the match flags, but it also might work...
+                        // work correctly (will simplify only if it doesn't
+                        // overflow the narrower type). If not, we will probably
+                        // fail to satisfy the match flags, but it also might
+                        // work...
                         matches[1] = simplify(matches[1] * (1 << shift));
                     }
 
