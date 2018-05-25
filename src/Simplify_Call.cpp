@@ -25,6 +25,10 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
 
+        if (is_zero(b)) {
+            return a;
+        }
+
         int64_t ib = 0;
         if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
             Type t = op->type;
