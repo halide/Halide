@@ -424,6 +424,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
@@ -571,6 +572,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PythonExtensionGen.h \
   Qualify.h \
   Random.h \
   RealizationOrder.h \
@@ -1599,7 +1601,7 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	bazel build --verbose_failures :all
 
 .PHONY: test_python2
-test_python2: distrib
+test_python2: distrib bin/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
@@ -1609,7 +1611,7 @@ test_python2: distrib
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 .PHONY: test_python
-test_python: distrib
+test_python: distrib bin/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
