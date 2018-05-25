@@ -64,6 +64,27 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
     return 0;
 }
 
+extern "C" DLLEXPORT int make_data_on_device(halide_buffer_t *out) {
+    if (!out->is_bounds_query()) {
+        assert(out->host);
+        assert(out->type == halide_type_of<float>());
+        assert(out->dimensions == 2);
+        printf("Generating data over [%d %d] x [%d %d]\n",
+               out->dim[0].min, out->dim[0].min + out->dim[0].extent,
+               out->dim[1].min, out->dim[1].min + out->dim[1].extent);
+        for (int y = 0; y < out->dim[1].extent; y++) {
+          float *dst = (float *)out->host + y * out->dim[1].stride;
+          for (int x = 0; x < out->dim[0].extent; x++) {
+            int x_coord = x + out->dim[0].min;
+            int y_coord = y + out->dim[1].min;
+            dst[x] = x_coord + y_coord;
+          }
+        }
+        return 0;
+    }
+    return 0;
+}
+
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t *out2) {
     if (!out1->host || !out2->host) {
@@ -96,6 +117,7 @@ extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t 
 int main(int argc, char **argv) {
     Var x, y;
     Var xi, yi;
+#if 0
     {
         Func source;
         source.define_extern("make_data",
@@ -146,6 +168,31 @@ int main(int argc, char **argv) {
         float error_multi = evaluate<float>(sum(abs(output_multi(r.x, r.y))));
         if (error_multi != 0) {
             printf("Something went wrong in multi case\n");
+            return -1;
+        }
+    }
+#endif
+    {
+        Func source("source");
+        source.define_extern("make_data_on_device",
+                             std::vector<ExternFuncArgument>(),
+                             Float(32), {x, y});
+        Func sink("sink");
+        sink(x, y) = source(x, y) - (x + y);
+
+        sink.gpu_tile(x, y, xi, yi, 32, 32);
+
+        // Compute the source per tile of sink
+        source.compute_root();
+
+        Buffer<float> output = sink.realize(100, 100);
+
+        // Should be all zeroes.
+        RDom r(output);
+        float error = evaluate_may_gpu<float>(sum(abs(output(r.x, r.y))));
+        if (error != 0) {
+            printf("error=%f\n", error);
+            printf("Something went wrong\n");
             return -1;
         }
     }

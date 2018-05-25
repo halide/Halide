@@ -569,7 +569,7 @@ class InjectBufferCopies : public IRMutator2 {
             Expr condition = op->condition;
             if (finder.devices_touched.size() == 1 &&
                 !touched_on_host) {
-                // Only touched on one device, and never passed to an extern stage.
+                // Only touched on one device.
                 condition = const_false();
                 // There's no host allocation, so substitute any
                 // references to it (e.g. the one in the make_buffer
