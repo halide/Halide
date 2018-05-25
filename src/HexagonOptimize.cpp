@@ -923,8 +923,14 @@ public:
 class EliminateInterleaves : public IRMutator2 {
     Scope<bool> vars;
 
+
     // We need to know when loads are a multiple of 2 native vectors.
     int native_vector_bits;
+
+    // int required_alignment;
+
+    // Alignment info for variables in scope.
+    // Scope<ModulusRemainder> alignment_info;
 
     // We can't interleave booleans, so we handle them specially.
     bool in_bool_to_mask = false;
@@ -1107,6 +1113,11 @@ class EliminateInterleaves : public IRMutator2 {
 
     template <typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
+        // Push alignment info on the stack
+        // if (op->value.type() == Int(32)) {
+        //     alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+        // }
+
         Expr value = mutate(op->value);
         string deinterleaved_name;
         NodeType body;
@@ -1132,6 +1143,12 @@ class EliminateInterleaves : public IRMutator2 {
         } else {
             body = mutate(op->body);
         }
+
+        // // Pop alignment info from the scope stack
+        // if (op->value.type() == Int(32)) {
+        //     alignment_info.pop(op->name);
+        // }
+
         if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
         } else if (body.same_as(op->body)) {
@@ -1353,6 +1370,10 @@ class EliminateInterleaves : public IRMutator2 {
     };
     Scope<BufferState> buffers;
 
+    // // True for buffers that have loads and stores that are aligned
+    // // to the vector width.
+    // Scope<bool> aligned_buffer_access;
+
     // Buffers we should deinterleave the storage of.
     Scope<bool> deinterleave_buffers;
 
@@ -1362,6 +1383,8 @@ class EliminateInterleaves : public IRMutator2 {
         // First, we need to mutate the op, to pull native interleaves
         // down, and to gather information about the loads and stores.
         buffers.push(op->name, BufferState::Unknown);
+        // Assume buffers are accessed by aligned loads and stores by default.
+        // aligned_buffer_access.push(op->name, true);
         Stmt body = mutate(op->body);
         bool deinterleave = buffers.get(op->name) == BufferState::Interleaved;
         buffers.pop(op->name);
@@ -1373,7 +1396,7 @@ class EliminateInterleaves : public IRMutator2 {
             body = mutate(op->body);
             deinterleave_buffers.pop(op->name);
         }
-
+        // aligned_buffer_access.pop(op->name);
         if (!body.same_as(op->body) || !condition.same_as(op->condition)) {
             return Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, condition, body,
@@ -1410,8 +1433,16 @@ class EliminateInterleaves : public IRMutator2 {
                 // interleave itself, we don't want to change the
                 // buffer state.
             }
-        }
+            // Should we check this only when state == BufferState::Interleaved
+            // internal_assert(aligned_buffer_access.contains(op->name), "Buffer not found in scope");
+            // bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+            // const Ramp *ramp = index.as<Ramp>();
+            // const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
+            // if (!ramp || !const_stride) {
+            //     aligned_accesses = false; // start here
+            // }
 
+        }
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
@@ -1455,7 +1486,10 @@ class EliminateInterleaves : public IRMutator2 {
     using IRMutator2::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits) {}
+    EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits)// , required_alignment(native_vector_bits/8)
+    {
+        // this->alignment_info.set_containing_scope(&alignment_info);
+    }
 };
 
 // After eliminating interleaves, there may be some that remain. This
@@ -1875,7 +1909,8 @@ Stmt vtmpy_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, Target t) {
+Stmt optimize_hexagon_instructions(Stmt s, Target t// , Scope<ModulusRemainder> &alignment_info
+                                   ) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);

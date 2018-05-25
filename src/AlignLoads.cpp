@@ -7,7 +7,7 @@
 #include "Bounds.h"
 #include "ModulusRemainder.h"
 #include "Simplify.h"
-
+#include "HexagonAlignment.h"
 using std::vector;
 
 namespace Halide {
@@ -22,17 +22,11 @@ namespace {
 class AlignLoads : public IRMutator2 {
 public:
     AlignLoads(int alignment, const Scope<ModulusRemainder>& alignment_info)
-        : required_alignment(alignment) {
-        this->alignment_info.set_containing_scope(&alignment_info);
-    }
+        : alignment_analyzer(alignment, alignment_info), required_alignment(alignment) {}
 
 private:
-    // The desired alignment of a vector load.
+    HexagonAlignmentAnalyzer alignment_analyzer;
     int required_alignment;
-
-    // Alignment info for variables in scope.
-    Scope<ModulusRemainder> alignment_info;
-
     using IRMutator2::visit;
 
     // Rewrite a load to have a new index, updating the type if necessary.
@@ -59,37 +53,20 @@ private:
         }
 
         Expr index = mutate(op->index);
-        const Ramp *ramp = index.as<Ramp>();
-        const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
-        if (!ramp || !const_stride) {
-            // We can't handle indirect loads, or loads with
-            // non-constant strides.
+        int aligned_offset = 0;
+        HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
+        if (alignment == HexagonAlign::Unknown) {
             return IRMutator2::visit(op);
         }
+
+        const Ramp *ramp = index.as<Ramp>();
+        internal_assert(ramp && "is_aligned didn't return Unknown when index isn't a ramp");
+        const int64_t *const_stride = as_const_int(ramp->stride);
+        internal_assert(const_stride && "is_aligned didn't return Unknown for non const stride");
+
+        bool known_alignment = (alignment == HexagonAlign::Aligned);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
-
-        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            // If the ramp isn't stride 1, 2, or 3, don't handle it.
-
-            // TODO: We should handle reverse vector loads (stride ==
-            // -1), maybe others as well.
-            return IRMutator2::visit(op);
-        }
-
-        // If this is a parameter, the base_alignment should be
-        // host_alignment. Otherwise, this is an internal buffer,
-        // which we assume has been aligned to the required alignment.
-        int aligned_offset = 0;
-        bool known_alignment = false;
-        int base_alignment =
-            op->param.defined() ? op->param.host_alignment() : required_alignment;
-        if (base_alignment % required_alignment == 0) {
-            // We know the base is aligned. Try to find out the offset
-            // of the ramp base from an aligned offset.
-            known_alignment = reduce_expr_modulo(ramp->base, native_lanes, &aligned_offset,
-                                                 alignment_info);
-        }
 
         int stride = static_cast<int>(*const_stride);
         if (stride != 1) {
@@ -150,14 +127,14 @@ private:
     template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
         if (op->value.type() == Int(32)) {
-            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+            alignment_analyzer.push(op->name, op->value);
         }
 
         Expr value = mutate(op->value);
         NodeType body = mutate(op->body);
 
         if (op->value.type() == Int(32)) {
-            alignment_info.pop(op->name);
+            alignment_analyzer.pop(op->name);
         }
 
         if (!value.same_as(op->value) || !body.same_as(op->body)) {
@@ -177,5 +154,5 @@ Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder>& alignment
     return AlignLoads(alignment, alignment_info).mutate(s);
 }
 
-}
-}
+} // namespace Internal
+} // namespace Halide
