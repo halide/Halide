@@ -20,13 +20,14 @@ extern "C" DLLEXPORT int extern_stage(int extern_on_device,
                                       halide_buffer_t *out) {
     if (!out->is_bounds_query()) {
         if (extern_on_device > 0 && outer_filter_on_device > 0) {
-          // If both the extern and the outer filter are on running on
-          // device, the host allocation can be null and the device
-          // allocation need to be allocated by the outer filter.
-          assert(out->host == nullptr);
-          assert(out->device != 0);
+            // If both the extern and the outer filter are on running on
+            // device, the host allocation can be null and the device
+            // allocation need to be allocated by the outer filter.
+            assert(out->host == nullptr);
+            assert(out->device != 0);
         } else {
-          assert(out->host);
+            // For other cases, the host allocation must exist.
+            assert(out->host);
         }
         assert(out->type == halide_type_of<int32_t>());
         assert(out->dimensions == 2);
@@ -47,41 +48,49 @@ extern "C" DLLEXPORT int extern_stage(int extern_on_device,
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+
+    if (!target.has_gpu_feature() && !target.has_feature(Target::CUDA)) {
+        printf("This is a gpu-specific test. Skipping it\n");
+        return 0;
+    }
+
     Var x, y;
     Var xi, yi;
 
-    for (int extern_on_device = 0; extern_on_device <= 1; ++extern_on_device)
-        for (int sink_on_device = 0; sink_on_device <= 1; ++sink_on_device) {
-        Func source("source");
-        std::vector<ExternFuncArgument> args;
-        args.push_back(extern_on_device);
-        args.push_back(sink_on_device);
-        source.define_extern("extern_stage",
-                             args,
-                             Int(32),
-                             {x, y},
-                             NameMangling::Default,
-                             extern_on_device ? Halide::DeviceAPI::CUDA : Halide::DeviceAPI::Host);
+    for (int extern_on_device : {0, 1} ) {
+        zfor (int sink_on_device : {0, 1} ) {
+            Func source("source");
+            std::vector<ExternFuncArgument> args;
+            args.push_back(extern_on_device);
+            args.push_back(sink_on_device);
+            source.define_extern("extern_stage",
+                                 args,
+                                 Int(32),
+                                 {x, y},
+                                 NameMangling::Default,
+                                 extern_on_device ? Halide::DeviceAPI::CUDA : Halide::DeviceAPI::Host);
 
-        Func sink("sink");
-        sink(x, y) = source(x, y) - (x + y);
+            Func sink("sink");
+            sink(x, y) = source(x, y) - (x + y);
 
-        source.compute_root();
-        sink.compute_root();
-        if (sink_on_device > 0) {
-            sink.gpu_tile(x, y, xi, yi, 32, 32);
-        }
+            source.compute_root();
+            sink.compute_root();
+            if (sink_on_device > 0) {
+              sink.gpu_tile(x, y, xi, yi, 32, 32);
+            }
 
-        Buffer<int32_t> output = sink.realize(100, 100);
+            Buffer<int32_t> output = sink.realize(100, 100);
 
-        // Should be all zeroes.
-        RDom r(output);
-        uint32_t error = evaluate_may_gpu<uint32_t>(sum(abs(output(r.x, r.y))));
-        if (error != 0) {
-            printf("Something went wrong when "
-                   "extern_on_device=%d, sink_on_device=%d \n",
-                   extern_on_device, sink_on_device);
-            return -1;
+            // Should be all zeroes.
+            RDom r(output);
+            uint32_t error = evaluate_may_gpu<uint32_t>(sum(abs(output(r.x, r.y))));
+            if (error != 0) {
+              printf("Something went wrong when "
+                     "extern_on_device=%d, sink_on_device=%d \n",
+                     extern_on_device, sink_on_device);
+              return -1;
+            }
         }
     }
 
