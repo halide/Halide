@@ -2404,8 +2404,11 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Mul *mul_a = a.as<Mul>();
         const Add *add_a = a.as<Add>();
-        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
-        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : nullptr;
+        const Sub *sub_a = a.as<Sub>();
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() :
+                             sub_a ? sub_a->a.as<Mul>() : nullptr;
+        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() :
+                             sub_a ? sub_a->b.as<Mul>() : nullptr;
         const Ramp *ramp_a = a.as<Ramp>();
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
@@ -2493,6 +2496,32 @@ private:
                    (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             return mutate(add_a->a % b);
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   mul_a_a &&
+                   const_int(mul_a_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   (ia % ib == 0)) {
+            // (x * (b*a) - y) % b -> (-y % b)
+            return mutate((-sub_a->b) % b);
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   const_int(sub_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   (ia % ib == 0)) {
+            // (y - (b*a)) % b -> (y % b)
+            return mutate(sub_a->a % b);
+        } else if (no_overflow(op->type) &&
+                   sub_a &&
+                   mul_a_b &&
+                   const_int(mul_a_b->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ib &&
+                   (ia % ib == 0)) {
+            // (y - x * (b*a)) % b -> (y % b)
+            return mutate(sub_a->a % b);
         } else if (no_overflow_scalar_int(op->type) &&
                    const_int(b, &ib) &&
                    ib &&
