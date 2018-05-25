@@ -27,12 +27,35 @@ public:
     vector<vector<Expr>> prefetches;
 };
 
+bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
+    if (result.size() != expected.size()) {
+        std::cout << "Expect " << expected.size() << " prefetches instead of "
+                  << result.size() << "\n";
+        return false;
+    }
+    for (size_t i = 0; i < expected.size(); ++i) {
+        if (expected[i].size() != result[i].size()) {
+            std::cout << "Expect prefetch args of size " << expected[i].size()
+                      << ", got " << result[i].size() << " instead\n";
+            return false;
+        }
+        for (size_t j = 0; j < expected[i].size(); ++j) {
+            if (!equal(expected[i][j], result[i][j])) {
+                std::cout << "Expect \"" << expected[i][j] << "\", got \""
+                          << result[i][j] << " instead\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 int test1() {
     Func f("f"), g("g");
     Var x("x");
 
     f(x) = x;
-    g(x) = f(0) + f(7);
+    g(x) = f(0) + f(1);
 
     f.compute_root();
     g.prefetch(f, x, 8);
@@ -42,24 +65,8 @@ int test1() {
     m.functions()[0].body.accept(&collect);
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, 8}};
-    if (collect.prefetches.size() != expected.size()) {
-        std::cout << "Expect " << expected.size() << " prefetches instead of "
-                  << collect.prefetches.size() << "\n";
+    if (!check(expected, collect.prefetches)) {
         return -1;
-    }
-    for (size_t i = 0; i < expected.size(); ++i) {
-        if (expected[i].size() != collect.prefetches[i].size()) {
-            std::cout << "Expect prefetch args of size " << expected[i].size()
-                      << ", got " << collect.prefetches[i].size() << " instead\n";
-            return -1;
-        }
-        for (size_t j = 0; j < expected[i].size(); ++j) {
-            if (!equal(expected[i][j], collect.prefetches[i][j])) {
-                std::cout << "Expect \"" << expected[i][j] << "\", got \""
-                          << collect.prefetches[i][j] << " instead\n";
-                return -1;
-            }
-        }
     }
     return 0;
 }
@@ -71,7 +78,7 @@ int test2() {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(0) + f(7);
+    g(x) = f(0) + f(1);
 
     f.compute_root();
     g.specialize(p).prefetch(f, x, 8);
@@ -81,24 +88,8 @@ int test2() {
     m.functions()[0].body.accept(&collect);
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, 8}};
-    if (collect.prefetches.size() != expected.size()) {
-        std::cout << "Expect " << expected.size() << " prefetches instead of "
-                  << collect.prefetches.size() << "\n";
+    if (!check(expected, collect.prefetches)) {
         return -1;
-    }
-    for (size_t i = 0; i < expected.size(); ++i) {
-        if (expected[i].size() != collect.prefetches[i].size()) {
-            std::cout << "Expect prefetch args of size " << expected[i].size()
-                      << ", got " << collect.prefetches[i].size() << " instead\n";
-            return -1;
-        }
-        for (size_t j = 0; j < expected[i].size(); ++j) {
-            if (!equal(expected[i][j], collect.prefetches[i][j])) {
-                std::cout << "Expect \"" << expected[i][j] << "\", got \""
-                          << collect.prefetches[i][j] << " instead\n";
-                return -1;
-            }
-        }
     }
     return 0;
 }
