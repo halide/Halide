@@ -354,7 +354,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt stmt = build_provide_loop_nest_helper(
         func_name, prefix, start_fuse, dims, site, values,
         def.split_predicate(), f_sched, def.schedule(), is_update);
-    stmt = inject_def_empty_prefetch(stmt, env, prefix, def.schedule().prefetches());
+    stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();

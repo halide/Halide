@@ -159,10 +159,10 @@ private:
     }
 };
 
-class InjectDefEmptyPrefetch : public IRMutator2 {
+class InjectPlaceholderPrefetch : public IRMutator2 {
 public:
-    InjectDefEmptyPrefetch(const map<string, Function> &e, const string &prefix,
-                           const vector<PrefetchDirective> &prefetches)
+    InjectPlaceholderPrefetch(const map<string, Function> &e, const string &prefix,
+                              const vector<PrefetchDirective> &prefetches)
         : env(e), prefix(prefix), prefetch_list(prefetches) {}
 
 private:
@@ -172,8 +172,8 @@ private:
 
     using IRMutator2::visit;
 
-    Stmt add_empty_prefetch(const string &loop_var, PrefetchDirective p, Stmt body) {
-        debug(5) << "...Injecting empty prefetch for " << loop_var << "\n";
+    Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, Stmt body) {
+        debug(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
         p.var = loop_var;
         internal_assert(body.defined());
         if (p.param.defined()) {
@@ -199,7 +199,7 @@ private:
                 }
                 seen.insert(p.name);
 
-                body = add_empty_prefetch(op->name, p, body);
+                body = add_placeholder_prefetch(op->name, p, body);
             }
         }
 
@@ -331,10 +331,10 @@ public:
 
 } // anonymous namespace
 
-Stmt inject_def_empty_prefetch(Stmt s, const map<string, Function> &env,
-                               const string &prefix,
-                               const vector<PrefetchDirective> &prefetches) {
-    Stmt stmt = InjectDefEmptyPrefetch(env, prefix, prefetches).mutate(s);
+Stmt inject_placeholder_prefetch(Stmt s, const map<string, Function> &env,
+                                 const string &prefix,
+                                 const vector<PrefetchDirective> &prefetches) {
+    Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
     return stmt;
 }
 
