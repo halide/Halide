@@ -51,6 +51,7 @@ public:
         // which we assume has been aligned to the required alignment.
         int base_alignment =
             op->param.defined() ? op->param.host_alignment() : required_alignment;
+
         *aligned_offset = 0;
         bool known_alignment = false;
         if (base_alignment % required_alignment == 0) {

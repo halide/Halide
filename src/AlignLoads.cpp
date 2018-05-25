@@ -26,7 +26,10 @@ public:
 
 private:
     HexagonAlignmentAnalyzer alignment_analyzer;
+
+    // Loads and stores should ideally be aligned to the vector width in bytes.
     int required_alignment;
+
     using IRMutator2::visit;
 
     // Rewrite a load to have a new index, updating the type if necessary.

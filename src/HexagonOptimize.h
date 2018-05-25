@@ -22,7 +22,7 @@ Stmt vtmpy_generator(Stmt s);
  * rewrites widenings/narrowings to be explicit in the IR, and
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
-Stmt optimize_hexagon_instructions(Stmt s, Target t/* , Scope<ModulusRemainder>& alignment_info */);
+Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder>& alignment_info);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */
