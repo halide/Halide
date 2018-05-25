@@ -4849,6 +4849,9 @@ private:
             if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
                 return expr;
             }
+            if (is_zero(b)) {
+                return a;
+            }
 
             int64_t ib = 0;
             if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
