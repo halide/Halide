@@ -3,7 +3,7 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 
 # These are set by Halide's Makefile when built via that path.
-HALIDE_PATH=$(ROOT_DIR)/..
+HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
@@ -128,6 +128,7 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(HALIDE_PATH)/bin/host/runtime.a $(LI
 
 # TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
 # every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
+.PHONY: test_correctness_addconstant_test test_correctness_bit_test test_correctness_pystub
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
