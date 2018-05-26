@@ -1605,7 +1605,7 @@ test_python2: distrib bin/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
-		HALIDE_PATH=$(CURDIR) \
+		HALIDE_PATH=$(ROOT_DIR) \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
 		PYTHON=python \
@@ -1616,7 +1616,7 @@ test_python: distrib bin/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
-		HALIDE_PATH=$(CURDIR) \
+		HALIDE_PATH=$(ROOT_DIR) \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \
