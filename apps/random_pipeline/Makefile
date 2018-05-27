@@ -37,7 +37,7 @@ clean:
 	rm -rf $(BIN)
 
 $(BIN)/$(ID)/times.txt: $(BIN)/$(ID)/test
-	HL_NUM_THREADS=16 numactl --cpunodebind=0 $(BIN)/$(ID)/test > $(BIN)/$(ID)/times.txt
+	$(BIN)/$(ID)/test > $(BIN)/$(ID)/times.txt
 
 build: $(BIN)/$(ID)/test
 bench: $(BIN)/$(ID)/times.txt
