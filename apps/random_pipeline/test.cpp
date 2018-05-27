@@ -45,16 +45,18 @@ int main(int argc, char **argv) {
 
     printf("Input size: %d %d %d\n", input.width(), input.height(), input.channels());
 
-    double best = benchmark(10, 10, [&]() {
+    double best = benchmark(3, 1, [&]() {
         random_pipeline(input, output);
     });
     printf("Time: %g\n", best * 1e3);
 
+    /*
     counter = 0;
     peak = 0;
     halide_set_custom_malloc(my_malloc);
     random_pipeline(input, output);
     printf("Mallocs: %lld %lld\n", (long long)counter, (long long)peak);
+    */
 
     return 0;
 }
