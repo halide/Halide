@@ -11,4 +11,6 @@ cd apps/random_pipeline
 make clean
 make
 
+chmod a+x *.sh
+
 bash bench_arm.sh
