@@ -3,7 +3,7 @@
 # Let the ftp server know we've started
 IP=$( ifconfig eth0 | grep 192.168 | cut -d: -f2 | cut -d' ' -f1 )
 touch ___started.${IP}.txt
-./ftp_up.sh ___started.${IP}.txt
+bash ./ftp_up.sh ___started.${IP}.txt
 rm ___started.${IP}.txt
 
 # Start a watchdog to kill any compilations that take too long
@@ -80,5 +80,6 @@ for ((i=0;i<10000000;i++)); do
     echo "Extracting costs..."
     cat results/files${SUFFIX}.txt | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1); done  > results/costs${SUFFIX}.txt
 
+    chmod a+x ftp_up.sh
     ls results/*${SUFFIX}.txt | xargs -n1 ./ftp_up.sh
 done
