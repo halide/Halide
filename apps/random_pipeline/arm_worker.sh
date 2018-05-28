@@ -4,7 +4,7 @@
 
 cd ~/Halide
 git reset --hard HEAD
-git checkout new_autoschedule_with_new_simplifier
+git checkout new_autoschedule_with_new_simplifier_arm_worker_branch
 git pull
 make -j4
 cd apps/random_pipeline
