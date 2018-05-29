@@ -779,7 +779,7 @@ private:
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
             { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+            //            { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
@@ -1517,7 +1517,7 @@ class FuseInterleaves : public IRMutator2 {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
         static const std::vector<std::pair<string, string>> non_deinterleaving_alts = {
-            { "halide.hexagon.zxt.vub", "halide.hexagon.unpack.vub" },
+            //            { "halide.hexagon.zxt.vub", "halide.hexagon.unpack.vub" },
             { "halide.hexagon.sxt.vb", "halide.hexagon.unpack.vb" },
             { "halide.hexagon.zxt.vuh", "halide.hexagon.unpack.vuh" },
             { "halide.hexagon.sxt.vh", "halide.hexagon.unpack.vh" },
