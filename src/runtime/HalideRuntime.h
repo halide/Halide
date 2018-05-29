@@ -1353,12 +1353,14 @@ typedef struct buffer_t {
 #endif // BUFFER_T_DEFINED
 
 /** Copies host pointer, mins, extents, strides, and device state from
- * an old-style buffer_t into a new-style halide_buffer_t. The
- * dimensions and type fields of the new buffer_t should already be
- * set. Returns an error code if the upgrade could not be
- * performed. */
+ * an old-style buffer_t into a new-style halide_buffer_t. If bounds_query_only is nonzero,
+ * the copy is only done if the old_buf has null host and dev (ie, a bounds query is being
+ * performed); otherwise new_buf is left untouched. (This is used for input buffers to avoid
+ * benign data races.) The dimensions and type fields of the new buffer_t should already be
+ * set. Returns an error code if the upgrade could not be performed. */
 extern int halide_upgrade_buffer_t(void *user_context, const char *name,
-                                   const buffer_t *old_buf, halide_buffer_t *new_buf);
+                                   const buffer_t *old_buf, halide_buffer_t *new_buf,
+                                   int bounds_query_only);
 
 /** Copies the host pointer, mins, extents, strides, and device state
  * from a halide_buffer_t to a buffer_t. Also sets elem_size. Useful
