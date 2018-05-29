@@ -353,7 +353,7 @@ void define_buffer(py::module &m) {
 
         .def("embed", [](Buffer<> &b, int d) -> void {
             b.embed(d);
-        }, py::arg("dimension")
+        }, py::arg("dimension"))
         .def("embedded", [](Buffer<> &b, int d) -> Buffer<> {
             return b.embedded(d);
         }, py::arg("dimension"))
