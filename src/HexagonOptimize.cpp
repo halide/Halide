@@ -1444,8 +1444,10 @@ class EliminateInterleaves : public IRMutator2 {
             }
 
             // Should we check this only when state == BufferState::Interleaved
-            internal_assert(aligned_buffer_access.contains(op->name), "Buffer not found in scope");
+            internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
             bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+            int aligned_offset = 0;
+
             HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
             if (alignment != HexagonAlign::Aligned)
                 aligned_accesses = false;
@@ -1476,6 +1478,13 @@ class EliminateInterleaves : public IRMutator2 {
                 // which is only true if any of the stores are
                 // actually interleaved (and don't just yield an
                 // interleave).
+                internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
+                bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+                int aligned_offset = 0;
+
+                HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
+                if (alignment != HexagonAlign::Aligned)
+                    aligned_accesses = false;
             } else {
                 // This is not a double vector load, so we can't
                 // deinterleave the storage of this buffer.
@@ -1493,8 +1502,8 @@ class EliminateInterleaves : public IRMutator2 {
     using IRMutator2::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits),
-                                                   alignment_analyzer(native_vector_bits/8, alignment_info) {}
+    EliminateInterleaves(int native_vector_bytes, Scope<ModulusRemainder>& alignment_info) :
+        native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes, alignment_info) {}
 };
 
 // After eliminating interleaves, there may be some that remain. This
@@ -1924,7 +1933,7 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder> &al
     s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8))*8).mutate(s);
+    s = EliminateInterleaves(t.natural_vector_size(Int(8)), alignment_info).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.

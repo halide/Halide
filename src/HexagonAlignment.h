@@ -29,8 +29,9 @@ public:
      */
     template<typename T>
     HexagonAlign is_aligned_impl(const T *op, int native_lanes, int *aligned_offset) {
-        debug(3) << "HexagonAlignmentAnalyzer: Check if " << op << " is aligned to a "
+        debug(3) << "HexagonAlignmentAnalyzer: Check if " << op->index << " is aligned to a "
                  << required_alignment << " byte boundary\n";
+        //        debug(3) << "Type: " << op->type << "\n";
         debug(3) << "native_lanes: " << native_lanes << "\n";
         Expr index = op->index;
         const Ramp *ramp = index.as<Ramp>();
