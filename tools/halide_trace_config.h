@@ -197,7 +197,8 @@ struct FuncConfig {
     int blank_on_end_realization = -1;
 
     // Specifies the on-screen color corresponding to uninitialized memory,
-    // in 0x00BBGGRR format.
+    // in 0x00BBGGRR format. 0x00010101 is a "magic" value that will actually
+    // fill with a checkerboard pattern.
     //
     // Valid values: Any uint32 with 0x00 in the upper 8 bits.
     uint32_t uninitialized_memory_color = 0xFFFFFFFF;
@@ -360,6 +361,14 @@ struct GlobalConfig {
     // If doing auto-layout, the padding to use between each cell.
     Point auto_layout_pad = { 32, 32 };
 
+    // Specifies the default on-screen color corresponding to uninitialized memory,
+    // in 0x00BBGGRR format. 0x00010101 is a "magic" value that will actually
+    // fill with a checkerboard pattern. This will be used for any Func that doesn't
+    // override it in its FuncConfig.
+    //
+    // Valid values: Any uint32 with 0x00 in the upper 8 bits.
+    uint32_t default_uninitialized_memory_color = 0xFFFFFFFF;
+
     static std::string tag_start_text() {
         return std::string("htv_global_config:");
     }
@@ -378,7 +387,8 @@ struct GlobalConfig {
             << "  timestep: " << timestep << "\n"
             << "  auto_layout: " << auto_layout << "\n"
             << "  auto_layout_grid: " << auto_layout_grid << "\n"
-            << "  auto_layout_pad: " << auto_layout_grid << "\n";
+            << "  auto_layout_pad: " << auto_layout_grid << "\n"
+            << "  default_uninitialized_memory_color: " << default_uninitialized_memory_color << "\n";
     }
 
     friend std::ostream &operator<<(std::ostream &os, const GlobalConfig &config) {
@@ -394,7 +404,8 @@ struct GlobalConfig {
             << config.timestep << " "
             << config.auto_layout << " "
             << config.auto_layout_grid << " "
-            << config.auto_layout_pad;
+            << config.auto_layout_pad << " "
+            << config.default_uninitialized_memory_color;
         return os;
     }
 
@@ -409,7 +420,8 @@ struct GlobalConfig {
             >> config.timestep
             >> config.auto_layout
             >> config.auto_layout_grid
-            >> config.auto_layout_pad;
+            >> config.auto_layout_pad
+            >> config.default_uninitialized_memory_color;
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }

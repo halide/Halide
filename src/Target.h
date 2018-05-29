@@ -27,7 +27,14 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, MIPS, Hexagon, POWERPC} arch;
+    enum Arch {
+        ArchUnknown = 0,
+        X86,
+        ARM,
+        MIPS,
+        Hexagon,
+        POWERPC,
+    } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
