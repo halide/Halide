@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <stdio.h>
 #include <iostream>
 
 using namespace Halide;
@@ -143,7 +144,11 @@ int main(int arch, char **argv) {
                 uint8_t correct = (static_cast<int16_t>(in(x, y)) + in(x + 1, y)) / 2;
                 if (correct != out(x, y)) {
                     std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << (int)correct << "\n";
+                    printf("in(x, y) = %d, in(x+1, y) = %d\n", in(x, y), in(x+1, y));
+                    //                    std::cout << "in(x, y) = " << in(x, y) << ", in(x+1, y) = " << in(x+1, y) << "\n";
                     return -1;
+                } else {
+                    std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << ", compute: " << (int)correct << "\n";
                 }
             }
         }
