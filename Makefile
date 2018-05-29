@@ -1602,7 +1602,7 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 
 .PHONY: test_python2
 test_python2: distrib bin/host/runtime.a
-	make -C $(ROOT_DIR)/python_bindings \
+	make -d -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_PATH=$(ROOT_DIR) \
@@ -1613,7 +1613,7 @@ test_python2: distrib bin/host/runtime.a
 
 .PHONY: test_python
 test_python: distrib bin/host/runtime.a
-	make -C $(ROOT_DIR)/python_bindings \
+	make -d -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_PATH=$(ROOT_DIR) \
