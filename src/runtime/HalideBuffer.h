@@ -1266,10 +1266,16 @@ public:
         return im;
     }
 
+    /** Make a lower-dimensional image that refers to one slice of this
+     * image at the dimension's minimum. */
+    inline Buffer<T, D> sliced(int d) const {
+        return sliced(d, dim(d).min());
+    }
+
     /** Slice an image in-place */
     void slice(int d, int pos) {
         assert(d >= 0 && d <= dimensions());
-        // assert(pos >= dim(d).min() && pos <= dim(d).max());
+        assert(pos >= dim(d).min() && pos <= dim(d).max());
         device_deallocate();
         buf.dimensions--;
         int shift = pos - buf.dim[d].min;
@@ -1283,6 +1289,11 @@ public:
         buf.dim[buf.dimensions] = {0, 0, 0};
     }
 
+    /** Slice an image in-place at the dimension's minimum. */
+    inline void slice(int d) {
+        slice(d, dim(d).min());
+    }
+
     /** Make a new image that views this image as a single slice in a
      * higher-dimensional space. The new dimension has extent one and
      * the given min. This operation is the opposite of slice. As an
@@ -1293,8 +1304,7 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<T, D> embedded(int d, int pos) const {
-        assert(d >= 0 && d <= dimensions());
+    Buffer<T, D> embedded(int d, int pos = 0) const {
         Buffer<T, D> im(*this);
         im.embed(d, pos);
         return im;
@@ -1302,7 +1312,7 @@ public:
 
     /** Embed an image in-place, increasing the
      * dimensionality. */
-    void embed(int d, int pos) {
+    void embed(int d, int pos = 0) {
         assert(d >= 0 && d <= dimensions());
         add_dimension();
         translate(dimensions() - 1, pos);

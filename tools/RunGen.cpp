@@ -595,7 +595,7 @@ Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, c
         }
         auto old_shape = get_shape(b);
         while (b.dimensions() > dims_needed) {
-            b = b.sliced(dims_needed, 0);
+            b = b.sliced(dims_needed);
         }
         info() << "Shape for " << name << " changed: " << old_shape << " -> " << get_shape(b);
     } else if (dims_actual < dims_needed) {
