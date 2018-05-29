@@ -104,17 +104,18 @@ struct Label {
     std::string text;
     Point pos;
     int fade_in_frames = 0;
+    float h_scale = 1.0f;
 
     Label() = default;
-    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0) : text(text), pos(pos), fade_in_frames(fade_in_frames) {}
+    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f) : text(text), pos(pos), fade_in_frames(fade_in_frames), h_scale(h_scale) {}
 
     friend std::ostream &operator<<(std::ostream &os, const Label &label) {
-        os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames;
+        os << escape_spaces(label.text) << " " << label.pos << " " << label.fade_in_frames << " " << label.h_scale;
         return os;
     }
 
     friend std::istream &operator>>(std::istream &is, Label &label) {
-        is >> label.text >> label.pos >> label.fade_in_frames;
+        is >> label.text >> label.pos >> label.fade_in_frames >> label.h_scale;
         label.text = unescape_spaces(label.text);
         return is;
     }
@@ -196,7 +197,8 @@ struct FuncConfig {
     int blank_on_end_realization = -1;
 
     // Specifies the on-screen color corresponding to uninitialized memory,
-    // in 0x00BBGGRR format.
+    // in 0x00BBGGRR format. 0x00010101 is a "magic" value that will actually
+    // fill with a checkerboard pattern.
     //
     // Valid values: Any uint32 with 0x00 in the upper 8 bits.
     uint32_t uninitialized_memory_color = 0xFFFFFFFF;
@@ -264,6 +266,10 @@ struct FuncConfig {
 
     friend std::istream &operator>>(std::istream &is, FuncConfig &config) {
         std::string start_text;
+        // Conforming C++ implementations are allowed to fail when reading
+        // 'nan', 'inf', etc for floating-point values, so read these as
+        // text and reality-check them ourselves.
+        std::string min_text, max_text;
         is
             >> start_text
             >> config.zoom
@@ -272,11 +278,26 @@ struct FuncConfig {
             >> config.pos
             >> config.strides
             >> config.color_dim
-            >> config.min
-            >> config.max
+            >> min_text
+            >> max_text
             >> config.labels
             >> config.blank_on_end_realization
             >> config.uninitialized_memory_color;
+
+        const auto parse_double = [](const std::string &s) -> double {
+            double d;
+            std::istringstream iss(s);
+            iss >> d;
+            if (iss.fail() || iss.get() != EOF) {
+                // If it fails, just use nan for the value.
+                // (Could upgrade to guess at +-Inf if we ever care.)
+                d = std::numeric_limits<double>::quiet_NaN();
+            }
+            return d;
+        };
+        config.min = parse_double(min_text);
+        config.max = parse_double(max_text);
+
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }
@@ -340,6 +361,14 @@ struct GlobalConfig {
     // If doing auto-layout, the padding to use between each cell.
     Point auto_layout_pad = { 32, 32 };
 
+    // Specifies the default on-screen color corresponding to uninitialized memory,
+    // in 0x00BBGGRR format. 0x00010101 is a "magic" value that will actually
+    // fill with a checkerboard pattern. This will be used for any Func that doesn't
+    // override it in its FuncConfig.
+    //
+    // Valid values: Any uint32 with 0x00 in the upper 8 bits.
+    uint32_t default_uninitialized_memory_color = 0xFFFFFFFF;
+
     static std::string tag_start_text() {
         return std::string("htv_global_config:");
     }
@@ -358,7 +387,8 @@ struct GlobalConfig {
             << "  timestep: " << timestep << "\n"
             << "  auto_layout: " << auto_layout << "\n"
             << "  auto_layout_grid: " << auto_layout_grid << "\n"
-            << "  auto_layout_pad: " << auto_layout_grid << "\n";
+            << "  auto_layout_pad: " << auto_layout_grid << "\n"
+            << "  default_uninitialized_memory_color: " << default_uninitialized_memory_color << "\n";
     }
 
     friend std::ostream &operator<<(std::ostream &os, const GlobalConfig &config) {
@@ -374,7 +404,8 @@ struct GlobalConfig {
             << config.timestep << " "
             << config.auto_layout << " "
             << config.auto_layout_grid << " "
-            << config.auto_layout_pad;
+            << config.auto_layout_pad << " "
+            << config.default_uninitialized_memory_color;
         return os;
     }
 
@@ -389,7 +420,8 @@ struct GlobalConfig {
             >> config.timestep
             >> config.auto_layout
             >> config.auto_layout_grid
-            >> config.auto_layout_pad;
+            >> config.auto_layout_pad
+            >> config.default_uninitialized_memory_color;
         if (start_text != tag_start_text()) {
             is.setstate(std::ios::failbit);
         }

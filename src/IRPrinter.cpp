@@ -627,7 +627,7 @@ void IRPrinter::visit(const Store *op) {
     do_indent();
     const bool has_pred = !is_one(op->predicate);
     if (has_pred) {
-        stream << "if (" << op->predicate << ") {\n";
+        stream << "predicate (" << op->predicate << ")\n";
         indent += 2;
         do_indent();
     }
@@ -638,8 +638,6 @@ void IRPrinter::visit(const Store *op) {
     stream << '\n';
     if (has_pred) {
         indent -= 2;
-        do_indent();
-        stream << "}\n";
     }
 }
 

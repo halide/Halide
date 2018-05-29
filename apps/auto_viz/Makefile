@@ -8,7 +8,7 @@ complex_up complex_down
 LIBRARIES = $(foreach V,$(VARIANTS),$(BIN)/auto_viz_demo_$(V).a)
 OUTPUTS = $(foreach V,$(VARIANTS),$(BIN)/out_$(V).png)
 
-TRACE_TARGET=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
+TRACE_TARGET=$(HL_TARGET)-trace_all
 
 all: $(OUTPUTS)
 
@@ -61,7 +61,7 @@ test: all
 
 $(BIN)/viz_%.mp4: $(BIN)/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTraceViz
 	@mkdir -p $(@D)
-	bash ../support/viz_auto.sh \
+	HL_AVCONV=$(HL_AVCONV) bash ../support/viz_auto.sh \
 		"$< $(IMAGES)/rgb_small.png /tmp/$*.png -s $* -f 0.5 " \
 		"../../bin/HalideTraceViz --auto_layout" \
 		$@
@@ -70,4 +70,4 @@ $(BIN)/viz_%.mp4: $(BIN)/auto_viz_demo ../support/viz_auto.sh ../../bin/HalideTr
 # make viz_lessnaive
 # make viz_complex
 viz_%: $(BIN)/viz_%.mp4
-	mplayer $^
+	$(HL_VIDEOPLAYER) $^

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <list>
 #include <map>
@@ -285,7 +286,7 @@ stdout. You should pipe the output of HalideTraceViz into a video
 encoder or player.
 
 E.g. to encode a video:
- HL_TARGET=host-trace_stores-trace_loads-trace_realizations <command to make pipeline> && \
+ HL_TARGET=host-trace_all <command to make pipeline> && \
  HL_TRACE_FILE=/dev/stdout <command to run pipeline> | \
  HalideTraceViz -s 1920 1080 -t 10000 <the -f args> | \
  avconv -f rawvideo -pix_fmt bgr32 -s 1920x1080 -i /dev/stdin -c:v h264 output.avi
@@ -391,6 +392,12 @@ Funcs.
 // for simplicity.
 void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &strides, Range *x, Range *y,
                       int current_dimension = 0, int x_off = 0, int y_off = 0) {
+    if (current_dimension == 0) {
+        x->min = 2147483647;
+        x->extent = -2147483647;
+        y->min = 2147483647;
+        y->extent = -2147483647;
+    }
     if (current_dimension == dims.size()) {
         x->min = std::min(x->min, x_off);
         x->extent = std::max(x->extent, x_off);
@@ -417,7 +424,7 @@ void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &stri
 
 // Given a FuncConfig, check each field for "use some reasonable default"
 // value and fill in something reasonable.
-void finalize_func_config_values(FuncInfo &fi) {
+void finalize_func_config_values(const GlobalConfig &globals, FuncInfo &fi) {
     // Make a FuncConfig with 'safe' defaults for everything,
     // then merge the existing cfg into it.
     FuncConfig safe;
@@ -431,7 +438,7 @@ void finalize_func_config_values(FuncInfo &fi) {
     safe.max = 1.0;
     safe.labels = {};
     safe.blank_on_end_realization = 0;
-    safe.uninitialized_memory_color = 0x00000000;
+    safe.uninitialized_memory_color = globals.default_uninitialized_memory_color;
 
     if (fi.type_and_dim_valid) {
         // Try to choose better values for min and max based on type.
@@ -457,19 +464,15 @@ void finalize_func_config_values(FuncInfo &fi) {
 
 // Given a FuncConfig, check each field for "use some reasonable default"
 // value and fill in something reasonable.
-void finalize_func_config_values(std::map<std::string, FuncInfo> &funcs) {
+void finalize_func_config_values(const GlobalConfig &globals, std::map<std::string, FuncInfo> &funcs) {
     for (auto &p : funcs) {
         auto &fi = p.second;
 
-        finalize_func_config_values(fi);
+        finalize_func_config_values(globals, fi);
     }
 }
 
 void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, FuncInfo &fi) {
-    if (fi.config_valid) {
-        return;
-    }
-
     assert(fi.type_and_dim_valid);
 
     const Point &pad = globals.auto_layout_pad;
@@ -547,7 +550,14 @@ void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, F
 
     if (fi.config.labels.empty()) {
         std::string label = func_name + " (" + std::to_string((int) (fi.config.zoom * 100)) + "%)";
-        fi.config.labels.push_back({label, {0, 0}, 10});
+        const int label_width = label.size() * inconsolata_char_width;
+        const int label_space = cell_size.x - pad.x*2;
+        float h_scale = 1.f;
+        if (label_width > label_space) {
+            h_scale = std::max(0.25f, std::min(1.f, (float) label_space / (float) label_width));
+            info() << "h_scale for label (" << label << " is " << h_scale << "\n";
+        }
+        fi.config.labels.push_back({label, {0, 0}, 10, h_scale});
     }
 
     fi.config_valid = true;
@@ -772,6 +782,12 @@ void process_args(int argc, char **argv, VizState *state) {
             expect(i + 2 < argc, i);
             globals.auto_layout_grid.x = parse_int(argv[++i]);
             globals.auto_layout_grid.y = parse_int(argv[++i]);
+        } else if (next == "--uninit_default") {
+            expect(i + 3 < argc, i);
+            int r = parse_int(argv[++i]);
+            int g = parse_int(argv[++i]);
+            int b = parse_int(argv[++i]);
+            globals.default_uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else if (next == "--ignore_tags" || next == "--no-ignore_tags") {
             // Already processed, just continue
         } else if (next == "--verbose" || next == "--no-verbose") {
@@ -838,24 +854,45 @@ struct Surface {
         }
     }
 
+    // Fill a rectangle in dst with color.
+    // opaque RGB(1,1,1) is a "magic" color that means "fill with checkerboard".
+    // dst is assumed to point to the start of a frame_size buffer.
+    void fill_rect(int left, int top, int width, int height, uint32_t color, uint32_t *dst) {
+        const int x_min = std::max(left, 0);
+        const int x_end = std::min(left + width, frame_size.x);
+        const int y_min = std::max(top, 0);
+        const int y_end = std::min(top + height, frame_size.y);
+        const int y_stride = frame_size.x - (x_end - x_min);
+        dst += y_min * frame_size.x + x_min;
+        if (color == 0xff010101) {
+            for (int y = y_min; y < y_end; y++) {
+                for (int x = x_min; x < x_end; x++) {
+                    const int check = ((x / 16) % 2) ^ ((y / 16) % 2);
+                    *dst++ = check ? 0xff808080 : 0xffffffff;
+                }
+                dst += y_stride;
+            }
+        } else {
+            for (int y = y_min; y < y_end; y++) {
+                for (int x = x_min; x < x_end; x++) {
+                    *dst++ = color;
+                }
+                dst += y_stride;
+            }
+        }
+    }
+
     // Set all boxes corresponding to positions in a Func's allocation to
     // the given color. Recursive to handle arbitrary
     // dimensionalities. Used by begin and end realization events.
     void do_fill_realization(uint32_t *dst, uint32_t color,
-                          const FuncInfo &fi, const halide_trace_packet_t &p,
-                          int current_dimension = 0, int x_off = 0, int y_off = 0) {
+                             const FuncInfo &fi, const halide_trace_packet_t &p,
+                             int current_dimension = 0, int x_off = 0, int y_off = 0) {
         if (2 * current_dimension == p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
             const int izoom = (int) ceil(fi.config.zoom);
-            for (int y = 0; y < izoom; y++) {
-                if (y_min + y < 0 || y_min + y >= frame_size.y) continue;
-                for (int x = 0; x < izoom; x++) {
-                    if (x_min + x < 0 || x_min + x >= frame_size.x) continue;
-                    int idx = (y_min + y) * frame_size.x + (x_min + x);
-                    dst[idx] = color;
-                }
-            }
+            fill_rect(x_min, y_min, izoom, izoom, color, dst);
         } else {
             const int *coords = p.coordinates();
             const int min = coords[current_dimension * 2 + 0];
@@ -897,7 +934,7 @@ public:
         return image[frame_size.x * y + x];
     }
 
-    void draw_text(const std::string &text, const Point &pos, uint32_t color) {
+    void draw_text(const std::string &text, const Point &pos, uint32_t color, float h_scale = 1.0f) {
         uint32_t *dst = text_buf.data();
 
         // Drop any alpha component of color
@@ -914,9 +951,10 @@ public:
             chr -= 32;
 
             const uint8_t *font_ptr = inconsolata_raw + chr * (inconsolata_char_width * inconsolata_char_height);
+            const int h_scale_numerator = std::ceil(std::min(1.f, h_scale) * 256);
             for (int fy = 0; fy < inconsolata_char_height; fy++) {
                 for (int fx = 0; fx < inconsolata_char_width; fx++) {
-                    int px = pos.x + inconsolata_char_width*c + fx;
+                    int px = pos.x + (((inconsolata_char_width*c + fx) * h_scale_numerator) >> 8);
                     int py = pos.y - inconsolata_char_height + fy + 1;
                     if (px < 0 || px >= frame_size.x ||
                         py < 0 || py >= frame_size.y) continue;
@@ -1026,8 +1064,19 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 << " with cells of size " << cell_size.x << "x" << cell_size.y;
         }
 
+        // If globals.default_uninitialized_memory_color was never set, init to black or checkerboard.
+        if (state.globals.default_uninitialized_memory_color & 0xff000000) {
+            if (state.globals.auto_layout) {
+                // auto-layout defaults to checkerboard.
+                state.globals.default_uninitialized_memory_color = 0x00010101;
+            } else {
+                // non-auto-layout defaults to black, to preserve existing look.
+                state.globals.default_uninitialized_memory_color = 0x00000000;
+            }
+        }
+
         do_auto_layout(state);
-        finalize_func_config_values(state.funcs);
+        finalize_func_config_values(state.globals, state.funcs);
     };
 
 
@@ -1056,6 +1105,25 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             const int64_t frame_bytes = surface->frame_elems() * sizeof(uint32_t);
 
             while (halide_clock > video_clock) {
+                // Always render text last, since it's on top of everything
+                // and there's no need to re-render for every packet.
+                for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
+                    const Label &label = it->first;
+                    int first_draw_clock = it->second;
+                    int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
+                    if (frames_since_first_draw < label.fade_in_frames) {
+                        uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
+                        if (color > 255) color = 255;
+                        color *= 0x10101;
+                        surface->draw_text(label.text, label.pos, color, label.h_scale);
+                        ++it;
+                    } else {
+                        // Once we reach or exceed the final frame, draw at 100% opacity, then remove
+                        surface->draw_text(label.text, label.pos, 0xffffff, label.h_scale);
+                        it = labels_being_drawn.erase(it);
+                    }
+                }
+
                 // Composite text over anim over image
                 surface->composite();
 
@@ -1281,23 +1349,6 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             break;
         default:
             fail() << "Unknown tracing event code: " << p.event;
-        }
-
-        for (auto it = labels_being_drawn.begin(); it != labels_being_drawn.end(); ) {
-            const Label &label = it->first;
-            int first_draw_clock = it->second;
-            int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
-            if (frames_since_first_draw < label.fade_in_frames) {
-                uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
-                if (color > 255) color = 255;
-                color *= 0x10101;
-                surface->draw_text(label.text, label.pos, color);
-                ++it;
-            } else {
-                // Once we reach or exceed the final frame, draw at 100% opacity, then remove
-                surface->draw_text(label.text, label.pos, 0xffffff);
-                it = labels_being_drawn.erase(it);
-            }
         }
     }
 
