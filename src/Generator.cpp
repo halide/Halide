@@ -1523,7 +1523,9 @@ const std::vector<Type> &GIOBase::types() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!types_defined()) {
-        const auto &f = funcs();
+        // use funcs_, not funcs(): the latter could give a much-less-helpful error message
+        // in this case.
+        const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
             check_matching_types(f.at(0).output_types());
         }
@@ -1547,7 +1549,9 @@ int GIOBase::dims() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!dims_defined()) {
-        const auto &f = funcs();
+        // use funcs_, not funcs(): the latter could give a much-less-helpful error message
+        // in this case.
+        const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
             check_matching_dims(funcs().at(0).dimensions());
         }
