@@ -118,9 +118,9 @@ $(BIN)/%.py.o: $(BIN)/%.py.c
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
 # TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(HALIDE_PATH)/bin/host/runtime.a $(LIBHALIDE)
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(LIBHALIDE)
 	@mkdir -p $(BIN)/ext
-	$(CXX) $(LDFLAGS) $^ -shared -o $@
+	$(CXX) $(LDFLAGS) $^ $(HALIDE_PATH)/bin/host/runtime.a -shared -o $@
 
 # Run the Python extension(s):
 %.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
