@@ -462,7 +462,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
 #else
-                                                llvm::CodeModel::Small,
+                                                llvm::CodeModel::Large,
 #endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
