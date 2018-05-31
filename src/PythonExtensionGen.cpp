@@ -89,7 +89,7 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
     } else if (arg->type.is_uint()) {
         return std::make_pair("I", "unsigned int");
     } else {
-        assert(0);
+        return std::make_pair("E", "unknown type");
     }
 }
 
