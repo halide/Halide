@@ -1258,8 +1258,7 @@ public:
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
-    /** Make a lower-dimensional image that refers to one slice of this
-     * image. */
+    /** Make a lower-dimensional image that refers to one slice of this image. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
         im.slice(d, pos);
