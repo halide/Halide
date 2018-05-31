@@ -3,7 +3,8 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 
 # These are set by Halide's Makefile when built via that path.
-HALIDE_DISTRIB_PATH ?= $(ROOT_DIR)/../distrib
+HALIDE_PATH ?= $(ROOT_DIR)/..
+HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
 PYTHON ?= python3
@@ -98,6 +99,38 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
+# Compile the generators:
+$(BIN)/%.gen: $(HALIDE_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
+
+# Make the generator generate a Python extension:
+$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
+	    -g $(notdir $(basename $<)) -o $(BIN) target=host
+
+# Compile the generated Python extension(s):
+$(BIN)/%.o: $(BIN)/%.cpp
+	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
+$(BIN)/%.py.o: $(BIN)/%.py.c
+	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
+
+# The Python extension of the generator is already in $(BIN), and is named
+# the same, so put the Python extension of the function into ext/.
+# TODO: Python extensions of generators should have a _generator suffix.
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(LIBHALIDE)
+	@mkdir -p $(BIN)/ext
+	$(CXX) $(LDFLAGS) $^ $(HALIDE_PATH)/bin/host/runtime.a -shared -o $@
+
+# Run the Python extension(s):
+%.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
+	PYTHONPATH="$(BIN)/ext:$$PYTHONPATH" $(PYTHON) $<
+
+# TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
+# every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
+.PHONY: test_correctness_addconstant_test test_correctness_bit_test test_correctness_pystub
+test_correctness_addconstant_test: addconstant.run ;
+test_correctness_bit_test: bit.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)

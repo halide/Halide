@@ -13,6 +13,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Outputs.h"
+#include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
 #include "WrapExternStages.h"
 
@@ -78,6 +79,20 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
         return path + suffix;
     }
     return path.substr(0, found) + suffix + path.substr(found);
+}
+
+// Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
+std::string replace_extension(const std::string &path, const std::string &new_ext) {
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
+    }
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + new_ext;
+    } else {
+        return path.substr(0, dot) + new_ext;
+    }
 }
 
 Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
@@ -422,6 +437,19 @@ void Module::compile(const Outputs &output_files_arg) const {
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
+    }
+    if (!output_files.python_extension_name.empty()) {
+        debug(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
+        std::string c_header_name = output_files.c_header_name;
+        if (c_header_name.empty()) {
+          // If we we're not generating a header right now, guess the filename.
+          c_header_name = replace_extension(output_files.python_extension_name, ".h");
+        }
+        std::ofstream file(output_files.python_extension_name);
+        Internal::PythonExtensionGen python_extension_gen(file,
+                                                          c_header_name,
+                                                          target());
+        python_extension_gen.compile(*this);
     }
     if (!output_files.schedule_name.empty()) {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";

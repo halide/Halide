@@ -2620,6 +2620,7 @@ public:
         bool emit_o{false};
         bool emit_h{true};
         bool emit_cpp{false};
+        bool emit_python_extension{false};
         bool emit_assembly{false};
         bool emit_bitcode{false};
         bool emit_stmt{false};
