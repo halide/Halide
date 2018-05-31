@@ -955,6 +955,58 @@ void CodeGen_ARM::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_ARM::visit(const Broadcast *op) {
+    if (neon_intrinsics_disabled()) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    // We only have peephole optimizations for int vectors for now
+    if (op->type.is_scalar() || op->type.is_float()) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    // Detect the pattern: broadcast(widen(scalar)) and convert it to
+    // widen(broadcast(scalar)) to be able to generate vmlal.x instructions
+    //
+
+    // The types to look for that are widened then broadcast
+    Type types[] = {Int(8), UInt(8), Int(16), UInt(16), Int(32), UInt(32)};
+    // Loop over the types
+    for (auto& type: types) {
+        // The wider type with twice the number of bits
+        Type wtype = type.with_bits(type.bits() * 2);
+
+        // wild card for type
+        Expr wild = Variable::make(type, "*");
+        // Pattern to match
+        // Expr pattern = cast(wtype.with_lanes(op->lanes), wild);
+        Expr pattern = Broadcast::make(Cast::make(wtype, wild), op->lanes);
+
+        // Do the matching ...
+        vector<Expr> matches;
+        if (expr_match(pattern, op, matches)) {
+            // We have a match
+            debug(4) << "Broadcast: x" << op->lanes << "(" << op->value << ")\n";
+            // debug(4) << "Pattern: " << pattern << "\n";
+            // debug(4) << "Match: " << matches[0] << "\n";
+
+            // Flip the order of the operations: broadcast then widen
+            Expr new_expr = Cast::make(wtype.with_lanes(op->lanes),
+                                       (Broadcast::make(matches[0], op->lanes)));
+            debug(4) << "Replacement: " << new_expr << "\n";
+
+            // Generate the code and quit
+            value = codegen(new_expr);
+            return;
+        }
+    }
+
+    // Catch unhandled general cases
+    CodeGen_Posix::visit(op);
+}
+
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {

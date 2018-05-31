@@ -34,6 +34,7 @@ protected:
     void visit(const Store *);
     void visit(const Load *);
     void visit(const Call *);
+    void visit(const Broadcast *);
     // @}
 
     /** Various patterns to peephole match against */
