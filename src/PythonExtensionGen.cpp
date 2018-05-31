@@ -90,6 +90,7 @@ std::pair<string, string> print_type(const LoweredArgument* arg) {
         return std::make_pair("I", "unsigned int");
     } else {
         assert(0);
+        return {"", ""};
     }
 }
 
