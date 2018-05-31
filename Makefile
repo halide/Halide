@@ -1601,22 +1601,24 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	bazel build --verbose_failures :all
 
 .PHONY: test_python2
-test_python2: distrib $(ROOT_DIR)/bin/host/runtime.a
+test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -d -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_PATH=$(ROOT_DIR) \
+		HALIDE_RUNTIME=$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
 		PYTHON=python \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 .PHONY: test_python
-test_python: distrib $(ROOT_DIR)/bin/host/runtime.a
+test_python: distrib $(BIN_DIR)/host/runtime.a
 	make -d -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
 		HALIDE_PATH=$(ROOT_DIR) \
+		HALIDE_RUNTIME=$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \

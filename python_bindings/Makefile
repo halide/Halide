@@ -5,6 +5,7 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 # These are set by Halide's Makefile when built via that path.
 HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
+HALIDE_RUNTIME ?= $(HALIDE_PATH)/bin/host/runtime.a
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
 PYTHON ?= python3
@@ -120,7 +121,7 @@ $(BIN)/%.py.o: $(BIN)/%.py.c
 # TODO: Python extensions of generators should have a _generator suffix.
 $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(LIBHALIDE)
 	@mkdir -p $(BIN)/ext
-	$(CXX) $(LDFLAGS) $^ $(HALIDE_PATH)/bin/host/runtime.a -shared -o $@
+	$(CXX) $(LDFLAGS) $^ $(HALIDE_RUNTIME) -shared -o $@
 
 # Run the Python extension(s):
 %.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
