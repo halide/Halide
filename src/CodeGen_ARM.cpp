@@ -402,6 +402,77 @@ void CodeGen_ARM::visit(const Mul *op) {
         }
     }
 
+    //
+    // Detect the pattern: broadcast(widen(scalar)) and convert it to
+    // widen(broadcast(scalar)) to be able to generate vmlal.x instructions
+    // from llvm.
+    //
+
+    // Function to match the operands for the pattern and flip if it matches.
+    // It should match expressions like Broadcast(Widen(scalar)) and flip them
+    // to Widen(Broadcast(scalar)) for the given type.
+    //
+    // Returns a pair:
+    //    first -> bool of whether it matched the pattern or not
+    //    second -> the updated expression if matched, or the original if not
+    auto match_and_flip = [](const Type& type, const Expr& op) {
+        // The wider type with twice the number of bits
+        Type wtype = type.with_bits(type.bits() * 2);
+
+        // wild card for type
+        Expr wild = Variable::make(type, "*");
+
+        // lanes
+        const int lanes = op.type().lanes();
+
+        // Pattern to match
+        // Expr pattern = cast(wtype.with_lanes(op->lanes), wild);
+        Expr pattern = Broadcast::make(Cast::make(wtype, wild), lanes);
+
+        bool matched;
+        Expr new_expr = op;
+
+        vector<Expr> matches;
+        matched = expr_match(pattern, op, matches);
+
+        if (matched) {
+            // We have a match
+            debug(4) << "Broadcast Op: " << op << "\n";
+            // debug(4) << "Pattern: " << pattern << "\n";
+            // debug(4) << "Match: " << matches[0] << "\n";
+
+            // Flip the order of the operations: broadcast then widen
+            new_expr = Cast::make(wtype.with_lanes(lanes),
+                                  (Broadcast::make(matches[0], lanes)));
+            debug(4) << "Replacement: " << new_expr << "\n";
+        }
+
+        return std::make_pair(matched, new_expr);
+    };
+
+    // The types to look for that are widened then broadcast
+    Type types[] = {Int(8), UInt(8), Int(16), UInt(16), Int(32), UInt(32)};
+
+    // Loop over the types
+    for (auto& type: types) {
+        // Match a and b for the desired pattern
+        auto a_match = match_and_flip(type, op->a);
+        auto b_match = match_and_flip(type, op->b);
+
+        // If any of them matched, then replace the Mul expression with the
+        // updated ones (one or both)
+        if (a_match.first || b_match.first) {
+            // New expression is product of new (or old) operands
+            Expr new_expr = a_match.second * b_match.second;
+            debug(4) << "Replaced Mul: " << op->a << " * " << op->b <<
+                "\n  with: " << new_expr << "\n";
+
+            // Generate code and quit!
+            value = codegen(new_expr);
+            return;
+        }
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -952,58 +1023,6 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_ARM::visit(const Broadcast *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // We only have peephole optimizations for int vectors for now
-    if (op->type.is_scalar() || op->type.is_float()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // Detect the pattern: broadcast(widen(scalar)) and convert it to
-    // widen(broadcast(scalar)) to be able to generate vmlal.x instructions
-    //
-
-    // The types to look for that are widened then broadcast
-    Type types[] = {Int(8), UInt(8), Int(16), UInt(16), Int(32), UInt(32)};
-    // Loop over the types
-    for (auto& type: types) {
-        // The wider type with twice the number of bits
-        Type wtype = type.with_bits(type.bits() * 2);
-
-        // wild card for type
-        Expr wild = Variable::make(type, "*");
-        // Pattern to match
-        // Expr pattern = cast(wtype.with_lanes(op->lanes), wild);
-        Expr pattern = Broadcast::make(Cast::make(wtype, wild), op->lanes);
-
-        // Do the matching ...
-        vector<Expr> matches;
-        if (expr_match(pattern, op, matches)) {
-            // We have a match
-            debug(4) << "Broadcast: x" << op->lanes << "(" << op->value << ")\n";
-            // debug(4) << "Pattern: " << pattern << "\n";
-            // debug(4) << "Match: " << matches[0] << "\n";
-
-            // Flip the order of the operations: broadcast then widen
-            Expr new_expr = Cast::make(wtype.with_lanes(op->lanes),
-                                       (Broadcast::make(matches[0], op->lanes)));
-            debug(4) << "Replacement: " << new_expr << "\n";
-
-            // Generate the code and quit
-            value = codegen(new_expr);
-            return;
-        }
-    }
-
-    // Catch unhandled general cases
     CodeGen_Posix::visit(op);
 }
 
