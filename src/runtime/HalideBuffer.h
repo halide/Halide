@@ -1547,6 +1547,13 @@ public:
         return buf;
     }
 
+    /** Make a zero-dimensional Buffer that points to non-owned, existing data */
+    static Buffer<T, D> make_scalar(T* data) {
+        Buffer<T, 1> buf(data, 1);
+        buf.slice(0, 0);
+        return buf;
+    }
+
     /** Make a buffer with the same shape and memory nesting order as
      * another buffer. It may have a different type. */
     template<typename T2, int D2>
