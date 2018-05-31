@@ -3,6 +3,7 @@
 
 using namespace Halide;
 
+// foo
 int main(int argc, char **argv) {
 
     // A single-dimensional argmax.
