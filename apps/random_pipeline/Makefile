@@ -28,7 +28,7 @@ $(BIN)/$(ID)/random_pipeline.a: $(BIN)/random_pipeline.generator
 	HL_SEED=$(HL_SEED) \
 	HL_BEAM_SIZE=$(HL_BEAM_SIZE) \
 	HL_DEBUG_CODEGEN=1 \
-	$^ -g random_pipeline -o $(BIN)/$(ID) -f random_pipeline target=$(HL_TARGET)-no_runtime auto_schedule=$(AUTO_SCHEDULE) seed=$(PIPELINE_SEED) stages=$(PIPELINE_STAGES) 2> $(BIN)/$(ID)/stderr.txt > $(BIN)/$(ID)/stdout.txt
+	$^ -g random_pipeline -o $(BIN)/$(ID) -f random_pipeline target=$(HL_TARGET)-no_runtime auto_schedule=$(AUTO_SCHEDULE) seed=$(PIPELINE_SEED) max_stages=$(PIPELINE_STAGES) 2> $(BIN)/$(ID)/stderr.txt > $(BIN)/$(ID)/stdout.txt
 
 $(BIN)/$(ID)/test: test.cpp $(BIN)/$(ID)/random_pipeline.a $(BIN)/runtime.a
 	@mkdir -p $(@D)
