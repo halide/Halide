@@ -50,7 +50,16 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
     return true;
 }
 
-int test1() {
+int get_max_byte_size(const Target &t) {
+    // See \ref reduce_prefetch_dimension for max_byte_size
+    return (t.arch == Target::ARM) ? 32 : 64;
+}
+
+int get_stride(const Target &t, int elem_byte_size) {
+    return get_max_byte_size(t) / elem_byte_size;
+}
+
+int test1(const Target &t) {
     Func f("f"), g("g");
     Var x("x");
 
@@ -64,14 +73,14 @@ int test1() {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, 8}};
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
         return -1;
     }
     return 0;
 }
 
-int test2() {
+int test2(const Target &t) {
     Param<bool> p;
 
     Func f("f"), g("g");
@@ -82,12 +91,13 @@ int test2() {
 
     f.compute_root();
     g.specialize(p).prefetch(f, x, 8);
+    g.specialize_fail("No prefetch");
 
     Module m = g.compile_to_module({p});
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, 8}};
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
         return -1;
     }
@@ -97,12 +107,14 @@ int test2() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    Target t = get_jit_target_from_environment();
+
     printf("Running prefetch test1\n");
-    if (test1() != 0) {
+    if (test1(t) != 0) {
         return -1;
     }
     printf("Running prefetch test2\n");
-    if (test2() != 0) {
+    if (test2(t) != 0) {
         return -1;
     }
 

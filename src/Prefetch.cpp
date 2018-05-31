@@ -283,7 +283,7 @@ class SplitPrefetch : public IRMutator2 {
             const Variable *base = call->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
 
-            int elem_size = base->type.bytes();
+            int elem_size = call->type.bytes();
 
             vector<string> index_names;
             vector<Expr> extents;
