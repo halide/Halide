@@ -593,8 +593,6 @@ struct PartialScheduleNode {
         // less than region_points if inlining is a good idea (e.g. a
         // sparsely-sampled Func with large bounds)
         int64_t min_points;
-        // The minimum possible compute cost
-        double min_cost;
     };
 
     // The total bounds required of the given Func for one representative iteration of this loop. Computed lazily and cached.
@@ -623,7 +621,6 @@ struct PartialScheduleNode {
                     << "Need an estimate on dimension " << i << " of \"" << f.name() << "\"";
                 bound.region.push_back(it->second);
             }
-            bound.min_cost = bound.region_points * dag.node_map.at(f)->compute;
             bound.min_points = bound.region_points;
         } else {
             internal_assert(!dag.outgoing_edges.at(f).empty())
@@ -667,8 +664,6 @@ struct PartialScheduleNode {
             }
             bound.region_points = points_if_realized;
             bound.min_points = std::min(points_if_realized, calls_if_inlined);
-            const auto *n = dag.node_map.at(f);
-            bound.min_cost = std::min(points_if_realized * n->compute, calls_if_inlined * n->compute_if_inlined);
         }
         bounds[f] = std::move(bound);
         return bounds[f];
@@ -787,14 +782,15 @@ struct PartialScheduleNode {
         Bound single_point;
         single_point.min_points = 1;
         single_point.region_points = 1;
-        single_point.min_cost = dag.node_map.at(f)->compute;
         for (int i = 0; i < f.dimensions(); i++) {
             // Initialize the loop nest to cover the desired bounds
             node->size.push_back(bounds.region[i].second - bounds.region[i].first + 1);
+            // Is this a point in the iteration domain of the Definition, or a point in the storage domain??
             single_point.region.push_back({bounds.region[i].first, bounds.region[i].first});
         }
         node->bounds[f] = single_point;
         children.emplace_back(std::move(node));
+        // TODO: Inject the func's update stages as distinct children
     }
 
     // Return all possible ways to compute f in tiles.
@@ -833,7 +829,7 @@ struct PartialScheduleNode {
                 r.store_at.insert(f);
             } else {
                 r.tileable = false;
-	    }
+            }
             result.emplace_back(std::move(r));
         }
 
@@ -955,8 +951,8 @@ struct PartialScheduleNode {
             }
         }
 
-	internal_assert(!result.empty());
-	
+        internal_assert(!result.empty());
+
         return result;
     }
 
@@ -1084,26 +1080,13 @@ struct State {
 
     int num_funcs_scheduled = 0;
 
+    static int cost_calculations;
+
     void calculate_cost(const FunctionDAG &dag, const MachineParams &params) {
         map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
         map<Function, double, Function::Compare> overcompute;
         cost = root.cost(dag, params, compute_site, overcompute, 1, nullptr);
-
-        /*
-        debug(0) << "Calculating cost for: \n";
-        dump();
-        debug(0) << "Total cost: " << cost << "\n";
-        */
-
-        // Subtract the essential compute cost of the funcs scheduled so far.
-        for (int i = 0; i < num_funcs_scheduled; i++) {
-            const FunctionDAG::Node &n = dag.nodes[i];
-            double c = root.get_bounds(n.func, dag).min_cost;
-            //debug(0) << "Func " << n.func.name() << " has minimum cost " << c << "\n";
-            cost -= c;
-        }
-
-        // debug(0) << "Redundant cost: " << cost << "\n";
+        cost_calculations++;
     }
 
     void generate_children(const FunctionDAG &dag,
@@ -1234,58 +1217,10 @@ struct State {
                      << (compute_cost + mem_cost) << " = "
                      << compute_cost << " + " << mem_cost << "\n";
         }
-
-        /*
-        // Print it in a form that can be copy-pasted elsewhere
-        debug(0) << "nodes = [";
-        for (const auto &n : dag.nodes) {
-            // double essential = root.get_bounds(n.func, dag).min_cost;
-            auto it = node_costs.find(&n);
-            if (it != node_costs.end()) {
-                debug(0) << " " << it->second;
-            } else {
-                debug(0) << " " << inlined_costs[n.func];
-            }
-        }
-        debug(0) << "]\n";
-
-        debug(0) << "edges = [";
-        for (const auto &n1 : dag.nodes) {
-            debug(0) << "[";
-            for (const auto &n2 : dag.nodes) {
-                const FunctionDAG::Edge *edge = nullptr;
-                for (const auto *e : dag.outgoing_edges.at(n1.func)) {
-                    if (e->consumer.same_as(n2.func)) {
-                        edge = e;
-                    }
-                }
-                if (edge) {
-                    debug(0) << " " << edge_costs[edge];
-                } else {
-                    debug(0) << " 0";
-                }
-            }
-            debug(0) << "]\n";
-        }
-        debug(0) << "]\n";
-        */
-
-
-        for (const auto &n : dag.nodes) {
-            auto it = node_costs.find(&n);
-            if (it != node_costs.end()) {
-                debug(0) << "XXXN " << it->second << "\n";
-            } else {
-                debug(0) << "XXXI " << inlined_costs[n.func] << "\n";
-            }
-        }
-        for (const auto &e : dag.edges) {
-            debug(0) << "XXXE " << edge_costs[&e] << "\n";
-        }
-
     }
 };
 
+int State::cost_calculations = 0;
 
 struct CompareStates {
     bool operator()(const std::shared_ptr<State> &a, const std::shared_ptr<State> &b) const {
@@ -1353,13 +1288,13 @@ State optimal_schedule(FunctionDAG &dag,
             auto state = pending.top();
             pending.pop();
 
-	    /*
+            /*
               if (true || i % 1000 == 0) {
               debug(0) << "** Queue top: ";
               state->dump();
               }
-	    */
-	    
+            */
+
             if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
                 debug(0) << '\n';
                 return *state;
@@ -1376,6 +1311,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
                                    const Target &target,
                                    const MachineParams &params) {
 
+    State::cost_calculations = 0;
     string seed_str = get_env_variable("HL_SEED");
     int seed = (int)time(NULL);
     if (!seed_str.empty()) {
@@ -1423,6 +1359,8 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     debug(0) << "** Optimal schedule:\n";
     optimal.dump();
+
+    debug(0) << "Cost evaluated this many times: " << State::cost_calculations << "\n";
 
     // Just to get the debugging prints to fire
     optimal.calculate_cost(dag, params);
