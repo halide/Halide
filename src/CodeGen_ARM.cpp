@@ -403,72 +403,38 @@ void CodeGen_ARM::visit(const Mul *op) {
     }
 
     //
-    // Detect the pattern: broadcast(widen(scalar)) and convert it to
-    // widen(broadcast(scalar)) to be able to generate vmlal.x instructions
-    // from llvm.
+    // Detect the cases where any of the operands has the pattern: 
+    //      broadcast(widen(scalar)) 
+    // and convert it to
+    //      widen(broadcast(scalar)) 
+    // to be able to generate vmlal.x instructions correctly from llvm.
     //
+    if (op->type.is_int() || op->type.is_uint()) {
+        // Check the first operand op->a for the pattern broadcast(widen(scalar))
+        //
+        const Broadcast *bcast_a = op->a.as<Broadcast>();
+        const Cast *cast_a = bcast_a ? bcast_a->value.as<Cast>() : nullptr;
+        const int lanes = op->type.lanes();
 
-    // Function to match the operands for the pattern and flip if it matches.
-    // It should match expressions like Broadcast(Widen(scalar)) and flip them
-    // to Widen(Broadcast(scalar)) for the given type.
-    //
-    // Returns a pair:
-    //    first -> bool of whether it matched the pattern or not
-    //    second -> the updated expression if matched, or the original if not
-    auto match_and_flip = [](const Type& type, const Expr& op) {
-        // The wider type with twice the number of bits
-        Type wtype = type.with_bits(type.bits() * 2);
-
-        // wild card for type
-        Expr wild = Variable::make(type, "*");
-
-        // lanes
-        const int lanes = op.type().lanes();
-
-        // Pattern to match
-        // Expr pattern = cast(wtype.with_lanes(op->lanes), wild);
-        Expr pattern = Broadcast::make(Cast::make(wtype, wild), lanes);
-
-        bool matched;
-        Expr new_expr = op;
-
-        vector<Expr> matches;
-        matched = expr_match(pattern, op, matches);
-
-        if (matched) {
-            // We have a match
-            debug(4) << "Broadcast Op: " << op << "\n";
-            // debug(4) << "Pattern: " << pattern << "\n";
-            // debug(4) << "Match: " << matches[0] << "\n";
-
-            // Flip the order of the operations: broadcast then widen
-            new_expr = Cast::make(wtype.with_lanes(lanes),
-                                  (Broadcast::make(matches[0], lanes)));
-            debug(4) << "Replacement: " << new_expr << "\n";
+        // If the pattern is there, and the cast is a widening cast
+        if (cast_a && cast_a->value.type().bits() < op->type.bits()) {
+            // generate a new Mul with flipped widen(broadcast(scalar))
+            Expr new_a = Cast::make(op->type, 
+                                    Broadcast::make(cast_a->value, lanes));
+            debug(4) << "Replaced: " << op->a << "\n  with: " << new_a << "\n";
+            value = codegen(new_a * op->b);
+            return;
         }
 
-        return std::make_pair(matched, new_expr);
-    };
-
-    // The types to look for that are widened then broadcast
-    Type types[] = {Int(8), UInt(8), Int(16), UInt(16), Int(32), UInt(32)};
-
-    // Loop over the types
-    for (auto& type: types) {
-        // Match a and b for the desired pattern
-        auto a_match = match_and_flip(type, op->a);
-        auto b_match = match_and_flip(type, op->b);
-
-        // If any of them matched, then replace the Mul expression with the
-        // updated ones (one or both)
-        if (a_match.first || b_match.first) {
-            // New expression is product of new (or old) operands
-            Expr new_expr = a_match.second * b_match.second;
-            debug(4) << "Replaced Mul: " << op->a << " * " << op->b <<
-                "\n  with: " << new_expr << "\n";
-
-            // Generate code and quit!
-            value = codegen(new_expr);
+        // Do the same for the second operand op->b
+        //
+        const Broadcast *bcast_b = op->b.as<Broadcast>();
+        const Cast *cast_b = bcast_b ? bcast_b->value.as<Cast>() : nullptr;
+        if (cast_b && cast_b->value.type().bits() < op->type.bits()) {
+            Expr new_b = Cast::make(op->type, 
+                                   Broadcast::make(cast_b->value, lanes));
+            debug(4) << "Replaced: " << op->b << "\n  with: " << new_b << "\n";
+            value = codegen(op->a * new_b);
             return;
         }
     }
