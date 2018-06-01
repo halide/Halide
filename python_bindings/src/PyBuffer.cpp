@@ -351,12 +351,26 @@ void define_buffer(py::module &m) {
             return b.embedded(d, pos);
         }, py::arg("dimension"), py::arg("pos"))
 
+        .def("embed", [](Buffer<> &b, int d) -> void {
+            b.embed(d);
+        }, py::arg("dimension"))
+        .def("embedded", [](Buffer<> &b, int d) -> Buffer<> {
+            return b.embedded(d);
+        }, py::arg("dimension"))
+
         .def("slice", [](Buffer<> &b, int d, int pos) -> void {
             b.slice(d, pos);
         }, py::arg("dimension"), py::arg("pos"))
         .def("sliced", [](Buffer<> &b, int d, int pos) -> Buffer<> {
             return b.sliced(d, pos);
         }, py::arg("dimension"), py::arg("pos"))
+
+        .def("slice", [](Buffer<> &b, int d) -> void {
+            b.slice(d);
+        }, py::arg("dimension"))
+        .def("sliced", [](Buffer<> &b, int d) -> Buffer<> {
+            return b.sliced(d);
+        }, py::arg("dimension"))
 
         .def("translate", [](Buffer<> &b, int d, int dx) -> void {
             b.translate(d, dx);
