@@ -119,7 +119,7 @@ $(BIN)/%.py.o: $(BIN)/%.py.c
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
 # TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(LIBHALIDE)
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o
 	@mkdir -p $(BIN)/ext
 	$(CXX) $(LDFLAGS) $^ $(HALIDE_RUNTIME) -shared -o $@
 
