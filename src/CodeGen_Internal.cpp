@@ -448,7 +448,8 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
 #endif
     }
-    internal_assert(llvm_target) << "Could not create LLVM target for " << module.getTargetTriple() << "\n";
+    auto triple = llvm::Triple(module.getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     llvm::TargetOptions options;
     std::string mcpu = "";
@@ -462,7 +463,9 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
 #else
-                                                llvm::CodeModel::Large,
+                                                (triple.isArch64Bit() ?
+                                                 llvm::CodeModel::Large :
+                                                 llvm::CodeModel::Small),
 #endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
