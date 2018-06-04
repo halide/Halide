@@ -2863,17 +2863,10 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
-    int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
         // We're not actually going to read from these outputs, so
-        // make the allocation tiny, then expand them with unsafe
-        // cropping.
-        Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
-        for (int s : sizes) {
-            if (!s) break;
-            im.add_dimension();
-            im.crop(im.dimensions()-1, 0, s);
-        }
+        // make the host allocation null.
+        Buffer<> im = Buffer<>(func.output_types()[i], nullptr, {x_size, y_size, z_size, w_size});
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
