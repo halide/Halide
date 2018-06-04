@@ -214,6 +214,8 @@ void IRVisitor::visit(const Prefetch *op) {
         op->bounds[i].min.accept(this);
         op->bounds[i].extent.accept(this);
     }
+    op->condition.accept(this);
+    op->body.accept(this);
 }
 
 void IRVisitor::visit(const Block *op) {
@@ -449,6 +451,8 @@ void IRGraphVisitor::visit(const Prefetch *op) {
         include(op->bounds[i].min);
         include(op->bounds[i].extent);
     }
+    include(op->condition);
+    include(op->body);
 }
 
 void IRGraphVisitor::visit(const Block *op) {
