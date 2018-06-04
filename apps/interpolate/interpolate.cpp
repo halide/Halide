@@ -82,6 +82,7 @@ int main(int argc, char **argv) {
     } else {
         sched = 2;
     }
+    sched = 5;
 
     switch (sched) {
     case 0:
@@ -197,6 +198,19 @@ int main(int argc, char **argv) {
         // The cpu wrapper is our new output Func
         normalize = cpu_wrapper;
 
+        break;
+    }
+    case 5: {
+        std::cout << "Autoschedule.\n";
+        input
+            .dim(0).set_bounds_estimate(0, 1536)
+            .dim(1).set_bounds_estimate(0, 2560)
+            .dim(2).set_bounds_estimate(0, 4);
+        normalize
+            .estimate(x, 0, 1536)
+            .estimate(y, 0, 2560)
+            .estimate(c, 0, 4);
+        Pipeline(normalize).auto_schedule(target);
         break;
     }
     default:
