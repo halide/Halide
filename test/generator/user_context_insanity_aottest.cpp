@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <assert.h>
+#include <atomic>
 
 #include "HalideRuntime.h"
 #include "HalideBuffer.h"
@@ -10,10 +11,10 @@ using namespace Halide::Runtime;
 
 const int num_launcher_tasks = 1000;
 
-static bool got_context[num_launcher_tasks];
+static std::atomic<bool> got_context[num_launcher_tasks] = {};
 
 int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {
-    bool *bool_ptr = (bool *)context;
+    std::atomic<bool> *bool_ptr = (std::atomic<bool> *)context;
     *bool_ptr = true;
     return 0;
 }

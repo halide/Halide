@@ -1,7 +1,7 @@
 #include "Buffer.h"
-#include "Var.h"
 #include "IREquality.h"
 #include "IROperator.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -31,10 +31,10 @@ Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args) {
             int_args.push_back(e);
         } else {
             int_args.push_back(cast<int>(e));
-       }
+        }
     }
     return Call::make(buf, int_args);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

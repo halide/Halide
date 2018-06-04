@@ -55,12 +55,12 @@ inline const Func &func_like_to_func(const Func &func) {
     return func;
 }
 
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func func_like_to_func(const T &func_like) {
     return lambda(_, func_like(_));
 }
 
-}
+}  // namespace Internal
 
 /** Impose a boundary condition such that a given expression is returned
  *  everywhere outside the boundary. Generally the expression will be a
@@ -86,7 +86,7 @@ Func constant_exterior(const Func &source, Tuple value,
 Func constant_exterior(const Func &source, Expr value,
                        const std::vector<std::pair<Expr, Expr>> &bounds);
 
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Tuple value) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
@@ -95,7 +95,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Tup
 
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
 }
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Expr value) {
     return constant_exterior(func_like, Tuple(value));
 }
@@ -132,7 +132,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, Exp
 Func repeat_edge(const Func &source,
                  const std::vector<std::pair<Expr, Expr>> &bounds);
 
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
@@ -168,7 +168,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds&&.
 Func repeat_image(const Func &source,
                   const std::vector<std::pair<Expr, Expr>> &bounds);
 
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
@@ -203,7 +203,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds&&
 Func mirror_image(const Func &source,
                   const std::vector<std::pair<Expr, Expr>> &bounds);
 
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
@@ -241,7 +241,7 @@ inline HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds&&
 Func mirror_interior(const Func &source,
                      const std::vector<std::pair<Expr, Expr>> &bounds);
 
-template <typename T>
+template<typename T>
 inline HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
@@ -260,8 +260,8 @@ inline HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, Bound
 }
 // @}
 
-}
+}  // namespace BoundaryConditions
 
-}
+}  // namespace Halide
 
 #endif

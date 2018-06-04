@@ -10,8 +10,8 @@
 #include <atomic>
 
 #include "IR.h"
-#include "Util.h"
 #include "Tuple.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -1917,6 +1917,6 @@ inline Expr strict_float(Expr e) {
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
-}
+}  // namespace Halide
 
 #endif

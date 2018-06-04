@@ -1,19 +1,19 @@
 #include "SlidingWindow.h"
+#include "Bounds.h"
+#include "Debug.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Debug.h"
-#include "Substitute.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
 #include "Monotonic.h"
-#include "Bounds.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
+using std::string;
 
 namespace {
 
@@ -407,5 +407,5 @@ Stmt sliding_window(Stmt s, const map<string, Function> &env) {
     return SlidingWindow(env).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

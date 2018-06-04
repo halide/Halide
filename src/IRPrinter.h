@@ -16,8 +16,8 @@
 
 #include <ostream>
 
-#include "Module.h"
 #include "IRVisitor.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -154,7 +154,7 @@ protected:
     void visit(const Shuffle *);
     void visit(const Prefetch *);
 };
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

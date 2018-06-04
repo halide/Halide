@@ -4,10 +4,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
+using std::string;
+using std::vector;
 
 Closure::Closure(Stmt s, const string &loop_variable) {
     if (!loop_variable.empty()) {
@@ -75,6 +75,7 @@ void Closure::visit(const Allocate *op) {
     for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
     }
+    op->condition.accept(this);
     op->body.accept(this);
 }
 
@@ -87,5 +88,5 @@ void Closure::visit(const Variable *op) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

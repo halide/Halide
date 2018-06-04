@@ -222,7 +222,7 @@ protected:
     }
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

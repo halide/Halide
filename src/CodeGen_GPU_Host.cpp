@@ -4,8 +4,8 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "Debug.h"
@@ -20,10 +20,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -544,4 +544,5 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 #endif
 
-}}
+}  // namespace Internal
+}  // namespace Halide

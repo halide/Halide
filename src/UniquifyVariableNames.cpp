@@ -5,8 +5,8 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
+using std::string;
 
 class UniquifyVariableNames : public IRMutator2 {
 
@@ -52,7 +52,6 @@ class UniquifyVariableNames : public IRMutator2 {
         } else {
             return LetStmt::make(new_name, value, body);
         }
-
     }
 
     Expr visit(const Let *op) override {
@@ -69,7 +68,6 @@ class UniquifyVariableNames : public IRMutator2 {
         } else {
             return Let::make(new_name, value, body);
         }
-
     }
 
     Stmt visit(const For *op) override {
@@ -105,5 +103,5 @@ Stmt uniquify_variable_names(Stmt s) {
     return u.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

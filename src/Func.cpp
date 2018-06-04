@@ -1,54 +1,53 @@
 #include <algorithm>
 #include <iostream>
 #include <string.h>
-#include <fstream>
 
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
-#include "IR.h"
+#include "ApplySplit.h"
+#include "Argument.h"
+#include "Associativity.h"
+#include "CodeGen_LLVM.h"
+#include "Debug.h"
+#include "ExprUsesVar.h"
 #include "Func.h"
-#include "Util.h"
+#include "Function.h"
+#include "IR.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Function.h"
-#include "Argument.h"
+#include "ImageParam.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 #include "Lower.h"
+#include "Outputs.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
-#include "Debug.h"
-#include "IREquality.h"
-#include "CodeGen_LLVM.h"
-#include "LLVM_Headers.h"
-#include "Outputs.h"
-#include "LLVM_Output.h"
-#include "Substitute.h"
-#include "ExprUsesVar.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "Associativity.h"
-#include "ApplySplit.h"
-#include "ImageParam.h"
+#include "Substitute.h"
+#include "Util.h"
 
 namespace Halide {
 
+using std::map;
 using std::max;
 using std::min;
-using std::map;
+using std::ofstream;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::ofstream;
 
 using namespace Internal;
 
 Func::Func(const string &name) : func(unique_name(name)) {}
 
-Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')) {}
+Func::Func() : func(make_entity_name(this, "Halide:.*:Func", 'f')) {}
 
-Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
+Func::Func(Expr e) : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
     (*this)(_) = e;
 }
 
@@ -3071,4 +3070,4 @@ Var _("_");
 Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
            _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
-}
+}  // namespace Halide

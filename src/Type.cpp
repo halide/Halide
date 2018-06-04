@@ -202,4 +202,4 @@ bool Type::same_handle_type(const Type &other) const {
         first->reference_type == second->reference_type;
 }
 
-}
+}  // namespace Halide

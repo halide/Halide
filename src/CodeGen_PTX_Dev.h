@@ -5,9 +5,9 @@
  * Defines the code-generator for producing CUDA host code
  */
 
-#include "CodeGen_LLVM.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_LLVM.h"
 
 namespace llvm {
 class BasicBlock;
@@ -75,6 +75,7 @@ protected:
     std::string simt_intrinsic(const std::string &name);
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

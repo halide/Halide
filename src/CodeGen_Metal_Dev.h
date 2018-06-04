@@ -86,6 +86,7 @@ protected:
     CodeGen_Metal_C metal_c;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

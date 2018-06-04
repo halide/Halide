@@ -11,5 +11,5 @@ int debug::debug_level() {
     return cached_debug_level;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

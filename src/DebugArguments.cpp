@@ -37,5 +37,5 @@ void debug_arguments(LoweredFunc *func) {
     func->body = Block::make(stmts);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

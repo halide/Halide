@@ -46,7 +46,7 @@ std::string generate_schedules(const std::vector<Function> &outputs,
                                const Target &target,
                                const MachineParams &arch_params);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

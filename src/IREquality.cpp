@@ -1,6 +1,6 @@
 #include "IREquality.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -511,14 +511,20 @@ void IRComparer::visit(const Shuffle *op) {
 }
 
 void IRComparer::visit(const Prefetch *op) {
-    const Prefetch *s = expr.as<Prefetch>();
+    const Prefetch *s = stmt.as<Prefetch>();
 
     compare_names(s->name, op->name);
+    compare_scalar(s->types.size(), op->types.size());
     compare_scalar(s->bounds.size(), op->bounds.size());
+    for (size_t i = 0; (result == Equal) && (i < s->types.size()); i++) {
+        compare_types(s->types[i], op->types[i]);
+    }
     for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
         compare_expr(s->bounds[i].min, op->bounds[i].min);
         compare_expr(s->bounds[i].extent, op->bounds[i].extent);
     }
+    compare_expr(s->condition, op->condition);
+    compare_stmt(s->body, op->body);
 }
 
 } // namespace
@@ -597,7 +603,7 @@ void check_not_equal(const Expr &a, const Expr &b) {
         << "\nand\n" << b << "\n";
 }
 
-} // namespace
+}  // namespace
 
 void ir_equality_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -622,4 +628,5 @@ void ir_equality_test() {
     debug(0) << "ir_equality_test passed\n";
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,7 +1,7 @@
 #include "RemoveTrivialForLoops.h"
+#include "CodeGen_GPU_Dev.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
@@ -53,5 +53,5 @@ Stmt remove_trivial_for_loops(Stmt s) {
     return RemoveTrivialForLoops().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

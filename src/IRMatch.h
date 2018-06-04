@@ -45,7 +45,7 @@ bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
 
 void expr_match_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

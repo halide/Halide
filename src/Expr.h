@@ -11,8 +11,8 @@
 #include "Debug.h"
 #include "Error.h"
 #include "Float16.h"
-#include "Type.h"
 #include "IntrusivePtr.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

@@ -15,8 +15,8 @@
 #include "JITModule.h"
 #include "Module.h"
 #include "ParamMap.h"
-#include "Tuple.h"
 #include "Target.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -33,8 +33,8 @@ class IRMutator2;
  * Used to determine if the output printed to file should be as a normal string
  * or as an HTML file which can be opened in a browerser and manipulated via JS and CSS.*/
 enum StmtOutputFormat {
-     Text,
-     HTML
+    Text,
+    HTML
 };
 
 namespace {
@@ -119,7 +119,7 @@ public:
     /** Generate a schedule for the pipeline. */
     //@{
     std::string auto_schedule(const Target &target,
-                                     const MachineParams &arch_params = MachineParams::generic());
+                              const MachineParams &arch_params = MachineParams::generic());
     //@}
 
     /** Return handle to the index-th Func within the pipeline based on the

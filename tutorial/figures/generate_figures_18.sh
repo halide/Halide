@@ -7,7 +7,7 @@ rm -rf tmp
 mkdir -p tmp
 
 # Grab a trace
-HL_JIT_TARGET=host-trace_loads-trace_stores-trace_realizations \
+HL_JIT_TARGET=host-trace_all \
 HL_TRACE_FILE=$(pwd)/tmp/trace.bin \
 make -C ../.. tutorial_lesson_18_parallel_associative_reductions
 ls tmp/trace.bin

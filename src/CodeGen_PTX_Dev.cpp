@@ -1,17 +1,17 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Internal.h"
+#include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
-#include "IROperator.h"
-#include "IRPrinter.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
-#include "Debug.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Target.h"
-#include "LLVM_Headers.h"
-#include "LLVM_Runtime_Linker.h"
 
 #include <fstream>
 
@@ -24,8 +24,8 @@ namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mappi
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -430,9 +430,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Output string stream
 
     // Ask the target to add backend passes as necessary.
+#if LLVM_VERSION < 70
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
                                                     TargetMachine::CGFT_AssemblyFile,
                                                     true);
+#else
+    bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
+                                                    TargetMachine::CGFT_AssemblyFile,
+                                                    true);
+#endif
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }
@@ -517,4 +523,5 @@ std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

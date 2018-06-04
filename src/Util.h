@@ -14,11 +14,11 @@
  * Various utility functions used internally Halide. */
 
 #include <cstdint>
-#include <utility>
-#include <vector>
-#include <string>
 #include <cstring>
 #include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "runtime/HalideRuntime.h"
 
@@ -62,10 +62,10 @@ DST safe_numeric_cast(SRC s) {
         // in different ways by different compilers, so an arbitrary but safe
         // choice like this is reasonable.
         if (s < (SRC) std::numeric_limits<DST>::min()) {
-          return std::numeric_limits<DST>::min();
+            return std::numeric_limits<DST>::min();
         }
         if (s > (SRC) std::numeric_limits<DST>::max()) {
-          return std::numeric_limits<DST>::max();
+            return std::numeric_limits<DST>::max();
         }
     }
     return (DST) s;
