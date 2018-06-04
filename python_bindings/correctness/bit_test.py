@@ -13,7 +13,7 @@ def test():
 
     try:
         bit.bit(
-            bool_constant, input_u1, output_u1
+            input_u1, bool_constant, output_u1
         )
     except NotImplementedError:
         pass  # OK - that's what we expected.
