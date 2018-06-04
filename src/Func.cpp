@@ -2875,9 +2875,8 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
             im.add_dimension();
             // buf.host is going to be wrong no matter what, so don't
             // bother adjusting it.
-            auto dim = im.raw_buffer()->dim[im.dimensions()-1];
-            dim.min = 0;
-            dim.extent = s;
+            im.raw_buffer()->dim[im.dimensions()-1].min = 0;
+            im.raw_buffer()->dim[im.dimensions()-1].extent = s;
         }
         outputs[i] = std::move(im);
     }
