@@ -413,6 +413,7 @@ struct PartialScheduleNode {
                 map<Function, double, Function::Compare> &overcompute,
                 int64_t instances,
                 const PartialScheduleNode *parent,
+                const PartialScheduleNode &root,
                 map<const FunctionDAG::Node *, double> *node_costs = nullptr,
                 map<const FunctionDAG::Edge *, double> *edge_costs = nullptr,
                 map<Function, double, Function::Compare> *inlined_costs = nullptr) {
@@ -438,17 +439,13 @@ struct PartialScheduleNode {
 
                 // Record overcompute due to vectorization
                 double factor = double(subinstances) / ideal_subinstances;
-                // Add some generic loop overhead for the operations at
-                // the boundary of the inner loop, and for the pipeline
-                // stall.  TODO: Expose the constant
-                factor *= (size[0] + 100) / size[0];
 
                 overcompute[func] = factor;
             }
         }
 
         for (auto c : children) {
-            result += c->cost(dag, params, compute_site, overcompute, subinstances, this, node_costs, edge_costs, inlined_costs);
+            result += c->cost(dag, params, compute_site, overcompute, subinstances, this, root, node_costs, edge_costs, inlined_costs);
         }
 
         // Bill compute and memory costs for all Funcs realized within this loop
@@ -470,12 +467,15 @@ struct PartialScheduleNode {
             // avoided by sliding.
             compute_cost *= overcompute[f];
 
-            if (node_costs) {
-                // TODO: Should this include inlined Funcs?
-                (*node_costs)[node] = compute_cost;
-            }
+            // Penalize small inner loops
+            compute_cost *= (innermost_compute_extent + 100.0) / innermost_compute_extent;
 
-            result += compute_cost;
+            // Now incorporate overcompute due to overlapping
+            // realizations, so that we can print it as a feature for
+            // the learned model and use it for early rejection of
+            // schedules that do silly amounts of overcompute.
+            const auto &root_bounds = root.get_bounds(f, dag);
+            overcompute[f] *= (points * subinstances) / root_bounds.region_points;
 
             // Compute a locality discount due to assumed storage folding.
             auto it = compute_site.find(f);
@@ -504,6 +504,10 @@ struct PartialScheduleNode {
                         if (node_costs) {
                             debug(0) << "Warning: Folding over innermost dimension: " << f.name() << "\n";
                         }
+
+                        // Assume worst-case full scalarization
+                        const int vector_size = dag.node_map.at(f)->vector_size;
+                        compute_cost *= vector_size;
                     }
                     break;
                 }
@@ -511,6 +515,13 @@ struct PartialScheduleNode {
                     debug(0) << "Folding discount for " << f.name() << ": " << discount << "\n";
                 }
             }
+
+            if (node_costs) {
+                // TODO: Should this include inlined Funcs?
+                (*node_costs)[node] = compute_cost;
+            }
+
+            result += compute_cost;
 
             // The memory cost is the number of cold loads times (in bytes) times the
             // cost per cold load. The discount reduces the cost per
@@ -530,7 +541,7 @@ struct PartialScheduleNode {
                          << node->compute << " "             // compute_cost per point
                          << node->compute_if_inlined << " "  // compute_cost per point when inlined
                          << innermost_compute_extent << " "  // Innermost dimension of region over which it is realized
-                         << overcompute[f] << " "            // Fraction of overcompute due to vectorization
+                         << overcompute[f] << " "            // Fraction of overcompute
                          << points << " "                    // Number of points in the region
                          << bytes_cold_loaded << " "         // Number of bytes in the region before folding
                          << allocation_size << " "           // Number of bytes in the region after folding
@@ -557,6 +568,16 @@ struct PartialScheduleNode {
                 (*inlined_costs)[p.first] += c;
             }
 
+            const auto &root_bounds = root.get_bounds(p.first, dag);
+            overcompute[p.first] = (double)(subinstances * p.second) / root_bounds.region_points;
+
+            /*
+            debug(0) << subinstances << " " << p.second << "\n";
+            for (auto s : root_bounds.region) {
+                debug(0) << s.first << " " << s.second << "\n";
+            }
+            */
+
             if (node_costs) {
                 debug(0) << "YYY "
                          << (node - dag.nodes.data()) << " "       // Topological order
@@ -567,7 +588,7 @@ struct PartialScheduleNode {
                          << node->compute << " "  // compute_cost per point
                          << node->compute_if_inlined << " "  // compute_cost per point when inlined
                          << "0 "                  // Innermost dimension of region over which it is realized
-                         << "0 "                  // Fraction of overcompute due to vectorization
+                         << overcompute[p.first] << " "  // Fraction of overcompute
                          << "0 "                  // Number of points in the region
                          << "0 "                  // Number of bytes in the region before folding
                          << "0 "                  // Number of bytes in the region after folding
@@ -786,7 +807,9 @@ struct PartialScheduleNode {
             // Initialize the loop nest to cover the desired bounds
             node->size.push_back(bounds.region[i].second - bounds.region[i].first + 1);
             // Is this a point in the iteration domain of the Definition, or a point in the storage domain??
-            single_point.region.push_back({bounds.region[i].first, bounds.region[i].first});
+            // Use the first point as the representative one
+            int64_t p = bounds.region[i].first;
+            single_point.region.push_back({p, p});
         }
         node->bounds[f] = single_point;
         children.emplace_back(std::move(node));
@@ -1082,11 +1105,19 @@ struct State {
 
     static int cost_calculations;
 
-    void calculate_cost(const FunctionDAG &dag, const MachineParams &params) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params) {
         map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
         map<Function, double, Function::Compare> overcompute;
-        cost = root.cost(dag, params, compute_site, overcompute, 1, nullptr);
+        cost = root.cost(dag, params, compute_site, overcompute, 1, nullptr, root);
+
+        for (const auto &p : overcompute) {
+            // Reject more than 50% overcompute out of hand for things
+            // that are realized. Inlined Funcs get a pass.
+            if (compute_site.count(p.first) && p.second > 1.5) return false;
+        }
+
         cost_calculations++;
+        return true;
     }
 
     void generate_children(const FunctionDAG &dag,
@@ -1111,9 +1142,10 @@ struct State {
             auto child = new State(*this);
             child->root = child->root.inline_func(f, dag);
             child->num_funcs_scheduled++;
-            child->calculate_cost(dag, params);
-            internal_assert(child->root.computes(f)) << "Failed to inline " << f.name() << "\n";
-            accept_child(child);
+            if (child->calculate_cost(dag, params)) {
+                internal_assert(child->root.computes(f)) << "Failed to inline " << f.name() << "\n";
+                accept_child(child);
+            }
         }
 
         // 2) Realize it somewhere
@@ -1122,9 +1154,10 @@ struct State {
             auto child = new State(*this);
             child->root = std::move(n);
             child->num_funcs_scheduled++;
-            child->calculate_cost(dag, params);
-            internal_assert(child->root.computes(f)) << "Failed to inject realization of " << f.name() << "\n";
-            accept_child(child);
+            if (child->calculate_cost(dag, params)) {
+                internal_assert(child->root.computes(f)) << "Failed to inject realization of " << f.name() << "\n";
+                accept_child(child);
+            }
         }
     }
 
@@ -1185,7 +1218,7 @@ struct State {
         std::map<const FunctionDAG::Edge *, double> edge_costs;
         std::map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
         std::map<Function, double, Function::Compare> overcompute;
-        root.cost(dag, params, compute_site, overcompute, 1, nullptr, &node_costs, &edge_costs, &inlined_costs);
+        root.cost(dag, params, compute_site, overcompute, 1, nullptr, root, &node_costs, &edge_costs, &inlined_costs);
 
         for (size_t i = dag.nodes.size(); i > 0; i--) {
             Function f = dag.nodes[i-1].func;
