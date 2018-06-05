@@ -173,6 +173,8 @@ private:
         }
     }
 
+    // Note that this is called "cropped" but can also encompass a slice/embed
+    // operation as well.
     struct DevRefCountCropped : DeviceRefCount {
         Buffer<T, D> cropped_from;
         DevRefCountCropped(const Buffer<T, D> &cropped_from) : cropped_from(cropped_from) {
@@ -180,7 +182,7 @@ private:
         }
     };
 
-    /** Setup the device ref count for a buffer to indicate it is a crop of cropped_from */
+    /** Setup the device ref count for a buffer to indicate it is a crop (or slice, embed, etc) of cropped_from */
     void crop_from(const Buffer<T, D> &cropped_from) {
         assert(dev_ref_count == nullptr);
         dev_ref_count = new DevRefCountCropped(cropped_from);
@@ -375,9 +377,6 @@ private:
 
     /** Crop a single dimension without handling device allocation. */
     void crop_host(int d, int min, int extent) {
-        // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug
-        // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
-        // Should either fix that or kill the asserts and document the routine accordingly.
        assert(dim(d).min() <= min);
        assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
@@ -410,6 +409,37 @@ private:
                 cropped_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
             }
             result_host_cropped.crop_from(*cropped_from);
+        }
+    }
+
+    /** slice a single dimension without handling device allocation. */
+    void slice_host(int d, int pos) {
+        assert(d >= 0 && d <= dimensions());
+        assert(pos >= dim(d).min() && pos <= dim(d).max());
+        buf.dimensions--;
+        int shift = pos - buf.dim[d].min;
+        if (buf.host != nullptr) {
+            buf.host += shift * buf.dim[d].stride * type().bytes();
+        }
+        for (int i = d; i < buf.dimensions; i++) {
+            buf.dim[i] = buf.dim[i+1];
+        }
+        buf.dim[buf.dimensions] = {0, 0, 0};
+    }
+
+    void complete_device_slice(Buffer<T, D> &result_host_sliced, int d, int pos) const {
+        assert(buf.device_interface != nullptr);
+        if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == 0) {
+            const Buffer<T, D> *sliced_from = this;
+            // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
+            // is it possible to get to this point without incref having run at least once since
+            // the device field was set? (I.e. in the internal logic of slice. incref might have been
+            // called.)
+            if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                sliced_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
+            }
+            // crop_from() is correct here, despite the fact that we are slicing.
+            result_host_sliced.crop_from(*sliced_from);
         }
     }
 
@@ -1263,7 +1293,16 @@ public:
     /** Make a lower-dimensional image that refers to one slice of this image. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
-        im.slice(d, pos);
+
+        // This guarantees the prexisting device ref is dropped if the
+        // device_slice call fails and maintains the buffer in a consistent
+        // state.
+        im.device_deallocate();
+
+        im.slice_host(d, pos);
+        if (buf.device_interface != nullptr) {
+            complete_device_slice(im, d, pos);
+        }
         return im;
     }
 
@@ -1275,19 +1314,15 @@ public:
 
     /** Slice an image in-place */
     void slice(int d, int pos) {
-        assert(d >= 0 && d <= dimensions());
-        assert(pos >= dim(d).min() && pos <= dim(d).max());
-        device_deallocate();
-        buf.dimensions--;
-        int shift = pos - buf.dim[d].min;
-        assert(buf.device == 0 || shift == 0);
-        if (buf.host != nullptr) {
-            buf.host += shift * buf.dim[d].stride * type().bytes();
+        // An optimization for non-device buffers. For the device case,
+        // a temp buffer is required, so reuse the not-in-place version.
+        // TODO(zalman|abadams): Are nop slices common enough to special
+        // case the device part of the if to do nothing?
+        if (buf.device_interface != nullptr) {
+            *this = sliced(d, pos);
+        } else {
+            slice_host(d, pos);
         }
-        for (int i = d; i < buf.dimensions; i++) {
-            buf.dim[i] = buf.dim[i+1];
-        }
-        buf.dim[buf.dimensions] = {0, 0, 0};
     }
 
     /** Slice an image in-place at the dimension's minimum. */
