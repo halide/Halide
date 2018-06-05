@@ -378,8 +378,8 @@ private:
         // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug
         // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
         // Should either fix that or kill the asserts and document the routine accordingly.
-        //        assert(dim(d).min() <= min);
-        //        assert(dim(d).max() >= min + extent - 1);
+       assert(dim(d).min() <= min);
+       assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
         if (buf.host != nullptr) {
             buf.host += shift * dim(d).stride() * type().bytes();
@@ -1108,8 +1108,9 @@ public:
     }
 
     /** Make an image that refers to a sub-range of this image along
-     * the given dimension. Does not assert the crop region is within
-     * the existing bounds. */
+     * the given dimension. Asserts that the crop region is within
+     * the existing bounds: you cannot "crop outwards", even if you know there
+     * is valid Buffer storage (e.g. because you already cropped inwards). */
     Buffer<T, D> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
@@ -1141,8 +1142,9 @@ public:
     }
 
     /** Make an image that refers to a sub-rectangle of this image along
-     * the first N dimensions. Does not assert the crop region is within
-     * the existing bounds. The cropped image drops any device handle. */
+     * the first N dimensions. Asserts that the crop region is within
+     * the existing bounds. The cropped image may drop any device handle
+     * if the device_interface cannot accomplish the crop in-place. */
     Buffer<T, D> cropped(const std::vector<std::pair<int, int>> &rect) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
