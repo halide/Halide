@@ -424,6 +424,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
@@ -571,6 +572,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PythonExtensionGen.h \
   Qualify.h \
   Random.h \
   RealizationOrder.h \
@@ -1599,20 +1601,24 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	bazel build --verbose_failures :all
 
 .PHONY: test_python2
-test_python2: distrib
+test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
+		HALIDE_PATH=$(ROOT_DIR) \
+		HALIDE_RUNTIME=$(CURDIR)/$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
 		PYTHON=python \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 .PHONY: test_python
-test_python: distrib
+test_python: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
+		HALIDE_PATH=$(ROOT_DIR) \
+		HALIDE_RUNTIME=$(CURDIR)/$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \
