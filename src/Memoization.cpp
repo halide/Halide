@@ -533,5 +533,5 @@ Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> 
     return rewriter.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

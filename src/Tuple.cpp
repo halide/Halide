@@ -1,6 +1,6 @@
 #include "Tuple.h"
-#include "Func.h"
 #include "Debug.h"
+#include "Func.h"
 
 namespace Halide {
 
@@ -13,4 +13,4 @@ Tuple::Tuple(const FuncRef &f) : exprs(f.size()) {
     }
 }
 
-}
+}  // namespace Halide

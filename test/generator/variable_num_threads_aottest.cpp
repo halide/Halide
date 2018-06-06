@@ -4,11 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <atomic>
 
 #include "variable_num_threads.h"
 
-bool stop = false;
-int max_threads = 1;
+std::atomic<bool> stop{false};
+std::atomic<int> max_threads{1};
 
 using namespace Halide::Runtime;
 

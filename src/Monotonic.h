@@ -20,7 +20,7 @@ Monotonic is_monotonic(Expr e, const std::string &var);
 
 void is_monotonic_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -15,7 +15,7 @@ namespace Internal {
  * the loop. */
 Stmt unroll_loops(Stmt);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

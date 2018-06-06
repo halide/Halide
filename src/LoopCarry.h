@@ -14,7 +14,7 @@ namespace Internal {
  * for Hexagon. */
 Stmt loop_carry(Stmt, int max_carried_values = 8);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

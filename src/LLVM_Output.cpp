@@ -1,12 +1,12 @@
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
-#include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -378,7 +378,11 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Ask the target to add backend passes as necessary.
+#if LLVM_VERSION < 70
     target_machine->addPassesToEmitFile(pass_manager, out, file_type);
+#else
+    target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
+#endif
 
     pass_manager.run(*module);
 }
@@ -491,7 +495,7 @@ struct SetCwd {
     }
 };
 
-}
+}  // namespace
 
 void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
                            const std::string &dst_file_in, bool deterministic) {

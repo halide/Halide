@@ -74,7 +74,7 @@ struct LoweredFunc {
                 NameMangling mangling = NameMangling::Default);
 };
 
-}
+}  // namespace Internal
 
 namespace Internal {
 struct ModuleContents;
@@ -172,6 +172,6 @@ void compile_multitarget(const std::string &fn_name,
                          ModuleProducer module_producer,
                          const std::map<std::string, std::string> &suffixes = {});
 
-}
+}  // namespace Halide
 
 #endif

@@ -1,11 +1,11 @@
 #include <algorithm>
 
 #include "AlignLoads.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Bounds.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "HexagonAlignment.h"
 using std::vector;
@@ -153,7 +153,7 @@ private:
 
 }  // namespace
 
-Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder>& alignment_info) {
+Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder> &alignment_info) {
     return AlignLoads(alignment, alignment_info).mutate(s);
 }
 

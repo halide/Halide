@@ -1,11 +1,11 @@
 #include <set>
 
-#include "Inline.h"
 #include "CSE.h"
-#include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Qualify.h"
 #include "Debug.h"
+#include "IRMutator.h"
+#include "IRPrinter.h"
+#include "Inline.h"
+#include "Qualify.h"
 
 namespace Halide {
 namespace Internal {
@@ -204,5 +204,5 @@ void inline_function(Function caller, Function f) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

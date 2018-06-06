@@ -8,9 +8,9 @@
  * computation loops.
  */
 
-#include <vector>
-#include <string>
 #include <map>
+#include <string>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -38,7 +38,7 @@ std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> reali
 std::vector<std::string> topological_order(
         const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

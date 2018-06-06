@@ -18,7 +18,7 @@ namespace Internal {
  * specializations. */
 void simplify_specializations(std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

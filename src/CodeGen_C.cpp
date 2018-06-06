@@ -3,23 +3,23 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
-#include "Substitute.h"
-#include "IROperator.h"
-#include "Param.h"
-#include "Var.h"
-#include "Lerp.h"
-#include "Simplify.h"
 #include "Deinterleave.h"
+#include "IROperator.h"
+#include "Lerp.h"
+#include "Param.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::ostream;
 using std::endl;
+using std::map;
+using std::ostream;
+using std::ostringstream;
 using std::string;
 using std::vector;
-using std::ostringstream;
-using std::map;
 
 extern "C" unsigned char halide_internal_initmod_inlined_c[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntime_h[];
@@ -150,7 +150,7 @@ public:
 } // namespace
 
 )INLINE_CODE";
-}
+}  // namespace
 
 class TypeInfoGatherer : public IRGraphVisitor {
 public:
@@ -405,7 +405,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     return oss.str();
 }
 
-}
+}  // namespace
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
@@ -1153,7 +1153,13 @@ private:
 
 )INLINE_CODE";
 
+        // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // emitting this long text string was regularly garbled in a predictable pattern;
+        // flushing the stream before or after heals it. Since C++ codegen is rarely
+        // on a compilation critical path, we'll just band-aid it in this way.
+        stream << std::flush;
         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
+        stream << std::flush;
 
         for (const auto &t : vector_types) {
             string name = type_to_c_type(t, false, false);
@@ -1369,7 +1375,7 @@ public:
         stream << "\n";
     }
 };
-}
+}  // namespace
 
 void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     if (!t.handle_type ||
@@ -1630,7 +1636,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     bool is_constant = buffer.dimensions() != 0;
 
     // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
     do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
         if (i > 0) {
@@ -2739,5 +2745,5 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     std::cout << "CodeGen_C test passed\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -170,26 +170,23 @@ public:
             for (int j = 0; j < i; ++j) {
                 y += 500 >> j;
             }
-            if (i > 0) {
+            {
                 int x = 370;
                 int store_cost = 1 << (i + 1);
                 Halide::Trace::FuncConfig cfg;
                 cfg.pos = {x, y};
                 cfg.store_cost = store_cost;
-                cfg.auto_label = false;
                 inGPyramid[i].add_trace_tag(cfg.to_trace_tag());
             }
-            if (i > 0) {
+            {
                 int x = 720;
                 int store_cost = 1 << i;
                 Halide::Trace::FuncConfig cfg;
                 cfg.strides = {{1, 0}, {0, 1}, {200, 0}};
                 cfg.pos = {x, y};
                 cfg.store_cost = store_cost;
-                cfg.auto_label = false;
                 if (i == 1) {
                     cfg.labels = { { "differently curved intermediate pyramids" } };
-                    cfg.pos = {x, 100};
                 }
                 gPyramid[i].add_trace_tag(cfg.to_trace_tag());
             }
@@ -199,7 +196,6 @@ public:
                 Halide::Trace::FuncConfig cfg;
                 cfg.pos = {x, y};
                 cfg.store_cost = store_cost;
-                cfg.auto_label = false;
                 if (i == 0) {
                     cfg.labels = { { "output pyramids" } };
                     cfg.pos = {x, 100};

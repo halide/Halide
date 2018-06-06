@@ -79,5 +79,5 @@ Stmt bound_small_allocations(const Stmt &s) {
     return BoundSmallAllocations().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

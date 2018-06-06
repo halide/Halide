@@ -87,7 +87,7 @@ struct FunctionPtr {
     }
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

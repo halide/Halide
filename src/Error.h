@@ -151,8 +151,8 @@ class Voidifier {
 // misattributed to Halide.h. Either make such functions internal to
 // libHalide, or mark them as HALIDE_NO_USER_CODE_INLINE.
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

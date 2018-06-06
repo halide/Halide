@@ -1,8 +1,8 @@
 #include <map>
 
 #include "CSE.h"
-#include "IRMutator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -10,10 +10,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -535,5 +535,5 @@ void cse_test() {
     debug(0) << "common_subexpression_elimination test passed\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

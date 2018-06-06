@@ -107,9 +107,9 @@ private:
     /** Free an allocation previously allocated with
      * create_allocation */
     void free_allocation(const std::string &name);
-
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -1,7 +1,7 @@
 #include "RegionCosts.h"
-#include "IRVisitor.h"
-#include "IRMutator.h"
 #include "FindCalls.h"
+#include "IRMutator.h"
+#include "IRVisitor.h"
 #include "PartitionLoops.h"
 #include "RealizationOrder.h"
 #include "Simplify.h"
@@ -9,9 +9,9 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::set;
+using std::string;
 using std::vector;
 
 namespace {
@@ -69,14 +69,14 @@ class ExprCost : public IRVisitor {
 
     void visit(const Cast *op) {
         op->value.accept(this);
-        cost.arith += 1;
+        arith += 1;
     }
 
     template<typename T>
     void visit_binary_operator(const T *op, int op_cost) {
         op->a.accept(this);
         op->b.accept(this);
-        cost.arith += op_cost;
+        arith += op_cost;
     }
 
     // The costs of all the simple binary operations is set to one.
@@ -102,20 +102,22 @@ class ExprCost : public IRVisitor {
 
     void visit(const Not *op) {
         op->a.accept(this);
-        cost.arith += 1;
+        arith += 1;
     }
 
     void visit(const Select *op) {
         op->condition.accept(this);
         op->true_value.accept(this);
         op->false_value.accept(this);
-        cost.arith += 1;
+        arith += 1;
     }
 
     void visit(const Call *call) {
         if (call->is_intrinsic(Call::if_then_else)) {
             internal_assert(call->args.size() == 3);
-            cost = Cost(0, 0);
+
+            int64_t current_arith = arith, current_memory = memory;
+            arith = 0, memory = 0;
             call->args[2].accept(this);
 
             // Check if this if_then_else is because of tracing or print_when.
@@ -123,24 +125,26 @@ class ExprCost : public IRVisitor {
             // the false expr since the true expr is debugging/tracing code.
             const Call *true_value_call = call->args[1].as<Call>();
             if (!true_value_call || !true_value_call->is_intrinsic(Call::return_second)) {
-                Cost false_cost = cost;
+                int64_t false_cost_arith = arith;
+                int64_t false_cost_memory = memory;
 
                 // For if_then_else intrinsic, the cost is the max of true and
                 // false branch costs plus the predicate cost.
-                Expr arith = cost.arith;
-                Expr memory = cost.memory;
-
-                cost = Cost(0, 0);
+                arith = 0, memory = 0;
                 call->args[0].accept(this);
-                Cost pred_cost = cost;
+                int64_t pred_cost_arith = arith;
+                int64_t pred_cost_memory = memory;
 
-                cost = Cost(0, 0);
+                arith = 0, memory = 0;
                 call->args[1].accept(this);
-                Cost true_cost = cost;
+                int64_t true_cost_arith = arith;
+                int64_t true_cost_memory = memory;
 
-                cost = Cost(pred_cost.arith + max(true_cost.arith, false_cost.arith),
-                            pred_cost.memory + max(true_cost.memory, false_cost.memory));
+                arith = pred_cost_arith + std::max(true_cost_arith, false_cost_arith);
+                memory = pred_cost_memory + std::max(true_cost_memory, false_cost_memory);
             }
+            arith += current_arith;
+            memory += current_memory;
             return;
         } else if (call->is_intrinsic(Call::return_second)) {
             // For return_second, since the first expr would usually either be a
@@ -153,25 +157,18 @@ class ExprCost : public IRVisitor {
 
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             // Each call also counts as an op since it results in a load instruction.
-            cost.arith += 1;
-            cost.memory += call->type.bytes();
-
-            auto iter = detailed_byte_loads.find(call->name);
-            if (iter != detailed_byte_loads.end()) {
-                internal_assert(iter->second.defined());
-                iter->second = simplify(iter->second + make_const(Int(64), call->type.bytes()));
-            } else {
-                detailed_byte_loads.emplace(call->name, make_const(Int(64), call->type.bytes()));
-            }
+            arith += 1;
+            memory += call->type.bytes();
+            detailed_byte_loads[call->name] += (int64_t)call->type.bytes();
         } else if (call->is_extern()) {
             // TODO: Suffix based matching is kind of sketchy; but going ahead with
             // it for now. Also not all the PureExtern's are accounted for yet.
             if (ends_with(call->name, "_f64")) {
-                cost.arith += 20;
+                arith += 20;
             } else if (ends_with(call->name, "_f32")) {
-                cost.arith += 10;
+                arith += 10;
             } else if (ends_with(call->name, "_f16")) {
-                cost.arith += 5;
+                arith += 5;
             } else {
                 // There is no visibility into an extern stage so there is no
                 // way to know the cost of the call statically. Modeling the
@@ -187,18 +184,18 @@ class ExprCost : public IRVisitor {
                     call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
                     call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
                     call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef)) {
-                cost.arith += 1;
+                arith += 1;
             } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
                        call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
                        call->is_intrinsic(Call::count_leading_zeros) ||
                        call->is_intrinsic(Call::count_trailing_zeros)) {
-                cost.arith += 5;
+                arith += 5;
             } else if (call->is_intrinsic(Call::likely) ||
                        call->is_intrinsic(Call::likely_if_innermost)) {
                 // Likely does not result in actual operations.
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
-                cost.arith += 1;
+                arith += 1;
                 user_warning << "Unhandled intrinsic call " << call->name << '\n';
             }
         }
@@ -209,7 +206,7 @@ class ExprCost : public IRVisitor {
     }
 
     void visit(const Shuffle *op) {
-        cost.arith += 1;
+        arith += 1;
     }
 
     void visit(const Let *let) {
@@ -236,12 +233,13 @@ class ExprCost : public IRVisitor {
     void visit(const Evaluate *) { internal_assert(false); }
 
 public:
-    Cost cost;
+    int64_t arith;
+    int64_t memory;
     // Detailed breakdown of bytes loaded by the allocation or function
     // they are loaded from.
-    map<string, Expr> detailed_byte_loads;
+    map<string, int64_t> detailed_byte_loads;
 
-    ExprCost() : cost(Cost(0, 0)) {}
+    ExprCost() : arith(0), memory(0) {}
 };
 
 // Return the number of bytes required to store a single value of the
@@ -307,8 +305,7 @@ Cost compute_expr_cost(Expr expr) {
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
-    cost_visitor.cost.simplify();
-    return cost_visitor.cost;
+    return Cost(cost_visitor.arith, cost_visitor.memory);
 }
 
 map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
@@ -317,7 +314,12 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
-    return cost_visitor.detailed_byte_loads;
+
+    map<string, Expr> loads;
+    for (const auto &iter : cost_visitor.detailed_byte_loads) {
+        loads.emplace(iter.first, Expr(iter.second));
+    }
+    return loads;
 }
 
 } // anonymous namespace
@@ -757,5 +759,5 @@ void Cost::simplify() {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

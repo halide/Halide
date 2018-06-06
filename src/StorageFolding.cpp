@@ -1,14 +1,14 @@
 #include "StorageFolding.h"
-#include "CSE.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
 #include "Bounds.h"
-#include "IRPrinter.h"
-#include "Substitute.h"
+#include "CSE.h"
 #include "Debug.h"
-#include "Monotonic.h"
 #include "ExprUsesVar.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Monotonic.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -21,9 +21,9 @@ int64_t next_power_of_two(int64_t x) {
 
 }  // namespace
 
+using std::map;
 using std::string;
 using std::vector;
-using std::map;
 
 // Count the number of producers of a particular func.
 class CountProducers : public IRVisitor {
@@ -586,5 +586,5 @@ Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

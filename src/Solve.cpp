@@ -1,17 +1,17 @@
 #include "Solve.h"
-#include "Simplify.h"
-#include "IRMutator.h"
-#include "IREquality.h"
-#include "Substitute.h"
 #include "CSE.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
 using std::vector;
 
 namespace {
@@ -1592,5 +1592,5 @@ void solve_test() {
     debug(0) << "Solve test passed\n";
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

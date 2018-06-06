@@ -19,7 +19,7 @@ class LLVMContext;
 class raw_fd_ostream;
 class raw_pwrite_stream;
 class raw_ostream;
-}
+}  // namespace llvm
 
 namespace Halide {
 
@@ -53,6 +53,6 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
  */
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
                            const std::string &dst_file, bool deterministic = true);
-}
+}  // namespace Halide
 
 #endif

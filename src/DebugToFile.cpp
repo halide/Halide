@@ -1,6 +1,6 @@
 #include <map>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 #include "DebugToFile.h"
 #include "IRMutator.h"
@@ -9,10 +9,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::ostringstream;
+using std::string;
+using std::vector;
 
 class DebugToFile : public IRMutator2 {
     const map<string, Function> &env;
@@ -128,5 +128,5 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

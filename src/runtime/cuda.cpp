@@ -104,8 +104,12 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
 
-    CUcontext local_val;
-    __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+    // Note that this null-check of the context is *not* locked with
+    // respect to device_release, so we may get a non-null context
+    // that's in the process of being destroyed. Things will go badly
+    // in general if you call device_release while other Halide code
+    // is running though.
+    CUcontext local_val = context;
     if (local_val == NULL) {
         if (!create) {
             *ctx = NULL;
@@ -114,16 +118,20 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 
         {
             ScopedSpinLock spinlock(&context_lock);
-
-            __atomic_load(&context, &local_val, __ATOMIC_ACQUIRE);
+            local_val = context;
             if (local_val == NULL) {
                 CUresult error = create_cuda_context(user_context, &local_val);
                 if (error != CUDA_SUCCESS) {
-                    __sync_lock_release(&context_lock);
                     return error;
                 }
             }
-            __atomic_store(&context, &local_val, __ATOMIC_RELEASE);
+            // Normally in double-checked locking you need a release
+            // fence here that synchronizes with an acquire fence
+            // above to ensure context is fully constructed before
+            // assigning to the global, but there's no way that
+            // create_cuda_context can access the "context" global, so
+            // we should be OK just storing to it here.
+            context = local_val;
         }  // spinlock
     }
 

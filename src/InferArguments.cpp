@@ -2,8 +2,8 @@
 #include <string>
 #include <vector>
 
-#include "InferArguments.h"
 #include "IRVisitor.h"
+#include "InferArguments.h"
 
 namespace Halide {
 namespace Internal {
@@ -150,7 +150,7 @@ private:
     }
 };
 
-}
+}  // namespace
 
 vector<InferredArgument> infer_arguments(Stmt body, const vector<Function> &outputs) {
     vector<InferredArgument> inferred_args;
@@ -166,5 +166,5 @@ vector<InferredArgument> infer_arguments(Stmt body, const vector<Function> &outp
     return inferred_args;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
