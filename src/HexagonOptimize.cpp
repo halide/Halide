@@ -11,9 +11,6 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Scope.h"
-#include "Bounds.h"
-#include "Lerp.h"
 #include "HexagonAlignment.h"
 #include <unordered_map>
 
