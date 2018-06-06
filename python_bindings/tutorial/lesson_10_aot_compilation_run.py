@@ -12,12 +12,12 @@ import numpy as np
 
 def main():
     # Have a look at the generated files above (they won't exist until you've run
-    # lesson_10_generate): lession_10_halide.py.c, lession_10_halide.h
+    # lesson_10_generate): lesson_10_halide.py.c, lesson_10_halide.h
     #
     # In the header file, the generated function is represented like this:
     # int lesson_10_halide(halide_buffer_t*, uint8_t, halide_buffer_t*);
     #
-    # lession_10_halide.py.c creates a Python wrapper around this function.
+    # lesson_10_halide.py.c creates a Python wrapper around this function.
     # Buffers are converted using the Python buffer API:
     #
     # https://docs.python.org/2/c-api/buffer.html

@@ -14,11 +14,11 @@
 #    python tutorial_lesson_10_aot_compilation_run.py
 # in a shell with the Halide Python extension in your PYTHONPATH.
 
-# This will generate a file lession_10_halide.py.c that still needs
+# This will generate a file lesson_10_halide.py.c that still needs
 # to be compiled. Use
 #   g++ -shared -fPIC lesson_10_halide.py.c lesson_10_halide.o \
 #       -lpthread -o lesson_10_halide.so
-# to generate a Python module called "lession_10_halide".
+# to generate a Python module called "lesson_10_halide".
 
 # The benefits of this approach are that the final program:
 # - Doesn't do any jit compilation at runtime, so it's fast.
