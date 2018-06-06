@@ -378,8 +378,8 @@ private:
         // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug
         // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
         // Should either fix that or kill the asserts and document the routine accordingly.
-        //        assert(dim(d).min() <= min);
-        //        assert(dim(d).max() >= min + extent - 1);
+       assert(dim(d).min() <= min);
+       assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
         if (buf.host != nullptr) {
             buf.host += shift * dim(d).stride() * type().bytes();
@@ -466,6 +466,7 @@ public:
 
     /** Access the shape of the buffer */
     HALIDE_ALWAYS_INLINE Dimension dim(int i) const {
+        assert(i >= 0 && i < this->dimensions());
         return Dimension(buf.dim[i]);
     }
 
@@ -1107,8 +1108,9 @@ public:
     }
 
     /** Make an image that refers to a sub-range of this image along
-     * the given dimension. Does not assert the crop region is within
-     * the existing bounds. */
+     * the given dimension. Asserts that the crop region is within
+     * the existing bounds: you cannot "crop outwards", even if you know there
+     * is valid Buffer storage (e.g. because you already cropped inwards). */
     Buffer<T, D> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
@@ -1140,8 +1142,9 @@ public:
     }
 
     /** Make an image that refers to a sub-rectangle of this image along
-     * the first N dimensions. Does not assert the crop region is within
-     * the existing bounds. The cropped image drops any device handle. */
+     * the first N dimensions. Asserts that the crop region is within
+     * the existing bounds. The cropped image may drop any device handle
+     * if the device_interface cannot accomplish the crop in-place. */
     Buffer<T, D> cropped(const std::vector<std::pair<int, int>> &rect) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
@@ -1184,6 +1187,7 @@ public:
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
+        assert(d >= 0 && d < this->dimensions());
         device_deallocate();
         buf.dim[d].min += delta;
     }
@@ -1251,31 +1255,44 @@ public:
 
     /** Transpose an image in-place */
     void transpose(int d1, int d2) {
+        assert(d1 >= 0 && d1 < this->dimensions());
+        assert(d2 >= 0 && d2 < this->dimensions());
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
-    /** Make a lower-dimensional image that refers to one slice of this
-     * image. */
+    /** Make a lower-dimensional image that refers to one slice of this image. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
         im.slice(d, pos);
         return im;
     }
 
+    /** Make a lower-dimensional image that refers to one slice of this
+     * image at the dimension's minimum. */
+    inline Buffer<T, D> sliced(int d) const {
+        return sliced(d, dim(d).min());
+    }
+
     /** Slice an image in-place */
     void slice(int d, int pos) {
-        // assert(pos >= dim(d).min() && pos <= dim(d).max());
+        assert(d >= 0 && d <= dimensions());
+        assert(pos >= dim(d).min() && pos <= dim(d).max());
         device_deallocate();
         buf.dimensions--;
-        int shift = pos - dim(d).min();
+        int shift = pos - buf.dim[d].min;
         assert(buf.device == 0 || shift == 0);
         if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
+            buf.host += shift * buf.dim[d].stride * type().bytes();
         }
-        for (int i = d; i < dimensions(); i++) {
+        for (int i = d; i < buf.dimensions; i++) {
             buf.dim[i] = buf.dim[i+1];
         }
         buf.dim[buf.dimensions] = {0, 0, 0};
+    }
+
+    /** Slice an image in-place at the dimension's minimum. */
+    inline void slice(int d) {
+        slice(d, dim(d).min());
     }
 
     /** Make a new image that views this image as a single slice in a
@@ -1288,8 +1305,7 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<T, D> embedded(int d, int pos) const {
-        assert(d >= 0 && d <= dimensions());
+    Buffer<T, D> embedded(int d, int pos = 0) const {
         Buffer<T, D> im(*this);
         im.embed(d, pos);
         return im;
@@ -1297,7 +1313,7 @@ public:
 
     /** Embed an image in-place, increasing the
      * dimensionality. */
-    void embed(int d, int pos) {
+    void embed(int d, int pos = 0) {
         assert(d >= 0 && d <= dimensions());
         add_dimension();
         translate(dimensions() - 1, pos);
@@ -1538,6 +1554,13 @@ public:
     /** Make a zero-dimensional Buffer */
     static Buffer<T, D> make_scalar() {
         Buffer<T, 1> buf(1);
+        buf.slice(0, 0);
+        return buf;
+    }
+
+    /** Make a zero-dimensional Buffer that points to non-owned, existing data */
+    static Buffer<T, D> make_scalar(T* data) {
+        Buffer<T, 1> buf(data, 1);
         buf.slice(0, 0);
         return buf;
     }

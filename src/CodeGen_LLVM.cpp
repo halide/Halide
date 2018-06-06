@@ -1529,6 +1529,22 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 
 void CodeGen_LLVM::visit(const Select *op) {
+    // Check for a select guarding an indeterminate expression
+    if (op->type.lanes() == 1) {
+        const Call *c_t = op->true_value.as<Call>();
+        const Call *c_f = op->false_value.as<Call>();
+        if (c_t && c_t->is_intrinsic(Call::indeterminate_expression)) {
+            codegen(select(!op->condition, op->false_value, op->true_value));
+            return;
+        }
+        if (c_f && c_f->is_intrinsic(Call::indeterminate_expression)) {
+            Expr err = Call::make(Int(32), "halide_error_integer_division_by_zero", {}, Call::Extern);
+            create_assertion(codegen(op->condition), err);
+            codegen(op->true_value);
+            return;
+        }
+    }
+
     if (op->type == Int(32)) {
         // llvm has a performance bug inside of loop strength
         // reduction that barfs on long chains of selects. To avoid

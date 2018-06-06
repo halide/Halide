@@ -2350,7 +2350,7 @@ auto rewriter(Instance instance, halide_type_t output_type) noexcept -> Rewriter
 
 HALIDE_ALWAYS_INLINE
 auto rewriter(const Expr &e, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(e))> {
-    return {pattern_arg(e), wildcard_type, e.type()};
+    return {pattern_arg(e), e.type(), wildcard_type};
 }
 
 

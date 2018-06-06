@@ -101,6 +101,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_cpp) {
         output_files.c_source_name = base_path + get_extension(".cpp", options);
     }
+    if (options.emit_python_extension) {
+        output_files.python_extension_name = base_path + get_extension(".py.c", options);
+    }
     if (options.emit_stmt) {
         output_files.stmt_name = base_path + get_extension(".stmt", options);
     }
@@ -900,6 +903,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_stmt_html = true;
             } else if (opt == "cpp") {
                 emit_options.emit_cpp = true;
+            } else if (opt == "py.c") {
+                emit_options.emit_python_extension = true;
             } else if (opt == "o") {
                 emit_options.emit_o = true;
             } else if (opt == "h") {
@@ -1518,7 +1523,9 @@ const std::vector<Type> &GIOBase::types() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!types_defined()) {
-        const auto &f = funcs();
+        // use funcs_, not funcs(): the latter could give a much-less-helpful error message
+        // in this case.
+        const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
             check_matching_types(f.at(0).output_types());
         }
@@ -1542,7 +1549,9 @@ int GIOBase::dims() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!dims_defined()) {
-        const auto &f = funcs();
+        // use funcs_, not funcs(): the latter could give a much-less-helpful error message
+        // in this case.
+        const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
             check_matching_dims(funcs().at(0).dimensions());
         }
