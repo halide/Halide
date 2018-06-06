@@ -340,16 +340,22 @@ Stmt Simplify::visit(const Realize *op) {
 }
 
 Stmt Simplify::visit(const Prefetch *op) {
+    Stmt body = mutate(op->body);
+    Expr condition = mutate(op->condition, nullptr);
+
     Region new_bounds;
     bool bounds_changed;
 
     // Mutate the bounds
     std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds, nullptr);
 
-    if (!bounds_changed) {
+    if (!bounds_changed &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
         return op;
+    } else {
+        return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
     }
-    return Prefetch::make(op->name, op->types, new_bounds, op->param);
 }
 
 Stmt Simplify::visit(const Free *op) {
