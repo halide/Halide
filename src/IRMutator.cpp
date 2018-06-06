@@ -294,16 +294,21 @@ void IRMutator::visit(const Realize *op) {
 }
 
 void IRMutator::visit(const Prefetch *op) {
+    Stmt body = mutate(op->body);
+    Expr condition = mutate(op->condition);
+
     Region new_bounds;
     bool bounds_changed;
 
     // Mutate the bounds
     std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
 
-    if (!bounds_changed) {
+    if (!bounds_changed &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
         stmt = op;
     } else {
-        stmt = Prefetch::make(op->name, op->types, new_bounds, op->param);
+        stmt = Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
     }
 }
 
@@ -618,16 +623,21 @@ Stmt IRMutator2::visit(const Realize *op) {
 }
 
 Stmt IRMutator2::visit(const Prefetch *op) {
+    Stmt body = mutate(op->body);
+    Expr condition = mutate(op->condition);
+
     Region new_bounds;
     bool bounds_changed;
 
     // Mutate the bounds
     std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
 
-    if (!bounds_changed) {
+    if (!bounds_changed &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
         return op;
     }
-    return Prefetch::make(op->name, op->types, new_bounds, op->param);
+    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
 }
 
 Stmt IRMutator2::visit(const Block *op) {

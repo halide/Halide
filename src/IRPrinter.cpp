@@ -719,6 +719,12 @@ void IRPrinter::visit(const Realize *op) {
 
 void IRPrinter::visit(const Prefetch *op) {
     do_indent();
+    const bool has_cond = !is_one(op->condition);
+    if (has_cond) {
+        stream << "if (" << op->condition << ") {\n";
+        indent += 2;
+        do_indent();
+    }
     stream << "prefetch " << op->name << "(";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
@@ -729,6 +735,12 @@ void IRPrinter::visit(const Prefetch *op) {
         if (i < op->bounds.size() - 1) stream << ", ";
     }
     stream << ")\n";
+    if (has_cond) {
+        indent -= 2;
+        do_indent();
+        stream << "}\n";
+    }
+    print(op->body);
 }
 
 void IRPrinter::visit(const Block *op) {

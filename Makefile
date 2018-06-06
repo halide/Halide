@@ -27,6 +27,14 @@ else
 endif
 endif
 
+ifeq ($(UNAME), Darwin)
+  # Anything that we us install_name_tool on needs these linker flags
+  # to ensure there is enough padding for install_name_tool to use
+  INSTALL_NAME_TOOL_LD_FLAGS=-Wl,-headerpad_max_install_names
+else
+  INSTALL_NAME_TOOL_LD_FLAGS=
+endif
+
 BAZEL ?= $(shell which bazel)
 
 SHELL = bash
@@ -424,6 +432,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
@@ -590,6 +599,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PythonExtensionGen.h \
   Qualify.h \
   Random.h \
   RealizationOrder.h \
@@ -796,7 +806,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1622,20 +1632,24 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	bazel build --verbose_failures :all
 
 .PHONY: test_python2
-test_python2: distrib
+test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
+		HALIDE_PATH=$(ROOT_DIR) \
+		HALIDE_RUNTIME=$(CURDIR)/$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
 		PYTHON=python \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 .PHONY: test_python
-test_python: distrib
+test_python: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
+		HALIDE_PATH=$(ROOT_DIR) \
+		HALIDE_RUNTIME=$(CURDIR)/$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \

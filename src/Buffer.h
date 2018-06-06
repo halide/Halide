@@ -198,6 +198,14 @@ public:
 
     template<typename ...Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+    explicit Buffer(Type t,
+                    Internal::add_const_if_T_is_const<T, void> *data,
+                    const std::vector<int> &sizes,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(t, data, sizes, name)) {}
+
+    template<typename ...Args,
+             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(T *data,
                     int first, Args&&... rest) :
         Buffer(Runtime::Buffer<T>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),

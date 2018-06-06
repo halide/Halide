@@ -75,6 +75,7 @@ void Closure::visit(const Allocate *op) {
     for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
     }
+    op->condition.accept(this);
     op->body.accept(this);
 }
 
