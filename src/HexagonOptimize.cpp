@@ -1018,11 +1018,8 @@ class EliminateInterleaves : public IRMutator2 {
     // We need to know when loads are a multiple of 2 native vectors.
     int native_vector_bits;
 
-    // int required_alignment;
-
     // Alignment analyzer for loads and stores
     HexagonAlignmentAnalyzer alignment_analyzer;
-
 
     // We can't interleave booleans, so we handle them specially.
     bool in_bool_to_mask = false;

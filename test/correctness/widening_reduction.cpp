@@ -6,7 +6,6 @@ using namespace Halide;
 using namespace Halide::ConciseCasts;
 using namespace Halide::Internal;
 
-IRPrinter irp(std::cerr);
 int main(int arch, char **argv) {
     const int W = 256, H = 256;
 
