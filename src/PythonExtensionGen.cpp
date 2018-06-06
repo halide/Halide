@@ -39,7 +39,7 @@ static bool has_legacy_buffers(const LoweredFunc& func) {
     const std::vector<LoweredArgument> &args = func.args;
     auto legacy_buffer_type = type_of<buffer_t *>().handle_type;
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type.is_handle() && args[i].type.handle_type && legacy_buffer_type) {
+        if (args[i].type.is_handle() && args[i].type.handle_type == legacy_buffer_type) {
             return true;
         }
     }
