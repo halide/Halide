@@ -5,9 +5,6 @@
 
 namespace {
 
-using std::map;
-using std::pair;
-using std::string;
 using std::vector;
 
 using namespace Halide;
