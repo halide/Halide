@@ -11,9 +11,9 @@ using namespace Halide::Tools;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<float> input(67, 67, 32, 4);
-    Buffer<float> filter(3, 3, 32, 32);
-    Buffer<float> bias(32);
+    Buffer<float> input(131, 131, 64, 4);
+    Buffer<float> filter(3, 3, 64, 64);
+    Buffer<float> bias(64);
 
     for (int c = 0; c < input.dim(3).extent(); c++) {
         for (int z = 0; z < input.channels(); z++) {
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         bias(x) = rand();
     }
 
-    Buffer<float> output(64, 64, 32, 4);
+    Buffer<float> output(128, 128, 64, 4);
 
     conv_layer(input, filter, bias, output);
 

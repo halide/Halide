@@ -95,4 +95,3 @@ public:
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(ConvolutionLayer, conv_layer)
-
