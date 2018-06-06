@@ -433,12 +433,12 @@ private:
 
 };
 
-vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool allow_splits, int vector_size) {
+vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool allow_splits, int vector_dim, int vector_size) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
-        auto v = generate_tilings(s, d - 1, allow_splits, vector_size);
+        auto v = generate_tilings(s, d - 1, allow_splits, vector_dim, vector_size);
         for (auto t : v) {
             bool is_full = false, is_one = false;
             // Skip trivial tilings
@@ -464,7 +464,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
                     int inner = (s[d] + outer - 1) / outer;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
-                    if (outer > inner || (d == 0 && inner < vector_size)) break; // TODO: Assumes dim 0 is the vectorized one. Might be an rvar
+                    if (outer > inner || (d == vector_dim && inner < vector_size)) break;
                     t.back() = outer;
                     result.push_back(t);
                 }
@@ -512,6 +512,9 @@ struct PartialScheduleNode {
 
     // Funcs realized inside this inner loop
     set<Function, Function::Compare> store_at;
+
+    // TODO: Should stash pointers to the relevant dag objects here to
+    // avoid have to look them up all the time.
 
     double cost(const FunctionDAG &dag,
                 const MachineParams &params,
@@ -585,7 +588,7 @@ struct PartialScheduleNode {
                 if (!bounds_realized.loops[s].empty()) {
                     // Penalize small inner loops
                     int64_t innermost_loop_extent = bounds_realized.loops[s][0].second - bounds_realized.loops[s][0].first + 1;
-                    stage_compute_cost *= (innermost_loop_extent + 100.0) / innermost_loop_extent;
+                    stage_compute_cost *= (innermost_loop_extent + 10.0) / innermost_loop_extent;
                 }
 
                 compute_cost += stage_compute_cost;
@@ -1046,11 +1049,14 @@ struct PartialScheduleNode {
             return result;
         }
 
-        //int vector_size = is_root() ? 1 : dag.node_map.at(func)->stages[stage].vector_size;
+        int vector_size = is_root() ? 1 : dag.node_map.at(func)->stages[stage].vector_size;
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, 1 /*vector_size */);
+            int vector_dim = 0;
+            const auto &l = dag.node_map.at(func)->stages[stage].loop;
+            while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_dim, vector_size);
 
             for (auto t : tilings) {
                 if (parent->is_root()) {
@@ -1199,7 +1205,7 @@ struct PartialScheduleNode {
     };
 
     void apply(LoopLevel here, const FunctionDAG &dag,
-               map<pair<Function, int>, FuncVars, FuncVarMapCompare> &vars_map, // TODO: needs to index off stage too
+               map<pair<Function, int>, FuncVars, FuncVarMapCompare> &vars_map,
                double num_cores,
                const PartialScheduleNode *parent) {
         if (is_root()) {
