@@ -148,10 +148,10 @@ int main(int argc, char **argv) {
 
     printf("Test realizing to/from slice.\n");
     {
-        ImageParam in(Int(32), 3);
-        Var x, y, c;
+        ImageParam in(Int(32), 2);
+        Var x, y;
         Func f;
-        f(x, y, c) = in(x, y, c) + 42;
+        f(x, y) = in(x, y) + 42;
 
         Var xi, yi;
         if (hexagon_rpc) {
