@@ -99,7 +99,7 @@ inline bool stmt_uses_vars(Stmt e, const Scope<T> &v,
     return stmt_or_expr_uses_vars(e, v, s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -7,8 +7,8 @@
  */
 
 #include "IROperator.h"
-#include "Scope.h"
 #include "Interval.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -164,7 +164,7 @@ FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &or
 
 void bounds_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

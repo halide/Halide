@@ -2,7 +2,7 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -164,6 +164,5 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     return let_stmts;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

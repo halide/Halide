@@ -1,13 +1,13 @@
 #include "Elf.h"
 #include "Debug.h"
-#include "Util.h"
 #include "Error.h"
+#include "Util.h"
 
 #include <algorithm>
-#include <map>
 #include <array>
-#include <memory>
 #include <iomanip>
+#include <map>
+#include <memory>
 
 namespace Halide {
 namespace Internal {
@@ -758,11 +758,23 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     Sym<T> undef_sym;
     memset(&undef_sym, 0, sizeof(undef_sym));
     syms.push_back(undef_sym);
-    // TODO: This map with pointers as the key will lead to non-deterministic builds...
+
+    // Ensure that we output the symbols deterministically, since a map of pointers
+    // will vary in ordering from run to tun.
+    std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols;
+    for (const auto &i : symbols) {
+        sorted_symbols.push_back(i);
+    }
+    std::sort(sorted_symbols.begin(), sorted_symbols.end(),
+        [&](const std::pair<const Symbol *, const Symbol *> &lhs, const std::pair<const Symbol *, const Symbol *> &rhs) {
+            return lhs.first->get_name() < rhs.first->get_name();
+        }
+    );
+
     std::map<const Symbol *, uint16_t> symbol_idxs;
     uint64_t local_count = 0;
     for (bool is_local : {true, false}) {
-        for (const auto &i : symbols) {
+        for (const auto &i : sorted_symbols) {
             const Symbol *s = i.second;
             if ((s->get_binding() == Symbol::STB_LOCAL) != is_local) continue;
 

@@ -121,9 +121,8 @@ public:
         }
         return 0;
     }
-
 };
 
-}
+}  // namespace Halide
 
 #endif

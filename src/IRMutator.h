@@ -179,7 +179,7 @@ public:
     Expr mutate(const Expr &e) override;
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

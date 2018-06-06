@@ -40,7 +40,7 @@ namespace {
 CompileError _compile_error("");
 RuntimeError _runtime_error("");
 InternalError _internal_error("");
-}
+}  // namespace
 
 ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
 
@@ -131,6 +131,6 @@ ErrorReport::~ErrorReport()
     abort();
 #endif
 }
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide

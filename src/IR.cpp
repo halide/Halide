@@ -1,7 +1,7 @@
 #include "IR.h"
+#include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -463,7 +463,10 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     return node;
 }
 
-Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Parameter param) {
+Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
+                    const Region &bounds,
+                    const PrefetchDirective &prefetch,
+                    Expr condition, Stmt body) {
     for (size_t i = 0; i < bounds.size(); i++) {
         internal_assert(bounds[i].min.defined()) << "Prefetch of undefined\n";
         internal_assert(bounds[i].extent.defined()) << "Prefetch of undefined\n";
@@ -471,12 +474,17 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types, con
         internal_assert(bounds[i].extent.type().is_scalar()) << "Prefetch of vector size\n";
     }
     internal_assert(!types.empty()) << "Prefetch has empty type\n";
+    internal_assert(body.defined()) << "Prefetch of undefined\n";
+    internal_assert(condition.defined()) << "Prefetch with undefined condition\n";
+    internal_assert(condition.type().is_bool()) << "Prefetch condition is not boolean\n";
 
     Prefetch *node = new Prefetch;
     node->name = name;
     node->types = types;
     node->bounds = bounds;
-    node->param = std::move(param);
+    node->prefetch = prefetch;
+    node->condition = condition;
+    node->body = body;
     return node;
 }
 
@@ -543,7 +551,7 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
                 Buffer<> image, Parameter param) {
     if (name == Call::prefetch && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
-            << "Number of args to a prefetch call should be even: {base, offset, extent0, min0, ...}\n";
+            << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
     }
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of undefined\n";
@@ -891,5 +899,5 @@ Call::ConstString Call::buffer_crop = "_halide_buffer_crop";
 Call::ConstString Call::buffer_set_bounds = "_halide_buffer_set_bounds";
 Call::ConstString Call::trace = "halide_trace_helper";
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

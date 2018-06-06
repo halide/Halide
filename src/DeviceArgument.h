@@ -5,8 +5,8 @@
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
 
-#include "IR.h"
 #include "Closure.h"
+#include "IR.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {
@@ -101,6 +101,7 @@ protected:
     void visit(const Call *op);
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

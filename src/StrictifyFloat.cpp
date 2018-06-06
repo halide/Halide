@@ -80,5 +80,5 @@ bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
     return any_strict_float;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

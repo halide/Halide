@@ -29,8 +29,8 @@ DeviceAPI get_default_device_api_for_target(const Target &t);
 namespace Internal {
 /** Get an Expr which evaluates to the device interface for the given device api at runtime. */
 Expr make_device_interface_call(DeviceAPI device_api);
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

@@ -1,32 +1,32 @@
 #include <iostream>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 
-#include "LLVM_Headers.h"
-#include "CodeGen_Hexagon.h"
-#include "CodeGen_Internal.h"
-#include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
-#include "IRMutator.h"
-#include "Target.h"
-#include "Debug.h"
-#include "Util.h"
-#include "Simplify.h"
-#include "IRPrinter.h"
-#include "EliminateBoolVectors.h"
-#include "HexagonOptimize.h"
 #include "AlignLoads.h"
 #include "CSE.h"
-#include "LoopCarry.h"
-#include "Substitute.h"
+#include "CodeGen_Hexagon.h"
+#include "CodeGen_Internal.h"
+#include "Debug.h"
+#include "EliminateBoolVectors.h"
+#include "HexagonOptimize.h"
+#include "IREquality.h"
+#include "IRMatch.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
 #include "LICM.h"
+#include "LLVM_Headers.h"
+#include "LoopCarry.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -2010,4 +2010,5 @@ void CodeGen_Hexagon::visit(const NE *op) {
     }
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide
