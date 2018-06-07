@@ -865,7 +865,7 @@ int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return ((a + b) << dead_bits) >> dead_bits;
+    return int64_t(uint64_t(a + b) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -895,9 +895,9 @@ template<>
 HALIDE_ALWAYS_INLINE
 int64_t constant_fold_bin_op<Sub>(halide_type_t &t, int64_t a, int64_t b) noexcept {
     t.lanes |= ((t.bits >= 32) && sub_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
-    int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return ((a - b) << dead_bits) >> dead_bits;
+    int dead_bits = 64 - t.bits;
+    return int64_t(uint64_t(a - b) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -930,7 +930,7 @@ int64_t constant_fold_bin_op<Mul>(halide_type_t &t, int64_t a, int64_t b) noexce
     t.lanes |= ((t.bits >= 32) && mul_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
     int dead_bits = 64 - t.bits;
     // Drop the high bits then sign-extend them back
-    return ((a * b) << dead_bits) >> dead_bits;
+    return int64_t(uint64_t(a * b) << dead_bits) >> dead_bits;
 }
 
 template<>
@@ -1686,12 +1686,12 @@ struct NegateOp {
         int dead_bits = 64 - ty.bits;
         switch (ty.code) {
         case halide_type_int:
-            if (ty.bits >= 32 && val.u.i64 && (val.u.i64 << (65 - ty.bits)) == 0) {
+            if (ty.bits >= 32 && val.u.u64 && (val.u.u64 << (65 - ty.bits)) == 0) {
                 // Trying to negate the most negative signed int for a no-overflow type.
                 ty.lanes |= MatcherState::signed_integer_overflow;
             } else {
                 // Negate, drop the high bits, and then sign-extend them back
-                val.u.i64 = ((-val.u.i64) << dead_bits) >> dead_bits;
+                val.u.i64 = int64_t(uint64_t(-val.u.i64) << dead_bits) >> dead_bits;
             }
             break;
         case halide_type_uint:

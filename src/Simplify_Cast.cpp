@@ -19,11 +19,11 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_int() &&
                    const_float(value, &f)) {
             // float -> int
-            return IntImm::make(op->type, (int64_t)f);
+            return IntImm::make(op->type, safe_numeric_cast<int64_t>(f));
         } else if (op->type.is_uint() &&
                    const_float(value, &f)) {
             // float -> uint
-            return UIntImm::make(op->type, (uint64_t)f);
+            return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(f));
         } else if (op->type.is_float() &&
                    const_float(value, &f)) {
             // float -> float
@@ -35,15 +35,15 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
-            return UIntImm::make(op->type, (uint64_t)i);
+            return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(i));
         } else if (op->type.is_float() &&
                    const_int(value, &i)) {
             // int -> float
-            return FloatImm::make(op->type, (double)i);
+            return FloatImm::make(op->type, safe_numeric_cast<double>(i));
         } else if (op->type.is_int() &&
                    const_uint(value, &u)) {
             // uint -> int
-            return IntImm::make(op->type, (int64_t)u);
+            return IntImm::make(op->type, safe_numeric_cast<int64_t>(u));
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
@@ -51,7 +51,7 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_float() &&
                    const_uint(value, &u)) {
             // uint -> float
-            return FloatImm::make(op->type, (double)u);
+            return FloatImm::make(op->type, safe_numeric_cast<double>(u));
         } else if (cast &&
                    op->type.code() == cast->type.code() &&
                    op->type.bits() < cast->type.bits()) {
