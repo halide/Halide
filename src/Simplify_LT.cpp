@@ -54,7 +54,7 @@ Expr Simplify::visit(const LT *op, ConstBounds *bounds) {
 
         if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
-             (rewrite(ramp(x, y) < ramp(z, y), x < z) ||
+             (rewrite(ramp(x, y) < ramp(z, y), broadcast(x < z, lanes)) ||
               // Move constants to the RHS
               rewrite(x + c0 < y, x < y + fold(-c0)) ||
 
