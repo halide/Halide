@@ -735,12 +735,15 @@ struct Prefetch : public StmtNode<Prefetch> {
     std::string name;
     std::vector<Type> types;
     Region bounds;
+    PrefetchDirective prefetch;
+    Expr condition;
 
-    /** If it's a prefetch load from an image parameter, this points to that. */
-    Parameter param;
+    Stmt body;
 
     static Stmt make(const std::string &name, const std::vector<Type> &types,
-                     const Region &bounds, Parameter param = Parameter());
+                     const Region &bounds,
+                     const PrefetchDirective &prefetch,
+                     Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
