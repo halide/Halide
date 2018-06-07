@@ -53,11 +53,10 @@ public:
         int w, h; // approx width and height;
     };
 
-    // Generate a random convolution of one dimension of f.
+    // Generate a random convolution of one dimension of f, statically unrolled.
     Stage convolve(Stage f, int dim, int kernel_min, int kernel_max) {
         std::cout << "Convolving dimension " << dim
-                  << " with kernel [" << kernel_min << ", " << kernel_max << "]"
-                  << std::endl;
+                  << " with kernel [" << kernel_min << ", " << kernel_max << "]\n";
 
         vector<Var> args = f.func.args();
 
@@ -68,20 +67,54 @@ public:
             def = def + rand_value(f.func.value().type()) * f.func(coords);
         }
 
-        Func conv("conv");
+        Func conv("conv_" + args[dim].name());
         conv(args) = def;
+
+        return {conv, f.w, f.h};
+    }
+
+    // Generate a random convolution of one dimension of f using a reduction.
+    Stage convolve_r(Stage f, int dim, int kernel_min, int kernel_max) {
+        std::cout << "Convolving dimension " << dim
+                  << " with kernel [" << kernel_min << ", " << kernel_max << "]"
+                  << " using +=\n";
+
+        vector<Var> args = f.func.args();
+
+        Func conv("conv_r_" + args[dim].name());
+        RDom r(kernel_min, kernel_max - kernel_min + 1);
+        vector<Expr> coords = make_arguments(f.func.args());
+        coords[dim] += r;
+        conv(args) += rand_value(f.func.value().type()) * f.func(coords);
+
+        return {conv, f.w, f.h};
+    }
+
+    // Generate a random convolution of one dimension of f using a reduction with a wrapper
+    Stage convolve_w(Stage f, int dim, int kernel_min, int kernel_max) {
+        std::cout << "Convolving dimension " << dim
+                  << " with kernel [" << kernel_min << ", " << kernel_max << "]"
+                  << " using sum() helper\n";
+
+        vector<Var> args = f.func.args();
+
+        Func conv("conv_w_" + args[dim].name());
+        RDom r(kernel_min, kernel_max - kernel_min + 1);
+        vector<Expr> coords = make_arguments(f.func.args());
+        coords[dim] += r;
+        conv(args) = sum(rand_value(f.func.value().type()) * f.func(coords));
 
         return {conv, f.w, f.h};
     }
 
     // Generate an upsampling or downsampling of dimension dim by factor.
     Stage upsample(Stage f, int dim, int factor) {
-        std::cout << "Upsampling dimension " << dim << " by " << factor << "x" << std::endl;
+        std::cout << "Upsampling dimension " << dim << " by " << factor << "x\n";
 
         vector<Expr> resampled_coords = make_arguments(f.func.args());
         resampled_coords[dim] = resampled_coords[dim] / factor;
 
-        Func resampled("upsampled");
+        Func resampled("upsampled_" + f.func.args()[dim].name());
         resampled(f.func.args()) = f.func(resampled_coords);
 
         Stage s {resampled, f.w, f.h};
@@ -96,12 +129,12 @@ public:
     }
 
     Stage downsample(Stage f, int dim, int factor) {
-        std::cout << "Downsampling dimension " << dim << " by " << factor << "x" << std::endl;
+        std::cout << "Downsampling dimension " << dim << " by " << factor << "x\n";
 
         vector<Expr> resampled_coords = make_arguments(f.func.args());
         resampled_coords[dim] = resampled_coords[dim] * factor;
 
-        Func resampled("downsampled");
+        Func resampled("downsampled_" + f.func.args()[dim].name());
         resampled(f.func.args()) = f.func(resampled_coords);
 
         Stage s {resampled, f.w, f.h};
@@ -121,9 +154,9 @@ public:
         return {added, f.w, f.h};
     }
 
-    // Generate an all-to-all communication in dimension dim.
+    // Generate an all-to-all communication in dimension dim, statically unrolled.
     Stage all_to_all(Stage f, int dim) {
-        std::cout << "All to all on dimension " << dim << std::endl;
+        std::cout << "All to all on dimension " << dim << '\n';
 
         // TODO: This just assumes that the extent of the dimension is
         // 3, which is really bad.
@@ -140,18 +173,90 @@ public:
         return {all, f.w, f.h};
     }
 
+    // Generate an all-to-all communication in dimension dim using an RDom
+    Stage all_to_all_r(Stage f, int dim) {
+        std::cout << "All to all on dimension " << dim << " using += \n";
+
+        // TODO: This just assumes that the extent of the dimension is
+        // 3, which is really bad.
+        vector<Expr> reduction_coords = make_arguments(f.func.args());
+        RDom r(0, 3);
+        reduction_coords[dim] = r;
+        Func all("all_r");
+        all(f.func.args()) += f.func(reduction_coords) * r * (f.func.args()[dim] + 1);
+
+        return {all, f.w, f.h};
+    }
+
+    // Generate an all-to-all communication in dimension dim using an RDom with wrapper func
+    Stage all_to_all_w(Stage f, int dim) {
+        std::cout << "All to all on dimension " << dim << " using += \n";
+
+        // TODO: This just assumes that the extent of the dimension is
+        // 3, which is really bad.
+        vector<Expr> reduction_coords = make_arguments(f.func.args());
+        RDom r(0, 3);
+        reduction_coords[dim] = r;
+        Func all("all_w");
+        all(f.func.args()) = sum(f.func(reduction_coords) * r * (f.func.args()[dim] + 1));
+
+        return {all, f.w, f.h};
+     }
+
+    // Generate a forwards-then-backwards scan along a dimension
+    Stage scan(Stage f, int dim) {
+        std::cout << "Scan on dimension " << dim << '\n';
+        int extent = dim == 0 ? f.w : dim == 1 ? f.h : 3;
+        RDom r(1, extent - 1);
+        Func scan("scan_" + f.func.args()[dim].name());
+        vector<Expr> coords = make_arguments(f.func.args());
+        scan(coords) = f.func(coords);
+        coords[dim] = r;
+        vector<Expr> prev_coords = coords;
+        prev_coords[dim] = r-1;
+        scan(coords) += scan(prev_coords);
+        // Now in reverse
+        coords[dim] = extent - r - 1;
+        prev_coords[dim] = extent - r;
+        scan(coords) += scan(prev_coords);
+        return {scan, f.w, f.h};
+    }
+
+    // Transpose
+    Stage transpose(Stage f) {
+        Func transpose("transpose");
+        vector<Expr> coords = make_arguments(f.func.args());
+        vector<Expr> swizzled_coords = coords;
+        std::swap(swizzled_coords[0], swizzled_coords[1]);
+
+        transpose(coords) = f.func(swizzled_coords);
+
+        return {transpose, f.h, f.w};
+
+    }
+
     // Generate a random stage using f as an input.
     Stage random_stage(const vector<Stage> &s) {
         int m = (int)s.size() - 1;
         int i2 = m > 0 ? rand_int(0, m - 1) : 0;
         int i1 = m > 0 ? rand_int(i2 + 1, m) : 0;
         Stage f = s[i1], g = s[i2];
-        int stage_type = rand_int(0, 7);
-        if (stage_type < 3) {
+        int stage_type = rand_int(0, 13);
+        if (stage_type == 0) {
             int dim = rand_int(0, 1);
-            int kernel_min = rand_int(-5, 0);
-            int kernel_max = rand_int(0, 5);
+            int kernel_min = rand_int(-3, 0);
+            int kernel_max = rand_int(0, 3);
             return convolve(f, dim, kernel_min, kernel_max);
+        } else if (stage_type == 1) {
+            int dim = rand_int(0, 1);
+            int kernel_min = rand_int(-10, 0);
+            int kernel_max = rand_int(0, 10);
+            return convolve_r(f, dim, kernel_min, kernel_max);
+        } else if (stage_type == 2) {
+            int dim = rand_int(0, 1);
+            int kernel_min = rand_int(-10, 0);
+            int kernel_max = rand_int(0, 10);
+            return convolve_w(f, dim, kernel_min, kernel_max);
         } else if (stage_type == 3) {
             // For now, only upsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
@@ -171,9 +276,19 @@ public:
                 return random_stage(s);
             }
         } else if (stage_type == 5) {
-            // TODO: For now, only generate all-to-all communication in dimension 2, which is likely to be small.
             int dim = 2;
             return all_to_all(f, dim);
+        } else if (stage_type == 6) {
+            int dim = 2;
+            return all_to_all_r(f, dim);
+        } else if (stage_type == 7) {
+            int dim = 2;
+            return all_to_all_w(f, dim);
+        } else if (stage_type == 8) {
+            int dim = rand_int(0, 2);
+            return scan(f, dim);
+        } else if (stage_type == 9) {
+            return transpose(f);
         } else if (i1 != i2) {
             // Add two equal resolution stages
             if (f.w == g.w && f.h == g.h) {
@@ -187,11 +302,16 @@ public:
     }
 
     void generate() {
+        Var x("x"), y("y"), c("c");
+
+        Func first;
+        first(x, y, c) = input(x, y, c);
+
         rng.seed((int)seed);
 
         vector<Stage> stages;
         // Assume input starts at ~1024x1024
-        stages.emplace_back(Stage{input, 1024, 1024});
+        stages.emplace_back(Stage{first, 1024, 1024});
 
         for (int i = 0; i < max_stages - 2; i++) {
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << "\n";
@@ -201,7 +321,7 @@ public:
             }
             stages.push_back(next);
             if (!auto_schedule) {
-                stages.back().func.compute_root().reorder(_0, _2, _1).vectorize(_0, 8).parallel(_1);
+                stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
             }
         }
 
@@ -223,7 +343,7 @@ public:
         output(tail.func.args()) = tail.func(tail.func.args());
 
         if (!auto_schedule) {
-            output.compute_root().reorder(_0, _2, _1).vectorize(_0, 8).parallel(_1);
+            output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
         }
 
         if (auto_schedule) {
