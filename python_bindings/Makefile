@@ -129,8 +129,9 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o
 
 # TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
 # every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
-.PHONY: test_correctness_addconstant_test test_correctness_pystub
+.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub
 test_correctness_addconstant_test: addconstant.run ;
+test_correctness_bit_test: bit.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
@@ -161,7 +162,16 @@ test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
-	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $< >/dev/null
+	@# We need "." in the PYTHONPATH for lesson_10_halide.so.
+	@cd $(TEST_TMP); PYTHONPATH=".:$(BIN):$$PYTHONPATH" $(PYTHON) $< >/dev/null
+
+test_tutorial_lesson_10_aot_compilation_run: $(TEST_TMP)/lesson_10_halide.so
+
+$(TEST_TMP)/lesson_10_halide.so: test_tutorial_lesson_10_aot_compilation_generate
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $(FPIC) -shared \
+		$(TEST_TMP)/lesson_10_halide.py.c \
+		$(TEST_TMP)/lesson_10_halide.o \
+		-I $(TEST_TMP) -o $@
 
 clean:
 	rm -rf $(BIN)
