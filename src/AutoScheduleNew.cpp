@@ -1294,7 +1294,7 @@ struct PartialScheduleNode {
                         } else {
                             Var outer(parent.var.name() + "o"), inner(parent.var.name() + "i");
                             debug(0) << "Splitting " << parent.var.name() << " by " << factor << "\n";
-                            if (parent.extent % factor == 0 && !func.has_update_definition()) {
+                            if (parent.extent % factor == 0 && stage == 0) {
                                 // TODO: If the actual size doesn't match the estimates, this could make some bad assumptions.
                                 s.split(parent.var, outer, inner, (int)factor, TailStrategy::RoundUp);
                             } else {
