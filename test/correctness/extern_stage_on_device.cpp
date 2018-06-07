@@ -12,8 +12,8 @@ using namespace Halide;
 #endif
 
 // An extern stage implemented by a Halide pipeline running
-// either on host or device. The outer Halide filter muster
-// to override "device_api" parameter of Func::define_extern
+// either on host or device. The outer Halide filter must
+// override the "device_api" parameter of Func::define_extern
 // when using the extern_stage on device.
 extern "C" DLLEXPORT int extern_stage(int extern_on_device,
                                       int outer_filter_on_device,
@@ -21,8 +21,8 @@ extern "C" DLLEXPORT int extern_stage(int extern_on_device,
     if (!out->is_bounds_query()) {
         if (extern_on_device > 0 && outer_filter_on_device > 0) {
             // If both the extern and the outer filter are on running on
-            // device, the host allocation can be null and the device
-            // allocation need to be allocated by the outer filter.
+            // device, the host allocation shall be null and the device
+            // allocation must exist before entering the extern stage.
             assert(out->host == nullptr);
             assert(out->device != 0);
         } else {
