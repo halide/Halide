@@ -563,6 +563,9 @@ void IRPrinter::visit(const Call *op) {
     }
     print_list(op->args);
     stream << ")";
+    if (op->func.defined() && Function(op->func).values().size() > 1) {
+        stream << "[" << op->value_index << "]";
+    }
 }
 
 void IRPrinter::visit(const Let *op) {

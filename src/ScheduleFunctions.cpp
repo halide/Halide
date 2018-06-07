@@ -14,6 +14,7 @@
 #include "Substitute.h"
 #include "Target.h"
 #include "Var.h"
+#include "CopyElision.h"
 
 #include <algorithm>
 
@@ -70,6 +71,84 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
+class CurrentRealizationInScope : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Realize *op) {
+        funcs.insert(op->name);
+    }
+
+public:
+    set<string> funcs;
+    CurrentRealizationInScope() {}
+};
+
+class ReplaceWithUndef : public IRMutator2 {
+public:
+    ReplaceWithUndef(const map<string, string> &pointwise_copies)
+        : pointwise_copies(pointwise_copies), current_producer("") {}
+
+private:
+    const map<string, string> &pointwise_copies;
+    string current_producer;
+
+    using IRMutator2::visit;
+
+    Stmt visit(const ProducerConsumer *op) override {
+        string old_producer = current_producer;
+        if (op->is_producer) {
+            current_producer = op->name;
+        }
+        Stmt stmt = IRMutator2::visit(op);
+        current_producer = old_producer;
+        return stmt;
+    }
+
+    Stmt visit(const Provide *op) override {
+        // TODO(psuriana): how do you handle halide_buffer_copy?
+
+        if (pointwise_copies.count(op->name) && (current_producer == op->name)) {
+            debug(4) << "\t\tREPLACING VALUES OF " << op->name << " TO UNDEF\n\n";
+            vector<Expr> undef_values(op->values.size());
+            for (size_t i = 0; i < op->values.size(); ++i) {
+                undef_values[i] = undef(op->values[i].type());
+            }
+            return Provide::make(op->name, undef_values, op->args);
+        } else {
+            return IRMutator2::visit(op);
+        }
+    }
+};
+
+class SubstituteCalls : public IRMutator2 {
+    using IRMutator2::visit;
+
+    const map<string, Function> &env;
+    string from, to;
+
+    Expr visit(const Call *op) override {
+        Expr expr = IRMutator2::visit(op);
+        op = expr.as<Call>();
+        internal_assert(op);
+
+        if ((op->call_type == Call::Halide) &&
+            op->func.defined() &&
+            (from == op->name)) {
+
+            debug(4) << "...Replace call to Func \"" << op->name << "\" with "
+                     << "\"" << to << "\"\n";
+            expr = Call::make(op->type, to, op->args, op->call_type,
+                              env.at(to).get_contents(), op->value_index,
+                              op->image, op->param);
+        }
+        return expr;
+    }
+public:
+    SubstituteCalls(const map<string, Function> &env,
+                    const string &from, const string &to)
+        : env(env), from(from), to(to) {}
+};
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest_helper(string func_name,
                                     string prefix,
@@ -80,12 +159,53 @@ Stmt build_provide_loop_nest_helper(string func_name,
                                     const vector<Expr> &predicates,
                                     const FuncSchedule &func_s,
                                     const StageSchedule &stage_s,
-                                    bool is_update) {
+                                    bool is_update,
+                                    const map<string, string> &pointwise_copies,
+                                    const map<string, Function> &env) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
+    // TODO(psuriana): Need to make sure the prod and cons of CopyPair are/
+    // in the same device
+
+    /*debug(0) << "\n\nFUNC NAME: " << func_name << ", prefix: " << prefix << ", vals: {";
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) {
+            debug(0) << ", ";
+        }
+        debug(0) << values[i];
+    }
+    debug(0) << "}, site: {";
+    for (size_t i = 0; i < site.size(); ++i) {
+        if (i > 0) {
+            debug(0) << ", ";
+        }
+        debug(0) << site[i];
+    }
+    debug(0) << "}\n\n";*/
+
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(func_name, values, site);
+    // TODO(psuriana): How should we check if the copy elimination is indeed okay?
+    // TODO(psuriana): Have to make sure if the copy elision is done, it
+    // should have been within the scope of consumer buffer realization or
+    // if the consumer is the output, the store replacement should be fine
+    Stmt stmt;
+    const auto &iter = std::find_if(pointwise_copies.begin(), pointwise_copies.end(),
+        [&func_name](const std::pair<string, string> &cp) { return (cp.second == func_name); });
+    if (iter != pointwise_copies.end()) {
+        internal_assert(iter->second == func_name);
+        //debug(0) << "\t\tREPLACING STORE TO: " << func_name << " -> INTO STORE TO: " << iter->first << "\n\n";
+        stmt = Provide::make(iter->first, values, site);
+        // TODO(psuriana): Need to update call/load to func_name as well since
+        // it is now storing into iter->first (A bit weird with the possibility of
+        // having circular call, maybe shouldn't do anything when the function
+        // has updates?)
+        stmt = SubstituteCalls(env, func_name, iter->first).mutate(stmt);
+    } else {
+        stmt = Provide::make(func_name, values, site);
+    }
+    //stmt = Provide::make(func_name, values, site);
+    internal_assert(stmt.defined());
 
     // A map of the dimensions for which we know the extent is a
     // multiple of some Expr. This can happen due to a bound, or
@@ -326,7 +446,9 @@ Stmt build_provide_loop_nest(string func_name,
                              const vector<string> &dims,
                              const FuncSchedule &f_sched,
                              const Definition &def,
-                             bool is_update) {
+                             bool is_update,
+                             const map<string, string> &pointwise_copies,
+                             const map<string, Function> &env) {
 
     internal_assert(!is_update == def.is_init());
 
@@ -351,7 +473,8 @@ Stmt build_provide_loop_nest(string func_name,
     // Default schedule/values if there is no specialization
     Stmt stmt = build_provide_loop_nest_helper(
         func_name, prefix, start_fuse, dims, site, values,
-        def.split_predicate(), f_sched, def.schedule(), is_update);
+        def.split_predicate(), f_sched, def.schedule(), is_update,
+        pointwise_copies, env);
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
@@ -362,7 +485,7 @@ Stmt build_provide_loop_nest(string func_name,
         Stmt then_case;
         if (s.failure_message.empty()) {
             then_case = build_provide_loop_nest(func_name, prefix, start_fuse, dims,
-                                                f_sched, s_def, is_update);
+                                                f_sched, s_def, is_update, pointwise_copies, env);
         } else {
             internal_assert(equal(c, const_true()));
             // specialize_fail() should only be possible on the final specialization
@@ -386,7 +509,7 @@ Stmt build_provide_loop_nest(string func_name,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f, const Target &target) {
+Stmt build_produce(Function f, const Target &target, const map<string, string> &pointwise_copies, const map<string, Function> &env) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -404,14 +527,42 @@ Stmt build_produce(Function f, const Target &target) {
         // extern function call.
         vector<pair<Expr, int>> buffers_to_annotate;
         vector<Expr> buffers_contents_to_annotate;
+
+        debug(0) << "\n\nPRODUCE EXTERN FUNCTION: " << f.name() << "\n";
+        for (const ExternFuncArgument &arg : args) {
+            if (arg.is_expr()) {
+                debug(0) << "\tExpr: " << arg.expr << "\n";
+            } else if (arg.is_func()) {
+                debug(0) << "\tFunc: " << Function(arg.func).name();
+            } else if (arg.is_buffer()) {
+                debug(0) << "\tBuffer: " << arg.buffer.name() << "\n";
+            } else if (arg.is_image_param()) {
+                debug(0) << "\tImage param: " << arg.image_param.name() << "\n";
+            } else {
+                internal_error << "Bad ExternFuncArgument type\n";
+            }
+        }
+
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
+                string input_name = input.name();
+
+                if (extern_name == "halide_buffer_copy") {
+                    const auto &iter = std::find_if(pointwise_copies.begin(), pointwise_copies.end(),
+                        [&input](const std::pair<string, string> &cp) { return (cp.second == input.name()); });
+                    // TODO(psuriana): How should we handle if it is the input name that has matches
+                    if (iter != pointwise_copies.end()) {
+                        debug(0) << "\t\tREPLACING halide_buffer_copy STORE TO: " << input.name() << " -> INTO STORE TO: " << iter->first << "\n\n";
+                        input_name = iter->first;
+                    }
+                }
+
                 if (input.schedule().store_level() == input.schedule().compute_level()) {
                     for (int k = 0; k < input.outputs(); k++) {
-                        string buf_name = input.name();
+                        string buf_name = input_name;
                         if (input.outputs() > 1) {
                             buf_name += "." + std::to_string(k);
                         }
@@ -431,7 +582,7 @@ Stmt build_produce(Function f, const Target &target) {
                     string stage_name = input.name() + ".s" + std::to_string(input.updates().size()) + ".";
                     const vector<string> input_args = input.args();
                     for (int k = 0; k < input.outputs(); k++) {
-                        string src_buf_name = input.name();
+                        string src_buf_name = input_name;
                         if (input.outputs() > 1) {
                             src_buf_name += "." + std::to_string(k);
                         }
@@ -463,7 +614,8 @@ Stmt build_produce(Function f, const Target &target) {
                         cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
                                                    args, Call::Extern);
 
-                        string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
+                        // TODO(psuriana): Not sure if this tmp_buffer also need to be replaced or not
+                        string buf_name = input_name + "." + std::to_string(k) + ".tmp_buffer";
                         extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                         buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
                         buffers_contents_to_annotate.push_back(cropped_input);
@@ -656,12 +808,12 @@ Stmt build_produce(Function f, const Target &target) {
 
         string prefix = f.name() + ".s0.";
         vector<string> dims = f.args();
-        return build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
+        return build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), f.definition(), false, pointwise_copies, env);
     }
 }
 
 // Build the loop nests that update a function (assuming it's a reduction).
-vector<Stmt> build_update(Function f) {
+vector<Stmt> build_update(Function f, const map<string, string> &pointwise_copies, const map<string, Function> &env) {
 
     vector<Stmt> updates;
 
@@ -671,16 +823,16 @@ vector<Stmt> build_update(Function f) {
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
         vector<string> dims = f.args();
-        Stmt loop = build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), def, true);
+        Stmt loop = build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), def, true, pointwise_copies, env);
         updates.push_back(loop);
     }
 
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(Function func, const Target &target) {
-    Stmt produce = build_produce(func, target);
-    vector<Stmt> updates = build_update(func);
+pair<Stmt, Stmt> build_production(Function func, const Target &target, const map<string, string> &pointwise_copies, const map<string, Function> &env) {
+    Stmt produce = build_produce(func, target, pointwise_copies, env);
+    vector<Stmt> updates = build_update(func, pointwise_copies, env);
 
     // Combine the update steps
     Stmt merged_updates = Block::make(updates);
@@ -784,11 +936,14 @@ public:
     bool is_output, found_store_level, found_compute_level;
     const Target &target;
     const map<string, Function> &env;
+    const map<string, string> &pointwise_copies;
 
     InjectRealization(const Function &f, bool o, const Target &t,
-                      const map<string, Function> &env)
+                      const map<string, Function> &env,
+                      const map<string, string> &pointwise_copies)
         : func(f), is_output(o), found_store_level(false),
-          found_compute_level(false), target(t), env(env) {}
+          found_compute_level(false), target(t), env(env),
+          pointwise_copies(pointwise_copies) {}
 
 private:
     // Determine if 'loop_name' is the right level to inject produce/realize node
@@ -847,7 +1002,7 @@ private:
     }
 
     Stmt build_pipeline(Stmt consumer) {
-        pair<Stmt, Stmt> realization = build_production(func, target);
+        pair<Stmt, Stmt> realization = build_production(func, target, pointwise_copies, env);
 
         Stmt producer;
         if (realization.first.defined() && realization.second.defined()) {
@@ -1186,13 +1341,16 @@ public:
     bool found_store_level, found_compute_level;
     const Target &target;
     const map<string, Function> &env;
+    const map<string, string> &pointwise_copies;
     LoopLevel compute_level;
     LoopLevel store_level;
 
     InjectGroupRealization(const vector<Function> &g, const vector<bool> &o,
-                           const Target &t, const map<string, Function> &env)
+                           const Target &t, const map<string, Function> &env,
+                           const map<string, string> &pointwise_copies)
             : group(g), is_output_list(o), found_store_level(false),
-              found_compute_level(false), target(t), env(env) {
+              found_compute_level(false), target(t), env(env),
+              pointwise_copies(pointwise_copies) {
         internal_assert(!group.empty());
         internal_assert(group.size() == is_output_list.size());
 
@@ -1426,7 +1584,7 @@ private:
 
         const vector<string> f_args = f.args();
         Stmt produce = build_provide_loop_nest(f.name(), prefix, start_fuse, f_args,
-                                               f.schedule(), def, is_update);
+                                               f.schedule(), def, is_update, pointwise_copies, env);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -2202,6 +2360,15 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
+    map<string, string> pointwise_copies = get_pointwise_copies(env);
+    debug(0) << "\nPointwise copies:\n";
+    for (const auto &p : pointwise_copies) {
+        debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
+        debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
+        debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
+    }
+    debug(0) << "\n";
+
     for (size_t i = fused_groups.size(); i > 0; --i) {
         const vector<string> &group = fused_groups[i-1];
         vector<Function> funcs;
@@ -2243,18 +2410,20 @@ Stmt schedule_functions(const vector<Function> &outputs,
                 s = inline_function(s, funcs[0]);
             } else {
                 debug(1) << "Injecting realization of " << funcs[0].name() << '\n';
-                InjectRealization injector(funcs[0], is_output_list[0], target, env);
+                InjectRealization injector(funcs[0], is_output_list[0], target, env, pointwise_copies);
                 s = injector.mutate(s);
                 internal_assert(injector.found_store_level && injector.found_compute_level);
             }
         } else {
-            InjectGroupRealization injector(funcs, is_output_list, target, env);
+            InjectGroupRealization injector(funcs, is_output_list, target, env, pointwise_copies);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
 
         debug(2) << s << '\n';
     }
+
+    s = ReplaceWithUndef(pointwise_copies).mutate(s);
 
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();

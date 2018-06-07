@@ -363,6 +363,7 @@ SOURCE_FILES = \
   CPlusPlusMangle.cpp \
   CSE.cpp \
   CanonicalizeGPUVars.cpp \
+  CopyElision.cpp \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
@@ -500,6 +501,7 @@ HEADER_FILES = \
   CPlusPlusMangle.h \
   CSE.h \
   CanonicalizeGPUVars.h \
+  CopyElision.h \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
