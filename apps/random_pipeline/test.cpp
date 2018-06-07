@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
     printf("Input size: %d %d %d\n", input.width(), input.height(), input.channels());
 
-    double best = benchmark(3, 1, [&]() {
+    double best = benchmark([&]() {
         random_pipeline(input, output);
     });
     printf("Time: %g\n", best * 1e3);
