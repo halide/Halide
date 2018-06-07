@@ -148,11 +148,15 @@ private:
             if (prefetch_box.maybe_unused()) {
                 condition = simplify(prefetch_box.used && condition);
             }
+            internal_assert(!new_bounds.empty());
             return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, std::move(body));
         }
 
         if (!body.same_as(op->body)) {
             return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
+        } else if (op->bounds.empty()) {
+            // Remove the Prefetch IR since it is prefetching an empty region
+            return body;
         } else {
             return op;
         }
