@@ -115,9 +115,10 @@ void check_casts() {
     check(cast(Int(64, 3), ramp(x, 2, 3)),
           ramp(cast(Int(64), x), cast(Int(64), 2), 3));
 
-    // Check cancellations can occur through casts
-    check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
-    check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
+    // We do not currently expect cancellations to occur through casts
+    // check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    // check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
+
     // But only when overflow is undefined for the type
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
