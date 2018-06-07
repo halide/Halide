@@ -81,13 +81,6 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
             return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
                                      ramp_value->lanes), bounds);
-        } else if (add &&
-                   op->type == Int(64) &&
-                   op->value.type() == Int(32) &&
-                   is_const(add->b)) {
-            // In the interest of moving constants outwards so they
-            // can cancel, pull the addition outside of the cast.
-            return mutate(Cast::make(op->type, add->a) + add->b, bounds);
         }
     }
 
