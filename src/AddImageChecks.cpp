@@ -97,6 +97,15 @@ Stmt add_image_checks(Stmt s,
                       const map<string, Function> &env,
                       const FuncValueBounds &fb) {
 
+    // Walk inside as many LetStmts as possible first, so that we can
+    // take advantage of the outermost lets placed by bounds
+    // inference.
+    vector<pair<string, Expr>> containing_lets;
+    while (const LetStmt *l = s.as<LetStmt>()) {
+        containing_lets.push_back({l->name, l->value});
+        s = l->body;
+    }
+
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
@@ -636,6 +645,11 @@ Stmt add_image_checks(Stmt s,
     // Inject the code that defines the required sizes produced by bounds inference.
     for (size_t i = lets_required.size(); i > 0; i--) {
         s = LetStmt::make(lets_required[i-1].first, lets_required[i-1].second, s);
+    }
+
+    // Rewrap the containing lets
+    for (size_t i = containing_lets.size(); i > 0; i--) {
+        s = LetStmt::make(containing_lets[i-1].first, containing_lets[i-1].second, s);
     }
 
     return s;
