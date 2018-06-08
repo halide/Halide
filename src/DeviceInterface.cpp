@@ -56,6 +56,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "openglcompute";
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
+    } else if (d == DeviceAPI::HexagonDma) {
+        name = "hexagon_dma";
     } else {
         if (error_site) {
             user_error << "get_device_interface_for_device_api called from " << error_site <<
@@ -94,6 +96,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.has_feature(Target::OpenGL)) {
         return DeviceAPI::GLSL;
+    } else if (target.has_feature(Target::HexagonDma)) {
+        return DeviceAPI::HexagonDma;
     } else {
         return DeviceAPI::Host;
     }
@@ -124,6 +128,9 @@ Expr make_device_interface_call(DeviceAPI device_api) {
         break;
     case DeviceAPI::Hexagon:
         interface_name = "halide_hexagon_device_interface";
+        break;
+    case DeviceAPI::HexagonDma:
+        interface_name = "halide_hexagon_dma_device_interface";
         break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later
