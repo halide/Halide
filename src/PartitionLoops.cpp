@@ -1,25 +1,25 @@
 #include <algorithm>
 #include <numeric>
 
-#include "PartitionLoops.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
 
 namespace {
 
@@ -404,7 +404,7 @@ public:
 
 };
 
-class ContainsThreadBarrier : public IRVisitor {
+class ContainsWarpSynchronousLogic : public IRVisitor {
 public:
     bool result = false;
 
@@ -413,13 +413,25 @@ protected:
     void visit(const Call *op) {
         if (op->name == "halide_gpu_thread_barrier") {
             result = true;
+        } else {
+            IRVisitor::visit(op);
         }
-        IRVisitor::visit(op);
+    }
+
+    void visit(const For *op) {
+        if (op->for_type == ForType::GPULane) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
     }
 };
 
-bool contains_thread_barrier(Stmt s) {
-    ContainsThreadBarrier c;
+bool contains_warp_synchronous_logic(Stmt s) {
+    ContainsWarpSynchronousLogic c;
     s.accept(&c);
     return c.result;
 }
@@ -430,26 +442,21 @@ class PartitionLoops : public IRMutator2 {
     bool in_gpu_loop = false;
 
     Stmt visit(const For *op) override {
-        Stmt stmt;
         Stmt body = op->body;
 
-        bool old_in_gpu_loop = in_gpu_loop;
-        in_gpu_loop |= CodeGen_GPU_Dev::is_gpu_var(op->name);
+        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop ||
+                                             CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers, it's not safe to duplicate code.
-        if (in_gpu_loop && contains_thread_barrier(body)) {
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+        // barriers or warp shuffles, it's not safe to duplicate code.
+        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
+            return IRMutator2::visit(op);
         }
 
         // We shouldn't partition GLSL loops - they have control-flow
         // constraints.
         if (op->device_api == DeviceAPI::GLSL) {
-            stmt = op;
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return op;
         }
 
         // Find simplifications in this loop body
@@ -457,9 +464,7 @@ class PartitionLoops : public IRMutator2 {
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return IRMutator2::visit(op);
         }
 
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
@@ -626,6 +631,7 @@ class PartitionLoops : public IRMutator2 {
             internal_assert(!expr_uses_var(epilogue_val, op->name));
         }
 
+        Stmt stmt;
         // Bust serial for loops up into three.
         if (op->for_type == ForType::Serial) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
@@ -678,12 +684,8 @@ class PartitionLoops : public IRMutator2 {
         if (can_prove(epilogue_val <= prologue_val)) {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
-            stmt = IRMutator2::visit(op);
-            in_gpu_loop = old_in_gpu_loop;
-            return stmt;
+            return IRMutator2::visit(op);
         }
-
-        in_gpu_loop = old_in_gpu_loop;
 
         debug(3) << "Partition loop.\n"
                  << "Old: " << Stmt(op) << "\n"
@@ -793,17 +795,17 @@ class RenormalizeGPULoops : public IRMutator2 {
             inner = For::make(f->name, f->min, f->extent, f->for_type, f->device_api, inner);
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
-            internal_assert(a->name == "__shared" && a->extents.size() == 1);
+            internal_assert(a->extents.size() == 1);
             if (expr_uses_var(a->extents[0], op->name)) {
                 // This var depends on the block index, and is used to
                 // define the size of shared memory. Can't move it
                 // inwards or outwards. Codegen will have to deal with
-                // it when it deduces how much shared memory to
-                // allocate.
+                // it when it deduces how much shared or warp-level
+                // memory to allocate.
                 return IRMutator2::visit(op);
             } else {
                 Stmt inner = LetStmt::make(op->name, op->value, a->body);
-                inner = Allocate::make(a->name, a->type, a->extents, a->condition, inner);
+                inner = Allocate::make(a->name, a->type, a->memory_type, a->extents, a->condition, inner);
                 return mutate(inner);
             }
         } else {
@@ -834,11 +836,11 @@ class RenormalizeGPULoops : public IRMutator2 {
         const For *for_b = else_case.as<For>();
         const LetStmt *let_a = then_case.as<LetStmt>();
         const LetStmt *let_b = else_case.as<LetStmt>();
-        if (allocate_a && allocate_b &&
-            allocate_a->name == "__shared" &&
-            allocate_b->name == "__shared") {
+        if (allocate_a && allocate_b) {
             Stmt inner = IfThenElse::make(op->condition, allocate_a->body, allocate_b->body);
-            inner = Allocate::make(allocate_a->name, allocate_a->type, allocate_a->extents, allocate_a->condition, inner);
+            inner = Allocate::make(allocate_a->name, allocate_a->type,
+                                   allocate_a->memory_type, allocate_a->extents,
+                                   allocate_a->condition, inner);
             return mutate(inner);
         } else if (let_a && let_b && let_a->name == let_b->name) {
             string condition_name = unique_name('t');
@@ -978,7 +980,7 @@ class LowerLikelyIfInnermost : public IRMutator2 {
     }
 };
 
-}
+}  // namespace
 
 bool has_likely_tag(Expr e) {
     HasLikelyTag h;
@@ -997,5 +999,5 @@ Stmt partition_loops(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

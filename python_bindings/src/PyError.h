@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_error();
+void define_error(py::module &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

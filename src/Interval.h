@@ -14,7 +14,7 @@ namespace Internal {
 struct Interval {
 
     /** Exprs to represent positive and negative infinity */
-    static Expr pos_inf, neg_inf;
+    HALIDE_EXPORT static Expr pos_inf, neg_inf;
 
     /** The lower and upper bound of the interval. They are included
      * in the interval. */
@@ -62,31 +62,31 @@ struct Interval {
     bool same_as(const Interval &other) {return min.same_as(other.min) && max.same_as(other.max);}
 
     /** Expand the interval to include another Interval */
-    EXPORT void include(const Interval &i);
+    void include(const Interval &i);
 
     /** Expand the interval to include an Expr */
-    EXPORT void include(Expr e);
+    void include(Expr e);
 
     /** Construct the smallest interval containing two intervals. */
-    EXPORT static Interval make_union(const Interval &a, const Interval &b);
+    static Interval make_union(const Interval &a, const Interval &b);
 
     /** Construct the largest interval contained within two intervals. */
-    EXPORT static Interval make_intersection(const Interval &a, const Interval &b);
+    static Interval make_intersection(const Interval &a, const Interval &b);
 
     /** An eagerly-simplifying max of two Exprs that respects infinities. */
-    EXPORT static Expr make_max(Expr a, Expr b);
+    static Expr make_max(Expr a, Expr b);
 
     /** An eagerly-simplifying min of two Exprs that respects infinities. */
-    EXPORT static Expr make_min(Expr a, Expr b);
+    static Expr make_min(Expr a, Expr b);
 
     bool operator==(const Interval &other) const {
         return (min.same_as(other.min)) && (max.same_as(other.max));
     }
 };
 
-EXPORT void interval_test();
+void interval_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

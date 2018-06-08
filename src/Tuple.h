@@ -7,7 +7,6 @@
  */
 
 #include "IR.h"
-#include "IROperator.h"
 #include "Util.h"
 
 namespace Halide {
@@ -49,12 +48,12 @@ public:
     //@}
 
     /** Construct a Tuple from a vector of Exprs */
-    explicit NO_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
+    explicit HALIDE_NO_USER_CODE_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
         user_assert(e.size() > 0) << "Tuples must have at least one element\n";
     }
 
     /** Construct a Tuple from a function reference. */
-    EXPORT Tuple(const FuncRef &);
+    Tuple(const FuncRef &);
 
     /** Treat the tuple as a vector of Exprs */
     const std::vector<Expr> &as_vector() const {
@@ -122,28 +121,8 @@ public:
         }
         return 0;
     }
-
 };
 
-/** Equivalents of some standard operators for tuples. */
-// @{
-inline Tuple tuple_select(Tuple condition, const Tuple &true_value, const Tuple &false_value) {
-    Tuple result(std::vector<Expr>(condition.size()));
-    for (size_t i = 0; i < result.size(); i++) {
-        result[i] = select(condition[i], true_value[i], false_value[i]);
-    }
-    return result;
-}
-
-inline Tuple tuple_select(Expr condition, const Tuple &true_value, const Tuple &false_value) {
-    Tuple result(std::vector<Expr>(true_value.size()));
-    for (size_t i = 0; i < result.size(); i++) {
-        result[i] = select(condition, true_value[i], false_value[i]);
-    }
-    return result;
-}
-// @}
-
-}
+}  // namespace Halide
 
 #endif

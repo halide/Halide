@@ -7,9 +7,9 @@
  * if there is any and computing the identity of the associative operator.
  */
 
+#include "AssociativeOpsTable.h"
 #include "IR.h"
 #include "IREquality.h"
-#include "AssociativeOpsTable.h"
 
 #include <functional>
 
@@ -101,9 +101,9 @@ struct AssociativeOp {
 AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
-EXPORT void associativity_test();
+void associativity_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

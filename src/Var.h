@@ -18,10 +18,10 @@ class Var {
     std::string _name;
 public:
     /** Construct a Var with the given name */
-    EXPORT Var(const std::string &n);
+    Var(const std::string &n);
 
     /** Construct a Var with an automatically-generated unique name. */
-    EXPORT Var();
+    Var();
 
     /** Get the name of a Var */
     const std::string &name() const {return _name;}
@@ -107,7 +107,7 @@ public:
      * anonymous functions (e.g. Func(_0 + _1)) this is considered
      * poor style. Instead use \ref lambda.
      */
-    EXPORT static Var implicit(int n);
+    static Var implicit(int n);
 
     /** Return whether a variable name is of the form for an implicit argument.
      * TODO: This is almost guaranteed to incorrectly fire on user
@@ -115,7 +115,7 @@ public:
      * user Var declarations from making names of this form.
      */
     //{
-    EXPORT static bool is_implicit(const std::string &name);
+    static bool is_implicit(const std::string &name);
     bool is_implicit() const {
         return is_implicit(name());
     }
@@ -165,25 +165,24 @@ public:
     static Var outermost() {
         return Var("__outermost");
     }
-
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
-EXPORT extern Var _;
+HALIDE_EXPORT extern Var _;
 
 /** The first ten implicit Vars for use in scheduling. See \ref Var::implicit */
 // @{
-EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+HALIDE_EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
 // @}
 
 namespace Internal {
 
 /** Make a list of unique arguments for definitions with unnamed
     arguments. */
-EXPORT std::vector<Var> make_argument_list(int dimensionality);
+std::vector<Var> make_argument_list(int dimensionality);
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

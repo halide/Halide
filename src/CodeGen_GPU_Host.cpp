@@ -1,27 +1,28 @@
 #include <sstream>
 
 #include "CodeGen_GPU_Host.h"
-#include "CodeGen_PTX_Dev.h"
-#include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_PTX_Dev.h"
+#include "Debug.h"
+#include "ExprUsesVar.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Debug.h"
-#include "CodeGen_Internal.h"
-#include "Util.h"
-#include "ExprUsesVar.h"
+#include "LLVM_Headers.h"
 #include "Simplify.h"
+#include "Util.h"
 #include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -538,4 +539,5 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 #endif
 
-}}
+}  // namespace Internal
+}  // namespace Halide

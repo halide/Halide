@@ -114,7 +114,7 @@ void load_metal() {
 #endif
 }
 
-}
+}  // namespace
 
 using namespace llvm;
 
@@ -144,10 +144,10 @@ public:
 };
 
 template <>
-EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
 
 template <>
-EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
+void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
 
@@ -217,7 +217,7 @@ public:
             // isn't right.
             debug(2) << "Flushing cache from " << (void *)start
                      << " to " << (void *)end << "\n";
-            __builtin___clear_cache(start, end);
+            __builtin___clear_cache((char*)start, (char*)end);
 #endif
 
 #ifndef _WIN32
@@ -858,5 +858,5 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

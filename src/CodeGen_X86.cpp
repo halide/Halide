@@ -2,21 +2,21 @@
 
 #include "CodeGen_X86.h"
 #include "ConciseCasts.h"
-#include "JITModule.h"
-#include "IROperator.h"
-#include "IRMatch.h"
 #include "Debug.h"
+#include "IRMatch.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "JITModule.h"
+#include "LLVM_Headers.h"
+#include "Param.h"
 #include "Util.h"
 #include "Var.h"
-#include "Param.h"
-#include "LLVM_Headers.h"
-#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
 using std::string;
+using std::vector;
 
 using namespace Halide::ConciseCasts;
 using namespace llvm;
@@ -328,7 +328,6 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-
     // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
     // LLVM uses a numerically unstable method for vector
     // uint32->float conversion before AVX.
@@ -350,7 +349,6 @@ void CodeGen_X86::visit(const Cast *op) {
         codegen(top_bits + top_bits + bottom_bit);
         return;
     }
-
 
     CodeGen_Posix::visit(op);
 }
@@ -438,4 +436,5 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

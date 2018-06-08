@@ -27,7 +27,7 @@ namespace Internal {
  * should return true, and set result[0] to 3 and
  * result[1] to 2*k.
  */
-EXPORT bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
+bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
 
 /** Does the first expression have the same structure as the second?
  * Variables are matched consistently. The first time a variable is
@@ -41,11 +41,11 @@ EXPORT bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
  \endcode
  * should return true, and set result["x"] = a, and result["y"] = b.
  */
-EXPORT bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
+bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
 
-EXPORT void expr_match_test();
+void expr_match_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

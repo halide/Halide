@@ -1,22 +1,22 @@
 #include "LoopCarry.h"
+#include "CSE.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
-#include "Substitute.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Substitute.h"
 
 #include <algorithm>
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
+using std::map;
 using std::pair;
 using std::set;
-using std::map;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -527,7 +527,7 @@ class LoopCarry : public IRMutator2 {
             // Inject the scratch buffer allocations.
             for (const auto &alloc : carry.allocs) {
                 stmt = Block::make(substitute(op->name, op->min, alloc.initial_stores), stmt);
-                stmt = Allocate::make(alloc.name, alloc.type, {alloc.size}, const_true(), stmt);
+                stmt = Allocate::make(alloc.name, alloc.type, MemoryType::Stack, {alloc.size}, const_true(), stmt);
             }
             if (!carry.allocs.empty()) {
                 stmt = IfThenElse::make(op->extent > 0, stmt);
@@ -542,14 +542,12 @@ public:
     LoopCarry(int max_carried_values) : max_carried_values(max_carried_values) {}
 };
 
-}
-
+}  // namespace
 
 Stmt loop_carry(Stmt s, int max_carried_values) {
     s = LoopCarry(max_carried_values).mutate(s);
     return s;
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -4,8 +4,8 @@
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -15,10 +15,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
-using std::vector;
 using std::map;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -39,8 +39,7 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
     return false;
 }
 
-}
-
+}  // namespace
 
 class PredicateFinder : public IRVisitor {
 public:
@@ -384,7 +383,7 @@ private:
 
                 debug(3) << "Done guarding computation for " << op->name << "\n";
 
-                return Realize::make(op->name, op->types, op->bounds,
+                return Realize::make(op->name, op->types, op->memory_type, op->bounds,
                                      alloc_predicate, body);
             } else {
                 return IRMutator2::visit(op);
@@ -495,5 +494,5 @@ Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     return stmt;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

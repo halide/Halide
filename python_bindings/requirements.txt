@@ -5,32 +5,6 @@
 # something similar to `pip3 install --user -r requirements.txt`
 
 # science packages
-#cython
 numpy
 scipy
-#matplotlib
-#scikit-learn
-
-# io
-#python3-protobuf
 pillow
-#pystache
-
-# helpers
-#enum34
-#pathlib
-#progressbar
-#progressbar-latest
-#blessings
-#contexttimer
-#joblib
-
-# documentation
-sphinx
-sphinx_rtd_theme
-
-# Regarding C++ dependencies we have
-# A C++ compiler (gcc or clang recommended)
-# Boost
-# Boost.numpy https://github.com/ndarray/Boost.NumPy
-# (Halide http://halide-lang.org which itself requires llvm http://llvm.org)

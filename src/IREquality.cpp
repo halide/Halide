@@ -1,6 +1,6 @@
 #include "IREquality.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -201,7 +201,66 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     compare_scalar(a.code(), b.code());
     compare_scalar(a.bits(), b.bits());
     compare_scalar(a.lanes(), b.lanes());
-    compare_scalar((uintptr_t)a.handle_type, (uintptr_t)b.handle_type);
+
+    if (result != Equal) return result;
+
+    const halide_handle_cplusplus_type *ha = a.handle_type;
+    const halide_handle_cplusplus_type *hb = b.handle_type;
+
+    if (ha == hb) {
+        // Same handle type, or both not handles, or both void *
+        return result;
+    }
+
+    if (ha == nullptr) {
+        // void* < T*
+        result = LessThan;
+        return result;
+    }
+
+    if (hb == nullptr) {
+        // T* > void*
+        result = GreaterThan;
+        return result;
+    }
+
+    // They're both non-void handle types with distinct type info
+    // structs. We now need to distinguish between different C++
+    // pointer types (e.g. char * vs const float *). If would be nice
+    // if the structs were unique per C++ type. Then comparing the
+    // pointers above would be sufficient.  Unfortunately, different
+    // shared libraries in the same process each create a distinct
+    // struct for the same type. We therefore have to do a deep
+    // comparison of the type info fields.
+
+    compare_scalar(ha->reference_type, hb->reference_type);
+    compare_names(ha->inner_name.name, hb->inner_name.name);
+    compare_scalar(ha->inner_name.cpp_type_type, hb->inner_name.cpp_type_type);
+    compare_scalar(ha->namespaces.size(), hb->namespaces.size());
+    compare_scalar(ha->enclosing_types.size(), hb->enclosing_types.size());
+    compare_scalar(ha->cpp_type_modifiers.size(), hb->cpp_type_modifiers.size());
+
+    if (result != Equal) return result;
+
+    for (size_t i = 0; i < ha->namespaces.size(); i++) {
+        compare_names(ha->namespaces[i], hb->namespaces[i]);
+    }
+
+    if (result != Equal) return result;
+
+    for (size_t i = 0; i < ha->enclosing_types.size(); i++) {
+        compare_scalar(ha->enclosing_types[i].cpp_type_type,
+                       hb->enclosing_types[i].cpp_type_type);
+        compare_names(ha->enclosing_types[i].name,
+                      hb->enclosing_types[i].name);
+    }
+
+    if (result != Equal) return result;
+
+    for (size_t i = 0; i < ha->cpp_type_modifiers.size(); i++) {
+        compare_scalar(ha->cpp_type_modifiers[i],
+                       hb->cpp_type_modifiers[i]);
+    }
 
     return result;
 }
@@ -452,14 +511,20 @@ void IRComparer::visit(const Shuffle *op) {
 }
 
 void IRComparer::visit(const Prefetch *op) {
-    const Prefetch *s = expr.as<Prefetch>();
+    const Prefetch *s = stmt.as<Prefetch>();
 
     compare_names(s->name, op->name);
+    compare_scalar(s->types.size(), op->types.size());
     compare_scalar(s->bounds.size(), op->bounds.size());
+    for (size_t i = 0; (result == Equal) && (i < s->types.size()); i++) {
+        compare_types(s->types[i], op->types[i]);
+    }
     for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
         compare_expr(s->bounds[i].min, op->bounds[i].min);
         compare_expr(s->bounds[i].extent, op->bounds[i].extent);
     }
+    compare_expr(s->condition, op->condition);
+    compare_stmt(s->body, op->body);
 }
 
 } // namespace
@@ -538,7 +603,7 @@ void check_not_equal(const Expr &a, const Expr &b) {
         << "\nand\n" << b << "\n";
 }
 
-} // namespace
+}  // namespace
 
 void ir_equality_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -563,4 +628,5 @@ void ir_equality_test() {
     debug(0) << "ir_equality_test passed\n";
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

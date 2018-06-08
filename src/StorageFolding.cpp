@@ -1,13 +1,14 @@
 #include "StorageFolding.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
 #include "Bounds.h"
-#include "IRPrinter.h"
-#include "Substitute.h"
+#include "CSE.h"
 #include "Debug.h"
-#include "Monotonic.h"
 #include "ExprUsesVar.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Monotonic.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,9 +21,9 @@ int64_t next_power_of_two(int64_t x) {
 
 }  // namespace
 
+using std::map;
 using std::string;
 using std::vector;
-using std::map;
 
 // Count the number of producers of a particular func.
 class CountProducers : public IRVisitor {
@@ -291,8 +292,6 @@ public:
           dim(dim), storage_dim(storage_dim) {}
 };
 
-
-
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
@@ -335,6 +334,20 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr min = simplify(box[dim].min);
             Expr max = simplify(box[dim].max);
 
+            // Consider the initial iteration and steady state
+            // separately for all these proofs.
+            Expr loop_var = Variable::make(Int(32), op->name);
+            Expr steady_state = (op->min < loop_var);
+
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min));
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max));
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min));
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max));
+            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1));
+            Expr extent_steady = simplify(max_steady - min_steady + 1);
+            Expr extent = Max::make(extent_initial, extent_steady);
+            extent = simplify(common_subexpression_elimination(extent));
+
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
             if (!is_pure(min) ||
@@ -350,55 +363,57 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
-                     << "Max: " << max << '\n';
+                     << "Max: " << max << '\n'
+                     << "Extent: " << extent << '\n';
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
-            bool min_monotonic_increasing = !explicit_only &&
-                (is_monotonic(min, op->name) == Monotonic::Increasing);
+            bool min_monotonic_increasing =
+                (!explicit_only &&
+                 is_monotonic(min_steady, op->name) == Monotonic::Increasing &&
+                 can_prove(min_steady >= min_initial));
 
-            bool max_monotonic_decreasing = !explicit_only &&
-                (is_monotonic(max, op->name) == Monotonic::Decreasing);
+            bool max_monotonic_decreasing =
+                (!explicit_only &&
+                 is_monotonic(max_steady, op->name) == Monotonic::Decreasing &&
+                 can_prove(max_steady <= max_initial));
 
-            if (!min_monotonic_increasing && !max_monotonic_decreasing &&
-                explicit_factor.defined()) {
-                // If we didn't find a monotonic dimension, and we
-                // have an explicit fold factor, we need to
-                // dynamically check that the min/max do in fact
-                // monotonically increase/decrease. We'll allocate
-                // some stack space to store the valid footprint,
-                // update it outside produce nodes, and check it
-                // outside consume nodes.
-                dynamic_footprint = func.name() + "." + op->name + ".footprint";
+            if (explicit_factor.defined()) {
+                bool can_skip_dynamic_checks =
+                    ((min_monotonic_increasing || max_monotonic_decreasing) &&
+                     can_prove(extent <= explicit_factor));
+                if (!can_skip_dynamic_checks) {
+                    // If we didn't find a monotonic dimension, or
+                    // couldn't prove the extent was small enough, and we
+                    // have an explicit fold factor, we need to
+                    // dynamically check that the min/max do in fact
+                    // monotonically increase/decrease. We'll allocate
+                    // some stack space to store the valid footprint,
+                    // update it outside produce nodes, and check it
+                    // outside consume nodes.
+                    dynamic_footprint = func.name() + "." + op->name + ".footprint";
 
-                body = InjectFoldingCheck(func,
-                                          dynamic_footprint,
-                                          op->name,
-                                          dim,
-                                          storage_dim).mutate(body);
-                if (storage_dim.fold_forward) {
-                    min_monotonic_increasing = true;
-                } else {
-                    max_monotonic_decreasing = true;
+                    body = InjectFoldingCheck(func,
+                                              dynamic_footprint,
+                                              op->name,
+                                              dim,
+                                              storage_dim).mutate(body);
+                    if (storage_dim.fold_forward) {
+                        min_monotonic_increasing = true;
+                    } else {
+                        max_monotonic_decreasing = true;
+                    }
                 }
             }
 
             // The min or max has to be monotonic with the loop
             // variable, and should depend on the loop variable.
             if (min_monotonic_increasing || max_monotonic_decreasing) {
-                Expr extent = simplify(max - min + 1);
                 Expr factor;
                 if (explicit_factor.defined()) {
-                    if (dynamic_footprint.empty()) {
-                        // We were able to prove monotonicity
-                        // statically, but we may need a runtime
-                        // assertion for maximum extent. In many cases
-                        // it will simplify away.
-                        Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                                {func.name(), storage_dim.var, explicit_factor, op->name, extent},
-                                                Call::Extern);
-                        body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
-                    }
+                    // We were either able to prove monotonicity
+                    // statically and sufficient-extent statically, or
+                    // we added dynamic checks for it already.
                     factor = explicit_factor;
                 } else {
                     // The max of the extent over all values of the loop variable must be a constant
@@ -444,7 +459,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                             }
                             Stmt init_min = Store::make(dynamic_footprint, init_val, 0, Parameter(), const_true());
                             stmt = Block::make(init_min, stmt);
-                            stmt = Allocate::make(dynamic_footprint, Int(32), {}, const_true(), stmt);
+                            stmt = Allocate::make(dynamic_footprint, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                         }
                         return;
                     } else {
@@ -454,8 +469,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 }
             } else {
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                         << "min = " << min << "\n"
-                         << "max = " << max << "\n";
+                         << "min_initial = " << min_initial << "\n"
+                         << "min_steady = " << min_steady << "\n"
+                         << "max_initial = " << max_initial << "\n"
+                         << "max_steady = " << max_steady << "\n";
             }
         }
 
@@ -508,7 +525,7 @@ class StorageFolding : public IRMutator {
         if (body.same_as(op->body)) {
             stmt = op;
         } else if (folder.dims_folded.empty()) {
-            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, body);
         } else {
             Region bounds = op->bounds;
 
@@ -521,7 +538,7 @@ class StorageFolding : public IRMutator {
                 bounds[d] = Range(0, f);
             }
 
-            stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
+            stmt = Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
         }
     }
 
@@ -569,5 +586,5 @@ Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -6,9 +6,9 @@
  * A simple function to get a C++ mangled function name for a function.
  */
 
-#include <string>
 #include "IR.h"
 #include "Target.h"
+#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -17,14 +17,16 @@ namespace Internal {
  * The target parameter is used to decide on the C++
  * ABI/mangling style to use.
  */
-EXPORT std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
-                                                   Type return_type, const std::vector<ExternFuncArgument> &args,
-                                                   const Target &target);
+std::string cplusplus_function_mangled_name(const std::string &name,
+                                            const std::vector<std::string> &namespaces,
+                                            Type return_type,
+                                            const std::vector<ExternFuncArgument> &args,
+                                            const Target &target);
 
-EXPORT void cplusplus_mangle_test();
+void cplusplus_mangle_test();
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

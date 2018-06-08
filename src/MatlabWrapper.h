@@ -12,7 +12,7 @@ namespace llvm {
 class Module;
 class Function;
 class Value;
-}
+}  // namespace llvm
 
 namespace Halide {
 namespace Internal {
@@ -20,11 +20,11 @@ namespace Internal {
 /** Add a mexFunction wrapper definition to the module, calling the
  * function with the name pipeline_name. Returns the mexFunction
  * definition. */
-EXPORT llvm::Function *define_matlab_wrapper(llvm::Module *module,
-                                             llvm::Function *pipeline_argv_wrapper,
-                                             llvm::Function *metadata_getter);
+llvm::Function *define_matlab_wrapper(llvm::Module *module,
+                                      llvm::Function *pipeline_argv_wrapper,
+                                      llvm::Function *metadata_getter);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

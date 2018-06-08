@@ -1,16 +1,16 @@
+#include <algorithm>
 #include <iostream>
 #include <set>
 #include <sstream>
-#include <algorithm>
 
 #include "Lower.h"
 
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
+#include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
-#include "BoundSmallAllocations.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "Debug.h"
@@ -24,15 +24,16 @@
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
-#include "IRMutator.h"
-#include "IROperator.h"
-#include "IRPrinter.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
 #include "Prefetch.h"
@@ -44,13 +45,14 @@
 #include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
-#include "SkipStages.h"
-#include "SlidingWindow.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
+#include "SkipStages.h"
+#include "SlidingWindow.h"
 #include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
+#include "StrictifyFloat.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -66,14 +68,14 @@
 namespace Halide {
 namespace Internal {
 
-using std::set;
+using std::map;
 using std::ostringstream;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
-             const vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+             const vector<Argument> &args, const LinkageType linkage_type,
              const vector<IRMutator2 *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -89,6 +91,9 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Create a deep-copy of the entire graph of Funcs.
     vector<Function> outputs;
     std::tie(outputs, env) = deep_copy(output_funcs, env);
+
+    bool any_strict_float = strictify_float(env, t);
+    result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
@@ -175,6 +180,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = uniquify_variable_names(s);
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
+    debug(1) << "Simplifying...\n";
+    s = simplify(s, false); // Keep dead lets. Storage flattening needs them.
+    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
+
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
@@ -182,10 +191,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
-
-    debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
-    s = simplify(s, false);
-    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
@@ -299,6 +304,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Bounding small allocations...\n";
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small allocations:\n" << s << "\n\n";
+
+    if (t.has_feature(Target::CUDA)) {
+        debug(1) << "Injecting warp shuffles...\n";
+        s = lower_warp_shuffles(s);
+        debug(2) << "Lowering after injecting warp shuffles:\n" << s << "\n\n";
+    }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
@@ -431,8 +442,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     return result_module;
 }
 
-EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
-                            const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
+Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
+                     const Target &t, const std::vector<IRMutator2 *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);
@@ -443,10 +454,10 @@ EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std
         }
     }
 
-    Module module = lower(output_funcs, pipeline_name, t, args, Internal::LoweredFunc::External, custom_passes);
+    Module module = lower(output_funcs, pipeline_name, t, args, LinkageType::External, custom_passes);
 
     return module.functions().front().body;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

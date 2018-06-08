@@ -20,7 +20,6 @@ public:
     static void test();
 
 protected:
-
     using CodeGen_Posix::visit;
 
     std::string mcpu() const;
@@ -29,6 +28,7 @@ protected:
     int native_vector_bits() const;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

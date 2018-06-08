@@ -265,6 +265,12 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"strict_float", Target::StrictFloat},
+    {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
+    {"tsan", Target::TSAN},
+    {"asan", Target::ASAN},
+    // NOTE: When adding features to this map, be sure to update
+    // PyEnums.cpp and halide.cmake as well.
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -291,8 +297,14 @@ Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
 #if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+    host.set_feature(Target::ASAN);
+#endif
 #if __has_feature(memory_sanitizer)
     host.set_feature(Target::MSAN);
+#endif
+#if __has_feature(thread_sanitizer)
+    host.set_feature(Target::TSAN);
 #endif
 #endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
@@ -351,6 +363,9 @@ bool merge_string(Target &t, const std::string &target) {
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
+            features_specified = true;
+        } else if (tok == "trace_all") {
+            t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
             features_specified = true;
         } else {
             return false;
@@ -470,6 +485,11 @@ std::string Target::to_string() const {
             result += "-" + feature_entry.first;
         }
     }
+    // Use has_feature() multiple times (rather than features_any_of())
+    // to avoid constructing a temporary vector for this rather-common call.
+    if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
+        result = Internal::replace_all(result, "trace_loads-trace_realizations-trace_stores", "trace_all");
+    }
     return result;
 }
 
@@ -557,7 +577,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 
 namespace Internal {
 
-EXPORT void target_test() {
+void target_test() {
     Target t;
     for (const auto &feature : feature_name_map) {
         t.set_feature(feature.second);
@@ -569,7 +589,6 @@ EXPORT void target_test() {
     std::cout << "Target test passed" << std::endl;
 }
 
+}  // namespace Internal
 
-}
-
-}
+}  // namespace Halide

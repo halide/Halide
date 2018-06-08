@@ -6,8 +6,8 @@
  */
 
 #include <iostream>
-#include <string>
 #include <stdlib.h>
+#include <string>
 
 #include "Introspection.h"
 
@@ -16,19 +16,23 @@ namespace Halide {
 struct Expr;
 struct Type;
 // Forward declare some things from IRPrinter, which we can't include yet.
-EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
-EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
+std::ostream &operator<<(std::ostream &stream, const Expr &);
+std::ostream &operator<<(std::ostream &stream, const Type &);
 
 class Module;
-EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
+std::ostream &operator<<(std::ostream &stream, const Module &);
+
+struct Target;
+/** Emit a halide Target in a human readable form */
+std::ostream &operator<<(std::ostream &stream, const Target &);
 
 namespace Internal {
 
 struct Stmt;
-EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
+std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 struct LoweredFunc;
-EXPORT std::ostream &operator << (std::ostream &, const LoweredFunc &);
+std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 /** For optional debugging during codegen, use the debug class as
  * follows:
@@ -58,10 +62,10 @@ public:
         return *this;
     }
 
-    EXPORT static int debug_level();
+    static int debug_level();
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

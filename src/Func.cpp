@@ -1,54 +1,53 @@
 #include <algorithm>
 #include <iostream>
 #include <string.h>
-#include <fstream>
 
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
-#include "IR.h"
+#include "ApplySplit.h"
+#include "Argument.h"
+#include "Associativity.h"
+#include "CodeGen_LLVM.h"
+#include "Debug.h"
+#include "ExprUsesVar.h"
 #include "Func.h"
-#include "Util.h"
+#include "Function.h"
+#include "IR.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Function.h"
-#include "Argument.h"
+#include "ImageParam.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 #include "Lower.h"
+#include "Outputs.h"
 #include "Param.h"
 #include "PrintLoopNest.h"
-#include "Debug.h"
-#include "IREquality.h"
-#include "CodeGen_LLVM.h"
-#include "LLVM_Headers.h"
-#include "Outputs.h"
-#include "LLVM_Output.h"
-#include "Substitute.h"
-#include "ExprUsesVar.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "Associativity.h"
-#include "ApplySplit.h"
-#include "ImageParam.h"
+#include "Substitute.h"
+#include "Util.h"
 
 namespace Halide {
 
+using std::map;
 using std::max;
 using std::min;
-using std::map;
+using std::ofstream;
+using std::pair;
 using std::string;
 using std::vector;
-using std::pair;
-using std::ofstream;
 
 using namespace Internal;
 
 Func::Func(const string &name) : func(unique_name(name)) {}
 
-Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')) {}
+Func::Func() : func(make_entity_name(this, "Halide:.*:Func", 'f')) {}
 
-Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')) {
+Func::Func(Expr e) : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
     (*this)(_) = e;
 }
 
@@ -186,7 +185,7 @@ int Func::outputs() const {
 
 /** Get the name of the extern function called for an extern
  * definition. */
-EXPORT const std::string &Func::extern_function_name() const {
+const std::string &Func::extern_function_name() const {
     return func.extern_function_name();
 }
 
@@ -293,7 +292,8 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
             // validate that this doesn't introduce a race condition.
             if (!dims[i].is_pure() && var.is_rvar &&
                 (t == ForType::Vectorized || t == ForType::Parallel ||
-                 t == ForType::GPUBlock || t == ForType::GPUThread)) {
+                 t == ForType::GPUBlock || t == ForType::GPUThread ||
+                 t == ForType::GPULane)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << name()
                     << ", marking var " << var.name()
@@ -934,18 +934,52 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
                    << dump_argument_list();
     }
 
+    bool round_up_ok = !exact;
+    if (round_up_ok && !definition.is_init()) {
+        // If it's the outermost split in this dimension, RoundUp
+        // is OK. Otherwise we need GuardWithIf to avoid
+        // recomputing values in the case where the inner split
+        // factor does not divide the outer split factor.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        round_up_ok = !inner_vars.count(old_name);
+        user_assert(round_up_ok || tail != TailStrategy::RoundUp)
+            << "Can't use TailStrategy::RoundUp for splitting " << old_name
+            << " in update definition of " << name() << ". "
+            << "It may redundantly recompute some values, which "
+            << "could change the meaning of the algorithm. "
+            << "Use TailStrategy::GuardWithIf instead.";
+    }
+
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
             tail = TailStrategy::GuardWithIf;
         } else if (!definition.is_init()) {
-            tail = TailStrategy::RoundUp;
+            tail = round_up_ok ? TailStrategy::RoundUp : TailStrategy::GuardWithIf;
         } else {
             // We should employ ShiftInwards when we can to prevent
             // overcompute and adding constraints to the bounds of
             // inputs and outputs. However, if we're already covered
-            // by an earlier ShiftInwards split, there's no point - it
-            // just complicates the IR and confuses bounds inference. An example of this is:
+            // by an earlier larger ShiftInwards split, there's no
+            // point - it just complicates the IR and confuses bounds
+            // inference. An example of this is:
             //
             // f.vectorize(x, 8).unroll(x, 4);
             //
@@ -963,19 +997,22 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             //
             // It's only the tail/epilogue that changes.
 
-            std::set<string> descends_from_shiftinwards_outer;
+            std::map<string, Expr> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
+                auto it = descends_from_shiftinwards_outer.find(s.old_var);
                 if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
-                } else if (s.is_split() && descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.inner);
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                    descends_from_shiftinwards_outer[s.outer] = s.factor;
+                } else if (s.is_split() && it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.inner] = it->second;
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 } else if ((s.is_rename() || s.is_purify()) &&
-                           descends_from_shiftinwards_outer.count(s.old_var)) {
-                    descends_from_shiftinwards_outer.insert(s.outer);
+                           it != descends_from_shiftinwards_outer.end()) {
+                    descends_from_shiftinwards_outer[s.outer] = it->second;
                 }
             }
-            if (descends_from_shiftinwards_outer.count(old_name)) {
+            auto it = descends_from_shiftinwards_outer.find(old_name);
+            if (it != descends_from_shiftinwards_outer.end() &&
+                can_prove(it->second >= factor)) {
                 tail = TailStrategy::RoundUp;
             } else {
                 tail = TailStrategy::ShiftInwards;
@@ -1527,6 +1564,12 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI de
     return *this;
 }
 
+Stage &Stage::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+    set_dim_device_api(tx, device_api);
+    set_dim_type(tx, ForType::GPULane);
+    return *this;
+}
+
 Stage &Stage::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_type(bx, ForType::GPUBlock);
@@ -1574,17 +1617,7 @@ Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
-                       TailStrategy tail, DeviceAPI device_api) {
-    split(x, bx, tx, x_size, tail);
-    set_dim_device_api(bx, device_api);
-    set_dim_device_api(tx, device_api);
-    set_dim_type(bx, ForType::GPUBlock);
-    set_dim_type(tx, ForType::GPUThread);
-    return *this;
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
                        TailStrategy tail, DeviceAPI device_api) {
     split(x, bx, tx, x_size, tail);
     set_dim_device_api(bx, device_api);
@@ -1624,15 +1657,7 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, Var ty,
-                       Expr x_size, Expr y_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    return gpu_tile(x, y, x, y, tx, ty, x_size, y_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       VarOrRVar tx, RVar ty,
+                       VarOrRVar tx, VarOrRVar ty,
                        Expr x_size, Expr y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
@@ -1678,42 +1703,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        TailStrategy tail,
                        DeviceAPI device_api) {
     return gpu_tile(x, y, z, x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar);
-    split(x, bx, tx, x_size, tail);
-    set_dim_device_api(bx, device_api);
-    set_dim_device_api(tx, device_api);
-    set_dim_type(bx, ForType::GPUBlock);
-    set_dim_type(tx, ForType::GPUThread);
-    return *this;
-}
-
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
-                       Expr x_size, Expr y_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        by("__deprecated_block_id_y", y.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar),
-        ty("__deprecated_thread_id_y", y.is_rvar);
-    return gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
-}
-
-Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                       Expr x_size, Expr y_size, Expr z_size,
-                       TailStrategy tail,
-                       DeviceAPI device_api) {
-    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
-        by("__deprecated_block_id_y", y.is_rvar),
-        bz("__deprecated_block_id_z", z.is_rvar),
-        tx("__deprecated_thread_id_x", x.is_rvar),
-        ty("__deprecated_thread_id_y", y.is_rvar),
-        tz("__deprecated_thread_id_z", z.is_rvar);
-    return gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
 Stage &Stage::hexagon(VarOrRVar x) {
@@ -1990,6 +1979,12 @@ Func &Func::memoize() {
     return *this;
 }
 
+Func &Func::store_in(MemoryType t) {
+    invalidate_cache();
+    func.schedule().memory_type() = t;
+    return *this;
+}
+
 Stage Func::specialize(Expr c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0, args()).specialize(c);
@@ -2152,6 +2147,12 @@ Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI devi
     return *this;
 }
 
+Func &Func::gpu_lanes(VarOrRVar tx, DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).gpu_lanes(tx, device_api);
+    return *this;
+}
+
 Func &Func::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).gpu_blocks(bx, device_api);
@@ -2194,13 +2195,7 @@ Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVa
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0, args()).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
@@ -2225,18 +2220,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, Var ty,
-                     Expr x_size, Expr y_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args())
-        .gpu_tile(x, y, tx, ty, x_size, y_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     VarOrRVar tx, RVar ty,
+                     VarOrRVar tx, VarOrRVar ty,
                      Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
@@ -2266,30 +2250,6 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     invalidate_cache();
     Stage(func, func.definition(), 0, args())
         .gpu_tile(x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, x_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     Expr x_size, Expr y_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, y, x_size, y_size, tail, device_api);
-    return *this;
-}
-
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                     Expr x_size, Expr y_size, Expr z_size,
-                     TailStrategy tail,
-                     DeviceAPI device_api) {
-    invalidate_cache();
-    Stage(func, func.definition(), 0, args()).gpu_tile(x, y, z, x_size, y_size, z_size, tail, device_api);
     return *this;
 }
 
@@ -2441,6 +2401,18 @@ Func &Func::compute_with(Stage s, VarOrRVar var, LoopAlignStrategy align) {
     return *this;
 }
 
+Func &Func::compute_with(LoopLevel loop_level, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &align) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    return *this;
+}
+
+Func &Func::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0, args()).compute_with(loop_level, align);
+    return *this;
+}
+
 Func &Func::compute_root() {
     return compute_at(LoopLevel::root());
 }
@@ -2482,6 +2454,12 @@ Func &Func::trace_stores() {
 Func &Func::trace_realizations() {
     invalidate_cache();
     func.trace_realizations();
+    return *this;
+}
+
+Func &Func::add_trace_tag(const std::string &trace_tag) {
+    invalidate_cache();
+    func.add_trace_tag(trace_tag);
     return *this;
 }
 
@@ -2850,44 +2828,55 @@ FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
+                          const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     return pipeline().realize(sizes, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize({x_size, y_size, z_size, w_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize({x_size, y_size, z_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, int y_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, int y_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, const Target &target, const ParamMap &param_map) {
+Realization Func::realize(int x_size, const Target &target,
+                          const ParamMap &param_map) {
     return realize(std::vector<int>{x_size}, target, param_map);
 }
 
-Realization Func::realize(const Target &target, const ParamMap &param_map) {
+Realization Func::realize(const Target &target,
+                          const ParamMap &param_map) {
     return realize(std::vector<int>{}, target, param_map);
 }
 
-  void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size, const ParamMap &param_map) {
+void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+                              const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
         // We're not actually going to read from these outputs, so
-        // make the allocation tiny, then expand them with unsafe
-        // cropping.
+        // make the allocation tiny, then "expand" them by directly manipulating
+        // the halide_buffer_t fields. (We can't use crop because it explicitly
+        // disallows expanding the fields in this unsafe manner.)
         Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
         for (int s : sizes) {
             if (!s) break;
             im.add_dimension();
-            im.crop(im.dimensions()-1, 0, s);
+            // buf.host is going to be wrong no matter what, so don't
+            // bother adjusting it.
+            im.raw_buffer()->dim[im.dimensions()-1].min = 0;
+            im.raw_buffer()->dim[im.dimensions()-1].extent = s;
         }
         outputs[i] = std::move(im);
     }
@@ -2991,6 +2980,13 @@ void Func::compile_to_lowered_stmt(const string &filename,
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
 }
 
+void Func::compile_to_python_extension(const string &filename_prefix,
+                                       const vector<Argument> &args,
+                                       const string &fn_name,
+                                       const Target &target) {
+    pipeline().compile_to_python_extension(filename_prefix, args, fn_name, target);
+}
+
 void Func::print_loop_nest() {
     pipeline().print_loop_nest();
 }
@@ -3051,7 +3047,7 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
-void Func::add_custom_lowering_pass(IRMutator2 *pass, void (*deleter)(IRMutator2 *)) {
+void Func::add_custom_lowering_pass(IRMutator2 *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }
 
@@ -3067,20 +3063,22 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Realization dst, const Target &target, const ParamMap &param_map) {
-    pipeline().realize(dst, target, param_map);
+void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
+                   const ParamMap &param_map) {
+    pipeline().realize(std::move(outputs), target, param_map);
 }
 
-void Func::infer_input_bounds(Realization dst, const ParamMap &param_map) {
-    pipeline().infer_input_bounds(dst, param_map);
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+                              const ParamMap &param_map) {
+    pipeline().infer_input_bounds(std::move(outputs), param_map);
 }
 
 void *Func::compile_jit(const Target &target) {
     return pipeline().compile_jit(target);
 }
 
-EXPORT Var _("_");
-EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
+Var _("_");
+Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
            _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
-}
+}  // namespace Halide

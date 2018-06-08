@@ -1,8 +1,8 @@
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
-#include "Lerp.h"
 #include "IROperator.h"
+#include "Lerp.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -174,5 +174,5 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
     return simplify(result);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

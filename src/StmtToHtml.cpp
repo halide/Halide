@@ -360,6 +360,8 @@ private:
             stream << keyword("gpu_block");
         } else if (op->for_type == ForType::GPUThread) {
             stream << keyword("gpu_thread");
+        } else if (op->for_type == ForType::GPULane) {
+            stream << keyword("gpu_lane");
         } else {
             internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
@@ -493,7 +495,15 @@ private:
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << matched(")");
+        if (!is_one(op->condition)) {
+            stream << " " << keyword("if") << " ";
+            print(op->condition);
+        }
         stream << close_span();
+
+        stream << open_div("PrefetchBody");
+        print(op->body);
+        stream << close_div();
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.

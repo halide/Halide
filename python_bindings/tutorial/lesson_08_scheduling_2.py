@@ -316,7 +316,7 @@ def main():
 
                 # Skip over rows of producer that we've already
                 # computed in a previous iteration.
-                if y > 0 and py == yy:
+                if yy > 0 and py == yy:
                     continue
 
                 for px in range(5):
@@ -362,7 +362,7 @@ def main():
             for yy in range(4):
                 for py in range(yy, yy + 2):
 
-                    if y > 0 and py == yy:
+                    if yy > 0 and py == yy:
                         continue
 
                     for px in range(5):
@@ -674,11 +674,11 @@ def main():
         # should tell you something.
         for yy in range(600):
             for xx in range(800):
-                error = halide_result(xx, yy) - c_result[yy][xx]
+                error = halide_result[xx, yy] - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 if (error < -0.001) or (error > 0.001):
                     raise Exception("halide_result(%d, %d) = %f instead of %f" % (
-                           xx, yy, halide_result(xx, yy), c_result[yy][xx]))
+                           xx, yy, halide_result[xx, yy], c_result[yy][xx]))
                     return -1
 
 

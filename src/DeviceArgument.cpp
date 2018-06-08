@@ -81,4 +81,5 @@ void HostClosure::visit(const For *loop) {
     }
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

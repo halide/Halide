@@ -33,10 +33,10 @@ namespace Halide {
  * scheduled innermost within g.
  */
 //@{
-EXPORT Expr sum(Expr, const std::string &s = "sum");
-EXPORT Expr product(Expr, const std::string &s = "product");
-EXPORT Expr maximum(Expr, const std::string &s = "maximum");
-EXPORT Expr minimum(Expr, const std::string &s = "minimum");
+Expr sum(Expr, const std::string &s = "sum");
+Expr product(Expr, const std::string &s = "product");
+Expr maximum(Expr, const std::string &s = "maximum");
+Expr minimum(Expr, const std::string &s = "minimum");
 //@}
 
 /** Variants of the inline reduction in which the RDom is stated
@@ -49,24 +49,23 @@ EXPORT Expr minimum(Expr, const std::string &s = "minimum");
  \endcode
 */
 // @{
-EXPORT Expr sum(RDom, Expr, const std::string &s = "sum");
-EXPORT Expr product(RDom, Expr, const std::string &s = "product");
-EXPORT Expr maximum(RDom, Expr, const std::string &s = "maximum");
-EXPORT Expr minimum(RDom, Expr, const std::string &s = "minimum");
+Expr sum(RDom, Expr, const std::string &s = "sum");
+Expr product(RDom, Expr, const std::string &s = "product");
+Expr maximum(RDom, Expr, const std::string &s = "maximum");
+Expr minimum(RDom, Expr, const std::string &s = "minimum");
 // @}
-
 
 /** Returns an Expr or Tuple representing the coordinates of the point
  * in the RDom which minimizes or maximizes the expression. The
  * expression must refer to some RDom. Also returns the extreme value
  * of the expression as the last element of the tuple. */
 // @{
-EXPORT Tuple argmax(Expr, const std::string &s = "argmax");
-EXPORT Tuple argmin(Expr, const std::string &s = "argmin");
-EXPORT Tuple argmax(RDom, Expr, const std::string &s = "argmax");
-EXPORT Tuple argmin(RDom, Expr, const std::string &s = "argmin");
+Tuple argmax(Expr, const std::string &s = "argmax");
+Tuple argmin(Expr, const std::string &s = "argmin");
+Tuple argmax(RDom, Expr, const std::string &s = "argmax");
+Tuple argmin(RDom, Expr, const std::string &s = "argmin");
 // @}
 
-}
+}  // namespace Halide
 
 #endif

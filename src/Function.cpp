@@ -1,29 +1,29 @@
-#include <set>
-#include <stdlib.h>
 #include <atomic>
 #include <memory>
+#include <set>
+#include <stdlib.h>
 
-#include "IR.h"
-#include "IRMutator.h"
-#include "Function.h"
-#include "Scope.h"
 #include "CSE.h"
-#include "Random.h"
-#include "Introspection.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Introspection.h"
 #include "ParallelRVar.h"
+#include "Random.h"
+#include "Scope.h"
 #include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
-using std::set;
 using std::map;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 typedef map<FunctionPtr, FunctionPtr> DeepCopyMap;
 
@@ -55,10 +55,11 @@ public:
     int count = 0;
     WeakenFunctionPtrs(FunctionContents *f) : func(f) {}
 };
-}
+}  // namespace
 
 struct FunctionContents {
     std::string name;
+    std::string origin_name;
     std::vector<Type> output_types;
 
     // The names of the dimensions of the Function. Corresponds to the
@@ -87,6 +88,7 @@ struct FunctionContents {
     Expr extern_proxy_expr;
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
+    std::vector<string> trace_tags;
 
     bool frozen = false;
 
@@ -162,12 +164,12 @@ FunctionContents *FunctionPtr::get() const {
 }
 
 template<>
-EXPORT RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
+RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) {
     return f->ref_count;
 }
 
 template<>
-EXPORT void destroy<FunctionGroup>(const FunctionGroup *f) {
+void destroy<FunctionGroup>(const FunctionGroup *f) {
     delete f;
 }
 
@@ -289,6 +291,7 @@ Function::Function(const std::string &n) {
     contents.strong = new FunctionGroup;
     contents.strong->members.resize(1);
     contents->name = n;
+    contents->origin_name = n;
 }
 
 // Return deep-copy of ExternFuncArgument 'src'
@@ -326,6 +329,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     debug(4) << "Deep-copy function contents: \"" << contents->name << "\"\n";
 
     copy->name = contents->name;
+    copy->origin_name = contents->origin_name;
     copy->args = contents->args;
     copy->output_types = contents->output_types;
     copy->debug_file = contents->debug_file;
@@ -337,6 +341,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
+    copy->trace_tags = contents->trace_tags;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -428,6 +433,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents.strong = new FunctionGroup;
         contents.strong->members.resize(1);
         contents->name = unique_name('f');
+        contents->origin_name = contents->name;
     }
 
     user_assert(!contents->init_def.defined())
@@ -636,7 +642,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
-
             Dim d = {v, ForType::Serial, DeviceAPI::None,
                      pure ? Dim::Type::PureRVar : Dim::Type::ImpureRVar};
             r.schedule().dims().push_back(d);
@@ -726,6 +731,10 @@ void Function::mutate(IRMutator2 *mutator) {
 
 const std::string &Function::name() const {
     return contents->name;
+}
+
+const std::string &Function::origin_name() const {
+    return contents->origin_name;
 }
 
 Definition &Function::definition() {
@@ -878,6 +887,10 @@ void Function::trace_stores() {
 void Function::trace_realizations() {
     contents->trace_realizations = true;
 }
+void Function::add_trace_tag(const std::string &trace_tag) {
+    contents->trace_tags.push_back(trace_tag);
+}
+
 bool Function::is_tracing_loads() const {
     return contents->trace_loads;
 }
@@ -886,6 +899,9 @@ bool Function::is_tracing_stores() const {
 }
 bool Function::is_tracing_realizations() const {
     return contents->trace_realizations;
+}
+const std::vector<std::string> &Function::get_trace_tags() const {
+    return contents->trace_tags;
 }
 
 void Function::freeze() {
@@ -996,7 +1012,7 @@ public:
         : substitutions(substitutions) {}
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
@@ -1067,6 +1083,5 @@ pair<vector<Function>, map<string, Function>> deep_copy(
     return { copy_outputs, copy_env };
 }
 
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide

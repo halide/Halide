@@ -1,12 +1,12 @@
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <string>
-#include <limits>
 
-#include "Profiling.h"
 #include "CodeGen_Internal.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -140,7 +140,8 @@ private:
             new_expr.same_as(op->new_expr)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+            stmt = Allocate::make(op->name, op->type, op->memory_type,
+                                  new_extents, condition, body, new_expr, op->free_function);
         }
 
         if (!is_zero(size) && !on_stack && profiling_memory) {
@@ -320,7 +321,8 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
                                         i, Parameter(), const_true()), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
-        s = Allocate::make("profiling_func_stack_peak_buf", UInt(64), {num_funcs}, const_true(), s);
+        s = Allocate::make("profiling_func_stack_peak_buf", UInt(64),
+                           MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
     for (std::pair<string, int> p : profiling.indices) {
@@ -328,11 +330,12 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
     }
 
     s = Block::make(s, Free::make("profiling_func_names"));
-    s = Allocate::make("profiling_func_names", Handle(), {num_funcs}, const_true(), s);
+    s = Allocate::make("profiling_func_names", Handle(),
+                       MemoryType::Auto, {num_funcs}, const_true(), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

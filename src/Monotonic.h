@@ -16,11 +16,11 @@ namespace Internal {
  * decreasing, or unknown.
  */
 enum class Monotonic {Constant, Increasing, Decreasing, Unknown};
-EXPORT Monotonic is_monotonic(Expr e, const std::string &var);
+Monotonic is_monotonic(Expr e, const std::string &var);
 
-EXPORT void is_monotonic_test();
+void is_monotonic_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

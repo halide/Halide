@@ -7,8 +7,8 @@
  * computing some function regions.
  */
 
-#include <set>
 #include <limits>
+#include <set>
 
 #include "AutoScheduleUtils.h"
 #include "Interval.h"
@@ -115,8 +115,8 @@ struct RegionCosts {
     Expr region_size(std::string func, const Box &region);
 
     /** Return the size of the peak amount of memory allocated in bytes. This takes
-     * the realization order of the function regions and the early free mechanism
-     * into account while computing the peak footprint. */
+     * the realization (topological) order of the function regions and the early
+     * free mechanism into account while computing the peak footprint. */
     Expr region_footprint(const std::map<std::string, Box> &regions,
                           const std::set<std::string> &inlined = std::set<std::string>());
 
@@ -138,7 +138,7 @@ struct RegionCosts {
  * cost of calling the function directly. */
 bool is_func_trivial_to_inline(const Function &func);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

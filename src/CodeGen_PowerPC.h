@@ -37,9 +37,10 @@ protected:
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
 private:
-    static const char* altivec_int_type_name(const Type&);
+    static const char *altivec_int_type_name(const Type &);
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

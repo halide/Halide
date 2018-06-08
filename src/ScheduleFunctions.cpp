@@ -1,32 +1,31 @@
 #include "ScheduleFunctions.h"
-#include "IROperator.h"
-#include "Simplify.h"
-#include "Substitute.h"
-#include "ExprUsesVar.h"
-#include "Var.h"
-#include "Qualify.h"
-#include "IRMutator.h"
-#include "Target.h"
-#include "Inline.h"
+#include "ApplySplit.h"
 #include "CodeGen_GPU_Dev.h"
-#include "IRPrinter.h"
+#include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
-#include "ApplySplit.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Inline.h"
+#include "Qualify.h"
+#include "Simplify.h"
 #include "Solve.h"
+#include "Substitute.h"
+#include "Target.h"
+#include "Var.h"
+#include "Prefetch.h"
 
 #include <algorithm>
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
-using std::vector;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 // A structure representing a containing LetStmt, IfThenElse, or For
@@ -48,7 +47,7 @@ bool var_name_match(string v1, string v2) {
             Internal::ends_with(v2, "." + v1));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
@@ -322,7 +321,8 @@ Stmt build_provide_loop_nest_helper(string func_name,
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(string func_name,
+Stmt build_provide_loop_nest(const map<string, Function> &env,
+                             string func_name,
                              string prefix,
                              int start_fuse,
                              const vector<string> &dims,
@@ -354,6 +354,7 @@ Stmt build_provide_loop_nest(string func_name,
     Stmt stmt = build_provide_loop_nest_helper(
         func_name, prefix, start_fuse, dims, site, values,
         def.split_predicate(), f_sched, def.schedule(), is_update);
+    stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
@@ -363,7 +364,7 @@ Stmt build_provide_loop_nest(string func_name,
         const Definition &s_def = s.definition;
         Stmt then_case;
         if (s.failure_message.empty()) {
-            then_case = build_provide_loop_nest(func_name, prefix, start_fuse, dims,
+            then_case = build_provide_loop_nest(env, func_name, prefix, start_fuse, dims,
                                                 f_sched, s_def, is_update);
         } else {
             internal_assert(equal(c, const_true()));
@@ -388,7 +389,7 @@ Stmt build_provide_loop_nest(string func_name,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f, const Target &target) {
+Stmt build_produce(const map<string, Function> &env, Function f, const Target &target) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -637,7 +638,7 @@ Stmt build_produce(Function f, const Target &target) {
             const char *fn = (cropped_buffers.size() == 1 ?
                               "_halide_buffer_retire_crop_after_extern_stage" :
                               "_halide_buffer_retire_crops_after_extern_stage");
-            check = Allocate::make(destructor_name, Handle(), {},
+            check = Allocate::make(destructor_name, Handle(), MemoryType::Stack, {},
                                    const_true(), check, cleanup_struct, fn);
         }
 
@@ -658,12 +659,12 @@ Stmt build_produce(Function f, const Target &target) {
 
         string prefix = f.name() + ".s0.";
         vector<string> dims = f.args();
-        return build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
+        return build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
     }
 }
 
 // Build the loop nests that update a function (assuming it's a reduction).
-vector<Stmt> build_update(Function f) {
+vector<Stmt> build_update(const map<string, Function> &env, Function f) {
 
     vector<Stmt> updates;
 
@@ -673,16 +674,16 @@ vector<Stmt> build_update(Function f) {
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
         vector<string> dims = f.args();
-        Stmt loop = build_provide_loop_nest(f.name(), prefix, -1, dims, f.schedule(), def, true);
+        Stmt loop = build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), def, true);
         updates.push_back(loop);
     }
 
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(Function func, const Target &target) {
-    Stmt produce = build_produce(func, target);
-    vector<Stmt> updates = build_update(func);
+pair<Stmt, Stmt> build_production(const map<string, Function> &env, Function func, const Target &target) {
+    Stmt produce = build_produce(env, func, target);
+    vector<Stmt> updates = build_update(env, func);
 
     // Combine the update steps
     Stmt merged_updates = Block::make(updates);
@@ -849,7 +850,7 @@ private:
     }
 
     Stmt build_pipeline(Stmt consumer) {
-        pair<Stmt, Stmt> realization = build_production(func, target);
+        pair<Stmt, Stmt> realization = build_production(env, func, target);
 
         Stmt producer;
         if (realization.first.defined() && realization.second.defined()) {
@@ -888,7 +889,7 @@ private:
                 bounds.push_back(Range(min, extent));
             }
 
-            s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
         // This is also the point at which we inject explicit bounds
@@ -1427,7 +1428,7 @@ private:
         }
 
         const vector<string> f_args = f.args();
-        Stmt produce = build_provide_loop_nest(f.name(), prefix, start_fuse, f_args,
+        Stmt produce = build_provide_loop_nest(env, f.name(), prefix, start_fuse, f_args,
                                                f.schedule(), def, is_update);
 
         // Strip off the containing lets. The bounds of the parent fused loop
@@ -1575,7 +1576,7 @@ private:
                 bounds.push_back(Range(min, extent));
             }
 
-            s = Realize::make(name, func.output_types(), bounds, const_true(), s);
+            s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
 
         // This is also the point at which we inject explicit bounds
@@ -1763,6 +1764,14 @@ class StmtUsesFunc : public IRVisitor {
         }
         IRVisitor::visit(op);
     }
+    void visit(const Variable *op) {
+        if (op->type.is_handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
+            result = true;
+        }
+        IRVisitor::visit(op);
+    }
 public:
     bool result = false;
     StmtUsesFunc(string f) : func(f) {}
@@ -1823,6 +1832,18 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const Call *op) {
         if (op->name == func) {
+            do_indent();
+            stream << caller << " uses " << func << "\n";
+            last_print_was_ellipsis = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (op->type.is_handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
             do_indent();
             stream << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
@@ -1892,15 +1913,71 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         }
     }
 
+    int racy_shift_inwards_count = 0;
+    int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
         const StageSchedule &s = def.schedule();
+        set<string> parallel_vars;
         for (const Dim &d : s.dims()) {
+            // We don't care about GPU parallelism here
+            if (d.for_type == ForType::Parallel) {
+                parallel_vars.insert(d.var);
+            }
             if (!target.supports_device_api(d.device_api)) {
                 user_error << "Schedule for Func " << f.name()
                            << " requires " << d.device_api
                            << " but no compatible target feature is enabled in target "
                            << target.to_string() << "\n";
             }
+        }
+        if (s.allow_race_conditions()) {
+            allow_race_conditions_count++;
+        }
+
+        // For purposes of race-detection-warning, any split that
+        // is the child of a parallel var is also 'parallel'.
+        //
+        // However, there are four types of Split, and the concept of a child var varies across them:
+        // - For a vanilla split, inner and outer are the children and old_var is the parent.
+        // - For rename and purify, the outer is the child and the inner is meaningless.
+        // - For fuse, old_var is the child and inner/outer are the parents.
+        //
+        // (@abadams comments: "I acknowledge that this is gross and should be refactored.")
+
+        // (Note that the splits are ordered, so a single reverse-pass catches all these cases.)
+        for (auto split = s.splits().rbegin(); split != s.splits().rend(); split++) {
+            if (split->is_split() && (parallel_vars.count(split->outer) || parallel_vars.count(split->inner))) {
+                parallel_vars.insert(split->old_var);
+            } else if (split->is_fuse() && parallel_vars.count(split->old_var)) {
+                parallel_vars.insert(split->inner);
+                parallel_vars.insert(split->outer);
+            } else if ((split->is_rename() || split->is_purify()) && parallel_vars.count(split->outer)) {
+                parallel_vars.insert(split->old_var);
+            }
+        }
+
+        for (const auto &split : s.splits()) {
+            // ShiftInwards used inside a parallel split can produce racy (though benignly so) code
+            // that TSAN will complain about; issue a warning so that the user doesn't assume
+            // the warning is legitimate.
+            if (split.tail == TailStrategy::ShiftInwards && parallel_vars.count(split.outer)) {
+                racy_shift_inwards_count++;
+            }
+        }
+    }
+
+    if (target.has_feature(Target::TSAN)) {
+        if (allow_race_conditions_count > 0) {
+            user_warning << "Schedule for Func '" << f.name()
+                   << "'' has one or more uses of allow_race_conditions() in its schedule;\n"
+                   << "this may report benign data races when run with ThreadSanitizer.\n\n";
+        }
+        if (racy_shift_inwards_count > 0) {
+            user_warning << "Schedule for Func '" << f.name()
+                   << "'' has " << racy_shift_inwards_count << " split(s) using TailStrategy::ShiftInwards inside a parallel loop;\n"
+                   << "this may report benign data races when run with ThreadSanitizer.\n"
+                   << "(Note that ShiftInwards splits may be implicitly created by\n"
+                   << "other scheduling operations, e.g. parallel() and vectorize()).\n\n";
         }
     }
 
@@ -2191,8 +2268,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
     s = RemoveLoopsOverOutermost().mutate(s);
 
     return s;
-
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

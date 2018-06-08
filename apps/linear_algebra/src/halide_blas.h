@@ -70,11 +70,11 @@ inline int halide_dgemv(bool trans, double a, halide_buffer_t *A, halide_buffer_
 }
 
 inline int halide_sger(float a, halide_buffer_t *x, halide_buffer_t *y, halide_buffer_t *A) {
-    return halide_sger_impl(a, x, y, A, A);
+    return halide_sger_impl(a, x, y, A);
 }
 
 inline int halide_dger(float a, halide_buffer_t *x, halide_buffer_t *y, halide_buffer_t *A) {
-    return halide_dger_impl(a, x, y, A, A);
+    return halide_dger_impl(a, x, y, A);
 }
 
 inline int halide_sgemm(bool transA, bool transB, float a, halide_buffer_t *A, halide_buffer_t *B, float b, halide_buffer_t *C) {

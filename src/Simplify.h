@@ -21,22 +21,22 @@ namespace Internal {
  * repeated variable names.
  */
 // @{
-EXPORT Stmt simplify(Stmt, bool simplify_lets = true,
-                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
-EXPORT Expr simplify(Expr, bool simplify_lets = true,
-                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+Stmt simplify(Stmt, bool remove_dead_lets = true,
+              const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+Expr simplify(Expr, bool remove_dead_lets = true,
+              const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
 
 /** A common use of the simplifier is to prove boolean expressions are
  * true at compile time. Equivalent to is_one(simplify(e)) */
-EXPORT bool can_prove(Expr e);
+bool can_prove(Expr e);
 
 /** Simplify expressions found in a statement, but don't simplify
  * across different statements. This is safe to perform at an earlier
  * stage in lowering than full simplification of a stmt. */
-EXPORT Stmt simplify_exprs(Stmt);
+Stmt simplify_exprs(Stmt);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
@@ -95,10 +95,7 @@ template<> inline double div_imp<double>(double a, double b) {
     return a/b;
 }
 
-
-EXPORT void simplify_test();
-
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

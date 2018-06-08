@@ -2,8 +2,8 @@
 #include "Error.h"
 #include "Util.h"
 
-#include <limits>
 #include <cmath>
+#include <limits>
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +16,7 @@ static const uint16_t mantissa_mask = 0x03ff;
 // Conversion routines to and from float cribbed from Christian Rau's
 // half library (half.sourceforge.net)
 
-uint16_t float_to_half(float value)  {
+uint16_t float_to_half(float value) {
     // Start by copying over the sign bit
     uint16_t bits = std::signbit(value) << 15;
 
@@ -429,4 +429,4 @@ uint16_t float16_t::to_bits() const {
     return data;
 }
 
-}  // namespace halide
+}  // namespace Halide

@@ -595,7 +595,7 @@ Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, c
         }
         auto old_shape = get_shape(b);
         while (b.dimensions() > dims_needed) {
-            b = b.sliced(dims_needed, 0);
+            b = b.sliced(dims_needed);
         }
         info() << "Shape for " << name << " changed: " << old_shape << " -> " << get_shape(b);
     } else if (dims_actual < dims_needed) {
@@ -885,6 +885,10 @@ int main(int argc, char **argv) {
     std::set<std::string> found;
     for (size_t i = 0; i < (size_t) md->num_arguments; ++i) {
         std::string name = md->arguments[i].name;
+        if (name.size() > 2 && name[name.size()-2] == '$' && isdigit(name[name.size()-1])) {
+            // If it ends in "$3" or similar, just lop it off
+            name = name.substr(0, name.size() - 2);
+        }
         ArgData arg;
         arg.index = i;
         arg.metadata = &md->arguments[i];
@@ -903,8 +907,8 @@ int main(int argc, char **argv) {
     bool track_memory = false;
     bool describe = false;
     double benchmark_min_time = BenchmarkConfig().min_time;
-    int benchmark_min_iters = BenchmarkConfig().min_iters;
-    int benchmark_max_iters = BenchmarkConfig().max_iters;
+    uint64_t benchmark_min_iters = BenchmarkConfig().min_iters;
+    uint64_t benchmark_max_iters = BenchmarkConfig().max_iters;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -

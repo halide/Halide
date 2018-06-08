@@ -3,7 +3,7 @@
 
 #include <set>
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -66,7 +66,7 @@ void validate_custom_wrapper(Function in_func, Function wrapped, Function wrappe
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> wrapped_env;
@@ -175,5 +175,5 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     return wrapped_env;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

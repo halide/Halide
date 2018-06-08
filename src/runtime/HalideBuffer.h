@@ -60,7 +60,10 @@ struct AllInts<double, Args...> : std::false_type {};
  * class itself. */
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
-    std::atomic<int> ref_count {0};
+    std::atomic<int> ref_count;
+
+    // Note that ref_count always starts at 1
+    AllocationHeader(void (*deallocate_fn)(void *)) : deallocate_fn(deallocate_fn), ref_count(1) {}
 };
 
 /** This indicates how to deallocate the device for a Halide::Runtime::Buffer. */
@@ -190,6 +193,7 @@ private:
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
+                alloc->~AllocationHeader();
                 fn(alloc);
             }
             buf.host = nullptr;
@@ -374,8 +378,8 @@ private:
         // TODO(abadams|zvookin): these asserts fail on correctness_autotune_bug
         // due to unsafe crop in Func::infer_input_bounds. See comment at Func.cpp:2834.
         // Should either fix that or kill the asserts and document the routine accordingly.
-        //        assert(dim(d).min() <= min);
-        //        assert(dim(d).max() >= min + extent - 1);
+       assert(dim(d).min() <= min);
+       assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
         if (buf.host != nullptr) {
             buf.host += shift * dim(d).stride() * type().bytes();
@@ -462,6 +466,7 @@ public:
 
     /** Access the shape of the buffer */
     HALIDE_ALWAYS_INLINE Dimension dim(int i) const {
+        assert(i >= 0 && i < this->dimensions());
         return Dimension(buf.dim[i]);
     }
 
@@ -521,7 +526,7 @@ public:
         return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
-    Buffer() {
+    Buffer() : shape() {
         buf.type = static_halide_type();
         make_shape_storage();
     }
@@ -743,9 +748,8 @@ public:
         size_t size = size_in_bytes();
         const size_t alignment = 128;
         size = (size + alignment - 1) & ~(alignment - 1);
-        alloc = (AllocationHeader *)allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
-        alloc->deallocate_fn = deallocate_fn;
-        alloc->ref_count = 1;
+        void *alloc_storage = allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
+        alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
@@ -871,7 +875,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
     }
@@ -884,7 +888,7 @@ public:
     explicit Buffer(T *data, int first, Args&&... rest) {
         buf.type = static_halide_type();
         buf.dimensions = 1 + (int)(sizeof...(rest));
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         initialize_shape(0, first, int(rest)...);
     }
@@ -896,7 +900,7 @@ public:
     explicit Buffer(T *data, const std::vector<int> &sizes) {
         buf.type = static_halide_type();
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         initialize_shape(sizes);
     }
@@ -911,7 +915,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = (int)sizes.size();
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
         initialize_shape(sizes);
     }
@@ -925,7 +929,7 @@ public:
         }
         buf.type = t;
         buf.dimensions = d;
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<void *>(data);
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
@@ -938,7 +942,7 @@ public:
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
         buf.type = halide_type_of<typename std::remove_cv<T>::type>();
         buf.dimensions = d;
-        buf.host = (uint8_t *)data;
+        buf.host = (uint8_t *) const_cast<typename std::remove_const<T>::type *>(data);
         make_shape_storage();
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
@@ -1104,8 +1108,9 @@ public:
     }
 
     /** Make an image that refers to a sub-range of this image along
-     * the given dimension. Does not assert the crop region is within
-     * the existing bounds. */
+     * the given dimension. Asserts that the crop region is within
+     * the existing bounds: you cannot "crop outwards", even if you know there
+     * is valid Buffer storage (e.g. because you already cropped inwards). */
     Buffer<T, D> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
@@ -1137,8 +1142,9 @@ public:
     }
 
     /** Make an image that refers to a sub-rectangle of this image along
-     * the first N dimensions. Does not assert the crop region is within
-     * the existing bounds. The cropped image drops any device handle. */
+     * the first N dimensions. Asserts that the crop region is within
+     * the existing bounds. The cropped image may drop any device handle
+     * if the device_interface cannot accomplish the crop in-place. */
     Buffer<T, D> cropped(const std::vector<std::pair<int, int>> &rect) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
@@ -1181,6 +1187,7 @@ public:
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
+        assert(d >= 0 && d < this->dimensions());
         device_deallocate();
         buf.dim[d].min += delta;
     }
@@ -1205,28 +1212,38 @@ public:
     }
 
     /** Set the min coordinate of an image in the first N dimensions */
-    template<typename ...Args>
-    void set_min(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
+    // @{
+    void set_min(const std::vector<int> &mins) {
+        assert(mins.size() <= (size_t)dimensions());
         device_deallocate();
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            buf.dim[i].min = x[i];
+        for (size_t i = 0; i < mins.size(); i++) {
+            buf.dim[i].min = mins[i];
         }
     }
 
-    /** Test if a given coordinate is within the the bounds of an image */
     template<typename ...Args>
-    bool contains(Args... args) {
-        assert(sizeof...(args) <= (size_t)dimensions());
-        const int x[] = {args...};
-        for (size_t i = 0; i < sizeof...(args); i++) {
-            if (x[i] < dim(i).min() || x[i] > dim(i).max()) {
+    void set_min(Args... args) {
+        set_min(std::vector<int>{args...});
+    }
+    // @}
+
+    /** Test if a given coordinate is within the the bounds of an image */
+    // @{
+    bool contains(const std::vector<int> &coords) const {
+        assert(coords.size() <= (size_t)dimensions());
+        for (size_t i = 0; i < coords.size(); i++) {
+            if (coords[i] < dim((int) i).min() || coords[i] > dim((int) i).max()) {
                 return false;
             }
         }
         return true;
     }
+
+    template<typename ...Args>
+    bool contains(Args... args) const {
+        return contains(std::vector<int>{args...});
+    }
+    // @}
 
     /** Make an image which refers to the same data using a different
      * ordering of the dimensions. */
@@ -1238,31 +1255,44 @@ public:
 
     /** Transpose an image in-place */
     void transpose(int d1, int d2) {
+        assert(d1 >= 0 && d1 < this->dimensions());
+        assert(d2 >= 0 && d2 < this->dimensions());
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
-    /** Make a lower-dimensional image that refers to one slice of this
-     * image. */
+    /** Make a lower-dimensional image that refers to one slice of this image. */
     Buffer<T, D> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
         im.slice(d, pos);
         return im;
     }
 
+    /** Make a lower-dimensional image that refers to one slice of this
+     * image at the dimension's minimum. */
+    inline Buffer<T, D> sliced(int d) const {
+        return sliced(d, dim(d).min());
+    }
+
     /** Slice an image in-place */
     void slice(int d, int pos) {
-        // assert(pos >= dim(d).min() && pos <= dim(d).max());
+        assert(d >= 0 && d <= dimensions());
+        assert(pos >= dim(d).min() && pos <= dim(d).max());
         device_deallocate();
         buf.dimensions--;
-        int shift = pos - dim(d).min();
+        int shift = pos - buf.dim[d].min;
         assert(buf.device == 0 || shift == 0);
         if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
+            buf.host += shift * buf.dim[d].stride * type().bytes();
         }
-        for (int i = d; i < dimensions(); i++) {
+        for (int i = d; i < buf.dimensions; i++) {
             buf.dim[i] = buf.dim[i+1];
         }
         buf.dim[buf.dimensions] = {0, 0, 0};
+    }
+
+    /** Slice an image in-place at the dimension's minimum. */
+    inline void slice(int d) {
+        slice(d, dim(d).min());
     }
 
     /** Make a new image that views this image as a single slice in a
@@ -1275,8 +1305,7 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<T, D> embedded(int d, int pos) const {
-        assert(d >= 0 && d <= dimensions());
+    Buffer<T, D> embedded(int d, int pos = 0) const {
         Buffer<T, D> im(*this);
         im.embed(d, pos);
         return im;
@@ -1284,7 +1313,7 @@ public:
 
     /** Embed an image in-place, increasing the
      * dimensionality. */
-    void embed(int d, int pos) {
+    void embed(int d, int pos = 0) {
         assert(d >= 0 && d <= dimensions());
         add_dimension();
         translate(dimensions() - 1, pos);
@@ -1529,6 +1558,13 @@ public:
         return buf;
     }
 
+    /** Make a zero-dimensional Buffer that points to non-owned, existing data */
+    static Buffer<T, D> make_scalar(T* data) {
+        Buffer<T, 1> buf(data, 1);
+        buf.slice(0, 0);
+        return buf;
+    }
+
     /** Make a buffer with the same shape and memory nesting order as
      * another buffer. It may have a different type. */
     template<typename T2, int D2>
@@ -1566,7 +1602,9 @@ public:
 
         // Use an explicit runtime type, and make dst a Buffer<void>, to allow
         // using this method with Buffer<void> for either src or dst.
-        const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<not_void_T>();
+        const halide_type_t dst_type = T_is_void
+            ? src.type()
+            : halide_type_of<typename std::remove_cv<not_void_T>::type>();
         Buffer<> dst(dst_type, nullptr, src.dimensions(), shape);
         dst.allocate(allocate_fn, deallocate_fn);
 

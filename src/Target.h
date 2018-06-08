@@ -5,14 +5,14 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <stdint.h>
 #include <bitset>
+#include <stdint.h>
 #include <string>
 
 #include "Error.h"
+#include "Expr.h"
 #include "Type.h"
 #include "Util.h"
-#include "Expr.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -27,7 +27,14 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, MIPS, Hexagon, POWERPC} arch;
+    enum Arch {
+        ArchUnknown = 0,
+        X86,
+        ARM,
+        MIPS,
+        Hexagon,
+        POWERPC,
+    } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -87,6 +94,10 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
+        StrictFloat = halide_target_feature_strict_float,
+        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
+        TSAN = halide_target_feature_tsan,
+        ASAN = halide_target_feature_asan,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -108,12 +119,12 @@ struct Target {
      * Invalid target strings will fail with a user_error.
      */
     // @{
-    EXPORT explicit Target(const std::string &s);
-    EXPORT explicit Target(const char *s);
+    explicit Target(const std::string &s);
+    explicit Target(const char *s);
     // @}
 
     /** Check if a target string is valid. */
-    EXPORT static bool validate_target_string(const std::string &s);
+    static bool validate_target_string(const std::string &s);
 
     void set_feature(Feature f, bool value = true) {
         if (f == FeatureEnd) return;
@@ -202,11 +213,11 @@ struct Target {
     /** Does this target allow using a certain type on a certain device.
      * This is the prefered version of this routine.
      */
-    EXPORT bool supports_type(const Type &t, DeviceAPI device) const;
+    bool supports_type(const Type &t, DeviceAPI device) const;
 
     /** Returns whether a particular device API can be used with this
      * Target. */
-    EXPORT bool supports_device_api(DeviceAPI api) const;
+    bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&
@@ -230,7 +241,7 @@ struct Target {
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).
      */
-    EXPORT std::string to_string() const;
+    std::string to_string() const;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
@@ -308,7 +319,7 @@ struct Target {
     }
 
     /** Was libHalide compiled with support for this target? */
-    EXPORT bool supported() const;
+    bool supported() const;
 
 private:
     /** A bitmask that stores the active features. */
@@ -316,30 +327,29 @@ private:
 };
 
 /** Return the target corresponding to the host machine. */
-EXPORT Target get_host_target();
+Target get_host_target();
 
 /** Return the target that Halide will use. If HL_TARGET is set it
  * uses that. Otherwise calls \ref get_host_target */
-EXPORT Target get_target_from_environment();
+Target get_target_from_environment();
 
 /** Return the target that Halide will use for jit-compilation. If
  * HL_JIT_TARGET is set it uses that. Otherwise calls \ref
  * get_host_target. Throws an error if the architecture, bit width,
  * and OS of the target do not match the host target, so this is only
  * useful for controlling the feature set. */
-EXPORT Target get_jit_target_from_environment();
+Target get_jit_target_from_environment();
 
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns
  * Target::FeatureEnd */
-EXPORT Target::Feature target_feature_for_device_api(DeviceAPI api);
+Target::Feature target_feature_for_device_api(DeviceAPI api);
 
 namespace Internal {
 
-EXPORT void target_test();
-
+void target_test();
 }
 
-}
+}  // namespace Halide
 
 #endif

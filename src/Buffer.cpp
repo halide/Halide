@@ -1,18 +1,18 @@
 #include "Buffer.h"
-#include "Var.h"
 #include "IREquality.h"
 #include "IROperator.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
 
 template<>
-EXPORT RefCount &ref_count<BufferContents>(const BufferContents *c) {
+RefCount &ref_count<BufferContents>(const BufferContents *c) {
     return c->ref_count;
 }
 
 template<>
-EXPORT void destroy<BufferContents>(const BufferContents *c) {
+void destroy<BufferContents>(const BufferContents *c) {
     delete c;
 }
 
@@ -31,10 +31,10 @@ Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args) {
             int_args.push_back(e);
         } else {
             int_args.push_back(cast<int>(e));
-       }
+        }
     }
     return Call::make(buf, int_args);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

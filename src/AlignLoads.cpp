@@ -1,11 +1,11 @@
 #include <algorithm>
 
 #include "AlignLoads.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Bounds.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify.h"
 
 using std::vector;
@@ -21,7 +21,10 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator2 {
 public:
-    AlignLoads(int alignment) : required_alignment(alignment) {}
+    AlignLoads(int alignment, const Scope<ModulusRemainder> &alignment_info)
+        : required_alignment(alignment) {
+        this->alignment_info.set_containing_scope(&alignment_info);
+    }
 
 private:
     // The desired alignment of a vector load.
@@ -170,9 +173,9 @@ private:
 
 }  // namespace
 
-Stmt align_loads(Stmt s, int alignment) {
-    return AlignLoads(alignment).mutate(s);
+Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder> &alignment_info) {
+    return AlignLoads(alignment, alignment_info).mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

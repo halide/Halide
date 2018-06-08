@@ -179,7 +179,7 @@ void do_test() {
 
     Buffer<T> luma_buf(width, height, 1);
     luma_buf.copy_from(color_buf);
-    luma_buf.slice(2, 0);
+    luma_buf.slice(2);
 
     std::vector<std::string> formats = {"ppm","pgm","tmp","mat"};
 #ifndef HALIDE_NO_JPEG
@@ -195,9 +195,17 @@ void do_test() {
         if (format == "tmp") {
             // .tmp only supports exactly-4-dimensions, so handle it separately.
             // (Add a dimension to make it 4-dimensional)
-            Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions(), 0);
+            Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions());
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
             test_round_trip(cb4, format);
+
+            // Here we test matching strides
+            Buffer<T> funky_buf = f.realize(10, 10, 1, 3);
+            funky_buf.fill(42);
+
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
+            test_round_trip(funky_buf, format);
+
             continue;
         }
         if (format != "pgm") {

@@ -14,22 +14,22 @@ namespace Halide {
 namespace Internal {
 
 /** Extract the odd-numbered lanes in a vector */
-EXPORT Expr extract_odd_lanes(Expr a);
+Expr extract_odd_lanes(Expr a);
 
 /** Extract the even-numbered lanes in a vector */
-EXPORT Expr extract_even_lanes(Expr a);
+Expr extract_even_lanes(Expr a);
 
 /** Extract the nth lane of a vector */
-EXPORT Expr extract_lane(Expr vec, int lane);
+Expr extract_lane(Expr vec, int lane);
 
 /** Look through a statement for expressions of the form select(ramp %
  * 2 == 0, a, b) and replace them with calls to an interleave
  * intrinsic */
 Stmt rewrite_interleavings(Stmt s);
 
-EXPORT void deinterleave_vector_test();
+void deinterleave_vector_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -1,22 +1,22 @@
 #include <iostream>
 
-#include "CodeGen_Posix.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
-#include "LLVM_Headers.h"
+#include "CodeGen_Posix.h"
+#include "Debug.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "Debug.h"
 #include "IRPrinter.h"
+#include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::map;
 using std::pair;
+using std::string;
+using std::vector;
 
 using namespace llvm;
 
@@ -79,7 +79,7 @@ int CodeGen_Posix::allocation_padding(Type type) const {
     return type.bytes();
 }
 
-CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
+CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                                            const std::vector<Expr> &extents, Expr condition,
                                                            Expr new_expr, std::string free_function) {
     Value *llvm_size = nullptr;
@@ -92,11 +92,20 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
-        } else if (!can_allocation_fit_on_stack(stack_bytes)) {
+        } else if (memory_type == MemoryType::Heap ||
+                   (memory_type != MemoryType::Stack &&
+                    memory_type != MemoryType::Register &&
+                    !can_allocation_fit_on_stack(stack_bytes))) {
+            // We should put the allocation on the heap if it's
+            // explicitly placed on the heap, or if it's not
+            // explicitly placed on the stack/register and it's large.
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
         }
     } else {
+        // Should have been caught in bound_small_allocations
+        internal_assert(memory_type != MemoryType::Stack);
+        internal_assert(memory_type != MemoryType::Register);
         llvm_size = codegen_allocation_size(name, type, extents);
     }
 
@@ -108,8 +117,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // of the stack, so we only need this for heap allocations.
         Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
         llvm_size = builder->CreateAdd(llvm_size, padding);
-
-
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
                                           ConstantInt::get(llvm_size->getType(), 0));
@@ -268,7 +275,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
                    << alloc->name << "\n";
     }
 
-    Allocation allocation = create_allocation(alloc->name, alloc->type,
+    Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->memory_type,
                                               alloc->extents, alloc->condition,
                                               alloc->new_expr, alloc->free_function);
     sym_push(alloc->name, allocation.ptr);
@@ -285,4 +292,5 @@ void CodeGen_Posix::visit(const Free *stmt) {
     free_allocation(stmt->name);
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

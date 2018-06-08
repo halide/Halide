@@ -69,6 +69,7 @@ int main(int argc, char **argv) {
         {
             buffer_input,  // typed_buffer_input
             buffer_input,  // untyped_buffer_input
+            { buffer_input, buffer_input },
             Func(simple_input),
             { Func(array_input[0]), Func(array_input[1]) },
             1.25f,
@@ -105,6 +106,12 @@ int main(int argc, char **argv) {
     Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
     Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
     verify(buffer_input, 1.f, 42, b2);
+
+    for (int i = 0; i < 2; ++i) {
+        Realization array_buffer_output_realized = gen.array_buffer_output[i].realize(kSize, kSize, 3);
+        Buffer<uint8_t> b2 = array_buffer_output_realized;
+        verify(buffer_input, 1.f, 1 + i, b2);
+    }
 
     printf("Success!\n");
     return 0;

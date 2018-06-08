@@ -3,9 +3,9 @@
 
 /** Defines methods for manipulating and analyzing boolean expressions. */
 
+#include "Bounds.h"
 #include "IR.h"
 #include "Scope.h"
-#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +23,7 @@ struct SolverResult {
  * bool indicates whether there is a single instance of the variable
  * in the result. If it is false, the expression has only been partially
  * solved, and there are still multiple instances of the variable. */
-EXPORT SolverResult solve_expression(
+SolverResult solve_expression(
         Expr e, const std::string &variable,
         const Scope<Expr> &scope = Scope<Expr>::empty_scope());
 
@@ -31,11 +31,11 @@ EXPORT SolverResult solve_expression(
  * or false inside of it, but definitely false outside of it. Never
  * returns undefined Exprs, instead it uses variables called "pos_inf"
  * and "neg_inf" to represent positive and negative infinity. */
-EXPORT Interval solve_for_outer_interval(Expr c, const std::string &variable);
+Interval solve_for_outer_interval(Expr c, const std::string &variable);
 
 /** Find the largest interval such that the condition is definitely
  * true inside of it, and might be true or false outside of it. */
-EXPORT Interval solve_for_inner_interval(Expr c, const std::string &variable);
+Interval solve_for_inner_interval(Expr c, const std::string &variable);
 
 /** Take a conditional that includes variables that vary over some
  * domain, and convert it to a more conservative (less frequently
@@ -46,9 +46,9 @@ EXPORT Interval solve_for_inner_interval(Expr c, const std::string &variable);
  * 'and' over the vector lanes, and return a scalar result. */
 Expr and_condition_over_domain(Expr c, const Scope<Interval> &varying);
 
-EXPORT void solve_test();
+void solve_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

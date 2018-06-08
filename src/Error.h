@@ -11,31 +11,31 @@
 namespace Halide {
 
 /** Query whether Halide was compiled with exceptions. */
-EXPORT bool exceptions_enabled();
+bool exceptions_enabled();
 
 /** A base class for Halide errors. */
 struct Error : public std::runtime_error {
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
-    EXPORT Error(const std::string &msg);
+    Error(const std::string &msg);
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
 struct RuntimeError : public Error {
-    EXPORT RuntimeError(const std::string &msg);
+    RuntimeError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
 struct CompileError : public Error {
-    EXPORT CompileError(const std::string &msg);
+    CompileError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
 struct InternalError : public Error {
-    EXPORT InternalError(const std::string &msg);
+    InternalError(const std::string &msg);
 };
 
 /** CompileTimeErrorReporter is used at compile time (*not* runtime) when
@@ -59,7 +59,7 @@ public:
  * it is up to the caller to ensure that this is the case (and to do any
  * cleanup necessary).
  */
-EXPORT void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
+void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
 
 namespace Internal {
 
@@ -73,7 +73,7 @@ struct ErrorReport {
     std::ostringstream msg;
     const int flags;
 
-    EXPORT ErrorReport(const char *f, int l, const char *cs, int flags);
+    ErrorReport(const char *f, int l, const char *cs, int flags);
 
     // Just a trick used to convert RValue into LValue
     HALIDE_ALWAYS_INLINE ErrorReport& ref() { return *this; }
@@ -93,9 +93,9 @@ struct ErrorReport {
      * flight already.
      */
 #if __cplusplus >= 201100 || _MSC_VER >= 1900
-    EXPORT ~ErrorReport() noexcept(false);
+    ~ErrorReport() noexcept(false);
 #else
-    EXPORT ~ErrorReport();
+    ~ErrorReport();
 #endif
 };
 
@@ -149,10 +149,10 @@ class Voidifier {
 // N.B. Any function that might throw a user_assert or user_error may
 // not be inlined into the user's code, or the line number will be
 // misattributed to Halide.h. Either make such functions internal to
-// libHalide, or mark them as NO_INLINE.
+// libHalide, or mark them as HALIDE_NO_USER_CODE_INLINE.
 
-}
+}  // namespace Internal
 
-}
+}  // namespace Halide
 
 #endif

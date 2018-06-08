@@ -1,17 +1,17 @@
 #include "WrapExternStages.h"
+#include "Argument.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Argument.h"
 
 #include <set>
 
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::set;
 using std::string;
 using std::vector;
-using std::pair;
 
 namespace {
 
@@ -89,8 +89,9 @@ class WrapExternStages : public IRMutator2 {
                 // Make the call to upgrade old buffer
                 // fields into the original new
                 // buffer. Important for bounds queries.
+                const int bounds_query_only = a.kind == Argument::InputBuffer ? 1 : 0;
                 Expr upgrade_call = Call::make(Int(32), "halide_upgrade_buffer_t",
-                                               {a.name, old_buffer_var, new_buffer_var},
+                                               {a.name, old_buffer_var, new_buffer_var, bounds_query_only},
                                                Call::Extern);
                 upgrades.push_back(make_checked_call(upgrade_call));
                 call_args.push_back(old_buffer_var);
@@ -111,7 +112,7 @@ class WrapExternStages : public IRMutator2 {
 
         // Add the wrapper to the module
         debug(2) << "Wrapped extern call to " << op->name << ":\n" << body << "\n\n";
-        LoweredFunc wrapper(wrapper_name, args, body, LoweredFunc::Internal, NameMangling::C);
+        LoweredFunc wrapper(wrapper_name, args, body, LinkageType::Internal, NameMangling::C);
         module.append(wrapper);
 
         // Return the name
@@ -123,6 +124,9 @@ class WrapExternStages : public IRMutator2 {
             Function f(op->func);
             internal_assert(f.has_extern_definition());
             if (f.extern_definition_uses_old_buffer_t()) {
+                user_assert(module.target().has_feature(Target::LegacyBufferWrappers))
+                    << "You must specify the legacy_buffer_wrappers feature in the Target "
+                    << "when passing uses_old_buffer_t = true to define_extern().";
                 vector<Expr> new_args;
                 for (Expr e : op->args) {
                     new_args.push_back(mutate(e));
@@ -159,6 +163,10 @@ void wrap_legacy_extern_stages(Module m) {
 }
 
 void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
+    if (!module.target().has_feature(Target::LegacyBufferWrappers)) {
+        return;
+    }
+
     // Build the arguments to the wrapper function
     vector<LoweredArgument> args;
     vector<Stmt> upgrades, downgrades;
@@ -207,8 +215,9 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
             // Make the call to upgrade old buffer
             // fields into the original new
             // buffer. Important for bounds queries.
+            const int bounds_query_only = 0;
             Expr upgrade_call = Call::make(Int(32), "halide_upgrade_buffer_t",
-                                           {arg.name, old_buffer_var, new_buffer_var},
+                                           {arg.name, old_buffer_var, new_buffer_var, bounds_query_only},
                                            Call::Extern);
             upgrades.push_back(make_checked_call(upgrade_call));
 
@@ -240,9 +249,9 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
 
     // Add the wrapper to the module.
     debug(2) << "Added legacy wrapper for " << fn.name << ":\n" << body << "\n\n";
-    LoweredFunc wrapper(name, args, body, LoweredFunc::External, NameMangling::Default);
+    LoweredFunc wrapper(name, args, body, LinkageType::External, NameMangling::Default);
     module.append(wrapper);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

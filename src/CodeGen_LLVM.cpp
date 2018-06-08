@@ -1,30 +1,30 @@
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 
-#include "IRPrinter.h"
-#include "CodeGen_LLVM.h"
 #include "CPlusPlusMangle.h"
-#include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
-#include "Simplify.h"
-#include "JITModule.h"
-#include "CodeGen_Internal.h"
-#include "Lerp.h"
-#include "Util.h"
-#include "LLVM_Runtime_Linker.h"
-#include "MatlabWrapper.h"
-#include "IntegerDivisionTable.h"
 #include "CSE.h"
-
-#include "CodeGen_X86.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_Hexagon.h"
+#include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
-#include "CodeGen_Hexagon.h"
+#include "CodeGen_X86.h"
+#include "Debug.h"
+#include "Deinterleave.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
+#include "JITModule.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
+#include "Lerp.h"
+#include "MatlabWrapper.h"
+#include "Simplify.h"
+#include "Util.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -44,14 +44,14 @@ std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMConte
 namespace Internal {
 
 using namespace llvm;
-using std::ostringstream;
 using std::cout;
 using std::endl;
+using std::map;
+using std::ostringstream;
+using std::pair;
+using std::stack;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
-using std::stack;
 
 // Define a local empty inline function for each target
 // to disable initialization.
@@ -101,6 +101,12 @@ using std::stack;
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
+#ifdef WITH_AMDGPU
+#define InitializeAMDGPUTarget()        InitializeTarget(AMDGPU)
+#define InitializeAMDGPUAsmParser()     InitializeAsmParser(AMDGPU)
+#define InitializeAMDGPUAsmPrinter()    InitializeAsmParser(AMDGPU)
+#endif
+
 #ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
@@ -128,15 +134,15 @@ using std::stack;
 namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
-llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
+llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // TODO(dsharlet): For some reason, marking internal functions as
     // private linkage on OSX is causing some of the static tests to
     // fail. Figure out why so we can remove this.
     return llvm::GlobalValue::ExternalLinkage;
 
     switch (t) {
-    case LoweredFunc::ExternalPlusMetadata:
-    case LoweredFunc::External:
+    case LinkageType::ExternalPlusMetadata:
+    case LinkageType::External:
         return llvm::GlobalValue::ExternalLinkage;
     default:
         return llvm::GlobalValue::PrivateLinkage;
@@ -151,6 +157,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     builder(nullptr),
     value(nullptr),
     very_likely_branch(nullptr),
+    default_fp_math_md(nullptr),
+    strict_fp_math_md(nullptr),
     target(t),
     void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
     i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
@@ -250,7 +258,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
 
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
-    destructor_block(nullptr) {
+    destructor_block(nullptr),
+    strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
 }
 
@@ -372,6 +381,23 @@ void CodeGen_LLVM::init_context() {
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
     very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
+    default_fp_math_md = md_builder.createFPMath(0.0);
+    strict_fp_math_md = md_builder.createFPMath(0.0);
+    builder->setDefaultFPMathTag(default_fp_math_md);
+    llvm::FastMathFlags fast_flags;
+    fast_flags.setNoNaNs();
+    fast_flags.setNoInfs();
+    fast_flags.setNoSignedZeros();
+    // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
+    // fast_flags.setAllowReciprocal();
+    #if LLVM_VERSION >= 60
+    // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
+    // turns on all the flags.
+    fast_flags.setAllowReassoc();
+    fast_flags.setAllowContract(true);
+    fast_flags.setApproxFunc();
+    #endif
+    builder->setFastMathFlags(fast_flags);
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
@@ -429,6 +455,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
+bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
 
 namespace {
 
@@ -440,7 +467,7 @@ struct MangledNames {
 };
 
 MangledNames get_mangled_names(const std::string &name,
-                               LoweredFunc::LinkageType linkage,
+                               LinkageType linkage,
                                NameMangling mangling,
                                const std::vector<LoweredArgument> &args,
                                const Target &target) {
@@ -451,7 +478,7 @@ MangledNames get_mangled_names(const std::string &name,
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    if (linkage != LoweredFunc::Internal &&
+    if (linkage != LinkageType::Internal &&
         ((mangling == NameMangling::Default &&
           target.has_feature(Target::CPlusPlusMangling)) ||
          mangling == NameMangling::CPlusPlus)) {
@@ -493,6 +520,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", input.any_strict_float());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -533,7 +561,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());
@@ -560,7 +588,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 
-void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::string& name,
+void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string& name,
                               const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     current_function_args = args;
 
@@ -670,7 +698,7 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
 
     // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
     // happen for every output buffer if the function succeeds.
-    if (f.linkage != LoweredFunc::Internal &&
+    if (f.linkage != LinkageType::Internal &&
         target.has_feature(Target::MSAN)) {
         llvm::Function *annotate_buffer_fn =
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
@@ -1043,12 +1071,52 @@ void CodeGen_LLVM::optimize_module() {
     }
 #endif
 
+    if (get_target().has_feature(Target::ASAN)) {
+        auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            constexpr bool compile_kernel = false;   // always false for user code
+            constexpr bool recover = false;          // -fsanitize-recover, always false here
+
+            constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+
+            constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+            pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
+    }
+
+    if (get_target().has_feature(Target::TSAN)) {
+        auto addThreadSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            pm.add(createThreadSanitizerPass());
+        };
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addThreadSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addThreadSanitizerPass);
+    }
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
     function_pass_manager.doInitialization();
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        if (get_target().has_feature(Target::ASAN)) {
+            i->addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::TSAN)) {
+            // Do not annotate any of Halide's low-level synchronization code as it has
+            // tsan interface calls to mark its behavior and is much faster if
+            // it is not analyzed instruction by instruction.
+            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  // TODO: this is a benign data race that re-initializes the detected features;
+                  // we should really fix it properly inside the implementation, rather than disabling
+                  // it here as a band-aid.
+                  i->getName().startswith("halide_default_can_use_target_features") ||
+                  i->getName().startswith("halide_mutex_") ||
+                  i->getName().startswith("halide_cond_"))) {
+                i->addFnAttr(Attribute::SanitizeThread);
+            }
+        }
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
@@ -1666,7 +1734,9 @@ void CodeGen_LLVM::visit(const Load *op) {
             bool external = op->param.defined() || op->image.defined();
 
             // Don't read beyond the end of an external buffer.
-            if (external) {
+            // (In ASAN mode, don't read beyond the end of internal buffers either,
+            // as ASAN will complain even about harmless stack overreads.)
+            if (external || target.has_feature(Target::ASAN)) {
                 base_b -= 1;
                 shifted_b = true;
             } else {
@@ -2542,7 +2612,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
             if (!sub_fn) {
                 extern_sub_fn_name = get_mangled_names(sub_fn_name,
-                                                       LoweredFunc::External,
+                                                       LinkageType::External,
                                                        NameMangling::Default,
                                                        current_function_args,
                                                        get_target()).extern_name;
@@ -2655,6 +2725,13 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+        value = codegen(op->args[0]);
     } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
@@ -2675,6 +2752,23 @@ void CodeGen_LLVM::visit(const Call *op) {
                (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
+
+        /* NaNs are not supposed to exist in "no NaNs" compilation
+         * mode, but it appears llvm special cases the unordered
+         * compare instruction when the global NoNaNsFPMath option is
+         * set and still checks for a NaN. However if the nnan flag is
+         * set on the instruction itself, llvm treats the comparison
+         * as always false. Thus we always turn off the per-instruction
+         * fast-math flags for this instruction. I.e. it is always
+         * treated as strict. Note that compilation may still be in
+         * fast-math mode due to global options, but that's ok due to
+         * the aforementioned special casing. */
+        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        llvm::FastMathFlags safe_flags;
+        safe_flags.clear();
+        builder->setFastMathFlags(safe_flags);
+        builder->setDefaultFPMathTag(strict_fp_math_md);
+
         value = builder->CreateFCmpUNO(a, a);
     } else {
         // It's an extern call.
@@ -3515,4 +3609,5 @@ ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
     return modulus_remainder(e, alignment_info);
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide
