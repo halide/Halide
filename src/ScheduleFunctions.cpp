@@ -146,7 +146,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
             nest.push_back(c);
             stmt = let->body;
         } else if (if_else && !if_else->else_case.defined()) {
-            Container c = {Container::If, 0, "", if_else->condition};
+            Container c = {Container::If, 0, std::string(), if_else->condition};
             pred_container.push_back(c);
             stmt = if_else->then_case;
         } else {
@@ -178,7 +178,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // Put all the reduction domain predicates into the containers vector.
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        Container c = {Container::If, 0, "", likely(pred)};
+        Container c = {Container::If, 0, std::string(), likely(pred)};
         pred_container.push_back(c);
     }
     int n_predicates = pred_container.size();
@@ -910,21 +910,20 @@ private:
 
         Stmt body = for_loop->body;
 
-        // Dig through any let statements
-        vector<pair<string, Expr>> lets;
-        while (const LetStmt *l = body.as<LetStmt>()) {
-            if (!is_pure(l->value)) {
-                // The consumer of the Func we're injecting may be an
-                // extern stage, which shows up in the IR as a let
-                // stmt with a side-effecty RHS. We need to take care
-                // not to blow past it and risk injecting the producer
-                // *after* the consumer. In general it seems unwise to
-                // reorder the computation of a Func past something
-                // side-effecty, so we stop here.
+        // Dig through any let/if statements
+        vector<Container> containers;
+        while (1) {
+            const LetStmt *l = body.as<LetStmt>();
+            const IfThenElse *i = body.as<IfThenElse>();
+            if (i && !i->else_case.defined() && is_pure(i->condition)) {
+                containers.push_back({Container::If, 0, std::string(), i->condition});
+                body = i->then_case;
+            } else if (l && is_pure(l->value)) {
+                containers.push_back({Container::Let, 0, l->name, l->value});
+                body = l->body;
+            } else {
                 break;
             }
-            lets.push_back({ l->name, l->value });
-            body = l->body;
         }
 
         // Can't schedule extern things inside a vector for loop
@@ -965,9 +964,14 @@ private:
             found_store_level = true;
         }
 
-        // Reinstate the let statements
-        for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        // Reinstate the let/if statements
+        for (size_t i = containers.size(); i > 0; i--) {
+            if (containers[i - 1].type == Container::Let) {
+                body = LetStmt::make(containers[i - 1].name, containers[i - 1].value, body);
+            } else {
+                internal_assert(containers[i - 1].type == Container::If);
+                body = IfThenElse::make(containers[i - 1].value, body);
+            }
         }
 
         if (body.same_as(for_loop->body)) {
