@@ -27,8 +27,8 @@ int main(int argc, char **argv) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
 
-    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, PLANE);
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, PLANE);
+    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, PLANE, PLANE);
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, PLANE, PLANE);
 
     // TODO: We shouldn't need to allocate a host buffer here, but the
     // current implementation of cropping + halide_buffer_copy needs
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     // The Last parameter 0 indicate DMA Read
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, FORMAT);
 
-    Halide::Runtime::Buffer<uint8_t> output(width, height, PLANE);
+    Halide::Runtime::Buffer<uint8_t> output(width, height, PLANE, PLANE);
 
     int result = pipeline_err(input, output);
     if (result != 0) {

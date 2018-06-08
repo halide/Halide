@@ -25,7 +25,7 @@ LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
 BIN ?= bin
 
-all: $(BIN)/process-host $(BIN)/process_nv12-host $(BIN)/process_p010-host $(BIN)/process_err-host
+all: $(BIN)/process-host $(BIN)/process_nv12-host $(BIN)/process_p010-host $(BIN)/process_err-host $(BIN)/process_rawinterleaved-host $(BIN)/process_rawplanar-host
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -39,6 +39,13 @@ $(BIN)/pipeline_p010: pipeline_p010.cpp $(GENERATOR_DEPS)
 $(BIN)/pipeline_err: pipeline_err.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+$(BIN)/pipeline_rawinterleaved: pipeline_rawinterleaved.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+$(BIN)/pipeline_rawplanar: pipeline_rawplanar.cpp $(GENERATOR_DEPS)
+	mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+
 
 $(BIN)/%/pipeline.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
@@ -52,6 +59,12 @@ $(BIN)/%/pipeline_p010.o: $(BIN)/pipeline_p010
 $(BIN)/%/pipeline_err.o: $(BIN)/pipeline_err
 	@mkdir -p $(@D)
 	$^ -g dma_pipeline_err -o $(BIN)/$* -e o,h,html -f pipeline_err target=$*-hexagon_dma
+$(BIN)/%/pipeline_rawinterleaved.o: $(BIN)/pipeline_rawinterleaved
+	@mkdir -p $(@D)
+	$^ -g dma_pipeline -o $(BIN)/$* -e o,h,html -f pipeline_rawinterleaved target=$*-hexagon_dma
+$(BIN)/%/pipeline_rawplanar.o: $(BIN)/pipeline_rawplanar
+	@mkdir -p $(@D)
+	$^ -g dma_pipeline -o $(BIN)/$* -e o,h,html -f pipeline_rawplanar target=$*-hexagon_dma
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline.o -o $(BIN)/process-$* $(LDFLAGS-$*)
@@ -61,6 +74,11 @@ $(BIN)/process_p010-%: process_p010.cpp $(BIN)/%/pipeline_p010.o mock_dma_implem
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010.o -o $(BIN)/process_p010-$* $(LDFLAGS-$*)
 $(BIN)/process_err-%: process_err.cpp $(BIN)/%/pipeline_err.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_err.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_err.o -o $(BIN)/process_err-$* $(LDFLAGS-$*)
+$(BIN)/process_rawinterleaved-%: process_rawinterleaved.cpp $(BIN)/%/pipeline_rawinterleaved.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_rawinterleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_rawinterleaved.o -o $(BIN)/process_rawinterleaved-$* $(LDFLAGS-$*)
+$(BIN)/process_rawplanar-%: process_rawplanar.cpp $(BIN)/%/pipeline_rawplanar.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_rawplanar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_rawplanar.o -o $(BIN)/process_rawplanar-$* $(LDFLAGS-$*)
+
 
 run-host: $(BIN)/process-host
 	$(BIN)/process-host 2048 1024

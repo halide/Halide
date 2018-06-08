@@ -154,8 +154,19 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         << "size_in_bytes() src: " << static_cast<uint32>(src->size_in_bytes())
         << " dst: " << static_cast<uint32>(dst->size_in_bytes())
         << "\n";
+    
+    //Assert if buffer dimensions do not fulfill the format requirements 
+    if (dev->fmt == eDmaFmt_RawData) {
+        halide_assert(user_context, src->dimensions <= 3);
+    }
+   
+    if ((dev->fmt == eDmaFmt_NV12_Y) ||
+        (dev->fmt == eDmaFmt_P010_Y) ||
+        (dev->fmt == eDmaFmt_TP10_Y) ||
+        (dev->fmt == eDmaFmt_NV124R_Y)) {
+        halide_assert(user_context, src->dimensions == 2);
+    }
 
-    // Changing the Format to Chroma or LUMA based on dimension    
     if ((dev->fmt == eDmaFmt_NV12_UV) ||
         (dev->fmt == eDmaFmt_P010_UV) ||
         (dev->fmt == eDmaFmt_TP10_UV) ||
@@ -166,7 +177,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         halide_assert(user_context, src->dim[2].min == 0);
         halide_assert(user_context, src->dim[2].extent == 2);
     }
-    // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
+
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {
         static_cast<uint16>(dst->dim[0].extent * dst->dim[0].stride),
         static_cast<uint16>(dst->dim[1].extent)
@@ -222,6 +233,12 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     stDmaTransferParm.u16RoiX               = (dev->offset_x + dst->dim[0].min) * dst->dim[0].stride;
     stDmaTransferParm.u16RoiY               = dev->offset_y + dst->dim[1].min;
 
+    //Raw Format Planar 
+    if ((dev->fmt == eDmaFmt_RawData) &&
+        (dst->dimensions == 3)) {
+        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * dst->dim[1].stride);
+    }
+   
     // DMA Driver implicitly halves the Height and Y Offset for chroma, based on Y/UV
     // planar relation for 4:2:0 format, to adjust the for plane size difference.
     // This driver adjustment is compensated here for Halide that treats Y/UV separately.
