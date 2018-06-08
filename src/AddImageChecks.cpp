@@ -1,5 +1,6 @@
 #include "AddImageChecks.h"
 #include "IRVisitor.h"
+#include "IRMutator.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
@@ -90,21 +91,12 @@ public:
     }
 };
 
-Stmt add_image_checks(Stmt s,
-                      const vector<Function> &outputs,
-                      const Target &t,
-                      const vector<string> &order,
-                      const map<string, Function> &env,
-                      const FuncValueBounds &fb) {
-
-    // Walk inside as many LetStmts as possible first, so that we can
-    // take advantage of the outermost lets placed by bounds
-    // inference.
-    vector<pair<string, Expr>> containing_lets;
-    while (const LetStmt *l = s.as<LetStmt>()) {
-        containing_lets.push_back({l->name, l->value});
-        s = l->body;
-    }
+Stmt add_image_checks_inner(Stmt s,
+                            const vector<Function> &outputs,
+                            const Target &t,
+                            const vector<string> &order,
+                            const map<string, Function> &env,
+                            const FuncValueBounds &fb) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
@@ -647,12 +639,41 @@ Stmt add_image_checks(Stmt s,
         s = LetStmt::make(lets_required[i-1].first, lets_required[i-1].second, s);
     }
 
-    // Rewrap the containing lets
-    for (size_t i = containing_lets.size(); i > 0; i--) {
-        s = LetStmt::make(containing_lets[i-1].first, containing_lets[i-1].second, s);
-    }
-
     return s;
+}
+
+// The following function repeats the arguments list it just passes
+// through six times. Surely there is a better way?
+Stmt add_image_checks(Stmt s,
+                      const vector<Function> &outputs,
+                      const Target &t,
+                      const vector<string> &order,
+                      const map<string, Function> &env,
+                      const FuncValueBounds &fb) {
+
+    // Checks for images go just outside the outermost Produce
+    class Injector : public IRMutator2 {
+        using IRMutator2::visit;
+
+        Stmt visit(const ProducerConsumer *op) override {
+            return add_image_checks_inner(op, outputs, t, order, env, fb);
+        }
+
+        const vector<Function> &outputs;
+        const Target &t;
+        const vector<string> &order;
+        const map<string, Function> &env;
+        const FuncValueBounds &fb;
+    public:
+        Injector(const vector<Function> &outputs,
+                 const Target &t,
+                 const vector<string> &order,
+                 const map<string, Function> &env,
+                 const FuncValueBounds &fb) :
+            outputs(outputs), t(t), order(order), env(env), fb(fb) {}
+    } injector(outputs, t, order, env, fb);
+
+    return injector.mutate(s);
 }
 
 }  // namespace Internal
