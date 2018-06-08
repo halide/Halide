@@ -463,9 +463,12 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
 #else
-                                                // macOS et al seem to trigger various dyld errors
+                                                // Many OSs trigger dyld errors
                                                 // with llvm::CodeModel::Large
-                                                (triple.isArch64Bit() && !triple.isOSDarwin() && !triple.isAndroid() ?
+                                                (triple.isArch64Bit() &&
+                                                 !triple.isOSDarwin() &&
+                                                 !triple.isAndroid() &&
+                                                 !(triple.isAArch64() && triple.isOSLinux()) ?
                                                  llvm::CodeModel::Large :
                                                  llvm::CodeModel::Small),
 #endif
