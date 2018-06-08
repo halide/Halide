@@ -651,12 +651,19 @@ Stmt add_image_checks(Stmt s,
                       const map<string, Function> &env,
                       const FuncValueBounds &fb) {
 
-    // Checks for images go just outside the outermost Produce
+    // Checks for images go at the marker deposited by computation
+    // bounds inference.
     class Injector : public IRMutator2 {
         using IRMutator2::visit;
 
-        Stmt visit(const ProducerConsumer *op) override {
-            return add_image_checks_inner(op, outputs, t, order, env, fb);
+        Stmt visit(const Block *op) override {
+            const Evaluate *e = op->first.as<Evaluate>();
+            const Call *c = e ? e->value.as<Call>() : nullptr;
+            if (c && c->is_intrinsic(Call::add_image_checks_marker)) {
+                return add_image_checks_inner(op->rest, outputs, t, order, env, fb);
+            } else {
+                return IRMutator2::visit(op);
+            }
         }
 
         const vector<Function> &outputs;
