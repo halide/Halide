@@ -465,7 +465,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #else
                                                 // macOS et al seem to trigger various dyld errors
                                                 // with llvm::CodeModel::Large
-                                                (triple.isArch64Bit() && !triple.isOSDarwin() ?
+                                                (triple.isArch64Bit() && !triple.isOSDarwin() && !triple.isAndroid() ?
                                                  llvm::CodeModel::Large :
                                                  llvm::CodeModel::Small),
 #endif
