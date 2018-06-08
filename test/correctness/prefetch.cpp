@@ -101,6 +101,55 @@ int test2(const Target &t) {
     return 0;
 }
 
+int test3(const Target &t) {
+    Func f("f"), g("g"), h("h");
+    Var x("x"), xo("xo");
+
+    f(x) = x;
+    h(x) = f(x) + 1;
+    g(x) = h(0) + h(1);
+
+    f.compute_root();
+    g.split(x, xo, x, 32);
+    h.compute_at(g, xo);
+    g.prefetch(f, xo, 1);
+
+    Module m = g.compile_to_module({});
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
+int test4(const Target &t) {
+    Func f("f"), g("g"), h("h");
+    Var x("x");
+
+    f(x) = x;
+    h(x) = f(x) + 1;
+    g(x) = h(0) + h(1);
+
+    f.compute_root();
+    h.compute_root();
+    g.prefetch(f, x, 1);
+
+    Module m = g.compile_to_module({});
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    // There shouldn't be any prefetches since there is no call to 'f'
+    // within the loop nest of 'g'
+    vector<vector<Expr>> expected = {};
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -112,6 +161,14 @@ int main(int argc, char **argv) {
     }
     printf("Running prefetch test2\n");
     if (test2(t) != 0) {
+        return -1;
+    }
+    printf("Running prefetch test3\n");
+    if (test3(t) != 0) {
+        return -1;
+    }
+    printf("Running prefetch test4\n");
+    if (test4(t) != 0) {
         return -1;
     }
 
