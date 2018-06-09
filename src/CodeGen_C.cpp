@@ -1957,7 +1957,12 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::count_leading_zeros)) {
         internal_assert(op->args.size() == 1);
         string a0 = print_expr(op->args[0]);
-        rhs << "__builtin_clz(" << a0 << ")";
+        // TODO: This logic should probably take the target into account.
+        if (op->args[0].type().bits() == 64) {
+          rhs << "__builtin_clzll(" << a0 << ")";
+        } else {
+          rhs << "__builtin_clz(" << a0 << ")";
+        }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
