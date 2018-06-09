@@ -1032,7 +1032,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
         {
-            std::ofstream f(input.pathname(), std::ios_base::out|std::ios_base::binary);
+            std::ofstream f(input.pathname(), std::ios::out|std::ios::binary);
 
             f.write(shared_object.data(), shared_object.size());
             f.flush();
@@ -1048,7 +1048,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             << " for cmd (" << cmd << ")";
 
         {
-            std::ifstream f(output.pathname(),std::ios_base::in|std::ios_base::binary);
+            std::ifstream f(output.pathname(), std::ios::in|std::ios::binary);
             f.seekg(0, std::ifstream::end);
             size_t signed_size = f.tellg();
             shared_object.resize(signed_size);
