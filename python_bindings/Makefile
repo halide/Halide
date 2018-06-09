@@ -5,7 +5,6 @@ ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 # These are set by Halide's Makefile when built via that path.
 HALIDE_PATH ?= $(ROOT_DIR)/..
 HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
-HALIDE_RUNTIME ?= $(HALIDE_PATH)/bin/host/runtime.a
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
 PYTHON ?= python3
@@ -105,10 +104,19 @@ $(BIN)/%.gen: $(HALIDE_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBH
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
 
+# Special generator for generating a runtime:
+$(BIN)/runtime.gen: $(HALIDE_PATH)/tools/GenGen.cpp $(LIBHALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
+
 # Make the generator generate a Python extension:
 $(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
-	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
-	    -g $(notdir $(basename $<)) -o $(BIN) target=host
+	$< -e h,cpp,py.c -g $(notdir $(basename $<)) -o $(BIN) target=host
+
+# Generate a runtime:
+$(BIN)/runtime.a: $(BIN)/runtime.gen
+	@mkdir -p $(@D)
+	$< -r runtime -o $(BIN) target=host
 
 # Compile the generated Python extension(s):
 $(BIN)/%.o: $(BIN)/%.cpp
@@ -119,9 +127,9 @@ $(BIN)/%.py.o: $(BIN)/%.py.c
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
 # TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(BIN)/runtime.a
 	@mkdir -p $(BIN)/ext
-	$(CXX) $(LDFLAGS) $^ $(HALIDE_RUNTIME) -shared -o $@
+	$(CXX) $(LDFLAGS) $^ -shared -o $@
 
 # Run the Python extension(s):
 %.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
