@@ -111,7 +111,7 @@ $(BIN)/runtime.gen: $(HALIDE_PATH)/tools/GenGen.cpp $(LIBHALIDE)
 
 # Make the generator generate a Python extension:
 $(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
-	$< -e h,cpp,py.c -g $(notdir $(basename $<)) -o $(BIN) target=host
+	$< -e h,cpp,py.c -g $(notdir $(basename $<)) -o $(BIN) target=host-no_runtime
 
 # Generate a runtime:
 $(BIN)/runtime.a: $(BIN)/runtime.gen
