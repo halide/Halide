@@ -25,7 +25,6 @@ using std::map;
 using std::pair;
 using std::set;
 using std::string;
-using std::tuple;
 using std::vector;
 
 namespace {
@@ -911,13 +910,6 @@ private:
 
         Stmt body = for_loop->body;
 
-        // Dig through any placeholder prefetches
-        vector<tuple<string, vector<Type>, PrefetchDirective>> placeholder_prefetches;
-        while (const Prefetch *p = body.as<Prefetch>()) {
-            placeholder_prefetches.push_back(std::make_tuple(p->name, p->types, p->prefetch));
-            body = p->body;
-        }
-
         // Dig through any let statements
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
@@ -976,16 +968,6 @@ private:
         // Reinstate the let statements
         for (size_t i = lets.size(); i > 0; i--) {
             body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
-        }
-
-        // Reinstate the placeholder prefetches
-        for (size_t i = placeholder_prefetches.size(); i > 0; i--) {
-            body = Prefetch::make(std::get<0>(placeholder_prefetches[i - 1]),
-                                  std::get<1>(placeholder_prefetches[i - 1]),
-                                  Region(),
-                                  std::get<2>(placeholder_prefetches[i - 1]),
-                                  const_true(),
-                                  body);
         }
 
         if (body.same_as(for_loop->body)) {
@@ -1614,13 +1596,6 @@ private:
 
         Stmt body = for_loop->body;
 
-        // Dig through any placeholder prefetches
-        vector<tuple<string, vector<Type>, PrefetchDirective>> placeholder_prefetches;
-        while (const Prefetch *p = body.as<Prefetch>()) {
-            placeholder_prefetches.push_back(std::make_tuple(p->name, p->types, p->prefetch));
-            body = p->body;
-        }
-
         // Dig through any let statements
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
@@ -1647,16 +1622,6 @@ private:
         // Reinstate the let statements
         for (size_t i = lets.size(); i > 0; i--) {
             body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
-        }
-
-        // Reinstate the placeholder prefetches
-        for (size_t i = placeholder_prefetches.size(); i > 0; i--) {
-            body = Prefetch::make(std::get<0>(placeholder_prefetches[i - 1]),
-                                  std::get<1>(placeholder_prefetches[i - 1]),
-                                  Region(),
-                                  std::get<2>(placeholder_prefetches[i - 1]),
-                                  const_true(),
-                                  body);
         }
 
         if (body.same_as(for_loop->body)) {
