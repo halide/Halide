@@ -1951,8 +1951,8 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::count_leading_zeros)) {
         internal_assert(op->args.size() == 1);
         string a0 = print_expr(op->args[0]);
-        // assume that "long long" is always 64 bits:
-        rhs << "(__builtin_clzll(" << a0 << ") - " << (64 - op->args[0].type().bits()) << ")";
+        rhs << "(__builtin_clzll(" << a0 << ") - (sizeof(unsigned long long) * 8 - " <<
+                op->args[0].type().bits() << "))";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
