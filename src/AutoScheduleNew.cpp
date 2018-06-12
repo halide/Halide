@@ -112,6 +112,9 @@ struct FunctionDAG {
                 NumScalarTypes
             };
 
+            // Just to avoid printing huge numbers of zeros while debugging things
+            bool types_in_use[(int)ScalarType::NumScalarTypes];
+
             int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes];
 
             enum class AccessType {
@@ -150,41 +153,45 @@ struct FunctionDAG {
             void dump() const {
                 for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
                     const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
+                    // Skip printing for types not used
+                    if (!types_in_use[i]) continue;
+
+
                     debug(0) << "    Featurization for type " << type_names[i] << '\n'
-                             << "     Op histogram: "
-                             << "      Constant: " << op_histogram[(int)OpType::Const][i] << '\n'
-                             << "      Cast: " << op_histogram[(int)OpType::Cast][i] << '\n'
-                             << "      Variable: " << op_histogram[(int)OpType::Variable][i] << '\n'
-                             << "      Param: " << op_histogram[(int)OpType::Param][i] << '\n'
-                             << "      Add: " << op_histogram[(int)OpType::Add][i] << '\n'
-                             << "      Sub: " << op_histogram[(int)OpType::Sub][i] << '\n'
-                             << "      Mod: " << op_histogram[(int)OpType::Mod][i] << '\n'
-                             << "      Mul: " << op_histogram[(int)OpType::Mul][i] << '\n'
-                             << "      Div: " << op_histogram[(int)OpType::Div][i] << '\n'
-                             << "      Min: " << op_histogram[(int)OpType::Min][i] << '\n'
-                             << "      Max: " << op_histogram[(int)OpType::Max][i] << '\n'
-                             << "      EQ: " << op_histogram[(int)OpType::EQ][i] << '\n'
-                             << "      NE: " << op_histogram[(int)OpType::NE][i] << '\n'
-                             << "      LT: " << op_histogram[(int)OpType::LT][i] << '\n'
-                             << "      LE: " << op_histogram[(int)OpType::LE][i] << '\n'
-                             << "      And: " << op_histogram[(int)OpType::And][i] << '\n'
-                             << "      Or: " << op_histogram[(int)OpType::Or][i] << '\n'
-                             << "      Not: " << op_histogram[(int)OpType::Not][i] << '\n'
-                             << "      Select: " << op_histogram[(int)OpType::Select][i] << '\n'
-                             << "      ImageCall: " << op_histogram[(int)OpType::ImageCall][i] << '\n'
-                             << "      FuncCall: " << op_histogram[(int)OpType::FuncCall][i] << '\n'
-                             << "      SelfCall: " << op_histogram[(int)OpType::SelfCall][i] << '\n'
+                             << "     Op histogram:\n"
+                             << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
+                             << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
+                             << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
+                             << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
+                             << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
+                             << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
+                             << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
+                             << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
+                             << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
+                             << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
+                             << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
+                             << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
+                             << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
+                             << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
+                             << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
+                             << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
+                             << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
+                             << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
+                             << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
+                             << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
+                             << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
+                             << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
                              << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
-                             << "      Let: " << op_histogram[(int)OpType::Let][i] << '\n'
-                             << "     Call types. Subclasses are Func, Self, Image, Store\n"
-                             << "      Pointwise: " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
-                             << "      Transpose: " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
-                             << "      Broadcast: " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
-                             << "      Slice: " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n'
-                             << "      Vectorizable: " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
-                             << "      Strided: " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
-                             << "      Scalar: " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
-                             << "      Gather_Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
+                             << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
+                             << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
+                             << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
+                             << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
+                             << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
+                             << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n'
+                             << "      Vectorizable:   " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
+                             << "      Strided:        " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
+                             << "      Scalar:         " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
+                             << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
                 }
             }
 
@@ -468,10 +475,6 @@ struct FunctionDAG {
 
                 node.stages.emplace_back(std::move(stage));
 
-                debug(0) << "Exprs in stage " << s << " " << exprs << '\n';
-
-                debug(0) << def.values()[0] << '\n';
-
                 // Now create the edges that lead to this func
                 for (auto p : boxes_required(exprs, stage_scope)) {
                     auto it = env.find(p.first);
@@ -514,6 +517,12 @@ struct FunctionDAG {
         Node::Stage &stage;
         size_t vector_dim;
 
+        int &op_bucket(Node::Features::OpType op_type, Type scalar_type) {
+            int type_bucket = (int)classify_type(scalar_type);
+            stage.features.types_in_use[type_bucket] = true;
+            return stage.features.op_histogram[(int)op_type][type_bucket];
+        }
+
         Node::Features::ScalarType classify_type(Type t) {
             if (t.is_float() && t.bits() > 32) {
                 return Node::Features::ScalarType::Double;
@@ -533,108 +542,108 @@ struct FunctionDAG {
         }
         void visit(const Variable *op) override {
             if (op->param.defined()) {
-                stage.features.op_histogram[(int)Node::Features::OpType::Param][(int)classify_type(op->type)]++;
+                op_bucket(Node::Features::OpType::Param, op->type)++;
             } else {
-                stage.features.op_histogram[(int)Node::Features::OpType::Variable][(int)classify_type(op->type)]++;
+                op_bucket(Node::Features::OpType::Variable, op->type)++;
             }
         }
         void visit(const IntImm *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Const][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Const, op->type)++;
         }
         void visit(const UIntImm *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Const][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Const, op->type)++;
         }
         void visit(const FloatImm *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Const][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Const, op->type)++;
         }
         void visit(const Add *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Add][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Add, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Sub *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Sub][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Sub, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Mul *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Mul][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Mul, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Mod *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Mod][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Mod, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Div *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Div][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Div, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Min *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Min][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Min, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Max *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Max][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Max, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const EQ *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::EQ][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::EQ, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const NE *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::NE][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::NE, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const LT *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::LT][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::LT, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const LE *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::LE][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::LE, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const GT *op) override {
             // Treat as a flipped LT
-            stage.features.op_histogram[(int)Node::Features::OpType::LT][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::LT, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const GE *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::LE][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::LE, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const And *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::And][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::And, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Or *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Or][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Or, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Not *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Not][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Not, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Select *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Select][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Select, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Let *op) override {
-            stage.features.op_histogram[(int)Node::Features::OpType::Let][(int)classify_type(op->type)]++;
+            op_bucket(Node::Features::OpType::Let, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Call *op) override {
-            auto t = classify_type(op->type);
+            IRVisitor::visit(op);
             if (op->call_type == Call::Halide) {
                 if (op->name == func.name()) {
                     visit_memory_access(op->type, op->args, Node::Features::AccessType::LoadSelf);
-                    stage.features.op_histogram[(int)Node::Features::OpType::SelfCall][(int)t]++;
+                    op_bucket(Node::Features::OpType::SelfCall, op->type)++;
                 } else {
                     visit_memory_access(op->type, op->args, Node::Features::AccessType::LoadFunc);
-                    stage.features.op_histogram[(int)Node::Features::OpType::FuncCall][(int)t]++;
+                    op_bucket(Node::Features::OpType::FuncCall, op->type)++;
                 }
             } else if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
-                stage.features.op_histogram[(int)Node::Features::OpType::ExternCall][(int)t]++;
+                op_bucket(Node::Features::OpType::ExternCall, op->type)++;
             } else if (op->call_type == Call::Image) {
                 visit_memory_access(op->type, op->args, Node::Features::AccessType::LoadImage);
-                stage.features.op_histogram[(int)Node::Features::OpType::ImageCall][(int)t]++;
+                op_bucket(Node::Features::OpType::ImageCall, op->type)++;
             }
         }
 
@@ -736,10 +745,6 @@ struct FunctionDAG {
                         is_strided &= (j == 0 ? deriv.is_small_integer() : deriv.is_zero());
                         is_scalar &= deriv.is_zero();
                     }
-                    debug(0) << "Derivative of " << args[i]
-                             << " w.r.t. " << stage.loop[j].var
-                             << " = " << deriv.exists << " " << deriv.numerator << "/" << deriv.denominator << '\n';
-                    (void)vector_dim;
                 }
             }
             bool is_transpose = (args.size() == stage.loop.size());
@@ -759,16 +764,6 @@ struct FunctionDAG {
                 is_slice &= single_one;
             }
             bool is_gather_scatter = !is_vector && !is_strided && !is_scalar;
-
-            debug(0) << "Classified memory access:\n"
-                     << " pointwise: " << is_pointwise << '\n'
-                     << " transpose: " << is_transpose << '\n'
-                     << " broadcast: " << is_broadcast << '\n'
-                     << " slice: " << is_slice << '\n'
-                     << " vectorizable: " << is_vector << '\n'
-                     << " strided: " << is_strided << '\n'
-                     << " scalar: " << is_scalar << '\n'
-                     << " gather/scatter: " << is_gather_scatter << '\n';
 
             auto type_class = classify_type(t);
 
