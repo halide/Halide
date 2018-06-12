@@ -1135,20 +1135,19 @@ WEAK uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t 
     return ((device_handle *)buf->device)->offset;
 }
 
-WEAK int halide_opencl_device_crop(void *user_context,
-                                    const struct halide_buffer_t *src,
-                                    struct halide_buffer_t *dst) {
+namespace {
+
+WEAK int opencl_device_crop_from_offset(void *user_context,
+                                        const struct halide_buffer_t *src,
+                                        int64_t offset,
+                                        struct halide_buffer_t *dst) {
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
     }
 
     dst->device_interface = src->device_interface;
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
-    offset *= src->type.bytes();
+
     device_handle *new_dev_handle = (device_handle *)malloc(sizeof(device_handle));
     if (new_dev_handle == NULL) {
         error(user_context) << "CL: malloc failed making device handle for crop.\n";
@@ -1161,6 +1160,24 @@ WEAK int halide_opencl_device_crop(void *user_context,
     dst->device = (uint64_t)new_dev_handle;
 
     return 0;
+}
+
+}  // namespace
+
+WEAK int halide_opencl_device_crop(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return opencl_device_crop_from_offset(user_context, src, offset, dst);
+}
+
+WEAK int halide_opencl_device_slice(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    int slice_dim,
+                                    int slice_pos,
+                                    struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return opencl_device_crop_from_offset(user_context, src, offset, dst);
 }
 
 WEAK int halide_opencl_device_release_crop(void *user_context,
@@ -1294,6 +1311,7 @@ WEAK halide_device_interface_impl_t opencl_device_interface_impl = {
     halide_opencl_device_and_host_free,
     halide_opencl_buffer_copy,
     halide_opencl_device_crop,
+    halide_opencl_device_slice,
     halide_opencl_device_release_crop,
     halide_opencl_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
@@ -1310,6 +1328,7 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
