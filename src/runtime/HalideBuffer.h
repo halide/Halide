@@ -414,7 +414,7 @@ private:
 
     /** slice a single dimension without handling device allocation. */
     void slice_host(int d, int pos) {
-        assert(d >= 0 && d <= dimensions());
+        assert(d >= 0 && d < dimensions());
         assert(pos >= dim(d).min() && pos <= dim(d).max());
         buf.dimensions--;
         int shift = pos - buf.dim[d].min;
