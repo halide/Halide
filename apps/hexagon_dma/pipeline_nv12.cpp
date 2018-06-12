@@ -26,8 +26,8 @@ public:
         Var tx("tx"), ty("ty");
 
         // Break the output into tiles.
-        const int tile_width = 256;
-        const int tile_height = 128;
+        const int tile_width = 64;
+        const int tile_height = 32;
   
         // tweak stride/extent to handle UV deinterleaving
         input_uv.dim(0).set_stride(2);
@@ -51,7 +51,8 @@ public:
             .compute_at(output_y, tx)
             .store_root()
             .fold_storage(x, tile_width * 2)
-            .copy_to_host();
+            .copy_to_host()
+            .align_storage(x, 256);
 
         copy_uv
             .compute_at(output_uv, tx)
@@ -59,6 +60,7 @@ public:
             .bound(c, 0, 2)
             .fold_storage(x, tile_width * 2)
             .copy_to_host()
+            .align_storage(x, 256)
             .reorder_storage(c, x, y);
 
     }

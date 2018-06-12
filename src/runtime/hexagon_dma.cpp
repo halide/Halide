@@ -190,10 +190,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     debug(user_context)
         << "Recommended ROI(w: " << roi_width << " h: " << roi_height << " s: " << roi_stride << ")\n";
-    halide_assert(user_context,(dst->dim[1].stride >= roi_stride));
-
-    // DMA driver Expect the Stride to be 256 Byte Aligned
-    halide_assert(user_context, (roi_stride % 256) == 0);
+    //Assert if destination stride is a multipe of recommended stride
+    halide_assert(user_context,((dst->dim[1].stride%roi_stride)== 0));
 
     // Return NULL if descriptor is not allocated
     void *desc_addr = desc_pool_get(user_context);
