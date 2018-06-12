@@ -616,11 +616,13 @@ extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
  * up resources associated with the cropped view. Do not free the
  * device allocation on the source buffer while the destination buffer
  * still lives. Note that the two buffers do not share dirty flags, so
- * care must be taken to update them together as needed. Note also
- * that device interfaces which support cropping may still not support
- * cropping a crop. Instead, create a new crop of the parent
- * buffer. Note that src and dst are required to have the same number of
- * dimensions. */
+ * care must be taken to update them together as needed. Note that src
+ * and dst are required to have the same number of dimensions.
+ *
+ * Note also that (in theory) device interfaces which support cropping may
+ * still not support cropping a crop (instead, create a new crop of the parent
+ * buffer); in practice, no known implementation has this limitation, although
+ * it is possible that some future implementations may require it. */
 extern int halide_device_crop(void *user_context,
                               const struct halide_buffer_t *src,
                               struct halide_buffer_t *dst);
@@ -634,11 +636,9 @@ extern int halide_device_crop(void *user_context,
  * up resources associated with the sliced view. Do not free the
  * device allocation on the source buffer while the destination buffer
  * still lives. Note that the two buffers do not share dirty flags, so
- * care must be taken to update them together as needed. Note also
- * that device interfaces which support cropping may still not support
- * cropping a crop. Instead, create a new crop of the parent
- * buffer. Note that the dst buffer must have exactly one fewer dimension than
- * the src buffer, and that slice_dim and slice_pos must be valid within src. */
+ * care must be taken to update them together as needed. Note that the dst buffer
+ * must have exactly one fewer dimension than the src buffer, and that slice_dim
+ * and slice_pos must be valid within src. */
 extern int halide_device_slice(void *user_context,
                                const struct halide_buffer_t *src,
                                int slice_dim, int slice_pos,
