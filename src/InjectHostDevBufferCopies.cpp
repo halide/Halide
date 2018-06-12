@@ -567,10 +567,10 @@ class InjectBufferCopies : public IRMutator2 {
             }
 
             Expr condition = op->condition;
-            bool touched_on_one_device = !touched_on_host &&
-                                         finder.devices_touched.size() == 1 &&
-                                         finder.devices_touched_by_extern.size() == 1 &&
-                                         *(finder.devices_touched.begin()) == *(finder.devices_touched_by_extern.begin());
+            bool touched_on_one_device = !touched_on_host && finder.devices_touched.size() == 1 &&
+                                         (finder.devices_touched_by_extern.empty() ||
+                                          (finder.devices_touched_by_extern.size() == 1 &&
+                                           *(finder.devices_touched.begin()) == *(finder.devices_touched_by_extern.begin())));
             if (touched_on_one_device) {
                 condition = const_false();
                 // There's no host allocation, so substitute any
