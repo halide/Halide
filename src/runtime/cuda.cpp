@@ -780,9 +780,9 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
 
 namespace {
 
-WEAK int cuda_device_offset(const struct halide_buffer_t *src,
-                            int64_t offset,
-                            struct halide_buffer_t *dst) {
+WEAK int cuda_device_crop_from_offset(const struct halide_buffer_t *src,
+                                      int64_t offset,
+                                      struct halide_buffer_t *dst) {
     dst->device = src->device + offset;
     dst->device_interface = src->device_interface;
     dst->set_device_dirty(src->device_dirty());
@@ -799,7 +799,7 @@ WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_
 
     // Pointer arithmetic works fine.
     const int64_t offset = calc_device_crop_byte_offset(src, dst);
-    return cuda_device_offset(src, offset, dst);
+    return cuda_device_crop_from_offset(src, offset, dst);
 }
 
 WEAK int halide_cuda_device_slice(void *user_context, const struct halide_buffer_t *src,
@@ -812,7 +812,7 @@ WEAK int halide_cuda_device_slice(void *user_context, const struct halide_buffer
 
     // Pointer arithmetic works fine.
     const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
-    return cuda_device_offset(src, offset, dst);
+    return cuda_device_crop_from_offset(src, offset, dst);
 }
 
 WEAK int halide_cuda_device_release_crop(void *user_context, struct halide_buffer_t *dst) {
