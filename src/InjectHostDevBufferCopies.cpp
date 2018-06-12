@@ -346,7 +346,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         op->value.accept(&finder);
         if (finder.devices_touched.empty() &&
-            !!finder.devices_touched_by_extern.empty()) {
+            finder.devices_touched_by_extern.empty()) {
             return IRMutator2::visit(op);
         } else {
             return do_copies(op);
