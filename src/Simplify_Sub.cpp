@@ -33,7 +33,7 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
         }
 
         if (EVAL_IN_LAMBDA
-            ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0))) ||
+            ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
              rewrite(ramp(x, y) - ramp(z, w), ramp(x - z, y - w, lanes)) ||
              rewrite(ramp(x, y) - broadcast(z), ramp(x - z, y, lanes)) ||

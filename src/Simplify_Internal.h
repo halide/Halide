@@ -61,7 +61,9 @@ public:
 #else
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ConstBounds *b) {
-        return Super::dispatch(e, b);
+        Expr new_e = Super::dispatch(e, b);
+        internal_assert(new_e.type() == e.type()) << e << " -> " << new_e << "\n";
+        return new_e;
     }
 #endif
 

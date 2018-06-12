@@ -343,6 +343,11 @@ Stmt Simplify::visit(const Prefetch *op) {
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
 
+    if (is_zero(op->condition)) {
+        // Predicate is always false
+        return body;
+    }
+
     Region new_bounds;
     bool bounds_changed;
 

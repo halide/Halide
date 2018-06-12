@@ -158,10 +158,10 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
                 fa = -fa;
             }
             return make_const(a.type(), fa);
-        } else if (a_bounds.min_defined && a_bounds.min >= 0) {
-            return a;
-        } else if (a_bounds.max_defined && a_bounds.max <= 0) {
-            return -a;
+        } else if (a.type().is_int() && a_bounds.min_defined && a_bounds.min >= 0) {
+            return cast(op->type, a);
+        } else if (a.type().is_int() && a_bounds.max_defined && a_bounds.max <= 0) {
+            return cast(op->type, -a);
         } else if (a.same_as(op->args[0])) {
             return op;
         } else {

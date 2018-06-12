@@ -11,7 +11,6 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
-        const Add *add = value.as<Add>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -20,11 +19,11 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_int() &&
                    const_float(value, &f)) {
             // float -> int
-            return IntImm::make(op->type, (int64_t)f);
+            return IntImm::make(op->type, safe_numeric_cast<int64_t>(f));
         } else if (op->type.is_uint() &&
                    const_float(value, &f)) {
             // float -> uint
-            return UIntImm::make(op->type, (uint64_t)f);
+            return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(f));
         } else if (op->type.is_float() &&
                    const_float(value, &f)) {
             // float -> float
@@ -36,15 +35,15 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
-            return UIntImm::make(op->type, (uint64_t)i);
+            return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(i));
         } else if (op->type.is_float() &&
                    const_int(value, &i)) {
             // int -> float
-            return FloatImm::make(op->type, (double)i);
+            return FloatImm::make(op->type, safe_numeric_cast<double>(i));
         } else if (op->type.is_int() &&
                    const_uint(value, &u)) {
             // uint -> int
-            return IntImm::make(op->type, (int64_t)u);
+            return IntImm::make(op->type, safe_numeric_cast<int64_t>(u));
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
@@ -52,7 +51,7 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         } else if (op->type.is_float() &&
                    const_uint(value, &u)) {
             // uint -> float
-            return FloatImm::make(op->type, (double)u);
+            return FloatImm::make(op->type, safe_numeric_cast<double>(u));
         } else if (cast &&
                    op->type.code() == cast->type.code() &&
                    op->type.bits() < cast->type.bits()) {
@@ -81,13 +80,6 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
             return mutate(Ramp::make(Cast::make(op->type.element_of(), ramp_value->base),
                                      Cast::make(op->type.element_of(), ramp_value->stride),
                                      ramp_value->lanes), bounds);
-        } else if (add &&
-                   op->type == Int(64) &&
-                   op->value.type() == Int(32) &&
-                   is_const(add->b)) {
-            // In the interest of moving constants outwards so they
-            // can cancel, pull the addition outside of the cast.
-            return mutate(Cast::make(op->type, add->a) + add->b, bounds);
         }
     }
 
