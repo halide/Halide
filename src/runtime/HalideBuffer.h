@@ -562,14 +562,14 @@ public:
     }
 
     /** Make a Buffer from a halide_buffer_t */
-    Buffer(const halide_buffer_t &buf,
+    explicit Buffer(const halide_buffer_t &buf,
            BufferDeviceOwnership ownership = BufferDeviceOwnership::Unmanaged) {
         assert(T_is_void || buf.type == static_halide_type());
         initialize_from_buffer(buf, ownership);
     }
 
     /** Make a Buffer from a legacy buffer_t. */
-    Buffer(const buffer_t &old_buf) {
+    explicit Buffer(const buffer_t &old_buf) {
         assert(!T_is_void && old_buf.elem_size == static_halide_type().bytes());
         buf.host = old_buf.host;
         buf.type = static_halide_type();
