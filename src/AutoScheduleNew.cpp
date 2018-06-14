@@ -54,6 +54,125 @@ bool random_dropout() {
     return drop_it;
 }
 
+
+struct PipelineFeatures {
+    // A featurization of the compute done by a Func, to
+    // feed the neural network.
+
+    enum class OpType {
+        Const,
+        Cast,
+        Variable,
+        Param,
+        Add, Sub, Mod, Mul, Div, Min, Max,
+        EQ, NE, LT, LE,
+        And, Or, Not,
+        Select,
+        ImageCall,
+        FuncCall,
+        SelfCall,   // Recursive calls from a Func to itself
+        ExternCall, // Math intrinsics, typically
+        Let,        // Depends on what CSE has decided to do, but a good indication of register pressure
+        NumOpTypes,
+    };
+
+    enum class ScalarType {
+        Bool,
+        UInt8,  // includes Int8
+        UInt16, // includes Int16
+        UInt32, // includes Int32 (TODO: is this a good idea? index math is a different sort of beast)
+        UInt64, // Includes Int64
+        Float,
+        Double,
+        NumScalarTypes
+    };
+
+    // Just to avoid printing huge numbers of zeros while debugging things
+    bool types_in_use[(int)ScalarType::NumScalarTypes];
+
+    int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes];
+
+    enum class AccessType {
+        LoadFunc,
+        LoadSelf,
+        LoadImage,
+        Store,
+        NumAccessTypes
+    };
+
+    // Finer granularity call/store node properties. These are a
+    // function of the matrix of derivatives of each arg to a
+    // call w.r.t the loop variables of the Stage. Each row of
+    // the matrix corresponds to one of the call arguments. In
+    // each case we illustrate such a call, assuming that the
+    // variables of this Func are x, y, z, and that the
+    // dimension vectorized over is the first (x).
+    int pointwise_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],  // Square identity matrix. f(x - 2, y + 8, z + param)
+        transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Square permutation matrix. f(y + 1, z - 3, x)
+        broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
+        slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
+        vectorizable_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes], // First (vectorized) col is 1, 0, 0, ... f(x+y, z*y, y/z)
+        strided_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],      // First col is [(int)2,3,4], 0, 0, ...        f(3*x + 1, z/8, y/z)
+        scalar_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],       // First col is all zero                  f(y, 2, z*8)
+        gather_scatter_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];            // Not one of the three categories above  f(x, x, sqrt(y))
+
+    // TODO: We should possibly feed these Jacobians directly
+    // to the net rather than computing the properties above.
+
+    // TODO: strided captures downsamples. What about upsamples?
+
+    // TODO: It's weird that we've already selected a
+    // dimension to be vectorized over - that should be part
+    // of the scheduling search space instead.
+
+    void dump() const {
+        for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
+            const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
+            // Skip printing for types not used
+            if (!types_in_use[i]) continue;
+
+
+            debug(0) << "    Featurization for type " << type_names[i] << '\n'
+                     << "     Op histogram:\n"
+                     << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
+                     << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
+                     << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
+                     << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
+                     << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
+                     << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
+                     << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
+                     << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
+                     << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
+                     << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
+                     << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
+                     << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
+                     << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
+                     << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
+                     << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
+                     << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
+                     << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
+                     << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
+                     << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
+                     << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
+                     << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
+                     << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
+                     << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
+                     << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
+                     << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
+                     << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
+                     << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
+                     << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
+                     << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n'
+                     << "      Vectorizable:   " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
+                     << "      Strided:        " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
+                     << "      Scalar:         " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
+                     << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
+        }
+    }
+
+};
+
+
 // A representation of the function DAG. The nodes and edges are both
 // in reverse realization order, so if you want to walk backwards up
 // the DAG, just iterate the nodes or edges in-order.
@@ -80,123 +199,6 @@ struct FunctionDAG {
         // with an IIR without computing the others, for example.
         vector<Interval> region_computed;
 
-        struct Features {
-            // A featurization of the compute done by this Func, to
-            // feed the neural network.
-
-            enum class OpType {
-                Const,
-                Cast,
-                Variable,
-                Param,
-                Add, Sub, Mod, Mul, Div, Min, Max,
-                EQ, NE, LT, LE,
-                And, Or, Not,
-                Select,
-                ImageCall,
-                FuncCall,
-                SelfCall,   // Recursive calls from a Func to itself
-                ExternCall, // Math intrinsics, typically
-                Let,        // Depends on what CSE has decided to do, but a good indication of register pressure
-                NumOpTypes,
-            };
-
-            enum class ScalarType {
-                Bool,
-                UInt8,  // includes Int8
-                UInt16, // includes Int16
-                UInt32, // includes Int32 (TODO: is this a good idea? index math is a different sort of beast)
-                UInt64, // Includes Int64
-                Float,
-                Double,
-                NumScalarTypes
-            };
-
-            // Just to avoid printing huge numbers of zeros while debugging things
-            bool types_in_use[(int)ScalarType::NumScalarTypes];
-
-            int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes];
-
-            enum class AccessType {
-                LoadFunc,
-                LoadSelf,
-                LoadImage,
-                Store,
-                NumAccessTypes
-            };
-
-            // Finer granularity call/store node properties. These are a
-            // function of the matrix of derivatives of each arg to a
-            // call w.r.t the loop variables of the Stage. Each row of
-            // the matrix corresponds to one of the call arguments. In
-            // each case we illustrate such a call, assuming that the
-            // variables of this Func are x, y, z, and that the
-            // dimension vectorized over is the first (x).
-            int pointwise_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],  // Square identity matrix. f(x - 2, y + 8, z + param)
-                transpose_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Square permutation matrix. f(y + 1, z - 3, x)
-                broadcast_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],         // Each row sums to 1. Each column sums to 1 or 0. f(y, x)
-                slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],             // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
-                vectorizable_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes], // First (vectorized) col is 1, 0, 0, ... f(x+y, z*y, y/z)
-                strided_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],      // First col is [(int)2,3,4], 0, 0, ...        f(3*x + 1, z/8, y/z)
-                scalar_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],       // First col is all zero                  f(y, 2, z*8)
-                gather_scatter_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];            // Not one of the three categories above  f(x, x, sqrt(y))
-
-            // TODO: We should possibly feed these Jacobians directly
-            // to the net rather than computing the properties above.
-
-            // TODO: strided captures downsamples. What about upsamples?
-
-            // TODO: It's weird that we've already selected a
-            // dimension to be vectorized over - that should be part
-            // of the scheduling search space instead.
-
-            void dump() const {
-                for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
-                    const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
-                    // Skip printing for types not used
-                    if (!types_in_use[i]) continue;
-
-
-                    debug(0) << "    Featurization for type " << type_names[i] << '\n'
-                             << "     Op histogram:\n"
-                             << "      Constant:   " << op_histogram[(int)OpType::Const][i] << '\n'
-                             << "      Cast:       " << op_histogram[(int)OpType::Cast][i] << '\n'
-                             << "      Variable:   " << op_histogram[(int)OpType::Variable][i] << '\n'
-                             << "      Param:      " << op_histogram[(int)OpType::Param][i] << '\n'
-                             << "      Add:        " << op_histogram[(int)OpType::Add][i] << '\n'
-                             << "      Sub:        " << op_histogram[(int)OpType::Sub][i] << '\n'
-                             << "      Mod:        " << op_histogram[(int)OpType::Mod][i] << '\n'
-                             << "      Mul:        " << op_histogram[(int)OpType::Mul][i] << '\n'
-                             << "      Div:        " << op_histogram[(int)OpType::Div][i] << '\n'
-                             << "      Min:        " << op_histogram[(int)OpType::Min][i] << '\n'
-                             << "      Max:        " << op_histogram[(int)OpType::Max][i] << '\n'
-                             << "      EQ:         " << op_histogram[(int)OpType::EQ][i] << '\n'
-                             << "      NE:         " << op_histogram[(int)OpType::NE][i] << '\n'
-                             << "      LT:         " << op_histogram[(int)OpType::LT][i] << '\n'
-                             << "      LE:         " << op_histogram[(int)OpType::LE][i] << '\n'
-                             << "      And:        " << op_histogram[(int)OpType::And][i] << '\n'
-                             << "      Or:         " << op_histogram[(int)OpType::Or][i] << '\n'
-                             << "      Not:        " << op_histogram[(int)OpType::Not][i] << '\n'
-                             << "      Select:     " << op_histogram[(int)OpType::Select][i] << '\n'
-                             << "      ImageCall:  " << op_histogram[(int)OpType::ImageCall][i] << '\n'
-                             << "      FuncCall:   " << op_histogram[(int)OpType::FuncCall][i] << '\n'
-                             << "      SelfCall:   " << op_histogram[(int)OpType::SelfCall][i] << '\n'
-                             << "      ExternCall: " << op_histogram[(int)OpType::ExternCall][i] << '\n'
-                             << "      Let:        " << op_histogram[(int)OpType::Let][i] << '\n'
-                             << "     Memory access patterns. Columns are calls to other Funcs, self-calls, input image access, and stores\n"
-                             << "      Pointwise:      " << pointwise_accesses[0][i] << ' ' << pointwise_accesses[1][i] << ' ' << pointwise_accesses[2][i] << ' ' << pointwise_accesses[3][i] << '\n'
-                             << "      Transpose:      " << transpose_accesses[0][i] << ' ' << transpose_accesses[1][i] << ' ' << transpose_accesses[2][i] << ' ' << transpose_accesses[3][i] << '\n'
-                             << "      Broadcast:      " << broadcast_accesses[0][i] << ' ' << broadcast_accesses[1][i] << ' ' << broadcast_accesses[2][i] << ' ' << broadcast_accesses[3][i] << '\n'
-                             << "      Slice:          " << slice_accesses[0][i] << ' ' << slice_accesses[1][i] << ' ' << slice_accesses[2][i] << ' ' << slice_accesses[3][i] << '\n'
-                             << "      Vectorizable:   " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
-                             << "      Strided:        " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
-                             << "      Scalar:         " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
-                             << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
-                }
-            }
-
-        };
-
         struct Loop {
             string var;
             bool pure;
@@ -215,7 +217,7 @@ struct FunctionDAG {
             int vector_size;
 
             // The featurization of the compute done
-            Features features;
+            PipelineFeatures features;
         };
         vector<Stage> stages;
 
@@ -517,133 +519,133 @@ struct FunctionDAG {
         Node::Stage &stage;
         size_t vector_dim;
 
-        int &op_bucket(Node::Features::OpType op_type, Type scalar_type) {
+        int &op_bucket(PipelineFeatures::OpType op_type, Type scalar_type) {
             int type_bucket = (int)classify_type(scalar_type);
             stage.features.types_in_use[type_bucket] = true;
             return stage.features.op_histogram[(int)op_type][type_bucket];
         }
 
-        Node::Features::ScalarType classify_type(Type t) {
+        PipelineFeatures::ScalarType classify_type(Type t) {
             if (t.is_float() && t.bits() > 32) {
-                return Node::Features::ScalarType::Double;
+                return PipelineFeatures::ScalarType::Double;
             } else if (t.is_float()) {
-                return Node::Features::ScalarType::Float;
+                return PipelineFeatures::ScalarType::Float;
             } else if (t.bits() == 1) {
-                return Node::Features::ScalarType::Bool;
+                return PipelineFeatures::ScalarType::Bool;
             } else if (t.bits() <= 8) {
-                return Node::Features::ScalarType::UInt8;
+                return PipelineFeatures::ScalarType::UInt8;
             } else if (t.bits() <= 16) {
-                return Node::Features::ScalarType::UInt16;
+                return PipelineFeatures::ScalarType::UInt16;
             } else if (t.bits() <= 32) {
-                return Node::Features::ScalarType::UInt32;
+                return PipelineFeatures::ScalarType::UInt32;
             } else {
-                return Node::Features::ScalarType::UInt64;
+                return PipelineFeatures::ScalarType::UInt64;
             }
         }
         void visit(const Variable *op) override {
             if (op->param.defined()) {
-                op_bucket(Node::Features::OpType::Param, op->type)++;
+                op_bucket(PipelineFeatures::OpType::Param, op->type)++;
             } else {
-                op_bucket(Node::Features::OpType::Variable, op->type)++;
+                op_bucket(PipelineFeatures::OpType::Variable, op->type)++;
             }
         }
         void visit(const IntImm *op) override {
-            op_bucket(Node::Features::OpType::Const, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Const, op->type)++;
         }
         void visit(const UIntImm *op) override {
-            op_bucket(Node::Features::OpType::Const, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Const, op->type)++;
         }
         void visit(const FloatImm *op) override {
-            op_bucket(Node::Features::OpType::Const, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Const, op->type)++;
         }
         void visit(const Add *op) override {
-            op_bucket(Node::Features::OpType::Add, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Add, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Sub *op) override {
-            op_bucket(Node::Features::OpType::Sub, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Sub, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Mul *op) override {
-            op_bucket(Node::Features::OpType::Mul, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Mul, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Mod *op) override {
-            op_bucket(Node::Features::OpType::Mod, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Mod, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Div *op) override {
-            op_bucket(Node::Features::OpType::Div, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Div, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Min *op) override {
-            op_bucket(Node::Features::OpType::Min, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Min, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Max *op) override {
-            op_bucket(Node::Features::OpType::Max, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Max, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const EQ *op) override {
-            op_bucket(Node::Features::OpType::EQ, op->type)++;
+            op_bucket(PipelineFeatures::OpType::EQ, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const NE *op) override {
-            op_bucket(Node::Features::OpType::NE, op->type)++;
+            op_bucket(PipelineFeatures::OpType::NE, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const LT *op) override {
-            op_bucket(Node::Features::OpType::LT, op->type)++;
+            op_bucket(PipelineFeatures::OpType::LT, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const LE *op) override {
-            op_bucket(Node::Features::OpType::LE, op->type)++;
+            op_bucket(PipelineFeatures::OpType::LE, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const GT *op) override {
             // Treat as a flipped LT
-            op_bucket(Node::Features::OpType::LT, op->type)++;
+            op_bucket(PipelineFeatures::OpType::LT, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const GE *op) override {
-            op_bucket(Node::Features::OpType::LE, op->type)++;
+            op_bucket(PipelineFeatures::OpType::LE, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const And *op) override {
-            op_bucket(Node::Features::OpType::And, op->type)++;
+            op_bucket(PipelineFeatures::OpType::And, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Or *op) override {
-            op_bucket(Node::Features::OpType::Or, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Or, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Not *op) override {
-            op_bucket(Node::Features::OpType::Not, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Not, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Select *op) override {
-            op_bucket(Node::Features::OpType::Select, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Select, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Let *op) override {
-            op_bucket(Node::Features::OpType::Let, op->type)++;
+            op_bucket(PipelineFeatures::OpType::Let, op->type)++;
             IRVisitor::visit(op);
         }
         void visit(const Call *op) override {
             IRVisitor::visit(op);
             if (op->call_type == Call::Halide) {
                 if (op->name == func.name()) {
-                    visit_memory_access(op->type, op->args, Node::Features::AccessType::LoadSelf);
-                    op_bucket(Node::Features::OpType::SelfCall, op->type)++;
+                    visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadSelf);
+                    op_bucket(PipelineFeatures::OpType::SelfCall, op->type)++;
                 } else {
-                    visit_memory_access(op->type, op->args, Node::Features::AccessType::LoadFunc);
-                    op_bucket(Node::Features::OpType::FuncCall, op->type)++;
+                    visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadFunc);
+                    op_bucket(PipelineFeatures::OpType::FuncCall, op->type)++;
                 }
             } else if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
-                op_bucket(Node::Features::OpType::ExternCall, op->type)++;
+                op_bucket(PipelineFeatures::OpType::ExternCall, op->type)++;
             } else if (op->call_type == Call::Image) {
-                visit_memory_access(op->type, op->args, Node::Features::AccessType::LoadImage);
-                op_bucket(Node::Features::OpType::ImageCall, op->type)++;
+                visit_memory_access(op->type, op->args, PipelineFeatures::AccessType::LoadImage);
+                op_bucket(PipelineFeatures::OpType::ImageCall, op->type)++;
             }
         }
 
@@ -721,7 +723,7 @@ struct FunctionDAG {
             }
         }
 
-        void visit_memory_access(Type t, const vector<Expr> &args, Node::Features::AccessType type) {
+        void visit_memory_access(Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
             // Compute matrix of partial derivatives of args w.r.t. loop params
             vector<vector<Expr>> matrix;
             vector<size_t> ones_per_row(args.size(), 0),
@@ -785,7 +787,7 @@ struct FunctionDAG {
             for (auto &e : args) {
                 e = common_subexpression_elimination(simplify(e)); // Get things into canonical form
             }
-            visit_memory_access(t, args, Node::Features::AccessType::Store);
+            visit_memory_access(t, args, PipelineFeatures::AccessType::Store);
         }
     };
 
@@ -795,7 +797,7 @@ struct FunctionDAG {
             for (size_t stage_idx = 0; stage_idx < node.stages.size(); stage_idx++) {
                 Node::Stage &stage = node.stages[stage_idx];
 
-                // Pick a dimension to vectorize over
+                // Pick a dimension to vectorize over - the innermost pure loop
                 size_t vector_dim = 0;
                 while (vector_dim < stage.loop.size() && !stage.loop[vector_dim].pure) vector_dim++;
                 // bool vectorized = vector_dim < stage.loop.size();
@@ -910,6 +912,58 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
     return result;
 }
 
+// The schedule-dependent portion of the featurization of a stage
+struct ScheduleFeatures {
+    int64_t num_realizations = 0; // Product of outer loops at store_at site
+    int64_t num_productions = 0;  // Product of outer loops at compute_at site
+    int64_t points_computed_per_realization = 0; // Number of times the innermost stmt happens per store_at
+    int64_t points_computed_per_production = 0;  // Number of times the innermost stmt happens per compute_at
+    int64_t points_computed_total = 0;
+    // points_computed_total
+    //  == num_realizations * points_computed_per_realization
+    //  ~= num_productions * points_computed_per_production
+    // Only approximately equal because of the simplifications made
+    // regarding the modelling of sliding window
+
+    int64_t innermost_loop_extent = 0; // Trip count of innermost loop
+    int64_t innermost_pure_loop_extent = 0; // Trip count of the loop that's going to be vectorized
+    int64_t inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
+    int64_t outer_parallelism = 0; // The number of times this Func could be realized in parallel. 1 when the Func is compute_root.
+
+    int64_t bytes_at_realization = 0; // Size of the region computed at the store_at site, measured in bytes
+    int64_t bytes_at_production = 0; // Size of the region computed at the compute_at site, measured in bytes
+    int64_t bytes_at_root = 0; // The same at root, regardless of where it's actually scheduled
+    int64_t innermost_bytes_at_realization = 0;
+    int64_t innermost_bytes_at_production = 0;
+    int64_t innermost_bytes_at_root = 0;
+
+    int64_t bytes_read_per_tile = 0; // Number of bytes loaded from all inputs per instance of innermost loop cluster
+    int64_t bytes_read_per_innermost_loop = 0; // Number of bytes loaded during one run through the innermost loop
+
+    int64_t inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
+
+    void dump() const {
+        debug(0) << "    num_realizations:                " << num_realizations << '\n'
+                 << "    num_productions:                 " << num_productions << '\n'
+                 << "    points_computed_per_realization: " << points_computed_per_realization << '\n'
+                 << "    points_computed_per_production:  " << points_computed_per_production << '\n'
+                 << "    points_computed_total:           " << points_computed_total << '\n'
+                 << "    innermost_loop_extent:           " << innermost_loop_extent << '\n'
+                 << "    innermost_pure_loop_extent:      " << innermost_pure_loop_extent << '\n'
+                 << "    inner_parallelism:               " << inner_parallelism << '\n'
+                 << "    outer_parallelism:               " << outer_parallelism << '\n'
+                 << "    bytes_at_realization:            " << bytes_at_realization << '\n'
+                 << "    bytes_at_production:             " << bytes_at_production << '\n'
+                 << "    bytes_at_root:                   " << bytes_at_root << '\n'
+                 << "    innermost_bytes_at_realization:  " << innermost_bytes_at_realization << '\n'
+                 << "    innermost_bytes_at_production:   " << innermost_bytes_at_production << '\n'
+                 << "    innermost_bytes_at_root:         " << innermost_bytes_at_root << '\n'
+                 << "    bytes_read_per_tile:             " << bytes_read_per_tile << '\n'
+                 << "    bytes_read_per_innermost_loop:   " << bytes_read_per_innermost_loop << '\n'
+                 << "    inlined_calls:                   " << inlined_calls << '\n';
+    }
+};
+
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
 // gives you children of the state (with costs). The following struct
@@ -944,231 +998,128 @@ struct PartialScheduleNode {
     // TODO: Should stash pointers to the relevant dag objects here to
     // avoid have to look them up all the time.
 
-    double cost(const FunctionDAG &dag,
-                const MachineParams &params,
-                map<Function, const PartialScheduleNode *, Function::Compare> &compute_site,
-                map<Function, double, Function::Compare> &overcompute,
-                int64_t instances,
-                const PartialScheduleNode *parent,
-                const PartialScheduleNode &root,
-                map<const FunctionDAG::Node *, double> *node_costs = nullptr,
-                map<const FunctionDAG::Edge *, double> *edge_costs = nullptr,
-                map<Function, double, Function::Compare> *inlined_costs = nullptr) {
+    void compute_features(const FunctionDAG &dag,
+                          const MachineParams &params,
+                          map<Function, const PartialScheduleNode *, Function::Compare> &compute_site,
+                          int64_t instances,
+                          int64_t parallelism,
+                          const PartialScheduleNode *parent,
+                          const PartialScheduleNode &root,
+                          map<Function, vector<ScheduleFeatures>, Function::Compare> *features) {
 
-        if (!is_root() && !compute_site.count(func)) {
-            compute_site[func] = parent;
-        }
-
-        double result = 0;
-
-        int64_t subinstances = instances;
+        int64_t loop_instances = 1;
         for (auto i : size) {
-            subinstances *= i;
+            loop_instances *= i;
         }
-        if (innermost) {
-            if (size.empty()) {
-                overcompute[func] = 1;
-            } else {
-                const auto &s = dag.node_map.at(func)->stages[stage];
-                int vector_size = s.vector_size;
-                int64_t ideal_subinstances = subinstances;
-                // We're going to vectorize the innermost pure loop
-                size_t p = 0;
-                while (!s.loop[p].pure && p < s.loop.size()) p++;
-                if (p < s.loop.size()) {
-                    subinstances /= size[p];
-                    subinstances *= ((size[p] + vector_size - 1) / vector_size) * vector_size;
+        int64_t subinstances = instances * loop_instances;
 
-                    // Record overcompute due to vectorization
-                    double factor = double(subinstances) / ideal_subinstances;
+        if (is_root()) {
+            for (auto c : children) {
+                c->compute_features(dag, params, compute_site, subinstances, parallelism, this, root, features);
+            }
+        } else {
 
-                    // Take the max over the stages
-                    overcompute[func] = std::max(overcompute[func], factor);
-                } else {
-                    // No pure vars. Not expected to vectorize. Doesn't count as overcompute.
-                    overcompute[func] = 1;
+            int64_t parallel_tasks = parent->is_root() ? loop_instances : 1;
+            int64_t subparallelism = parallel_tasks * parallelism;
+
+
+            // Figure out the features at the compute_at level
+            vector<ScheduleFeatures> &func_features = (*features)[func];
+            if (func_features.empty()) {
+                func_features.resize(func.updates().size() + 1);
+            }
+            ScheduleFeatures &feat = func_features[stage];
+            const auto *node = dag.node_map.at(func);
+
+            if (innermost) {
+                // Figure out the features at the innermost loop cluster level
+                feat.points_computed_total = subinstances;
+                feat.innermost_loop_extent = size.empty() ? 1 : size[0];
+                feat.innermost_pure_loop_extent = feat.innermost_loop_extent; // TODO
+
+                // TODO: bytes_read_per_tile, bytes_read_per_innermost_loop
+            }
+
+            if (!compute_site.count(func)) {
+                compute_site[func] = parent;
+            }
+
+            bool outermost_loop_for_this_stage = (feat.num_productions == 0);
+            if (outermost_loop_for_this_stage) {
+                feat.num_productions = instances;
+                feat.inner_parallelism = parallel_tasks;
+                feat.outer_parallelism = parallelism;
+
+                const auto &bounds = parent->get_bounds(func, dag);
+
+                feat.bytes_at_production = node->bytes_per_point;
+                for (auto p : bounds.region_computed) {
+                    feat.bytes_at_production *= (p.second - p.first) + 1;
                 }
+                int64_t innermost_storage_extent = 1;
+                if (!bounds.region_computed.empty()) {
+                    innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
+                }
+                feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
+            }
+
+            for (auto c : children) {
+                c->compute_features(dag, params, compute_site, subinstances, subparallelism, this, root, features);
+            }
+
+            if (outermost_loop_for_this_stage) {
+                feat.points_computed_per_production = feat.points_computed_total / instances;
             }
         }
 
-        for (auto c : children) {
-            result += c->cost(dag, params, compute_site, overcompute, subinstances, this, root, node_costs, edge_costs, inlined_costs);
-        }
-
-        // Bill compute and memory costs for all Funcs realized within this loop
         for (Function f : store_at) {
-            const auto &bounds_realized = get_bounds(f, dag);
-
+            // Figure out the features at the store_at level
+            const auto &bounds = get_bounds(f, dag);
             const auto *node = dag.node_map.at(f);
-            double compute_cost = 0;
-            double points_computed = 1;
-            for (auto p : bounds_realized.region_computed) {
-                points_computed *= p.second - p.first + 1;
-            }
-            for (size_t s = 0; s < node->stages.size(); s++) {
-                const auto &stage = node->stages[s];
-                double stage_points = 1;
-                for (const auto &p : bounds_realized.loops[s]) {
-                    stage_points *= (p.second - p.first + 1);
-                }
-                double stage_compute_cost = stage.compute * stage_points;
-
-                if (!bounds_realized.loops[s].empty()) {
-                    // Penalize small inner loops
-                    int64_t innermost_loop_extent = bounds_realized.loops[s][0].second - bounds_realized.loops[s][0].first + 1;
-                    stage_compute_cost *= (innermost_loop_extent + 10.0) / innermost_loop_extent;
-                }
-
-                compute_cost += stage_compute_cost;
-            }
-            compute_cost *= subinstances;
-
-            // Most recompute occurs due to there being multiple
-            // overlapping realizations of a Func. However, we
-            // must also account for recompute within a single
-            // realization due to vectorization of the innermost
-            // loop. Assume all other potential recompute is
-            // avoided by sliding.
-            compute_cost *= overcompute[f];
-
-            // Now incorporate overcompute due to overlapping
-            // realizations, so that we can print it as a feature for
-            // the learned model and use it for early rejection of
-            // schedules that do silly amounts of overcompute.
             const auto &root_bounds = root.get_bounds(f, dag);
-            overcompute[f] *= (bounds_realized.iteration_domain_points * subinstances) / root_bounds.iteration_domain_points;
 
-            // Compute a locality discount due to assumed storage folding.
-            auto it = compute_site.find(f);
-            internal_assert(it != compute_site.end());
+            for (size_t s = 0; s < node->stages.size(); s++) {
+                // TODO: Lift invariants from this loop. Most of it's the same for every stage.
+                ScheduleFeatures &feat = features->at(f)[s];
 
-            bool folded_over_vector_dim = false;
+                feat.num_realizations = subinstances;
 
-            double discount = 1;
-            if (it->second != this) {
-                const auto &bounds_computed = it->second->get_bounds(f, dag);
-                for (size_t i = bounds_realized.region_computed.size(); i > 0; i--) {
-                    auto r = bounds_realized.region_computed[i-1];
-                    auto c = bounds_computed.region_computed[i-1];
-                    int64_t er = r.second - r.first + 1;
-                    int64_t ec = c.second - c.first + 1;
-                    if (ec == er) {
-                        continue;
+                feat.bytes_at_realization = node->bytes_per_point;
+                for (auto p : bounds.region_computed) {
+                    feat.bytes_at_realization *= (p.second - p.first) + 1;
+                }
+                int64_t innermost_storage_extent = 1;
+                if (!bounds.region_computed.empty()) {
+                    innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
+                }
+                feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
+
+                double points_computed = 1;
+                for (auto p : bounds.region_computed) {
+                    points_computed *= p.second - p.first + 1;
+                }
+
+                {
+                    // This is as good a place as any to figure out the root-level features
+                    feat.bytes_at_root = node->bytes_per_point;
+                    for (auto p : root_bounds.region_computed) {
+                        feat.bytes_at_root *= (p.second - p.first) + 1;
                     }
-                    discount = (double)ec / er;
-                    if (i == 1) {
-                        // By folding on the innermost dimension, you just broke vectorization. Don't do that.
-                        folded_over_vector_dim = true;
-                        if (node_costs) {
-                            debug(0) << "Warning: Folding over innermost dimension: " << f.name() << '\n';
-                        }
-
-                        // Assume worst-case full scalarization.
-                        const int vector_size = dag.node_map.at(f)->vector_size;
-                        compute_cost *= vector_size;
+                    int64_t innermost_storage_extent = 1;
+                    if (!bounds.region_computed.empty()) {
+                        innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
                     }
-                    break;
+                    feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
                 }
-                if (node_costs) {
-                    debug(0) << "Folding discount for " << f.name() << ": " << discount << '\n';
-                }
-
-                // Flat penalty for storage folding. Only do it if there's a benefit.
-                compute_cost += 1;
-            }
-
-            if (node_costs) {
-                // TODO: Should this include inlined Funcs?
-                (*node_costs)[node] = compute_cost;
-            }
-
-            result += compute_cost;
-
-            // The memory cost is the number of cold loads times (in bytes) times the
-            // cost per cold load. The discount reduces the cost per
-            // cold load, but not the number of cold loads.
-            double bytes_per_point = node->bytes_per_point;
-            double allocation_size = bytes_per_point * points_computed * discount;
-            double bytes_cold_loaded = bytes_per_point * points_computed;
-            double mem_cost = subinstances * bytes_cold_loaded * cost_of_cold_load(allocation_size, params);
-
-            if (node_costs) {
-                // Outputs the featurization for this Func
-
-
-                debug(0) << "YYY "
-                         << (node - dag.nodes.data()) << " " // Topological order
-                         << f.name() << " "                  // Func name
-                         << compute_cost << " "              // Hand-designed compute cost
-                         << mem_cost << " "                  // Hand-designed memory cost
-                         << subinstances << " "              // Number of times the Func is realized
-                    // TODO: figure out featurization that captures all stages
-                         << node->stages[0].compute << " " // compute_cost per point
-                         << node->compute_if_inlined << " "  // compute_cost per point when inlined
-                    //                         << innermost_compute_extent << " "  // Innermost dimension of region over which it is realized
-                         << overcompute[f] << " "            // Fraction of overcompute
-                         << points_computed << " "             // Number of points in the region
-                         << bytes_cold_loaded << " "         // Number of bytes in the region before folding
-                         << allocation_size << " "           // Number of bytes in the region after folding
-                         << "0 " // number of inlined calls per 'realization'
-                         << (int)folded_over_vector_dim << '\n';
-
-            }
-
-            for (const auto *e : dag.outgoing_edges.at(f)) {
-                if (edge_costs) {
-                    (*edge_costs)[e] = mem_cost;
-                }
-                result += mem_cost;
             }
         }
 
-        // Bill compute cost for all Funcs inlined in this loop
+        // Track features for inlined Funcs
         for (auto p : inlined) {
-            const auto *node = dag.node_map.at(p.first);
-            double c = node->compute_if_inlined * subinstances * p.second;
-            // debug(0) << "Inlined Func " << p.first.name() << " has compute cost " << c << '\n';
-            result += c;
-            if (inlined_costs) {
-                (*inlined_costs)[p.first] += c;
-            }
-
-            // For inlineable Funcs, the points required is equal to
-            // the iteration domain points (we don't inline things with
-            // RDoms), so we can divide to get the overcompute.
-
-            const auto &root_bounds = root.get_bounds(p.first, dag);
-            overcompute[p.first] = (double)(subinstances * p.second) / root_bounds.iteration_domain_points;
-
-            /*
-            debug(0) << subinstances << " " << p.second << '\n';
-            for (auto s : root_bounds.region) {
-                debug(0) << s.first << " " << s.second << '\n';
-            }
-            */
-
-            if (node_costs) {
-                debug(0) << "YYY "
-                         << (node - dag.nodes.data()) << " "       // Topological order
-                         << p.first.name() << " "
-                         << c << " "              // Hand-designed compute cost
-                         << "0 "                  // Hand-designed memory cost
-                         << subinstances << " "   // Number of times the Func is realized
-                    // TODO: Figure out featurization that captures all stages (though we probably won't inline things with update defs)
-                         << node->stages[0].compute << " "  // compute_cost per point
-                         << node->compute_if_inlined << " "  // compute_cost per point when inlined
-                         << "0 "                  // Innermost dimension of region over which it is realized
-                         << overcompute[p.first] << " "  // Fraction of overcompute
-                         << "0 "                  // Number of points in the region
-                         << "0 "                  // Number of bytes in the region before folding
-                         << "0 "                  // Number of bytes in the region after folding
-                         << p.second << " "       // number of inlined calls per 'realization'
-                         << "0\n";                // Did we fold over the vectorized dimension
-                    }
-
+            vector<ScheduleFeatures> &func_features = (*features)[p.first];
+            func_features.resize(1);
+            func_features[0].inlined_calls += p.second * subinstances;
         }
-
-        return result;
     }
 
     bool is_root() const {
@@ -1773,19 +1724,27 @@ struct State {
 
     static int cost_calculations;
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, bool verbose = false) {
         map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
-        map<Function, double, Function::Compare> overcompute;
-        cost = root.cost(dag, params, compute_site, overcompute, 1, nullptr, root);
+        map<Function, vector<ScheduleFeatures>, Function::Compare> features;
+        root.compute_features(dag, params, compute_site, 1, 1, nullptr, root, &features);
 
-        for (const auto &p : overcompute) {
-            // Reject more than 50% overcompute out of hand for things
-            // that are realized. Inlined Funcs get a pass
-            // Compute_root is always legal.
-            auto it = compute_site.find(p.first);
-            if (it != compute_site.end() &&
-                !it->second->is_root() &&
-                p.second > 1.5) return false;
+        // Evaluate cost model on the featurization here.  This is
+        // model v0, to bootstrap training data generation for an
+        // actual model
+        cost = 0;
+        for (auto p : features) {
+            for (size_t s = 0; s < p.second.size(); s++) {
+                const auto &feat = p.second[s];
+                if (verbose) {
+                    debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
+                    feat.dump();
+                }
+                // Don't compute stuff or allocate memory. Round up innermost loops to a multiple of 16.
+                double penalty = ((feat.innermost_pure_loop_extent + 15) / 16) * 16;
+                penalty /= feat.innermost_pure_loop_extent;
+                cost += feat.points_computed_total * penalty + feat.inlined_calls + feat.bytes_at_realization;
+            }
         }
 
         cost_calculations++;
@@ -1894,46 +1853,6 @@ struct State {
                     // fused = v.var;
                 }
             }
-        }
-    }
-
-    void print_predicted_runtimes(const FunctionDAG &dag, const MachineParams &params) {
-        std::map<Function, double, Function::Compare> inlined_costs;
-        std::map<const FunctionDAG::Node *, double> node_costs;
-        std::map<const FunctionDAG::Edge *, double> edge_costs;
-        std::map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
-        std::map<Function, double, Function::Compare> overcompute;
-        root.cost(dag, params, compute_site, overcompute, 1, nullptr, root, &node_costs, &edge_costs, &inlined_costs);
-
-        for (size_t i = dag.nodes.size(); i > 0; i--) {
-            Function f = dag.nodes[i-1].func;
-            if (inlined_costs.count(f)) {
-                double c = 0;
-                for (const auto *e1 : dag.incoming_edges.at(f)) {
-                    c += edge_costs[e1];
-                }
-                for (const auto *e2 : dag.outgoing_edges.at(f)) {
-                    edge_costs[e2] += c;
-                }
-            }
-        }
-
-        for (size_t i = dag.nodes.size(); i > 0; i--) {
-            const FunctionDAG::Node *n = &dag.nodes[i-1];
-            auto it = node_costs.find(n);
-            double compute_cost = 0, mem_cost = 0;
-            if (it != node_costs.end()) {
-                compute_cost = it->second;
-                for (const auto *e : dag.incoming_edges.at(n->func)) {
-                    mem_cost += edge_costs[e];
-                }
-            } else {
-                debug(0) << "Func " << n->func.name() << " is inlined\n";
-                compute_cost = inlined_costs[n->func];
-            }
-            debug(0) << "Func " << n->func.name() << " has costs: "
-                     << (compute_cost + mem_cost) << " = "
-                     << compute_cost << " + " << mem_cost << '\n';
         }
     }
 };
@@ -2089,7 +2008,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     optimal.apply_schedule(dag, params);
 
     // Print out the predicted runtime of each Func, so we can compare them to a profile
-    optimal.print_predicted_runtimes(dag, params);
+    // optimal.print_predicted_runtimes(dag, params);
 
 
     return "";
@@ -2117,6 +2036,7 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2150,6 +2070,7 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, cheap_memory, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2173,6 +2094,7 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2195,13 +2117,14 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
 
         optimal.apply_schedule(dag, params);
         h.realize(2048, 2048);
 
-        optimal.print_predicted_runtimes(dag, params);
+        // optimal.print_predicted_runtimes(dag, params);
     }
 
     // A stencil chain
@@ -2223,6 +2146,7 @@ void autoschedule_test() {
         FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, 1);
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2243,6 +2167,7 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2268,10 +2193,9 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, 1);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
-
-        optimal.print_predicted_runtimes(dag, params);
     }
 
     // A Func with multiple stages, some of which include additional loops
@@ -2297,10 +2221,9 @@ void autoschedule_test() {
         dag.dump();
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
-
-        optimal.print_predicted_runtimes(dag, params);
     }
 
     {
@@ -2322,10 +2245,9 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, 1);
 
         debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, true);
         optimal.dump();
         debug(0) << '\n';
-
-        optimal.print_predicted_runtimes(dag, params);
     }
 
 }
