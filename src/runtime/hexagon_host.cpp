@@ -669,29 +669,39 @@ WEAK int halide_hexagon_device_and_host_free(void *user_context, struct halide_b
     return 0;
 }
 
-WEAK int halide_hexagon_device_crop(void *user_context, const struct halide_buffer_t *src,
-                                    struct halide_buffer_t *dst) {
-    debug(user_context) << "halide_hexagon_device_crop called.\n";
+namespace {
 
-    // Pointer arithmetic works fine.
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
-    offset *= src->type.bytes();
-
+WEAK int hexagon_device_crop_from_offset(const struct halide_buffer_t *src, int64_t offset, struct halide_buffer_t *dst) {
     ion_device_handle *src_handle = (ion_device_handle *)src->device;
     ion_device_handle *dst_handle = (ion_device_handle *)malloc(sizeof(ion_device_handle));
     if (!dst_handle) {
         return halide_error_code_out_of_memory;
     }
-    
+
     dst_handle->buffer = (uint8_t *)src_handle->buffer + offset;
     dst_handle->size = src_handle->size - offset;
     dst->device = reinterpret<uint64_t>(dst_handle);
     dst->device_interface = src->device_interface;
     dst->set_device_dirty(src->device_dirty());
     return 0;
+}
+
+}  // namespace
+
+WEAK int halide_hexagon_device_crop(void *user_context, const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    debug(user_context) << "halide_hexagon_device_crop called.\n";
+
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return hexagon_device_crop_from_offset(src, offset, dst);
+}
+
+WEAK int halide_hexagon_device_slice(void *user_context, const struct halide_buffer_t *src,
+                                     int slice_dim, int slice_pos, struct halide_buffer_t *dst) {
+    debug(user_context) << "halide_hexagon_device_slice called.\n";
+
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return hexagon_device_crop_from_offset(src, offset, dst);
 }
 
 WEAK int halide_hexagon_device_release_crop(void *user_context, struct halide_buffer_t *dst) {
@@ -844,6 +854,7 @@ WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_hexagon_device_and_host_free,
     halide_default_buffer_copy,
     halide_hexagon_device_crop,
+    halide_hexagon_device_slice,
     halide_hexagon_device_release_crop,
     halide_default_device_wrap_native,
     halide_default_device_detach_native,
@@ -860,6 +871,7 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,

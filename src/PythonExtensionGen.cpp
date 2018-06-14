@@ -39,7 +39,7 @@ static bool has_legacy_buffers(const LoweredFunc& func) {
     const std::vector<LoweredArgument> &args = func.args;
     auto legacy_buffer_type = type_of<buffer_t *>().handle_type;
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type.is_handle() && args[i].type.handle_type && legacy_buffer_type) {
+        if (args[i].type.is_handle() && args[i].type.handle_type == legacy_buffer_type) {
             return true;
         }
     }
@@ -133,7 +133,8 @@ void PythonExtensionGen::compile(const Module &module) {
 extern "C" {
 #endif
 
-static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int flags,
+static __attribute__((unused)) int _convert_py_buffer_to_halide(
+        PyObject* pyobj, int dimensions, int flags,
         halide_dimension_t* dim,  // array of size `dimensions`
         halide_buffer_t* out, const char* name) {
     Py_buffer buf;
