@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
     Buffer<float> input = load_and_convert_image(src_image);
     Buffer<float> transformed(input.width()/2, input.height(), 2);
-    Buffer<float> inverse_transformed(input.width(), input.height(), 1);
+    Buffer<float> inverse_transformed(input.width(), input.height());
 
     _assert(haar_x(input, transformed) == 0, "haar_x failed");
     save_transformed(transformed, dirname + "/haar_x.png");

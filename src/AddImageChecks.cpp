@@ -275,6 +275,18 @@ Stmt add_image_checks(Stmt s,
                                  (type_lanes == type.lanes()), error));
         }
 
+        // Check the dimensions matches the internally-understood dimensions
+        {
+            string dimensions_name = name + ".dimensions";
+            Expr dimensions_given = Variable::make(Int(32), dimensions_name, image, param, rdom);
+            Expr error = Call::make(Int(32), "halide_error_bad_dimensions",
+                                    {error_name,
+                                     dimensions_given, make_const(Int(32), dimensions)},
+                                    Call::Extern);
+            asserts_elem_size.push_back(
+                AssertStmt::make(dimensions_given == dimensions, error));
+        }
+
         if (touched.maybe_unused()) {
             debug(3) << "Image " << name << " is only used when " << touched.used << "\n";
         }
