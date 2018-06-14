@@ -133,7 +133,8 @@ void PythonExtensionGen::compile(const Module &module) {
 extern "C" {
 #endif
 
-static int _convert_py_buffer_to_halide(PyObject* pyobj, int dimensions, int flags,
+static __attribute__((unused)) int _convert_py_buffer_to_halide(
+        PyObject* pyobj, int dimensions, int flags,
         halide_dimension_t* dim,  // array of size `dimensions`
         halide_buffer_t* out, const char* name) {
     Py_buffer buf;
