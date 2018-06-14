@@ -570,6 +570,14 @@ WEAK int halide_default_device_crop(void *user_context,
     return halide_error_code_device_crop_unsupported;
 }
 
+WEAK int halide_default_device_slice(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    int slice_dim, int slice_pos,
+                                    struct halide_buffer_t *dst) {
+    halide_error(user_context, "device_interface does not support slicing\n");
+    return halide_error_code_device_crop_unsupported;
+}
+
 WEAK int halide_device_crop(void *user_context,
                             const struct halide_buffer_t *src,
                             struct halide_buffer_t *dst) {
@@ -584,8 +592,43 @@ WEAK int halide_device_crop(void *user_context,
         return halide_error_code_device_crop_failed;
     }
 
+    if (src->dimensions != dst->dimensions) {
+        halide_error(user_context, "src and dst must have identical dimensionality\n");
+        return halide_error_code_device_crop_failed;
+    }
+
     src->device_interface->impl->use_module();
     int err = src->device_interface->impl->device_crop(user_context, src, dst);
+
+    debug(user_context) << "halide_device_crop " << "\n"
+                        << " src: " << *src << "\n"
+                        << " dst: " << *dst << "\n";
+
+    return err;
+}
+
+WEAK int halide_device_slice(void *user_context,
+                             const struct halide_buffer_t *src,
+                             int slice_dim, int slice_pos,
+                             struct halide_buffer_t *dst) {
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    if (!src->device) {
+        return 0;
+    }
+
+    if (dst->device) {
+        halide_error(user_context, "destination buffer already has a device allocation\n");
+        return halide_error_code_device_crop_failed;
+    }
+
+    if (src->dimensions != dst->dimensions + 1) {
+        halide_error(user_context, "dst must have exactly one fewer dimension than src\n");
+        return halide_error_code_device_crop_failed;
+    }
+
+    src->device_interface->impl->use_module();
+    int err = src->device_interface->impl->device_slice(user_context, src, slice_dim, slice_pos, dst);
 
     debug(user_context) << "halide_device_crop " << "\n"
                         << " src: " << *src << "\n"

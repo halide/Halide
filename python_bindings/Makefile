@@ -3,7 +3,9 @@ THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
 ROOT_DIR = $(strip $(shell dirname $(THIS_MAKEFILE)))
 
 # These are set by Halide's Makefile when built via that path.
-HALIDE_DISTRIB_PATH ?= $(ROOT_DIR)/../distrib
+HALIDE_PATH ?= $(ROOT_DIR)/..
+HALIDE_DISTRIB_PATH ?= $(HALIDE_PATH)/distrib
+HALIDE_RUNTIME ?= $(HALIDE_PATH)/bin/host/runtime.a
 BIN ?= $(ROOT_DIR)/bin
 # 'python' or 'python3'
 PYTHON ?= python3
@@ -98,6 +100,38 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
+# Compile the generators:
+$(BIN)/%.gen: $(HALIDE_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
+
+# Make the generator generate a Python extension:
+$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
+	    -g $(notdir $(basename $<)) -o $(BIN) target=host
+
+# Compile the generated Python extension(s):
+$(BIN)/%.o: $(BIN)/%.cpp
+	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
+$(BIN)/%.py.o: $(BIN)/%.py.c
+	$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
+
+# The Python extension of the generator is already in $(BIN), and is named
+# the same, so put the Python extension of the function into ext/.
+# TODO: Python extensions of generators should have a _generator suffix.
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o
+	@mkdir -p $(BIN)/ext
+	$(CXX) $(LDFLAGS) $^ $(HALIDE_RUNTIME) -shared -o $@
+
+# Run the Python extension(s):
+%.run: $(ROOT_DIR)/correctness/%_test.py $(BIN)/ext/%.so
+	PYTHONPATH="$(BIN)/ext:$$PYTHONPATH" $(PYTHON) $<
+
+# TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
+# every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
+.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub
+test_correctness_addconstant_test: addconstant.run ;
+test_correctness_bit_test: bit.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
@@ -128,7 +162,16 @@ test_tutorial_%: $(ROOT_DIR)/tutorial/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
 	@# Send stdout (but not stderr) from these to /dev/null to reduce noise
-	@cd $(TEST_TMP); PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $< >/dev/null
+	@# We need "." in the PYTHONPATH for lesson_10_halide.so.
+	@cd $(TEST_TMP); PYTHONPATH=".:$(BIN):$$PYTHONPATH" $(PYTHON) $< >/dev/null
+
+test_tutorial_lesson_10_aot_compilation_run: $(TEST_TMP)/lesson_10_halide.so
+
+$(TEST_TMP)/lesson_10_halide.so: test_tutorial_lesson_10_aot_compilation_generate
+	$(CXX) $(CCFLAGS) $(LDFLAGS) $(FPIC) -shared \
+		$(TEST_TMP)/lesson_10_halide.py.c \
+		$(TEST_TMP)/lesson_10_halide.o \
+		-I $(TEST_TMP) -o $@
 
 clean:
 	rm -rf $(BIN)

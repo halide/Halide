@@ -1153,7 +1153,13 @@ private:
 
 )INLINE_CODE";
 
+        // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // emitting this long text string was regularly garbled in a predictable pattern;
+        // flushing the stream before or after heals it. Since C++ codegen is rarely
+        // on a compilation critical path, we'll just band-aid it in this way.
+        stream << std::flush;
         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
+        stream << std::flush;
 
         for (const auto &t : vector_types) {
             string name = type_to_c_type(t, false, false);
