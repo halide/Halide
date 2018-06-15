@@ -87,8 +87,8 @@ struct PipelineFeatures {
         NumScalarTypes
     };
 
-    // Just to avoid printing huge numbers of zeros while debugging things
-    bool types_in_use[(int)ScalarType::NumScalarTypes];
+    // Not a super-useful feature, but helps avoid printing huge numbers of zeros while debugging things
+    int types_in_use[(int)ScalarType::NumScalarTypes];
 
     int op_histogram[(int)OpType::NumOpTypes][(int)ScalarType::NumScalarTypes];
 
@@ -1749,6 +1749,30 @@ struct State {
         map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
         map<Function, vector<ScheduleFeatures>, Function::Compare> features;
         root.compute_features(dag, params, compute_site, 1, 1, nullptr, root, &features);
+
+        if (verbose) {
+            for (const auto &n : dag.nodes) {
+                const auto &sched_feat = features[n.func];
+                for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
+                    const auto &s = n.stages[stage_idx - 1];
+                    debug(0) << "YYY ";
+                    debug(0) << n.func.name() << ' ' << (stage_idx - 1) << ' ';
+                    const int64_t *sched_stats = (const int64_t *)(&sched_feat[stage_idx - 1]);
+                    for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
+                        // The schedule-based features are all
+                        // naturally multiplicative and have a very
+                        // large dynamic range, so I'll emit them
+                        // logged
+                        debug(0) << std::log(1 + sched_stats[i]) << ' ';
+                    }
+                    const int *stats = (const int *)(&s.features);
+                    for (size_t i = 0; i < sizeof(s.features) / sizeof(int); i++) {
+                        debug(0) << stats[i] << ' ';
+                    }
+                    debug(0) << '\n';
+                }
+            }
+        }
 
         // Evaluate cost model on the featurization here.  This is
         // model v0, to bootstrap training data generation for an
