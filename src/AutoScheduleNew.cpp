@@ -925,6 +925,8 @@ struct ScheduleFeatures {
     // Only approximately equal because of the simplifications made
     // regarding the modelling of sliding window
 
+    int64_t points_computed_minimum = 0; // The minimum number of points that are actually required to be computed to produce a correct output.
+
     int64_t innermost_loop_extent = 0; // Trip count of innermost loop
     int64_t innermost_pure_loop_extent = 0; // Trip count of the loop that's going to be vectorized
     int64_t inner_parallelism = 0; // The number of parallel jobs used in the production of this Func. 1 unless the Func is compute_root.
@@ -947,6 +949,7 @@ struct ScheduleFeatures {
                  << "    points_computed_per_realization: " << points_computed_per_realization << '\n'
                  << "    points_computed_per_production:  " << points_computed_per_production << '\n'
                  << "    points_computed_total:           " << points_computed_total << '\n'
+                 << "    points_computed_minimum:         " << points_computed_minimum << '\n'
                  << "    innermost_loop_extent:           " << innermost_loop_extent << '\n'
                  << "    innermost_pure_loop_extent:      " << innermost_pure_loop_extent << '\n'
                  << "    inner_parallelism:               " << inner_parallelism << '\n'
@@ -1103,7 +1106,12 @@ struct PartialScheduleNode {
 
                 feat.num_realizations = subinstances;
 
-                feat.points_computed_per_realization = feat.points_computed_total / feat.num_realizations;
+                feat.points_computed_per_realization = 1;
+                internal_assert(!bounds.loops[s].empty());
+                for (auto p : bounds.loops[s]) {
+                    feat.points_computed_per_realization *= (p.second - p.first + 1);
+                }
+                feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
 
                 feat.bytes_at_realization = node->bytes_per_point;
                 for (auto p : bounds.region_computed) {
@@ -1131,6 +1139,11 @@ struct PartialScheduleNode {
                         innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
                     }
                     feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
+
+                    feat.points_computed_minimum = 1;
+                    for (auto p : root_bounds.loops[s]) {
+                        feat.points_computed_minimum *= (p.second - p.first + 1);
+                    }
                 }
             }
         }
@@ -1505,10 +1518,15 @@ struct PartialScheduleNode {
                     new_inner_iteration_domain_points = 1,
                     new_outer_iteration_domain_points = 1;
 
+                // Track the number of ones in the inner size, so that
+                // we can tell whether or not it's appropriate to
+                // slide over it.
+                size_t num_ones = 0;
                 for (size_t i = 0; i < t.size(); i++) {
                     old_stage_iteration_domain_points *= b.loops[stage][i].second - b.loops[stage][i].first + 1;
                     int factor = t[i];
                     inner->size[i] = (outer.size[i] + factor - 1) / factor;
+                    if (inner->size[i] == 1) num_ones++;
                     outer.size[i] = factor;
                     int64_t min = parent_bounds.loops[stage][i].first;
                     int64_t extent = parent_bounds.loops[stage][i].second - min + 1;
@@ -1517,6 +1535,7 @@ struct PartialScheduleNode {
                     new_outer_iteration_domain_points *= extent;
                     new_inner_iteration_domain_points *= factor;
                 }
+
                 // The number of points in an iteration domain is inclusive of children
                 new_outer_iteration_domain_points *= new_inner_iteration_domain_points;
 
@@ -1535,7 +1554,10 @@ struct PartialScheduleNode {
                 }
                 result.emplace_back(std::move(compute_at_here));
 
-                if (!in_realization && !f.has_update_definition()) {
+                bool may_slide = ((num_ones == t.size() - 1) &&
+                                  !in_realization &&
+                                  !f.has_update_definition());
+                if (may_slide) {
                     // Also consider just storing here, but computing
                     // further in. Currently don't have to worry about
                     // the constraints this places on parallelism, as
@@ -1753,6 +1775,10 @@ struct State {
         if (verbose) {
             for (const auto &n : dag.nodes) {
                 const auto &sched_feat = features[n.func];
+                if (sched_feat.size() < n.stages.size()) {
+                    // This Func hasn't been scheduled yet.
+                    break;
+                }
                 for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
                     const auto &s = n.stages[stage_idx - 1];
                     debug(0) << "YYY ";
@@ -1761,7 +1787,7 @@ struct State {
                     for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
                         // The schedule-based features are all
                         // naturally multiplicative and have a very
-                        // large dynamic range, so I'll emit them
+                        // large dynamic range, so we emit them
                         // logged
                         debug(0) << std::log(1 + sched_stats[i]) << ' ';
                     }
@@ -1781,6 +1807,13 @@ struct State {
         for (auto p : features) {
             for (size_t s = 0; s < p.second.size(); s++) {
                 const auto &feat = p.second[s];
+                // Reject silly schedules. They're not even useful for
+                // training data, as they potentially take the age of
+                // the universe to benchmark. We define 'silly' as
+                // doing more than 10x redundant recompute for any one
+                // stage.
+                if (feat.points_computed_total > 10*feat.points_computed_minimum) return false;
+
                 if (verbose) {
                     debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
                     feat.dump();
@@ -1788,7 +1821,7 @@ struct State {
                 // Don't compute stuff or allocate memory. Large inner loops are good.
                 cost += (feat.points_computed_total +
                          feat.inlined_calls +
-                         feat.num_realizations * feat.bytes_at_production - // Assume bytes_at_production is what actually matters for allocation size (due to folding)
+                         feat.num_realizations * feat.bytes_at_production -
                          std::sqrt(feat.innermost_pure_loop_extent) * 100);
             }
         }
@@ -1831,6 +1864,7 @@ struct State {
 
         // 2) Realize it somewhere
         auto tile_options = root.compute_in_tiles(f, dag, nullptr, params, false);
+        debug(0) << "Produced " << tile_options.size() << " tile options\n";
         for (PartialScheduleNode n : tile_options) {
             auto child = new State(*this);
             child->root = std::move(n);
@@ -1944,11 +1978,10 @@ State optimal_schedule(FunctionDAG &dag,
     };
 
     std::function<void(State *)> enqueue_new_children = [&](State *s) {
-        /*
-        debug(0) << "\n** Generated child: ";
-        s->dump();
-        s->print_predicted_runtimes(dag, params);
-        */
+
+        // debug(0) << "\n** Generated child: ";
+        // s->calculate_cost(dag, params, true);
+        // s->dump();
 
         tick(double(s->num_funcs_scheduled) / dag.nodes.size());
         q.emplace(std::shared_ptr<State>(s));
