@@ -27,7 +27,7 @@ void *my_malloc(void *ucon, size_t sz) {
 }
 
 int main(int argc, char **argv) {
-    Buffer<float> output(1024, 1024, 3);
+    Buffer<float> output(2000, 2000, 3);
 
     for (int y = 0; y < output.height(); y++) {
         for (int x = 0; x < output.width(); x++) {
