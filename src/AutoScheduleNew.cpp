@@ -515,6 +515,8 @@ struct FunctionDAG {
     }
 
     class Featurizer : public IRVisitor {
+        using IRVisitor::visit;
+
         Function &func;
         Node::Stage &stage;
         size_t vector_dim;
@@ -2081,7 +2083,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Just to get the debugging prints to fire
-    optimal.calculate_cost(dag, params);
+    optimal.calculate_cost(dag, params, true);
 
     // Apply the schedules
     optimal.apply_schedule(dag, params);

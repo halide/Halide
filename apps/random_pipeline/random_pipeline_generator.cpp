@@ -261,7 +261,7 @@ public:
             // For now, only upsample dimensions 0 or 1.
             int dim = rand_int(0, 1);
             int factor = 2;
-            if (f.w < 1024 && f.h < 1024) {
+            if (f.w < 2000 && f.h < 2000) {
                 return upsample(f, dim, factor);
             } else {
                 return random_stage(s);
@@ -310,8 +310,8 @@ public:
         rng.seed((int)seed);
 
         vector<Stage> stages;
-        // Assume input starts at ~1024x1024
-        stages.emplace_back(Stage{first, 1024, 1024});
+        // Assume input starts at ~2000x2000
+        stages.emplace_back(Stage{first, 2000, 2000});
 
         for (int i = 0; i < max_stages - 2; i++) {
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << "\n";
@@ -329,15 +329,15 @@ public:
 
         // Resample back to the correct resolution
         if (tail.w >= 2048) {
-            tail = downsample(tail, 0, tail.w / 1024);
+            tail = downsample(tail, 0, tail.w / 2000);
         } else if (tail.w < 512) {
-            tail = upsample(tail, 0, 1024 / tail.w);
+            tail = upsample(tail, 0, 2000 / tail.w);
         }
 
         if (tail.h >= 2048) {
-            tail = downsample(tail, 1, tail.h / 1024);
+            tail = downsample(tail, 1, tail.h / 2000);
         } else if (tail.h < 512) {
-            tail = upsample(tail, 1, 1024 / tail.h);
+            tail = upsample(tail, 1, 2000 / tail.h);
         }
 
         output(tail.func.args()) = tail.func(tail.func.args());
@@ -347,8 +347,8 @@ public:
         }
 
         if (auto_schedule) {
-            output.estimate(output.args()[0], 0, 1024);
-            output.estimate(output.args()[1], 0, 1024);
+            output.estimate(output.args()[0], 0, 2000);
+            output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
         }
     }
