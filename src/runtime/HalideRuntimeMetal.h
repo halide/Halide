@@ -61,7 +61,7 @@ extern int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t
  */
 extern uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf);
 
-/** Returns the offset associated with the Metal Buffer allocation via device_crop. */
+/** Returns the offset associated with the Metal Buffer allocation via device_crop or device_slice. */
 extern uint64_t halide_metal_get_crop_offset(void *user_context, struct halide_buffer_t *buf);
 
 struct halide_metal_device;
