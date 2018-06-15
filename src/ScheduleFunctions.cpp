@@ -960,10 +960,8 @@ private:
             found_compute_level = true;
         }
 
-        if (store_level.match(for_loop->name) && is_the_right_level(for_loop->name)) {
+        if (store_level.match(for_loop->name) && is_the_right_level(for_loop->name) && found_compute_level) {
             debug(3) << "Found store level\n";
-            internal_assert(found_compute_level)
-                << "The compute loop level was not found within the store loop level!\n";
 
             if (!function_is_already_realized_in_stmt(func, body) &&
                 (function_is_used_in_stmt(func, body) || is_output)) {
