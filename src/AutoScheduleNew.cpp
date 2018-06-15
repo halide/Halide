@@ -938,7 +938,6 @@ struct ScheduleFeatures {
     int64_t innermost_bytes_at_root = 0;
 
     int64_t bytes_read_per_tile = 0; // Number of bytes loaded from all inputs per instance of innermost loop cluster
-    int64_t bytes_read_per_innermost_loop = 0; // Number of bytes loaded during one run through the innermost loop
 
     int64_t inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
 
@@ -959,7 +958,6 @@ struct ScheduleFeatures {
                  << "    innermost_bytes_at_production:   " << innermost_bytes_at_production << '\n'
                  << "    innermost_bytes_at_root:         " << innermost_bytes_at_root << '\n'
                  << "    bytes_read_per_tile:             " << bytes_read_per_tile << '\n'
-                 << "    bytes_read_per_innermost_loop:   " << bytes_read_per_innermost_loop << '\n'
                  << "    inlined_calls:                   " << inlined_calls << '\n';
     }
 };
@@ -1035,9 +1033,30 @@ struct PartialScheduleNode {
                 // Figure out the features at the innermost loop cluster level
                 feat.points_computed_total = subinstances;
                 feat.innermost_loop_extent = size.empty() ? 1 : size[0];
-                feat.innermost_pure_loop_extent = feat.innermost_loop_extent; // TODO
 
-                // TODO: bytes_read_per_tile, bytes_read_per_innermost_loop
+                feat.innermost_pure_loop_extent = 1;
+                size_t i = 0;
+                for (auto l : node->stages[stage].loop) {
+                    if (l.pure) {
+                        feat.innermost_pure_loop_extent = size[i];
+                        break;
+                    }
+                    i++;
+                }
+
+
+                int64_t bytes_loaded = 0;
+                for (const auto *e : dag.incoming_edges.at(func)) {
+                    const auto &bounds = parent->get_bounds(e->producer, dag);
+                    const auto *n = dag.node_map.at(e->producer);
+                    int64_t footprint = 1;
+                    for (auto p : bounds.region_required) {
+                        footprint *= (p.second - p.first + 1);
+                    }
+                    bytes_loaded += n->bytes_per_point * footprint;
+                }
+                // TODO: consider input images
+                feat.bytes_read_per_tile = bytes_loaded;
             }
 
             if (!compute_site.count(func)) {
@@ -1083,6 +1102,8 @@ struct PartialScheduleNode {
                 ScheduleFeatures &feat = features->at(f)[s];
 
                 feat.num_realizations = subinstances;
+
+                feat.points_computed_per_realization = feat.points_computed_total / feat.num_realizations;
 
                 feat.bytes_at_realization = node->bytes_per_point;
                 for (auto p : bounds.region_computed) {
@@ -1740,10 +1761,11 @@ struct State {
                     debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
                     feat.dump();
                 }
-                // Don't compute stuff or allocate memory. Round up innermost loops to a multiple of 16.
-                double penalty = ((feat.innermost_pure_loop_extent + 15) / 16) * 16;
-                penalty /= feat.innermost_pure_loop_extent;
-                cost += feat.points_computed_total * penalty + feat.inlined_calls + feat.bytes_at_realization;
+                // Don't compute stuff or allocate memory. Large inner loops are good.
+                cost += (feat.points_computed_total +
+                         feat.inlined_calls +
+                         feat.num_realizations * feat.bytes_at_production - // Assume bytes_at_production is what actually matters for allocation size (due to folding)
+                         std::sqrt(feat.innermost_pure_loop_extent) * 100);
             }
         }
 
