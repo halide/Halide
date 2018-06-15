@@ -287,7 +287,8 @@ public:
         } else if (stage_type == 8) {
             int dim = rand_int(0, 2);
             return scan(f, dim);
-        } else if (stage_type == 9) {
+        } else if (stage_type == 9 && false) {
+            // TODO: transpose disabled for now because f(x, y) + f(y, x) totally breaks the bounds inference done by the autoscheduler.
             return transpose(f);
         } else if (i1 != i2) {
             // Add two equal resolution stages
