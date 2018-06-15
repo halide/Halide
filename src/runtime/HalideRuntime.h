@@ -982,9 +982,13 @@ enum halide_error_code_t {
      * first. */
     halide_error_code_incompatible_device_interface = -42,
 
+    /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
+    halide_error_code_bad_dimensions = -43,
+
     /** An expression that would perform an integer division or modulo
      * by zero was evaluated. */
-    halide_error_code_integer_division_by_zero = -43,
+    halide_error_code_integer_division_by_zero = -44,
+
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1010,6 +1014,8 @@ extern int halide_error_bad_type(void *user_context, const char *func_name,
                                  uint8_t code_given, uint8_t correct_code,
                                  uint8_t bits_given, uint8_t correct_bits,
                                  uint16_t lanes_given, uint16_t correct_lanes);
+extern int halide_error_bad_dimensions(void *user_context, const char *func_name,
+                                       int32_t dimensions_given, int32_t correct_dimensions);
 extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
                                              int dimension, int min_touched, int max_touched,
                                              int min_valid, int max_valid);
