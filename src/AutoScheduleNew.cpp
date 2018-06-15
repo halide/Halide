@@ -515,6 +515,8 @@ struct FunctionDAG {
     }
 
     class Featurizer : public IRVisitor {
+        using IRVisitor::visit;
+
         Function &func;
         Node::Stage &stage;
         size_t vector_dim;
