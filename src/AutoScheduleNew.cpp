@@ -1010,9 +1010,13 @@ struct PartialScheduleNode {
                           const PartialScheduleNode &root,
                           map<Function, vector<ScheduleFeatures>, Function::Compare> *features) {
 
-        int64_t loop_instances = 1;
+        int64_t loop_instances = 1, pure_loop_instances = 1;
+        size_t idx = 0;
         for (auto i : size) {
             loop_instances *= i;
+            if (dag.node_map.at(func)->stages[stage].loop[idx++].pure) {
+                pure_loop_instances *= i;
+            }
         }
         int64_t subinstances = instances * loop_instances;
 
@@ -1022,7 +1026,7 @@ struct PartialScheduleNode {
             }
         } else {
 
-            int64_t parallel_tasks = parent->is_root() ? loop_instances : 1;
+            int64_t parallel_tasks = parent->is_root() ? pure_loop_instances : 1;
             int64_t subparallelism = parallel_tasks * parallelism;
 
 
@@ -1480,8 +1484,11 @@ struct PartialScheduleNode {
                 if (parent->is_root()) {
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
                     int total = 1;
+                    size_t idx = 0;
                     for (auto s : t) {
-                        total *= s;
+                        if (l[idx++].pure) {
+                            total *= s;
+                        }
                     }
                     if (total < params.parallelism) continue;
                 }
@@ -1524,11 +1531,13 @@ struct PartialScheduleNode {
                 // we can tell whether or not it's appropriate to
                 // slide over it.
                 size_t num_ones = 0;
+                bool splits_vector_dim = false;
                 for (size_t i = 0; i < t.size(); i++) {
                     old_stage_iteration_domain_points *= b.loops[stage][i].second - b.loops[stage][i].first + 1;
                     int factor = t[i];
                     inner->size[i] = (outer.size[i] + factor - 1) / factor;
                     if (inner->size[i] == 1) num_ones++;
+                    splits_vector_dim |= ((int)i == vector_dim && factor != 1);
                     outer.size[i] = factor;
                     int64_t min = parent_bounds.loops[stage][i].first;
                     int64_t extent = parent_bounds.loops[stage][i].second - min + 1;
@@ -1557,6 +1566,7 @@ struct PartialScheduleNode {
                 result.emplace_back(std::move(compute_at_here));
 
                 bool may_slide = ((num_ones == t.size() - 1) &&
+                                  !splits_vector_dim &&
                                   !in_realization &&
                                   !f.has_update_definition());
                 if (may_slide) {
