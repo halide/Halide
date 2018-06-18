@@ -1816,10 +1816,9 @@ struct State {
             }
         }
 
-        // Evaluate cost model on the featurization here.  This is
-        // model v0, to bootstrap training data generation for an
-        // actual model
+        // Evaluate cost model on the featurization here.
         cost = 0;
+
         for (auto p : features) {
             for (size_t s = 0; s < p.second.size(); s++) {
                 const auto &feat = p.second[s];
@@ -1828,17 +1827,99 @@ struct State {
                 // the universe to benchmark. We define 'silly' as
                 // doing more than 10x redundant recompute for any one
                 // stage.
-                if (feat.points_computed_total > 10*feat.points_computed_minimum) return false;
+                if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
 
                 if (verbose) {
                     debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
                     feat.dump();
                 }
+
+                // This is model v0, to bootstrap training data generation for
+                // an actual model. Just wrote down something reasonable-sounding.
+                /*
                 // Don't compute stuff or allocate memory. Large inner loops are good.
                 cost += (feat.points_computed_total +
                          feat.inlined_calls +
                          feat.num_realizations * feat.bytes_at_production -
                          std::sqrt(feat.innermost_pure_loop_extent) * 100);
+                */
+
+                // Model v1 is a least-squares fit on the features and
+                // the features squared trying to predict
+                // throughput. PipelineFeatures were used in the
+                // prediction, but are ignored here because we're only
+                // comparing different schedules for the same
+                // pipeline. Some of the ScheduleFeatures also have
+                // that property (the ones computed at root), but we
+                // include them here for convenience. If you look at
+                // the non-trivial coefficients on things that depend
+                // on the schedule you'll see that it has basically
+                // learned one thing:
+
+                // Large innermost_bytes_at_realization is good,
+                // unless it gets *really* large. Have spatial
+                // coherence on output cache lines and don't break
+                // vectorization.
+
+                // Smaller effects include:
+
+                // - More points computed per realization is better
+                // (amortize malloc overhead)
+
+                // - Fewer points computed total is better (minimize
+                // redundant recompute)
+
+                // - Fewer bytes per realization is better (fit into
+                // local cache). Recall that we want *more* bytes
+                // along the innermost dimension, so this is really a
+                // constraint on the height of a tile)
+
+                double linear_weights[] = {
+                    7.44107243e-08,
+                    -6.61684316e-08,
+                    1.38209663e-06,
+                    -9.72775735e-07,
+                    -2.15445520e-06,
+                    1.64845721e-06,
+                    1.42242235e-07,
+                    1.58736644e-07,
+                    -9.37325174e-08,
+                    1.77330511e-09,
+                    -1.21396794e-06,
+                    6.31298712e-07,
+                    -8.20550970e-08,
+                    8.74631069e-01,
+                    -1.68220271e-07,
+                    -8.74630980e-01,
+                    3.83216062e-08,
+                    -5.86168533e-07
+                };
+                double square_weights[] = {
+                    -1.07675757e-09,
+                    -3.02034990e-09,
+                    3.34156891e-09,
+                    2.31720771e-09,
+                    6.04231900e-08,
+                    -6.81740558e-08,
+                    -1.08771382e-08,
+                    -1.92484135e-08,
+                    5.48552892e-09,
+                    -1.05536441e-09,
+                    -7.13883484e-09,
+                    6.89300573e-09,
+                    2.32452547e-08,
+                    -1.00000000e+00,
+                    1.32440828e-08,
+                    9.99999996e-01,
+                    -2.18566372e-09,
+                    1.41639965e-08
+                };
+
+                const int64_t *sched_stats = (const int64_t *)(&feat);
+                for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
+                    double w = std::log(1 + sched_stats[i]);
+                    cost -= (linear_weights[i] + square_weights[i] * w) * w;
+                }
             }
         }
 
