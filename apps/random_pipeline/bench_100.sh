@@ -25,7 +25,7 @@ for ((b=0;b<10000000;b++)); do
     # Build lots of pipelines
     for ((p=0;p<$PIPELINES;p++)); do
 	P=$((b * $PIPELINES + p))
-        STAGES=$(((P % 20) + 5))
+        STAGES=$(((P % 30) + 10))
 	echo echo Building pipeline $P
 	echo "HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build 2>&1 | grep -v Nothing.to.be.done"
 	for ((s=0;s<$SCHEDULES;s++)); do
@@ -36,7 +36,7 @@ for ((b=0;b<10000000;b++)); do
     # Benchmark them
     for ((p=0;p<$PIPELINES;p++)); do
 	P=$((b * $PIPELINES + p))
-        STAGES=$(((P % 20) + 5))
+        STAGES=$(((P % 30) + 10))
 	echo Benchmarking pipeline $P
 	F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_root_50_1/times.txt
 	if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=24 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
@@ -64,13 +64,13 @@ for ((b=0;b<10000000;b++)); do
 
     # Extract the features
     echo "Extracting features..."
-    cat results/files_${b}.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | cut -d' ' -f2- | sort -n | cut -d' ' -f3-); done > results/features_${b}.txt
+    cat results/files_${b}.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | cut -d' ' -f3-); done > results/features_${b}.txt
 
     # Extract failed proofs
     echo "Extracting any failed proofs..."
     cat results/files_${b}.txt | while read F; do grep -A1 'Failed to prove' ${F/times/stderr}; done > results/failed_proofs_${b}.txt    
 
-    # Extract the cost according to the hand-designed model (just the sum of the features)
+    # Extract the cost according to the hand-designed model (just the sum of a few of the features)
     echo "Extracting costs..."
     cat results/files_${b}.txt | while read F; do echo $(grep '^State with cost' ${F/times/stderr} | cut -d' ' -f4 | cut -d: -f1); done  > results/costs_${b}.txt
 done
