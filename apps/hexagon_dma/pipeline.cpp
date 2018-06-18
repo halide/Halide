@@ -32,8 +32,8 @@ public:
         // circular buffer of two tiles.
         copy
             .compute_at(output, tx)
+            .store_in(MemoryType::LockedCache)
             .store_root()
-            .fold_storage(x, tile_width * 2)
             .copy_to_host();
     }
 

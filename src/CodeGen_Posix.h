@@ -70,6 +70,18 @@ protected:
 
     std::string get_allocation_name(const std::string &n);
 
+    /** Free an allocation previously allocated with
+     * create_allocation */
+    void free_allocation(const std::string &name);
+
+     /** Generates code for computing the size of an allocation from a
+     * list of its extents and its size. Fires a runtime assert
+     * (halide_error) if the size overflows 2^31 -1, the maximum
+     * positive number an int32_t can hold. */
+    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+
+
+
 private:
 
     /** Stack allocations that were freed, but haven't gone out of
@@ -84,8 +96,8 @@ private:
     /** Generates code for computing the size of an allocation from a
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
-     * positive number an int32_t can hold. */
-    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+     * positive number an int32_t can hold. 
+    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);*/
 
     /** Allocates some memory on either the stack or the heap, and
      * returns an Allocation object describing it. For heap
@@ -104,9 +116,6 @@ private:
                                  const std::vector<Expr> &extents,
                                  Expr condition, Expr new_expr, std::string free_function);
 
-    /** Free an allocation previously allocated with
-     * create_allocation */
-    void free_allocation(const std::string &name);
 };
 
 }  // namespace Internal

@@ -61,6 +61,7 @@ protected:
     void visit(const GT *);
     void visit(const EQ *);
     void visit(const Select *);
+    void visit(const Allocate *);
     ///@}
 
     /** We ask for an extra vector on each allocation to enable fast

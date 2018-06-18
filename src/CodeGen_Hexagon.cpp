@@ -1993,5 +1993,93 @@ void CodeGen_Hexagon::visit(const NE *op) {
     }
 }
 
+void CodeGen_Hexagon::visit(const Allocate *alloc) {
+    if (sym_exists(alloc->name)) {
+        user_error << "Can't have two different buffers with the same name: "
+                   << alloc->name << "\n";
+    }
+
+    if (alloc->memory_type == MemoryType::LockedCache) {
+        Value *llvm_size = nullptr;
+        int32_t constant_bytes = Allocate::constant_allocation_size(alloc->extents, alloc->name);
+        if (constant_bytes > 0) {
+            constant_bytes *= alloc->type.bytes();
+            llvm_size = codegen(Expr(constant_bytes));
+        } else {
+            llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+        }
+
+        Allocation allocation;
+        allocation.constant_bytes = constant_bytes;
+        //TODO not sure what to do with stack bytes right now
+        allocation.stack_bytes = 0;
+        allocation.type = alloc->type;
+        allocation.ptr = nullptr;
+        allocation.destructor = nullptr;
+        allocation.destructor_function = nullptr;
+        allocation.name = alloc->name;
+
+        user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
+
+        // call HAP_Cache_Alloc
+        llvm::Function *alloc_fn = module->getFunction("halide_hexagon_dma_allocate_from_l2_pool");
+        internal_assert(alloc_fn) << "Could not find halide_hexagon_dma_allocate_from_l2_pool in module\n";
+
+        llvm::Function::arg_iterator arg_iter = alloc_fn->arg_begin();
+        ++arg_iter;  // skip the user context *
+        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
+
+        debug(4) << "Creating call to halide_hexagon_dma_allocate_from_l2_pool for allocation " << alloc->name
+                 << " of size " << alloc->type.bytes();
+        for (Expr e : alloc->extents) {
+            debug(4) << " x " << e;
+        }
+        debug(4) << "\n";
+        Value *args[2] = { get_user_context(), llvm_size };
+
+        Value *call = builder->CreateCall(alloc_fn, args);
+
+        // Fix the type to avoid pointless bitcasts later
+        call = builder->CreatePointerCast(call, llvm_type_of(alloc->type)->getPointerTo());
+        allocation.ptr = call;
+
+        // Assert that the allocation worked.
+        Value *check = builder->CreateIsNotNull(allocation.ptr);
+        if (llvm_size) {
+            Value *zero_size = builder->CreateIsNull(llvm_size);
+            check = builder->CreateOr(check, zero_size);
+        }
+
+        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+                                           std::vector<Expr>(), Call::Extern));
+
+        std::string free_function_string; 
+        // Register a destructor for this allocation.
+        if (alloc->free_function.empty()) {
+            free_function_string = "halide_hexagon_dma_free_from_l2_pool";
+        }
+        llvm::Function *free_fn = module->getFunction(free_function_string);
+        internal_assert(free_fn) << "Could not find " << alloc->free_function << " in module.\n";
+        allocation.destructor = register_destructor(free_fn, allocation.ptr, OnError);
+        allocation.destructor_function = free_fn;
+
+        // Push the allocation base pointer onto the symbol table
+        debug(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
+        allocations.push(alloc->name, allocation);
+
+        sym_push(alloc->name, allocation.ptr);
+
+        codegen(alloc->body);
+
+        // If there was no early free, free it now.
+       if (allocations.contains(alloc->name)) {
+            free_allocation(alloc->name);
+        }
+    } else {
+        //for all other memory types
+        CodeGen_Posix::visit(alloc);   
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

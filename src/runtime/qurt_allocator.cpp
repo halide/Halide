@@ -1,4 +1,6 @@
 #include "HalideRuntime.h"
+#include "cache_allocator.h"
+#include "mini_hexagon_dma.h"
 
 extern "C" {
 
@@ -118,5 +120,16 @@ WEAK void *halide_malloc(void *user_context, size_t x) {
 WEAK void halide_free(void *user_context, void *ptr) {
     halide_default_free(user_context, ptr);
 }
+
+WEAK void *halide_hexagon_dma_allocate_from_l2_pool(void *user_context, size_t x) {
+    halide_print(NULL, "halide_hexagon_dma_allocate_from_l2_pool\n");
+    return cache_pool_get(user_context, x);
+}
+
+WEAK void halide_hexagon_dma_free_from_l2_pool(void *user_context, void *ptr) {
+    halide_print(NULL, "halide_hexagon_dma_free_from_l2_pool.\n");
+    cache_pool_put(user_context, ptr);
+}
+
 
 }
