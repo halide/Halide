@@ -635,6 +635,11 @@ class ExtractRegisterAllocations : public IRMutator2 {
                 loop_var = op->name;
             }
 
+            // Hoisting an allocation out of a vectorized for loop
+            // would break here. We should already have hoisted
+            // vectorized allocations.
+            internal_assert(op->for_type != ForType::Vectorized);
+
             // Set aside the allocations we've found so far.
             vector<RegisterAllocation> old;
             old.swap(allocations);
