@@ -1472,16 +1472,19 @@ struct PartialScheduleNode {
         }
 
         int vector_size = is_root() ? 1 : dag.node_map.at(func)->stages[stage].vector_size;
+        int vector_dim = 0;
+        if (!is_root()) {
+            const auto &l = dag.node_map.at(func)->stages[stage].loop;
+            while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
+        }
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            int vector_dim = 0;
-            const auto &l = dag.node_map.at(func)->stages[stage].loop;
-            while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
             auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_dim, vector_size);
 
             for (auto t : tilings) {
                 if (parent->is_root()) {
+                    const auto &l = dag.node_map.at(func)->stages[stage].loop;
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
                     int total = 1;
                     size_t idx = 0;
@@ -1596,6 +1599,7 @@ struct PartialScheduleNode {
                 num_ones += (s == 1) ? 1 : 0;
             }
             bool may_slide = !is_root() && (num_ones == ((int)size.size() - 1)) && !f.has_update_definition();
+            may_slide &= (vector_dim >= (int)size.size()) || (size[vector_dim] == 1);
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
