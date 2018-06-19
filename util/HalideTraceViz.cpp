@@ -817,8 +817,8 @@ struct Surface {
             *dst = o;
         } else {
             // TODO: this could be done using 64-bit ops more simply
-            uint8_t *a = (uint8_t*)under;
-            uint8_t *b = (uint8_t*)over;
+            const uint8_t *a = (const uint8_t*)under;
+            const uint8_t *b = (const uint8_t*)over;
             uint8_t *d = (uint8_t*)dst;
             d[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
             d[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
