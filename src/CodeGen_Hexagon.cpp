@@ -1994,12 +1994,16 @@ void CodeGen_Hexagon::visit(const NE *op) {
 }
 
 void CodeGen_Hexagon::visit(const Allocate *alloc) {
+    
     if (sym_exists(alloc->name)) {
         user_error << "Can't have two different buffers with the same name: "
                    << alloc->name << "\n";
     }
-
+ 
     if (alloc->memory_type == MemoryType::LockedCache) {
+
+        user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
+
         Value *llvm_size = nullptr;
         int32_t constant_bytes = Allocate::constant_allocation_size(alloc->extents, alloc->name);
         if (constant_bytes > 0) {
@@ -2018,8 +2022,6 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         allocation.destructor = nullptr;
         allocation.destructor_function = nullptr;
         allocation.name = alloc->name;
-
-        user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
 
         // call HAP_Cache_Alloc
         llvm::Function *alloc_fn = module->getFunction("halide_hexagon_dma_allocate_from_l2_pool");
