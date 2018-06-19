@@ -418,6 +418,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
         debug(user_context) << "        " << result << "\n";
         shared_runtime = 0;
     }
+    host_malloc_deinit();
 
     return 0;
 }
