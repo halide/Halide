@@ -980,6 +980,13 @@ public:
         }
     }
 
+    /** Initialize a Buffer from a pointer to the min coordinate and
+     * a vector describing the shape.  Does not take ownership of the
+     * data, and does not set the host_dirty flag. */
+    explicit inline Buffer(halide_type_t t, add_const_if_T_is_const<void> *data,
+                           const std::vector<halide_dimension_t> &shape)
+        : Buffer(t, data, (int) shape.size(), shape.data()) {}
+
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
@@ -992,6 +999,12 @@ public:
             buf.dim[i] = shape[i];
         }
     }
+
+    /** Initialize a Buffer from a pointer to the min coordinate and
+     * a vector describing the shape.  Does not take ownership of the
+     * data, and does not set the host_dirty flag. */
+    explicit inline Buffer(T *data, const std::vector<halide_dimension_t> &shape)
+        : Buffer(data, (int) shape.size(), shape.data()) {}
 
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. Will assert fail if there are
