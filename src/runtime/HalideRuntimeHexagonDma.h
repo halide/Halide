@@ -42,8 +42,8 @@ extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struc
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, int fmt);
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
-extern int halide_hexagon_dma_allocate_l2_pool(void *user_context);
-extern int halide_hexagon_dma_free_l2_pool(void *user_context);
+extern int halide_hexagon_allocate_l2_pool(void *user_context);
+extern int halide_hexagon_free_l2_pool(void *user_context);
 ///@}
 
 #ifdef __cplusplus

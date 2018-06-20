@@ -3,7 +3,6 @@
 #include "device_interface.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "printer.h"
-#include "hexagon_cache_allocator.h"
 #include "mini_hexagon_dma.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
@@ -701,18 +700,6 @@ WEAK int halide_hexagon_dma_device_release(void *user_context) {
         << "Hexagon: halide_hexagon_dma_device_release (user_context: " << user_context << ")\n";
 
     return 0;
-}
-
-WEAK int halide_hexagon_dma_allocate_l2_pool(void *user_context) {
-   //TODO not sure what is required to be done here ? 
-   return halide_error_code_success;
-}
-
-WEAK int halide_hexagon_dma_free_l2_pool(void *user_context) {
-    debug(user_context)
-        << "Hexagon: halide_hexagon_dma_free_l2_pool (user_context: " << user_context << ")\n";
-    hexagon_cache_pool_free(user_context);
-    return halide_error_code_success;
 }
 
 } // extern "C" linkage

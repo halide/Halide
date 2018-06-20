@@ -2001,7 +2001,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
     }
  
     if (alloc->memory_type == MemoryType::LockedCache) {
-
+        //We are not allowing Customized memory allocation for Locked Cache 
         user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
 
         Value *llvm_size = nullptr;
@@ -2011,6 +2011,14 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             llvm_size = codegen(Expr(constant_bytes));
         } else {
             llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+        }
+  
+         // Only allocate memory if the condition is true, otherwise 0.
+        Value *llvm_condition = codegen(alloc->condition);
+        if (llvm_size != nullptr) {
+            llvm_size = builder->CreateSelect(llvm_condition,
+                                          llvm_size,
+                                          ConstantInt::get(llvm_size->getType(), 0));
         }
 
         Allocation allocation;
@@ -2024,14 +2032,14 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         allocation.name = alloc->name;
 
         // call HAP_Cache_Alloc
-        llvm::Function *alloc_fn = module->getFunction("halide_hexagon_dma_allocate_from_l2_pool");
-        internal_assert(alloc_fn) << "Could not find halide_hexagon_dma_allocate_from_l2_pool in module\n";
+        llvm::Function *alloc_fn = module->getFunction("halide_hexagon_allocate_from_l2_pool");
+        internal_assert(alloc_fn) << "Could not find halide_hexagon_allocate_from_l2_pool in module\n";
 
         llvm::Function::arg_iterator arg_iter = alloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
         llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-        debug(4) << "Creating call to halide_hexagon_dma_allocate_from_l2_pool for allocation " << alloc->name
+        debug(4) << "Creating call to halide_hexagon_allocate_from_l2_pool for allocation " << alloc->name
                  << " of size " << alloc->type.bytes();
         for (Expr e : alloc->extents) {
             debug(4) << " x " << e;
@@ -2051,14 +2059,13 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             Value *zero_size = builder->CreateIsNull(llvm_size);
             check = builder->CreateOr(check, zero_size);
         }
-
         create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
                                            std::vector<Expr>(), Call::Extern));
 
         std::string free_function_string; 
         // Register a destructor for this allocation.
         if (alloc->free_function.empty()) {
-            free_function_string = "halide_hexagon_dma_free_from_l2_pool";
+            free_function_string = "halide_hexagon_free_from_l2_pool";
         }
         llvm::Function *free_fn = module->getFunction(free_function_string);
         internal_assert(free_fn) << "Could not find " << alloc->free_function << " in module.\n";
