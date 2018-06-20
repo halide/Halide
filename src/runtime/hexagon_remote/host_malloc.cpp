@@ -47,11 +47,6 @@ struct ion_handle_data {
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
 
 // For libion.so usage
-extern "C" {
-    __attribute__((weak)) extern int ion_open();
-    __attribute__((weak)) extern int ion_alloc_fd(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int* map_fd);
-}
-
 typedef int (*rem_ion_open_fn)();
 rem_ion_open_fn ion_open_fn = NULL;
 
@@ -59,7 +54,7 @@ typedef int (*rem_ion_alloc_fd_fn)(int ion_fd, size_t len, size_t align, unsigne
 rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
 
 // ION IOCTL approach
-int ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
+ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
 
     ion_allocation_data alloc = {
         len,
@@ -177,14 +172,14 @@ void *halide_hexagon_host_malloc(size_t size) {
     if (use_libion) {
         if (ion_alloc_fd_fn(ion_fd, size, alignment, 1 << heap_id, ion_flags, &buf_fd)) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc_fd(%d, %d, %d, %d, %d) failed",
-                            ion_fd, size, alignment, 1 << heap_id, ion_flags);
+                                ion_fd, size, alignment, 1 << heap_id, ion_flags);
             return NULL;
         }
     } else { // !use_libion
         handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
         if (handle < 0) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %d, %d, %d, %d) failed",
-                            ion_fd, size, alignment, 1 << heap_id, ion_flags);
+                                ion_fd, size, alignment, 1 << heap_id, ion_flags);
             return NULL;
         }
         // Map the ion handle to a file buffer.
