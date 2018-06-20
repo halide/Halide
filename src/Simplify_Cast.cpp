@@ -17,10 +17,12 @@ Expr Simplify::visit(const Cast *op, ConstBounds *bounds) {
         if (value.type() == op->type) {
             return value;
         } else if (op->type.is_int() &&
+                   std::isfinite(f) &&
                    const_float(value, &f)) {
             // float -> int
             return IntImm::make(op->type, safe_numeric_cast<int64_t>(f));
         } else if (op->type.is_uint() &&
+                   std::isfinite(f) &&
                    const_float(value, &f)) {
             // float -> uint
             return UIntImm::make(op->type, safe_numeric_cast<uint64_t>(f));
