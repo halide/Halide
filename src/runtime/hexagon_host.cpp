@@ -834,6 +834,7 @@ namespace {
 __attribute__((destructor))
 WEAK void halide_hexagon_cleanup() {
     halide_hexagon_device_release(NULL);
+    host_malloc_deinit();
 }
 }
 
