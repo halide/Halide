@@ -22,7 +22,6 @@ struct dma_device_handle {
     bool is_ubwc;
     bool is_write;
     t_eDmaFmt fmt;
-    void *cache_buf;
 };
 
 dma_device_handle *malloc_device_handle() {
@@ -34,7 +33,6 @@ dma_device_handle *malloc_device_handle() {
     dev->frame_width = 0;
     dev->frame_height = 0;
     dev->frame_stride = 0;
-    dev->cache_buf = 0;
     dev->is_ubwc = 0;
     dev->fmt = eDmaFmt_RawData;
     dev->is_write = 0;
@@ -48,7 +46,6 @@ typedef struct desc_pool {
 } desc_pool_t;
 
 typedef desc_pool_t *pdesc_pool;
-
 
 static pdesc_pool dma_desc_pool = NULL;
 
@@ -131,15 +128,6 @@ static void desc_pool_free (void *user_context) {
     }
 }
 
-static inline void copy_from_cache(uint8_t *src, uint8_t *dest, int roi_height,
-           int roi_stride, int dest_stride, int pixelsize, int linesize) {
-    for (int y = 0; y < roi_height; y++) {
-        int sy = y * roi_stride * pixelsize;
-        int dy = y * dest_stride * pixelsize;
-        memcpy(&dest[dy], &src[sy], linesize);
-    }
-} 
-
 static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
                                        struct halide_buffer_t *dst) {
     dma_device_handle *dev = (dma_device_handle *)src->device;
@@ -200,13 +188,6 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         return halide_error_code_device_buffer_copy_failed;
     }
 
-    // Copy from Locked Cache to a temp DDR buffer
-    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
-    int buf_size = roi_stride * roi_height * dst->type.bytes();
-    debug(user_context) << " cache buffer size " << buf_size << "\n";
-    if (dev->cache_buf == 0) {
-        dev->cache_buf = HAP_cache_lock(buf_size, 0);
-    }
     // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
     // We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format
     // because DMA treat RAW as a flattened buffer
@@ -221,7 +202,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     stDmaTransferParm.bIsFmtUbwc            = dev->is_ubwc;
     stDmaTransferParm.bUse16BitPaddingInL2  = 0;
     stDmaTransferParm.pDescBuf              = desc_addr;
-    stDmaTransferParm.pTcmDataBuf           = dev->cache_buf;
+    stDmaTransferParm.pTcmDataBuf           = reinterpret_cast<void *>(dst->host);
     stDmaTransferParm.pFrameBuf             = dev->buffer;
     if (dev->is_write) {
         stDmaTransferParm.eTransferType     = eDmaWrapper_L2ToDdr;
@@ -276,21 +257,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         return halide_error_code_device_buffer_copy_failed;
     }
 
-    uint8_t *dest = reinterpret_cast<uint8_t *>(dst->host);
-
-    // Copy from Locked Cache to a temp DDR buffer
-    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
-    if (dest) {
-        const int pixelsize = dst->type.bytes();
-        const int linesize = roi_width * pixelsize;
-        uint8_t *cache_buf = reinterpret_cast<uint8_t *>(dev->cache_buf);
-        debug(user_context)
-            << "copy cache: " << "pixelsize= " << pixelsize << " linesize= " << linesize << "\n";
-        copy_from_cache(cache_buf, dest, roi_height, roi_stride, dst->dim[1].stride, pixelsize, linesize); 
-    }
-
     desc_pool_put(user_context, desc_addr);
-
     return halide_error_code_success;
 }
 
@@ -374,7 +341,8 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         error(user_context) << "Freeing DMA Engine failed.\n";
         return halide_error_code_generic_error;
     }
-
+    //free cache pool
+    halide_hexagon_free_l2_pool(user_context);
     return halide_error_code_success;
 }
 
@@ -424,10 +392,6 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     halide_assert(user_context, buf->device);
 
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
-    if (dev->cache_buf) {
-        HAP_cache_unlock(dev->cache_buf);
-    }
-    dev->cache_buf = 0;
     debug(user_context) << "   dma_finish_frame -> ";
     int err = nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";

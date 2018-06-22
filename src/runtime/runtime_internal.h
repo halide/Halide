@@ -146,6 +146,9 @@ struct mxArray;
 WEAK int halide_matlab_call_pipeline(void *user_context,
                                      int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
                                      int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
+//API Hidden from user apps
+extern int halide_hexagon_allocate_l2_pool(void *user_context);
+extern void halide_hexagon_free_l2_pool(void *user_context);
 
 // Condition variables. Must be initialized with 0.
 struct halide_cond {

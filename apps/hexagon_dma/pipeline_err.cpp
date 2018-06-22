@@ -35,6 +35,7 @@ public:
         copy
             .compute_at(output, tx)
             .store_root()
+            .store_in(MemoryType::LockedCache)
             .fold_storage(x, tile_width * 2)
             .copy_to_host();
     }
