@@ -587,6 +587,18 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
     return halide_error_code_success;
 }
 
+WEAK int halide_hexagon_dma_device_slice(void *user_context,
+                                         const struct halide_buffer_t *src,
+                                         int slice_dim, int slice_pos, struct halide_buffer_t *dst) {
+    debug(user_context)
+        << "Hexagon: halide_hexagon_dma_device_slice (user_context: " << user_context
+        << " src: " << src << " dst: " << dst << ")\n";
+
+    halide_assert(user_context, 0);
+
+    return halide_error_code_generic_error;
+}
+
 WEAK int halide_hexagon_dma_device_release_crop(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_release_crop (user_context: " << user_context
@@ -704,6 +716,7 @@ WEAK halide_device_interface_impl_t hexagon_dma_device_interface_impl = {
     halide_hexagon_dma_device_and_host_free,
     halide_hexagon_dma_buffer_copy,
     halide_hexagon_dma_device_crop,
+    halide_hexagon_dma_device_slice,
     halide_hexagon_dma_device_release_crop,
     halide_hexagon_dma_device_wrap_native,
     halide_hexagon_dma_device_detach_native,
@@ -720,6 +733,7 @@ WEAK halide_device_interface_t hexagon_dma_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
