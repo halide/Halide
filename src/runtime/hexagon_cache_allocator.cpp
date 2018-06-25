@@ -86,6 +86,7 @@ static inline void *hexagon_cache_pool_get (void *user_context, size_t size) {
     temp->l2memory = (void *)mem;
     temp->bytes = size;
     temp->used = true;
+    temp->next = NULL;
 
     halide_mutex_lock(&hexagon_cache_mutex);
     if (prev != NULL) {
@@ -116,14 +117,15 @@ static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
 static inline void hexagon_cache_pool_free(void *user_context) {
     // TODO: Add Mutex locking for access to hexagon_free_pool ( To be Thread safe )
     pcache_pool temp = hexagon_cache_pool;
+    pcache_pool prev = hexagon_cache_pool;
     halide_mutex_lock(&hexagon_cache_mutex);
     while (temp != NULL) {
         if (temp->l2memory != NULL) {
             HAP_cache_unlock(temp->l2memory);
         }
-        temp = temp->next;
-        free(hexagon_cache_pool);
-        hexagon_cache_pool = temp;
+        prev = temp->next;
+        free(temp);
+        temp = prev;
     }
     halide_mutex_unlock(&hexagon_cache_mutex);
 }
