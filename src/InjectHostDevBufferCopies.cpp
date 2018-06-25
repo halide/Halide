@@ -86,9 +86,9 @@ class FindBufferUsage : public IRVisitor {
 
             // Check each buffer arg
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (is_buffer_var(op->args[i])) {
+                if (is_buffer_var(op->args[i])){
                     DeviceAPI extern_device_api = f.extern_function_device_api();
-                    touched_by_extern = true;
+                    devices_touched_by_extern.insert(extern_device_api);
                     if (i >= f.extern_arguments().size()) {
                         // An output. The extern stage is responsible
                         // for dealing with any device transitions for
@@ -122,7 +122,7 @@ public:
     std::set<DeviceAPI> devices_writing, devices_touched;
     // Any buffer passed to an extern stage may have had its dirty
     // bits and device allocation messed with.
-    bool touched_by_extern = false;
+    std::set<DeviceAPI> devices_touched_by_extern;
 
     FindBufferUsage(const std::string &buf, DeviceAPI d) : buffer(buf), current_device_api(d) {}
 };
@@ -303,7 +303,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
 
         s = Block::make(stmts);
 
-        if (finder.touched_by_extern) {
+        if (!finder.devices_touched_by_extern.empty()) {
             // This buffer was passed to an extern stage. Unless we
             // explicitly marked it after the stmt ran, we no longer
             // know the state of the dirty bits.
@@ -320,7 +320,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         }
 
         if (!finder.devices_touched.empty() ||
-            finder.touched_by_extern) {
+            !finder.devices_touched_by_extern.empty()) {
             last_use = s;
         }
 
@@ -346,7 +346,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         op->value.accept(&finder);
         if (finder.devices_touched.empty() &&
-            !finder.touched_by_extern) {
+            finder.devices_touched_by_extern.empty()) {
             return IRMutator2::visit(op);
         } else {
             return do_copies(op);
@@ -520,7 +520,7 @@ class InjectBufferCopies : public IRMutator2 {
         bool touched_on_host = finder.devices_touched.count(DeviceAPI::Host);
         bool touched_on_device = finder.devices_touched.size() > (touched_on_host ? 1 : 0);
 
-        if (!touched_on_device && !finder.touched_by_extern) {
+        if (!touched_on_device && finder.devices_touched_by_extern.empty()) {
             // Boring.
             return IRMutator2::visit(op);
         }
@@ -567,10 +567,11 @@ class InjectBufferCopies : public IRMutator2 {
             }
 
             Expr condition = op->condition;
-            if (finder.devices_touched.size() == 1 &&
-                !touched_on_host &&
-                !finder.touched_by_extern) {
-                // Only touched on one device, and never passed to an extern stage.
+            bool touched_on_one_device = !touched_on_host && finder.devices_touched.size() == 1 &&
+                                         (finder.devices_touched_by_extern.empty() ||
+                                          (finder.devices_touched_by_extern.size() == 1 &&
+                                           *(finder.devices_touched.begin()) == *(finder.devices_touched_by_extern.begin())));
+            if (touched_on_one_device) {
                 condition = const_false();
                 // There's no host allocation, so substitute any
                 // references to it (e.g. the one in the make_buffer

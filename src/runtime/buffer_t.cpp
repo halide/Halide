@@ -15,6 +15,11 @@
 extern "C" {
 
 HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_get_dimensions(const halide_buffer_t *buf) {
+    return buf->dimensions;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 uint8_t *_halide_buffer_get_host(const halide_buffer_t *buf) {
     return buf->host;
 }
