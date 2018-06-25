@@ -1131,12 +1131,14 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability61 = 46,  ///< Enable CUDA compute capability 6.1 (Pascal)
     halide_target_feature_hvx_v65 = 47, ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66 = 48, ///< Enable Hexagon v66 architecture.
-    halide_target_feature_cl_half = 49,  ///< Enable half support on OpenCL targets
-    halide_target_feature_strict_float = 50, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
-    halide_target_feature_legacy_buffer_wrappers = 51,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
-    halide_target_feature_tsan = 52, ///< Enable hooks for TSAN support.
-    halide_target_feature_asan = 53, ///< Enable hooks for ASAN support.
-    halide_target_feature_end = 54 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_scatter = 49, ///< Enable vscatter for v65
+    halide_target_feature_hvx_gather = 50, ///< Enable vgather for v65
+    halide_target_feature_cl_half = 51,  ///< Enable half support on OpenCL targets
+    halide_target_feature_strict_float = 52, ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
+    halide_target_feature_legacy_buffer_wrappers = 53,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
+    halide_target_feature_tsan = 54, ///< Enable hooks for TSAN support.
+    halide_target_feature_asan = 55, ///< Enable hooks for ASAN support.
+    halide_target_feature_end = 56 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

@@ -118,6 +118,7 @@ DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(qurt_hvx)
+DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
 DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
@@ -829,6 +830,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
+                if (t.has_feature(Target::HVX_v65) &&
+                    (t.has_feature(Target::HVX_scatter) ||
+                     t.has_feature(Target::HVX_gather))) {
+                    modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
+                                                                debug));
+                }
                 if (t.has_feature(Target::HVX_64)) {
                     modules.push_back(get_initmod_hvx_64_ll(c));
                 } else if (t.has_feature(Target::HVX_128)) {

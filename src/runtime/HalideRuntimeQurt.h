@@ -18,6 +18,12 @@ extern "C" {
 extern int halide_qurt_hvx_lock(void *user_context, int size);
 extern int halide_qurt_hvx_unlock(void *user_context);
 extern void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/);
+extern void* halide_request_vtcm(void *user_context, int size, int page);
+extern void halide_release_vtcm(void *user_context, void *addr);
+extern void* halide_vtcm_manager_init(void *user_context);
+extern void halide_vtcm_manager_destroy(void *user_context, void* vtcm_manager);
+extern int halide_get_vtcm_slot(void *user_context, void* vtcm_manager);
+extern int halide_free_vtcm_slot(void *user_context, void* vtcm_manager, int slot);
 // @}
 
 #ifdef __cplusplus

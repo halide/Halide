@@ -253,6 +253,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
+    {"hvx_scatter", Target::HVX_scatter},
+    {"hvx_gather", Target::HVX_gather},
     {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},

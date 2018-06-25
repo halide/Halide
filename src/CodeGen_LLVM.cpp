@@ -3408,6 +3408,17 @@ Value *CodeGen_LLVM::call_intrin(Type result_type, int intrin_lanes,
         arg_values[i] = codegen(args[i]);
     }
 
+    // TODO(aankit): Change this section of code.
+    // Base address of VTCM (arg[0]) for vscatter-vgather insruction
+    // must always be a void * pointer irrespecitve of the type of data
+    // copied using the base pointer.
+    if (name.find("halide.hexagon.vgather") != string::npos ||
+        name.find("halide.hexagon.vscatter") != string::npos) {
+        llvm::Type *void_ptr = i8_t->getPointerTo();
+        // Cast the object to llvm's representation of void *
+        arg_values[0] = builder->CreatePointerCast(arg_values[0], void_ptr);
+    }
+
     return call_intrin(llvm_type_of(result_type),
                        intrin_lanes,
                        name, arg_values);
@@ -3465,7 +3476,12 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
 
     CallInst *call = builder->CreateCall(fn, arg_values);
 
-    call->setDoesNotAccessMemory();
+    // TODO(aankit): Explore a better way to handle this case.
+    // Only vscatter and vgather instructions on hexagon access memory
+    if (name.find("halide.hexagon.vscatter") == string::npos &&
+        name.find("halide.hexagon.vgather") == string::npos) {
+        call->setDoesNotAccessMemory();
+    }
     call->setDoesNotThrow();
 
     return call;
