@@ -233,9 +233,9 @@ void Pipeline::compile_to_c(const string &filename,
 }
 
 void Pipeline::compile_to_python_extension(const string &filename,
-					   const vector<Argument> &args,
-					   const string &fn_name,
-					   const Target &target) {
+                                           const vector<Argument> &args,
+                                           const string &fn_name,
+                                           const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(Outputs().python_extension(output_name(filename, m, ".py.c")));
 }
@@ -836,13 +836,13 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 
     if (outputs.r) {
         for (size_t i = 0; i < outputs.r->size(); i++) {
-            user_assert((*outputs.r)[i].data() != nullptr)
+            user_assert((*outputs.r)[i].data() != nullptr || (*outputs.r)[i].has_device_allocation())
                 << "Buffer at " << &((*outputs.r)[i]) << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }
     } else if (outputs.buffer_list) {
         for (const Buffer<> &buf : *outputs.buffer_list) {
-            user_assert(buf.data() != nullptr)
+            user_assert(buf.data() != nullptr || buf.has_device_allocation())
                 << "Buffer at " << &buf << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }
