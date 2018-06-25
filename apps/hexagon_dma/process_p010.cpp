@@ -92,6 +92,8 @@ int main(int argc, char **argv) {
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
+ 
+    free(data_in);
 
     printf("Success!\n");
     return 0;
