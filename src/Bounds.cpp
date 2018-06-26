@@ -856,8 +856,27 @@ private:
             assert(op->args.size() == 3);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
-                   op->is_intrinsic(Call::shift_right) ||
-                   op->is_intrinsic(Call::bitwise_and)) {
+                   op->is_intrinsic(Call::shift_right)) {
+            assert(op->args.size() == 2);
+            Expr simplified = simplify(op);
+            if (!equal(simplified, op)) {
+                simplified.accept(this);
+            } else {
+                op->args[0].accept(this);
+                Interval a = interval;
+                op->args[1].accept(this);
+                Interval b = interval;
+                if (a.is_bounded() && b.is_bounded()) {
+                    Expr shift_min = op->is_intrinsic(Call::shift_left) ? b.min : b.max;
+                    Expr shift_max = op->is_intrinsic(Call::shift_left) ? b.max : b.min;
+                    interval.min = Call::make(t, op->name, {a.min, shift_min}, Call::PureIntrinsic);
+                    interval.max = Call::make(t, op->name, {a.max, shift_max}, Call::PureIntrinsic);
+                } else {
+                    // Just use the bounds of the type
+                    bounds_of_type(t);
+                }
+            }
+        } else if (op->is_intrinsic(Call::bitwise_and)) {
             Expr simplified = simplify(op);
             if (!equal(simplified, op)) {
                 simplified.accept(this);
