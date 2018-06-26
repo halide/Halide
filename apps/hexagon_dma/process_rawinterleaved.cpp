@@ -55,8 +55,6 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<uint8_t> output(width, height, 4);
 
-    output.embed(2, 0);
-
     output.raw_buffer()->dim[0].stride = 4;
     output.raw_buffer()->dim[0].extent = width;
 

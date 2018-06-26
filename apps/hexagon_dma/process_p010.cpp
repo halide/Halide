@@ -19,14 +19,14 @@ int main(int argc, char **argv) {
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
     
-    const int buf_size = width * height * 1.5;
+    const int buf_size = (width * height * 3) / 2;
     uint16_t *data_in = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
-    // Creating the Input Data so that we can catch if there are any Errors in DMA   
+    // Creating the Input Data so that we can catch if there are any Errors in DMA
     int *data_in_int = reinterpret_cast<int *>(data_in);
     for (int i = 0; i < (buf_size >> 1);  i++) {
         data_in_int[i] = i;
     }
-    Halide::Runtime::Buffer<uint16_t> input(nullptr, width, (3*height) / 2);
+    Halide::Runtime::Buffer<uint16_t> input(nullptr, width, (3 * height) / 2);
 
     void *dma_engine = nullptr;
     halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
@@ -58,14 +58,13 @@ int main(int argc, char **argv) {
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
     
-    Halide::Runtime::Buffer<uint16_t> output(width, (height * 1.5));
+    Halide::Runtime::Buffer<uint16_t> output(width, (3 * height) / 2);
     Halide::Runtime::Buffer<uint16_t> output_y = output.cropped(1, 0, height);    // Luma plane only
     Halide::Runtime::Buffer<uint16_t> output_c = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
     output_c.embed(2, 0);
     output_c.raw_buffer()->dim[2].extent = 2;
     output_c.raw_buffer()->dim[2].stride = 1;
-
     output_c.raw_buffer()->dim[0].stride = 2;
     output_c.raw_buffer()->dim[0].extent = width / 2;
 
@@ -75,7 +74,7 @@ int main(int argc, char **argv) {
         printf("pipeline failed! %d\n", result);
     }
 
-    for (int y = 0; y < 1.5 * height; y++) {
+    for (int y = 0; y < (3 * height) / 2; y++) {
         for (int x = 0; x < width; x++) {
             uint16_t correct = data_in[x + y * width] * 2;
             if (correct != output(x, y)) {
@@ -88,7 +87,6 @@ int main(int argc, char **argv) {
     
     halide_hexagon_dma_unprepare(nullptr, input_y);
     halide_hexagon_dma_unprepare(nullptr, input_uv);
-
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);

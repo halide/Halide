@@ -92,31 +92,27 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
+        } else if (memory_type == MemoryType::LockedCache) {
+            user_assert(!new_expr.defined()) << "Custom Expression not allowed for Locked Cache Memory Type\n";
+            stack_bytes = 0;
+            llvm_size = codegen_allocation_size(name, type, extents);
         } else if (memory_type == MemoryType::Heap ||
-                    memory_type == MemoryType::LockedCache || 
-                     (memory_type != MemoryType::Stack &&
-                      memory_type != MemoryType::Register && 
-                       !can_allocation_fit_on_stack(stack_bytes))) {
+                   (memory_type != MemoryType::Stack &&
+                    memory_type != MemoryType::Register &&
+                    !can_allocation_fit_on_stack(stack_bytes))) {
             // We should put the allocation on the heap if it's
             // explicitly placed on the heap, or if it's not
             // explicitly placed on the stack/register and it's large.
             stack_bytes = 0;
             llvm_size = codegen(Expr(constant_bytes));
-        } 
-    } else if (memory_type == MemoryType::LockedCache) {
-        user_assert(!new_expr.defined()) << "Custom Expression not allowed for Locked Cache Memory Type\n";
-        internal_assert(memory_type != MemoryType::Stack);
-        internal_assert(memory_type != MemoryType::Register);
-        stack_bytes = 0;
-        llvm_size = codegen_allocation_size(name, type, extents);
+        }
     } else {
         // Should have been caught in bound_small_allocations
         internal_assert(memory_type != MemoryType::Stack);
         internal_assert(memory_type != MemoryType::Register);
-        internal_assert(memory_type != MemoryType::LockedCache);
         llvm_size = codegen_allocation_size(name, type, extents);
     }
-
+    
     // Only allocate memory if the condition is true, otherwise 0.
     Value *llvm_condition = codegen(condition);
     if (llvm_size != nullptr) {
@@ -211,11 +207,19 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             ++arg_iter;  // skip the user context *
             llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-            debug(1) << "Creating call to malloc_fn for allocation " << name
-                     << " of size " << type.bytes();
+            if (memory_type == MemoryType::LockedCache) {
+                debug(4) << "Creating call to halide_hexagon_allocate_from_l2_pool for allocation " << name
+                         << " of size " << type.bytes();
+            } else {
+                debug(4) << "Creating call to halide_malloc for allocation " << name
+                         << " of size " << type.bytes();
+            }
+
             for (Expr e : extents) {
                 debug(4) << " x " << e;
             }
+            debug(4) << "\n";
+
             Value *args[2] = { get_user_context(), llvm_size };
 
             Value *call = builder->CreateCall(malloc_fn, args);
@@ -241,12 +245,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
                                            std::vector<Expr>(), Call::Extern));
 
-        // Register a destructor for this allocation.  
+        // Register a destructor for this allocation.
         if (free_function.empty()) {
             if (memory_type == MemoryType::LockedCache) {
                 free_function = "halide_hexagon_free_from_l2_pool";
             } else {
-               free_function = "halide_free";
+                free_function = "halide_free";
             }
         }
         llvm::Function *free_fn = module->getFunction(free_function);
