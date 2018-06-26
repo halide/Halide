@@ -114,14 +114,19 @@ static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     halide_mutex_unlock(&hexagon_cache_mutex);
 }
 
-static inline void hexagon_cache_pool_free(void *user_context) {
+static inline int hexagon_cache_pool_free(void *user_context) {
     // TODO: Add Mutex locking for access to hexagon_free_pool ( To be Thread safe )
     halide_mutex_lock(&hexagon_cache_mutex);
     pcache_pool temp = hexagon_cache_pool;
     pcache_pool prev = hexagon_cache_pool;
+    int err = QURT_EOK;
     while (temp != NULL) {
         if (temp->l2memory != NULL) {
-            HAP_cache_unlock(temp->l2memory);
+            err = HAP_cache_unlock(temp->l2memory);
+            if (err != QURT_EOK) {
+                halide_mutex_unlock(&hexagon_cache_mutex);
+                return err;
+            }
         }
         prev = temp->next;
         free(temp);
@@ -129,6 +134,7 @@ static inline void hexagon_cache_pool_free(void *user_context) {
     }
     hexagon_cache_pool = NULL;
     halide_mutex_unlock(&hexagon_cache_mutex);
+    return QURT_EOK;
 }
 
 WEAK void *halide_hexagon_allocate_from_l2_pool(void *user_context, size_t size) {
@@ -150,10 +156,9 @@ WEAK int halide_hexagon_allocate_l2_pool(void *user_context) {
    return halide_error_code_success;
 }
 
-WEAK void halide_hexagon_free_l2_pool(void *user_context) {
+WEAK int halide_hexagon_free_l2_pool(void *user_context) {
     halide_print(user_context, "halide_hexagon_free_l2_pool \n");
-    hexagon_cache_pool_free(user_context);
-    return;
+    return hexagon_cache_pool_free(user_context);
 }
 
 }

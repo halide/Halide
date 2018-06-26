@@ -68,7 +68,6 @@ int main(int argc, char **argv) {
     output_c.raw_buffer()->dim[0].stride = 2;
     output_c.raw_buffer()->dim[0].extent = width / 2;
 
-
     int result = pipeline_p010(input_y, input_uv, output_y, output_c);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
@@ -84,7 +83,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    
+
     halide_hexagon_dma_unprepare(nullptr, input_y);
     halide_hexagon_dma_unprepare(nullptr, input_uv);
     // We're done with the DMA engine, release it. This would also be

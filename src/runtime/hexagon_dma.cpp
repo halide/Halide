@@ -342,7 +342,11 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         return halide_error_code_generic_error;
     }
     //free cache pool
-    halide_hexagon_free_l2_pool(user_context);
+    err = halide_hexagon_free_l2_pool(user_context);
+    if (err != 0) {
+        error(user_context) << "Freeing Cache Pool failed.\n";
+        return halide_error_code_generic_error;
+    }
     return halide_error_code_success;
 }
 
