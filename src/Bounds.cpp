@@ -12,6 +12,7 @@
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "Param.h"
+#include "PurifyIndexMath.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Util.h"
@@ -1857,6 +1858,16 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
     // Combine the two maps.
     for (pair<const string, Box> &i : provides.boxes) {
         merge_boxes(calls.boxes[i.first], i.second);
+    }
+
+    // Make evaluating these boxes side-effect-free
+    for (auto &p : calls.boxes) {
+        auto &box = p.second;
+        box.used = purify_index_math(box.used);
+        for (Interval &i : box.bounds) {
+            i.min = purify_index_math(i.min);
+            i.max = purify_index_math(i.max);
+        }
     }
 
     return calls.boxes;

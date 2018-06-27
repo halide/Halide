@@ -36,6 +36,7 @@
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "PurifyIndexMath.h"
 #include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"

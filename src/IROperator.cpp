@@ -100,6 +100,24 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
+    void visit(const Div *op) {
+        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
+            // Division by zero is a side-effect
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Mod *op) {
+        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
+            // Mod by zero is a side-effect
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         if (!op->image.defined() && !op->param.defined()) {
             // It's a load from an internal buffer, which could

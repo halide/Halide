@@ -432,6 +432,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -599,6 +600,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PurifyIndexMath.h \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
