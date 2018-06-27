@@ -10,8 +10,7 @@ class PurifyIndexMath : public IRMutator2 {
     using IRMutator2::visit;
 
     Expr visit(const Div *op) override {
-        Expr z = make_zero(op->type);
-        if (can_prove(op->b != z)) {
+        if (can_prove(op->b != 0)) {
             return op;
         } else {
             return Call::make(op->type, Call::quiet_div, {op->a, op->b}, Call::PureIntrinsic);
@@ -19,8 +18,7 @@ class PurifyIndexMath : public IRMutator2 {
     }
 
     Expr visit(const Mod *op) override {
-        Expr z = make_zero(op->type);
-        if (can_prove(op->b != z)) {
+        if (can_prove(op->b != 0)) {
             return op;
         } else {
             return Call::make(op->type, Call::quiet_mod, {op->a, op->b}, Call::PureIntrinsic);
