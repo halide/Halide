@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <atomic>
 #include <iostream>
 #include <assert.h>
@@ -5,9 +6,14 @@
 #include <random>
 #include <thread>
 
+#include "HalideRuntime.h"
 #include "HalideBuffer.h"
 
 #include "async_parallel.h"
+
+extern "C" void halide_print(void *user_context, const char *msg) {
+    std::cerr << msg;
+}
 
 std::atomic<uint64_t> last_update;
 
@@ -53,7 +59,7 @@ thread_local last_call thread_last = {};
 
 extern "C" int sleeper(int loc, int x, int y, int z, int v) {
     last_update++;
-  
+
     thread_last.loc = loc;
     thread_last.x = x;
     thread_last.y = y;
@@ -61,6 +67,7 @@ extern "C" int sleeper(int loc, int x, int y, int z, int v) {
 
     if (!thread_last.inited) {
         std::lock_guard<std::mutex> lock(watchdog_state_mutex);
+
         thread_last.next = all_thread_lasts;
         all_thread_lasts = &thread_last;
         thread_last.inited = true;
@@ -77,9 +84,12 @@ void watchdog() {
     int count = 0;
     while (true) {
         uint64_t prev = last_update;
+
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
         if (prev == last_update) {
             std::lock_guard<std::mutex> lock(watchdog_state_mutex);
+
             if (watchdog_done) {
                 return;
             }
@@ -98,8 +108,16 @@ void watchdog() {
                 thread_count++;
                 lc = lc->next;
             }
-            std::cerr << "Hung at loc " << best->loc << "(" << best->x << ", " << best->y << ", " << best->z << ") sleeps: " << sleeps << " threads: " << thread_count << "\n";
+            fflush(stdout);
+            fflush(stderr);
+            if (best == nullptr) {
+                std::cout << "Hung before any sleeps on any thread.\n";
+            } else {
+                std::cout << "Hung at loc " << best->loc << "(" << best->x << ", " << best->y << ", " << best->z << ") sleeps: " << sleeps << " threads: " << thread_count << "\n";
+            }
             _Exit(1);
+        } else {
+            count = 0;
         }
     }
 }
