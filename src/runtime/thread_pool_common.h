@@ -95,13 +95,6 @@ struct work_queue_t {
     // The desired number threads doing work (HL_NUM_THREADS).
     int desired_threads_working;
 
-    // All fields after this must be zero in the initial state. See assert_zeroed
-    // Field serves both to mark the offset in struct and as layout padding.
-    int zero_marker;
-
-    // Singly linked list for job stack
-    work *jobs;
-
 // This file currently contains code to dum the entire work queue state.
 // Jobs actively being worked on are sometimes removed from the queue.
 // This look aside list allows printing them for debug purposes.
@@ -109,6 +102,11 @@ struct work_queue_t {
 // TODO(zvookin): Does this stay or does it go?
 #ifndef WORK_QUEUE_DEBUG
 #define WORK_QUEUE_DEBUG 0
+#endif
+
+#ifndef TLS_PARENT_LINK
+// WORK_QUEUE_DEBUG requires the parent links.
+#define TLS_PARENT_LINK WORK_QUEUE_DEBUG
 #endif
 
 #if TLS_PARENT_LINK
@@ -124,7 +122,36 @@ struct work_queue_t {
         int tid;
 #endif
     } *thread_states;
+
+    pthread_key_t job_link_key;
+    bool job_link_key_inited;
+
+    thread_state *get_thread_state() {
+        if (!job_link_key_inited) {
+            pthread_key_create(&job_link_key, free);
+            job_link_key_inited = true;
+        }
+        thread_state *state = (thread_state *)pthread_getspecific(job_link_key);
+        if (state == NULL) {
+            state = (thread_state *)malloc(sizeof(thread_state));
+            state->next = thread_states;
+            thread_states = state;
+            state->job_stack = NULL;
+#if WORK_QUEUE_DEBUG
+            state->tid = gettid();
 #endif
+            pthread_setspecific(job_link_key, state);
+        }
+        return state;
+    }
+#endif
+
+    // All fields after this must be zero in the initial state. See assert_zeroed
+    // Field serves both to mark the offset in struct and as layout padding.
+    int zero_marker;
+
+    // Singly linked list for job stack
+    work *jobs;
 
     // The number threads created
     int threads_created;
@@ -159,35 +186,8 @@ struct work_queue_t {
 // and the algorithm needs to be vetted in the PR.
 // TODO(zvookin): Either remove the code or change this comment.
 
-#ifndef TLS_PARENT_LINK
-// WORK_QUEUE_DEBUG requires the parent links.
-#define TLS_PARENT_LINK WORK_QUEUE_DEBUG
-#endif
-
 #if TLS_PARENT_LINK
     int threads_reserved;
-
-    pthread_key_t job_link_key;
-    bool job_link_key_inited;
-
-    thread_state *get_thread_state() {
-        if (!job_link_key_inited) {
-            pthread_key_create(&job_link_key, free);
-            job_link_key_inited = true;
-        }
-        thread_state *state = (thread_state *)pthread_getspecific(job_link_key);
-        if (state == NULL) {
-            state = (thread_state *)malloc(sizeof(thread_state));
-            state->next = thread_states;
-            thread_states = state;
-            state->job_stack = NULL;
-#if WORK_QUEUE_DEBUG
-            state->tid = gettid();
-#endif
-            pthread_setspecific(job_link_key, state);
-        }
-        return state;
-    }
 #endif
 
     bool running() const {
@@ -451,10 +451,6 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // We are no longer active on this job
         job->active_workers--;
 
-#if 1
-        halide_cond_broadcast(&work_queue.wake_a_team);
-        halide_cond_broadcast(&work_queue.wake_b_team);
-#endif
         if (!job->running() && job->owner_is_sleeping) {
             // The job is done. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
@@ -494,15 +490,11 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
 
     // Could stalled owners of other tasks conceivably help with one
     // of these jobs.
-#if 0
     bool stealable_jobs = false;
-#endif
 
     for (int i = 0; i < num_jobs; i++) {
         if (!jobs[i].task.may_block) {
-#if 0
           stealable_jobs = true;
-#endif
         } else {
             min_threads += jobs[i].task.min_threads;
         }
@@ -569,7 +561,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
     log_message(" A team size: " << work_queue.a_team_size);
     log_message(" Target A team size: " << work_queue.target_a_team_size);
 // TODO(zvookin): test with this back in.
-#if 0
+#if 1
     halide_cond_broadcast(&work_queue.wake_a_team);
     if (work_queue.target_a_team_size > work_queue.a_team_size) {
         halide_cond_broadcast(&work_queue.wake_b_team);
