@@ -11,17 +11,17 @@ class PurifyIndexMath : public IRMutator2 {
 
     Expr visit(const Div *op) override {
         if (can_prove(op->b != 0)) {
-            return op;
+            return IRMutator2::visit(op);
         } else {
-            return Call::make(op->type, Call::quiet_div, {op->a, op->b}, Call::PureIntrinsic);
+            return Call::make(op->type, Call::quiet_div, {mutate(op->a), mutate(op->b)}, Call::PureIntrinsic);
         }
     }
 
     Expr visit(const Mod *op) override {
         if (can_prove(op->b != 0)) {
-            return op;
+            return IRMutator2::visit(op);
         } else {
-            return Call::make(op->type, Call::quiet_mod, {op->a, op->b}, Call::PureIntrinsic);
+            return Call::make(op->type, Call::quiet_mod, {mutate(op->a), mutate(op->b)}, Call::PureIntrinsic);
         }
     }
 
