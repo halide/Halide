@@ -356,6 +356,7 @@ set(HEADER_FILES
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PythonExtensionGen.h
   Qualify.h
   Random.h
   RealizationOrder.h
@@ -510,6 +511,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PrintLoopNest.cpp
   Prefetch.cpp
   Profiling.cpp
+  PythonExtensionGen.cpp
   Qualify.cpp
   RDom.cpp
   Random.cpp

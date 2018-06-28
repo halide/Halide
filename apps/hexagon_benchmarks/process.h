@@ -50,9 +50,9 @@ class Conv3x3a16Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<int8_t> i8_mask;
 
 public:
-    Conv3x3a16Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
-                                         u8_out(nullptr, W, H, 2),
-                                         i8_mask(nullptr, 3, 3, 2) {}
+    Conv3x3a16Descriptor(int W, int H) : u8_in(nullptr, W, H),
+                                         u8_out(nullptr, W, H),
+                                         i8_mask(nullptr, 3, 3) {}
 
     void init() {
 #ifdef HALIDE_RUNTIME_HEXAGON
@@ -135,8 +135,8 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
         return std::max(std::max(a, b), c);
     }
  public:
-     Dilate3x3Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
-                                         u8_out(nullptr, W, H, 2) {}
+     Dilate3x3Descriptor(int W, int H) : u8_in(nullptr, W, H),
+                                         u8_out(nullptr, W, H) {}
 
     void init() {
 #ifdef HALIDE_RUNTIME_HEXAGON
@@ -202,8 +202,8 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
-      Median3x3Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
-                                          u8_out(nullptr, W, H, 2) {}
+      Median3x3Descriptor(int W, int H) : u8_in(nullptr, W, H),
+                                          u8_out(nullptr, W, H) {}
 
     void init() {
 #ifdef HALIDE_RUNTIME_HEXAGON
@@ -267,8 +267,8 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
-     Gaussian5x5Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
-                                           u8_out(nullptr, W, H, 2) {}
+     Gaussian5x5Descriptor(int W, int H) : u8_in(nullptr, W, H),
+                                           u8_out(nullptr, W, H) {}
 
     void init() {
 #ifdef HALIDE_RUNTIME_HEXAGON
@@ -334,8 +334,8 @@ class SobelDescriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
-     SobelDescriptor(int W, int H) : u8_in(nullptr, W, H, 2),
-                                     u8_out(nullptr, W, H, 2) {}
+     SobelDescriptor(int W, int H) : u8_in(nullptr, W, H),
+                                     u8_out(nullptr, W, H) {}
 
     void init() {
 #ifdef HALIDE_RUNTIME_HEXAGON
@@ -408,9 +408,9 @@ class Conv3x3a32Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<int8_t> i8_mask;
 
 public:
-    Conv3x3a32Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
-                                         u8_out(nullptr, W, H, 2),
-                                         i8_mask(nullptr, 3, 3, 2) {}
+    Conv3x3a32Descriptor(int W, int H) : u8_in(nullptr, W, H),
+                                         u8_out(nullptr, W, H),
+                                         i8_mask(nullptr, 3, 3) {}
 
     void init() {
 #ifdef HALIDE_RUNTIME_HEXAGON

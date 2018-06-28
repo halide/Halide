@@ -20,7 +20,7 @@ Stmt debug_to_file(Stmt s,
                    const std::vector<Function> &outputs,
                    const std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

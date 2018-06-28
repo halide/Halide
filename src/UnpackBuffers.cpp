@@ -1,15 +1,15 @@
 #include "UnpackBuffers.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::string;
 using std::pair;
-using std::vector;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -62,7 +62,7 @@ public:
     map<string, BufferInfo> buffers;
 };
 
-}
+}  // namespace
 
 Stmt unpack_buffers(Stmt s) {
     FindBufferSymbols finder;
@@ -108,6 +108,10 @@ Stmt unpack_buffers(Stmt s) {
         Expr dev_dirty_val = Call::make(Bool(), Call::buffer_get_device_dirty, args, Call::Extern);
         lets.push_back({dev_dirty_var, dev_dirty_val});
 
+        string dimensions_var = name + ".dimensions";
+        Expr dimensions_val = Call::make(Int(32), Call::buffer_get_dimensions, args, Call::Extern);
+        lets.push_back({dimensions_var, dimensions_val});
+
         for (int i = 0; i < info.dimensions; i++) {
             vector<Expr> args = {info.handle, i};
 
@@ -146,5 +150,5 @@ Stmt unpack_buffers(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -7,8 +7,8 @@
 
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Schedule.h"
 #include "Reduction.h"
+#include "Schedule.h"
 
 #include <map>
 
@@ -17,7 +17,7 @@ namespace Halide {
 namespace Internal {
 struct DefinitionContents;
 struct FunctionContents;
-}
+}  // namespace Internal
 
 namespace Internal {
 
@@ -123,6 +123,7 @@ struct Specialization {
     std::string failure_message;  // If non-empty, this specialization always assert-fails with this message.
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

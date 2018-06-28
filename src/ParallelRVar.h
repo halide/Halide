@@ -21,7 +21,7 @@ bool can_parallelize_rvar(const std::string &rvar,
                           const std::string &func,
                           const Definition &r);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

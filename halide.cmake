@@ -449,14 +449,60 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
 
     # Halide Target Features we know about. (This need not be exact, but should
     # be close for best compression.)
-    list(APPEND KNOWN_FEATURES armv7s avx avx2 avx512 avx512_cannonlake avx512_knl
-         avx512_skylake c_plus_plus_name_mangling cl_doubles cuda cuda_capability_30
-         cuda_capability_32 cuda_capability_35 cuda_capability_50 cuda_capability_61
-         debug f16c fma fma4 fuzz_float_stores hvx_128 hvx_64 hvx_shared_object
-         hvx_v62 hvx_v65 hvx_v66 jit large_buffers matlab metal mingw msan no_asserts
-         no_bounds_query no_neon no_runtime opencl opengl openglcompute
-         power_arch_2_07 profile soft_float_abi sse41 trace_loads trace_realizations
-         trace_stores user_context vsx)
+    list(APPEND KNOWN_FEATURES
+        jit
+        debug
+        no_asserts
+        no_bounds_query
+        sse41
+        avx
+        avx2
+        fma
+        fma4
+        f16c
+        armv7s
+        no_neon
+        vsx
+        power_arch_2_07
+        cuda
+        cuda_capability_30
+        cuda_capability_32
+        cuda_capability_35
+        cuda_capability_50
+        cuda_capability_61
+        opencl
+        cl_doubles
+        cl_half
+        opengl
+        openglcompute
+        user_context
+        matlab
+        profile
+        no_runtime
+        metal
+        mingw
+        c_plus_plus_name_mangling
+        large_buffers
+        hvx_64
+        hvx_128
+        hvx_v62
+        hvx_v65
+        hvx_v66
+        hvx_shared_object
+        fuzz_float_stores
+        soft_float_abi
+        msan
+        avx512
+        avx512_knl
+        avx512_skylake
+        avx512_cannonlake
+        trace_loads
+        trace_stores
+        trace_realizations
+        strict_float
+        legacy_buffer_wrappers
+        tsan
+      )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
     # in the KNOWN_FEATURES list.
     set(I 0)

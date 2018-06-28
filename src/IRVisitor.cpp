@@ -194,7 +194,7 @@ void IRVisitor::visit(const Provide *op) {
 
 void IRVisitor::visit(const Allocate *op) {
     for (size_t i = 0; i < op->extents.size(); i++) {
-      op->extents[i].accept(this);
+        op->extents[i].accept(this);
     }
     op->condition.accept(this);
     if (op->new_expr.defined()) {
@@ -220,6 +220,8 @@ void IRVisitor::visit(const Prefetch *op) {
         op->bounds[i].min.accept(this);
         op->bounds[i].extent.accept(this);
     }
+    op->condition.accept(this);
+    op->body.accept(this);
 }
 
 void IRVisitor::visit(const Block *op) {
@@ -468,6 +470,8 @@ void IRGraphVisitor::visit(const Prefetch *op) {
         include(op->bounds[i].min);
         include(op->bounds[i].extent);
     }
+    include(op->condition);
+    include(op->body);
 }
 
 void IRGraphVisitor::visit(const Block *op) {
@@ -498,5 +502,5 @@ void IRGraphVisitor::visit(const Shuffle *op) {
     }
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

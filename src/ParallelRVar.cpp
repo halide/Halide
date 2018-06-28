@@ -1,19 +1,19 @@
-#include "IR.h"
 #include "ParallelRVar.h"
-#include "IRMutator.h"
-#include "Debug.h"
-#include "Simplify.h"
-#include "IROperator.h"
-#include "Substitute.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 using std::vector;
-using std::map;
 
 namespace {
 /** Find all calls arguments to the given function. Substitutes in
@@ -69,10 +69,7 @@ public:
             new_names[s] = new_name;
             return new_name;
         }
-
     }
-
-
 };
 
 /** Substitute in boolean expressions. */
@@ -87,7 +84,7 @@ class SubstituteInBooleanLets : public IRMutator2 {
         }
     }
 };
-}
+}  // namespace
 
 bool can_parallelize_rvar(const string &v,
                           const string &f,
@@ -165,5 +162,5 @@ bool can_parallelize_rvar(const string &v,
     return is_zero(hazard);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -1,28 +1,28 @@
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 
-#include "CodeGen_LLVM.h"
+#include "CPlusPlusMangle.h"
+#include "CSE.h"
 #include "CodeGen_ARM.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Hexagon.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
 #include "CodeGen_X86.h"
-#include "CPlusPlusMangle.h"
-#include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
-#include "IntegerDivisionTable.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
 #include "JITModule.h"
-#include "Lerp.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Lerp.h"
 #include "MatlabWrapper.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -45,14 +45,14 @@ std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMConte
 namespace Internal {
 
 using namespace llvm;
-using std::ostringstream;
 using std::cout;
 using std::endl;
+using std::map;
+using std::ostringstream;
+using std::pair;
+using std::stack;
 using std::string;
 using std::vector;
-using std::pair;
-using std::map;
-using std::stack;
 
 // Define a local empty inline function for each target
 // to disable initialization.
@@ -1082,12 +1082,18 @@ void CodeGen_LLVM::optimize_module() {
 #endif
 
     if (get_target().has_feature(Target::ASAN)) {
-        auto addAddressSanitizerPass = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
-            pm.add(createAddressSanitizerFunctionPass());
-            pm.add(createAddressSanitizerModulePass());
+        auto addAddressSanitizerPasses = [](const PassManagerBuilder &builder, legacy::PassManagerBase &pm) {
+            constexpr bool compile_kernel = false;   // always false for user code
+            constexpr bool recover = false;          // -fsanitize-recover, always false here
+
+            constexpr bool use_after_scope = false;  // enable -fsanitize-address-use-after-scope?
+            pm.add(createAddressSanitizerFunctionPass(compile_kernel, recover, use_after_scope));
+
+            constexpr bool use_globals_gc = false;  // Should ASan use GC-friendly instrumentation for globals?
+            pm.add(createAddressSanitizerModulePass(compile_kernel, recover, use_globals_gc));
         };
-        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPass);
-        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPass);
+        b.addExtension(PassManagerBuilder::EP_OptimizerLast, addAddressSanitizerPasses);
+        b.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0, addAddressSanitizerPasses);
     }
 
     if (get_target().has_feature(Target::TSAN)) {
@@ -1112,6 +1118,10 @@ void CodeGen_LLVM::optimize_module() {
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
             if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+                  // TODO: this is a benign data race that re-initializes the detected features;
+                  // we should really fix it properly inside the implementation, rather than disabling
+                  // it here as a band-aid.
+                  i->getName().startswith("halide_default_can_use_target_features") ||
                   i->getName().startswith("halide_mutex_") ||
                   i->getName().startswith("halide_cond_"))) {
                 i->addFnAttr(Attribute::SanitizeThread);
@@ -3823,4 +3833,5 @@ ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {
     return modulus_remainder(e, alignment_info);
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

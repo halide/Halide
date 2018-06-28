@@ -15,7 +15,7 @@ namespace Internal {
  * something. For examples see test/correctness/trim_no_ops.cpp */
 Stmt trim_no_ops(Stmt s);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

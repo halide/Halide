@@ -8,10 +8,9 @@
 
 #include "Argument.h"
 #include "Dimension.h"
-#include "runtime/HalideRuntime.h"
-#include "Var.h"
-#include "Dimension.h"
 #include "Func.h"
+#include "Var.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
@@ -113,6 +112,6 @@ public:
     operator ExternFuncArgument() const;
 };
 
-}
+}  // namespace Halide
 
 #endif

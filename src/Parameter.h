@@ -5,8 +5,8 @@
  * Defines the internal representation of parameters to halide piplines
  */
 
-#include "Expr.h"
 #include "Buffer.h"
+#include "Expr.h"
 
 namespace Halide {
 
@@ -193,7 +193,7 @@ public:
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

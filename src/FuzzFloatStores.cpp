@@ -24,11 +24,11 @@ class FuzzFloatStores : public IRMutator2 {
         }
     }
 };
-}
+}  // namespace
 
 Stmt fuzz_float_stores(Stmt s) {
     return FuzzFloatStores().mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

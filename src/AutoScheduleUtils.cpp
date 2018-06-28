@@ -1,19 +1,19 @@
 #include <sstream>
 
 #include "AutoScheduleUtils.h"
+#include "IREquality.h"
+#include "ImageParam.h"
 #include "Inline.h"
+#include "Param.h"
 #include "Simplify.h"
 #include "Var.h"
-#include "IREquality.h"
-#include "Param.h"
-#include "ImageParam.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::map;
 using std::set;
+using std::string;
 using std::vector;
 
 namespace {
@@ -236,7 +236,7 @@ void check(Expr input, Expr expected) {
             << "Expected result: " << expected << '\n';
     }
 }
-} // anonymous namespace
+}  // anonymous namespace
 
 void propagate_estimate_test() {
     Param<int> p;
@@ -254,5 +254,5 @@ void propagate_estimate_test() {
     std::cout << "Propagate estimate test passed" << std::endl;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

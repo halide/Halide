@@ -6,18 +6,18 @@
  * Defines Func - the front-end handle on a halide function, and related classes.
  */
 
-#include "IR.h"
-#include "Var.h"
-#include "Function.h"
-#include "Param.h"
 #include "Argument.h"
-#include "RDom.h"
+#include "Function.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "JITModule.h"
+#include "Module.h"
+#include "Param.h"
+#include "Pipeline.h"
+#include "RDom.h"
 #include "Target.h"
 #include "Tuple.h"
-#include "IROperator.h"
-#include "Module.h"
-#include "Pipeline.h"
+#include "Var.h"
 
 #include <map>
 
@@ -49,7 +49,7 @@ class ImageParam;
 namespace Internal {
 struct Split;
 struct StorageDim;
-}
+}  // namespace Internal
 
 /** A single definition of a Func. May be a pure or update definition. */
 class Stage {
@@ -607,7 +607,7 @@ public:
 namespace Internal {
 struct ErrorBuffer;
 class IRMutator2;
-}
+}  // namespace Internal
 
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
@@ -860,6 +860,12 @@ public:
                                  const std::vector<Argument> &args,
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
+
+    /** Emit a Python Extension glue .c file. */
+    void compile_to_python_extension(const std::string &filename_prefix,
+                                     const std::vector<Argument> &args,
+                                     const std::string &fn_name,
+                                     const Target &target = get_target_from_environment());
 
     /** Write out the loop nests specified by the schedule for this
      * Function. Helpful for understanding what a schedule is
@@ -1193,8 +1199,8 @@ public:
                        const std::vector<Var> &arguments,
                        NameMangling mangling,
                        bool uses_old_buffer_t) {
-      define_extern(function_name, params, types,
-                    arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
+        define_extern(function_name, params, types,
+                      arguments, mangling, DeviceAPI::Host, uses_old_buffer_t);
     }
 
     void define_extern(const std::string &function_name,
@@ -2416,7 +2422,6 @@ HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest&&...
 }
 // @}
 
-}
-
+}  // namespace Halide
 
 #endif

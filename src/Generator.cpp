@@ -101,6 +101,9 @@ Outputs compute_outputs(const Target &target,
     if (options.emit_cpp) {
         output_files.c_source_name = base_path + get_extension(".cpp", options);
     }
+    if (options.emit_python_extension) {
+        output_files.python_extension_name = base_path + get_extension(".py.c", options);
+    }
     if (options.emit_stmt) {
         output_files.stmt_name = base_path + get_extension(".stmt", options);
     }
@@ -504,31 +507,53 @@ void StubEmitter::emit() {
     if (out_info.size() == 1) {
         stream << "\n";
         if (all_outputs_are_func) {
-            // If there is exactly one output, add overloads
-            // for operator Func and operator().
             std::string name = out_info.at(0).name;
+            auto output = outputs[0];
+            if (output->is_array()) {
+                stream << indent() << "operator std::vector<Halide::Func>() const {\n";
+                indent_level++;
+                stream << indent() << "return " << name << ";\n";
+                indent_level--;
+                stream << indent() << "}\n";
 
-            stream << indent() << "operator Halide::Func() const {\n";
-            indent_level++;
-            stream << indent() << "return " << name << ";\n";
-            indent_level--;
-            stream << indent() << "}\n";
+                stream << indent() << "Halide::Func operator[](size_t i) const {\n";
+                indent_level++;
+                stream << indent() << "return " << name << "[i];\n";
+                indent_level--;
+                stream << indent() << "}\n";
 
-            stream << "\n";
-            stream << indent() << "template <typename... Args>\n";
-            stream << indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
-            indent_level++;
-            stream << indent() << "return " << name << "(std::forward<Args>(args)...);\n";
-            indent_level--;
-            stream << indent() << "}\n";
+                stream << indent() << "Halide::Func at(size_t i) const {\n";
+                indent_level++;
+                stream << indent() << "return " << name << ".at(i);\n";
+                indent_level--;
+                stream << indent() << "}\n";
 
-            stream << "\n";
-            stream << indent() << "template <typename ExprOrVar>\n";
-            stream << indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
-            indent_level++;
-            stream << indent() << "return " << name << "()(args);\n";
-            indent_level--;
-            stream << indent() << "}\n";
+                stream << indent() << "// operator operator()() overloads omitted because the sole Output is array-of-Func.\n";
+            } else {
+                // If there is exactly one output, add overloads
+                // for operator Func and operator().
+                stream << indent() << "operator Halide::Func() const {\n";
+                indent_level++;
+                stream << indent() << "return " << name << ";\n";
+                indent_level--;
+                stream << indent() << "}\n";
+
+                stream << "\n";
+                stream << indent() << "template <typename... Args>\n";
+                stream << indent() << "Halide::FuncRef operator()(Args&&... args) const {\n";
+                indent_level++;
+                stream << indent() << "return " << name << "(std::forward<Args>(args)...);\n";
+                indent_level--;
+                stream << indent() << "}\n";
+
+                stream << "\n";
+                stream << indent() << "template <typename ExprOrVar>\n";
+                stream << indent() << "Halide::FuncRef operator()(std::vector<ExprOrVar> args) const {\n";
+                indent_level++;
+                stream << indent() << "return " << name << "()(args);\n";
+                indent_level--;
+                stream << indent() << "}\n";
+            }
         } else {
             stream << indent() << "// operator Func() and operator()() overloads omitted because the sole Output is not Func.\n";
         }
@@ -878,6 +903,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_stmt_html = true;
             } else if (opt == "cpp") {
                 emit_options.emit_cpp = true;
+            } else if (opt == "py.c") {
+                emit_options.emit_python_extension = true;
             } else if (opt == "o") {
                 emit_options.emit_o = true;
             } else if (opt == "h") {
@@ -1496,7 +1523,9 @@ const std::vector<Type> &GIOBase::types() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!types_defined()) {
-        const auto &f = funcs();
+        // use funcs_, not funcs(): the latter could give a much-less-helpful error message
+        // in this case.
+        const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
             check_matching_types(f.at(0).output_types());
         }
@@ -1520,7 +1549,9 @@ int GIOBase::dims() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
     if (!dims_defined()) {
-        const auto &f = funcs();
+        // use funcs_, not funcs(): the latter could give a much-less-helpful error message
+        // in this case.
+        const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
             check_matching_dims(funcs().at(0).dimensions());
         }

@@ -4,10 +4,10 @@
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "LICM.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "LICM.h"
 
 // In CUDA, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication
@@ -38,9 +38,9 @@
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
 using std::pair;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -791,7 +791,7 @@ class LowerWarpShufflesInEachKernel : public IRMutator2 {
     }
 };
 
-}
+}  // namespace
 
 Stmt lower_warp_shuffles(Stmt s) {
     s = loop_invariant_code_motion(s);
@@ -801,5 +801,5 @@ Stmt lower_warp_shuffles(Stmt s) {
     return s;
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

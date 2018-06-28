@@ -268,6 +268,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
+    // NOTE: When adding features to this map, be sure to update
+    // PyEnums.cpp and halide.cmake as well.
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -360,6 +362,9 @@ bool merge_string(Target &t, const std::string &target) {
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
+            features_specified = true;
+        } else if (tok == "trace_all") {
+            t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
             features_specified = true;
         } else {
             return false;
@@ -479,6 +484,11 @@ std::string Target::to_string() const {
             result += "-" + feature_entry.first;
         }
     }
+    // Use has_feature() multiple times (rather than features_any_of())
+    // to avoid constructing a temporary vector for this rather-common call.
+    if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
+        result = Internal::replace_all(result, "trace_loads-trace_realizations-trace_stores", "trace_all");
+    }
     return result;
 }
 
@@ -578,7 +588,6 @@ void target_test() {
     std::cout << "Target test passed" << std::endl;
 }
 
+}  // namespace Internal
 
-}
-
-}
+}  // namespace Halide

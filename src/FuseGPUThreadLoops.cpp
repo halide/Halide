@@ -1,26 +1,26 @@
 #include <algorithm>
 #include <cmath>
 
-#include "FuseGPUThreadLoops.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "FuseGPUThreadLoops.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Bounds.h"
-#include "Substitute.h"
-#include "IREquality.h"
-#include "Simplify.h"
 #include "IRPrinter.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::sort;
+using std::string;
+using std::vector;
 
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
@@ -935,5 +935,5 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

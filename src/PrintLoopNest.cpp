@@ -1,9 +1,9 @@
 #include "PrintLoopNest.h"
 #include "FindCalls.h"
-#include "Function.h"
 #include "Func.h"
-#include "RealizationOrder.h"
+#include "Function.h"
 #include "IRPrinter.h"
+#include "RealizationOrder.h"
 #include "ScheduleFunctions.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
@@ -15,9 +15,9 @@
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 using std::vector;
-using std::map;
 
 class PrintLoopNest : public IRVisitor {
 public:
@@ -205,5 +205,5 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     return sstr.str();
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

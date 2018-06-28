@@ -4,8 +4,8 @@
 #include "IR.h"
 #include "Util.h"
 
-#include <set>
 #include <map>
+#include <set>
 #include <string>
 
 /** \file
@@ -145,7 +145,7 @@ protected:
     // @}
 };
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

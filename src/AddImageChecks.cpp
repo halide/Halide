@@ -1,17 +1,17 @@
 #include "AddImageChecks.h"
-#include "Target.h"
 #include "IRVisitor.h"
-#include "Substitute.h"
 #include "Simplify.h"
+#include "Substitute.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::vector;
-using std::string;
+using std::make_pair;
 using std::map;
 using std::pair;
-using std::make_pair;
+using std::string;
+using std::vector;
 
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
@@ -273,6 +273,18 @@ Stmt add_image_checks(Stmt s,
                 AssertStmt::make((type_code == type.code()) &&
                                  (type_bits == type.bits()) &&
                                  (type_lanes == type.lanes()), error));
+        }
+
+        // Check the dimensions matches the internally-understood dimensions
+        {
+            string dimensions_name = name + ".dimensions";
+            Expr dimensions_given = Variable::make(Int(32), dimensions_name, image, param, rdom);
+            Expr error = Call::make(Int(32), "halide_error_bad_dimensions",
+                                    {error_name,
+                                     dimensions_given, make_const(Int(32), dimensions)},
+                                    Call::Extern);
+            asserts_elem_size.push_back(
+                AssertStmt::make(dimensions_given == dimensions, error));
         }
 
         if (touched.maybe_unused()) {
@@ -641,5 +653,5 @@ Stmt add_image_checks(Stmt s,
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

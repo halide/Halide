@@ -1039,4 +1039,4 @@ void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
 
 }  // namespace Internal
 
-}
+}  // namespace Halide
