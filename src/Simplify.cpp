@@ -5758,8 +5758,18 @@ private:
             bounds_info.pop(op->name);
         }
 
+        const IfThenElse *ifelse = new_body.as<IfThenElse>();
+
         if (is_no_op(new_body)) {
             return new_body;
+        } else if (ifelse &&
+                   op->device_api == DeviceAPI::None &&
+                   !ifelse->else_case.defined() &&
+                   !expr_uses_var(ifelse->condition, op->name)) {
+            // Pull the if outside the for
+            Stmt then = ifelse->then_case;
+            then = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, then);
+            return IfThenElse::make(ifelse->condition, then);
         } else if (op->min.same_as(new_min) &&
             op->extent.same_as(new_extent) &&
             op->body.same_as(new_body)) {
