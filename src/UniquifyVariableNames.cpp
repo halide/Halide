@@ -50,6 +50,7 @@ class UniquifyVariableNames : public IRMutator2 {
         vector<Frame> frames;
         decltype(op->body) result;
         while (op) {
+            push_name(op->name);
             frames.push_back({op, mutate(op->value), get_name(op->name)});
             result = op->body;
             op = result.template as<LetOrLetStmt>();
