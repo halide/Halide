@@ -98,20 +98,16 @@ int main(int argc, char **argv) {
     printf("Async root time %f for %d calls.\n", time, count);
     fflush(stdout);
 
-#if 0 // This hangs due to a miscompilation that is being worked on.
     both = make(AsyncComputeAt);
     both.compile_to_lowered_stmt("/tmp/async_compute_at.stmt", {}, Text);
     call_count = 0;
     im = both.realize(10, 10, 2);
-    printf(stderr, "Done first run.\n");
-    fflush(stdout);
     count = call_count;
     time = benchmark([&]() {
         both.realize(im);
     });
     printf("AsyncComputeAt time %f for %d calls.\n", time, count);
     fflush(stdout);
-#endif
 
     printf("Success!\n");
     return 0;
