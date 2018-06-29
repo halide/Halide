@@ -24,20 +24,10 @@ int main(int argc, char **argv) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
 
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 4);
 
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height);
+    input = input.make_interleaved(width, height, 4);
  
-    input.embed(2, 0);
-
-    input.raw_buffer()->dim[0].stride = 4;
-    input.raw_buffer()->dim[0].extent = width;
-
-    input.raw_buffer()->dim[1].extent = height;
-    input.raw_buffer()->dim[1].stride = width * 4;
-
-    input.raw_buffer()->dim[2].extent = 4;
-    input.raw_buffer()->dim[2].stride = 1;
-
     // Give the input the buffer we want to DMA from.
     input.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_in));
 
@@ -55,14 +45,7 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<uint8_t> output(width, height, 4);
 
-    output.raw_buffer()->dim[0].stride = 4;
-    output.raw_buffer()->dim[0].extent = width;
-
-    output.raw_buffer()->dim[1].extent = height;
-    output.raw_buffer()->dim[1].stride = width * 4;
-
-    output.raw_buffer()->dim[2].extent = 4;
-    output.raw_buffer()->dim[2].stride = 1;
+    output = output.make_interleaved(width, height, 4);
 
     printf("before pipeline\n");
 

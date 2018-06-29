@@ -92,10 +92,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
-        } else if (memory_type == MemoryType::LockedCache) {
-            user_assert(!new_expr.defined()) << "Custom Expression not allowed for Locked Cache Memory Type\n";
-            stack_bytes = 0;
-            llvm_size = codegen_allocation_size(name, type, extents);
         } else if (memory_type == MemoryType::Heap ||
                    (memory_type != MemoryType::Stack &&
                     memory_type != MemoryType::Register &&
@@ -112,7 +108,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         internal_assert(memory_type != MemoryType::Register);
         llvm_size = codegen_allocation_size(name, type, extents);
     }
-    
+
     // Only allocate memory if the condition is true, otherwise 0.
     Value *llvm_condition = codegen(condition);
     if (llvm_size != nullptr) {
@@ -135,7 +131,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     allocation.destructor_function = nullptr;
     allocation.name = name;
 
-    if (!new_expr.defined() && extents.empty() && (memory_type != MemoryType::LockedCache))  {
+    if (!new_expr.defined() && extents.empty()) {
         // If it's a scalar allocation, don't try anything clever. We
         // want llvm to be able to promote it to a register.
         allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
@@ -186,17 +182,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         if (new_expr.defined()) {
             allocation.ptr = codegen(new_expr);
         } else {
-
-            // Call malloc based on Memory Type
-            llvm::Function *malloc_fn;
-            if (memory_type == MemoryType::LockedCache) {
-                malloc_fn = module->getFunction("halide_hexagon_allocate_from_l2_pool"); 
-                internal_assert(malloc_fn) << "Could not find halide_hexagon_allocate_from_l2_pool in module\n";
-            } else { 
-                malloc_fn = module->getFunction("halide_malloc");
-                internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
-            }
-
+            // call malloc
+            llvm::Function *malloc_fn = module->getFunction("halide_malloc");
+            internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
             #if LLVM_VERSION < 50
             malloc_fn->setDoesNotAlias(0);
             #else
@@ -207,19 +195,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             ++arg_iter;  // skip the user context *
             llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-            if (memory_type == MemoryType::LockedCache) {
-                debug(4) << "Creating call to halide_hexagon_allocate_from_l2_pool for allocation " << name
-                         << " of size " << type.bytes();
-            } else {
-                debug(4) << "Creating call to halide_malloc for allocation " << name
-                         << " of size " << type.bytes();
-            }
-
+            debug(4) << "Creating call to halide_malloc for allocation " << name
+                     << " of size " << type.bytes();
             for (Expr e : extents) {
                 debug(4) << " x " << e;
             }
             debug(4) << "\n";
-
             Value *args[2] = { get_user_context(), llvm_size };
 
             Value *call = builder->CreateCall(malloc_fn, args);
@@ -247,11 +228,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Register a destructor for this allocation.
         if (free_function.empty()) {
-            if (memory_type == MemoryType::LockedCache) {
-                free_function = "halide_hexagon_free_from_l2_pool";
-            } else {
-                free_function = "halide_free";
-            }
+            free_function = "halide_free";
         }
         llvm::Function *free_fn = module->getFunction(free_function);
         internal_assert(free_fn) << "Could not find " << free_function << " in module.\n";

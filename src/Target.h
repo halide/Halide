@@ -311,9 +311,6 @@ struct Target {
      * Target. This is 2^31 - 1 except on 64-bit targets when the LargeBuffers
      * feature is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
-        if (has_feature(Target::HexagonDma)) {
-            return (((uint64_t)1) << 31) - 1; 
-        }
         if (has_large_buffers()) {
             return (((uint64_t)1) << 63) - 1;
         } else {

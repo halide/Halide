@@ -369,7 +369,7 @@ enum class MemoryType {
      * across GPU threads within the same block. */
     GPUShared,
 
-    /**Allocating and Locking Cached Memory to act as local memory(TCM)*/
+    /** Allocate Locked Cache Memory to act as local memory */
     LockedCache,
 };
 

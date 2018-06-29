@@ -50,7 +50,6 @@ public:
         copy_y
             .compute_at(output_y, tx)
             .store_root()
-            .store_in(MemoryType::LockedCache)
             .fold_storage(x, tile_width * 2)
             .copy_to_host()
             .align_storage(x, 256);
@@ -58,7 +57,6 @@ public:
         copy_uv
             .compute_at(output_uv, tx)
             .store_root()
-            .store_in(MemoryType::LockedCache)
             .bound(c, 0, 2)
             .fold_storage(x, tile_width * 2)
             .copy_to_host()

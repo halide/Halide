@@ -708,7 +708,8 @@ RUNTIME_CPP_COMPONENTS = \
   windows_yield \
   write_debug_image \
   x86_cpu_features \
-  hexagon_cache_allocator
+  hexagon_cache_allocator \
+  default_cache_allocator
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \

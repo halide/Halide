@@ -8,6 +8,10 @@
 #include "HalideBuffer.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
 
+void halide_print(void *user_context, const char *msg) {
+    printf("halide_print %s\n", msg);
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) {
         printf("Usage: %s width height\n", argv[0]);

@@ -143,7 +143,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         << " dst: " << static_cast<uint32>(dst->size_in_bytes())
         << "\n";
     
-    //Assert if buffer dimensions do not fulfill the format requirements 
+    // Assert if buffer dimensions do not fulfill the format requirements
     if (dev->fmt == eDmaFmt_RawData) {
         halide_assert(user_context, src->dimensions <= 3);
     }
@@ -178,7 +178,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     debug(user_context)
         << "Recommended ROI(w: " << roi_width << " h: " << roi_height << " s: " << roi_stride << ")\n";
-    //Assert if destination stride is a multipe of recommended stride
+    // Assert if destination stride is a multipe of recommended stride
     halide_assert(user_context,((dst->dim[1].stride%roi_stride)== 0));
 
     // Return NULL if descriptor is not allocated
@@ -212,7 +212,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     stDmaTransferParm.u16RoiX               = (dev->offset_x + dst->dim[0].min) * dst->dim[0].stride;
     stDmaTransferParm.u16RoiY               = dev->offset_y + dst->dim[1].min;
 
-    //Raw Format Planar 
+    // Raw Format Planar
     if ((dev->fmt == eDmaFmt_RawData) &&
         (dst->dimensions == 3)) {
         stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * dst->dim[1].stride);
@@ -332,16 +332,16 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         << "Hexagon: halide_hexagon_dma_deallocate_engine (user_context: " << user_context
         << ", dma_engine: " << dma_engine << ")\n";
 
-    debug(user_context) << "    dma_free_dma_engine\n";
     halide_assert(user_context, dma_engine);
     desc_pool_free(user_context);
 
     int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
+    debug(user_context) << "    dma_free_dma_engine done\n";
     if (err != 0) {
         error(user_context) << "Freeing DMA Engine failed.\n";
         return halide_error_code_generic_error;
     }
-    //free cache pool
+    // Free cache pool
     err = halide_hexagon_free_l2_pool(user_context);
     if (err != 0) {
         error(user_context) << "Freeing Cache Pool failed.\n";

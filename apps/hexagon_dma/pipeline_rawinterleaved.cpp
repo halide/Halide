@@ -39,7 +39,6 @@ public:
         copy
             .compute_at(output, tx)
             .store_root()
-            .store_in(MemoryType::LockedCache) 
             .bound(c, 0, 4)
             .copy_to_host()
             .reorder_storage(c, x, y);

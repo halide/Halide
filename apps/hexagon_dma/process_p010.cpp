@@ -40,18 +40,17 @@ int main(int argc, char **argv) {
     input_uv.embed(2, 0);
     input_uv.raw_buffer()->dim[2].extent = 2;
     input_uv.raw_buffer()->dim[2].stride = 1;
-
     input_uv.raw_buffer()->dim[0].stride = 2;
     input_uv.raw_buffer()->dim[0].extent = width / 2;
    
 
     input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
-                             reinterpret_cast<uint64_t>(data_in));
+                                reinterpret_cast<uint64_t>(data_in));
 
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, eDmaFmt_P010_UV);
 
     input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
-                             reinterpret_cast<uint64_t>(data_in));
+                               reinterpret_cast<uint64_t>(data_in));
 
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, eDmaFmt_P010_Y);
 
