@@ -2517,7 +2517,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
                                map<string, Expr> strides, AutoSchedule &sched) {
     vector<Dim> &dims = def.schedule().dims();
     internal_assert(dims.size() > 1);
-    vector<pair<string, bool>> order;
+    vector<pair<string, int>> order;
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         internal_assert(strides.find(dims[d].var) != strides.end());
