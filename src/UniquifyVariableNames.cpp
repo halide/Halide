@@ -7,6 +7,7 @@ namespace Internal {
 
 using std::map;
 using std::string;
+using std::vector;
 
 class UniquifyVariableNames : public IRMutator2 {
 
@@ -38,54 +39,35 @@ class UniquifyVariableNames : public IRMutator2 {
         vars[s]--;
     }
 
-    template<typename T>
-    auto visit_let(const T *op) -> decltype(op->body) {
-        using Body = decltype(op->body);
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         struct Frame {
-            const T *op;
-            UniquifyVariableNames *u;
-            Body *result;
+            const LetOrLetStmt *op;
             Expr value;
             string new_name;
-
-            Frame(const T *op, UniquifyVariableNames *u, Body *result) : op(op), u(u), result(result) {
-                value = u->mutate(op->value);
-                u->push_name(op->name);
-                new_name = u->get_name(op->name);
-            }
-
-            ~Frame() {
-                if (!value.defined()) return; // Was moved-from in vector realloc
-
-                u->pop_name(op->name);
-                if (new_name == op->name &&
-                    result->same_as(op->body) &&
-                    value.same_as(op->value)) {
-                    *result = op;
-                } else {
-                    *result = T::make(new_name, value, *result);
-                }
-            }
-
-            Frame(const Frame &) = delete;
-            Frame(Frame &&) = default;
         };
 
-        Body result;
-
-        {
-            std::vector<Frame> stack;
-            stack.emplace_back(op, this, &result);
-            Body body = op->body;
-            while (const T *t = body.template as<T>()) {
-                stack.emplace_back(t, this, &result);
-                body = t->body;
-            }
-            result = mutate(body);
+        vector<Frame> frames;
+        decltype(op->body) result;
+        while (op) {
+            frames.push_back({op, mutate(op->value), get_name(op->name)});
+            result = op->body;
+            op = result.template as<LetOrLetStmt>();
         }
 
-        // The destructors of the Frame objects have rewrapped the
-        // result with the appropriate lets
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            pop_name(it->op->name);
+            if (it->new_name == it->op->name &&
+                result.same_as(it->op->body) &&
+                it->op->value.same_as(it->value)) {
+                result = it->op;
+            } else {
+                result = LetOrLetStmt::make(it->new_name, it->value, result);
+            }
+        }
+
         return result;
     }
 

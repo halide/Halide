@@ -1435,134 +1435,129 @@ private:
         // the heap.
         struct Frame {
             set<string> old_let_vars;
+            const LetOrLetStmt *op;
             VarInstance vi;
             CollectVars collect;
             string max_name, min_name;
             Interval value_bounds;
-            const LetOrLetStmt *op;
-            BoxesTouched *b;
-
-            Frame(const LetOrLetStmt *op, BoxesTouched *b) : collect(op->name), op(op), b(b) {
-                b->push_var(op->name);
-
-                if (is_let_stmt::value) {
-                    vi = b->get_var_instance(op->name);
-
-                    // Update the 'children' map.
-                    op->value.accept(&collect);
-                    for (const auto &v : collect.vars) {
-                        b->children[b->get_var_instance(v)].insert(vi);
-                    }
-
-                    // If this let stmt is a redefinition of a previous one, we should
-                    // remove the old let stmt from the 'children' map since it is
-                    // no longer valid at this point.
-                    if ((vi.instance > 0) && b->let_stmts.contains(op->name)) {
-                        const Expr &val = b->let_stmts.get(op->name);
-                        CollectVars collect(op->name);
-                        val.accept(&collect);
-                        old_let_vars = collect.vars;
-
-                        VarInstance old_vi = VarInstance(vi.var, vi.instance-1);
-                        for (const auto &v : old_let_vars) {
-                            internal_assert(b->vars_renaming.count(v));
-                            b->children[b->get_var_instance(v)].erase(old_vi);
-                        }
-                    }
-                    b->let_stmts.push(op->name, op->value);
-                }
-
-                if (b->consider_calls) {
-                    op->value.accept(b);
-                }
-
-                value_bounds = bounds_of_expr_in_scope(op->value, b->scope, b->func_bounds);
-
-                bool fixed = value_bounds.min.same_as(value_bounds.max);
-                value_bounds.min = simplify(value_bounds.min);
-                value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
-
-                if (b->is_small_enough_to_substitute(value_bounds.min) &&
-                    (fixed || b->is_small_enough_to_substitute(value_bounds.max))) {
-                    b->scope.push(op->name, value_bounds);
-                } else {
-                    max_name = unique_name('t');
-                    min_name = unique_name('t');
-                    b->scope.push(op->name, Interval(Variable::make(op->value.type(), min_name),
-                                                     Variable::make(op->value.type(), max_name)));
-                }
-            }
-
-            ~Frame() {
-                if (!value_bounds.min.defined()) return; // Was moved-from
-
-                // Pop the value bounds
-                b->scope.pop(op->name);
-
-                if (!min_name.empty()) {
-                    // We made up new names for the bounds of the
-                    // value, and need to rewrap any boxes we're
-                    // returning with appropriate lets.
-                    for (pair<const string, Box> &i : b->boxes) {
-                        Box &box = i.second;
-                        for (size_t i = 0; i < box.size(); i++) {
-                            if (box[i].has_lower_bound()) {
-                                if (expr_uses_var(box[i].min, max_name)) {
-                                    box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                                }
-                                if (expr_uses_var(box[i].min, min_name)) {
-                                    box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
-                                }
-                            }
-                            if (box[i].has_upper_bound()) {
-                                if (expr_uses_var(box[i].max, max_name)) {
-                                    box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                                }
-                                if (expr_uses_var(box[i].max, min_name)) {
-                                    box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (is_let_stmt::value) {
-                    b->let_stmts.pop(op->name);
-
-                    // If this let stmt shadowed an outer one, we need
-                    // to re-insert the children from the previous let
-                    // stmt into the map.
-                    if (!old_let_vars.empty()) {
-                        internal_assert(vi.instance > 0);
-                        VarInstance old_vi = VarInstance(vi.var, vi.instance-1);
-                        for (const auto &v : old_let_vars) {
-                            internal_assert(b->vars_renaming.count(v));
-                            b->children[b->get_var_instance(v)].insert(old_vi);
-                        }
-                    }
-
-                    // Remove the children from the current let stmt.
-                    for (const auto &v : collect.vars) {
-                        internal_assert(b->vars_renaming.count(v));
-                        b->children[b->get_var_instance(v)].erase(vi);
-                    }
-                }
-
-                b->pop_var(op->name);
-            }
-
-            Frame(const Frame &) = delete;
-            Frame(Frame &&) = default;
+            Frame(const LetOrLetStmt *op) : op(op), collect(op->name) {}
         };
 
-        vector<Frame> stack;
-        stack.emplace_back(op, this);
-        auto body = op->body;
-        while (const LetOrLetStmt *l = body.template as<LetOrLetStmt>()) {
-            stack.emplace_back(l, this);
-            body = l->body;
+        vector<Frame> frames;
+        decltype(op->body) result;
+        while (op) {
+            frames.emplace_back(op);
+            Frame &f = frames.back();
+            push_var(op->name);
+
+            if (is_let_stmt::value) {
+                f.vi = get_var_instance(op->name);
+
+                // Update the 'children' map.
+                op->value.accept(&f.collect);
+                for (const auto &v : f.collect.vars) {
+                    children[get_var_instance(v)].insert(f.vi);
+                }
+
+                // If this let stmt is a redefinition of a previous one, we should
+                // remove the old let stmt from the 'children' map since it is
+                // no longer valid at this point.
+                if ((f.vi.instance > 0) && let_stmts.contains(op->name)) {
+                    const Expr &val = let_stmts.get(op->name);
+                    CollectVars collect(op->name);
+                    val.accept(&collect);
+                    f.old_let_vars = collect.vars;
+
+                    VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance-1);
+                    for (const auto &v : f.old_let_vars) {
+                        internal_assert(vars_renaming.count(v));
+                        children[get_var_instance(v)].erase(old_vi);
+                    }
+                }
+                let_stmts.push(op->name, op->value);
+            }
+
+            if (consider_calls) {
+                op->value.accept(this);
+            }
+
+            f.value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
+
+            bool fixed = f.value_bounds.min.same_as(f.value_bounds.max);
+            f.value_bounds.min = simplify(f.value_bounds.min);
+            f.value_bounds.max = fixed ? f.value_bounds.min : simplify(f.value_bounds.max);
+
+            if (is_small_enough_to_substitute(f.value_bounds.min) &&
+                (fixed || is_small_enough_to_substitute(f.value_bounds.max))) {
+                scope.push(op->name, f.value_bounds);
+            } else {
+                f.max_name = unique_name('t');
+                f.min_name = unique_name('t');
+                scope.push(op->name, Interval(Variable::make(op->value.type(), f.min_name),
+                                              Variable::make(op->value.type(), f.max_name)));
+            }
+
+            result = op->body;
+            op = result.template as<LetOrLetStmt>();
         }
-        body.accept(this);
+
+        result.accept(this);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            // Pop the value bounds
+            scope.pop(it->op->name);
+
+            if (!it->min_name.empty()) {
+                // We made up new names for the bounds of the
+                // value, and need to rewrap any boxes we're
+                // returning with appropriate lets.
+                for (pair<const string, Box> &i : boxes) {
+                    Box &box = i.second;
+                    for (size_t i = 0; i < box.size(); i++) {
+                        if (box[i].has_lower_bound()) {
+                            if (expr_uses_var(box[i].min, it->max_name)) {
+                                box[i].min = Let::make(it->max_name, it->value_bounds.max, box[i].min);
+                            }
+                            if (expr_uses_var(box[i].min, it->min_name)) {
+                                box[i].min = Let::make(it->min_name, it->value_bounds.min, box[i].min);
+                            }
+                        }
+                        if (box[i].has_upper_bound()) {
+                            if (expr_uses_var(box[i].max, it->max_name)) {
+                                box[i].max = Let::make(it->max_name, it->value_bounds.max, box[i].max);
+                            }
+                            if (expr_uses_var(box[i].max, it->min_name)) {
+                                box[i].max = Let::make(it->min_name, it->value_bounds.min, box[i].max);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (is_let_stmt::value) {
+                let_stmts.pop(it->op->name);
+
+                // If this let stmt shadowed an outer one, we need
+                // to re-insert the children from the previous let
+                // stmt into the map.
+                if (!it->old_let_vars.empty()) {
+                    internal_assert(it->vi.instance > 0);
+                    VarInstance old_vi = VarInstance(it->vi.var, it->vi.instance-1);
+                    for (const auto &v : it->old_let_vars) {
+                        internal_assert(vars_renaming.count(v));
+                        children[get_var_instance(v)].insert(old_vi);
+                    }
+                }
+
+                // Remove the children from the current let stmt.
+                for (const auto &v : it->collect.vars) {
+                    internal_assert(vars_renaming.count(v));
+                    children[get_var_instance(v)].erase(it->vi);
+                }
+            }
+
+            pop_var(it->op->name);
+        }
     }
 
     void visit(const Let *op) {

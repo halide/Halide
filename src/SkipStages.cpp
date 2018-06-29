@@ -335,39 +335,28 @@ private:
     Stmt visit(const LetStmt *op) override {
         struct Frame {
             const LetStmt *op;
-            StageSkipper *s;
-            Stmt *result;
             bool vector_var;
-            Frame(const LetStmt *op, StageSkipper *s, Stmt *result) :
-                op(op), s(s), result(result),
-                vector_var(s->in_vector_loop &&
-                           expr_uses_vars(op->value, s->vector_vars)) {
-                if (vector_var) {
-                    s->vector_vars.push(op->name);
-                }
-            }
-            ~Frame() {
-                if (!result) return; // Was moved-from
-                if (vector_var) {
-                    s->vector_vars.pop(op->name);
-                }
-                *result = LetStmt::make(op->name, op->value, *result);
-            }
-            Frame(const Frame &) = delete;
-            Frame(Frame &&f) : op(f.op), s(f.s), result(f.result), vector_var(f.vector_var) {
-                f.result = nullptr;
-            }
         };
+        vector<Frame> frames;
         Stmt result;
-        {
-            vector<Frame> frames;
-            frames.emplace_back(op, this, &result);
-            Stmt body = op->body;
-            while (const LetStmt *l = body.as<LetStmt>()) {
-                frames.emplace_back(l, this, &result);
-                body = l->body;
+
+        while (op) {
+            bool vector_var = in_vector_loop && expr_uses_vars(op->value, vector_vars);
+            frames.push_back({op, vector_var});
+            if (vector_var) {
+                vector_vars.push(op->name);
             }
-            result = mutate(body);
+            result = op->body;
+            op = result.as<LetStmt>();
+        }
+
+        result = mutate(result);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->vector_var) {
+                vector_vars.pop(it->op->name);
+            }
+            result = LetStmt::make(it->op->name, it->op->value, result);
         }
         return result;
     }
