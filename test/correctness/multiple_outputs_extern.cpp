@@ -7,7 +7,7 @@
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
+extern "C" DLLEXPORT int flip_x_and_sum(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
     int min = out->dim[0].min;
     int max = out->dim[0].min + out->dim[0].extent - 1;
 
@@ -19,7 +19,7 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
         // If any of the inputs have a null host pointer, we're in
         // bounds inference mode, and should mutate those input
         // buffers that have a null host pointer.
-        printf("Doing flip_x bounds inference over [%d %d]\n", min, max);
+        printf("Doing flip_x_and_sum bounds inference over [%d %d]\n", min, max);
         if (in1->is_bounds_query()) {
             in1->dim[0].min = flipped_min;
             in1->dim[0].extent = extent;
@@ -30,14 +30,12 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
         }
         // We don't mutate the output buffer, because we can handle
         // any size output.
-
-        //printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
     } else {
         assert(in1->type == halide_type_of<uint8_t>());
         assert(in2->type == halide_type_of<int32_t>());
         assert(out->type == halide_type_of<uint8_t>());
 
-        printf("Computing flip_x over [%d %d]\n", min, max);
+        printf("Computing flip_x_and_sum over [%d %d]\n", min, max);
 
         // Check the inputs are as large as we expected. They should
         // be, if the above bounds inference code is right.
@@ -82,7 +80,7 @@ int main(int argc, char **argv) {
     std::vector<ExternFuncArgument> args(2);
     args[0] = input;
     args[1] = f;
-    g.define_extern("flip_x", args, UInt(8), 1);
+    g.define_extern("flip_x_and_sum", args, UInt(8), 1);
 
     h(x) = g(x) * 2;
 
