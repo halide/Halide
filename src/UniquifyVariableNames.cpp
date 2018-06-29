@@ -8,12 +8,14 @@ namespace Internal {
 using std::map;
 using std::string;
 using std::vector;
+using std::set;
 
 class UniquifyVariableNames : public IRMutator2 {
 
     using IRMutator2::visit;
 
     map<string, int> vars;
+    set<string> used;
 
     void push_name(string s) {
         if (vars.find(s) == vars.end()) {
@@ -50,8 +52,9 @@ class UniquifyVariableNames : public IRMutator2 {
         vector<Frame> frames;
         decltype(op->body) result;
         while (op) {
+            Expr val = mutate(op->value);
             push_name(op->name);
-            frames.push_back({op, mutate(op->value), get_name(op->name)});
+            frames.push_back({op, val, get_name(op->name)});
             result = op->body;
             op = result.template as<LetOrLetStmt>();
         }
@@ -60,12 +63,15 @@ class UniquifyVariableNames : public IRMutator2 {
 
         for (auto it = frames.rbegin(); it != frames.rend(); it++) {
             pop_name(it->op->name);
-            if (it->new_name == it->op->name &&
-                result.same_as(it->op->body) &&
-                it->op->value.same_as(it->value)) {
-                result = it->op;
-            } else {
-                result = LetOrLetStmt::make(it->new_name, it->value, result);
+            if (used.count(it->new_name)) {
+                if (it->new_name == it->op->name &&
+                    result.same_as(it->op->body) &&
+                    it->op->value.same_as(it->value)) {
+                    result = it->op;
+                } else {
+                    result = LetOrLetStmt::make(it->new_name, it->value, result);
+                }
+                used.erase(it->new_name);
             }
         }
 
@@ -100,6 +106,7 @@ class UniquifyVariableNames : public IRMutator2 {
 
     Expr visit(const Variable *op) override {
         string new_name = get_name(op->name);
+        used.insert(new_name);
         if (op->name != new_name) {
             return Variable::make(op->type, new_name);
         } else {
