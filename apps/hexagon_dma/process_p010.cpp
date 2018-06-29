@@ -34,8 +34,6 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint16_t> input_y = input.cropped(1, 0, height);    // Luma plane only
     Halide::Runtime::Buffer<uint16_t> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
 
-    input_uv.allocate();
-    input_y.allocate();
 
     input_uv.embed(2, 0);
     input_uv.raw_buffer()->dim[2].extent = 2;

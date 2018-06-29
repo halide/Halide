@@ -23,10 +23,14 @@ int main(int argc, char **argv) {
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
-    // Giving 4 dimensions to test for the assert condition Buffer Dimensions <= 3
+
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2, 2);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 2, 2);
 
+    // TODO: We shouldn't need to allocate a host buffer here, but the
+    // current implementation of cropping + halide_buffer_copy needs
+    // it to work correctly.
+    input.allocate();
 
     // Give the input the buffer we want to DMA from.
     input.device_wrap_native(halide_hexagon_dma_device_interface(),
@@ -42,9 +46,10 @@ int main(int argc, char **argv) {
     // to host without doing this is an error.
     // The Last parameter 0 indicate DMA Read
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_RawData);
+    // This to just to Valide the Assertion checkes for RAW Processing
+    // Assertion checks Fail for dimensions >=4
+    // Used last two dimensions as same value just to use a 4-D Buffer
 
-    // This is just to Verify the Assertion Error checks
-    // Giving 4 dimensions to test for the assert condition Buffer Dimensions <= 3
     Halide::Runtime::Buffer<uint8_t> output(width, height, 2, 2);
 
     int result = pipeline_err(input, output);

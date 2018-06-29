@@ -31,10 +31,6 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height);
 
-    // TODO: We shouldn't need to allocate a host buffer here, but the
-    // current implementation of cropping + halide_buffer_copy needs
-    // it to work correctly.
-    input.allocate();
 
     // Give the input the buffer we want to DMA from.
     input.device_wrap_native(halide_hexagon_dma_device_interface(),
