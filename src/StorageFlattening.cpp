@@ -31,7 +31,6 @@ public:
             outputs.insert(f.name());
         }
     }
-    Scope<> scope;
 private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
@@ -43,9 +42,6 @@ private:
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
         name = name + "." + field + "." + std::to_string(dim);
-        if (scope.contains(name + ".constrained")) {
-            name = name + ".constrained";
-        }
         return Variable::make(Int(32), name, buf, param, rdom);
     }
 
@@ -359,22 +355,6 @@ private:
         }
         Stmt body = mutate(op->body);
         return Block::make(prefetch_call, body);
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        // Discover constrained versions of things.
-        bool constrained_version_exists = ends_with(op->name, ".constrained");
-        if (constrained_version_exists) {
-            scope.push(op->name);
-        }
-
-        Stmt stmt = IRMutator2::visit(op);
-
-        if (constrained_version_exists) {
-            scope.pop(op->name);
-        }
-
-        return stmt;
     }
 
     Stmt visit(const For *op) override {

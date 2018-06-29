@@ -10,6 +10,9 @@ CXXFLAGS += -DWITH_FFTW
 LDFLAGS += -lfftw3f
 endif
 
+# Use a small stack, to stress out the compiler
+LDFLAGS += -Wl,-stack_size -Wl,0xa0000
+
 $(BIN)/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o $@ $(LDFLAGS) $(LLVM_SHARED_LIBS) $(HALIDE_SYSTEM_LDFLAGS)

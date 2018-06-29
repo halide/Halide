@@ -38,36 +38,63 @@ class UniquifyVariableNames : public IRMutator2 {
         vars[s]--;
     }
 
-    Stmt visit(const LetStmt *op) override {
-        Expr value = mutate(op->value);
-        push_name(op->name);
-        string new_name = get_name(op->name);
-        Stmt body = mutate(op->body);
-        pop_name(op->name);
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        using Body = decltype(op->body);
+        struct Frame {
+            const T *op;
+            UniquifyVariableNames *u;
+            Body *result;
+            Expr value;
+            string new_name;
 
-        if (new_name == op->name &&
-            body.same_as(op->body) &&
-            value.same_as(op->value)) {
-            return op;
-        } else {
-            return LetStmt::make(new_name, value, body);
+            Frame(const T *op, UniquifyVariableNames *u, Body *result) : op(op), u(u), result(result) {
+                value = u->mutate(op->value);
+                u->push_name(op->name);
+                new_name = u->get_name(op->name);
+            }
+
+            ~Frame() {
+                if (!value.defined()) return; // Was moved-from in vector realloc
+
+                u->pop_name(op->name);
+                if (new_name == op->name &&
+                    result->same_as(op->body) &&
+                    value.same_as(op->value)) {
+                    *result = op;
+                } else {
+                    *result = T::make(new_name, value, *result);
+                }
+            }
+
+            Frame(const Frame &) = delete;
+            Frame(Frame &&) = default;
+        };
+
+        Body result;
+
+        {
+            std::vector<Frame> stack;
+            stack.emplace_back(op, this, &result);
+            Body body = op->body;
+            while (const T *t = body.template as<T>()) {
+                stack.emplace_back(t, this, &result);
+                body = t->body;
+            }
+            result = mutate(body);
         }
+
+        // The destructors of the Frame objects have rewrapped the
+        // result with the appropriate lets
+        return result;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
     Expr visit(const Let *op) override {
-        Expr value = mutate(op->value);
-        push_name(op->name);
-        string new_name = get_name(op->name);
-        Expr body = mutate(op->body);
-        pop_name(op->name);
-
-        if (new_name == op->name &&
-            body.same_as(op->body) &&
-            value.same_as(op->value)) {
-            return op;
-        } else {
-            return Let::make(new_name, value, body);
-        }
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
