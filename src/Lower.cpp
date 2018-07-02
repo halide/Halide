@@ -182,7 +182,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s);
+    s = simplify(s, false); // Storage folding needs .loop_max symbols
     debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
