@@ -744,9 +744,9 @@ struct FunctionDAG {
                     zeros_per_col[j] += deriv.is_zero();
                     ones_per_col[j] += deriv.is_one();
                     is_pointwise &= (i == j ? deriv.is_one() : deriv.is_zero());
-                    if (i == vector_dim) {
-                        is_vector &= (j == 0 ? deriv.is_one() : deriv.is_zero());
-                        is_strided &= (j == 0 ? deriv.is_small_integer() : deriv.is_zero());
+                    if (j == vector_dim) {
+                        is_vector &= (i == 0 ? deriv.is_one() : deriv.is_zero());
+                        is_strided &= (i == 0 ? deriv.is_small_integer() : deriv.is_zero());
                         is_scalar &= deriv.is_zero();
                     }
                 }
@@ -1836,14 +1836,13 @@ struct State {
 
                 // This is model v0, to bootstrap training data generation for
                 // an actual model. Just wrote down something reasonable-sounding.
-                /*
                 // Don't compute stuff or allocate memory. Large inner loops are good.
                 cost += (feat.points_computed_total +
                          feat.inlined_calls +
                          feat.num_realizations * feat.bytes_at_production -
                          std::sqrt(feat.innermost_pure_loop_extent) * 100);
-                */
 
+                /*
                 // Model v1 is a least-squares fit on the features and
                 // the features squared trying to predict
                 // throughput. PipelineFeatures were used in the
@@ -1920,6 +1919,7 @@ struct State {
                     double w = std::log(1 + sched_stats[i]);
                     cost -= (linear_weights[i] + square_weights[i] * w) * w;
                 }
+                */
             }
         }
 
