@@ -223,6 +223,9 @@ struct FunctionDAG {
 
             // The featurization of the compute done
             PipelineFeatures features;
+
+            // Coefficients for the bilinear cost model for this pipeline stage.
+            float bilinear_model[18];
         };
         vector<Stage> stages;
 
@@ -749,9 +752,9 @@ struct FunctionDAG {
                     zeros_per_col[j] += deriv.is_zero();
                     ones_per_col[j] += deriv.is_one();
                     is_pointwise &= (i == j ? deriv.is_one() : deriv.is_zero());
-                    if (i == vector_dim) {
-                        is_vector &= (j == 0 ? deriv.is_one() : deriv.is_zero());
-                        is_strided &= (j == 0 ? deriv.is_small_integer() : deriv.is_zero());
+                    if (j == vector_dim) {
+                        is_vector &= (i == 0 ? deriv.is_one() : deriv.is_zero());
+                        is_strided &= (i == 0 ? deriv.is_small_integer() : deriv.is_zero());
                         is_scalar &= deriv.is_zero();
                     }
                 }
@@ -825,6 +828,34 @@ struct FunctionDAG {
                     v = common_subexpression_elimination(simplify(v)); // Get things into canonical form
                     v.accept(&featurizer);
                 }
+
+                // Compute coefficients for the schedule features for
+                // this stage using the learned bilinear model.
+
+                const int *pipeline_features = (const int *)(&stage.features);
+
+                // The bilinear model is simple, and doesn't
+                // distinguish between different types. First we sum
+                // the pipeline features across types with a weight
+                // corresponding to the number of bytes in the type.
+                float pipeline_feature_vec[58];
+                memset(pipeline_feature_vec, 0, sizeof(pipeline_feature_vec));
+
+                pipeline_feature_vec[0] = stage_idx;
+                const int cost_per_type[7] = {1, 1, 2, 4, 8, 4, 8};
+                for (int i = 0; i < 57; i++) {
+                    for (int j = 0; j < 7; j++) {
+                        pipeline_feature_vec[i + 1] += pipeline_features[i * 7 + j] * cost_per_type[j];
+                    };
+                }
+
+                // We then whiten this using learned weights. Note
+                // that a large number of coefficients are simply
+                // ignored, even after the summation across types,
+                // because they were always zero in the training set.
+
+
+                // We then multiply by a large matrix
             }
         }
     }
@@ -892,7 +923,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
                     t.back() = 1;
                     result.push_back(t);
                 }
-                if (s[d] != 1 && !is_full && is_one) {
+                if (s[d] != 1 && !is_full && is_one && (d != vector_dim)) {
                     t.back() = s[d];
                     result.push_back(t);
                 }
@@ -1109,7 +1140,6 @@ struct PartialScheduleNode {
             // Figure out the features at the store_at level
             const auto &bounds = get_bounds(f, dag);
             const auto *node = dag.node_map.at(f);
-            const auto &root_bounds = root.get_bounds(f, dag);
 
             for (size_t s = 0; s < node->stages.size(); s++) {
                 // TODO: Lift invariants from this loop. Most of it's the same for every stage.
@@ -1138,16 +1168,36 @@ struct PartialScheduleNode {
                 for (auto p : bounds.region_computed) {
                     points_computed *= p.second - p.first + 1;
                 }
+            }
+        }
 
-                {
-                    // This is as good a place as any to figure out the root-level features
+        // Track features for inlined Funcs
+        for (auto p : inlined) {
+            auto &f = p.first;
+            vector<ScheduleFeatures> &func_features = (*features)[f];
+            func_features.resize(1);
+            auto &feat = func_features[0];
+            feat.inlined_calls += p.second * subinstances;
+
+
+        }
+
+        if (is_root()) {
+            // Figure out the root-level features for every Func
+            for (auto &p : *features) {
+                auto &f = p.first;
+                auto &feat_vec = p.second;
+                const auto *node = dag.node_map.at(f);
+                const auto &root_bounds = root.get_bounds(f, dag);
+                int s = 0;
+                for (auto &feat : feat_vec) {
                     feat.bytes_at_root = node->bytes_per_point;
                     for (auto p : root_bounds.region_computed) {
                         feat.bytes_at_root *= (p.second - p.first) + 1;
                     }
                     int64_t innermost_storage_extent = 1;
-                    if (!bounds.region_computed.empty()) {
-                        innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
+                    if (!root_bounds.region_computed.empty()) {
+                        innermost_storage_extent = root_bounds.region_computed[0].second - root_bounds.region_computed[0].first + 1;
                     }
                     feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
 
@@ -1155,15 +1205,9 @@ struct PartialScheduleNode {
                     for (auto p : root_bounds.loops[s]) {
                         feat.points_computed_minimum *= (p.second - p.first + 1);
                     }
+                    s++;
                 }
             }
-        }
-
-        // Track features for inlined Funcs
-        for (auto p : inlined) {
-            vector<ScheduleFeatures> &func_features = (*features)[p.first];
-            func_features.resize(1);
-            func_features[0].inlined_calls += p.second * subinstances;
         }
     }
 
@@ -1216,8 +1260,8 @@ struct PartialScheduleNode {
                 << "No consumers of " << f.name()
                 << " at loop over " << (is_root() ? "root" : func.name()) << '\n';
             for (const auto *e : dag.outgoing_edges.at(f)) {
-                if (!bounds.count(e->consumer) && !calls(e->consumer, dag)) {
-                    // debug(0) << "Skipping over " << e->consumer.name() << '\n';
+                // Ignore consumers outside of this loop nest
+                if (!computes(e->consumer)) {
                     continue;
                 }
                 const auto &c_bounds = get_bounds(e->consumer, dag);
@@ -1261,7 +1305,7 @@ struct PartialScheduleNode {
                     }
                 }
             }
-            internal_assert(bound.region_required.size() == (size_t)f.dimensions()) << is_root() << " " << f.name() << '\n';
+            internal_assert(bound.region_required.size() == (size_t)f.dimensions()) << is_root() << " " << f.name() << ' ' << bound.region_required.size() << ' ' << f.dimensions() << '\n';
         }
 
         // Use the region required and the dag to compute the region computed and the iteration domain
@@ -1459,7 +1503,14 @@ struct PartialScheduleNode {
             }
         }
 
-        {
+        int vector_size = is_root() ? 1 : dag.node_map.at(func)->stages[stage].vector_size;
+        int vector_dim = 0;
+        if (!is_root()) {
+            const auto &l = dag.node_map.at(func)->stages[stage].loop;
+            while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
+        }
+
+        if (!in_realization || size[vector_dim] == 1) {
             // Place the computation inside this loop
             PartialScheduleNode r = *this;
             r.compute_here(f, dag);
@@ -1474,13 +1525,6 @@ struct PartialScheduleNode {
         if (dag.outgoing_edges.at(f).empty()) {
             // Can't tile outputs
             return result;
-        }
-
-        int vector_size = is_root() ? 1 : dag.node_map.at(func)->stages[stage].vector_size;
-        int vector_dim = 0;
-        if (!is_root()) {
-            const auto &l = dag.node_map.at(func)->stages[stage].loop;
-            while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
         }
 
         if (tileable) {
@@ -1535,17 +1579,10 @@ struct PartialScheduleNode {
                     new_inner_iteration_domain_points = 1,
                     new_outer_iteration_domain_points = 1;
 
-                // Track the number of ones in the inner size, so that
-                // we can tell whether or not it's appropriate to
-                // slide over it.
-                size_t num_ones = 0;
-                bool splits_vector_dim = false;
                 for (size_t i = 0; i < t.size(); i++) {
                     old_stage_iteration_domain_points *= b.loops[stage][i].second - b.loops[stage][i].first + 1;
                     int factor = t[i];
                     inner->size[i] = (outer.size[i] + factor - 1) / factor;
-                    if (inner->size[i] == 1) num_ones++;
-                    splits_vector_dim |= ((int)i == vector_dim && factor != 1);
                     outer.size[i] = factor;
                     int64_t min = parent_bounds.loops[stage][i].first;
                     int64_t extent = parent_bounds.loops[stage][i].second - min + 1;
@@ -1573,9 +1610,7 @@ struct PartialScheduleNode {
                 }
                 result.emplace_back(std::move(compute_at_here));
 
-                bool may_slide = ((num_ones == t.size() - 1) &&
-                                  !splits_vector_dim &&
-                                  !in_realization &&
+                bool may_slide = (!in_realization &&
                                   !f.has_update_definition());
                 if (may_slide) {
                     // Also consider just storing here, but computing
@@ -1599,12 +1634,13 @@ struct PartialScheduleNode {
             // Push the Func further inwards in the loop nest
 
             // See if it's appropriate to slide over this loop
+            const vector<int64_t> &child_size = children[child]->size;
             int num_ones = 0;
-            for (auto s : size) {
+            for (auto s : child_size) {
                 num_ones += (s == 1) ? 1 : 0;
             }
-            bool may_slide = !is_root() && (num_ones == ((int)size.size() - 1)) && !f.has_update_definition();
-            may_slide &= (vector_dim >= (int)size.size()) || (size[vector_dim] == 1);
+            bool may_slide = !is_root() && (num_ones == ((int)child_size.size() - 1)) && !f.has_update_definition();
+            may_slide &= (vector_dim >= (int)child_size.size()) || (child_size[vector_dim] == 1);
             for (int store_here = 0; store_here < 2; store_here++) {
                 if (store_here && !may_slide) {
                     // We place all our parallel loops at the root
@@ -1625,8 +1661,6 @@ struct PartialScheduleNode {
                 }
             }
         }
-
-        internal_assert(!result.empty());
 
         return result;
     }
@@ -1831,16 +1865,12 @@ struct State {
         int schedule_feat_size = 18;
 
         cost = 0;
+
         // use either deep network or linear model to predict cost
         if (throughput_predictor) {
-            unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-            std::default_random_engine generator(seed);
-            std::normal_distribution<float> distribution(0.0,1.0);  
-
             Buffer<float> pipeline_features(1, 56, 7, num_stages); // just predicting on batch size of 1 pipeline
             Buffer<float> schedule_features(1, 18, num_stages);
             Buffer<float> network_output(1,1,1);
-
 
             // index of current stage whose features we are reading
             int stage = 0;
@@ -1857,10 +1887,6 @@ struct State {
                       pipeline_features(0, x, y, stage) = pipeline_feats[i]; 
                       pipeline_features(0, x, y, stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
                       pipeline_features(0, x, y, stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
-                      /**
-                      float val =  distribution(generator);
-                      pipeline_features(0, x, y, stage) = val; 
-                      **/
                     }
                     stage += 1;
                 } 
@@ -1886,22 +1912,14 @@ struct State {
                         schedule_features(0, i, stage) = std::log(1+sched_stats[i]);
                         schedule_features(0, i, stage) -= throughput_predictor->feature_stats.schedule_mean(i);
                         schedule_features(0, i, stage) /= throughput_predictor->feature_stats.schedule_std(i);
-                        //schedule_features(0, i, stage) = distribution(generator);
                     }
                     stage += 1;
                 }
             }
 
-
             throughput_predictor->set_inputs(pipeline_features, schedule_features);
             throughput_predictor->prediction.realize(network_output);
-            /**
-            for (int i = 0; i < 20; i++) {
-              for (int j = 10; j < 12; j++) {
-                  std::cout << network_output(0,i,j) << " ";
-              }
-            }
-            **/
+            
             cost = -network_output(0,0,0);
         } 
 
@@ -1920,17 +1938,36 @@ struct State {
                         debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
                         feat.dump();
                     }
+                    // This is model v0, to bootstrap training data
+                    // generation for an actual model. Just wrote down
+                    // something reasonable-sounding that corresponds
+                    // roughly to the Ravi cost model, then tuned the two
+                    // constants to have OK performance on local
+                    // laplacian.
+                    auto &stage = dag.node_map.at(p.first)->stages[s];
+                    double compute_cost = 0;
+                    const int *pipeline_feat = (const int *)(&stage.features);
+                    for (size_t i = 0; i < sizeof(stage.features) / sizeof(int); i++) {
+                        // A very crude compute cost that just adds up the histograms
+                        compute_cost += pipeline_feat[i];
+                    }
+                    compute_cost *= feat.points_computed_total + feat.inlined_calls;
 
-                    // This is model v0, to bootstrap training data generation for
-                    // an actual model. Just wrote down something reasonable-sounding.
+                    // Get a bonus for large inner loops and a penalty for small ones
+                    if (feat.inlined_calls == 0) {
+                        compute_cost *= 0.9 + 10.0 / feat.innermost_pure_loop_extent;
+                    }
+
+                    // Pay a super-linear penalty for large
+                    // allocations. Nothing wrong with them per-se, but
+                    // they're a good indicator of poor producer-consumer
+                    // locality in Halide.
+                    double memory_cost = 5 * feat.bytes_at_production * std::log(feat.bytes_at_production + 1);
+                    memory_cost *= feat.num_realizations;
+
+                    cost += compute_cost + memory_cost;
+                    
                     /*
-                    // Don't compute stuff or allocate memory. Large inner loops are good.
-                    cost += (feat.points_computed_total +
-                             feat.inlined_calls +
-                             feat.num_realizations * feat.bytes_at_production -
-                             std::sqrt(feat.innermost_pure_loop_extent) * 100);
-                    */
-
                     // Model v1 is a least-squares fit on the features and
                     // the features squared trying to predict
                     // throughput. PipelineFeatures were used in the
@@ -2006,7 +2043,7 @@ struct State {
                     for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
                         double w = std::log(1 + sched_stats[i]);
                         cost -= (linear_weights[i] + square_weights[i] * w) * w;
-                    }
+                    }*/
                 }
             }
         }
@@ -2049,7 +2086,6 @@ struct State {
 
         // 2) Realize it somewhere
         auto tile_options = root.compute_in_tiles(f, dag, nullptr, params, false);
-        debug(0) << "Produced " << tile_options.size() << " tile options\n";
         for (PartialScheduleNode n : tile_options) {
             auto child = new State(*this);
             child->root = std::move(n);
