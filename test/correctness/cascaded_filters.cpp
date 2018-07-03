@@ -13,7 +13,7 @@ Func blur(Func in, std::string n) {
 }
 
 int main(int argc, char **argv) {
-    Buffer<float> input = lambda(x, sin(x) + 1.0f).realize(1000);
+    /*Buffer<float> input = lambda(x, sin(x) + 1.0f).realize(1000);
 
     std::vector<Func> stages;
     Func first("S0");
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     if (err > 0.001f) {
         printf("Error too large!\n");
         return -1;
-    }
+    }*/
 
     printf("Success!\n");
     return 0;

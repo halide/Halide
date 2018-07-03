@@ -61,11 +61,13 @@ string get_pointwise_copy_producer(const Function &f,
         return prod;
     }*/
 
+    debug(0) << "\n\nGET POINTWISE COPIES FOR: " << f.name() << "\n";
     string prod;
     for (int i = 0; i < (int)f.values().size(); ++i) {
         Expr val = perform_inline(f.values()[i], env, inlined);
         if (const Call *call = val.as<Call>()) {
             if (call->call_type == Call::Halide) {
+                debug(0) << "\t...Checking call: " << Expr(call) << "\n";
                 // Check if it is a pointwise copy. For tuple, check if 'f'
                 // copies the whole tuple values.
                 if (!prod.empty() && (prod != call->name)) {
@@ -92,6 +94,7 @@ string get_pointwise_copy_producer(const Function &f,
                              << f.dimensions() << " vs " << prod_f.dimensions() << ")\n";
                     return "";
                 }
+                internal_assert(f.args().size() == call->args.size());
 
                 if (f.values().size() != prod_f.values().size()) {
                     debug(4) << "...Function \"" << f.name() << "\" does not call "
@@ -112,14 +115,29 @@ string get_pointwise_copy_producer(const Function &f,
                     // Check if the call args are equivalent for both the
                     // RHS ('f') and LHS ('prod_f').
                     // TODO(psuriana): Handle case for copy with some index shifting
+                    debug(0) << "\tcons: " << f.name() << ", cons arg: " << f.args()[j] << ", prod: " << prod_f.name() << ", prod arg: " << call->args[j] << "\n";
+                    if (!equal(f.args()[j], call->args[j])) {
+                        debug(0) << "At arg " << j << ", " << f.name() << "("
+                                 << f.args()[i] << ") != " << prod_f.name()
+                                 << "[" << call->value_index << "]("
+                                 << call->args[j] << ")\n";
+                        return "";
+                    }
+                }
+
+                /*for (int j = 0; j < f.dimensions(); ++j) {
+                    // Check if the call args are equivalent for both the
+                    // RHS ('f') and LHS ('prod_f').
+                    // TODO(psuriana): Handle case for copy with some index shifting
+                    debug(0) << "\tcons: " << f.name() << ", cons arg: " << f.args()[j] << ", prod: " << prod_f.name() << ", prod arg: " << prod_f.args()[j] << "\n";
                     if (!equal(f.args()[j], prod_f.args()[j])) {
-                        debug(4) << "At arg " << j << ", " << f.name() << "("
+                        debug(0) << "At arg " << j << ", " << f.name() << "("
                                  << f.args()[i] << ") != " << prod_f.name()
                                  << "[" << call->value_index << "]("
                                  << prod_f.args()[j] << ")\n";
                         return "";
                     }
-                }
+                }*/
             }
         } else if (!prod.empty()) {
             debug(4) << "...Function \"" << f.name() << "\" does not call "
@@ -294,7 +312,7 @@ map<string, string> get_pointwise_copies(const map<string, Function> &env) {
 }
 
 void copy_elision_test() {
-    if (0) {
+    if (1) {
         Func tile("tile"), output("output"), f("f"), g("g"), h("h"), in("in");
         Var x("x"), y("y");
 
@@ -312,6 +330,12 @@ void copy_elision_test() {
         env.emplace(g.name(), g.function());
         env.emplace(h.name(), h.function());
         env.emplace(in.name(), in.function());
+
+        f.compute_root();
+        g.compute_root();
+        h.compute_root();
+        in.compute_root();
+        tile.compute_root();
 
         for (auto &iter : env) {
            iter.second.lock_loop_levels();
@@ -346,6 +370,11 @@ void copy_elision_test() {
         env.emplace(output.name(), output.function());
         env.emplace(output_copy.name(), output_copy.function());
 
+        input.compute_root();
+        input_copy.compute_root();
+        work.compute_root();
+        output.compute_root();
+
         for (auto &iter : env) {
            iter.second.lock_loop_levels();
         }
@@ -360,7 +389,7 @@ void copy_elision_test() {
         debug(0) << "\n";
     }
 
-    if (0) {
+    if (1) {
         Func input("input"), input_copy("input_copy"), work("work");
         Func output("output"), output_copy("output_copy");
 
@@ -378,6 +407,11 @@ void copy_elision_test() {
         env.emplace(work.name(), work.function());
         env.emplace(output.name(), output.function());
         env.emplace(output_copy.name(), output_copy.function());
+
+        input.compute_root();
+        input_copy.compute_root();
+        work.compute_root();
+        output.compute_root();
 
         for (auto &iter : env) {
            iter.second.lock_loop_levels();
