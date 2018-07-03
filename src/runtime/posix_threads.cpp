@@ -135,6 +135,4 @@ struct thread_parker {
 
 #include "synchronization_common.h"
 
-#define TLS_PARENT_LINK 1
-
 #include "thread_pool_common.h"

@@ -145,8 +145,10 @@ typedef int (*halide_semaphore_init_t)(struct halide_semaphore_t *, int);
 typedef int (*halide_semaphore_release_t)(struct halide_semaphore_t *, int);
 typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int);
 
+
 /** A task representing a serial for loop evaluated over some range. */
-typedef int (*halide_loop_task_t)(void *user_context, int min, int extent, uint8_t *closure);
+typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
+                                  uint8_t *closure, void *);
 
 /** A parallel task to be passed to halide_do_parallel_tasks. That
  * tasks may recursively call halide_do_parallel_tasks, and there may
@@ -219,7 +221,8 @@ struct halide_parallel_task_t {
  * to complete. While waiting, the calling threads assists with either
  * the tasks enqueued, or other non-blocking tasks in the task
  * system. */
-extern int halide_do_parallel_tasks(void *user_context, int num_tasks, struct halide_parallel_task_t *tasks);
+extern int halide_do_parallel_tasks(void *user_context, int num_tasks,
+                                    struct halide_parallel_task_t *tasks, void *task_parent);
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
@@ -233,10 +236,10 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
 /** The version of do_task called for loop tasks. By default calls the
  * loop task with the same arguments. */
 // @{
-typedef int (*halide_do_loop_task_t)(void *, halide_loop_task_t, int, int, uint8_t *);
+  typedef int (*halide_do_loop_task_t)(void *, halide_loop_task_t, int, int, uint8_t *, void *);
 extern halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t do_task);
 extern int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min, int extent,
-                                uint8_t *closure);
+                               uint8_t *closure, void *task_parent);
 //@}
 
 /** Provide an entire custom tasking runtime via function
@@ -246,7 +249,8 @@ extern int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min
  * those if you are mixing in the default implementations of
  * do_par_for and do_parallel_tasks. */
 // @{
-typedef int (*halide_do_parallel_tasks_t)(void *, int, struct halide_parallel_task_t *);
+typedef int (*halide_do_parallel_tasks_t)(void *, int, struct halide_parallel_task_t *,
+                                          void *task_parent);
 extern void halide_set_custom_parallel_runtime(
     halide_do_par_for_t,
     halide_do_task_t,
@@ -265,11 +269,13 @@ extern int halide_default_do_par_for(void *user_context,
                                      int min, int size, uint8_t *closure);
 extern int halide_default_do_parallel_tasks(void *user_context,
                                             int num_tasks,
-                                            struct halide_parallel_task_t *tasks);
+                                            struct halide_parallel_task_t *tasks,
+                                            void *task_parent);
 extern int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                   uint8_t *closure);
 extern int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
-                                       int min, int extent, uint8_t *closure);
+                                       int min, int extent,
+                                       uint8_t *closure, void *task_parent);
 extern int halide_default_semaphore_init(struct halide_semaphore_t *, int n);
 extern int halide_default_semaphore_release(struct halide_semaphore_t *, int n);
 extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, int n);

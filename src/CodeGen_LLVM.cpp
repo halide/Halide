@@ -3134,7 +3134,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
 
     llvm::Type *args_t[] = {i8_t->getPointerTo(), i32_t, i8_t->getPointerTo()};
     FunctionType *task_t = FunctionType::get(i32_t, args_t, false);
-    llvm::Type *loop_args_t[] = {i8_t->getPointerTo(), i32_t, i32_t, i8_t->getPointerTo()};
+    llvm::Type *loop_args_t[] = {i8_t->getPointerTo(), i32_t, i32_t, i8_t->getPointerTo(), i8_t->getPointerTo()};
     FunctionType *loop_task_t = FunctionType::get(i32_t, loop_args_t, false);
 
     Value *result = nullptr;
@@ -3188,11 +3188,13 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         // do_parallel_tasks. halide_do_par_for is simpler, but
         // assumes a bunch of things. Programs that don't use async
         // can also enter the task system via do_par_for.
+        Value *task_parent = sym_get("__task_parent", false);
         bool use_do_par_for = (
             num_tasks == 1 &&
             min_threads.result == 1 &&
             t.semaphores.empty() &&
-            !may_block.result);
+            !may_block.result &&
+            !task_parent);
 
         // Make the array of semaphore acquisitions this task needs to do before it runs.
         Value *semaphores;
@@ -3277,7 +3279,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             ++iter;
         }
 
-        // The closure pointer is the last argument.
+        // The closure pointer is either the last (for halide_do_par_for) or
+        // second to last argument (for halide_do_parallel_tasks).
         ++iter;
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iterator_to_pointer(iter),
@@ -3286,6 +3289,14 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         // Load everything from the closure into the new scope
         unpack_closure(closure, symbol_table, closure_t, closure_handle, builder);
 
+        if (!use_do_par_for) {
+            // For halide_do_parallel_tasks the threading runtime task parent
+            // is the last argument.
+            ++iter;
+            iter->setName("task_parent");
+            sym_push("__task_parent", iterator_to_pointer(iter));
+        }
+        
         // Generate the new function body
         codegen(t.body);
 
@@ -3350,9 +3361,14 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         #else
         do_parallel_tasks->addParamAttr(2, Attribute::NoAlias);
         #endif
+        Value *task_parent = sym_get("__task_parent", false);
+        if (!task_parent) {
+            task_parent = ConstantPointerNull::get(i8_t->getPointerTo()); // void*
+        }
         Value *args[] = {get_user_context(),
                          ConstantInt::get(i32_t, num_tasks),
-                         task_stack_ptr};
+                         task_stack_ptr,
+                         task_parent};
         result = builder->CreateCall(do_parallel_tasks, args);
     }
 
