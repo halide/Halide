@@ -120,6 +120,7 @@ DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(default_cache_allocator) 
 DECLARE_CPP_INITMOD(hexagon_cache_allocator)
+DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
@@ -952,6 +953,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::HexagonDma)) {
             modules.push_back(get_initmod_hexagon_dma(c, bits_64, debug));
+            modules.push_back(get_initmod_hexagon_dma_pool(c, bits_64, debug));
         }
     }
 

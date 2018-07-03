@@ -646,6 +646,7 @@ RUNTIME_CPP_COMPONENTS = \
   float16_t \
   gpu_device_selection \
   hexagon_cpu_features \
+  hexagon_dma_pool \
   hexagon_dma \
   hexagon_host \
   ios_io \
@@ -709,7 +710,7 @@ RUNTIME_CPP_COMPONENTS = \
   write_debug_image \
   x86_cpu_features \
   hexagon_cache_allocator \
-  default_cache_allocator
+  default_cache_allocator \
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \

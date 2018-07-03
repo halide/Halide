@@ -49,7 +49,7 @@ $(BIN)/pipeline_rawplanar: pipeline_rawplanar.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/pipeline.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -g dma_pipeline -o $(BIN)/$* -e o,h,html -f pipeline target=$*-hexagon_dma
+	$^ -g dma_pipeline -o $(BIN)/$* -e o,h,html -f pipeline target=$*-hexagon_dma-debug
 $(BIN)/%/pipeline_nv12.o: $(BIN)/pipeline_nv12
 	@mkdir -p $(@D)
 	$^ -g dma_pipeline_nv12 -o $(BIN)/$* -e o,h,html -f pipeline_nv12 target=$*-hexagon_dma

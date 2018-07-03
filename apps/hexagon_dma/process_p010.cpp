@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint16_t> input(nullptr, width, (3 * height) / 2);
 
     void *dma_engine = nullptr;
-    halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
+    halide_hexagon_dma_allocate_engine(nullptr, 2, &dma_engine);
 
     Halide::Runtime::Buffer<uint16_t> input_y = input.cropped(1, 0, height);    // Luma plane only
     Halide::Runtime::Buffer<uint16_t> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height

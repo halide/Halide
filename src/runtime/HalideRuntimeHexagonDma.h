@@ -35,12 +35,12 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
 /** Before a buffer can be used in a copy operation (i.e. a DMA
  * operation), it must have a DMA engine allocated. */
 ///@{
-extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
-extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
+extern int halide_hexagon_dma_allocate_engine(void *user_context, int num, void ** dma_pool);
+extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_pool);
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, int fmt);
+                                                       void *dma_pool, bool is_ubwc, int fmt);
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, int fmt);
+                                                       void *dma_pool, bool is_ubwc, int fmt);
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 ///@}
 

@@ -33,7 +33,7 @@ public:
         // circular buffer of two tiles.
         copy
             .compute_at(output, tx)
-            .store_root()
+            .store_at(output, tx)
             .copy_to_host();
     }
 

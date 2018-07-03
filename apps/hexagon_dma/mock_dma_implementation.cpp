@@ -152,7 +152,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
 #endif
             for (int yii = 0; yii < h; yii++) {
                 // per line copy 
-                int ydst = yii * desc->stWord1.src_roi_stride * pixelsize;
+                int ydst = yii * desc->stWord1.dst_roi_stride * pixelsize;
                 int RoiOffset = (x + (y_offset + y) * desc->stWord1.src_roi_stride) * pixelsize;
                 int ysrc = yii * desc->stWord1.src_roi_stride * pixelsize;
                 int len = w * pixelsize;
