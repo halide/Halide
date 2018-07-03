@@ -11,11 +11,16 @@
 #include "Util.h"
 #include "PartitionLoops.h"
 
+#include "ThroughputPredictorPipeline.h"
+#include "ThroughputPredictorLoader.h"
+
 #include <set>
 #include <queue>
 #include <algorithm>
 #include <fstream>
 #include <chrono>
+#include <iostream>
+#include <random>
 
 // TODO: overview of algorithm
 
@@ -124,7 +129,7 @@ struct PipelineFeatures {
     // TODO: It's weird that we've already selected a
     // dimension to be vectorized over - that should be part
     // of the scheduling search space instead.
-
+  
     void dump() const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
@@ -1783,7 +1788,7 @@ struct State {
 
     static int cost_calculations;
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, bool verbose = false) {
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
         map<Function, const PartialScheduleNode *, Function::Compare> compute_site;
         map<Function, vector<ScheduleFeatures>, Function::Compare> features;
         root.compute_features(dag, params, compute_site, 1, 1, nullptr, root, &features);
@@ -1815,120 +1820,203 @@ struct State {
                 }
             }
         }
+        
+        // get the size of the feature to feed into the network
+        int num_stages = 0;
+        for (const auto &n : dag.nodes) { 
+          num_stages += n.stages.size();
+        }
 
-        // Evaluate cost model on the featurization here.
+        int pipeline_feat_size = 399;
+        int schedule_feat_size = 18;
+
         cost = 0;
+        // use either deep network or linear model to predict cost
+        if (throughput_predictor) {
+            unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+            std::default_random_engine generator(seed);
+            std::normal_distribution<float> distribution(0.0,1.0);  
 
-        for (auto p : features) {
-            for (size_t s = 0; s < p.second.size(); s++) {
-                const auto &feat = p.second[s];
-                // Reject silly schedules. They're not even useful for
-                // training data, as they potentially take the age of
-                // the universe to benchmark. We define 'silly' as
-                // doing more than 10x redundant recompute for any one
-                // stage.
-                if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
+            Buffer<float> pipeline_features(1, 56, 7, num_stages); // just predicting on batch size of 1 pipeline
+            Buffer<float> schedule_features(1, 18, num_stages);
+            Buffer<float> network_output(1,1,1);
 
-                if (verbose) {
-                    debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
-                    feat.dump();
+
+            // index of current stage whose features we are reading
+            int stage = 0;
+            // load pipeline features into input buffer
+            for (const auto &n : dag.nodes) { 
+                for (const auto &s : n.stages) {
+                    // cast the stage's pipeline features as an array of ints
+                    const int *pipeline_feats = (const int *)(&(s.features));
+                    // write features to file
+                    // skip the first 7 features
+                    for (int i = 7; i < pipeline_feat_size; i++) {
+                      int x = (i-7)/7;
+                      int y = (i-7)%7;
+                      pipeline_features(0, x, y, stage) = pipeline_feats[i]; 
+                      pipeline_features(0, x, y, stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
+                      pipeline_features(0, x, y, stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
+                      /**
+                      float val =  distribution(generator);
+                      pipeline_features(0, x, y, stage) = val; 
+                      **/
+                    }
+                    stage += 1;
+                } 
+            }
+
+            for (int i = 0; i < 56; i++) {
+              for (int j = 0; j < 7; j++) {
+                for (int k = 0; k < num_stages; k++) {
+                  if (pipeline_features(0,i,j,k) != pipeline_features(0,i,j,k)) {
+                    std::cout << "pipeline features index: " << i << "," << j << "," << k << " is NAN " << pipeline_features(0,i,j,k) << std::endl;
+                  }
                 }
+              }
+            } 
 
-                // This is model v0, to bootstrap training data generation for
-                // an actual model. Just wrote down something reasonable-sounding.
-                /*
-                // Don't compute stuff or allocate memory. Large inner loops are good.
-                cost += (feat.points_computed_total +
-                         feat.inlined_calls +
-                         feat.num_realizations * feat.bytes_at_production -
-                         std::sqrt(feat.innermost_pure_loop_extent) * 100);
-                */
+            stage = 0;
+            // load schedule features into input buffer
+            for (auto p : features) {
+                for (size_t s = 0; s < p.second.size(); s++) {
+                    const auto &feat = p.second[s];
+                    const int64_t *sched_stats = (const int64_t *)(&feat);
+                    for (int i = 0; i < schedule_feat_size; i++) {
+                        schedule_features(0, i, stage) = std::log(1+sched_stats[i]);
+                        schedule_features(0, i, stage) -= throughput_predictor->feature_stats.schedule_mean(i);
+                        schedule_features(0, i, stage) /= throughput_predictor->feature_stats.schedule_std(i);
+                        //schedule_features(0, i, stage) = distribution(generator);
+                    }
+                    stage += 1;
+                }
+            }
 
-                // Model v1 is a least-squares fit on the features and
-                // the features squared trying to predict
-                // throughput. PipelineFeatures were used in the
-                // prediction, but are ignored here because we're only
-                // comparing different schedules for the same
-                // pipeline. Some of the ScheduleFeatures also have
-                // that property (the ones computed at root), but we
-                // include them here for convenience. If you look at
-                // the non-trivial coefficients on things that depend
-                // on the schedule you'll see that it has basically
-                // learned one thing:
 
-                // Large innermost_bytes_at_realization is good,
-                // unless it gets *really* large. Have spatial
-                // coherence on output cache lines and don't break
-                // vectorization.
+            throughput_predictor->set_inputs(pipeline_features, schedule_features);
+            throughput_predictor->prediction.realize(network_output);
+            /**
+            for (int i = 0; i < 20; i++) {
+              for (int j = 10; j < 12; j++) {
+                  std::cout << network_output(0,i,j) << " ";
+              }
+            }
+            **/
+            cost = -network_output(0,0,0);
+        } 
 
-                // Smaller effects include:
+        else {
+            for (auto p : features) {
+                for (size_t s = 0; s < p.second.size(); s++) {
+                    const auto &feat = p.second[s];
+                    // Reject silly schedules. They're not even useful for
+                    // training data, as they potentially take the age of
+                    // the universe to benchmark. We define 'silly' as
+                    // doing more than 10x redundant recompute for any one
+                    // stage.
+                    if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
 
-                // - More points computed per realization is better
-                // (amortize malloc overhead)
+                    if (verbose) {
+                        debug(0) << "Schedule features for " << p.first.name() << " stage " << s << "\n";
+                        feat.dump();
+                    }
 
-                // - Fewer points computed total is better (minimize
-                // redundant recompute)
+                    // This is model v0, to bootstrap training data generation for
+                    // an actual model. Just wrote down something reasonable-sounding.
+                    /*
+                    // Don't compute stuff or allocate memory. Large inner loops are good.
+                    cost += (feat.points_computed_total +
+                             feat.inlined_calls +
+                             feat.num_realizations * feat.bytes_at_production -
+                             std::sqrt(feat.innermost_pure_loop_extent) * 100);
+                    */
 
-                // - Fewer bytes per realization is better (fit into
-                // local cache). Recall that we want *more* bytes
-                // along the innermost dimension, so this is really a
-                // constraint on the height of a tile)
+                    // Model v1 is a least-squares fit on the features and
+                    // the features squared trying to predict
+                    // throughput. PipelineFeatures were used in the
+                    // prediction, but are ignored here because we're only
+                    // comparing different schedules for the same
+                    // pipeline. Some of the ScheduleFeatures also have
+                    // that property (the ones computed at root), but we
+                    // include them here for convenience. If you look at
+                    // the non-trivial coefficients on things that depend
+                    // on the schedule you'll see that it has basically
+                    // learned one thing:
 
-                double linear_weights[] = {
-                    7.44107243e-08,
-                    -6.61684316e-08,
-                    1.38209663e-06,
-                    -9.72775735e-07,
-                    -2.15445520e-06,
-                    1.64845721e-06,
-                    1.42242235e-07,
-                    1.58736644e-07,
-                    -9.37325174e-08,
-                    1.77330511e-09,
-                    -1.21396794e-06,
-                    6.31298712e-07,
-                    -8.20550970e-08,
-                    8.74631069e-01,
-                    -1.68220271e-07,
-                    -8.74630980e-01,
-                    3.83216062e-08,
-                    -5.86168533e-07
-                };
-                double square_weights[] = {
-                    -1.07675757e-09,
-                    -3.02034990e-09,
-                    3.34156891e-09,
-                    2.31720771e-09,
-                    6.04231900e-08,
-                    -6.81740558e-08,
-                    -1.08771382e-08,
-                    -1.92484135e-08,
-                    5.48552892e-09,
-                    -1.05536441e-09,
-                    -7.13883484e-09,
-                    6.89300573e-09,
-                    2.32452547e-08,
-                    -1.00000000e+00,
-                    1.32440828e-08,
-                    9.99999996e-01,
-                    -2.18566372e-09,
-                    1.41639965e-08
-                };
+                    // Large innermost_bytes_at_realization is good,
+                    // unless it gets *really* large. Have spatial
+                    // coherence on output cache lines and don't break
+                    // vectorization.
 
-                const int64_t *sched_stats = (const int64_t *)(&feat);
-                for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
-                    double w = std::log(1 + sched_stats[i]);
-                    cost -= (linear_weights[i] + square_weights[i] * w) * w;
+                    // Smaller effects include:
+
+                    // - More points computed per realization is better
+                    // (amortize malloc overhead)
+
+                    // - Fewer points computed total is better (minimize
+                    // redundant recompute)
+
+                    // - Fewer bytes per realization is better (fit into
+                    // local cache). Recall that we want *more* bytes
+                    // along the innermost dimension, so this is really a
+                    // constraint on the height of a tile)
+
+                    double linear_weights[] = {
+                        7.44107243e-08,
+                        -6.61684316e-08,
+                        1.38209663e-06,
+                        -9.72775735e-07,
+                        -2.15445520e-06,
+                        1.64845721e-06,
+                        1.42242235e-07,
+                        1.58736644e-07,
+                        -9.37325174e-08,
+                        1.77330511e-09,
+                        -1.21396794e-06,
+                        6.31298712e-07,
+                        -8.20550970e-08,
+                        8.74631069e-01,
+                        -1.68220271e-07,
+                        -8.74630980e-01,
+                        3.83216062e-08,
+                        -5.86168533e-07
+                    };
+                    double square_weights[] = {
+                        -1.07675757e-09,
+                        -3.02034990e-09,
+                        3.34156891e-09,
+                        2.31720771e-09,
+                        6.04231900e-08,
+                        -6.81740558e-08,
+                        -1.08771382e-08,
+                        -1.92484135e-08,
+                        5.48552892e-09,
+                        -1.05536441e-09,
+                        -7.13883484e-09,
+                        6.89300573e-09,
+                        2.32452547e-08,
+                        -1.00000000e+00,
+                        1.32440828e-08,
+                        9.99999996e-01,
+                        -2.18566372e-09,
+                        1.41639965e-08
+                    };
+
+                    const int64_t *sched_stats = (const int64_t *)(&feat);
+                    for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
+                        double w = std::log(1 + sched_stats[i]);
+                        cost -= (linear_weights[i] + square_weights[i] * w) * w;
+                    }
                 }
             }
         }
-
         cost_calculations++;
         return true;
     }
 
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
+                           ThroughputPredictorPipeline *throughput_predictor,
                            std::function<void(State *)> &accept_child) {
         internal_assert(root.is_root());
 
@@ -1951,7 +2039,7 @@ struct State {
             auto child = new State(*this);
             child->root = child->root.inline_func(f, dag);
             child->num_funcs_scheduled++;
-            if (child->calculate_cost(dag, params)) {
+            if (child->calculate_cost(dag, params, throughput_predictor)) {
                 internal_assert(child->root.computes(f)) << "Failed to inline " << f.name() << '\n';
                 num_children++;
                 accept_child(child);
@@ -1966,7 +2054,7 @@ struct State {
             auto child = new State(*this);
             child->root = std::move(n);
             child->num_funcs_scheduled++;
-            if (child->calculate_cost(dag, params)) {
+            if (child->calculate_cost(dag, params, throughput_predictor)) {
                 internal_assert(child->root.computes(f)) << "Failed to inject realization of " << f.name() << '\n';
                 num_children++;
                 accept_child(child);
@@ -2045,6 +2133,7 @@ struct CompareStates {
 State optimal_schedule(FunctionDAG &dag,
                        vector<Function> outputs,
                        const MachineParams &params,
+                       ThroughputPredictorPipeline *throughput_predictor,
                        int beam_size) {
     std::priority_queue<std::shared_ptr<State>,
                         std::vector<std::shared_ptr<State>>,
@@ -2115,7 +2204,7 @@ State optimal_schedule(FunctionDAG &dag,
                 return *state;
             }
 
-            state->generate_children(dag, params, enqueue_new_children);
+            state->generate_children(dag, params, throughput_predictor, enqueue_new_children);
         }
     }
 }
@@ -2157,7 +2246,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            State s = optimal_schedule(dag, outputs, params, beam_size);
+            State s = optimal_schedule(dag, outputs, params, nullptr, beam_size);
             if (beam_size == 1 || s.cost < optimal.cost) {
                 optimal = s;
             }
@@ -2169,7 +2258,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         }
     } else {
         // Use a fixed beam size
-        optimal = optimal_schedule(dag, outputs, params, beam_size);
+        optimal = optimal_schedule(dag, outputs, params, nullptr, beam_size);
     }
 
     debug(0) << "** Optimal schedule:\n";
@@ -2178,7 +2267,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Just to get the debugging prints to fire
-    optimal.calculate_cost(dag, params, true);
+    optimal.calculate_cost(dag, params, nullptr, true);
 
     // Apply the schedules
     optimal.apply_schedule(dag, params);
@@ -2195,6 +2284,11 @@ void autoschedule_test() {
     size_t beam_size = 1;
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");
+    
+    Weights w = load_weights();
+    Stats stats = load_stats();
+
+    ThroughputPredictorPipeline throughput_predictor(w, stats);
 
     Var x("x"), y("y");
 
@@ -2209,10 +2303,11 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, beam_size);
+
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2243,10 +2338,10 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, cheap_memory, target);
-        State optimal = optimal_schedule(dag, outputs, cheap_memory, beam_size);
+        State optimal = optimal_schedule(dag, outputs, cheap_memory, &throughput_predictor, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2267,10 +2362,10 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2290,10 +2385,10 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2320,9 +2415,9 @@ void autoschedule_test() {
         f[N-1].estimate(x, 0, 2048).estimate(y, 0, 2048);
         vector<Function> outputs = {f[N-1].function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, 1);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
 
@@ -2340,10 +2435,10 @@ void autoschedule_test() {
 
         vector<Function> outputs = {f.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2366,10 +2461,10 @@ void autoschedule_test() {
 
         vector<Function> outputs = {downx.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, 1);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2392,12 +2487,12 @@ void autoschedule_test() {
 
         vector<Function> outputs = {g.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, 4);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 4);
 
         dag.dump();
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2418,10 +2513,10 @@ void autoschedule_test() {
         vector<Function> outputs = {c.function()};
         FunctionDAG dag(outputs, params, target);
         dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, 1);
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, true);
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
         optimal.dump();
         debug(0) << '\n';
     }
