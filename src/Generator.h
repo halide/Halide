@@ -2640,6 +2640,7 @@ public:
         bool emit_static_library{true};
         bool emit_cpp_stub{false};
         bool emit_schedule{false};
+        bool emit_yaml{false};
 
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
@@ -2667,7 +2668,8 @@ public:
         return get_target().natural_vector_size<data_t>();
     }
 
-    void emit_cpp_stub(const std::string &stub_file_path);
+    void emit_cpp_stub(std::string const& stub_file_path);
+    void     emit_yaml(std::string const& yaml_file_path);
 
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.

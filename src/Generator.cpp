@@ -3,8 +3,9 @@
 #include <fstream>
 #include <set>
 
-#include "runtime/HalideRuntime.h"      /// for halide_type_code_t
-#include "llvm/Support/YAMLTraits.h"    /// for YAML underpinnings
+#include "runtime/HalideRuntime.h"        /// for halide_type_code_t
+#include "llvm/Support/YAMLTraits.h"      /// for YAML underpinnings
+#include "llvm/Support/raw_os_ostream.h"  /// for LLVM and STL I/O bridge
 
 #include "Generator.h"
 #include "Outputs.h"
@@ -159,6 +160,9 @@ Outputs compute_outputs(const Target &target,
     }
     if (options.emit_schedule) {
         output_files.schedule_name = base_path + get_extension(".schedule", options);
+    }
+    if (options.emit_yaml) {
+        output_files.yaml_name = base_path + get_extension(".yaml", options);
     }
     return output_files;
 }
@@ -348,6 +352,9 @@ class EmitterBase {
             return out;
         }
         
+        /// Extract relevant info from a vector of Input pointers, copying
+        /// it into a vector of EmitterBase::InputInfo structs:
+        
         in_infovec_t get_input_info(input_ptr_vec_t const& ins) const {
             in_infovec_t outvec;
             outvec.reserve(ins.size());
@@ -361,6 +368,9 @@ class EmitterBase {
             return outvec;
         }
         
+        /// Extract relevant info from a vector of Output pointers, copying
+        /// it into a vector of EmitterBase::OutputInfo structs:
+        
         out_info_t get_output_info(output_ptr_vec_t const& outs) const {
             bool all_outputs_are_func = true;
             out_infovec_t outvec;
@@ -372,15 +382,13 @@ class EmitterBase {
                 if (output->is_array()) {
                     getter = is_func ? "get_array_output" : "get_array_output_buffer";
                 } else {
-                    getter = is_func ? "get_output" : "get_output_buffer";
+                    getter = is_func ?       "get_output" : "get_output_buffer";
                 }
                 getter += "<" + c_type + ">";
                 outvec.push_back({ output->name(),
                                    output->is_array() ? "std::vector<" + c_type + ">" : c_type,
                   getter + "(\"" + output->name() + "\")" });
-                if (c_type != "Func") {
-                    all_outputs_are_func = false;
-                }
+                all_outputs_are_func = all_outputs_are_func && is_func;
             }
             return { outvec, all_outputs_are_func };
         }
@@ -427,6 +435,13 @@ class YamlEmitter : EmitterBase {
         using Super::input_ptr_vec_t;
         using Super::output_ptr_vec_t;
     
+    private:
+        using youtput_t = llvm::yaml::Output;
+        using ostream_t = llvm::raw_os_ostream;
+    
+    private:
+        static constexpr std::size_t column_width = 80;
+    
     public:
         virtual void emit() override;
         YamlEmitter(std::ostream& dest,
@@ -439,21 +454,20 @@ class YamlEmitter : EmitterBase {
                     generator_registered_name,
                     generator_stub_name,
                     generator_params,
-                    inputs, outputs) {}
+                    inputs, outputs),
+              llostream(stream),
+              youtput(llostream, nullptr, column_width) {}
     
-    // private:
-    //
-    //     void emit_inputs_struct();
-    //     void emit_generator_params_struct();
+    private:
+        ostream_t llostream;
+        youtput_t youtput;
     
 };
 
+// void YamlEmitter::emit() {}
+
 } /// namespace Internal
 } /// namespace Halide
-
-// using llvm::yaml::ScalarEnumerationTraits;
-// using llvm::yaml::MappingTraits;
-// using llvm::yaml::IO;
 
 namespace llvm {
     
@@ -475,8 +489,8 @@ namespace llvm {
         template <>
         struct MappingTraits<Halide::Type> {
             static void mapping(IO& io, Halide::Type& haltype) {
-                int bits                            = haltype.bits();
-                int lanes                           = haltype.lanes();
+                                   int bits         = haltype.bits();
+                                  int lanes         = haltype.lanes();
                 halide_type_code_t typecode         = haltype.code();
                 
                 io.mapRequired("bits",              bits);
@@ -525,12 +539,19 @@ namespace llvm {
         template <>
         struct MappingTraits<output_ptr_t> {
             static void mapping(IO& io, output_ptr_t& output) {
+                std::string name                    = output->name();
+                  typevec_t types                   = output->types();
+                std::string c_type                  = output->get_c_type();
+                
+                io.mapRequired("name",              name);
+                io.mapRequired("types",             types);
+                io.mapRequired("c_type",            c_type);
             }
         };
         
-    }
+    } /// namespace yaml
     
-}
+} /// namespace llvm
 
 namespace Halide {
 namespace Internal {
@@ -655,8 +676,9 @@ void StubEmitter::emit() {
         stream << "/* The Generator named " << generator_registered_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
-    bool all_outputs_are_func = true;
+    
     out_infovec_t out_info;
+    bool all_outputs_are_func = true;
     
     /// Load up a std::vector<OutputInfo> from our GeneratorInputs,
     /// passing along a boolean flag indicating if all outputs are Funcs:
@@ -1019,7 +1041,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule]. If omitted, default value is [static_library, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, schedule, yaml]. If omitted, default value is [static_library, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -1094,8 +1116,17 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     // It's ok to omit "target=" if we are generating *only* a cpp_stub
     const std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
-    const bool stub_only = (emit_flags.size() == 1 && emit_flags[0] == "cpp_stub");
-    if (!stub_only) {
+    
+    /// I am not particularly proud of the next few lines:
+    const bool stub_only = (emit_flags.size() == 1 &&   emit_flags[0] == "cpp_stub");
+    const bool yaml_only = (emit_flags.size() == 1 &&   emit_flags[0] == "yaml");
+    const bool stub_yaml = (emit_flags.size() == 2 && ((emit_flags[0] == "cpp_stub" && emit_flags[1] == "yaml") ||
+                                                       (emit_flags[1] == "cpp_stub" && emit_flags[0] == "yaml")));
+    const bool basic_emitters_only = stub_only ||
+                                     yaml_only ||
+                                     stub_yaml;
+    
+    if (!basic_emitters_only) {
         if (generator_args.find("target") == generator_args.end()) {
             cerr << "Target missing\n";
             cerr << kUsage;
@@ -1138,9 +1169,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_cpp_stub = true;
             } else if (opt == "schedule") {
                 emit_options.emit_schedule = true;
+            } else if (opt == "yaml") {
+                emit_options.emit_yaml = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, yaml], ignoring.\n";
             }
         }
     }
@@ -1178,13 +1211,21 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
+        
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
             gen->emit_cpp_stub(stub_file_path);
         }
-
+        
+        if (emit_options.emit_yaml) {
+            // When generating YAML, we ignore all generator args passed in, and supply a fake Target.
+            auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
+            auto yaml_file_path = base_path + get_extension(".yaml", emit_options);
+            gen->emit_yaml(yaml_file_path);
+        }
+        
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
@@ -1673,15 +1714,36 @@ Module GeneratorBase::build_module(const std::string &function_name,
     return result;
 }
 
-void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
+void GeneratorBase::emit_cpp_stub(std::string const& stub_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
-    ParamInfo &pi = param_info();
+    ParamInfo& pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params, pi.filter_inputs, pi.filter_outputs);
+    StubEmitter emit(file,
+                     generator_registered_name,
+                     generator_stub_name,
+                     pi.generator_params,
+                     pi.filter_inputs,
+                     pi.filter_outputs);
     emit.emit();
+}
+
+void GeneratorBase::emit_yaml(std::string const& yaml_file_path) {
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    // YamlEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
+    advance_phase(GenerateCalled);
+    advance_phase(ScheduleCalled);
+    ParamInfo& pi = param_info();
+    std::ofstream file(yaml_file_path);
+    YamlEmitter yamitter(file,
+                         generator_registered_name,
+                         generator_stub_name,
+                         pi.generator_params,
+                         pi.filter_inputs,
+                         pi.filter_outputs);
+    yamitter.emit();
 }
 
 void GeneratorBase::check_scheduled(const char* m) const {

@@ -58,6 +58,10 @@ struct Outputs {
      * output is desired. */
     std::string schedule_name;
 
+   /** The name of the emitted YAML metadata file.. Empty if no YAML metadata
+    * output is desired. */
+   std::string yaml_name;
+
     /** Make a new Outputs struct that emits everything this one does
      * and also an object file with the given name. */
     Outputs object(const std::string &object_name) const {
@@ -145,6 +149,14 @@ struct Outputs {
         updated.schedule_name = schedule_name;
         return updated;
     }
+
+   /** Make a new Outputs struct that emits everything this one does
+    * and also an YAML metadata output file with the given name. */
+   Outputs yaml(const std::string &yaml_name) const {
+       Outputs updated = *this;
+       updated.yaml_name = yaml_name;
+       return updated;
+   }
 };
 
 }  // namespace Halide
