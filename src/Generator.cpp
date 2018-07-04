@@ -43,6 +43,9 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(param_ptr_t);
 LLVM_YAML_IS_SEQUENCE_VECTOR(input_ptr_t);
 LLVM_YAML_IS_SEQUENCE_VECTOR(output_ptr_t);
 
+/// We can also have a sequence of Halide Types:
+LLVM_YAML_IS_SEQUENCE_VECTOR(Halide::Type);
+
 namespace Halide {
 
 GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
@@ -287,6 +290,7 @@ class EmitterBase {
         using  param_ptr_vec_t = std::vector<std::add_pointer_t<Internal::GeneratorParamBase>>;
         using  input_ptr_vec_t = std::vector<std::add_pointer_t<Internal::GeneratorInputBase>>;
         using output_ptr_vec_t = std::vector<std::add_pointer_t<Internal::GeneratorOutputBase>>;
+        using        typevec_t = std::vector<Halide::Type>;
         using     in_infovec_t = std::vector<InputInfo>;
         using    out_infovec_t = std::vector<OutputInfo>;
         using       out_info_t = std::tuple<out_infovec_t, bool>;
@@ -502,13 +506,17 @@ namespace llvm {
             }
         };
         
+        using typevec_t = Halide::Internal::EmitterBase::typevec_t;
+        
         template <>
         struct MappingTraits<input_ptr_t> {
             static void mapping(IO& io, input_ptr_t& input) {
                 std::string name                   = input->name();
+                  typevec_t types                  = input->types();
                 std::string c_type                 = input->get_c_type();
                 
                 io.mapRequired("name",             name);
+                io.mapRequired("types",            types);
                 io.mapRequired("c_type",           c_type);
             }
         };
