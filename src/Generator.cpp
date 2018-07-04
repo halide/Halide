@@ -2,6 +2,8 @@
 #include <fstream>
 #include <set>
 
+#include "llvm/Support/YAMLTraits.h"
+
 #include "Generator.h"
 #include "Outputs.h"
 #include "Simplify.h"
@@ -326,6 +328,52 @@ class StubEmitter : public EmitterBase {
         void emit_generator_params_struct();
         
 };
+
+class YamlEmitter : EmitterBase {
+    
+    public:
+        using Super = EmitterBase;
+        using Super::param_ptr_vec_t;
+        using Super::input_ptr_vec_t;
+        using Super::output_ptr_vec_t;
+    
+    public:
+        virtual void emit() override;
+        YamlEmitter(std::ostream& dest,
+                    std::string const& generator_registered_name,
+                    std::string const& generator_stub_name,
+                    param_ptr_vec_t const& generator_params,
+                    input_ptr_vec_t const& inputs,
+                    output_ptr_vec_t const& outputs)
+            : Super(dest,
+                    generator_registered_name,
+                    generator_stub_name,
+                    generator_params,
+                    inputs, outputs) {}
+    
+    // private:
+    //
+    //     void emit_inputs_struct();
+    //     void emit_generator_params_struct();
+    
+};
+
+} /// namespace Internal
+} /// namespace Halide
+
+namespace llvm {
+    
+    namespace yaml {
+        
+        // template <>
+        // struct MappingTraits<THINGY>
+        
+    }
+    
+}
+
+namespace Halide {
+namespace Internal {
 
 std::string EmitterBase::indent() {
     std::ostringstream o;
@@ -724,6 +772,11 @@ void StubEmitter::emit() {
 
     stream << indent() << "#endif  // " << guard.str() << "\n";
 }
+
+void YamlEmitter::emit() {
+    /// INSERT YAML EMITTER BUSINESS HERE
+}
+
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory)
