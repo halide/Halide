@@ -20,8 +20,8 @@ class HexagonAlignmentAnalyzer {
     Scope<ModulusRemainder> alignment_info;
     int required_alignment;
 public:
- HexagonAlignmentAnalyzer(int required_alignment, const Scope<ModulusRemainder>& alignment_info) :
-    required_alignment(required_alignment) {
+    HexagonAlignmentAnalyzer(int required_alignment,
+                             const Scope<ModulusRemainder>& alignment_info) : required_alignment(required_alignment) {
         this->alignment_info.set_containing_scope(&alignment_info);
     }
     /** Analyze the index of a load/store instruction for alignment
@@ -31,22 +31,12 @@ public:
     HexagonAlign is_aligned_impl(const T *op, int native_lanes, int *aligned_offset) {
         debug(3) << "HexagonAlignmentAnalyzer: Check if " << op->index << " is aligned to a "
                  << required_alignment << " byte boundary\n";
-        //        debug(3) << "Type: " << op->type << "\n";
         debug(3) << "native_lanes: " << native_lanes << "\n";
         Expr index = op->index;
         const Ramp *ramp = index.as<Ramp>();
-        const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
-        if (!ramp || !const_stride) {
-            // We can't handle indirect loads, or loads with
-            // non-constant strides.
-            debug(3) << "Either not a ramp or not a constant stride, returning Unknown alignment.\n";
-            return HexagonAlign::Unknown;
+        if (ramp) {
+            index = ramp->base;
         }
-        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            debug(3) << "Can only deal with constant stride of 1, 2 or 3, returning Unknown alignment.\n";
-            return HexagonAlign::Unknown;
-        }
-
         // If this is a parameter, the base_alignment should be
         // host_alignment. Otherwise, this is an internal buffer,
         // which we assume has been aligned to the required alignment.
@@ -61,7 +51,7 @@ public:
             known_alignment = reduce_expr_modulo(ramp->base, native_lanes, aligned_offset,
                                                  alignment_info);
         }
-        if (known_alignment) {
+        if (known_alignment && (*aligned_offset == 0)) {
             debug(3) << "Is Aligned\n";
             return HexagonAlign::Aligned;
         }

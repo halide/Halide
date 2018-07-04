@@ -56,16 +56,19 @@ private:
         }
 
         Expr index = mutate(op->index);
+        const Ramp *ramp = index.as<Ramp>();
+        const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
+        if (!ramp || !const_stride) {
+            // We can't handle indirect loads, or loads with
+            // non-constant strides.
+            return IRMutator2::visit(op);
+        }
+
         int aligned_offset = 0;
         HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
         if (alignment == HexagonAlign::Unknown) {
             return IRMutator2::visit(op);
         }
-
-        const Ramp *ramp = index.as<Ramp>();
-        internal_assert(ramp && "is_aligned didn't return Unknown when index isn't a ramp");
-        const int64_t *const_stride = as_const_int(ramp->stride);
-        internal_assert(const_stride && "is_aligned didn't return Unknown for non const stride");
 
         bool known_alignment = (alignment == HexagonAlign::Aligned);
         int lanes = ramp->lanes;

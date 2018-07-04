@@ -1204,7 +1204,6 @@ class EliminateInterleaves : public IRMutator2 {
     NodeType visit_let(const LetType *op) {
         // Push alignment info on the stack
         if (op->value.type() == Int(32)) {
-            // alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
             alignment_analyzer.push(op->name, op->value);
         }
 
@@ -1234,9 +1233,8 @@ class EliminateInterleaves : public IRMutator2 {
             body = mutate(op->body);
         }
 
-        // // Pop alignment info from the scope stack
+        // Pop alignment info from the scope stack
         if (op->value.type() == Int(32)) {
-            //            alignment_info.pop(op->name);
             alignment_analyzer.pop(op->name);
         }
 
@@ -1461,8 +1459,7 @@ class EliminateInterleaves : public IRMutator2 {
     };
     Scope<BufferState> buffers;
 
-    // True for buffers that have loads and stores that are aligned
-    // to the vector width.
+    // False for buffers that have any loads or stores that are unaligned
     Scope<bool> aligned_buffer_access;
 
     // Buffers we should deinterleave the storage of.
@@ -1529,15 +1526,14 @@ class EliminateInterleaves : public IRMutator2 {
                 // interleave itself, we don't want to change the
                 // buffer state.
             }
-
-            // Should we check this only when state == BufferState::Interleaved
             internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
             bool &aligned_accesses = aligned_buffer_access.ref(op->name);
             int aligned_offset = 0;
 
             HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
-            if (alignment != HexagonAlign::Aligned)
+            if (alignment != HexagonAlign::Aligned) {
                 aligned_accesses = false;
+            }
         }
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
@@ -1570,8 +1566,9 @@ class EliminateInterleaves : public IRMutator2 {
                 int aligned_offset = 0;
 
                 HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
-                if (alignment != HexagonAlign::Aligned)
+                if (alignment != HexagonAlign::Aligned) {
                     aligned_accesses = false;
+                }
             } else {
                 // This is not a double vector load, so we can't
                 // deinterleave the storage of this buffer.
