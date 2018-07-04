@@ -262,6 +262,8 @@ class EmitterBase {
            namespaces.pop_back();
         }
         
+    public:
+        /// This is an ABC:
         virtual void emit() = 0;
         virtual ~EmitterBase() {}
         
@@ -276,6 +278,7 @@ class EmitterBase {
         const output_ptr_vec_t outputs;
         int indent_level{ 0 };
         
+    protected:
         param_ptr_vec_t select_generator_params(param_ptr_vec_t const& in) {
             param_ptr_vec_t out;
             for (auto p : in) {
@@ -289,6 +292,7 @@ class EmitterBase {
             return out;
         }
         
+    protected:
         /** Emit spaces according to the current indentation level */
         std::string indent();
 };
