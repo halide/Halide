@@ -233,12 +233,18 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 class EmitterBase {
     
     public:
+        using      stringvec_t = std::vector<std::string>;
+        using  param_ptr_vec_t = std::vector<Internal::GeneratorParamBase*>;
+        using  input_ptr_vec_t = std::vector<Internal::GeneratorInputBase*>;
+        using output_ptr_vec_t = std::vector<Internal::GeneratorOutputBase*>;
+    
+    public:
         EmitterBase(std::ostream& dest,
                     std::string const& generator_registered_name,
                     std::string const& generator_stub_name,
-                    std::vector<Internal::GeneratorParamBase*> const& generator_params,
-                    std::vector<Internal::GeneratorInputBase*> const& inputs,
-                    std::vector<Internal::GeneratorOutputBase*> const& outputs)
+                    param_ptr_vec_t const& generator_params,
+                    input_ptr_vec_t const& inputs,
+                    output_ptr_vec_t const& outputs)
             : stream(dest),
               generator_registered_name(generator_registered_name),
               generator_stub_name(generator_stub_name),
@@ -264,14 +270,14 @@ class EmitterBase {
         const std::string generator_registered_name;
         const std::string generator_stub_name;
         std::string class_name;
-        std::vector<std::string> namespaces;
-        const std::vector<Internal::GeneratorParamBase*> generator_params;
-        const std::vector<Internal::GeneratorInputBase*> inputs;
-        const std::vector<Internal::GeneratorOutputBase*> outputs;
+        stringvec_t namespaces;
+        const param_ptr_vec_t generator_params;
+        const input_ptr_vec_t inputs;
+        const output_ptr_vec_t outputs;
         int indent_level{ 0 };
         
-        std::vector<Internal::GeneratorParamBase*> select_generator_params(std::vector<Internal::GeneratorParamBase*> const& in) {
-            std::vector<Internal::GeneratorParamBase*> out;
+        param_ptr_vec_t select_generator_params(param_ptr_vec_t const& in) {
+            param_ptr_vec_t out;
             for (auto p : in) {
                 // These are always propagated specially.
                 if (p->name == "target" ||
@@ -290,16 +296,20 @@ class EmitterBase {
 
 class StubEmitter : public EmitterBase {
     
-    using Super = EmitterBase;
+    public:
+        using Super = EmitterBase;
+        using Super::param_ptr_vec_t;
+        using Super::input_ptr_vec_t;
+        using Super::output_ptr_vec_t;
     
     public:
         virtual void emit() override;
         StubEmitter(std::ostream& dest,
                     std::string const& generator_registered_name,
                     std::string const& generator_stub_name,
-                    std::vector<Internal::GeneratorParamBase*> const& generator_params,
-                    std::vector<Internal::GeneratorInputBase*> const& inputs,
-                    std::vector<Internal::GeneratorOutputBase*> const& outputs)
+                    param_ptr_vec_t const& generator_params,
+                    input_ptr_vec_t const& inputs,
+                    output_ptr_vec_t const& outputs)
             : Super(dest,
                     generator_registered_name,
                     generator_stub_name,
@@ -322,7 +332,7 @@ std::string EmitterBase::indent() {
 }
 
 void StubEmitter::emit_generator_params_struct() {
-    const auto &v = generator_params;
+    auto const& v = generator_params;
     std::string name = "GeneratorParams";
     stream << indent() << "struct " << name << " final {\n";
     indent_level++;
@@ -472,7 +482,7 @@ void StubEmitter::emit() {
 
     std::ostringstream guard;
     guard << "HALIDE_STUB";
-    for (const auto &ns : namespaces) {
+    for (auto const& ns : namespaces) {
         guard << "_" << ns;
     }
     guard << "_" << class_name;
@@ -501,7 +511,7 @@ void StubEmitter::emit() {
     stream << "}  // namespace " << generator_registered_name << "\n";
     stream << "\n";
 
-    for (const auto &ns : namespaces) {
+    for (auto const& ns : namespaces) {
         stream << indent() << "namespace " << ns << " {\n";
     }
     stream << "\n";
@@ -522,7 +532,7 @@ void StubEmitter::emit() {
     stream << indent() << "struct Outputs final {\n";
     indent_level++;
     stream << indent() << "// Outputs\n";
-    for (const auto &out : out_info) {
+    for (auto const& out : out_info) {
         stream << indent() << out.ctype << " " << out.name << ";\n";
     }
 
@@ -591,8 +601,8 @@ void StubEmitter::emit() {
         indent_level++;
         stream << indent() << "return Halide::Pipeline(std::vector<Halide::Func>{\n";
         indent_level++;
-        int commas = (int)out_info.size() - 1;
-        for (const auto &out : out_info) {
+        int commas = static_cast<int>(out_info.size()) - 1;
+        for (auto const& out : out_info) {
             stream << indent() << out.name << (commas-- ? "," : "") << "\n";
         }
         indent_level--;
@@ -646,7 +656,7 @@ void StubEmitter::emit() {
     stream << indent() << "generator_params.to_generator_params_map(),\n";
     stream << indent() << "{\n";
     indent_level++;
-    for (size_t i = 0; i < inputs.size(); ++i) {
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
         stream << indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
@@ -657,7 +667,7 @@ void StubEmitter::emit() {
 
     stream << indent() << "return {\n";
     indent_level++;
-    for (const auto &out : out_info) {
+    for (auto const& out : out_info) {
         stream << indent() << "stub." << out.getter << ",\n";
     }
     stream << indent() << "stub.generator->get_target()\n";
@@ -703,7 +713,7 @@ void StubEmitter::emit() {
     stream << indent() << "};\n";
     stream << "\n";
 
-    for (int i = (int)namespaces.size() - 1; i >= 0 ; --i) {
+    for (int i = static_cast<int>(namespaces.size()) - 1; i >= 0 ; --i) {
         stream << indent() << "}  // namespace " << namespaces[i] << "\n";
     }
     stream << "\n";
