@@ -383,16 +383,32 @@ class YamlEmitter : EmitterBase {
 using llvm::yaml::MappingTraits;
 using llvm::yaml::IO;
 
-// LLVM_YAML_IS_SEQUENCE_VECTOR(std::string);
-#define FUCKYOU(string) (char const*)string
+template <typename T>
+using const_ptr = std::add_pointer_t<std::add_const_t<T>>;
 
 namespace llvm {
     
     namespace yaml {
         
-        using  param_ptr_t = Halide::Internal::GeneratorParamBase*;
-        using  input_ptr_t = Halide::Internal::GeneratorInputBase*;
-        using output_ptr_t = Halide::Internal::GeneratorOutputBase*;
+        using  param_ptr_t = const_ptr<Halide::Internal::GeneratorParamBase>;
+        using  input_ptr_t = const_ptr<Halide::Internal::GeneratorInputBase>;
+        using output_ptr_t = const_ptr<Halide::Internal::GeneratorOutputBase>;
+        
+    } /// namespace yaml
+
+} /// namespace llvm
+
+LLVM_YAML_STRONG_TYPEDEF(const_ptr<Halide::Internal::GeneratorParamBase>,     param_ptr_t);
+LLVM_YAML_STRONG_TYPEDEF(const_ptr<Halide::Internal::GeneratorInputBase>,     input_ptr_t);
+LLVM_YAML_STRONG_TYPEDEF(const_ptr<Halide::Internal::GeneratorOutputBase>,   output_ptr_t);
+
+LLVM_YAML_IS_SEQUENCE_VECTOR(param_ptr_t);
+LLVM_YAML_IS_SEQUENCE_VECTOR(input_ptr_t);
+LLVM_YAML_IS_SEQUENCE_VECTOR(output_ptr_t);
+
+namespace llvm {
+    
+    namespace yaml {
         
         template <>
         struct MappingTraits<param_ptr_t> {
@@ -426,8 +442,6 @@ namespace llvm {
     }
     
 }
-
-#undef FUCKYOU
 
 namespace Halide {
 namespace Internal {
