@@ -483,6 +483,7 @@ namespace llvm {
                 io.mapRequired("lanes",             lanes);
                 io.mapRequired("typecode",          typecode);
             }
+            static const bool flow = true; /// print values inline
         };
         
         template <>
