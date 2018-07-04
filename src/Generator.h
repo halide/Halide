@@ -1348,8 +1348,10 @@ protected:
     friend class StubEmitter;
     friend class YamlEmitter;
 
+public:
     virtual std::string get_c_type() const = 0;
 
+protected:
     void check_value_writable() const override;
 
     const char *input_or_output() const override { return "Input"; }
@@ -1974,10 +1976,12 @@ protected:
     void init_internals();
     void resize(size_t size);
 
+public:
     virtual std::string get_c_type() const {
         return "Func";
     }
 
+protected:
     void check_value_writable() const override;
 
     const char *input_or_output() const override { return "Output"; }

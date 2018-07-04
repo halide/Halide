@@ -3,11 +3,45 @@
 #include <fstream>
 #include <set>
 
-#include "llvm/Support/YAMLTraits.h"
+#include "runtime/HalideRuntime.h"      /// for halide_type_code_t
+#include "llvm/Support/YAMLTraits.h"    /// for YAML underpinnings
 
 #include "Generator.h"
 #include "Outputs.h"
 #include "Simplify.h"
+
+template <typename T>
+using const_ptr = std::add_pointer_t<std::add_const_t<T>>;
+
+namespace llvm {
+    
+    namespace yaml {
+        
+        /// Make the internal GeneratorParam, GeneratorInput,
+        /// and GeneratorOutput base types available within the
+        /// llvm::yaml namespace:
+        
+        using  param_t = Halide::Internal::GeneratorParamBase;
+        using  input_t = Halide::Internal::GeneratorInputBase;
+        using output_t = Halide::Internal::GeneratorOutputBase;
+        
+        using  param_ptr_t = std::add_pointer_t<param_t>;
+        using  input_ptr_t = std::add_pointer_t<input_t>;
+        using output_ptr_t = std::add_pointer_t<output_t>;
+        
+    } /// namespace yaml
+
+} /// namespace llvm
+
+/// Inform the LLVM YAML system that a std::vector containing
+/// pointers to instances of our GeneratorXXX base types are
+/// to be considered “sequence vectors”; q.v. “Utility Macros”
+/// (¶ https://llvm.org/docs/YamlIO.html#utility-macros sub.)
+/// in the LLVM YAML I/O informal information brochure.
+
+LLVM_YAML_IS_SEQUENCE_VECTOR(param_ptr_t);
+LLVM_YAML_IS_SEQUENCE_VECTOR(input_ptr_t);
+LLVM_YAML_IS_SEQUENCE_VECTOR(output_ptr_t);
 
 namespace Halide {
 
@@ -240,13 +274,22 @@ class EmitterBase {
             std::string c_type;
             std::string name;
         };
+        
+    public:
+        struct OutputInfo {
+            std::string name;
+            std::string ctype;
+            std::string getter;
+        };
     
     public:
         using      stringvec_t = std::vector<std::string>;
-        using  param_ptr_vec_t = std::vector<Internal::GeneratorParamBase*>;
-        using  input_ptr_vec_t = std::vector<Internal::GeneratorInputBase*>;
-        using output_ptr_vec_t = std::vector<Internal::GeneratorOutputBase*>;
-        using        infovec_t = std::vector<InputInfo>;
+        using  param_ptr_vec_t = std::vector<std::add_pointer_t<Internal::GeneratorParamBase>>;
+        using  input_ptr_vec_t = std::vector<std::add_pointer_t<Internal::GeneratorInputBase>>;
+        using output_ptr_vec_t = std::vector<std::add_pointer_t<Internal::GeneratorOutputBase>>;
+        using     in_infovec_t = std::vector<InputInfo>;
+        using    out_infovec_t = std::vector<OutputInfo>;
+        using       out_info_t = std::tuple<out_infovec_t, bool>;
     
     public:
         EmitterBase(std::ostream& dest,
@@ -259,8 +302,7 @@ class EmitterBase {
               generator_registered_name(generator_registered_name),
               generator_stub_name(generator_stub_name),
               generator_params(select_generator_params(generator_params)),
-              inputs(inputs),
-              outputs(outputs) {
+              inputs(inputs), outputs(outputs) {
            namespaces = split_string(generator_stub_name, "::");
            internal_assert(namespaces.size() >= 1);
            if (namespaces[0].empty()) {
@@ -302,17 +344,41 @@ class EmitterBase {
             return out;
         }
         
-        infovec_t get_input_info(input_ptr_vec_t const& in) {
-            infovec_t out;
-            // std::vector<EmitterBase::InputInfo> in_info;
-            for (auto input : in) {
+        in_infovec_t get_input_info(input_ptr_vec_t const& ins) const {
+            in_infovec_t outvec;
+            outvec.reserve(ins.size());
+            for (auto input : ins) {
                 std::string c_type = input->get_c_type();
                 if (input->is_array()) {
                     c_type = "std::vector<" + c_type + ">";
                 }
-                out.push_back({ c_type, input->name() });
+                outvec.push_back({ c_type, input->name() });
             }
-            return out;
+            return outvec;
+        }
+        
+        out_info_t get_output_info(output_ptr_vec_t const& outs) const {
+            bool all_outputs_are_func = true;
+            out_infovec_t outvec;
+            outvec.reserve(outs.size());
+            for (auto output : outs) {
+                std::string c_type = output->get_c_type();
+                std::string getter;
+                const bool is_func = (c_type == "Func");
+                if (output->is_array()) {
+                    getter = is_func ? "get_array_output" : "get_array_output_buffer";
+                } else {
+                    getter = is_func ? "get_output" : "get_output_buffer";
+                }
+                getter += "<" + c_type + ">";
+                outvec.push_back({ output->name(),
+                                   output->is_array() ? "std::vector<" + c_type + ">" : c_type,
+                  getter + "(\"" + output->name() + "\")" });
+                if (c_type != "Func") {
+                    all_outputs_are_func = false;
+                }
+            }
+            return { outvec, all_outputs_are_func };
         }
         
     protected:
@@ -381,41 +447,9 @@ class YamlEmitter : EmitterBase {
 } /// namespace Internal
 } /// namespace Halide
 
-using llvm::yaml::MappingTraits;
-using llvm::yaml::IO;
-
-template <typename T>
-using const_ptr = std::add_pointer_t<std::add_const_t<T>>;
-
-namespace llvm {
-    
-    namespace yaml {
-        
-        using  param_t = Halide::Internal::GeneratorParamBase;
-        using  input_t = Halide::Internal::GeneratorInputBase;
-        using output_t = Halide::Internal::GeneratorOutputBase;
-        
-        using  param_ptr_t = const_ptr<param_t>;
-        using  input_ptr_t = const_ptr<input_t>;
-        using output_ptr_t = const_ptr<output_t>;
-        
-    } /// namespace yaml
-
-} /// namespace llvm
-
-LLVM_YAML_STRONG_TYPEDEF(const_ptr<Halide::Internal::GeneratorParamBase>,     param_ptr_t);
-LLVM_YAML_STRONG_TYPEDEF(const_ptr<Halide::Internal::GeneratorInputBase>,     input_ptr_t);
-LLVM_YAML_STRONG_TYPEDEF(const_ptr<Halide::Internal::GeneratorOutputBase>,   output_ptr_t);
-
-LLVM_YAML_IS_SEQUENCE_VECTOR(param_ptr_t);
-LLVM_YAML_IS_SEQUENCE_VECTOR(input_ptr_t);
-LLVM_YAML_IS_SEQUENCE_VECTOR(output_ptr_t);
-
-// LLVM_YAML_DECLARE_MAPPING_TRAITS(param_t);
-// LLVM_YAML_DECLARE_MAPPING_TRAITS(input_t);
-// LLVM_YAML_DECLARE_MAPPING_TRAITS(output_t);
-
-// LLVM_YAML_IS_STRING_MAP(std::string);
+// using llvm::yaml::ScalarEnumerationTraits;
+// using llvm::yaml::MappingTraits;
+// using llvm::yaml::IO;
 
 namespace llvm {
     
@@ -425,15 +459,38 @@ namespace llvm {
         /// The second rule of the LLVM YAML interface is YOU DO NOT TALK ABOUT CONST
         
         template <>
-        struct MappingTraits<param_t> {
-            static void mapping(IO& io,      param_t& param) {
-                std::string name                    = param.name;
-                std::string default_value           = param.get_default_value();
-                std::string c_type                  = param.get_c_type();
-                std::string type_decls              = param.get_type_decls();
-                       bool is_synthetic            = param.is_synthetic_param();
-                       bool is_looplevel            = param.is_looplevel_param();
-                std::string call_to_string          = is_looplevel ? "" : param.call_to_string(param.name);
+        struct ScalarEnumerationTraits<halide_type_code_t> {
+            static void enumeration(IO& io, halide_type_code_t& typecode) {
+                io.enumCase(typecode,   "halide_type_int",      halide_type_int);
+                io.enumCase(typecode,   "halide_type_uint",     halide_type_uint);
+                io.enumCase(typecode,   "halide_type_float",    halide_type_float);
+                io.enumCase(typecode,   "halide_type_handle",   halide_type_handle);
+            }
+        };
+        
+        template <>
+        struct MappingTraits<Halide::Type> {
+            static void mapping(IO& io, Halide::Type& haltype) {
+                int bits                            = haltype.bits();
+                int lanes                           = haltype.lanes();
+                halide_type_code_t typecode         = haltype.code();
+                
+                io.mapRequired("bits",              bits);
+                io.mapRequired("lanes",             lanes);
+                io.mapRequired("typecode",          typecode);
+            }
+        };
+        
+        template <>
+        struct MappingTraits<param_ptr_t> {
+            static void mapping(IO& io,  param_ptr_t& param) {
+                std::string name                    = param->name;
+                std::string default_value           = param->get_default_value();
+                std::string c_type                  = param->get_c_type();
+                std::string type_decls              = param->get_type_decls();
+                       bool is_synthetic            = param->is_synthetic_param();
+                       bool is_looplevel            = param->is_looplevel_param();
+                std::string call_to_string          = is_looplevel ? "" : param->call_to_string(param->name);
                 
                 io.mapRequired("name",              name);
                 io.mapRequired("default",           default_value);
@@ -446,14 +503,19 @@ namespace llvm {
         };
         
         template <>
-        struct MappingTraits<input_t> {
-            static void mapping(IO& io, input_t& input) {
+        struct MappingTraits<input_ptr_t> {
+            static void mapping(IO& io, input_ptr_t& input) {
+                std::string name                   = input->name();
+                std::string c_type                 = input->get_c_type();
+                
+                io.mapRequired("name",             name);
+                io.mapRequired("c_type",           c_type);
             }
         };
         
         template <>
-        struct MappingTraits<output_t> {
-            static void mapping(IO& io, output_t& output) {
+        struct MappingTraits<output_ptr_t> {
+            static void mapping(IO& io, output_ptr_t& output) {
             }
         };
         
@@ -534,7 +596,9 @@ void StubEmitter::emit_generator_params_struct() {
 }
 
 void StubEmitter::emit_inputs_struct() {
-    infovec_t in_info = get_input_info(inputs);
+    /// Load up a std::vector<InputInfo> from our GeneratorInputs:
+    in_infovec_t in_info = get_input_info(inputs);
+    
     const std::string name = "Inputs";
     stream << indent() << "struct " << name << " final {\n";
     indent_level++;
@@ -582,33 +646,13 @@ void StubEmitter::emit() {
         stream << "/* The Generator named " << generator_registered_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
-
-    struct OutputInfo {
-        std::string name;
-        std::string ctype;
-        std::string getter;
-    };
     bool all_outputs_are_func = true;
-    std::vector<OutputInfo> out_info;
-    for (auto output : outputs) {
-        std::string c_type = output->get_c_type();
-        std::string getter;
-        const bool is_func = (c_type == "Func");
-        if (output->is_array()) {
-            getter = is_func ? "get_array_output" : "get_array_output_buffer<" + c_type + ">";
-        } else {
-            getter = is_func ? "get_output" : "get_output_buffer<" + c_type + ">";
-        }
-        out_info.push_back({
-            output->name(),
-            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-            getter + "(\"" + output->name() + "\")"
-        });
-        if (c_type != "Func") {
-            all_outputs_are_func = false;
-        }
-    }
-
+    out_infovec_t out_info;
+    
+    /// Load up a std::vector<OutputInfo> from our GeneratorInputs,
+    /// passing along a boolean flag indicating if all outputs are Funcs:
+    std::tie(out_info, all_outputs_are_func) = get_output_info(outputs);
+    
     std::ostringstream guard;
     guard << "HALIDE_STUB";
     for (auto const& ns : namespaces) {
