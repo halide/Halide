@@ -397,25 +397,17 @@ namespace llvm {
         template <>
         struct MappingTraits<param_ptr_t> {
             static void mapping(IO& io, param_ptr_t& param) {
-                std::string name{ "name" };
-                std::string default_value{ "default_value" };
-                std::string c_type{ "c_type" };
-                std::string type_decls{ "type_decls" };
-                std::string is_synthetic{ "is_synthetic" };
-                std::string is_looplevel{ "is_looplevel" };
-                std::string call_to_string{ "call_to_string" };
+                io.mapRequired("name",               param->name);
+                io.mapRequired("default",            param->get_default_value());
+                io.mapRequired("c_type",             param->get_c_type());
+                io.mapRequired("type_decls",         param->get_type_decls());
+                io.mapRequired("is_synthetic",       param->is_synthetic_param());
                 
-                io.mapRequired(name.c_str(),               param->name);
-                io.mapRequired(default_value.c_str(),      param->get_default_value());
-                io.mapRequired(c_type.c_str(),             param->get_c_type());
-                io.mapRequired(type_decls.c_str(),         param->get_type_decls());
-                io.mapRequired(is_synthetic.c_str(),       param->is_synthetic_param());
+                bool is_looplevel = param->is_looplevel_param();
+                std::string call_to_string = is_looplevel ? "" : param->call_to_string(param->name);
                 
-                bool is_looplevel_value = param->is_looplevel_param();
-                std::string call_to_string_value = is_looplevel ? "" : param->call_to_string(param->name);
-                
-                io.mapRequired(is_looplevel.c_str(),       is_looplevel_value);
-                io.mapRequired(call_to_string.c_str(),     call_to_string_value);
+                io.mapRequired("is_looplevel",       is_looplevel);
+                io.mapRequired("call_to_string",     call_to_string);
             }
         };
         
