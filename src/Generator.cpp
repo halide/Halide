@@ -1,3 +1,4 @@
+
 #include <cmath>
 #include <fstream>
 #include <set>
@@ -390,9 +391,13 @@ namespace llvm {
     
     namespace yaml {
         
-        using  param_ptr_t = const_ptr<Halide::Internal::GeneratorParamBase>;
-        using  input_ptr_t = const_ptr<Halide::Internal::GeneratorInputBase>;
-        using output_ptr_t = const_ptr<Halide::Internal::GeneratorOutputBase>;
+        using  param_t = Halide::Internal::GeneratorParamBase;
+        using  input_t = Halide::Internal::GeneratorInputBase;
+        using output_t = Halide::Internal::GeneratorOutputBase;
+        
+        using  param_ptr_t = const_ptr<param_t>;
+        using  input_ptr_t = const_ptr<input_t>;
+        using output_ptr_t = const_ptr<output_t>;
         
     } /// namespace yaml
 
@@ -406,36 +411,49 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(param_ptr_t);
 LLVM_YAML_IS_SEQUENCE_VECTOR(input_ptr_t);
 LLVM_YAML_IS_SEQUENCE_VECTOR(output_ptr_t);
 
+// LLVM_YAML_DECLARE_MAPPING_TRAITS(param_t);
+// LLVM_YAML_DECLARE_MAPPING_TRAITS(input_t);
+// LLVM_YAML_DECLARE_MAPPING_TRAITS(output_t);
+
+// LLVM_YAML_IS_STRING_MAP(std::string);
+
 namespace llvm {
     
     namespace yaml {
         
+        /// The first rule of the LLVM YAML interface is, you do not talk about const.
+        /// The second rule of the LLVM YAML interface is YOU DO NOT TALK ABOUT CONST
+        
         template <>
-        struct MappingTraits<param_ptr_t> {
-            static void mapping(IO& io, param_ptr_t& param) {
-                io.mapRequired("name",               param->name);
-                io.mapRequired("default",            param->get_default_value());
-                io.mapRequired("c_type",             param->get_c_type());
-                io.mapRequired("type_decls",         param->get_type_decls());
-                io.mapRequired("is_synthetic",       param->is_synthetic_param());
+        struct MappingTraits<param_t> {
+            static void mapping(IO& io,      param_t& param) {
+                std::string name                    = param.name;
+                std::string default_value           = param.get_default_value();
+                std::string c_type                  = param.get_c_type();
+                std::string type_decls              = param.get_type_decls();
+                       bool is_synthetic            = param.is_synthetic_param();
+                       bool is_looplevel            = param.is_looplevel_param();
+                std::string call_to_string          = is_looplevel ? "" : param.call_to_string(param.name);
                 
-                bool is_looplevel = param->is_looplevel_param();
-                std::string call_to_string = is_looplevel ? "" : param->call_to_string(param->name);
-                
-                io.mapRequired("is_looplevel",       is_looplevel);
-                io.mapRequired("call_to_string",     call_to_string);
+                io.mapRequired("name",              name);
+                io.mapRequired("default",           default_value);
+                io.mapRequired("c_type",            c_type);
+                io.mapRequired("type_decls",        type_decls);
+                io.mapRequired("is_synthetic",      is_synthetic);
+                io.mapRequired("is_looplevel",      is_looplevel);
+                io.mapRequired("call_to_string",    call_to_string);
             }
         };
         
         template <>
-        struct MappingTraits<input_ptr_t> {
-            static void mapping(IO& io, input_ptr_t& param) {
+        struct MappingTraits<input_t> {
+            static void mapping(IO& io, input_t& input) {
             }
         };
         
         template <>
-        struct MappingTraits<output_ptr_t> {
-            static void mapping(IO& io, output_ptr_t& param) {
+        struct MappingTraits<output_t> {
+            static void mapping(IO& io, output_t& output) {
             }
         };
         
