@@ -235,10 +235,17 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 class EmitterBase {
     
     public:
+        struct InputInfo {
+            std::string c_type;
+            std::string name;
+        };
+    
+    public:
         using      stringvec_t = std::vector<std::string>;
         using  param_ptr_vec_t = std::vector<Internal::GeneratorParamBase*>;
         using  input_ptr_vec_t = std::vector<Internal::GeneratorInputBase*>;
         using output_ptr_vec_t = std::vector<Internal::GeneratorOutputBase*>;
+        using        infovec_t = std::vector<InputInfo>;
     
     public:
         EmitterBase(std::ostream& dest,
@@ -294,6 +301,19 @@ class EmitterBase {
             return out;
         }
         
+        infovec_t get_input_info(input_ptr_vec_t const& in) {
+            infovec_t out;
+            // std::vector<EmitterBase::InputInfo> in_info;
+            for (auto input : in) {
+                std::string c_type = input->get_c_type();
+                if (input->is_array()) {
+                    c_type = "std::vector<" + c_type + ">";
+                }
+                out.push_back({ c_type, input->name() });
+            }
+            return out;
+        }
+        
     protected:
         /** Emit spaces according to the current indentation level */
         std::string indent();
@@ -321,9 +341,8 @@ class StubEmitter : public EmitterBase {
                     generator_stub_name,
                     generator_params,
                     inputs, outputs) {}
-        
+    
     private:
-        
         void emit_inputs_struct();
         void emit_generator_params_struct();
         
@@ -361,16 +380,62 @@ class YamlEmitter : EmitterBase {
 } /// namespace Internal
 } /// namespace Halide
 
+using llvm::yaml::MappingTraits;
+using llvm::yaml::IO;
+
+// LLVM_YAML_IS_SEQUENCE_VECTOR(std::string);
+#define FUCKYOU(string) (char const*)string
+
 namespace llvm {
     
     namespace yaml {
         
-        // template <>
-        // struct MappingTraits<THINGY>
+        using  param_ptr_t = Halide::Internal::GeneratorParamBase*;
+        using  input_ptr_t = Halide::Internal::GeneratorInputBase*;
+        using output_ptr_t = Halide::Internal::GeneratorOutputBase*;
+        
+        template <>
+        struct MappingTraits<param_ptr_t> {
+            static void mapping(IO& io, param_ptr_t& param) {
+                std::string name{ "name" };
+                std::string default_value{ "default_value" };
+                std::string c_type{ "c_type" };
+                std::string type_decls{ "type_decls" };
+                std::string is_synthetic{ "is_synthetic" };
+                std::string is_looplevel{ "is_looplevel" };
+                std::string call_to_string{ "call_to_string" };
+                
+                io.mapRequired(name.c_str(),               param->name);
+                io.mapRequired(default_value.c_str(),      param->get_default_value());
+                io.mapRequired(c_type.c_str(),             param->get_c_type());
+                io.mapRequired(type_decls.c_str(),         param->get_type_decls());
+                io.mapRequired(is_synthetic.c_str(),       param->is_synthetic_param());
+                
+                bool is_looplevel_value = param->is_looplevel_param();
+                std::string call_to_string_value = is_looplevel ? "" : param->call_to_string(param->name);
+                
+                io.mapRequired(is_looplevel.c_str(),       is_looplevel_value);
+                io.mapRequired(call_to_string.c_str(),     call_to_string_value);
+            }
+        };
+        
+        template <>
+        struct MappingTraits<input_ptr_t> {
+            static void mapping(IO& io, input_ptr_t& param) {
+            }
+        };
+        
+        template <>
+        struct MappingTraits<output_ptr_t> {
+            static void mapping(IO& io, output_ptr_t& param) {
+            }
+        };
         
     }
     
 }
+
+#undef FUCKYOU
 
 namespace Halide {
 namespace Internal {
@@ -445,19 +510,7 @@ void StubEmitter::emit_generator_params_struct() {
 }
 
 void StubEmitter::emit_inputs_struct() {
-    struct InInfo {
-        std::string c_type;
-        std::string name;
-    };
-    std::vector<InInfo> in_info;
-    for (auto input : inputs) {
-        std::string c_type = input->get_c_type();
-        if (input->is_array()) {
-            c_type = "std::vector<" + c_type + ">";
-        }
-        in_info.push_back({c_type, input->name()});
-    }
-
+    infovec_t in_info = get_input_info(inputs);
     const std::string name = "Inputs";
     stream << indent() << "struct " << name << " final {\n";
     indent_level++;

@@ -392,6 +392,7 @@ protected:
     friend class GeneratorBase;
     friend class EmitterBase;
     friend class StubEmitter;
+    friend class YamlEmitter;
 
     void check_value_readable() const;
     void check_value_writable() const;
@@ -399,6 +400,7 @@ protected:
     // All GeneratorParams are settable from string.
     virtual void set_from_string(const std::string &value_string) = 0;
 
+public:
     virtual std::string call_to_string(const std::string &v) const = 0;
     virtual std::string get_c_type() const = 0;
 
@@ -416,6 +418,7 @@ protected:
         return false;
     }
 
+protected:
     void fail_wrong_type(const char *type);
 
 private:
@@ -1343,6 +1346,7 @@ protected:
 
     friend class EmitterBase;
     friend class StubEmitter;
+    friend class YamlEmitter;
 
     virtual std::string get_c_type() const = 0;
 
@@ -1965,6 +1969,7 @@ protected:
     friend class GeneratorBase;
     friend class EmitterBase;
     friend class StubEmitter;
+    friend class YamlEmitter;
 
     void init_internals();
     void resize(size_t size);
