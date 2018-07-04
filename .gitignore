@@ -6,6 +6,7 @@
 bazel-*
 bin/*
 python_bindings/bin/*
+build/
 build-64/*
 build-ios/*
 build-osx/*

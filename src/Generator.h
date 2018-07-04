@@ -390,6 +390,7 @@ public:
 
 protected:
     friend class GeneratorBase;
+    friend class EmitterBase;
     friend class StubEmitter;
 
     void check_value_readable() const;
@@ -1340,6 +1341,7 @@ protected:
 
     void verify_internals() override;
 
+    friend class EmitterBase;
     friend class StubEmitter;
 
     virtual std::string get_c_type() const = 0;
@@ -1961,6 +1963,7 @@ protected:
     ~GeneratorOutputBase() override;
 
     friend class GeneratorBase;
+    friend class EmitterBase;
     friend class StubEmitter;
 
     void init_internals();

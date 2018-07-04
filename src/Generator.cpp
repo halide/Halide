@@ -230,64 +230,90 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
     return values;
 }
 
-class StubEmitter {
-public:
-    StubEmitter(std::ostream &dest,
-                const std::string &generator_registered_name,
-                const std::string &generator_stub_name,
-                const std::vector<Internal::GeneratorParamBase *>& generator_params,
-                const std::vector<Internal::GeneratorInputBase *>& inputs,
-                const std::vector<Internal::GeneratorOutputBase *>& outputs)
-        : stream(dest),
-          generator_registered_name(generator_registered_name),
-          generator_stub_name(generator_stub_name),
-          generator_params(select_generator_params(generator_params)),
-          inputs(inputs),
-          outputs(outputs) {
-       namespaces = split_string(generator_stub_name, "::");
-       internal_assert(namespaces.size() >= 1);
-       if (namespaces[0].empty()) {
-           // We have a name like ::foo::bar::baz; omit the first empty ns.
-           namespaces.erase(namespaces.begin());
-           internal_assert(namespaces.size() >= 2);
-       }
-       class_name = namespaces.back();
-       namespaces.pop_back();
-    }
-
-    void emit();
-private:
-    std::ostream &stream;
-    const std::string generator_registered_name;
-    const std::string generator_stub_name;
-    std::string class_name;
-    std::vector<std::string> namespaces;
-    const std::vector<Internal::GeneratorParamBase *> generator_params;
-    const std::vector<Internal::GeneratorInputBase *> inputs;
-    const std::vector<Internal::GeneratorOutputBase *> outputs;
-    int indent_level{0};
-
-    std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
-        std::vector<Internal::GeneratorParamBase *> out;
-        for (auto p : in) {
-            // These are always propagated specially.
-            if (p->name == "target" ||
-                p->name == "auto_schedule" ||
-                p->name == "machine_params") continue;
-            if (p->is_synthetic_param()) continue;
-            out.push_back(p);
+class EmitterBase {
+    
+    public:
+        EmitterBase(std::ostream& dest,
+                    std::string const& generator_registered_name,
+                    std::string const& generator_stub_name,
+                    std::vector<Internal::GeneratorParamBase*> const& generator_params,
+                    std::vector<Internal::GeneratorInputBase*> const& inputs,
+                    std::vector<Internal::GeneratorOutputBase*> const& outputs)
+            : stream(dest),
+              generator_registered_name(generator_registered_name),
+              generator_stub_name(generator_stub_name),
+              generator_params(select_generator_params(generator_params)),
+              inputs(inputs),
+              outputs(outputs) {
+           namespaces = split_string(generator_stub_name, "::");
+           internal_assert(namespaces.size() >= 1);
+           if (namespaces[0].empty()) {
+               // We have a name like ::foo::bar::baz; omit the first empty ns.
+               namespaces.erase(namespaces.begin());
+               internal_assert(namespaces.size() >= 2);
+           }
+           class_name = namespaces.back();
+           namespaces.pop_back();
         }
-        return out;
-    }
-
-    /** Emit spaces according to the current indentation level */
-    std::string indent();
-
-    void emit_inputs_struct();
-    void emit_generator_params_struct();
+        
+        virtual void emit() = 0;
+        virtual ~EmitterBase() {}
+        
+    protected:
+        std::ostream& stream;
+        const std::string generator_registered_name;
+        const std::string generator_stub_name;
+        std::string class_name;
+        std::vector<std::string> namespaces;
+        const std::vector<Internal::GeneratorParamBase*> generator_params;
+        const std::vector<Internal::GeneratorInputBase*> inputs;
+        const std::vector<Internal::GeneratorOutputBase*> outputs;
+        int indent_level{ 0 };
+        
+        std::vector<Internal::GeneratorParamBase*> select_generator_params(std::vector<Internal::GeneratorParamBase*> const& in) {
+            std::vector<Internal::GeneratorParamBase*> out;
+            for (auto p : in) {
+                // These are always propagated specially.
+                if (p->name == "target" ||
+                    p->name == "auto_schedule" ||
+                    p->name == "machine_params") continue;
+                if (p->is_synthetic_param()) continue;
+                out.push_back(p);
+            }
+            return out;
+        }
+        
+        /** Emit spaces according to the current indentation level */
+        std::string indent();
 };
 
-std::string StubEmitter::indent() {
+
+class StubEmitter : public EmitterBase {
+    
+    using Super = EmitterBase;
+    
+    public:
+        virtual void emit() override;
+        StubEmitter(std::ostream& dest,
+                    std::string const& generator_registered_name,
+                    std::string const& generator_stub_name,
+                    std::vector<Internal::GeneratorParamBase*> const& generator_params,
+                    std::vector<Internal::GeneratorInputBase*> const& inputs,
+                    std::vector<Internal::GeneratorOutputBase*> const& outputs)
+            : Super(dest,
+                    generator_registered_name,
+                    generator_stub_name,
+                    generator_params,
+                    inputs, outputs) {}
+        
+    private:
+        
+        void emit_inputs_struct();
+        void emit_generator_params_struct();
+        
+};
+
+std::string EmitterBase::indent() {
     std::ostringstream o;
     for (int i = 0; i < indent_level; i++) {
         o << "  ";
