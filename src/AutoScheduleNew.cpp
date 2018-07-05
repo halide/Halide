@@ -129,7 +129,7 @@ struct PipelineFeatures {
     // TODO: It's weird that we've already selected a
     // dimension to be vectorized over - that should be part
     // of the scheduling search space instead.
-  
+
     void dump() const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
@@ -1854,7 +1854,7 @@ struct State {
                 }
             }
         }
-        
+
 
         cost = 0;
 
@@ -1879,13 +1879,13 @@ struct State {
             // index of current stage whose features we are reading
             int stage = 0;
             // load pipeline features into input buffer
-            for (const auto &n : dag.nodes) { 
+            for (const auto &n : dag.nodes) {
                 for (const auto &s : n.stages) {
                     if (stage >= num_stages) {
                         // don't use pipeline features for unscheduled stages
                         break;
                     }
-                    
+
                     const int *pipeline_feats = (const int *)(&(s.features));
                     // write features to file
                     fwrite(pipeline_feats, sizeof(int), 399, fpipe);
@@ -1894,12 +1894,12 @@ struct State {
                     for (int i = 7; i < pipeline_feat_size; i++) {
                       int x = (i-7)/7;
                       int y = (i-7)%7;
-                      pipeline_features(0, x, y, stage) = pipeline_feats[i]; 
+                      pipeline_features(0, x, y, stage) = pipeline_feats[i];
                       pipeline_features(0, x, y, stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
                       pipeline_features(0, x, y, stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
                     }
                     stage += 1;
-                } 
+                }
             }
 
 
@@ -1910,9 +1910,9 @@ struct State {
                     const auto &feat = p.second[s];
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
-                        float val = std::log(1+sched_stats[i]);  
+                        float val = std::log(1+sched_stats[i]);
                         fwrite(&val, sizeof(float), 1, fsched);
-                        
+
                         schedule_features(0, i, stage) = std::log(1+sched_stats[i]);
                         schedule_features(0, i, stage) -= throughput_predictor->feature_stats.schedule_mean(i);
                         schedule_features(0, i, stage) /= throughput_predictor->feature_stats.schedule_std(i);
@@ -1925,14 +1925,14 @@ struct State {
             fclose(fsched);
             throughput_predictor->set_inputs(pipeline_features, schedule_features);
             throughput_predictor->prediction.realize(network_output);
-            
+
             FILE* fp = fopen("../prediction.data" , "ab");
             float prediction = network_output(0,0,0);
             fwrite(&prediction, sizeof(float), 1, fp);
             fclose(fp);
 
             cost = -network_output(0,0,0);
-        } 
+        }
 
         else {
             for (auto p : features) {
@@ -1977,7 +1977,7 @@ struct State {
                     memory_cost *= feat.num_realizations;
 
                     cost += compute_cost + memory_cost;
-                    
+
                     /*
                     // Model v1 is a least-squares fit on the features and
                     // the features squared trying to predict
@@ -2287,13 +2287,18 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
+    Weights w = load_weights();
+    Stats stats = load_stats();
+
+    ThroughputPredictorPipeline throughput_predictor(w, stats);
+
     State optimal;
 
     if (time_limit) {
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            State s = optimal_schedule(dag, outputs, params, nullptr, beam_size);
+            State s = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
             if (beam_size == 1 || s.cost < optimal.cost) {
                 optimal = s;
             }
@@ -2305,7 +2310,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         }
     } else {
         // Use a fixed beam size
-        optimal = optimal_schedule(dag, outputs, params, nullptr, beam_size);
+        optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
     }
 
     debug(0) << "** Optimal schedule:\n";
@@ -2314,7 +2319,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Just to get the debugging prints to fire
-    optimal.calculate_cost(dag, params, nullptr, true);
+    optimal.calculate_cost(dag, params, &throughput_predictor, true);
 
     // Apply the schedules
     optimal.apply_schedule(dag, params);
@@ -2331,7 +2336,7 @@ void autoschedule_test() {
     size_t beam_size = 1;
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");
-    
+
     Weights w = load_weights();
     Stats stats = load_stats();
 
