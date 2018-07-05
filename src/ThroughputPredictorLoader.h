@@ -37,14 +37,9 @@ namespace {
           for (int c = 0; c < shapes.pipeline_stats[1]; c++) {
               int index = k * shapes.pipeline_stats[1] + c;
               stats.pipeline_mean(k, c) = buffer[index]; 
-              std::cout << stats.pipeline_mean(k, c) << " ";
-              if ( stats.pipeline_mean(k, c)  !=  stats.pipeline_mean(k, c) )
-                std::cout <<"pipe mean NAN" << std::endl;
           }
       }
       free(buffer);
-      std::cout << std::endl;
-      std::cout << " pipeline std" << std::endl;
 
       fp = fopen("../stats/pipeline_std.data", "rb");
       size = shapes.pipeline_stats[0] * shapes.pipeline_stats[1];
@@ -56,14 +51,9 @@ namespace {
           for (int c = 0; c < shapes.pipeline_stats[1]; c++) {
               int index = k * shapes.pipeline_stats[1] + c;
               stats.pipeline_std(k, c) = buffer[index]; 
-              std::cout << stats.pipeline_std(k, c) << " ";
-              if (stats.pipeline_std(k, c) != stats.pipeline_std(k, c))
-                std::cout  << "pipe std NAN" << std::endl;
           }
       }
       free(buffer);
-      std::cout << std::endl;
-      std::cout << "scheduele mean " << std::endl;
       
       fp = fopen("../stats/schedule_mean.data", "rb");
       size = shapes.schedule_stats[0];
@@ -73,11 +63,7 @@ namespace {
 
       for (int k = 0; k < shapes.schedule_stats[0]; k++) {
           stats.schedule_mean(k) = buffer[k]; 
-          std::cout << stats.schedule_mean(k) << " ";
-          if ( stats.schedule_mean(k) !=  stats.schedule_mean(k) )
-            std::cout << "Sched mean NAN" << std::endl;
       }
-      std::cout << std::endl;
       free(buffer);
       
       fp = fopen("../stats/schedule_std.data", "rb");
@@ -88,12 +74,8 @@ namespace {
 
       for (int k = 0; k < shapes.schedule_stats[0]; k++) {
           stats.schedule_std(k) = buffer[k]; 
-          std::cout << stats.schedule_std(k) << " ";
-          if ( stats.schedule_std(k) !=  stats.schedule_std(k)) 
-            std::cout << "sched std NAN" << std::endl;
       }
       free(buffer);
-      std::cout << std::endl;
       return stats;
     }
     
@@ -184,7 +166,6 @@ namespace {
             }
           }
       }
-      std::cout << std::endl;
       free(buffer);
       
       // load head1_bias
@@ -223,7 +204,6 @@ namespace {
       
       for (int c = 0; c < shapes.head2_bias[0]; c++) {
           W.head2_bias(c) = buffer[c]; 
-          if (W.head2_bias(c) != W.head2_bias(c)) std::cout << "NAN in head2 bias";
       }
       free(buffer);
 
@@ -239,7 +219,6 @@ namespace {
               for (int x = 0; x < shapes.conv1_filter[2]; x++) {
                   int index = k * shapes.conv1_filter[1] * shapes.conv1_filter[2] + c * shapes.conv1_filter[2] + x;
                   W.conv1_filter(k,c,x) = buffer[index]; 
-                  if (W.conv1_filter(k,c,x) != W.conv1_filter(k,c,x)) std::cout << "NAN in conv1 filter";
               }
           }
       }
@@ -254,7 +233,6 @@ namespace {
       
       for (int c = 0; c < shapes.conv1_bias[0]; c++) {
           W.conv1_bias(c) = buffer[c]; 
-          if (W.conv1_bias(c) != W.conv1_bias(c)) std::cout << "NAN in conv1 bias";
       }
       free(buffer);
 
@@ -286,7 +264,6 @@ namespace {
       }
       free(buffer);
 
-      std::cout << 4 << std::endl;      
       
       // load trunk_conv3
       fp = fopen("../weights/trunk_conv3.weight.data", "rb");

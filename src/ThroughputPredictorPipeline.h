@@ -16,10 +16,7 @@ namespace {
       ImageParam schedule_features{Float(32), 3, "schedule_features"};
 
       Stats feature_stats;
-       /**
-      Buffer<float> pipeline_std{56,7};
-      Buffer<float> pipeline_mean{56,7};
-      **/
+      
       Buffer<float> schedule_std{18};
       Buffer<float> schedule_mean{18};
 
@@ -56,6 +53,8 @@ namespace {
 			Func f_ReLU1, f_ReLU2, f_ReLU3, f_ReLU4, f_ReLU5, f_ReLU6, f_ReLU7;
 			Func f_pool3, f_pool4;
 			Func f_reduce, f_fc1, f_fc2, prediction;
+  
+      int min_stages; // minimum number of stages required by neural network
 
       ThroughputPredictorPipeline(Weights weights, Stats stats) : 
                                                feature_stats(stats),
@@ -70,8 +69,10 @@ namespace {
                                                fc2_weights(weights.fc2_filter), fc2_bias(weights.fc2_bias),
                                                fc3_weights(weights.fc3_filter), fc3_bias(weights.fc3_bias) {
         
-        
+        min_stages = 22;
+
         Var c("c"), w("w"), n("n");
+
         padded_pipeline_features = Halide::BoundaryConditions::constant_exterior(pipeline_features, 0);	
         padded_schedule_features = Halide::BoundaryConditions::constant_exterior(schedule_features, 0);
         
@@ -98,10 +99,8 @@ namespace {
         RDom r5(filter5.dim(1).min(), filter5.dim(1).extent(),
                 filter5.dim(2).min(), filter5.dim(2).extent());
 
-        /* Assuming input features are given zero padded to the longest pipeline within the batch of size n */
-        //RDom r_reduce(0, (feat_len/num_features) / 4);
-        RDom r_reduce(0, (Halide::max(22, schedule_features.dim(2).extent())-16)/ 4);
-
+        // reduce over a region that expands to 3x1 convs from the first two stages to the last two stages with zero padding
+        RDom r_reduce(0, ( Halide::max(min_stages, schedule_features.dim(2).extent()) - 16 ) / 4);
 
         f_head1_conv(n, c, w) = head1_bias(c);
         f_head1_conv(n, c, w) += head1_filter(c, r_head1.x, r_head1.y) * padded_pipeline_features(n, r_head1.x, r_head1.y, w);
@@ -152,7 +151,6 @@ namespace {
         f_fc1(n, c, w) = fc1_bias(c);;
         f_fc1(n, c, w) += f_reduce(n, r_fc1, w) * fc1_weights(c, r_fc1);
         f_ReLU6(n, c, w) = max(0, f_fc1(n, c, w));
-
         
         f_fc2(n, c, w) = fc2_bias(c);;
         f_fc2(n, c, w) += f_ReLU6(n, r_fc2, w) * fc2_weights(c, r_fc2);
@@ -195,7 +193,6 @@ namespace {
         prediction.compute_root();
 
         prediction.compile_jit(); 
-        std::cout << "JIT COMPILED PIPELINE" << std::endl; 
       }
     
       void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats) {
