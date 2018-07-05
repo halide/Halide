@@ -27,6 +27,8 @@
 namespace Halide {
 namespace Internal {
 
+using namespace AutoScheduleModel;
+
 namespace {
 
 using std::string;
@@ -1866,12 +1868,13 @@ struct State {
                 num_stages += p.second.size();
             }
 
-            int pipeline_feat_size = 399;
-            int schedule_feat_size = 18;
+            const int pipeline_feat_size = 399;
+            const int schedule_feat_size = 18;
+            const int batch_size = 1;
 
-            Buffer<float> pipeline_features(1, 56, 7, num_stages); // just predicting on batch size of 1 pipeline
-            Buffer<float> schedule_features(1, 18, num_stages);
-            Buffer<float> network_output(1,1,1);
+            Buffer<float> pipeline_features(batch_size, 56, 7, num_stages); // just predicting on batch size of 1 pipeline
+            Buffer<float> schedule_features(batch_size, 18, num_stages);
+            Buffer<float> network_output(batch_size);
 
             FILE *fsched = fopen("../schedule_feats.data", "ab");
             FILE *fpipe = fopen("../pipeline_feats.data", "ab");
@@ -2287,8 +2290,8 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
-    Weights w = load_weights();
-    Stats stats = load_stats();
+    auto w = AutoScheduleModel::load_weights();
+    auto stats = AutoScheduleModel::load_stats();
 
     ThroughputPredictorPipeline throughput_predictor(w, stats);
 
