@@ -1996,8 +1996,8 @@ void CodeGen_Hexagon::visit(const NE *op) {
 Value *CodeGen_Hexagon::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
     // Compute size from list of extents checking for overflow.
 
-    Expr overflow = make_zero(UInt(64));
-    Expr total_size = make_const(UInt(64), type.lanes() * type.bytes());
+    Expr overflow = make_zero(UInt(32));
+    Expr total_size = make_const(UInt(32), type.lanes() * type.bytes());
 
     // We'll multiply all the extents into the 64-bit value
     // total_size. We'll also track (total_size >> 32) as a 64-bit
@@ -2006,9 +2006,9 @@ Value *CodeGen_Hexagon::codegen_allocation_size(const std::string &name, Type ty
     // only occupies the bottom 32-bits. Overflow could be more simply
     // checked for using division, but that's slower at runtime. This
     // method generates much better assembly.
-    Expr total_size_hi = make_zero(UInt(64));
+    Expr total_size_hi = make_zero(UInt(32));
 
-    Expr low_mask = make_const(UInt(64), (uint64_t)(0xffffffff));
+    Expr low_mask = make_const(UInt(32), (uint32_t)(0xffff));
     for (size_t i = 0; i < extents.size(); i++) {
         Expr next_extent = cast(UInt(32), extents[i]);
 
@@ -2016,17 +2016,17 @@ Value *CodeGen_Hexagon::codegen_allocation_size(const std::string &name, Type ty
         // the loop invariant:
         total_size_hi *= next_extent;
         // Deal with carry from the low bits. Still can't overflow.
-        total_size_hi += ((total_size & low_mask) * next_extent) >> 32;
+        total_size_hi += ((total_size & low_mask) * next_extent) >> 24;
 
         // Update total_size. This may overflow.
         total_size *= next_extent;
 
         // We can check for overflow by asserting that total_size_hi
         // is still a 32-bit number.
-        overflow = overflow | (total_size_hi >> 32);
+        overflow = overflow | (total_size_hi >> 24);
     }
 
-    Expr max_size = make_const(UInt(64), target.maximum_buffer_size());
+    Expr max_size = make_const(UInt(32), target.maximum_buffer_size());
     Expr size_check = (overflow == 0) && (total_size <= max_size);
 
     // For constant-sized allocations this check should simplify away.

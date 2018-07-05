@@ -731,7 +731,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_qurt_threads(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
-                modules.push_back(get_initmod_hexagon_cache_allocator(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing

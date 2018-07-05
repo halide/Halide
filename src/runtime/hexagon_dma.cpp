@@ -4,6 +4,7 @@
 #include "HalideRuntimeHexagonDma.h"
 #include "printer.h"
 #include "mini_hexagon_dma.h"
+#include "hexagon_dma_pool.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
 

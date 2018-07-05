@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "hexagon_dma_pool.h"
 
 //Dummy implementation
 WEAK void *halide_locked_cache_malloc(void *user_context, size_t size) {

@@ -1,6 +1,7 @@
 #include "HalideRuntime.h"
 #include "mini_hexagon_dma.h"
 #include "scoped_mutex_lock.h"
+#include "hexagon_dma_pool.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
@@ -56,15 +57,17 @@ static inline void *hexagon_cache_pool_get (void *user_context, size_t size, boo
     pcache_pool prev = NULL;
     pcache_pool temp = hexagon_cache_pool;
     // Walk the list to find free buffer
-    while (temp != NULL) {
+    {
         ScopedMutexLock lock(&hexagon_cache_mutex);
-        if ((temp->used == false) &&
-            (size == temp->bytes)) {
-            temp->used = true;
-            return (void *)temp->l2memory;
+        while (temp != NULL) {
+            if ((temp->used == false) &&
+                (size == temp->bytes)) {
+                temp->used = true;
+                return (void *)temp->l2memory;
+            }
+            prev = temp;
+            temp = temp->next;
         }
-        prev = temp;
-        temp = temp->next;
     }
 
     // If we are still here that means temp was null.
@@ -151,7 +154,7 @@ WEAK void halide_locked_cache_free(void *user_context, void *ptr) {
     hexagon_cache_pool_put(user_context, ptr);
 }
 
-WEAK int halide_hexagon_allocate_l2_pool(void *user_context, size_t size) {
+WEAK int halide_hexagon_allocate_l2_pool(void *user_context) {
    // TODO not sure what is required to be done here ?
    halide_print(user_context, "halide_hexagon_allocate_l2_pool \n");
    return halide_error_code_success;
