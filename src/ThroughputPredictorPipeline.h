@@ -5,6 +5,7 @@
 #include "BoundaryConditions.h"
 #include "ThroughputPredictorLoader.h"
 #include "Type.h"
+#include "../tools/halide_benchmark.h"
 
 namespace Halide {
 namespace Internal {
@@ -160,22 +161,42 @@ public:
         prediction(n) = fc3_bias();
         prediction(n) += f_ReLU7(n, r_fc3) * fc3_weights(r_fc3);
 
-        f_head1_relu.compute_root();
-        f_head2_relu.compute_root();
-        f_ReLU1.compute_root();
-        f_ReLU2.compute_root();
-        f_ReLU3.compute_root();
-        f_pool3.compute_root();
-        f_ReLU4.compute_root();
-        f_pool4.compute_root();
-        f_ReLU5.compute_root();
-        f_reduce.compute_root();
+        padded_pipeline_features.compute_at(prediction, n);
+        padded_schedule_features.compute_at(prediction, n);
+        f_head1_relu.compute_at(prediction, n);
+        f_head2_relu.compute_at(prediction, n);
+        f_ReLU1.compute_at(prediction, n);
+        f_ReLU2.compute_at(prediction, n);
+        f_ReLU3.compute_at(prediction, n);
+        f_pool3.compute_at(prediction, n);
+        f_ReLU4.compute_at(prediction, n);
+        f_pool4.compute_at(prediction, n);
+        f_ReLU5.compute_at(prediction, n);
+        f_reduce.compute_at(prediction, n);
 
-        f_ReLU6.compute_root();
-        f_ReLU7.compute_root();
+        f_ReLU6.compute_at(prediction, n);
+        f_ReLU7.compute_at(prediction, n);
+        Expr batch_size = pipeline_features.dim(0).extent();
+        prediction.bound(n, 0, batch_size);
+        pipeline_features.dim(0).set_bounds(0, batch_size);
+        schedule_features.dim(0).set_bounds(0, batch_size);
+        Expr pipeline_length = schedule_features.dim(2).extent();
+        pipeline_features.dim(3).set_bounds(0, pipeline_length);
+        schedule_features.dim(2).set_bounds(0, pipeline_length);
+
         prediction.compute_root();
 
         prediction.compile_jit();
+    }
+
+    void benchmark() {
+        Buffer<float> pipeline_feats(1000, 56, 7, 20), schedule_feats(1000, 18, 20);
+        pipeline_feats.fill(0.0f);
+        schedule_feats.fill(0.0f);
+        set_inputs(pipeline_feats, schedule_feats);
+        Buffer<float> out(1000);
+        auto t = Halide::Tools::benchmark([&]() {prediction.realize(out);});
+        debug(0) << "Throughput predictor runtime: " << (t * 1000) << " us\n";
     }
 
     void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats) {
