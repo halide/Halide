@@ -15,6 +15,8 @@ function finish {
 }
 trap finish EXIT
 
+rm -rf bin results
+
 mkdir -p results
 
 PIPELINES=5
