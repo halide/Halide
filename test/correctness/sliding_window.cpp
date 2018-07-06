@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
         Func f, g, h;
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x-1);
-        h(x) = g(x);
+        h(x) = g(x) + 1;
 
         f.store_root().compute_at(g, x);
         g.compute_at(h, x);
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         Var c;
         f(x, c) = call_counter(x, c);
         g(x, c) = f(x + 1, c) - f(x, c);
-        h(x, c) = g(x, c);
+        h(x, c) = g(x, c) + 1;
 
         f.store_root()
             .compute_at(h, x)

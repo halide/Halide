@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
 
     {
         Func g;
-        g(x) = f(x);
+        g(x) = f(x) + 1;
         g.vectorize(x, 8);
         count_partitions(g, 2);
     }

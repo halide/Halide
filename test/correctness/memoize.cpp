@@ -79,7 +79,7 @@ void record_error(void *user_context, const char *msg) {
 
 int main(int argc, char **argv) {
 
-    {
+    /*{
         call_count = 0;
         Func count_calls;
         count_calls.define_extern("count_calls", {}, UInt(8), 2);
@@ -609,9 +609,7 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
-
-
-    }
+    }*/
 
     fprintf(stderr, "Success!\n");
     return 0;
