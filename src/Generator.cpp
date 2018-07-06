@@ -4,8 +4,8 @@
 #include <set>
 
 #include "runtime/HalideRuntime.h"        /// for halide_type_code_t
-#include "llvm/Support/YAMLTraits.h"      /// for YAML underpinnings
 #include "llvm/Support/raw_os_ostream.h"  /// for LLVM and STL I/O bridge
+#include "llvm/Support/YAMLTraits.h"      /// for YAML underpinnings
 
 #include "Generator.h"
 #include "Outputs.h"
@@ -13,6 +13,13 @@
 
 template <typename T>
 using const_ptr = std::add_pointer_t<std::add_const_t<T>>;
+
+namespace Halide {
+    namespace Internal {
+        /// Forward-declare the YamlEmitter class:
+        class YamlEmitter;
+    }
+}
 
 namespace llvm {
     
@@ -30,6 +37,12 @@ namespace llvm {
         using  input_ptr_t = std::add_pointer_t<input_t>;
         using output_ptr_t = std::add_pointer_t<output_t>;
         
+        /// Forward-declare the MappingTraits specialization
+        /// for Halide::Internal::YamlEmitter:
+        
+        template <>
+        struct MappingTraits<Halide::Internal::YamlEmitter>;
+        
     } /// namespace yaml
 
 } /// namespace llvm
@@ -46,6 +59,9 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(output_ptr_t);
 
 /// We can also have a sequence of Halide Types:
 LLVM_YAML_IS_SEQUENCE_VECTOR(Halide::Type);
+
+/// … and of Yaml Emitters:
+LLVM_YAML_IS_SEQUENCE_VECTOR(Halide::Internal::YamlEmitter);
 
 namespace Halide {
 
@@ -276,6 +292,10 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 
 class EmitterBase {
     
+    /// Abstract base class for an emitter -- a class that describes generator
+    /// output for a simple mode, e.g. C++ stubs or YAML metadata (see concrete
+    /// subclass definitions below).
+    
     public:
         struct InputInfo {
             std::string c_type;
@@ -352,13 +372,13 @@ class EmitterBase {
             return out;
         }
         
-        /// Extract relevant info from a vector of Input pointers, copying
-        /// it into a vector of EmitterBase::InputInfo structs:
+        /// Extract relevant info from the vector of Input pointers, copying
+        /// their data into a vector of EmitterBase::InputInfo structs:
         
-        in_infovec_t get_input_info(input_ptr_vec_t const& ins) const {
+        in_infovec_t get_input_info() const {
             in_infovec_t outvec;
-            outvec.reserve(ins.size());
-            for (auto input : ins) {
+            outvec.reserve(inputs.size());
+            for (auto input : inputs) {
                 std::string c_type = input->get_c_type();
                 if (input->is_array()) {
                     c_type = "std::vector<" + c_type + ">";
@@ -368,14 +388,16 @@ class EmitterBase {
             return outvec;
         }
         
-        /// Extract relevant info from a vector of Output pointers, copying
-        /// it into a vector of EmitterBase::OutputInfo structs:
+        /// Extract relevant info from the vector of Output pointers, copying
+        /// their data into a vector of EmitterBase::OutputInfo structs and
+        /// returning this in a std::tuple, alongside a boolean value indicating
+        /// whether or not all of the outputs are of type Halide::Func:
         
-        out_info_t get_output_info(output_ptr_vec_t const& outs) const {
+        out_info_t get_output_info() const {
             bool all_outputs_are_func = true;
             out_infovec_t outvec;
-            outvec.reserve(outs.size());
-            for (auto output : outs) {
+            outvec.reserve(outputs.size());
+            for (auto output : outputs) {
                 std::string c_type = output->get_c_type();
                 std::string getter;
                 const bool is_func = (c_type == "Func");
@@ -424,10 +446,13 @@ class StubEmitter : public EmitterBase {
     private:
         void emit_inputs_struct();
         void emit_generator_params_struct();
-        
+    
 };
 
-class YamlEmitter : EmitterBase {
+class YamlEmitter : public EmitterBase {
+    
+    public:
+        friend struct llvm::yaml::MappingTraits<YamlEmitter>;
     
     public:
         using Super = EmitterBase;
@@ -436,11 +461,11 @@ class YamlEmitter : EmitterBase {
         using Super::output_ptr_vec_t;
     
     private:
-        using youtput_t = llvm::yaml::Output;
         using ostream_t = llvm::raw_os_ostream;
+        using youtput_t = llvm::yaml::Output;
     
     private:
-        static constexpr std::size_t column_width = 80;
+        static constexpr std::size_t default_column_width = 80;
     
     public:
         virtual void emit() override;
@@ -449,7 +474,8 @@ class YamlEmitter : EmitterBase {
                     std::string const& generator_stub_name,
                     param_ptr_vec_t const& generator_params,
                     input_ptr_vec_t const& inputs,
-                    output_ptr_vec_t const& outputs)
+                    output_ptr_vec_t const& outputs,
+                    std::size_t column_width = default_column_width)
             : Super(dest,
                     generator_registered_name,
                     generator_stub_name,
@@ -464,10 +490,11 @@ class YamlEmitter : EmitterBase {
     
 };
 
-// void YamlEmitter::emit() {}
-
 } /// namespace Internal
 } /// namespace Halide
+
+LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(Halide::Internal::EmitterBase::InputInfo);
+LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(Halide::Internal::EmitterBase::OutputInfo);
 
 namespace llvm {
     
@@ -488,16 +515,20 @@ namespace llvm {
         
         template <>
         struct MappingTraits<Halide::Type> {
+            static const bool flow = true; /// print values inline
             static void mapping(IO& io, Halide::Type& haltype) {
                                    int bits         = haltype.bits();
                                   int lanes         = haltype.lanes();
                 halide_type_code_t typecode         = haltype.code();
+                         std::string c_type         = Halide::Internal::halide_type_to_c_type(haltype);
+                       std::string c_source         = Halide::Internal::halide_type_to_c_source(haltype);
                 
-                io.mapRequired("bits",              bits);
-                io.mapRequired("lanes",             lanes);
-                io.mapRequired("typecode",          typecode);
+                io.mapRequired("bits",                bits);
+                io.mapRequired("lanes",               lanes);
+                io.mapRequired("typecode",            typecode);
+                io.mapRequired("c_type",              c_type);
+                io.mapRequired("c_source",            c_source);
             }
-            static const bool flow = true; /// print values inline
         };
         
         template <>
@@ -511,13 +542,13 @@ namespace llvm {
                        bool is_looplevel            = param->is_looplevel_param();
                 std::string call_to_string          = is_looplevel ? "" : param->call_to_string(param->name);
                 
-                io.mapRequired("name",              name);
-                io.mapRequired("default",           default_value);
-                io.mapRequired("c_type",            c_type);
-                io.mapRequired("type_decls",        type_decls);
-                io.mapRequired("is_synthetic",      is_synthetic);
-                io.mapRequired("is_looplevel",      is_looplevel);
-                io.mapRequired("call_to_string",    call_to_string);
+                io.mapRequired("name",                name);
+                io.mapRequired("default",             default_value);
+                io.mapRequired("c_type",              c_type);
+                io.mapRequired("type_decls",          type_decls);
+                io.mapRequired("is_synthetic",        is_synthetic);
+                io.mapRequired("is_looplevel",        is_looplevel);
+                io.mapRequired("call_to_string",      call_to_string);
             }
         };
         
@@ -530,9 +561,9 @@ namespace llvm {
                   typevec_t types                  = input->types();
                 std::string c_type                 = input->get_c_type();
                 
-                io.mapRequired("name",             name);
-                io.mapRequired("types",            types);
-                io.mapRequired("c_type",           c_type);
+                io.mapRequired("name",               name);
+                io.mapRequired("types",              types);
+                io.mapRequired("c_type",             c_type);
             }
         };
         
@@ -543,9 +574,68 @@ namespace llvm {
                   typevec_t types                   = output->types();
                 std::string c_type                  = output->get_c_type();
                 
-                io.mapRequired("name",              name);
-                io.mapRequired("types",             types);
-                io.mapRequired("c_type",            c_type);
+                io.mapRequired("name",                name);
+                io.mapRequired("types",               types);
+                io.mapRequired("c_type",              c_type);
+            }
+        };
+        
+        using InputInfo = Halide::Internal::EmitterBase::InputInfo;
+        
+        template <>
+        struct MappingTraits<InputInfo> {
+            static const bool flow = true; /// print values inline
+            static void mapping(IO& io, InputInfo& input_info) {
+                io.mapRequired("name",             input_info.name);
+                io.mapRequired("c_type",           input_info.c_type);
+            }
+        };
+        
+        using OutputInfo = Halide::Internal::EmitterBase::OutputInfo;
+        
+        template <>
+        struct MappingTraits<OutputInfo> {
+            static const bool flow = true; /// print values inline
+            static void mapping(IO& io, OutputInfo& output_info) {
+                io.mapRequired("name",              output_info.name);
+                io.mapRequired("c_type",            output_info.ctype);
+                io.mapRequired("getter",            output_info.getter);
+            }
+        };
+        
+        using                     Halide::Internal::YamlEmitter;
+        using stringvec_t       = Halide::Internal::EmitterBase::stringvec_t;
+        using param_ptr_vec_t   = Halide::Internal::EmitterBase::param_ptr_vec_t;
+        using input_ptr_vec_t   = Halide::Internal::EmitterBase::input_ptr_vec_t;
+        using output_ptr_vec_t  = Halide::Internal::EmitterBase::output_ptr_vec_t;
+        using in_infovec_t      = Halide::Internal::EmitterBase::in_infovec_t;
+        using out_infovec_t     = Halide::Internal::EmitterBase::out_infovec_t;
+        
+        template <>
+        struct MappingTraits<YamlEmitter> {
+            static void mapping(IO& io, YamlEmitter& yammitter) {
+                     std::string name              = yammitter.generator_registered_name;
+                     std::string stub_name         = yammitter.generator_stub_name;
+                     std::string class_name        = yammitter.class_name;
+                     stringvec_t namespaces        = yammitter.namespaces;
+                 param_ptr_vec_t params            = yammitter.generator_params;
+                 input_ptr_vec_t inputs            = yammitter.inputs;
+                output_ptr_vec_t outputs           = yammitter.outputs;
+                    in_infovec_t in_info           = yammitter.get_input_info();
+                   out_infovec_t out_info;
+                            bool outs_all_funcs{ true };
+                std::tie(out_info, outs_all_funcs) = yammitter.get_output_info();
+                
+                io.mapRequired("name",               name);
+                io.mapRequired("stub_name",          stub_name);
+                io.mapRequired("class_name",         class_name);
+                io.mapRequired("namespaces",         namespaces);
+                io.mapRequired("params",             params);
+                io.mapRequired("inputs",             inputs);
+                io.mapRequired("input_info",         in_info);
+                io.mapRequired("outputs",            outputs);
+                io.mapRequired("output_info",        out_info);
+                io.mapRequired("outputs_all_funcs",  outs_all_funcs);
             }
         };
         
@@ -555,6 +645,11 @@ namespace llvm {
 
 namespace Halide {
 namespace Internal {
+
+void YamlEmitter::emit() {
+    youtput << *this;
+}
+
 
 std::string EmitterBase::indent() {
     std::ostringstream o;
@@ -627,7 +722,7 @@ void StubEmitter::emit_generator_params_struct() {
 
 void StubEmitter::emit_inputs_struct() {
     /// Load up a std::vector<InputInfo> from our GeneratorInputs:
-    in_infovec_t in_info = get_input_info(inputs);
+    in_infovec_t in_info = get_input_info();
     
     const std::string name = "Inputs";
     stream << indent() << "struct " << name << " final {\n";
@@ -682,7 +777,7 @@ void StubEmitter::emit() {
     
     /// Load up a std::vector<OutputInfo> from our GeneratorInputs,
     /// passing along a boolean flag indicating if all outputs are Funcs:
-    std::tie(out_info, all_outputs_are_func) = get_output_info(outputs);
+    std::tie(out_info, all_outputs_are_func) = get_output_info();
     
     std::ostringstream guard;
     guard << "HALIDE_STUB";
@@ -925,11 +1020,6 @@ void StubEmitter::emit() {
     stream << indent() << "#endif  // " << guard.str() << "\n";
 }
 
-void YamlEmitter::emit() {
-    /// INSERT YAML EMITTER BUSINESS HERE
-}
-
-
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory)
     : generator(generator_factory(context)) {}
@@ -1114,7 +1204,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
-    // It's ok to omit "target=" if we are generating *only* a cpp_stub
+    /// It's ok to omit "target=" if we are generating a cpp_stub and/or yaml,
+    /// but nothing else (e.g. no other emit options):
     const std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
     
     /// I am not particularly proud of the next few lines:
@@ -1212,22 +1303,22 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         
-        if (emit_options.emit_cpp_stub) {
-            // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+        if (emit_options.emit_cpp_stub || emit_options.emit_yaml) {
+            /// When generating cpp_stubs and/or YAML metadata, we ignore all generator args passed in,
+            /// and supply a fake placeholder Target argument:
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
-            gen->emit_cpp_stub(stub_file_path);
+            if (emit_options.emit_cpp_stub) {
+                std::string stub_file_path = base_path + get_extension(".stub.h", emit_options);
+                gen->emit_cpp_stub(stub_file_path);
+            }
+            if (emit_options.emit_yaml) {
+                std::string yaml_file_path = base_path + get_extension(".yaml", emit_options);
+                gen->emit_yaml(yaml_file_path);
+            }
         }
         
-        if (emit_options.emit_yaml) {
-            // When generating YAML, we ignore all generator args passed in, and supply a fake Target.
-            auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto yaml_file_path = base_path + get_extension(".yaml", emit_options);
-            gen->emit_yaml(yaml_file_path);
-        }
-        
-        // Don't bother with this if we're just emitting a cpp_stub.
-        if (!stub_only) {
+        /// Don't bother with this if we're just emitting via “basic emitter” (e.g. YAML or a cpp_stub).
+        if (!basic_emitters_only) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
             auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
@@ -1721,13 +1812,13 @@ void GeneratorBase::emit_cpp_stub(std::string const& stub_file_path) {
     advance_phase(ScheduleCalled);
     ParamInfo& pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file,
-                     generator_registered_name,
-                     generator_stub_name,
-                     pi.generator_params,
-                     pi.filter_inputs,
-                     pi.filter_outputs);
-    emit.emit();
+    StubEmitter stubmitter(file,
+                           generator_registered_name,
+                           generator_stub_name,
+                           pi.generator_params,
+                           pi.filter_inputs,
+                           pi.filter_outputs);
+    stubmitter.emit();
 }
 
 void GeneratorBase::emit_yaml(std::string const& yaml_file_path) {
