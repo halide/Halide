@@ -125,18 +125,20 @@ void halide_hexagon_host_malloc_init() {
         ion_open_fn = (rem_ion_open_fn) dlsym(lib, "ion_open");
         ion_alloc_fd_fn = (rem_ion_alloc_fd_fn) dlsym(lib, "ion_alloc_fd");
         if (!ion_open_fn || ! ion_alloc_fd_fn) {
-            __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libion.so");
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "libion.so missing ion_open or ion_alloc_fd");
             return;
         }
         ion_fd = ion_open_fn();
         if (ion_fd < 0) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_open failed");
         }
+        __android_log_print(ANDROID_LOG_INFO, "halide", "Using libion.so");
     } else {
         ion_fd = open("/dev/ion", O_RDONLY, 0);
         if (ion_fd < 0) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
         }
+        __android_log_print(ANDROID_LOG_INFO, "halide", "Using ion ioctl");
     }
 }
 
