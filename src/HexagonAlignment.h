@@ -11,11 +11,6 @@
 namespace Halide {
 namespace Internal {
 
-enum class HexagonAlign {
-    Unknown,     // We don't know if this load/store is aligned or unaligned.
-    Aligned,     // We know the load/store is aligned to the required vector alignment.
-    Unaligned,   // We know the load/store is not aligned to the required vector alignment.
-};
 class HexagonAlignmentAnalyzer {
     Scope<ModulusRemainder> alignment_info;
     int required_alignment;
@@ -25,10 +20,10 @@ public:
         this->alignment_info.set_containing_scope(&alignment_info);
     }
     /** Analyze the index of a load/store instruction for alignment
-     *  It returns HexagonAlign::Unknown, HexagonAlign::Unaligned or HexagonAlign::Aligned
+     *  Returns true if it can determing that the address of the store or load is aligned, false otherwise.
      */
     template<typename T>
-    HexagonAlign is_aligned_impl(const T *op, int native_lanes, int *aligned_offset) {
+    bool is_aligned_impl(const T *op, int native_lanes, int *aligned_offset) {
         debug(3) << "HexagonAlignmentAnalyzer: Check if " << op->index << " is aligned to a "
                  << required_alignment << " byte boundary\n";
         debug(3) << "native_lanes: " << native_lanes << "\n";
@@ -53,16 +48,16 @@ public:
         }
         if (known_alignment && (*aligned_offset == 0)) {
             debug(3) << "Is Aligned\n";
-            return HexagonAlign::Aligned;
+            return true;
         }
         debug(3) << "Is Unaligned\n";
-        return HexagonAlign::Unaligned;
+        return false;
     }
-    HexagonAlign is_aligned(const Load *op, int *aligned_offset) {
+    bool is_aligned(const Load *op, int *aligned_offset) {
         int native_lanes = required_alignment / op->type.bytes();
         return is_aligned_impl<Load>(op, native_lanes, aligned_offset);
     }
-    HexagonAlign is_aligned(const Store *op, int *aligned_offset) {
+    bool is_aligned(const Store *op, int *aligned_offset) {
         int native_lanes = required_alignment / op->value.type().bytes();
         return is_aligned_impl<Store>(op, native_lanes, aligned_offset);
     }

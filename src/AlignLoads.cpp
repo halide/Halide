@@ -63,14 +63,13 @@ private:
             // non-constant strides.
             return IRMutator2::visit(op);
         }
-
-        int aligned_offset = 0;
-        HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
-        if (alignment == HexagonAlign::Unknown) {
+        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
+            // Handle ramps with stride 1, 2 or 3 only.
             return IRMutator2::visit(op);
         }
 
-        bool known_alignment = (alignment == HexagonAlign::Aligned);
+        int aligned_offset = 0;
+        bool known_alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
 

@@ -1530,8 +1530,7 @@ class EliminateInterleaves : public IRMutator2 {
             bool &aligned_accesses = aligned_buffer_access.ref(op->name);
             int aligned_offset = 0;
 
-            HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
-            if (alignment != HexagonAlign::Aligned) {
+            if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
                 aligned_accesses = false;
             }
         }
@@ -1565,8 +1564,7 @@ class EliminateInterleaves : public IRMutator2 {
                 bool &aligned_accesses = aligned_buffer_access.ref(op->name);
                 int aligned_offset = 0;
 
-                HexagonAlign alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
-                if (alignment != HexagonAlign::Aligned) {
+                if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
                     aligned_accesses = false;
                 }
             } else {
