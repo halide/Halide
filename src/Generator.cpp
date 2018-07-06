@@ -621,7 +621,7 @@ namespace llvm {
                  param_ptr_vec_t params            = yammitter.generator_params;
                  input_ptr_vec_t inputs            = yammitter.inputs;
                 output_ptr_vec_t outputs           = yammitter.outputs;
-                    in_infovec_t in_info           = yammitter.get_input_info();
+                    in_infovec_t input_info        = yammitter.get_input_info();
                    out_infovec_t out_info;
                             bool outs_all_funcs{ true };
                 std::tie(out_info, outs_all_funcs) = yammitter.get_output_info();
@@ -632,7 +632,7 @@ namespace llvm {
                 io.mapRequired("namespaces",         namespaces);
                 io.mapRequired("params",             params);
                 io.mapRequired("inputs",             inputs);
-                io.mapRequired("input_info",         in_info);
+                io.mapRequired("input_info",         input_info);
                 io.mapRequired("outputs",            outputs);
                 io.mapRequired("output_info",        out_info);
                 io.mapRequired("outputs_all_funcs",  outs_all_funcs);
