@@ -70,7 +70,7 @@ for ((i=0;i<10000000;i++)); do
 
     # Extract the features
     echo "Extracting features..."
-    cat results/files${SUFFIX}.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | cut -d' ' -f2- | sort -n | cut -d' ' -f3-); done > results/features${SUFFIX}.txt
+    cat results/files${SUFFIX}.txt | while read F; do echo $(grep '^YYY' ${F/times/stderr} | cut -d' ' -f3-); done > results/features${SUFFIX}.txt
 
     # Extract failed proofs
     echo "Extracting any failed proofs..."
