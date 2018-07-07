@@ -5,80 +5,79 @@
 #include "BoundaryConditions.h"
 #include "ThroughputPredictorLoader.h"
 #include "Type.h"
+#include "../tools/halide_benchmark.h"
 
-namespace {
-  using namespace Halide;
+namespace Halide {
+namespace Internal {
+namespace AutoScheduleModel {
 
-  class ThroughputPredictorPipeline {
-    public:
+class ThroughputPredictorPipeline {
+public:
 
-      ImageParam pipeline_features{Float(32), 4, "pipeline_features"};
-      ImageParam schedule_features{Float(32), 3, "schedule_features"};
+    ImageParam pipeline_features{Float(32), 4, "pipeline_features"};
+    ImageParam schedule_features{Float(32), 3, "schedule_features"};
 
-      Stats feature_stats;
-      
-      Buffer<float> schedule_std{18};
-      Buffer<float> schedule_mean{18};
+    Stats feature_stats;
 
-      Buffer<float> head1_filter{20,56,7};
-      Buffer<float> head1_bias{20};
-      
-      Buffer<float> head2_filter{20,18};
-      Buffer<float> head2_bias{20};
+    Buffer<float> schedule_std;
+    Buffer<float> schedule_mean;
 
-      Buffer<float> filter1{40,40,3};
-      Buffer<float> bias1{40};
-      Buffer<float> filter2{40,40,3};
-      Buffer<float> bias2{40};
-      Buffer<float> filter3{80,40,3};
-      Buffer<float> bias3{80};
-      Buffer<float> filter4{120,80,3};
-      Buffer<float> bias4{120};
-      Buffer<float> filter5{160,120,3};
-      Buffer<float> bias5{160};
+    Buffer<float> head1_filter;
+    Buffer<float> head1_bias;
 
-      Buffer<float> fc1_weights{80,160};
-      Buffer<float> fc1_bias{80};
-      Buffer<float> fc2_weights{40,80};
-      Buffer<float> fc2_bias{40};
-      Buffer<float> fc3_weights{1,40};
-      Buffer<float> fc3_bias{1};
+    Buffer<float> head2_filter;
+    Buffer<float> head2_bias;
 
-			Func padded_pipeline_features;
-      Func padded_schedule_features;
-      
-      Func f_head1_conv, f_head2_conv;
-      Func f_head1_relu, f_head2_relu;
-      Func f_head1_relu_padded, f_head2_relu_padded;
-      
-      Func f_conv1_stage1, f_conv1_stage2, f_conv2, f_conv3, f_conv4, f_conv5;
-			Func f_ReLU1, f_relu1_padded, f_ReLU2, f_relu2_padded, f_ReLU3, f_relu3_padded, f_ReLU4, f_relu4_padded, f_ReLU5, f_relu5_padded, f_ReLU6, f_ReLU7;
-			Func f_pool3, f_pool3_padded, f_pool4, f_pool4_padded;
-			Func f_reduce, f_fc1, f_fc2, prediction;
-  
-      int min_stages; // minimum number of stages required by neural network
+    Buffer<float> filter1;
+    Buffer<float> bias1{40};
+    Buffer<float> filter2{40,40,3};
+    Buffer<float> bias2{40};
+    Buffer<float> filter3{80,40,3};
+    Buffer<float> bias3{80};
+    Buffer<float> filter4{120,80,3};
+    Buffer<float> bias4{120};
+    Buffer<float> filter5{160,120,3};
+    Buffer<float> bias5{160};
 
-      ThroughputPredictorPipeline(Weights weights, Stats stats) : 
-                                               feature_stats(stats),
-                                               head1_filter(weights.head1_filter), head1_bias(weights.head1_bias),
-                                               head2_filter(weights.head2_filter), head2_bias(weights.head2_bias),
-                                               filter1(weights.conv1_filter), bias1(weights.conv1_bias),
-                                               filter2(weights.conv2_filter), bias2(weights.conv2_bias),
-                                               filter3(weights.conv3_filter), bias3(weights.conv3_bias),
-                                               filter4(weights.conv4_filter), bias4(weights.conv4_bias),
-                                               filter5(weights.conv5_filter), bias5(weights.conv5_bias),
-                                               fc1_weights(weights.fc1_filter), fc1_bias(weights.fc1_bias),
-                                               fc2_weights(weights.fc2_filter), fc2_bias(weights.fc2_bias),
-                                               fc3_weights(weights.fc3_filter), fc3_bias(weights.fc3_bias) {
-        
-        min_stages = 22;
+    Buffer<float> fc1_weights{80,160};
+    Buffer<float> fc1_bias{80};
+    Buffer<float> fc2_weights{40,80};
+    Buffer<float> fc2_bias{40};
+    Buffer<float> fc3_weights{1,40};
+    Buffer<float> fc3_bias{1};
+
+
+    Func f_head1_conv, f_head2_conv;
+    Func f_head1_relu, f_head2_relu;
+    Func f_head1_relu_padded, f_head2_relu_padded;
+    
+    Func f_conv1_stage1, f_conv1_stage2, f_conv2, f_conv3, f_conv4, f_conv5;
+    Func f_ReLU1, f_relu1_padded;
+    Func f_ReLU2, f_relu2_padded;
+    Func f_ReLU3, f_relu3_padded;
+    Func f_ReLU4, f_relu4_padded;
+    Func f_ReLU5, f_relu5_padded;
+    Func f_ReLU6, f_ReLU7;
+    Func f_pool3, f_pool3_padded, f_pool4, f_pool4_padded;
+    Func f_reduce, f_fc1, f_fc2, prediction;
+    
+
+    ThroughputPredictorPipeline(Weights weights, Stats stats) :
+        feature_stats(stats),
+        head1_filter(weights.head1_filter), head1_bias(weights.head1_bias),
+        head2_filter(weights.head2_filter), head2_bias(weights.head2_bias),
+        filter1(weights.conv1_filter), bias1(weights.conv1_bias),
+        filter2(weights.conv2_filter), bias2(weights.conv2_bias),
+        filter3(weights.conv3_filter), bias3(weights.conv3_bias),
+        filter4(weights.conv4_filter), bias4(weights.conv4_bias),
+        filter5(weights.conv5_filter), bias5(weights.conv5_bias),
+        fc1_weights(weights.fc1_filter), fc1_bias(weights.fc1_bias),
+        fc2_weights(weights.fc2_filter), fc2_bias(weights.fc2_bias),
+        fc3_weights(weights.fc3_filter), fc3_bias(weights.fc3_bias) {
+
 
         Var c("c"), w("w"), n("n");
 
-        // input features are given padded for complicated reasons
-        //padded_pipeline_features = Halide::BoundaryConditions::constant_exterior(pipeline_features, 0.0f);	
-        //padded_schedule_features = Halide::BoundaryConditions::constant_exterior(schedule_features, 0.0f);
-        
         RDom r_head1(head1_filter.dim(1).min(), head1_filter.dim(1).extent(),
                      head1_filter.dim(2).min(), head1_filter.dim(2).extent());
 
@@ -133,6 +132,7 @@ namespace {
 
         f_conv2(n, c, w) = bias2(c);
         f_conv2(n, c, w) += filter2(c, r2.x, r2.y) * f_relu1_padded(n, r2.x, w+r2.y-1);
+        
         f_ReLU2(n, c, w) = max(0, f_conv2(n, c, w));
 
         // set boundary conditions for f_ReLU2
@@ -169,65 +169,67 @@ namespace {
         // set boundary conditions for f_ReLU5
         f_relu5_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU5, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, (schedule_features.dim(2).extent()+6) / 4}});
 
-        f_reduce(n, c, w) = 0.0f;
-        f_reduce(n, c, w) += f_relu5_padded(n, c, w + r_reduce);
+        f_reduce(n, c) = 0.0f;
+        f_reduce(n, c) += f_relu5_padded(n, c, r_reduce);
 
         RDom r_fc1(fc1_weights.dim(1).min(), fc1_weights.dim(1).extent());
         RDom r_fc2(fc2_weights.dim(1).min(), fc2_weights.dim(1).extent());
-        RDom r_fc3(fc3_weights.dim(1).min(), fc3_weights.dim(1).extent());
-        
-        f_fc1(n, c, w) = fc1_bias(c);;
-        f_fc1(n, c, w) += f_reduce(n, r_fc1, w) * fc1_weights(c, r_fc1);
-        f_ReLU6(n, c, w) = max(0, f_fc1(n, c, w));
-        
-        f_fc2(n, c, w) = fc2_bias(c);;
-        f_fc2(n, c, w) += f_ReLU6(n, r_fc2, w) * fc2_weights(c, r_fc2);
-        f_ReLU7(n, c, w) = max(0, f_fc2(n, c, w));
+        RDom r_fc3(fc3_weights.dim(0).min(), fc3_weights.dim(0).extent());
 
-        prediction(n, c, w) = fc3_bias(c);;
-        prediction(n, c, w) += f_ReLU7(n, r_fc3, w) * fc3_weights(c, r_fc3);
+        f_fc1(n, c) = fc1_bias(c);
+        f_fc1(n, c) += f_reduce(n, r_fc1) * fc1_weights(c, r_fc1);
+        f_ReLU6(n, c) = max(0, f_fc1(n, c));
 
-        f_head1_conv.compute_root();
-        f_head1_relu.compute_root();
-        f_head2_conv.compute_root();
-        f_head2_relu.compute_root();
+        f_fc2(n, c) = fc2_bias(c);
+        f_fc2(n, c) += f_ReLU6(n, r_fc2) * fc2_weights(c, r_fc2);
+        f_ReLU7(n, c) = max(0, f_fc2(n, c));
 
-        f_conv1_stage1.compute_root();
-        f_conv1_stage2.compute_root();
-        f_ReLU1.compute_root();
-        
-        f_conv2.compute_root();
-        f_ReLU2.compute_root();
-        
-        f_conv3.compute_root();
-        f_ReLU3.compute_root();
-        
-        f_pool3.compute_root();
-        
-        f_conv4.compute_root();
-        f_ReLU4.compute_root();
-        
-        f_pool4.compute_root();
-        
-        f_conv5.compute_root();
-        f_ReLU5.compute_root();
-        
-        f_reduce.compute_root();
-        
-        f_fc1.compute_root();
-        f_ReLU6.compute_root();
-        f_fc2.compute_root();
-        f_ReLU7.compute_root();
+        prediction(n) = fc3_bias();
+        prediction(n) += f_ReLU7(n, r_fc3) * fc3_weights(r_fc3);
+
+        f_head1_relu.compute_at(prediction, n);
+        f_head2_relu.compute_at(prediction, n);
+        f_ReLU1.compute_at(prediction, n);
+        f_ReLU2.compute_at(prediction, n);
+        f_ReLU3.compute_at(prediction, n);
+        f_pool3.compute_at(prediction, n);
+        f_ReLU4.compute_at(prediction, n);
+        f_pool4.compute_at(prediction, n);
+        f_ReLU5.compute_at(prediction, n);
+        f_reduce.compute_at(prediction, n);
+
+        f_ReLU6.compute_at(prediction, n);
+        f_ReLU7.compute_at(prediction, n);
+        Expr batch_size = pipeline_features.dim(0).extent();
+        prediction.bound(n, 0, batch_size);
+        pipeline_features.dim(0).set_bounds(0, batch_size);
+        schedule_features.dim(0).set_bounds(0, batch_size);
+        Expr pipeline_length = schedule_features.dim(2).extent();
+        pipeline_features.dim(3).set_bounds(0, pipeline_length);
+        schedule_features.dim(2).set_bounds(0, pipeline_length);
+
         prediction.compute_root();
 
-        prediction.compile_jit(); 
-      }
-    
-      void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats) {
+        prediction.compile_jit();
+    }
+
+    void benchmark() {
+        Buffer<float> pipeline_feats(1000, 56, 7, 20), schedule_feats(1000, 18, 20);
+        pipeline_feats.fill(0.0f);
+        schedule_feats.fill(0.0f);
+        set_inputs(pipeline_feats, schedule_feats);
+        Buffer<float> out(1000);
+        auto t = Halide::Tools::benchmark([&]() {prediction.realize(out);});
+        debug(0) << "Throughput predictor runtime: " << (t * 1000) << " us\n";
+    }
+
+    void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats) {
         pipeline_features.set(pipeline_feats);
         schedule_features.set(schedule_feats);
-      }
+    }
 
-  };
 };
 
+}
+}
+}

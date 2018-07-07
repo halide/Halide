@@ -321,6 +321,7 @@ TARGET=$(if $(HL_TARGET),$(HL_TARGET),host)
 # The following directories are all relative to the output directory (i.e. $(CURDIR), not $(SRC_DIR))
 LIB_DIR     = lib
 BIN_DIR     = bin
+WEIGHTS_DIR = weights
 DISTRIB_DIR = distrib
 INCLUDE_DIR = include
 DOC_DIR     = doc
@@ -764,6 +765,35 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
+WEIGHTS_COMPONENTS = \
+  head1_conv1_bias \
+  head1_conv1_weight \
+  head2_conv1_bias \
+  head2_conv1_weight \
+  trunk_conv1_bias \
+  trunk_conv1_weight \
+  trunk_conv2_bias \
+  trunk_conv2_weight \
+  trunk_conv3_bias \
+  trunk_conv3_weight \
+  trunk_conv4_bias \
+  trunk_conv4_weight \
+  trunk_conv5_bias \
+  trunk_conv5_weight \
+  trunk_fc1_bias \
+  trunk_fc1_weight \
+  trunk_fc2_bias \
+  trunk_fc2_weight \
+  trunk_fc3_bias \
+  trunk_fc3_weight \
+  pipeline_mean \
+  pipeline_std \
+  schedule_mean \
+  schedule_std 
+
+WEIGHTS = $(WEIGHTS_COMPONENTS:%=$(BUILD_DIR)/weights_%.o)
+OBJECTS += $(WEIGHTS)
+
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
 ifneq (,$(WITH_HEXAGON))
@@ -888,6 +918,9 @@ $(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/buf
 
 $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
 	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+
+$(BUILD_DIR)/weights_%.cpp: $(BIN_DIR)/binary2cpp $(WEIGHTS_DIR)/%.data
+	./$(BIN_DIR)/binary2cpp halide_internal_weights_$* < $(WEIGHTS_DIR)/$*.data > $@
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)

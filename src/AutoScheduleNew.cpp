@@ -27,6 +27,8 @@
 namespace Halide {
 namespace Internal {
 
+using namespace AutoScheduleModel;
+
 namespace {
 
 using std::string;
@@ -1860,9 +1862,6 @@ struct State {
 
         // use either deep network or linear model to predict cost
         if (throughput_predictor) {
-            int pipeline_feat_size = 399;
-            int schedule_feat_size = 18;
-            
             // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
             int num_stages = 0;
@@ -1875,13 +1874,15 @@ struct State {
             int padded_stages = std::max(num_stages, min_stages);
             int lpad = std::max(0, (padded_stages - num_stages)/2); 
             
-            Buffer<float> pipeline_features(1, 56, 7, padded_stages); // just predicting on batch size of 1 pipeline
+            const int pipeline_feat_size = 399;
+            const int schedule_feat_size = 18;
+            const int batch_size = 1;
+
+            Buffer<float> pipeline_features(batch_size, 56, 7, padded_stages); // just predicting on batch size of 1 pipeline
             pipeline_features.fill(0.0f);
-
-            Buffer<float> schedule_features(1, 18, padded_stages);
+            Buffer<float> schedule_features(batch_size, 18, padded_stages);
             schedule_features.fill(0.0f);
-
-            Buffer<float> network_output(1,1,1);
+            Buffer<float> network_output(batch_size);
 
             // index of current stage whose features we are reading
             int stage = 0;
@@ -2285,8 +2286,8 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
-    Weights w = load_weights();
-    Stats stats = load_stats();
+    auto w = AutoScheduleModel::load_weights();
+    auto stats = AutoScheduleModel::load_stats();
 
     ThroughputPredictorPipeline throughput_predictor(w, stats);
 
