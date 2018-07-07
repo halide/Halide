@@ -67,7 +67,7 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(Halide::Type);
 /// … and of YamlEmitters (which act as the top-level class
 /// capable of YAML output serialization in our traited heiarchy):
 
-LLVM_YAML_IS_SEQUENCE_VECTOR(Halide::Internal::YamlEmitter);
+LLVM_YAML_IS_SEQUENCE_VECTOR(Halide::Internal::YamlEmitter const);
 
 namespace Halide {
 
