@@ -259,7 +259,8 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     min_f64(Float(64).min()),
     max_f64(Float(64).max()),
     destructor_block(nullptr),
-    strict_float(t.has_feature(Target::StrictFloat)) {
+    strict_float(t.has_feature(Target::StrictFloat)),
+    check_unsafe_promises(t.has_feature(Target::CheckUnsafePromises)) {
     initialize_llvm();
 }
 
@@ -2377,6 +2378,12 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             create_assertion(codegen(cond), op->args[2]);
             value = codegen(op->args[1]);
+        }
+    } else if (op->is_intrinsic(Call::unsafe_promise) ||
+               op->is_intrinsic(Call::unsafe_promise_clamped)) {
+        Expr lowered = compile_unsafe_promises(op, check_unsafe_promises);
+        if (lowered.defined()) {
+            codegen(lowered);
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {

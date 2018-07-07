@@ -876,6 +876,8 @@ Call::ConstString Call::extract_mask_element = "extract_mask_element";
 Call::ConstString Call::require = "require";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 Call::ConstString Call::strict_float = "strict_float";
+Call::ConstString Call::unsafe_promise = "unsafe_promise";
+Call::ConstString Call::unsafe_promise_clamped = "unsafe_promise_clamped";
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

@@ -1799,7 +1799,6 @@ inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args&
 
 // @}
 
-
 /** Return an undef value of the given type. Halide skips stores that
  * depend on undef values, so you can use this to mean "do not modify
  * this memory location". This is an escape hatch that can be used for
@@ -1916,6 +1915,49 @@ inline Expr strict_float(Expr e) {
     return Internal::Call::make(t, Internal::Call::strict_float,
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
+
+/** Create an Expr that that promises a precondition is true but does not
+ * generate code to check the assertion. Not attempt is made to prove the
+ * promise at compile time. The condition which is promised may be used
+ * to improve optimization.
+ *
+ * Always returns the second argument, the Expr 'value'
+ *
+ * This is a very easy way to make Halide generate erroneous code if
+ * the promise is not actually true. Use sparingly when there is no
+ * other way to convey the information to the compiler and it is
+ * required for a valuable optimization.
+ *
+ * Unsafe promises can be checked by turning on
+ * Target::CheckUnsafePromises. This is intended for debugging only.
+ */
+// @{
+Expr unsafe_promise(Expr promise, Expr value);
+// @}
+
+/** Create an Expr that that promises another Expr is clamped but do
+ * not generate code to check the assertion or modify the value. No
+ * attempt is made to prove the bound at compile time. (If it is
+ * proved false as a result of soemthing else, an error might be
+ * generated, but it is also possible the compiler will crash.) The
+ * promised bound is used in bounds inferrence so it will allow
+ * satisfying bounds checks as well as possibly aiding optimization.
+ *
+ * unsafe_promise_clamped returns its first argument, the Expr 'value'
+ *
+ * This is a very easy way to make Halide generate erroneous code if
+ * the promised bound is not obeyed. Use sparingly when there is no other way
+ * to convey the information to the compiler and it is required for a
+ * valuable optimization.
+ *
+ * (Note: at present unsafe_promise cannot be used to promise a bound
+ *  for bounds inference. This method must be used to influence bounds
+ *  inferrence.)
+ *
+ * Unsafe promises can be checked by turning on
+ * Target::CheckUnsafePromises. This is intended for debugging only.
+ */
+Expr unsafe_promise_clamped(Expr value, Expr min, Expr max);
 
 }  // namespace Halide
 
