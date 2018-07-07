@@ -491,7 +491,7 @@ class YamlEmitter : public EmitterBase {
               youtput(llostream, nullptr, column_width) {}
     
     private:
-        mutable ostream_t llostream;
+        ostream_t llostream;
         mutable youtput_t youtput;
     
 };
