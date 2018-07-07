@@ -49,12 +49,12 @@ for ((i=0;i<10000000;i++)); do
         STAGES=$(((P % 30) + 10))
 	echo Benchmarking pipeline $P
 	F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_root_50_1/times.txt
-	if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=24 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+	if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=4 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
 	grep '^Time' $F > /dev/null && echo $F >> results/files_root${SUFFIX}.txt
 	for ((s=0;s<$SCHEDULES;s++)); do
 	    F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_50_1/times.txt
-            if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=24 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+            if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=4 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
 	    grep '^Time' $F > /dev/null && echo $F >> results/files${SUFFIX}.txt
 	done
