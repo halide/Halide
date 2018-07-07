@@ -1,4 +1,4 @@
-#!/bin/bash
+!/bin/bash
 
 # Let the ftp server know we've started
 IP=$( ifconfig eth0 | grep 192.168 | cut -d: -f2 | cut -d' ' -f1 )
@@ -35,24 +35,26 @@ for ((i=0;i<10000000;i++)); do
     # Build lots of pipelines
     for ((p=0;p<$PIPELINES;p++)); do
 	P=$((b * $PIPELINES + p))
+        STAGES=$(((P % 30) + 10))
 	echo echo Building pipeline $P
-	echo "HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build 2>&1 | grep -v Nothing.to.be.done"
+	echo "HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build 2>&1 | grep -v Nothing.to.be.done"
 	for ((s=0;s<$SCHEDULES;s++)); do
-            echo "HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build 2>&1 | grep -v Nothing.to.be.done"
+            echo "HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make build 2>&1 | grep -v Nothing.to.be.done"
 	done
     done | xargs -P4 -I{} bash -c "{}"
 
     # Benchmark them
     for ((p=0;p<$PIPELINES;p++)); do
 	P=$((b * $PIPELINES + p))
+        STAGES=$(((P % 30) + 10))
 	echo Benchmarking pipeline $P
-	F=bin/host-new_autoscheduler/pipeline_${P}/schedule_root_50_1/times.txt
-	if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+	F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_root_50_1/times.txt
+	if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=24 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
 	grep '^Time' $F > /dev/null && echo $F >> results/files_root${SUFFIX}.txt
 	for ((s=0;s<$SCHEDULES;s++)); do
-	    F=bin/host-new_autoscheduler/pipeline_${P}/schedule_${s}_50_1/times.txt
-            if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+	    F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_50_1/times.txt
+            if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=50 HL_BEAM_SIZE=1 HL_NUM_THREADS=24 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
 	    grep '^Time' $F > /dev/null && echo $F >> results/files${SUFFIX}.txt
 	done
