@@ -45,7 +45,7 @@ using output_ptr_t = std::add_pointer_t<output_t>;
 /// of the Halide::Internal::YamlEmitter class itself:
 
 template <>
-struct MappingTraits<Halide::Internal::YamlEmitter>;
+struct MappingTraits<Halide::Internal::YamlEmitter const>;
 
 } /// namespace yaml
 } /// namespace llvm
@@ -351,7 +351,7 @@ class EmitterBase {
         
     public:
         /// The EmitterBase class is an ABC:
-        virtual void emit() = 0;
+        virtual void emit() const = 0;
         virtual ~EmitterBase() {}
         
     protected:
@@ -427,7 +427,6 @@ class EmitterBase {
         std::string indent() const;
 };
 
-
 class StubEmitter : public EmitterBase {
     
     public:
@@ -437,7 +436,7 @@ class StubEmitter : public EmitterBase {
         using Super::output_ptr_vec_t;
     
     public:
-        virtual void emit() override;
+        virtual void emit() const override;
         StubEmitter(std::ostream& dest,
                     std::string const& generator_registered_name,
                     std::string const& generator_stub_name,
@@ -459,7 +458,7 @@ class StubEmitter : public EmitterBase {
 class YamlEmitter : public EmitterBase {
     
     public:
-        friend struct llvm::yaml::MappingTraits<YamlEmitter>;
+        friend struct llvm::yaml::MappingTraits<YamlEmitter const>;
     
     public:
         using Super = EmitterBase;
@@ -475,7 +474,7 @@ class YamlEmitter : public EmitterBase {
         static constexpr std::size_t default_column_width = 80;
     
     public:
-        virtual void emit() override;
+        virtual void emit() const override;
         YamlEmitter(std::ostream& dest,
                     std::string const& generator_registered_name,
                     std::string const& generator_stub_name,
@@ -511,8 +510,28 @@ LLVM_YAML_IS_FLOW_SEQUENCE_VECTOR(Halide::Internal::EmitterBase::OutputInfo);
 namespace llvm {
 namespace yaml {
 
-/// The first rule of the LLVM YAML interface is, you do not talk about const.
-/// The second rule of the LLVM YAML interface is YOU DO NOT TALK ABOUT CONST
+/// These specializations of templated types in the llvm::yaml namespace
+/// allow for the serialized I/O of our types -- those upon which we are
+/// specializing the llvm::yaml types -- to and from YAML. In this case,
+/// most of our specializations make our given types only workable within
+/// the LLVM YAML framework for output only. Input can’t work in our cases
+/// as the llvm::yaml::IO::mapRequired(…) templated member function attempts
+/// to cover both the read and write cases; in the case of nearly all of
+/// the Halide types, the data we want to serialize is obtained from one or
+/// more member function calls, or some other manner.
+
+/// Because llvm::yaml::IO::mapRequired(…) requires a non-const T& type to
+/// be passed as its second argument, we have to use a non-const intermediate
+/// variable to store the values we obtain from our types’ member functions;
+/// when serializing output, llvm::yaml can read from these variables without
+/// issue, but writing deserialized input values to them would be meaningless.
+/// That is why most of the specializations are described as “output-only” in
+/// the comments below. The few types whose members could be used for reading
+/// and writing both, as llvm::yaml expects, are described as "I/O" – this
+/// despite the fact that deserialization from YAML itself is really kind of a
+/// nonsensical operation: at the time of writing, the goal of YAML output is
+/// to furnish a generators’ metadata to a consuming program, and not to render
+/// the generator code itself in YAML.
 
 template <>
 struct ScalarEnumerationTraits<halide_type_code_t> {
@@ -553,6 +572,8 @@ struct MappingTraits<param_ptr_t> {
     /// Traited YAML output-only serialization for Halide::Internal::GeneratorParamBase
     /// pointer types, as declared in Generator.h:
     
+    static const std::string default_call_to_string;
+    
     static void mapping(IO& io,  param_ptr_t& param) {
         std::string name                    = param->name;
         std::string default_value           = param->get_default_value();
@@ -560,7 +581,8 @@ struct MappingTraits<param_ptr_t> {
         std::string type_decls              = param->get_type_decls();
                bool is_synthetic            = param->is_synthetic_param();
                bool is_looplevel            = param->is_looplevel_param();
-        std::string call_to_string          = is_looplevel ? "" : param->call_to_string(param->name);
+        std::string call_to_string          = is_looplevel ? default_call_to_string
+                                                           :  param->call_to_string(param->name);
         
         io.mapRequired("name",                name);
         io.mapRequired("default",             default_value);
@@ -568,13 +590,21 @@ struct MappingTraits<param_ptr_t> {
         io.mapRequired("type_decls",          type_decls);
         io.mapRequired("is_synthetic",        is_synthetic);
         io.mapRequired("is_looplevel",        is_looplevel);
-        io.mapRequired("call_to_string",      call_to_string);
+        io.mapOptional("call_to_string",      call_to_string,   default_call_to_string);
     }
 };
+
+/// If the value passed to llvm::yaml::IO::mapOptional(…) compares equal (using operator==())
+/// with the default value passed -- the third argument -- the value is not included in the
+/// emitted YAML mapping. We use a static-const empty string as this default value, allowing
+/// us to bypass emitting “call_to_string” for instances of GeneratorParam<LoopLevel>:
+
+std::string const MappingTraits<param_ptr_t>::default_call_to_string = std::string{ "" };
 
 /// Both Halide::Internal::GeneratorInputBase and Halide::Internal::GeneratorOutputBase
 /// inherit from Halide::Internal::GIOBase, which gives them a “types()” method, returning
 /// a std::vector<Halide::Type> we would like to serialize:
+
 using typevec_t = Halide::Internal::EmitterBase::typevec_t;
 
 template <>
@@ -647,35 +677,35 @@ using in_infovec_t      = Halide::Internal::EmitterBase::in_infovec_t;
 using out_infovec_t     = Halide::Internal::EmitterBase::out_infovec_t;
 
 template <>
-struct MappingTraits<YamlEmitter> {
+struct MappingTraits<YamlEmitter const> {
     /// Traited YAML output-only serialization for the Halide::Internal::YamlEmitter
     /// class -- an instance of which corresponds one-to-one with the actual generator
     /// whose information we would like to serialize -- as declared in Generator.cpp
     /// (q.v. supra.):
     
-    static void mapping(IO& io, YamlEmitter& yammitter) {
-             std::string name              = yammitter.generator_registered_name;
-             std::string stub_name         = yammitter.generator_stub_name;
-             std::string class_name        = yammitter.class_name;
-             stringvec_t namespaces        = yammitter.namespaces;
-         param_ptr_vec_t params            = yammitter.generator_params;
-         input_ptr_vec_t inputs            = yammitter.inputs;
-        output_ptr_vec_t outputs           = yammitter.outputs;
-            in_infovec_t input_info        = yammitter.get_input_info();
-           out_infovec_t out_info;
-                    bool outs_all_funcs{ true };
-        std::tie(out_info, outs_all_funcs) = yammitter.get_output_info();
+    static void mapping(IO& io, YamlEmitter const& yammitter) {
+             std::string name                    = yammitter.generator_registered_name;
+             std::string stub_name               = yammitter.generator_stub_name;
+             std::string class_name              = yammitter.class_name;
+             stringvec_t namespaces              = yammitter.namespaces;
+         param_ptr_vec_t params                  = yammitter.generator_params;
+         input_ptr_vec_t inputs                  = yammitter.inputs;
+        output_ptr_vec_t outputs                 = yammitter.outputs;
+            in_infovec_t input_info              = yammitter.get_input_info();
+           out_infovec_t output_info;
+                    bool outputs_all_funcs{ true };
+        std::tie(output_info, outputs_all_funcs) = yammitter.get_output_info();
         
-        io.mapRequired("name",               name);
-        io.mapRequired("stub_name",          stub_name);
-        io.mapRequired("class_name",         class_name);
-        io.mapRequired("namespaces",         namespaces);
-        io.mapRequired("params",             params);
-        io.mapRequired("inputs",             inputs);
-        io.mapRequired("input_info",         input_info);
-        io.mapRequired("outputs",            outputs);
-        io.mapRequired("output_info",        out_info);
-        io.mapRequired("outputs_all_funcs",  outs_all_funcs);
+        io.mapRequired("name",                     name);
+        io.mapRequired("stub_name",                stub_name);
+        io.mapRequired("class_name",               class_name);
+        io.mapRequired("namespaces",               namespaces);
+        io.mapRequired("params",                   params);
+        io.mapRequired("inputs",                   inputs);
+        io.mapRequired("input_info",               input_info);
+        io.mapRequired("outputs",                  outputs);
+        io.mapRequired("output_info",              output_info);
+        io.mapRequired("outputs_all_funcs",        outputs_all_funcs);
     }
 };
 
@@ -701,16 +731,11 @@ namespace Internal {
 /// calling on the static member functions of our specialized YAML trait structs,
 /// q.v. supra.:
 
-void YamlEmitter::emit() {
+void YamlEmitter::emit() const {
     youtput << *this;
 }
 
 std::string EmitterBase::indent() const {
-    // std::ostringstream o;
-    // for (int i = 0; i < indent_level; i++) {
-    //     o << "  ";
-    // }
-    // return o.str();
     return std::string(
         static_cast<std::string::size_type>(
             indent_level * 2), ' ');
@@ -816,7 +841,7 @@ void StubEmitter::emit_inputs_struct() const {
     stream << "\n";
 }
 
-void StubEmitter::emit() {
+void StubEmitter::emit() const {
     if (outputs.empty()) {
         // The generator can't support a real stub. Instead, generate an (essentially)
         // empty .stub.h file, so that build systems like Bazel will still get the output file
