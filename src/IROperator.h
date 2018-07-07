@@ -1940,7 +1940,7 @@ Expr unsafe_promise(Expr promise, Expr value);
  * attempt is made to prove the bound at compile time. (If it is
  * proved false as a result of soemthing else, an error might be
  * generated, but it is also possible the compiler will crash.) The
- * promised bound is used in bounds inferrence so it will allow
+ * promised bound is used in bounds inference so it will allow
  * satisfying bounds checks as well as possibly aiding optimization.
  *
  * unsafe_promise_clamped returns its first argument, the Expr 'value'
@@ -1952,7 +1952,7 @@ Expr unsafe_promise(Expr promise, Expr value);
  *
  * (Note: at present unsafe_promise cannot be used to promise a bound
  *  for bounds inference. This method must be used to influence bounds
- *  inferrence.)
+ *  inference.)
  *
  * Unsafe promises can be checked by turning on
  * Target::CheckUnsafePromises. This is intended for debugging only.
