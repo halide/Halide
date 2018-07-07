@@ -14,7 +14,7 @@ namespace {
     };
     
     struct Stats {
-      Buffer<float> pipeline_mean{56, 7};
+      Buffer<float> pipeline_mean{56,7};
       Buffer<float> pipeline_std{56,7};
       Buffer<float> schedule_mean{18};
       Buffer<float> schedule_std{18};
@@ -27,7 +27,7 @@ namespace {
       size_t size, readSize;
       float* buffer;
 
-      fp = fopen("../stats/pipeline_mean.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/stats/pipeline_mean.data", "rb");
       size = shapes.pipeline_stats[0] * shapes.pipeline_stats[1];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -41,7 +41,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../stats/pipeline_std.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/stats/pipeline_std.data", "rb");
       size = shapes.pipeline_stats[0] * shapes.pipeline_stats[1];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -55,7 +55,7 @@ namespace {
       }
       free(buffer);
       
-      fp = fopen("../stats/schedule_mean.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/stats/schedule_mean.data", "rb");
       size = shapes.schedule_stats[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -66,7 +66,7 @@ namespace {
       }
       free(buffer);
       
-      fp = fopen("../stats/schedule_std.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/stats/schedule_std.data", "rb");
       size = shapes.schedule_stats[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -125,7 +125,7 @@ namespace {
       Buffer<float> conv2_filter{40, 40, 3};
       Buffer<float> conv2_bias{40};
       
-      Buffer<float> conv3_filter{80, 40,3};
+      Buffer<float> conv3_filter{80, 40, 3};
       Buffer<float> conv3_bias{80};
       
       Buffer<float> conv4_filter{120, 80,3};
@@ -134,13 +134,13 @@ namespace {
       Buffer<float> conv5_filter{160, 120, 3};
       Buffer<float> conv5_bias{160};
       
-      Buffer<float> fc1_filter{80,160};
+      Buffer<float> fc1_filter{80, 160};
       Buffer<float> fc1_bias{80};
       
       Buffer<float> fc2_filter{40, 80};
       Buffer<float> fc2_bias{40};
       
-      Buffer<float> fc3_filter{1,40};
+      Buffer<float> fc3_filter{1, 40};
       Buffer<float> fc3_bias{1};
     };
 
@@ -152,7 +152,7 @@ namespace {
       float* buffer;
 
       // load head1_filter
-      fp = fopen("../weights/head1_conv1.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/head1_conv1.weight.data", "rb");
       size = shapes.head1_filter[0] * shapes.head1_filter[1] * shapes.head1_filter[2];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -169,19 +169,19 @@ namespace {
       free(buffer);
       
       // load head1_bias
-      fp = fopen("../weights/head1_conv1.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/head1_conv1.bias.data", "rb");
       size = shapes.head1_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
       assert(readSize == size);
       
       for (int c = 0; c < shapes.head1_bias[0]; c++) {
-          W.head1_bias(c) = buffer[c]; 
+          W.head1_bias(c) = buffer[c];
       }
       free(buffer);
 
       // load head2_filter
-      fp = fopen("../weights/head2_conv1.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/head2_conv1.weight.data", "rb");
       size = shapes.head2_filter[0] * shapes.head2_filter[1];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -196,7 +196,7 @@ namespace {
       free(buffer);
 
       //load head2_bias
-      fp = fopen("../weights/head2_conv1.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/head2_conv1.bias.data", "rb");
       size = shapes.head2_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -208,7 +208,7 @@ namespace {
       free(buffer);
 
       // load conv1
-      fp = fopen("../weights/trunk_conv1.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv1.weight.data", "rb");
       size = shapes.conv1_filter[0] * shapes.conv1_filter[1] * shapes.conv1_filter[2];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -225,7 +225,7 @@ namespace {
       free(buffer);
       
       
-      fp = fopen("../weights/trunk_conv1.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv1.bias.data", "rb");
       size = shapes.conv1_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -237,7 +237,7 @@ namespace {
       free(buffer);
 
       // load trunk_conv2
-      fp = fopen("../weights/trunk_conv2.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv2.weight.data", "rb");
       size = shapes.conv2_filter[0] * shapes.conv2_filter[1] * shapes.conv2_filter[2];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -247,13 +247,13 @@ namespace {
           for (int c = 0; c < shapes.conv2_filter[1]; c++) {
               for (int x = 0; x < shapes.conv2_filter[2]; x++) {
                   int index = k * (shapes.conv2_filter[1]*shapes.conv2_filter[2]) + c * shapes.conv2_filter[2] + x;
-                  W.conv2_filter(k,c,x) =buffer[index]; 
+                  W.conv2_filter(k,c,x) = buffer[index]; 
               }
           }
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_conv2.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv2.bias.data", "rb");
       size = shapes.conv2_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -266,7 +266,7 @@ namespace {
 
       
       // load trunk_conv3
-      fp = fopen("../weights/trunk_conv3.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv3.weight.data", "rb");
       size = shapes.conv3_filter[0] * shapes.conv3_filter[1] * shapes.conv3_filter[2];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -282,7 +282,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_conv3.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv3.bias.data", "rb");
       size = shapes.conv3_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -293,7 +293,7 @@ namespace {
       free(buffer);
 
       // load trunk_conv4
-      fp = fopen("../weights/trunk_conv4.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv4.weight.data", "rb");
       size = shapes.conv4_filter[0] * shapes.conv4_filter[1] * shapes.conv4_filter[2];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -309,7 +309,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_conv4.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv4.bias.data", "rb");
       size = shapes.conv4_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -321,7 +321,7 @@ namespace {
       free(buffer);		
 
       // load trunk_conv5
-      fp = fopen("../weights/trunk_conv5.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv5.weight.data", "rb");
       size = shapes.conv5_filter[0] * shapes.conv5_filter[1] * shapes.conv5_filter[2];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -337,7 +337,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_conv5.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_conv5.bias.data", "rb");
       size = shapes.conv5_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -349,7 +349,7 @@ namespace {
       free(buffer);
       
       // load trunk_fc1
-      fp = fopen("../weights/trunk_fc1.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_fc1.weight.data", "rb");
       size = shapes.fc1_filter[0] * shapes.fc1_filter[1];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -363,7 +363,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_fc1.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_fc1.bias.data", "rb");
       size = shapes.fc1_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -375,7 +375,7 @@ namespace {
       free(buffer);		
       
       // load trunk_fc2
-      fp = fopen("../weights/trunk_fc2.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_fc2.weight.data", "rb");
       size = shapes.fc2_filter[0] * shapes.fc2_filter[1];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -389,7 +389,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_fc2.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_fc2.bias.data", "rb");
       size = shapes.fc2_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -401,7 +401,7 @@ namespace {
       free(buffer);		
       
       // load trunk_fc3
-      fp = fopen("../weights/trunk_fc3.weight.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_fc3.weight.data", "rb");
       size = shapes.fc3_filter[0] * shapes.fc3_filter[1];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp);
@@ -415,7 +415,7 @@ namespace {
       }
       free(buffer);
 
-      fp = fopen("../weights/trunk_fc3.bias.data", "rb");
+      fp = fopen("/home/karima/rl4halide/Halide/weights/trunk_fc3.bias.data", "rb");
       size = shapes.fc3_bias[0];
       buffer = (float*) malloc (sizeof(float)*size);
       readSize = fread(buffer, sizeof(float), size, fp); 

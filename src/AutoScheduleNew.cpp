@@ -1860,21 +1860,28 @@ struct State {
 
         // use either deep network or linear model to predict cost
         if (throughput_predictor) {
+            int pipeline_feat_size = 399;
+            int schedule_feat_size = 18;
+            
+            // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
             int num_stages = 0;
+            int min_stages = 22;
+
             for (auto p : features) {
                 num_stages += p.second.size();
             }
+            
+            int padded_stages = std::max(num_stages, min_stages);
+            int lpad = std::max(0, (padded_stages - num_stages)/2); 
+            
+            Buffer<float> pipeline_features(1, 56, 7, padded_stages); // just predicting on batch size of 1 pipeline
+            pipeline_features.fill(0.0f);
 
-            int pipeline_feat_size = 399;
-            int schedule_feat_size = 18;
+            Buffer<float> schedule_features(1, 18, padded_stages);
+            schedule_features.fill(0.0f);
 
-            Buffer<float> pipeline_features(1, 56, 7, num_stages); // just predicting on batch size of 1 pipeline
-            Buffer<float> schedule_features(1, 18, num_stages);
             Buffer<float> network_output(1,1,1);
-
-            FILE *fsched = fopen("../schedule_feats.data", "ab");
-            FILE *fpipe = fopen("../pipeline_feats.data", "ab");
 
             // index of current stage whose features we are reading
             int stage = 0;
@@ -1887,51 +1894,42 @@ struct State {
                     }
 
                     const int *pipeline_feats = (const int *)(&(s.features));
-                    // write features to file
-                    fwrite(pipeline_feats, sizeof(int), 399, fpipe);
 
                     // skip the first 7 features
                     for (int i = 7; i < pipeline_feat_size; i++) {
-                      int x = (i-7)/7;
-                      int y = (i-7)%7;
-                      pipeline_features(0, x, y, stage) = pipeline_feats[i];
-                      pipeline_features(0, x, y, stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
-                      pipeline_features(0, x, y, stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
+                        int x = (i-7)/7;
+                        int y = (i-7)%7;
+                        pipeline_features(0, x, y, lpad+stage) = pipeline_feats[i];
+                        pipeline_features(0, x, y, lpad+stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
+                        pipeline_features(0, x, y, lpad+stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
                     }
+
                     stage += 1;
                 }
             }
 
 
             stage = 0;
+
             // load schedule features into input buffer
             for (auto p : features) {
                 for (size_t s = 0; s < p.second.size(); s++) {
                     const auto &feat = p.second[s];
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
-                        float val = std::log(1+sched_stats[i]);
-                        fwrite(&val, sizeof(float), 1, fsched);
-
-                        schedule_features(0, i, stage) = std::log(1+sched_stats[i]);
-                        schedule_features(0, i, stage) -= throughput_predictor->feature_stats.schedule_mean(i);
-                        schedule_features(0, i, stage) /= throughput_predictor->feature_stats.schedule_std(i);
+                        schedule_features(0, i, lpad+stage) = std::log(1+sched_stats[i]);
+                        schedule_features(0, i, lpad+stage) -= throughput_predictor->feature_stats.schedule_mean(i);
+                        schedule_features(0, i, lpad+stage) /= throughput_predictor->feature_stats.schedule_std(i);
                     }
                     stage += 1;
                 }
             }
 
-            fclose(fpipe);
-            fclose(fsched);
             throughput_predictor->set_inputs(pipeline_features, schedule_features);
             throughput_predictor->prediction.realize(network_output);
 
-            FILE* fp = fopen("../prediction.data" , "ab");
-            float prediction = network_output(0,0,0);
-            fwrite(&prediction, sizeof(float), 1, fp);
-            fclose(fp);
-
             cost = -network_output(0,0,0);
+           
         }
 
         else {
