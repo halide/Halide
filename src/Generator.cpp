@@ -613,62 +613,70 @@ struct MappingTraits<input_ptr_t> {
     /// Traited YAML output-only serialization for Halide::Internal::GeneratorInputBase
     /// pointer types, as declared in Generator.h:
     
-    static const int default_array_size;
-    static const int default_dims;
+    static const int       default_array_size;
+    static const int       default_dims;
+    static const typevec_t default_types;
     
     static void mapping(IO& io, input_ptr_t& input) {
         std::string name                   = input->name();
         std::string c_type                 = input->get_c_type();
-          typevec_t types                  = input->types();
-               bool array_size_defined     = input->array_size_defined();
-               bool dims_defined           = input->dims_defined();
-                int array_size             = array_size_defined ? default_array_size
-                                                                :  static_cast<int>(
-                                                                   input->array_size());
-                int dims                   =       dims_defined ? default_dims
-                                                                :  input->dims();
+              bool array_size_defined      = output->array_size_defined();
+              bool dims_defined            = output->dims_defined();
+              bool types_defined           = output->types_defined();
+               int array_size              = array_size_defined ? static_cast<int>(
+                                                                   input->array_size())
+                                                                : default_array_size;
+               int dims                    =       dims_defined ?  input->dims()
+                                                                : default_dims;
+         typevec_t types                   =      types_defined ?  input->types()
+                                                                : default_types;
         
         io.mapRequired("name",               name);
         io.mapRequired("c_type",             c_type);
-        io.mapRequired("types",              types);
         io.mapOptional("array_size",         array_size,          default_array_size);
         io.mapOptional("dims",               dims,                default_dims);
+        io.mapOptional("types",              types,               default_types);
     }
 };
 
-int const MappingTraits<input_ptr_t>::default_array_size = int{ 0 };
-int const MappingTraits<input_ptr_t>::default_dims       = int{ 0 };
+      int const MappingTraits<input_ptr_t>::default_array_size = int{ 0 };
+      int const MappingTraits<input_ptr_t>::default_dims       = int{ 0 };
+typevec_t const MappingTraits<input_ptr_t>::default_types      = typevec_t{};
 
 template <>
 struct MappingTraits<output_ptr_t> {
     /// Traited YAML output-only serialization for Halide::Internal::GeneratorOutputBase
     /// pointer types, as declared in Generator.h:
     
-    static const int default_array_size;
-    static const int default_dims;
+    static const int       default_array_size;
+    static const int       default_dims;
+    static const typevec_t default_types;
     
     static void mapping(IO& io, output_ptr_t& output) {
         std::string name                    = output->name();
         std::string c_type                  = output->get_c_type();
-          typevec_t types                   = output->types();
                bool array_size_defined      = output->array_size_defined();
                bool dims_defined            = output->dims_defined();
-                int array_size              = array_size_defined ? default_array_size
-                                                                 :  static_cast<int>(
-                                                                    output->array_size());
-                int dims                    =       dims_defined ? default_dims
-                                                                 :  output->dims();
+               bool types_defined           = output->types_defined();
+                int array_size              = array_size_defined ? static_cast<int>(
+                                                                   output->array_size())
+                                                                 : default_array_size;
+                int dims                    =       dims_defined ? output->dims()
+                                                                 : default_dims;
+          typevec_t types                   =      types_defined ? output->types()
+                                                                 : default_types;
         
         io.mapRequired("name",                name);
         io.mapRequired("c_type",              c_type);
-        io.mapRequired("types",               types);
         io.mapOptional("array_size",          array_size,          default_array_size);
         io.mapOptional("dims",                dims,                default_dims);
+        io.mapOptional("types",               types,               default_types);
     }
 };
 
-int const MappingTraits<output_ptr_t>::default_array_size = int{ 0 };
-int const MappingTraits<output_ptr_t>::default_dims       = int{ 0 };
+      int const MappingTraits<output_ptr_t>::default_array_size = int{ 0 };
+      int const MappingTraits<output_ptr_t>::default_dims       = int{ 0 };
+typevec_t const MappingTraits<output_ptr_t>::default_types      = typevec_t{};
 
 using InputInfo = Halide::Internal::EmitterBase::InputInfo;
 

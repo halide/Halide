@@ -93,15 +93,26 @@ function(halide_generator NAME)
 
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
   set(STUB_HDR "${GENFILES_DIR}/${BASENAME}.stub.h")
-  set(GENERATOR_EXEC_ARGS "-g" "${args_GENERATOR_NAME}" "-o" "${GENFILES_DIR}" "-e" "cpp_stub" "-n" "${BASENAME}")
+  set(GENERATOR_STUB_EXEC_ARGS "-g" "${args_GENERATOR_NAME}" "-o" "${GENFILES_DIR}" "-e" "cpp_stub" "-n" "${BASENAME}")
 
   _halide_add_exec_generator_target(
     "${NAME}_stub_gen"
     GENERATOR_BINARY "${NAME}_binary"
-    GENERATOR_ARGS   "${GENERATOR_EXEC_ARGS}"
+    GENERATOR_ARGS   "${GENERATOR_STUB_EXEC_ARGS}"
     OUTPUTS          "${STUB_HDR}"
   )
   set_property(TARGET "${NAME}_stub_gen" PROPERTY _HALIDE_GENERATOR_NAME "${args_GENERATOR_NAME}")
+  
+  set(YAML_FILE "${GENFILES_DIR}/${BASENAME}.yaml")
+  set(GENERATOR_YAML_EXEC_ARGS "-g" "${args_GENERATOR_NAME}" "-o" "${GENFILES_DIR}" "-e" "yaml" "-n" "${BASENAME}")
+
+  _halide_add_exec_generator_target(
+    "${NAME}_yaml_gen"
+    GENERATOR_BINARY "${NAME}_binary"
+    GENERATOR_ARGS   "${GENERATOR_YAML_EXEC_ARGS}"
+    OUTPUTS          "${YAML_FILE}"
+  )
+  set_property(TARGET "${NAME}_yaml_gen" PROPERTY _HALIDE_GENERATOR_NAME "${args_GENERATOR_NAME}")
 
   if("${SRCSLEN}" GREATER 0)
     add_library("${NAME}" STATIC IMPORTED)
@@ -111,6 +122,7 @@ function(halide_generator NAME)
     add_library("${NAME}" INTERFACE)
   endif()
   add_dependencies("${NAME}" "${NAME}_stub_gen")
+  add_dependencies("${NAME}" "${NAME}_yaml_gen")
   set_target_properties("${NAME}" PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
 endfunction()
@@ -170,6 +182,9 @@ function(halide_library_from_generator BASENAME)
     if("${E}" STREQUAL "cpp_stub")
       message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'cpp_stub' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
     endif()
+    if("${E}" STREQUAL "yaml")
+      message(FATAL_ERROR "halide_library('${BASENAME}') doesn't support 'yaml' in EXTRA_OUTPUTS; please depend on '${BASENAME}.generator' instead.")
+    endif()
     list(FIND OUTPUTS ${E} index)
     if (${index} GREATER -1)
       message(FATAL_ERROR "Duplicate entry ${E} in extra_outputs.")
@@ -178,6 +193,7 @@ function(halide_library_from_generator BASENAME)
   endforeach()
 
   get_property(GENERATOR_NAME TARGET "${args_GENERATOR}_stub_gen" PROPERTY _HALIDE_GENERATOR_NAME)
+  # get_property(GENERATOR_NAME TARGET "${args_GENERATOR}_stub_gen" PROPERTY _HALIDE_GENERATOR_NAME)
 
   # Create a directory to contain generator specific intermediate files
   _halide_genfiles_dir(${BASENAME} GENFILES_DIR)
