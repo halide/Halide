@@ -560,11 +560,11 @@ struct MappingTraits<Halide::Type> {
                  std::string c_type         = Halide::Internal::halide_type_to_c_type(haltype);
                std::string c_source         = Halide::Internal::halide_type_to_c_source(haltype);
         
+        io.mapRequired("name",                c_source);
         io.mapRequired("bits",                bits);
         io.mapRequired("lanes",               lanes);
         io.mapRequired("typecode",            typecode);
-        io.mapRequired("c_type",              c_type);
-        io.mapRequired("c_source",            c_source);
+        io.mapRequired("c-type",              c_type);
     }
 };
 
@@ -587,11 +587,11 @@ struct MappingTraits<param_ptr_t> {
         
         io.mapRequired("name",                name);
         io.mapRequired("default",             default_value);
-        io.mapRequired("c_type",              c_type);
-        io.mapRequired("type_decls",          type_decls);
-        io.mapRequired("is_synthetic",        is_synthetic);
-        io.mapRequired("is_looplevel",        is_looplevel);
-        io.mapOptional("call_to_string",      call_to_string, default_call_to_string);
+        io.mapRequired("c-type",              c_type);
+        io.mapRequired("type-decls",          type_decls);
+        io.mapRequired("is-synthetic",        is_synthetic);
+        io.mapRequired("is-looplevel",        is_looplevel);
+        io.mapOptional("call-to-string",      call_to_string, default_call_to_string);
     }
 };
 
@@ -601,6 +601,23 @@ struct MappingTraits<param_ptr_t> {
 /// us to bypass emitting “call_to_string” for instances of GeneratorParam<LoopLevel>:
 
 std::string const MappingTraits<param_ptr_t>::default_call_to_string = std::string{ "" };
+
+/// The Halide::Internal::IOKind enum class type is the return type from the member function
+/// Halide::Internal::GIOBase::kind():
+
+using Halide::Internal::IOKind;
+
+template <>
+struct ScalarEnumerationTraits<Halide::Internal::IOKind> {
+    /// Traited YAML I/O serialization for the Halide::Internal::IOKind enum type
+    /// (the return type of GIOBase::kind()) as declared in Generator.h:
+    
+    static void enumeration(IO& io, Halide::Internal::IOKind& iokind) {
+        io.enumCase(iokind,     "IOKind::Scalar",     IOKind::Scalar);
+        io.enumCase(iokind,     "IOKind::Function",   IOKind::Function);
+        io.enumCase(iokind,     "IOKind::Buffer",     IOKind::Buffer);
+    }
+};
 
 /// Both Halide::Internal::GeneratorInputBase and Halide::Internal::GeneratorOutputBase
 /// inherit from Halide::Internal::GIOBase, which gives them a “types()” method, returning
@@ -620,21 +637,23 @@ struct MappingTraits<input_ptr_t> {
     static void mapping(IO& io, input_ptr_t& input) {
         std::string name                   = input->name();
         std::string c_type                 = input->get_c_type();
-              bool array_size_defined      = input->array_size_defined();
-              bool dims_defined            = input->dims_defined();
-              bool types_defined           = input->types_defined();
-               int array_size              = array_size_defined ? static_cast<int>(
+             IOKind kind                   = input->kind();
+               bool array_size_defined     = input->array_size_defined();
+               bool dims_defined           = input->dims_defined();
+               bool types_defined          = input->types_defined();
+                int array_size             = array_size_defined ? static_cast<int>(
                                                                    input->array_size())
                                                                 : default_array_size;
-               int dims                    =       dims_defined ?  input->dims()
+                int dims                   =       dims_defined ?  input->dims()
                                                                 : default_dims;
-         typevec_t types                   =      types_defined ?  input->types()
+          typevec_t types                  =      types_defined ?  input->types()
                                                                 : default_types;
         
         io.mapRequired("name",               name);
-        io.mapRequired("c_type",             c_type);
-        io.mapOptional("array_size",         array_size,          default_array_size);
-        io.mapOptional("dims",               dims,                default_dims);
+        io.mapRequired("c-type",             c_type);
+        io.mapRequired("io-kind",            kind);
+        io.mapOptional("rank",               array_size,          default_array_size);
+        io.mapOptional("dimensions",         dims,                default_dims);
         io.mapOptional("types",              types,               default_types);
     }
 };
@@ -655,6 +674,7 @@ struct MappingTraits<output_ptr_t> {
     static void mapping(IO& io, output_ptr_t& output) {
         std::string name                    = output->name();
         std::string c_type                  = output->get_c_type();
+             IOKind kind                    = output->kind();
                bool array_size_defined      = output->array_size_defined();
                bool dims_defined            = output->dims_defined();
                bool types_defined           = output->types_defined();
@@ -667,9 +687,10 @@ struct MappingTraits<output_ptr_t> {
                                                                  : default_types;
         
         io.mapRequired("name",                name);
-        io.mapRequired("c_type",              c_type);
-        io.mapOptional("array_size",          array_size,          default_array_size);
-        io.mapOptional("dims",                dims,                default_dims);
+        io.mapRequired("c-type",              c_type);
+        io.mapRequired("io-kind",             kind);
+        io.mapOptional("rank",                array_size,          default_array_size);
+        io.mapOptional("dimensions",          dims,                default_dims);
         io.mapOptional("types",               types,               default_types);
     }
 };
@@ -688,7 +709,7 @@ struct MappingTraits<InputInfo> {
     static const bool flow = true; /// print values inline
     static void mapping(IO& io, InputInfo& input_info) {
         io.mapRequired("name",             input_info.name);
-        io.mapRequired("c_type",           input_info.c_type);
+        io.mapRequired("c-type",           input_info.c_type);
     }
 };
 
@@ -702,7 +723,7 @@ struct MappingTraits<OutputInfo> {
     static const bool flow = true; /// print values inline
     static void mapping(IO& io, OutputInfo& output_info) {
         io.mapRequired("name",              output_info.name);
-        io.mapRequired("c_type",            output_info.ctype);
+        io.mapRequired("c-type",            output_info.ctype);
         io.mapRequired("getter",            output_info.getter);
     }
 };
@@ -736,15 +757,15 @@ struct MappingTraits<YamlEmitter const> {
         std::tie(output_info, outputs_all_funcs) = yammitter.get_output_info();
         
         io.mapRequired("name",                     name);
-        io.mapRequired("stub_name",                stub_name);
-        io.mapRequired("class_name",               class_name);
+        io.mapRequired("stub-name",                stub_name);
+        io.mapRequired("class-name",               class_name);
         io.mapRequired("namespaces",               namespaces);
         io.mapRequired("params",                   params);
         io.mapRequired("inputs",                   inputs);
-        io.mapRequired("input_info",               input_info);
         io.mapRequired("outputs",                  outputs);
-        io.mapRequired("output_info",              output_info);
-        io.mapRequired("outputs_all_funcs",        outputs_all_funcs);
+        io.mapRequired("outputs-all-funcs",        outputs_all_funcs);
+        io.mapRequired("input-info",               input_info);
+        io.mapRequired("output-info",              output_info);
     }
 };
 
