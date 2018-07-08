@@ -658,7 +658,7 @@ struct MappingTraits<input_ptr_t> {
     }
 };
 
-      int const MappingTraits<input_ptr_t>::default_array_size = int{ 0 };
+      int const MappingTraits<input_ptr_t>::default_array_size = int{ 1 };
       int const MappingTraits<input_ptr_t>::default_dims       = int{ 0 };
 typevec_t const MappingTraits<input_ptr_t>::default_types      = typevec_t{};
 
@@ -695,7 +695,7 @@ struct MappingTraits<output_ptr_t> {
     }
 };
 
-      int const MappingTraits<output_ptr_t>::default_array_size = int{ 0 };
+      int const MappingTraits<output_ptr_t>::default_array_size = int{ 1 };
       int const MappingTraits<output_ptr_t>::default_dims       = int{ 0 };
 typevec_t const MappingTraits<output_ptr_t>::default_types      = typevec_t{};
 
