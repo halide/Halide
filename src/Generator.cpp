@@ -414,7 +414,7 @@ class EmitterBase {
                 } else {
                     getter = is_func ?       "get_output" : "get_output_buffer";
                 }
-                getter += "<" + c_type + ">";
+                if (!is_func) { getter += "<" + c_type + ">"; }
                 outvec.push_back({ output->name(),
                                    output->is_array() ? "std::vector<" + c_type + ">" : c_type,
                   getter + "(\"" + output->name() + "\")" });
