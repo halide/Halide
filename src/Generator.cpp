@@ -620,9 +620,9 @@ struct MappingTraits<input_ptr_t> {
     static void mapping(IO& io, input_ptr_t& input) {
         std::string name                   = input->name();
         std::string c_type                 = input->get_c_type();
-              bool array_size_defined      = output->array_size_defined();
-              bool dims_defined            = output->dims_defined();
-              bool types_defined           = output->types_defined();
+              bool array_size_defined      = input->array_size_defined();
+              bool dims_defined            = input->dims_defined();
+              bool types_defined           = input->types_defined();
                int array_size              = array_size_defined ? static_cast<int>(
                                                                    input->array_size())
                                                                 : default_array_size;
