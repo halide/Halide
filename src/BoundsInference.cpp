@@ -970,7 +970,7 @@ public:
         if (!no_pipelines && producing >= 0) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
-            internal_assert((int)box.size() == f.dimensions());
+            internal_assert(box.empty() || ((int)box.size() == f.dimensions()));
         }
 
         // Recurse.

@@ -63,7 +63,6 @@ class Stage {
     std::vector<Var> dim_vars;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
-    void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
     void split(const std::string &old, const std::string &outer, const std::string &inner,
                Expr factor, bool exact, TailStrategy tail);
     void remove(const std::string &var);
@@ -76,6 +75,8 @@ class Stage {
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
 
 public:
+    void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
+
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index,
           const std::vector<Var> &args)
             : function(f), definition(d), stage_index(stage_index), dim_vars(args) {

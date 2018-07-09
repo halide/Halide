@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
         Func f, g;
 
         g(x, y) = x * y;
-        f(x, y) = g(x, y);
+        f(x, y) = g(x, y) + 1;
 
         Var yo, yi;
         f.bound(y, 0, (f.output_buffer().height()/8)*8).split(y, yo, yi, 8);
@@ -283,7 +283,7 @@ int main(int argc, char **argv) {
 
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
-                int correct = x*y;
+                int correct = x*y + 1;
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
                     return -1;
@@ -392,7 +392,7 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
+        h(x, y) = g(x, y) + 1;
 
         f.compute_root();
         g.store_root().compute_at(h, y).fold_storage(g.args()[1], 8);
@@ -400,8 +400,8 @@ int main(int argc, char **argv) {
 
         Buffer<int> out = h.realize(64, 64);
         out.for_each_element([&](int x, int y) {
-                if (out(x, y) != x + y) {
-                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+                if (out(x, y) != x + y + 1) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y + 1);
                     abort();
                 }
             });
@@ -413,7 +413,7 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
+        h(x, y) = g(x, y) + 1;
 
         f.store_root().compute_at(h, y).fold_storage(y, 8);
         g.compute_at(h, y);
@@ -421,8 +421,8 @@ int main(int argc, char **argv) {
 
         Buffer<int> out = h.realize(64, 64);
         out.for_each_element([&](int x, int y) {
-                if (out(x, y) != x + y) {
-                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+                if (out(x, y) != x + y + 1) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y + 1);
                     abort();
                 }
             });
@@ -436,7 +436,7 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
+        h(x, y) = g(x, y) + 1;
 
         f.store_root().compute_at(h, y).fold_storage(y, 4);
         g.compute_at(h, y);
@@ -454,7 +454,7 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
+        h(x, y) = g(x, y) + 1;
 
         f.store_root().compute_at(h, y).fold_storage(y, 4);
         g.compute_at(h, y);
@@ -471,7 +471,7 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         g.define_extern("zigzag_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
+        h(x, y) = g(x, y) + 1;
 
         f.store_root().compute_at(h, y).fold_storage(y, 4);
         g.compute_at(h, y);
@@ -488,7 +488,7 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
+        h(x, y) = g(x, y) + 1;
 
         f.compute_root();
         g.store_root().compute_at(h, y).fold_storage(g.args()[1], 4);
@@ -505,12 +505,12 @@ int main(int argc, char **argv) {
         Var xo, yo, line, chunk;
 
         input(x, y) = x;
-        a(x, y) = input(x, y);
+        a(x, y) = input(x, y) + 1;
         b(x, y) = select(y % 2 == 0, a(x, y / 2), a(x, y / 2 + 1));
 
         c = lambda(x, y, b(x, y));
 
-        output(x, y) = c(x, y);
+        output(x, y) = c(x, y) + 1;
 
 
         output
