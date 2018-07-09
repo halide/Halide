@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     // In order to actually do a DMA transfer, we need to allocate a
     // DMA engine.
     void *dma_engine = nullptr;
-    halide_hexagon_dma_allocate_engine(nullptr, 2, &dma_engine);
+    halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
 
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     halide_hexagon_dma_unprepare(nullptr, input);
 
     // We're done with the DMA engine, release it. This would also be
-    // done automatically by device_free.*/
+    // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
     free(data_in);

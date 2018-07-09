@@ -16,7 +16,7 @@ struct dma_device_handle {
     uint8_t *buffer;
     int offset_x;
     int offset_y;
-    void *dma_pool;
+    void *dma_engine;
     int frame_width;
     int frame_height;
     int frame_stride;
@@ -30,7 +30,7 @@ dma_device_handle *malloc_device_handle() {
     dev->buffer = 0;
     dev->offset_x = 0;
     dev->offset_y = 0;
-    dev->dma_pool = 0;
+    dev->dma_engine = 0;
     dev->frame_width = 0;
     dev->frame_height = 0;
     dev->frame_stride = 0;
@@ -235,7 +235,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
             << " dst->dim[1].min: " << dst->dim[1].min << "\n" ;
     }
 
-    void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_pool);
+    void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_engine);
     if (!dma_engine) {
         debug(user_context) << "Hexagon: Dma Engine Allocation Faliure\n"; 
         return halide_error_code_device_buffer_copy_failed; 
@@ -265,7 +265,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     }
 
     desc_pool_put(user_context, desc_addr);
-    nRet = halide_hexagon_free_from_dma_pool(user_context, dev->dma_pool, dma_engine);
+    nRet = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine);
     if (nRet != halide_error_code_success) {
         debug(user_context) << "halide_hexagon_free_from_dma_pool:" << nRet << "\n";
         return nRet; 
@@ -323,52 +323,50 @@ WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf
     return halide_error_code_success;
 }
 
-WEAK int halide_hexagon_dma_allocate_engine(void *user_context, int num, void **dma_engine) {
+WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engine) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_allocate_engine (user_context: " << user_context << ")\n";
 
     halide_assert(user_context, dma_engine);
-    debug(user_context) << "    dma_allocate_dma_engine -> " << num;
-    *dma_engine = halide_hexagon_dma_allocate_pool(user_context, num);
+    debug(user_context) << "    dma_allocate_dma_engine -> ";
+    *dma_engine = halide_hexagon_create_dma_pool(user_context);
     debug(user_context) << "        " << dma_engine << "\n";
     if (!*dma_engine) {
         error(user_context) << "dma_allocate_dma_engine failed.\n";
         return halide_error_code_generic_error;
     }
 
-    //*dma_engine = dma_engine_x;
-
     return halide_error_code_success;
 }
 
-WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_pool) {
+WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_deallocate_engine (user_context: " << user_context
-        << ", dma_engine: " << dma_pool << ")\n";
+        << ", dma_engine: " << dma_engine << ")\n";
 
-    halide_assert(user_context, dma_pool);
+    halide_assert(user_context, dma_engine);
     desc_pool_free(user_context);
 
-    int err = halide_hexagon_free_dma_pool(user_context, dma_pool); 
+    int err = halide_hexagon_delete_dma_pool(user_context);
     debug(user_context) << "    dma_free_dma_pool done\n";
     if (err != 0) {
-        error(user_context) << "Freeing DMA Pool failed.\n";
+        error(user_context) << "Free DMA Pool failed.\n";
         return halide_error_code_generic_error;
     }
     // Free cache pool
     err = halide_hexagon_free_l2_pool(user_context);
     if (err != 0) {
-        error(user_context) << "Freeing Cache Pool failed.\n";
+        error(user_context) << "Free Cache Pool failed.\n";
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
 }
 
 
-inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_pool, bool is_ubwc, int fmt, bool is_write ) {
-    halide_assert(user_context, dma_pool);
+inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_engine, bool is_ubwc, int fmt, bool is_write ) {
+    halide_assert(user_context, dma_engine);
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
-    dev->dma_pool = dma_pool;
+    dev->dma_engine = dma_engine;
     dev->is_ubwc = is_ubwc;
     dev->fmt = (t_eDmaFmt) fmt;
     dev->is_write = is_write;
@@ -385,20 +383,20 @@ inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf,
 
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_pool, bool is_ubwc, int fmt ) {
+                                                     void *dma_engine, bool is_ubwc, int fmt ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_host (user_context: " << user_context
-        << ", buf: " << buf << ", dma_engine: " << dma_pool << ")\n";
+        << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
 
-    return dma_prepare_for_copy(user_context, buf, dma_pool, is_ubwc, fmt, 0);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, fmt, 0);
 }
 WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_pool, bool is_ubwc, int fmt ) {
+                                                     void *dma_engine, bool is_ubwc, int fmt ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_device (user_context: " << user_context
-        << ", buf: " << buf << ", dma_engine: " << dma_pool << ")\n";
+        << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
 
-    return dma_prepare_for_copy(user_context, buf, dma_pool, is_ubwc, fmt, 1);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, fmt, 1);
 }
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {
@@ -409,8 +407,9 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
     halide_assert(user_context, buf->device);
 
-    //dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
+    dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     debug(user_context) << "   dma_finish_frame -> ";
+    halide_hexagon_free_dma_engine(user_context, dev->dma_engine);
     int err = 0; //nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";
     if (err != 0) {
@@ -579,7 +578,7 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
     // try to reduce complexity here.
     dst_dev->offset_x = src_dev->offset_x + dst->dim[0].min - src->dim[0].min;
     dst_dev->offset_y = src_dev->offset_y + dst->dim[1].min - src->dim[1].min;
-    dst_dev->dma_pool = src_dev->dma_pool;
+    dst_dev->dma_engine = src_dev->dma_engine;
 
     return halide_error_code_success;
 }
@@ -642,7 +641,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
     dma_device_handle *dev = malloc_device_handle();
     halide_assert(user_context, dev);
     dev->buffer = reinterpret_cast<uint8_t*>(handle);
-    dev->dma_pool = 0; 
+    dev->dma_engine = 0;
     dev->frame_width = buf->dim[0].extent * buf->dim[0].stride;
     dev->frame_height = buf->dim[1].extent;
     dev->frame_stride = buf->dim[1].stride;

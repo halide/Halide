@@ -6,11 +6,11 @@
 extern "C" {
 #endif
 
-WEAK void* halide_hexagon_dma_allocate_pool(void *user_context, int num);
-WEAK int halide_hexagon_free_dma_pool(void *user_context, void *pool_addr);
-WEAK void *halide_hexagon_allocate_from_dma_pool(void *user_context, void *pool_addr);
-WEAK int halide_hexagon_free_from_dma_pool(void *user_context, void *pool_addr, void *engine_addr);
-
+WEAK void *halide_hexagon_create_dma_pool(void *user_context);
+WEAK int halide_hexagon_delete_dma_pool(void *user_context);
+WEAK void *halide_hexagon_allocate_from_dma_pool(void *user_context, void* virtual_engine_addr);
+WEAK int halide_hexagon_free_to_dma_pool(void *user_context, void* dma_engine, void* virtual_engine_addr);
+WEAK void halide_hexagon_free_dma_engine(void *user_context, void *virtual_engine_id);
 #ifdef __cplusplus
 }
 #endif
