@@ -21,7 +21,7 @@ HalideExtern_1(int, expensive, int);
 int main(int argc, char **argv) {
 
     // Basic compute-root async producer
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     }
 
     // Sliding and folding over a single variable
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     }
 
     // Sliding and folding over a single variable, but flipped
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
     }
 
     // Sliding and folding over y
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     }
 
     // Sliding over x and y, folding over y
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
     // folded to prevent clobbering along each axis. The outer
     // semaphore never actually does anything, because the inner
     // semaphore stops it from getting that far ahead.
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
     }
 
     // Multiple async producers at root.
-    if (1) {
+    {
         Func producer_1;
         Func producer_2;
         Func consumer;
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
     }
 
     // Multiple async producers inside an outer parallel for loop
-    if (1) {
+    {
         Func producer_1;
         Func producer_2;
         Func consumer;
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
 
     // Multiple async producers inside an outer parallel for loop
     // with sliding within the inner serial loop
-    if (1) {
+    {
         Func producer_1;
         Func producer_2;
         Func consumer;
@@ -251,7 +251,7 @@ int main(int argc, char **argv) {
     }
 
     // Nested asynchronous tasks.
-    if (1) {
+    {
         Func f0, f1, f2;
         Var x, y;
 
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
 
     // Two async producer-consumer pairs over x in a producer-consumer
     // relationship over y.
-    if (1) {
+    {
         Func producer_1;
         Func consumer_1;
         Func producer_2;
@@ -307,7 +307,7 @@ int main(int argc, char **argv) {
 
     // Sliding and folding over y, with a non-constant amount of stuff
     // to acquire/release in the folding semaphore.
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -332,7 +332,7 @@ int main(int argc, char **argv) {
     // to acquire/release in the folding semaphore, and a flip in y
     // (the footprint marches monotonically up the image instead of
     // monotonically down the image).
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -354,7 +354,7 @@ int main(int argc, char **argv) {
     }
 
     // Downsample by 2x in y with sliding and folding over y
-    if (1) {
+    {
         Func producer, consumer;
         Var x, y;
 
@@ -377,7 +377,7 @@ int main(int argc, char **argv) {
     }
 
     // Downsample by 1.5x in y with sliding and folding over y
-    if (1) {
+    {
         Func producer, producer_up, consumer;
         Var x, y;
 
@@ -418,7 +418,7 @@ int main(int argc, char **argv) {
 
     // Computing other stages at the outermost var of an async stage
     // should include it in the async block.
-    if (1) {
+    {
         Func producer, producer_friend, consumer;
         Var x, y;
 
