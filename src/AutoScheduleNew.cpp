@@ -1911,6 +1911,7 @@ struct State {
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
                 for (const auto &feat : features.at(n.func)) {
+                    if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(0, i, lpad+stage) = std::log(1+sched_stats[i]);
