@@ -1870,10 +1870,10 @@ struct State {
             for (auto p : features) {
                 num_stages += p.second.size();
             }
-            
+
             int padded_stages = std::max(num_stages, min_stages);
-            int lpad = std::max(0, (padded_stages - num_stages)/2); 
-            
+            int lpad = std::max(0, (padded_stages - num_stages)/2);
+
             const int pipeline_feat_size = 399;
             const int schedule_feat_size = 18;
             const int batch_size = 1;
@@ -1888,12 +1888,8 @@ struct State {
             int stage = 0;
             // load pipeline features into input buffer
             for (const auto &n : dag.nodes) {
+                if (stage >= num_stages) break;
                 for (const auto &s : n.stages) {
-                    if (stage >= num_stages) {
-                        // don't use pipeline features for unscheduled stages
-                        break;
-                    }
-
                     const int *pipeline_feats = (const int *)(&(s.features));
 
                     // skip the first 7 features
@@ -1909,13 +1905,12 @@ struct State {
                 }
             }
 
-
             stage = 0;
 
             // load schedule features into input buffer
-            for (auto p : features) {
-                for (size_t s = 0; s < p.second.size(); s++) {
-                    const auto &feat = p.second[s];
+            for (const auto &n : dag.nodes) {
+                if (stage >= num_stages) break;
+                for (const auto &feat : features.at(n.func)) {
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(0, i, lpad+stage) = std::log(1+sched_stats[i]);
@@ -1930,7 +1925,7 @@ struct State {
             throughput_predictor->prediction.realize(network_output);
 
             cost = -network_output(0,0,0);
-           
+
         }
 
         else {
