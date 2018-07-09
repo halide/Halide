@@ -1889,7 +1889,8 @@ struct State {
             // load pipeline features into input buffer
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
-                for (const auto &s : n.stages) {
+                for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+                    const auto &s = *it;
                     const int *pipeline_feats = (const int *)(&(s.features));
 
                     // skip the first 7 features
@@ -1910,7 +1911,9 @@ struct State {
             // load schedule features into input buffer
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
-                for (const auto &feat : features.at(n.func)) {
+                const auto &feats = features.at(n.func);
+                for (auto it = feats.rbegin(); it != feats.rend(); it++) {
+                    const auto &feat = *it;
                     if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
