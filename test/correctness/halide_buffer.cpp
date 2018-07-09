@@ -1,6 +1,8 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
+#include <stdio.h>
+
 using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
