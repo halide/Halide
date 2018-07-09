@@ -24,10 +24,10 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
         const int lanes = op->type.lanes();
 
         if (rewrite(c0 - c1, fold(c0 - c1)) ||
-            rewrite(IRMatcher::Indeterminate() * x, a) ||
-            rewrite(x * IRMatcher::Indeterminate(), b) ||
-            rewrite(IRMatcher::Overflow() * x, a) ||
-            rewrite(x * IRMatcher::Overflow(), b) ||
+            rewrite(IRMatcher::Indeterminate() - x, a) ||
+            rewrite(x - IRMatcher::Indeterminate(), b) ||
+            rewrite(IRMatcher::Overflow() - x, a) ||
+            rewrite(x - IRMatcher::Overflow(), b) ||
             rewrite(x - 0, x)) {
             return rewrite.result;
         }
