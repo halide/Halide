@@ -843,7 +843,7 @@ private:
             }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
            // Allow degenerate case to ease conditional code construction.
-           if (!op->args[1].defined() && !op->args[1].defined()) {
+           if (!op->args[1].defined() && !op->args[2].defined()) {
                op->args[0].accept(this);
            } else if (!op->args[1].defined()) {
                Expr high_clamp = min(op->args[0], op->args[2]);

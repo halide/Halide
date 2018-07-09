@@ -2379,8 +2379,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             create_assertion(codegen(cond), op->args[2]);
             value = codegen(op->args[1]);
         }
-    } else if (op->is_intrinsic(Call::unsafe_promise) ||
-               op->is_intrinsic(Call::unsafe_promise_clamped)) {
+    } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
         Expr lowered = compile_unsafe_promises(op, check_unsafe_promises);
         if (lowered.defined()) {
             codegen(lowered);

@@ -2005,8 +2005,7 @@ void CodeGen_C::visit(const Call *op) {
             create_assertion(op->args[0], op->args[2]);
             rhs << print_expr(op->args[1]);
         }
-    } else if (op->is_intrinsic(Call::unsafe_promise) ||
-               op->is_intrinsic(Call::unsafe_promise_clamped)) {
+    } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
         Expr lowered = compile_unsafe_promises(op, target.has_feature(Target::CheckUnsafePromises));
         if (lowered.defined()) {
             rhs << print_expr(lowered);

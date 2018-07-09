@@ -1916,25 +1916,6 @@ inline Expr strict_float(Expr e) {
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
-/** Create an Expr that that promises a precondition is true but does not
- * generate code to check the assertion. Not attempt is made to prove the
- * promise at compile time. The condition which is promised may be used
- * to improve optimization.
- *
- * Always returns the second argument, the Expr 'value'
- *
- * This is a very easy way to make Halide generate erroneous code if
- * the promise is not actually true. Use sparingly when there is no
- * other way to convey the information to the compiler and it is
- * required for a valuable optimization.
- *
- * Unsafe promises can be checked by turning on
- * Target::CheckUnsafePromises. This is intended for debugging only.
- */
-// @{
-Expr unsafe_promise(Expr promise, Expr value);
-// @}
-
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No
  * attempt is made to prove the bound at compile time. (If it is

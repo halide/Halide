@@ -971,24 +971,10 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
     return result;
 }
 
-// TODO: It would be nice to make these pure intrisics, but I don't
-// think that is actually correct if the thing they're wrapped around
-// is not pure.
-Expr unsafe_promise(Expr condition, Expr value) {
-    user_assert(condition.defined()) << "unsafe_promise with undefined condition.\n";
-    user_assert(condition.type().is_bool()) << "unsafe_promise condition must be a boolean type.\n";
-    user_assert(value.defined()) << "unsafe_promise with undefined value.\n";
-
-    return Internal::Call::make(value.type(),
-                                Internal::Call::unsafe_promise,
-                                {condition, value},
-                                Internal::Call::Intrinsic);
-}
-
 Expr unsafe_promise_clamped(Expr value, Expr min, Expr max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
-    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : min;
-    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : max;
+    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
+    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
 

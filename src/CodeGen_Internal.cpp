@@ -477,22 +477,7 @@ void set_function_attributes_for_target(llvm::Function *fn, Target t) {
 Expr compile_unsafe_promises(const Call *op, bool check_unsafe_promises) {
     Expr result;
 
-    if (op->is_intrinsic(Call::unsafe_promise)) {
-        if (check_unsafe_promises) {
-            std::ostringstream promise_expr_text;
-            promise_expr_text << op->args[0];
-            Expr cond_as_string = StringImm::make(promise_expr_text.str());
-            Expr promise_broken_error =
-                Internal::Call::make(Int(32),
-                                     "halide_error_requirement_failed",
-                                     {cond_as_string, StringImm::make("from unsafe_promise")},
-                                     Internal::Call::Extern);
-            result =  Internal::Call::make(op->args[1].type(),
-                                           Internal::Call::require,
-                                           {op->args[0], op->args[1], promise_broken_error},
-                                           Internal::Call::PureIntrinsic);
-        }
-    } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
+    if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
         if (check_unsafe_promises) {
             Expr is_clamped = op->args[0] >= op->args[1] && op->args[0] <= op->args[2];
             std::ostringstream promise_expr_text;
