@@ -41,22 +41,22 @@ Func make(Schedule schedule) {
     switch (schedule) {
     case Serial:
         f.compute_root();
-	g.compute_root();
-	break;
+        g.compute_root();
+        break;
     case Parallel:
         both.parallel(z);
-	f.compute_at(both, z);
-	g.compute_at(both, z);
-	break;
+        f.compute_at(both, z);
+        g.compute_at(both, z);
+        break;
     case AsyncRoot:
-	f.compute_root().async();
-	g.compute_root().async();
-	break;
+        f.compute_root().async();
+        g.compute_root().async();
+        break;
     case AsyncComputeAt:
         both.parallel(z);
-	f.compute_at(both, z).async();
-	g.compute_at(both, z).async();
-	break;
+        f.compute_at(both, z).async();
+        g.compute_at(both, z).async();
+        break;
     }
 
     return both;
