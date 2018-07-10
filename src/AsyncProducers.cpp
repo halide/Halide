@@ -542,10 +542,13 @@ class TightenForkNodes : public IRMutator {
     }
 
     void visit(const Fork *op) {
-        bool old_in_fork = in_fork;
-        in_fork = true;
-        Stmt first = mutate(op->first), rest = mutate(op->rest);
-        in_fork = old_in_fork;
+        Stmt first, rest;
+        {
+            ScopedValue<bool> old_in_fork(in_fork, true);
+            first = mutate(op->first);
+            rest = mutate(op->rest);
+        }
+
         if (is_no_op(first)) {
             stmt = rest;
         } else if (is_no_op(rest)) {

@@ -34,20 +34,16 @@ private:
     }
 
     void visit(const Fork *fork) {
-        bool old_in_loop = in_loop;
-        in_loop = true;
+        ScopedValue<bool> old_in_loop(in_loop, true);
         fork->first.accept(this);
         fork->rest.accept(this);
-        in_loop = old_in_loop;
     }
 
     void visit(const Acquire *acq) {
         acq->semaphore.accept(this);
         acq->count.accept(this);
-        bool old_in_loop = in_loop;
-        in_loop = true;
+        ScopedValue<bool> old_in_loop(in_loop, true);
         acq->body.accept(this);
-        in_loop = old_in_loop;
     }
 
     void visit(const Load *load) {
@@ -94,14 +90,12 @@ private:
         if (in_loop) {
             IRVisitor::visit(block);
         } else {
-            Stmt old_containing_stmt = containing_stmt;
-            containing_stmt = block->first;
+            ScopedValue<Stmt> old_containing_stmt(containing_stmt, block->first);
             block->first.accept(this);
             if (block->rest.defined()) {
                 containing_stmt = block->rest;
                 block->rest.accept(this);
             }
-            containing_stmt = old_containing_stmt;
         }
     }
 };
