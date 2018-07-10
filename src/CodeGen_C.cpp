@@ -2006,7 +2006,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << print_expr(op->args[1]);
         }
     } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
-        Expr lowered = compile_unsafe_promises(op, target.has_feature(Target::CheckUnsafePromises));
+        Expr lowered = lower_unsafe_promises(op, target.has_feature(Target::CheckUnsafePromises));
         if (lowered.defined()) {
             rhs << print_expr(lowered);
         }

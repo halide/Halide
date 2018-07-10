@@ -1919,7 +1919,7 @@ inline Expr strict_float(Expr e) {
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No
  * attempt is made to prove the bound at compile time. (If it is
- * proved false as a result of soemthing else, an error might be
+ * proved false as a result of something else, an error might be
  * generated, but it is also possible the compiler will crash.) The
  * promised bound is used in bounds inference so it will allow
  * satisfying bounds checks as well as possibly aiding optimization.
@@ -1927,13 +1927,9 @@ inline Expr strict_float(Expr e) {
  * unsafe_promise_clamped returns its first argument, the Expr 'value'
  *
  * This is a very easy way to make Halide generate erroneous code if
- * the promised bound is not obeyed. Use sparingly when there is no other way
- * to convey the information to the compiler and it is required for a
- * valuable optimization.
- *
- * (Note: at present unsafe_promise cannot be used to promise a bound
- *  for bounds inference. This method must be used to influence bounds
- *  inference.)
+ * the bound promises is not kept. Use sparingly when there is no
+ * other way to convey the information to the compiler and it is
+ * required for a valuable optimization.
  *
  * Unsafe promises can be checked by turning on
  * Target::CheckUnsafePromises. This is intended for debugging only.

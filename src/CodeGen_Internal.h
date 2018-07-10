@@ -91,7 +91,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 /** Set the appropriate llvm Function attributes given a Target. */
 void set_function_attributes_for_target(llvm::Function *, Target);
 
-Expr compile_unsafe_promises(const Call *op, bool check_unsafe_promises);
+Expr lower_unsafe_promises(const Call *op, bool check_unsafe_promises);
 
 }  // namespace Internal
 }  // namespace Halide

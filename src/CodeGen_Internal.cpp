@@ -474,27 +474,27 @@ void set_function_attributes_for_target(llvm::Function *fn, Target t) {
     fn->addFnAttr("reciprocal-estimates", "none");
 }
 
-Expr compile_unsafe_promises(const Call *op, bool check_unsafe_promises) {
+Expr lower_unsafe_promises(const Call *op, bool check_unsafe_promises) {
     Expr result;
 
-    if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
-        if (check_unsafe_promises) {
-            Expr is_clamped = op->args[0] >= op->args[1] && op->args[0] <= op->args[2];
-            std::ostringstream promise_expr_text;
-            promise_expr_text << is_clamped;
-            Expr cond_as_string = StringImm::make(promise_expr_text.str());
-            Expr promise_broken_error =
-                Internal::Call::make(Int(32),
-                             "halide_error_requirement_failed",
-                                     {cond_as_string, StringImm::make("from unsafe_promise_clamped")},
-                             Internal::Call::Extern);
-            result =  Internal::Call::make(op->args[0].type(),
-                                           Internal::Call::require,
-                                           {is_clamped, op->args[0], promise_broken_error},
-                                           Internal::Call::PureIntrinsic);
-        } else {
-            result = op->args[0];
-        }
+    internal_assert(op->is_intrinsic(Call::unsafe_promise_clamped));
+
+    if (check_unsafe_promises) {
+        Expr is_clamped = op->args[0] >= op->args[1] && op->args[0] <= op->args[2];
+        std::ostringstream promise_expr_text;
+        promise_expr_text << is_clamped;
+        Expr cond_as_string = StringImm::make(promise_expr_text.str());
+        Expr promise_broken_error =
+            Internal::Call::make(Int(32),
+                         "halide_error_requirement_failed",
+                                 {cond_as_string, StringImm::make("from unsafe_promise_clamped")},
+                         Internal::Call::Extern);
+        result =  Internal::Call::make(op->args[0].type(),
+                                       Internal::Call::require,
+                                       {is_clamped, op->args[0], promise_broken_error},
+                                       Internal::Call::PureIntrinsic);
+    } else {
+        result = op->args[0];
     }
 
     return result;
