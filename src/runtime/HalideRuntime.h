@@ -146,18 +146,22 @@ typedef int (*halide_semaphore_release_t)(struct halide_semaphore_t *, int);
 typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int);
 
 
-/** A task representing a serial for loop evaluated over some range. */
+/** A task representing a serial for loop evaluated over some range.
+ * Note that task_parent is a pass through argument that should be
+ * passed to any dependent taks that are invokved using halide_do_parallel_tasks
+ * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
-                                  uint8_t *closure, void *);
+                                  uint8_t *closure, void *task_parent);
 
-/** A parallel task to be passed to halide_do_parallel_tasks. That
- * tasks may recursively call halide_do_parallel_tasks, and there may
+/** A parallel task to be passed to halide_do_parallel_tasks. This
+ * task may recursively call halide_do_parallel_tasks, and there may
  * be complex dependencies between seemingly unrelated tasks expressed
  * using semaphores. If you are using a custom task system, care must
  * be taken to avoid potential deadlock. This can be done by carefully
  * respecting the static metadata at the end of the task struct.*/
 struct halide_parallel_task_t {
-    // The function to call. It takes a user context, a min and extent, and a closure.
+    // The function to call. It takes a user context, a min and
+    // extent, a closure, and a task system pass through argument.
     halide_loop_task_t fn;
 
     // The closure to pass it
@@ -220,9 +224,12 @@ struct halide_parallel_task_t {
 /** Enqueue some number of the tasks described above and wait for them
  * to complete. While waiting, the calling threads assists with either
  * the tasks enqueued, or other non-blocking tasks in the task
- * system. */
+ * system. Note that task_parent should be NULL for top-level calls
+ * and the pass through argument if this call is being made from
+ * another task. */
 extern int halide_do_parallel_tasks(void *user_context, int num_tasks,
-                                    struct halide_parallel_task_t *tasks, void *task_parent);
+                                    struct halide_parallel_task_t *tasks,
+				    void *task_parent);
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
