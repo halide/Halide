@@ -314,13 +314,8 @@ class ForkAsyncProducers : public IRMutator {
                 sema_vars.push_back(Variable::make(Handle(), sema_names.back()));
             }
 
-            // debug(0) << "Body: " << body << "\n\n";
-
             Stmt producer = GenerateProducerBody(op->name, sema_vars, cloned_acquires).mutate(body);
             Stmt consumer = GenerateConsumerBody(op->name, sema_vars).mutate(body);
-
-            // debug(0) << "Producer: " << producer << "\n\n";
-            // debug(0) << "Consumer: " << consumer << "\n\n";
 
             // Recurse on both sides
             producer = mutate(producer);
