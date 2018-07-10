@@ -12,8 +12,8 @@ typedef struct hexagon_local_cache {
 
 typedef hexagon_cache_pool_t* pcache_pool;
 //Global Variables
-pcache_pool hexagon_cache_pool = NULL;
-halide_mutex hexagon_cache_mutex;
+WEAK pcache_pool hexagon_cache_pool = NULL;
+WEAK halide_mutex hexagon_cache_mutex;
 
 }}}}
 
