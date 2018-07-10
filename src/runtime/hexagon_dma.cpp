@@ -347,16 +347,17 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     halide_assert(user_context, dma_engine);
     desc_pool_free(user_context);
 
-    int err = halide_hexagon_delete_dma_pool(user_context);
+     // Free cache pool
+    int err = halide_hexagon_free_l2_pool(user_context);
+    if (err != 0) {
+        error(user_context) << "Free Cache Pool failed.\n";
+        return halide_error_code_generic_error;
+    }
+    // Free DMA Resources
+    err = halide_hexagon_delete_dma_pool(user_context);
     debug(user_context) << "    dma_free_dma_pool done\n";
     if (err != 0) {
         error(user_context) << "Free DMA Pool failed.\n";
-        return halide_error_code_generic_error;
-    }
-    // Free cache pool
-    err = halide_hexagon_free_l2_pool(user_context);
-    if (err != 0) {
-        error(user_context) << "Free Cache Pool failed.\n";
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
