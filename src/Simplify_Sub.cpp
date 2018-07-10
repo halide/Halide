@@ -239,7 +239,7 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
                // on which of a or b is a constant, and we also need to
                // catch the cases where that constant is zero.
                rewrite(((x + y) + z)/c0 - ((y + x) + w)/c0, ((x + y) + z)/c0 - ((x + y) + w)/c0, c0 > 0) ||
-               rewrite((x + y)/c0 - (y + x)/c0, 0) ||
+               rewrite((x + y)/c0 - (y + x)/c0, 0, c0 != 0) ||
                rewrite((x + y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) + (y - c1))/c0, c0 > 0) ||
                rewrite((x + c1)/c0 - (x + y)/c0, ((fold(c0 + c1 - 1) - y) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
                rewrite((x - y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) - y - c1)/c0, c0 > 0) ||
