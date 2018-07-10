@@ -32,9 +32,19 @@ struct CpuFeatures {
         return (available[i / 64] & ((uint64_t) 1) << (i % 64)) != 0;
     }
 
-    uint64_t known[kWordCount] = {0};     // mask of the CPU features we know how to detect
-    uint64_t available[kWordCount] = {0}; // mask of the CPU features that are available
-                                          // (always a subset of 'known')
+    __attribute__((always_inline))
+    CpuFeatures() {
+        // Can't use in-class initing of these without C++11 enabled,
+        // which isn't the case for all runtime builds
+        for (int i = 0; i < kWordCount; ++i) {
+            known[i] = 0;
+            available[i] = 0;
+        }
+    }
+
+    uint64_t known[kWordCount];     // mask of the CPU features we know how to detect
+    uint64_t available[kWordCount]; // mask of the CPU features that are available
+                                    // (always a subset of 'known')
 };
 
 extern WEAK CpuFeatures halide_get_cpu_features();
