@@ -9,8 +9,6 @@
 #     For correctness and performance tests this include halide build time and run time. For
 #     the tests in test/generator/ this times only the halide build time.
 
-.NOTPARALLEL:
-
 UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
