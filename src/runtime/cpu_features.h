@@ -10,7 +10,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 // One with all the CPU-specific features that might possible be available on this architecture ('known'),
 // and one with the subset that are actually present ('available').
 struct CpuFeatures {
-    static constexpr int kWordCount = (halide_target_feature_end + 63) / (sizeof(uint64_t) * 8);
+    static const int kWordCount = (halide_target_feature_end + 63) / (sizeof(uint64_t) * 8);
 
     __attribute__((always_inline))
     void set_known(int i) {
