@@ -8,7 +8,8 @@ struct work {
     halide_task_t task_fn;
 
     work *next_job;
-    int *parent;
+    work *siblings;
+    int sibling_count;
     work *parent_job;
     int threads_reserved;
   
@@ -36,7 +37,7 @@ struct work {
     }
 
     bool running() {
-        return task.extent || active_workers;
+        return (task.extent || active_workers) && exit_status == 0;
     }
 };
 
@@ -169,7 +170,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             }
             enough_threads = threads_available >= job->task.min_threads;
 
-            bool may_try = ((!owned_job || (job->parent == owned_job->parent) || !job->task.may_block) &&
+            bool may_try = ((!owned_job || (job->siblings == owned_job->siblings) || !job->task.may_block) &&
                             (!job->task.serial || (job->active_workers == 0)));
             if (may_try && enough_threads && job->make_runnable()) {
                 break;
@@ -276,6 +277,12 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // If this task failed, set the exit status on the job.
         if (result) {
             job->exit_status = result;
+            // Mark all siblings as also failed.
+            for (int i = 0; i < job->sibling_count; i++) {
+                if (job->siblings[i].exit_status == 0) {
+                    job->siblings[i].exit_status = result;
+                }
+            }
         }
 
         if (job->parent_job == NULL) {
@@ -351,17 +358,13 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
             halide_spawn_thread(worker_thread, NULL);
     }
 
-    // Store a token on the stack so that we know which jobs we
-    // own. We may work on any job we own, regardless of whether it
-    // blocks. The value is unimportant - we only use the address.
-    int parent_id = 0;
-
     // Push the jobs onto the stack.
     for (int i = num_jobs - 1; i >= 0; i--) {
         // We could bubble it downwards based on some heuristics, but
         // it's not strictly necessary to do so.
         jobs[i].next_job = work_queue.jobs;
-        jobs[i].parent = &parent_id;
+        jobs[i].siblings = &jobs[0];
+        jobs[i].sibling_count = num_jobs;
         jobs[i].threads_reserved = 0;
         work_queue.jobs = jobs + i;
     }
@@ -443,6 +446,8 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.active_workers = 0;
     job.next_semaphore = 0;
     job.owner_is_sleeping = false;
+    job.siblings = &job; // guarantees no other job points to the same siblings.
+    job.sibling_count = 0;
     job.parent_job = NULL;
     halide_mutex_lock(&work_queue.mutex);
     enqueue_work_already_locked(1, &job);
