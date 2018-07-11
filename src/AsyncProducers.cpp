@@ -354,10 +354,16 @@ public:
 
 // Lowers semaphore initialization from a call to
 // "halide_make_semaphore" to an alloca followed by a call into the
-// runtime to initialize. TODO: what if something crashes before
-// releasing a semaphore. Do we need a destructor? The acquire task
-// needs to leave the task queue somehow without running. We need a
-// destructor that unblocks all waiters somewhere.
+// runtime to initialize. If something crashes before releasing a
+// semaphore, the task system is responsible for propagating the
+// failure to all branches of the fork. This depends on all semaphore
+// acquires happening as part of the halide_do_parallel_tasks logic,
+// not via explicit code in the closure.  The current design for this
+// does not propagate failures downward to subtasks of a failed
+// fork. It assumes these will be able to reach completion in spite of
+// the failure, which remains to be proven. (There is a test for the
+// simple failure case, error_async_require_fail. One has not been
+// written for the complex nested case yet.)
 class InitializeSemaphores : public IRMutator {
     using IRMutator::visit;
 
