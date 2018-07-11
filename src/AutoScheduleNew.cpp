@@ -1512,7 +1512,7 @@ struct PartialScheduleNode {
             while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
         }
 
-        if (!in_realization || size[vector_dim] == 1) {
+        if (!in_realization || (!innermost && size[vector_dim] == 1)) {
             // Place the computation inside this loop
             PartialScheduleNode r = *this;
             r.compute_here(f, dag);
@@ -1914,7 +1914,7 @@ struct State {
                 const auto &feats = features.at(n.func);
                 for (auto it = feats.rbegin(); it != feats.rend(); it++) {
                     const auto &feat = *it;
-                    if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
+                    if (feat.points_computed_total + feat.inlined_calls > 1.2*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(0, i, lpad+stage) = std::log(1+sched_stats[i]);
