@@ -317,12 +317,9 @@ public:
         for (int i = 0; i < max_stages - 2; i++) {
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << "\n";
             Stage next = random_stage(stages);
-            if (!auto_schedule) {
-                next.func.compute_root();
-            }
             stages.push_back(next);
             if (!auto_schedule) {
-                stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
+                stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
             }
         }
 
@@ -348,6 +345,9 @@ public:
         }
 
         if (auto_schedule) {
+            input.dim(0).set_bounds_estimate(0, 2000)
+                .dim(1).set_bounds_estimate(0, 2000)
+                .dim(2).set_bounds_estimate(0, 3);
             output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
