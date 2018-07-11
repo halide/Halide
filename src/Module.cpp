@@ -569,7 +569,7 @@ void compile_multitarget(const std::string &fn_name,
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
         for (int i = 0; i < Target::FeatureEnd; ++i) {
             if (target.has_feature((Target::Feature) i)) {
-                cur_target_features[i / 64] |= ((uint64_t) 1) << (i % 64);
+                cur_target_features[i >> 6] |= ((uint64_t) 1) << (i & 63);
             }
         }
 
@@ -604,8 +604,8 @@ void compile_multitarget(const std::string &fn_name,
             if (i == Target::NoRuntime) {
                 continue;
             }
-            const int word = i / 64;
-            const int bit = i % 64;
+            const int word = i >> 6;
+            const int bit = i & 63;
             if (runtime_features[word] & (((uint64_t) 1) << bit)) {
                 runtime_target.set_feature((Target::Feature) i);
             }

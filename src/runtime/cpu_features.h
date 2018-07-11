@@ -14,22 +14,22 @@ struct CpuFeatures {
 
     __attribute__((always_inline))
     void set_known(int i) {
-        known[i / 64] |= ((uint64_t) 1) << (i % 64);
+        known[i >> 6] |= ((uint64_t) 1) << (i & 63);
     }
 
     __attribute__((always_inline))
     void set_available(int i) {
-        available[i / 64] |= ((uint64_t) 1) << (i % 64);
+        available[i >> 6] |= ((uint64_t) 1) << (i & 63);
     }
 
     __attribute__((always_inline))
     bool test_known(int i) const {
-        return (known[i / 64] & ((uint64_t) 1) << (i % 64)) != 0;
+        return (known[i >> 6] & ((uint64_t) 1) << (i & 63)) != 0;
     }
 
     __attribute__((always_inline))
     bool test_available(int i) const {
-        return (available[i / 64] & ((uint64_t) 1) << (i % 64)) != 0;
+        return (available[i >> 6] & ((uint64_t) 1) << (i & 63)) != 0;
     }
 
     __attribute__((always_inline))

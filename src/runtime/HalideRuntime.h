@@ -1168,7 +1168,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  * but continue providing existing support, e.g.
  *
  *     int halide_can_use_target_features(int count, const uint64_t *features) {
- *          if (features[halide_target_somefeature / 64] & (1LL << (halide_target_somefeature % 64))) {
+ *          if (features[halide_target_somefeature >> 6] & (1LL << (halide_target_somefeature & 63))) {
  *              if (!can_use_somefeature()) {
  *                  return 0;
  *              }
