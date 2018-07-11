@@ -31,7 +31,7 @@ protected:
     Stmt visit(const For *op) {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
-             return body;
+            return body;
         } else {
             return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
         }
