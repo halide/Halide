@@ -36,7 +36,8 @@ static inline void* free_unused_buffers(void* user_context) {
     return (void *)prev_node;
 }
 
-// Retry logic if enabled will walk the list and deallocate unused blocks to make room for a largerr block size
+// Retry logic if enabled will walk the list and deallocate unused blocks to make room for a larger block size
+// Onec all unused blocks are deallocaed it will try to allocate a larger block
 static inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
 
     pcache_pool prev = NULL;

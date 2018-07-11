@@ -2008,7 +2008,7 @@ Value *CodeGen_Hexagon::codegen_allocation_size(const std::string &name, Type ty
     // method generates much better assembly.
     Expr total_size_hi = make_zero(UInt(32));
 
-    Expr low_mask = make_const(UInt(32), (uint32_t)(0xffff));
+    Expr low_mask = make_const(UInt(32), (uint32_t)(0xfffff));
     for (size_t i = 0; i < extents.size(); i++) {
         Expr next_extent = cast(UInt(32), extents[i]);
 
