@@ -195,9 +195,9 @@ public:
 
     /** Emit a Python extension glue .c file. */
     void compile_to_python_extension(const std::string &filename,
-				     const std::vector<Argument> &args,
-				     const std::string &fn_name,
-				     const Target &target = get_target_from_environment());
+                                     const std::vector<Argument> &args,
+                                     const std::string &fn_name,
+                                     const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
