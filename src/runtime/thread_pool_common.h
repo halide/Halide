@@ -37,7 +37,7 @@ struct work {
     }
 
     bool running() {
-        return (task.extent || active_workers) && exit_status == 0;
+        return task.extent || active_workers;
     }
 };
 
@@ -146,9 +146,20 @@ WEAK void worker_thread(void *);
 
 WEAK void worker_thread_already_locked(work *owned_job) {
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
-        // Find a job to run, prefering things near the top of the stack.
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
+
+        if (owned_job && owned_job->exit_status != 0) {
+            while (job != owned_job) {
+                prev_ptr = &job->next_job;
+                job = job->next_job;
+            }
+            *prev_ptr = job->next_job;
+            job->task.extent = 0;
+            continue; // So loop exit is always in the same place.
+        }
+      
+        // Find a job to run, prefering things near the top of the stack.
         while (job) {
             // Only schedule tasks with enough free worker threads
             // around to complete. They may get stolen later, but only
@@ -243,12 +254,13 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->task.min += total_iters;
             job->task.extent -= total_iters;
 
-            // Put it back on the job stack
-            if (job->task.extent > 0) {
+            // Put it back on the job stack, if it hasn't failed.
+            if (result != 0) {
+                job->task.extent = 0; // Force job to be finished.
+            } else if (job->task.extent > 0) {
                 job->next_job = work_queue.jobs;
                 work_queue.jobs = job;
             }
-
         } else {
             // Claim a task from it.
             work myjob = *job;
@@ -274,13 +286,16 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_lock(&work_queue.mutex);
         }
 
+        bool wake_owners = false;
+ 
         // If this task failed, set the exit status on the job.
-        if (result) {
+        if (result != 0) {
             job->exit_status = result;
             // Mark all siblings as also failed.
             for (int i = 0; i < job->sibling_count; i++) {
                 if (job->siblings[i].exit_status == 0) {
                     job->siblings[i].exit_status = result;
+                    wake_owners |= job->siblings[i].owner_is_sleeping;
                 }
             }
         }
@@ -294,8 +309,8 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // We are no longer active on this job
         job->active_workers--;
 
-        if (!job->running() && job->owner_is_sleeping) {
-            // The job is done. Wake up the owner.
+        if (wake_owners || (!job->running() && job->owner_is_sleeping)) {
+            // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
         }
     }
