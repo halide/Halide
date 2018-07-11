@@ -234,7 +234,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
             << " W: " << stDmaTransferParm.u16RoiW << " H: " << stDmaTransferParm.u16RoiH << ")"
             << " dst->dim[1].min: " << dst->dim[1].min << "\n" ;
     }
-
+    // TODO Check for async
     void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_engine);
     if (!dma_engine) {
         debug(user_context) << "Hexagon: Dma Engine Allocation Faliure\n"; 
@@ -329,7 +329,7 @@ WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engin
 
     halide_assert(user_context, dma_engine);
     debug(user_context) << "    dma_allocate_dma_engine -> ";
-    *dma_engine = halide_hexagon_create_dma_pool(user_context);
+    *dma_engine = halide_hexagon_allocate_dma_resource(user_context);
     debug(user_context) << "        " << dma_engine << "\n";
     if (!*dma_engine) {
         error(user_context) << "dma_allocate_dma_engine failed.\n";
@@ -354,7 +354,7 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         return halide_error_code_generic_error;
     }
     // Free DMA Resources
-    err = halide_hexagon_delete_dma_pool(user_context);
+    err = halide_hexagon_free_dma_resource(user_context, dma_engine);
     debug(user_context) << "    dma_free_dma_pool done\n";
     if (err != 0) {
         error(user_context) << "Free DMA Pool failed.\n";
@@ -404,19 +404,18 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << buf << ")\n";
-
-    halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
+   //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
+   /* halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
     halide_assert(user_context, buf->device);
 
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     debug(user_context) << "   dma_finish_frame -> ";
-    halide_hexagon_free_dma_engine(user_context, dev->dma_engine);
     int err = 0; //nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";
     if (err != 0) {
         error(user_context) << "dma_finish_frame failed.\n";
         return halide_error_code_generic_error;
-    }
+    }*/
 
     return halide_error_code_success;
 }

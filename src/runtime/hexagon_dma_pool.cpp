@@ -46,7 +46,7 @@ static inline void *hexagon_dma_pool_get (void *user_context, void *virtual_engi
 
     //  If the number of dma engines assigned to virtual engines is less than MAX_NUMBER_OF_WORK_UNITS,
     //  assign a real engine to a virtual engine
-    if (virtual_engine_addr->num_of_engines <= MAX_NUMBER_OF_WORK_UNITS) {
+    if (virtual_engine_addr->num_of_engines < MAX_NUMBER_OF_WORK_UNITS) {
         for (int j=0; j < MAX_NUMBER_OF_DMA_ENGINES; j++) {
             if (hexagon_dma_pool->dma_engine_list[j].assigned == false) {
                 hexagon_dma_pool->dma_engine_list[j].assigned = true;
@@ -83,28 +83,53 @@ static inline int hexagon_dma_pool_put(void *user_context, void *dma_engine, voi
 using namespace Halide::Runtime::Internal::HexagonDma;
 
 extern "C" {
-// halide_hexagon_free_dma_engine
-void halide_hexagon_free_dma_engine(void *user_context, void *virtual_engine_id) {
+// halide_hexagon_free_dma_resource
+int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engine_id) {
     halide_assert(user_context, hexagon_dma_pool);
     halide_assert(user_context, virtual_engine_id);
-    ScopedMutexLock lock(&hexagon_dma_pool_mutex);
+    // Free the Real DMA Engines
+    int nRet = halide_error_code_success;
 
+    // Lock the Mutex
+    ScopedMutexLock lock(&hexagon_dma_pool_mutex);
     hexagon_dma_virtual_engine_t *virtual_engine_addr = (hexagon_dma_virtual_engine_t *)virtual_engine_id;
     for (int j=0; j < MAX_NUMBER_OF_WORK_UNITS; j++) {
         int num = virtual_engine_addr->mapped_engines[j] - 1;
         if (num != -1) {
             hexagon_dma_pool->dma_engine_list[num].assigned = false;
             hexagon_dma_pool->dma_engine_list[num].used = false;
+            //TODO Call DMAWrapperFinishFrame during write
             //nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
         }
         virtual_engine_addr->mapped_engines[j] = 0;
     }
     virtual_engine_addr->num_of_engines = 0;
     virtual_engine_addr->in_use = false;
+
+    bool delete_dma_pool = true;
+    for (int k=0; k < MAX_NUMBER_OF_DMA_ENGINES; k++) {
+        if (hexagon_dma_pool->virtual_engine_list[k].in_use) {
+            delete_dma_pool = false;
+        }
+    }
+
+    if (delete_dma_pool) {
+        for (int i=0; i < MAX_NUMBER_OF_DMA_ENGINES; i++) {
+            if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
+                int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
+                if (err != QURT_EOK) {
+                    nRet = err;
+                }
+            }
+        }
+        free(hexagon_dma_pool);
+        hexagon_dma_pool = NULL;
+    }
+    return nRet;
 }
 
 // halide_hexagon_create_dma_pool
-void *halide_hexagon_create_dma_pool(void *user_context) {
+void *halide_hexagon_allocate_dma_resource(void *user_context) {
     ScopedMutexLock lock(&hexagon_dma_pool_mutex);
 
     if (!hexagon_dma_pool) {
@@ -130,25 +155,6 @@ void *halide_hexagon_create_dma_pool(void *user_context) {
         }
     }
     return NULL;
-}
-
-//halide_hexagon_free_dma_pool
-WEAK int halide_hexagon_delete_dma_pool(void *user_context) {
-    halide_assert(user_context, hexagon_dma_pool);
-    ScopedMutexLock lock(&hexagon_dma_pool_mutex);
-    // Free the Real DMA Engines
-    int nRet = halide_error_code_success;
-    for (int i=0; i < MAX_NUMBER_OF_DMA_ENGINES; i++) {
-        if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
-            int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
-            if (err != QURT_EOK) {
-                nRet = err;
-            }
-        }
-    }
-    free(hexagon_dma_pool);
-    hexagon_dma_pool = NULL;
-    return nRet;
 }
 
 WEAK void *halide_hexagon_allocate_from_dma_pool(void *user_context, void *virtual_engine_id) {
