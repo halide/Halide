@@ -171,13 +171,21 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
             int threads_available;
             if (parent_job == NULL) {
-                threads_available = work_queue.threads_created - work_queue.threads_reserved;
+                // The + 1 is because work_queue.threads_created does not include the main thread.
+                threads_available = (work_queue.threads_created + 1) - work_queue.threads_reserved;
             } else {
                 if (parent_job->active_workers == 0) {
                     threads_available = parent_job->task.min_threads - parent_job->threads_reserved;
                 } else {
                     threads_available = parent_job->active_workers * parent_job->task.min_threads - parent_job->threads_reserved;
                 }
+            }
+            // A job with may_block == false can always use the current thread.
+            // This adjustment allows it to do so by ensuring enough_threads is true.
+            // TODO(zvookin): The logic here is beyond a handwave. However improving it
+            // really requires putting the entire design on a more formal foundation.
+            if (!job->task.may_block) {
+                threads_available += 1;
             }
             enough_threads = threads_available >= job->task.min_threads;
 
@@ -352,7 +360,7 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
 
     for (int i = 0; i < num_jobs; i++) {
         if (!jobs[i].task.may_block) {
-          stealable_jobs = true;
+            stealable_jobs = true;
         } else {
             min_threads += jobs[i].task.min_threads;
         }
