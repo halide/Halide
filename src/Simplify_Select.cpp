@@ -7,15 +7,8 @@ Expr Simplify::visit(const Select *op, ConstBounds *bounds) {
 
     ConstBounds t_bounds, f_bounds;
     Expr condition = mutate(op->condition, nullptr);
-    Expr true_value, false_value;
-    {
-        auto fact = scoped_truth(condition);
-        true_value = mutate(op->true_value, &t_bounds);
-    }
-    {
-        auto fact = scoped_falsehood(condition);
-        false_value = mutate(op->false_value, &f_bounds);
-    }
+    Expr true_value = mutate(op->true_value, &t_bounds);
+    Expr false_value = mutate(op->false_value, &f_bounds);
 
     if (bounds) {
         bounds->min_defined = t_bounds.min_defined && f_bounds.min_defined;
