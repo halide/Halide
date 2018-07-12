@@ -1,21 +1,7 @@
 #include "HalideRuntime.h"
 #include "mini_hexagon_dma.h"
 #include "scoped_mutex_lock.h"
-
-namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
-
-typedef struct hexagon_cache_block {
-    void *l2memory;
-    size_t bytes;
-    bool used;
-    struct hexagon_cache_block *next;
-} hexagon_cache_pool_t;
-
-typedef hexagon_cache_pool_t *pcache_pool;
-WEAK pcache_pool hexagon_cache_pool = NULL;
-WEAK halide_mutex hexagon_cache_mutex;
-
-}}}}
+#include "hexagon_dma_pool.h"
 
 extern "C" {
 
@@ -50,21 +36,24 @@ static inline void* free_unused_buffers(void* user_context) {
     return (void *)prev_node;
 }
 
-// Retry logic if enabled will walk the list and deallocate unused blocks to make room for a largerr block size
+// Retry logic if enabled will walk the list and deallocate unused blocks to make room for a larger block size
+// Onec all unused blocks are deallocaed it will try to allocate a larger block
 static inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
 
     pcache_pool prev = NULL;
     pcache_pool temp = hexagon_cache_pool;
     // Walk the list to find free buffer
-    while (temp != NULL) {
+    {
         ScopedMutexLock lock(&hexagon_cache_mutex);
-        if ((temp->used == false) &&
-            (size == temp->bytes)) {
-            temp->used = true;
-            return (void *)temp->l2memory;
+        while (temp != NULL) {
+            if ((temp->used == false) &&
+                (size == temp->bytes)) {
+                temp->used = true;
+                return (void *)temp->l2memory;
+            }
+            prev = temp;
+            temp = temp->next;
         }
-        prev = temp;
-        temp = temp->next;
     }
 
     // If we are still here that means temp was null.
@@ -151,7 +140,7 @@ WEAK void halide_locked_cache_free(void *user_context, void *ptr) {
     hexagon_cache_pool_put(user_context, ptr);
 }
 
-WEAK int halide_hexagon_allocate_l2_pool(void *user_context, size_t size) {
+WEAK int halide_hexagon_allocate_l2_pool(void *user_context) {
    // TODO not sure what is required to be done here ?
    halide_print(user_context, "halide_hexagon_allocate_l2_pool \n");
    return halide_error_code_success;

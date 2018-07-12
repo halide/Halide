@@ -118,12 +118,21 @@ int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engine_id
             if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
                 int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
                 if (err != QURT_EOK) {
+                    halide_print(user_context, "Failure to Free DMA\n");
                     nRet = err;
                 }
             }
         }
         free(hexagon_dma_pool);
         hexagon_dma_pool = NULL;
+        // Free cache pool
+        if (Halide::Runtime::Internal::Hexagon::hexagon_cache_pool) {
+            int err = halide_hexagon_free_l2_pool(user_context);
+            if (err != 0) {
+                halide_print(user_context, "Freeing Cache Pool failed.\n");
+                nRet = err;
+            }
+        }
     }
     return nRet;
 }

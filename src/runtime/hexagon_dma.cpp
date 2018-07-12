@@ -216,7 +216,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     // Raw Format Planar
     if ((dev->fmt == eDmaFmt_RawData) &&
         (dst->dimensions == 3)) {
-        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * dst->dim[1].stride);
+        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * src->dim[1].stride);
     }
    
     // DMA Driver implicitly halves the Height and Y Offset for chroma, based on Y/UV
@@ -347,17 +347,11 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     halide_assert(user_context, dma_engine);
     desc_pool_free(user_context);
 
-     // Free cache pool
-    int err = halide_hexagon_free_l2_pool(user_context);
-    if (err != 0) {
-        error(user_context) << "Free Cache Pool failed.\n";
-        return halide_error_code_generic_error;
-    }
     // Free DMA Resources
-    err = halide_hexagon_free_dma_resource(user_context, dma_engine);
+    int err = halide_hexagon_free_dma_resource(user_context, dma_engine);
     debug(user_context) << "    dma_free_dma_pool done\n";
     if (err != 0) {
-        error(user_context) << "Free DMA Pool failed.\n";
+        error(user_context) << "Free DMA/Cache Pool failed.\n";
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
