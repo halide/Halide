@@ -101,6 +101,11 @@ class HasLikelyTag : public IRVisitor {
             IRVisitor::visit(op);
         }
     }
+
+    // Any likelies buried inside the following ops are captured the by respective ops
+    void visit(const Select *op) {}
+    void visit(const Min *op) {}
+    void visit(const Max *op) {}
 public:
     bool result = false;
 };
@@ -274,9 +279,16 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Min *op) {
-        IRVisitor::visit(op);
-        bool likely_a = has_likely_tag(op->a);
-        bool likely_b = has_likely_tag(op->b);
+        bool likely_a = has_uncaptured_likely_tag(op->a);
+        bool likely_b = has_uncaptured_likely_tag(op->b);
+
+        // Don't hunt for simplifications in unlikely paths
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b <= op->a, op, op->b, op->a);
@@ -286,9 +298,15 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Max *op) {
-        IRVisitor::visit(op);
-        bool likely_a = has_likely_tag(op->a);
-        bool likely_b = has_likely_tag(op->b);
+        bool likely_a = has_uncaptured_likely_tag(op->a);
+        bool likely_b = has_uncaptured_likely_tag(op->b);
+
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b >= op->a, op, op->b, op->a);
@@ -298,9 +316,17 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Select *op) {
-        IRVisitor::visit(op);
-        bool likely_t = has_likely_tag(op->true_value);
-        bool likely_f = has_likely_tag(op->false_value);
+        op->condition.accept(this);
+
+        bool likely_t = has_uncaptured_likely_tag(op->true_value);
+        bool likely_f = has_uncaptured_likely_tag(op->false_value);
+
+        if (!likely_t) {
+            op->false_value.accept(this);
+        }
+        if (!likely_f) {
+            op->true_value.accept(this);
+        }
 
         if (likely_t && !likely_f) {
             new_simplification(op->condition, op, op->true_value, op->false_value);
@@ -982,7 +1008,7 @@ class LowerLikelyIfInnermost : public IRMutator2 {
 
 }  // namespace
 
-bool has_likely_tag(Expr e) {
+bool has_uncaptured_likely_tag(Expr e) {
     HasLikelyTag h;
     e.accept(&h);
     return h.result;
