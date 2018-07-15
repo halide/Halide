@@ -46,7 +46,7 @@ public:
     Printer &operator<<(const char *arg) {
         // Crashing on NULL here is a big debugging time sink.
         if (arg == NULL) {
-            dst = halide_string_to_string(dst, end, "<NULL STRING>");
+            dst = halide_string_to_string(dst, end, "<NULL>");
         } else {
             dst = halide_string_to_string(dst, end, arg);
         }
