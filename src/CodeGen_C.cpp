@@ -118,6 +118,16 @@ inline float float_from_bits(uint32_t bits) {
 }
 
 template<typename T>
+inline uint8_t halide_count_leading_zeros(T v) {
+    int bits = sizeof(v) * 8;
+    while (v) {
+        v >>= 1;
+        bits--;
+    }
+    return bits;
+}
+
+template<typename T>
 inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 
 template<typename T>
@@ -1954,6 +1964,10 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
+    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+        internal_assert(op->args.size() == 1);
+        string a0 = print_expr(op->args[0]);
+        rhs << "halide_count_leading_zeros(" << a0 << ")";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
