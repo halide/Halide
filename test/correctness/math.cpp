@@ -7,7 +7,7 @@
 using namespace Halide;
 
 template <typename value_t>
-bool relatively_equal(value_t a, value_t b) {
+bool relatively_equal(value_t a, value_t b, Target target) {
     if (a == b) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
@@ -29,13 +29,19 @@ bool relatively_equal(value_t a, value_t b) {
             return true;
         }
 
-        // try again with a lower error threshold in case the device target is
-        // using fast approximate trigonometric functions (HLSL):
-        if (relative_error < .001023) {
-            std::cout << "relatively_equal: relaxed threshold for (" << a << ", " << b << ") "
-                      << "with relative error " << relative_error
-                      << " (shader fast trig)" << std::endl;
-            return true;
+        // For HLSL, try again with a lower error threshold, as it might be using
+        // fast but approximated trigonometric functions:
+        if (target.supports_device_api(DeviceAPI::D3D12Compute))
+        {
+            // this threshold value has been empirically determined since there
+            // is no clear documentation on the precision of these algorithms
+            const double threshold = .001023;
+            if (relative_error < threshold) {
+                std::cout << "relatively_equal: relaxed threshold for (" << a << ", " << b << ") "
+                          << "with relative error " << relative_error
+                          << " (shader fast trig)" << std::endl;
+                return true;
+            }
         }
 
         std::cerr
@@ -79,9 +85,9 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Buffer<type_ret> result = test_##name.realize(in.extent(0), target); \
         for (int i = 0; i < in.extent(0); i++) {                        \
             type_ret c_result = c_name(in(i));                          \
-            if (!relatively_equal(c_result, result(i)))                 \
+            if (!relatively_equal(c_result, result(i), target))         \
                 printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)in(i), (double)c_result, (double)result(i)); \
-            assert(relatively_equal(c_result, result(i)) &&             \
+            assert(relatively_equal(c_result, result(i), target) &&     \
                    "Failure on function " #name);                       \
         }                                                               \
     }
@@ -104,7 +110,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Buffer<type_ret> result = test_##name.realize(in.height(), target);         \
         for (int i = 0; i < in.height(); i++) {                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                         \
-            assert(relatively_equal(c_result, result(i)) &&                         \
+            assert(relatively_equal(c_result, result(i), target) &&                 \
                    "Failure on function " #name);                                   \
         }                                                                           \
     }
