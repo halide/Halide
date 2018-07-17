@@ -229,7 +229,7 @@ struct halide_parallel_task_t {
  * another task. */
 extern int halide_do_parallel_tasks(void *user_context, int num_tasks,
                                     struct halide_parallel_task_t *tasks,
-				    void *task_parent);
+                                    void *task_parent);
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
