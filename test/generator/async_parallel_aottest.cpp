@@ -11,10 +11,6 @@
 
 #include "async_parallel.h"
 
-extern "C" void halide_print(void *user_context, const char *msg) {
-    std::cerr << msg;
-}
-
 std::atomic<uint64_t> last_update;
 
 uint64_t sleeps;
