@@ -2692,6 +2692,14 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
     return 0;
 }
 
+WEAK int halide_d3d12compute_device_slice(void *user_context,
+                                          const struct halide_buffer_t *src,
+                                          int slice_dim, int slice_pos,
+                                          struct halide_buffer_t *dst) {
+    // TODO(marcos): implement slicing!
+    return 0;
+}
+
 WEAK int halide_d3d12compute_device_release_crop(void *user_context, struct halide_buffer_t *buf) {
     TRACELOG;
     // for D3D12, this just so happens to be exactly like halide_d3d12compute_device_free():
@@ -2797,6 +2805,7 @@ WEAK halide_device_interface_impl_t d3d12compute_device_interface_impl = {
     halide_d3d12compute_device_and_host_free,
     halide_default_buffer_copy,
     halide_d3d12compute_device_crop,
+    halide_d3d12compute_device_slice,
     halide_d3d12compute_device_release_crop,
     halide_d3d12compute_wrap_buffer,
     halide_d3d12compute_detach_buffer
@@ -2813,6 +2822,7 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
