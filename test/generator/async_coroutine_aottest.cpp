@@ -306,7 +306,7 @@ void do_one_task(execution_context *parent, execution_context *this_context, voi
             semaphore_acquire(this_context, task->semaphores[j].semaphore, task->semaphores[j].count);
         }
         big_lock.unlock();
-        task->fn(nullptr, i, 1, task->closure);
+        task->fn(nullptr, i, 1, task->closure, nullptr);
         big_lock.lock();
     }
     semaphore_release_already_locked(completion_sema, 1);
@@ -316,7 +316,7 @@ void do_one_task(execution_context *parent, execution_context *this_context, voi
     abort();
 }
 
-int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *tasks) {
+int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *tasks, void *parent_pass_through) {
     // We're leaving Halide code, so grab the lock until we return
     std::lock_guard<std::mutex> lock(big_lock);
 
