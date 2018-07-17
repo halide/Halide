@@ -348,11 +348,6 @@ int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *task
 }
 
 int main(int argc, char **argv) {
-    #ifdef _WIN32
-    printf("This test deadlocks on windows :(\n");
-    return -1;
-    #endif
-
     Halide::Runtime::Buffer<int> out(16, 16, 16);
 
     // Get a baseline runtime.
