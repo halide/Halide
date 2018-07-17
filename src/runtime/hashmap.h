@@ -8,11 +8,11 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
+inline bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return memcmp(key1, key2, key_size) == 0;
 }
 
-WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size) {
+inline uint32_t djb_hash(const uint8_t *key, size_t key_size) {
     uint32_t h = 5381;
     for (size_t i = 0; i < key_size; i++) {
       h = (h << 5) + h + key[i];
@@ -44,7 +44,7 @@ struct CacheEntry {
     void destroy(destroy_value_func destroy_value);
 };
 
-WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
+inline bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
                            uint32_t key_hash,
                            const uint8_t* cache_value, size_t cache_value_size,
                            copy_value_func copy_value) {
@@ -90,7 +90,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     return true;
 }
 
-WEAK void CacheEntry::destroy(destroy_value_func destroy_value) {
+inline void CacheEntry::destroy(destroy_value_func destroy_value) {
     destroy_value(value, value_size);
     halide_free(NULL, metadata_storage);
 }
@@ -123,7 +123,7 @@ struct HashMap {
     void cleanup();
 };
 
-WEAK bool HashMap::init(copy_value_func _copy_value, destroy_value_func _destroy_value) {
+inline bool HashMap::init(copy_value_func _copy_value, destroy_value_func _destroy_value) {
     memset(&memoization_lock, 0, sizeof(halide_mutex));
     halide_assert(NULL, !inited);
     most_recently_used  = NULL;
@@ -142,7 +142,7 @@ WEAK bool HashMap::init(copy_value_func _copy_value, destroy_value_func _destroy
     return true;
 }
 
-WEAK void HashMap::prune() {
+inline void HashMap::prune() {
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
@@ -198,7 +198,7 @@ WEAK void HashMap::prune() {
 #endif
 }
 
-WEAK void HashMap::set_size(int64_t size) {
+inline void HashMap::set_size(int64_t size) {
     if (size == 0) {
         size = kDefaultCacheSize;
     }
@@ -210,7 +210,7 @@ WEAK void HashMap::set_size(int64_t size) {
 }
 
 
-WEAK int HashMap::lookup(void *user_context,
+inline int HashMap::lookup(void *user_context,
                          const uint8_t *cache_key, int32_t size,
                          uint8_t *cache_value, size_t cache_value_size) {
     uint32_t h = djb_hash(cache_key, size);
@@ -272,7 +272,7 @@ WEAK int HashMap::lookup(void *user_context,
     return 1;
 }
 
-WEAK int HashMap::store(void *user_context,
+inline int HashMap::store(void *user_context,
                         const uint8_t *cache_key, int32_t size,
                         const uint8_t *cache_value, size_t cache_value_size) {
     debug(user_context) << "halide_memoization_cache_store\n";
@@ -338,14 +338,14 @@ WEAK int HashMap::store(void *user_context,
     return 0;
 }
 
-WEAK void HashMap::release(void *user_context, void *host) {
+inline void HashMap::release(void *user_context, void *host) {
     debug(user_context) << "halide_memoization_cache_release\n";
     // TODO(marcos): this method does not make sense on a generic hashmap... remove it?
     halide_assert(user_context, false);
     debug(user_context) << "Exited halide_memoization_cache_release.\n";
 }
 
-WEAK void HashMap::cleanup() {
+inline void HashMap::cleanup() {
     debug(NULL) << "halide_memoization_cache_cleanup\n";
     for (size_t i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
