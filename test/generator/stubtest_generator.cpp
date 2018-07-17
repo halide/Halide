@@ -42,6 +42,7 @@ public:
     Output<Func[]> array_output{ "array_output", Int(16), 2};   // leave ArraySize unspecified
     Output<Buffer<float>> typed_buffer_output{ "typed_buffer_output" };
     Output<Buffer<>> untyped_buffer_output{ "untyped_buffer_output" };
+    Output<Buffer<>> tupled_output{ "tupled_output", { Float(32), Int(32) }, 3 };
     Output<Buffer<uint8_t>> static_compiled_buffer_output{ "static_compiled_buffer_output", 3 };
     Output<Buffer<uint8_t>[2]> array_buffer_output{ "array_buffer_output", 3 };
 
@@ -54,6 +55,8 @@ public:
         // will end up as whatever we infer from the values put into it. We'll use an
         // explicit GeneratorParam to allow us to set it.
         untyped_buffer_output(x, y, c) = cast(untyped_buffer_output_type, untyped_buffer_input(x, y, c));
+
+        tupled_output(x, y, c) = Tuple(simple_output(x, y, c), cast<int32_t>(simple_output(x, y, c)) + 1);
 
         for (int i = 0; i < 2; ++i) {
             array_buffer_output[i](x, y, c) = array_buffer_input[i](x, y,c) + 1 + i;
