@@ -1,3 +1,20 @@
+#define EXTENDED_DEBUG 0
+
+#if EXTENDED_DEBUG
+// This code is currently setup for Linux debugging. Switch to using pthread_self on e.g. Mac OS X.
+extern "C" int syscall(int);
+
+namespace {
+int gettid() {
+    return syscall(186);
+}
+}
+
+#define log_message(stuff) print(NULL) << gettid() << ": " << stuff << "\n"
+#else
+#define log_message(stuff)
+#endif
+
 namespace Halide { namespace Runtime { namespace Internal {
 
 struct work {
@@ -142,6 +159,33 @@ struct work_queue_t {
 
 WEAK work_queue_t work_queue = {};
 
+#if EXTENDED_DEBUG
+WEAK void print_job(work *job, const char *indent, const char *prefix = NULL) {
+    if (prefix == NULL) {
+        prefix = indent;
+    }
+    const char *name = job->task.name ? job->task.name : "<no name>";
+    const char *parent_name = job->parent_job ? (job->parent_job->task.name ? job->parent_job->task.name : "<no name>") : "<no parent job>";
+    log_message(prefix << name << "[" << job << "] serial: " << job->task.serial << " active_workers: " << job->active_workers << " min: " << job->task.min << " extent: " << job->task.extent << " may_block: " << job->task.may_block << " siblings: " << job->siblings << " sibling count: " << job->sibling_count << " min_threads " << job->task.min_threads << " next_sempaphore: " << job->next_semaphore << " threads_reserved: " << job->threads_reserved << " parent_job: " << parent_name << "[" << job->parent_job << "]");
+    for (int i = 0; i < job->task.num_semaphores; i++) {
+          log_message(indent << "    semaphore " << (void *)job->task.semaphores[i].semaphore << " count " << job->task.semaphores[i].count << " val " << *(int *)job->task.semaphores[i].semaphore);
+    }
+}
+
+WEAK void dump_job_state() {
+    log_message("Dumping job state, jobs in queue:");
+    work *job = work_queue.jobs;
+    while (job != NULL) {
+        print_job(job, "    ");
+        job = job->next_job;
+    }
+    log_message("Done dumping job state.");
+}
+#else
+#define print_job(job, indent, prefix)
+#define dump_job_state()
+#endif
+
 WEAK void worker_thread(void *);
 
 WEAK void worker_thread_already_locked(work *owned_job) {
@@ -161,6 +205,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
       
         // Find a job to run, prefering things near the top of the stack.
         while (job) {
+            print_job(job, "", "Considering job ");
             // Only schedule tasks with enough free worker threads
             // around to complete. They may get stolen later, but only
             // by tasks which can themselves use them to complete
@@ -180,6 +225,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     threads_available = parent_job->active_workers * parent_job->task.min_threads - parent_job->threads_reserved;
                 }
             }
+#if 0
             // A job with may_block == false can always use the current thread.
             // This adjustment allows it to do so by ensuring enough_threads is true.
             // TODO(zvookin): The logic here is beyond a handwave. However improving it
@@ -187,12 +233,28 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (!job->task.may_block) {
                 threads_available += 1;
             }
+#endif
             enough_threads = threads_available >= job->task.min_threads;
 
-            bool may_try = ((!owned_job || (job->siblings == owned_job->siblings) || !job->task.may_block) &&
-                            (!job->task.serial || (job->active_workers == 0)));
-            if (may_try && enough_threads && job->make_runnable()) {
-                break;
+            if (!enough_threads) {
+
+                log_message("Not enough threads for job " << job->task.name << " available: " << threads_available << " min_threads: " << job->task.min_threads);
+            }              
+            bool can_use_this_thread_stack  = !owned_job || (job->siblings == owned_job->siblings) || !job->task.may_block;
+            if (!can_use_this_thread_stack) {
+                log_message("Cannot run job " << job->task.name << " on this thread.");
+            }              
+            bool can_add_worker = (!job->task.serial || (job->active_workers == 0));
+            if (!can_add_worker) {
+                log_message("Cannot add worker to job " << job->task.name);
+            }              
+              
+            if (enough_threads && can_use_this_thread_stack && can_add_worker) {
+                if (job->make_runnable()) {
+                    break;
+                } else {
+                     log_message("Cannot acquire semaphores for " << job->task.name);
+                }
             }
             prev_ptr = &(job->next_job);
             job = job->next_job;
@@ -220,6 +282,8 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             }
             continue;
         }
+
+        log_message("Working on job " << job->task.name);
 
         // Increment the active_worker count so that other threads
         // are aware that this job is still in progress even
@@ -317,6 +381,8 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // We are no longer active on this job
         job->active_workers--;
 
+        log_message("Done working on job " << job->task.name);
+
         if (wake_owners || (!job->running() && job->owner_is_sleeping)) {
             // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
@@ -358,10 +424,12 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
     // of these jobs.
     bool stealable_jobs = false;
 
+    bool one_may_block = false;
     for (int i = 0; i < num_jobs; i++) {
         if (!jobs[i].task.may_block) {
             stealable_jobs = true;
         } else {
+            one_may_block = true;
             min_threads += jobs[i].task.min_threads;
         }
         if (jobs[i].task.serial) {
@@ -369,6 +437,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs) {
         } else {
             workers_to_wake += jobs[i].task.extent;
         }
+    }
+    if (one_may_block) {
+        min_threads += 1;
     }
 
     // Spawn more threads if necessary.
@@ -461,7 +532,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.semaphores = NULL;
     job.task.num_semaphores = 0;
     job.task.closure = closure;
-    job.task.min_threads = 1;
+    job.task.min_threads = 0;
     job.task.name = NULL;
     job.task_fn = f;
     job.user_context = user_context;

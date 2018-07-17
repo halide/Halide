@@ -3154,36 +3154,84 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         MayBlock may_block;
         t.body.accept(&may_block);
 
+        // TODO(zvookin|abadams): This makes multiple passes over the
+        // IR to cover each node. (One tree walk produces the min
+        // thread count for all nodes, but we redo each subtree when
+        // compiling a given node.) Ideally we'd move to a lowering pass
+        // that converts our parallelism constructs to Call nodes, or
+        // direct hardware operations in some cases.
         class MinThreads : public IRVisitor {
             using IRVisitor::visit;
+
+            // TODO(zvookin|abadams): If there is a constraint that the
+            // Acquire has to be immediately inside a Fork or For node,
+            // this can be simplified.
+            int direct_acquires = 0;
+
             void visit(const Fork *op) {
-                IRVisitor::visit(op);
-                // Conservatively assume that if either side is
-                // blocking, then the owner of this fork may get stuck
-                // waiting for the completion of a thread that stole
-                // the blocking side.
-                Stmt first = op->first, rest = op->rest;
-                MayBlock first_may_block, rest_may_block;
-                op->first.accept(&first_may_block);
-                op->rest.accept(&rest_may_block);
-                if (first_may_block.result || rest_may_block.result) {
-                    result++;
+                ScopedValue<int> save(direct_acquires, 0);
+
+                int total_threads = 0;
+                // Take the sum of min threads across all
+                // cascaded Fork nodes.
+                const Fork *node = op;
+                while (node != NULL) {
+                    result = 0;
+                    node->first.accept(this);
+                    total_threads += result;
+                    const Fork *continued_branches = node->rest.as<Fork>();
+                    if (continued_branches == NULL) {
+                        result = 0;
+                        op->rest.accept(this);
+                        total_threads += result;
+                    }
+                    node = continued_branches;
+                }
+                if (direct_acquires == 0 && total_threads == 0) {
+                    result = 0;
+                } else {
+                    result = total_threads + 1;
                 }
             }
+
+            void visit(const For *op) {
+                result = 0;
+
+                const Acquire *acquire = op->body.as<Acquire>();
+
+                if (op->for_type == ForType::Parallel ||
+                    (op->for_type == ForType::Serial &&
+                     acquire &&
+                     !expr_uses_var(acquire->count, op->name))) {
+                    ScopedValue<int> save(direct_acquires, 0);
+                    IRVisitor::visit(op);
+                    if (direct_acquires > 0) {
+                        result++;
+                    }
+                } else {
+                    IRVisitor::visit(op);
+                }
+            }
+ 
+            void visit(const Acquire *op) {
+                IRVisitor::visit(op);
+                direct_acquires++;
+            }
+ 
             void visit(const Block *op) {
-                int result_orig = result;
+                result = 0;
                 op->first.accept(this);
                 int result_first = result;
-                result = result_orig;
+                result = 0;
                 op->rest.accept(this);
                 result = std::max(result, result_first);
             }
         public:
-            int result = 1;
+            int result = 0;
         };
         MinThreads min_threads;
         t.body.accept(&min_threads);
-
+          
         // Decide if we're going to call do_par_for or
         // do_parallel_tasks. halide_do_par_for is simpler, but
         // assumes a bunch of things. Programs that don't use async
@@ -3191,7 +3239,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         Value *task_parent = sym_get("__task_parent", false);
         bool use_do_par_for = (
             num_tasks == 1 &&
-            min_threads.result == 1 &&
+            min_threads.result == 0 &&
             t.semaphores.empty() &&
             !may_block.result &&
             !task_parent);
