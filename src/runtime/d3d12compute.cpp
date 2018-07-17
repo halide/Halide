@@ -14,20 +14,14 @@
 // force-enable call-trace, d3d12 debug layer and shader debugging information
 #ifdef DEBUG_RUNTIME
 
-    #ifdef  HALIDE_D3D12_TRACE
     #undef  HALIDE_D3D12_TRACE
     #define HALIDE_D3D12_TRACE (1)
-    #endif//HALIDE_D3D12_TRACE
 
-    #ifdef  HALIDE_D3D12_DEBUG_LAYER
     #undef  HALIDE_D3D12_DEBUG_LAYER
     #define HALIDE_D3D12_DEBUG_LAYER (1)
-    #endif//HALIDE_D3D12_DEBUG_LAYER
 
-    #ifdef  HALIDE_D3D12_DEBUG_SHADERS
     #undef  HALIDE_D3D12_DEBUG_SHADERS
     #define HALIDE_D3D12_DEBUG_SHADERS (1)
-    #endif//HALIDE_D3D12_DEBUG_SHADERS
 
 #endif
 
@@ -48,8 +42,12 @@
 #include "mini_d3d12.h"
 #include "d3d12_abi_patch_64.h"
 
+// For all intents and purposes, we always want to use COMPUTE command lists
+// (and queues) ...
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_COMPUTE
-
+// ...  unless we need to debug with RenderDoc/PIX, or use the built-in ad-hoc
+// ad-hoc profiler, in which case we need regular (DIRECT) graphics lists...
+// (This is due to limitations of the D3D12 run-time, not Halide's fault.)
 #if HALIDE_D3D12_PROFILING
 // NOTE(marcos): timer queries are reporting exceedingly small elapsed deltas
 // when placed in compute queues... this might be related to GPU Power Boost,
@@ -352,8 +350,6 @@ static DXGI_FORMAT FindD3D12FormatForHalideType(halide_type_t type) {
     format = FORMATS[(int)type.code][type.lanes-1][i];
     return format;
 }
-
-#define INLINE inline __attribute__((always_inline))
 
 
 
@@ -1793,6 +1789,10 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             // returning 1 for cropped buffers... ('size_in_bytes()' returns 0)
             UINT NumElements = input_buffer->elements;
             UINT SizeInBytes = input_buffer->sizeInBytes;
+
+            // SizeInBytes is here just for debugging/logging purposes in TRACEPRINT.
+            // Because TRACEPRINT might turn into "nothing" (when call-tracing is not
+            // enabled) the compiler might warn about unused variables...
             UNUSED(SizeInBytes);
 
             TRACEPRINT("--- [" << index << "] : "
