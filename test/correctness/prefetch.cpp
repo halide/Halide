@@ -5,9 +5,6 @@
 
 namespace {
 
-using std::map;
-using std::pair;
-using std::string;
 using std::vector;
 
 using namespace Halide;
@@ -41,8 +38,8 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
         }
         for (size_t j = 0; j < expected[i].size(); ++j) {
             if (!equal(expected[i][j], result[i][j])) {
-                std::cout << "Expect \"" << expected[i][j] << "\", got \""
-                          << result[i][j] << " instead\n";
+                std::cout << "Expect \"" << expected[i][j] << "\" at arg index "
+                          << j << ", got \"" << result[i][j] << " instead\n";
                 return false;
             }
         }
@@ -50,13 +47,22 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
     return true;
 }
 
-int get_max_byte_size(const Target &t) {
+Expr get_max_byte_size(const Target &t) {
     // See \ref reduce_prefetch_dimension for max_byte_size
-    return (t.arch == Target::ARM) ? 32 : 64;
+    Expr max_byte_size;
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        max_byte_size = Expr();
+    } else if (t.arch == Target::ARM) {
+        max_byte_size = 32;
+    } else {
+        max_byte_size = 64;
+    }
+    return max_byte_size;
 }
 
-int get_stride(const Target &t, int elem_byte_size) {
-    return get_max_byte_size(t) / elem_byte_size;
+Expr get_stride(const Target &t, const Expr &elem_byte_size) {
+    Expr max_byte_size = get_max_byte_size(t);
+    return max_byte_size.defined() ? simplify(max_byte_size/elem_byte_size) : 1;
 }
 
 int test1(const Target &t) {
@@ -64,7 +70,7 @@ int test1(const Target &t) {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(0) + f(1);
+    g(x) = f(0);
 
     f.compute_root();
     g.prefetch(f, x, 8);
@@ -87,7 +93,7 @@ int test2(const Target &t) {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(0) + f(1);
+    g(x) = f(0);
 
     f.compute_root();
     g.specialize(p).prefetch(f, x, 8);
@@ -104,7 +110,56 @@ int test2(const Target &t) {
     return 0;
 }
 
-}  // namespace
+int test3(const Target &t) {
+    Func f("f"), g("g"), h("h");
+    Var x("x"), xo("xo");
+
+    f(x) = x;
+    h(x) = f(x) + 1;
+    g(x) = h(0);
+
+    f.compute_root();
+    g.split(x, xo, x, 32);
+    h.compute_at(g, xo);
+    g.prefetch(f, xo, 1);
+
+    Module m = g.compile_to_module({});
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()) , 0, 1, get_stride(t, 4)}};
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
+int test4(const Target &t) {
+    Func f("f"), g("g"), h("h");
+    Var x("x");
+
+    f(x) = x;
+    h(x) = f(x) + 1;
+    g(x) = h(0);
+
+    f.compute_root();
+    h.compute_root();
+    g.prefetch(f, x, 1);
+
+    Module m = g.compile_to_module({});
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    // There shouldn't be any prefetches since there is no call to 'f'
+    // within the loop nest of 'g'
+    vector<vector<Expr>> expected = {};
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
+}  // anonymous namespace
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
@@ -115,6 +170,14 @@ int main(int argc, char **argv) {
     }
     printf("Running prefetch test2\n");
     if (test2(t) != 0) {
+        return -1;
+    }
+    printf("Running prefetch test3\n");
+    if (test3(t) != 0) {
+        return -1;
+    }
+    printf("Running prefetch test4\n");
+    if (test4(t) != 0) {
         return -1;
     }
 

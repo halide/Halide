@@ -523,6 +523,7 @@ struct Call : public ExprNode<Call> {
     // functions that we want to construct Call nodes to here to avoid
     // magic string constants and the potential risk of typos.
     HALIDE_EXPORT static ConstString
+        buffer_get_dimensions,
         buffer_get_min,
         buffer_get_extent,
         buffer_get_stride,

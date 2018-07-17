@@ -562,6 +562,8 @@ struct halide_device_interface_t {
                        const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
     int (*device_crop)(void *user_context, const struct halide_buffer_t *src,
                        struct halide_buffer_t *dst);
+    int (*device_slice)(void *user_context, const struct halide_buffer_t *src,
+                        int slice_dim, int slice_pos, struct halide_buffer_t *dst);
     int (*device_release_crop)(void *user_context, struct halide_buffer_t *buf);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
@@ -614,15 +616,35 @@ extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
  * up resources associated with the cropped view. Do not free the
  * device allocation on the source buffer while the destination buffer
  * still lives. Note that the two buffers do not share dirty flags, so
- * care must be taken to update them together as needed. Note also
- * that device interfaces which support cropping may still not support
- * cropping a crop. Instead, create a new crop of the parent
- * buffer. */
+ * care must be taken to update them together as needed. Note that src
+ * and dst are required to have the same number of dimensions.
+ *
+ * Note also that (in theory) device interfaces which support cropping may
+ * still not support cropping a crop (instead, create a new crop of the parent
+ * buffer); in practice, no known implementation has this limitation, although
+ * it is possible that some future implementations may require it. */
 extern int halide_device_crop(void *user_context,
                               const struct halide_buffer_t *src,
                               struct halide_buffer_t *dst);
 
-/** Release any resources associated with a cropped view of another
+/** Give the destination buffer a device allocation which is an alias
+ * for a similar coordinate range in the source buffer, but with one dimension
+ * sliced away in the dst. Modifies the device, device_interface, and the
+ * device_dirty flag only. Only supported by some device APIs (others will return
+ * halide_error_code_device_crop_unsupported). Call
+ * halide_device_release_crop instead of halide_device_free to clean
+ * up resources associated with the sliced view. Do not free the
+ * device allocation on the source buffer while the destination buffer
+ * still lives. Note that the two buffers do not share dirty flags, so
+ * care must be taken to update them together as needed. Note that the dst buffer
+ * must have exactly one fewer dimension than the src buffer, and that slice_dim
+ * and slice_pos must be valid within src. */
+extern int halide_device_slice(void *user_context,
+                               const struct halide_buffer_t *src,
+                               int slice_dim, int slice_pos,
+                               struct halide_buffer_t *dst);
+
+/** Release any resources associated with a cropped/sliced view of another
  * buffer. */
 extern int halide_device_release_crop(void *user_context,
                                       struct halide_buffer_t *buf);
@@ -946,11 +968,11 @@ enum halide_error_code_t {
      * string to see more details. */
     halide_error_code_device_buffer_copy_failed = -39,
 
-    /** Attempted to make cropped alias of a buffer with a device
+    /** Attempted to make cropped/sliced alias of a buffer with a device
      * field, but the device_interface does not support cropping. */
     halide_error_code_device_crop_unsupported = -40,
 
-    /** Cropping a buffer failed for some other reason. Turn on -debug
+    /** Cropping/slicing a buffer failed for some other reason. Turn on -debug
      * in your target string. */
     halide_error_code_device_crop_failed = -41,
 
@@ -959,6 +981,9 @@ enum halide_error_code_t {
      * existed on a different device interface. Free the old one
      * first. */
     halide_error_code_incompatible_device_interface = -42,
+
+    /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
+    halide_error_code_bad_dimensions = -43,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -984,6 +1009,8 @@ extern int halide_error_bad_type(void *user_context, const char *func_name,
                                  uint8_t code_given, uint8_t correct_code,
                                  uint8_t bits_given, uint8_t correct_bits,
                                  uint16_t lanes_given, uint16_t correct_lanes);
+extern int halide_error_bad_dimensions(void *user_context, const char *func_name,
+                                       int32_t dimensions_given, int32_t correct_dimensions);
 extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
                                              int dimension, int min_touched, int max_touched,
                                              int min_valid, int max_valid);
