@@ -5765,7 +5765,8 @@ private:
         } else if (ifelse &&
                    op->device_api == DeviceAPI::None &&
                    !ifelse->else_case.defined() &&
-                   !expr_uses_var(ifelse->condition, op->name)) {
+                   !expr_uses_var(ifelse->condition, op->name) &&
+                   is_pure(ifelse->condition)) {
             // Pull the if outside the for
             Stmt then = ifelse->then_case;
             then = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, then);
