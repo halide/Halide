@@ -2,6 +2,7 @@
     #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
 #endif
 
+// Debugging utilities for back-end developers:
 #define HALIDE_D3D12_TRACE          (0)
 #define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
@@ -9,6 +10,8 @@
 #define HALIDE_D3D12_PIX            (0)
 #define HALIDE_D3D12_RENDERDOC      (0)
 
+// Halide debug target (Target::Debug, "-debug"):
+// force-enable call-trace, d3d12 debug layer and shader debugging information
 #ifdef DEBUG_RUNTIME
 
     #ifdef  HALIDE_D3D12_TRACE
@@ -906,44 +909,68 @@ ID3D12RootSignature *D3D12CreateMasterRootSignature(ID3D12Device *device) {
     // do not support unbounded descriptor tables...
 
     D3D12_ROOT_PARAMETER TableTemplate = { };
+    {
         TableTemplate.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         TableTemplate.DescriptorTable.NumDescriptorRanges = 1;
         TableTemplate.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;   // compute must use this
+    }
     D3D12_DESCRIPTOR_RANGE RangeTemplate = { };
+    {
         RangeTemplate.NumDescriptors = -1;      // -1 for unlimited/unbounded tables
         RangeTemplate.BaseShaderRegister = 0;
         RangeTemplate.RegisterSpace = 0;
         RangeTemplate.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    }
 
     D3D12_ROOT_PARAMETER rootParameterTables [NumSlots] = { };
-    // UAVs: read-only, write-only and read-write buffers:
+    D3D12_DESCRIPTOR_RANGE descriptorRanges  [NumSlots] = { };
+    {
+        // UAVs: read-only, write-only and read-write buffers:
         D3D12_ROOT_PARAMETER& RootTableUAV = rootParameterTables[UAV];
+        {
             RootTableUAV = TableTemplate;
-            D3D12_DESCRIPTOR_RANGE UAVs = RangeTemplate;
+            D3D12_DESCRIPTOR_RANGE& UAVs = descriptorRanges[UAV];
+            {
+                UAVs = RangeTemplate;
                 UAVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
                 UAVs.NumDescriptors = ResourceBindingLimits[UAV];
+            }
             RootTableUAV.DescriptorTable.pDescriptorRanges = &UAVs;
-    // CBVs: read-only uniform/coherent/broadcast buffers:
+        }
+        // CBVs: read-only uniform/coherent/broadcast buffers:
         D3D12_ROOT_PARAMETER& RootTableCBV = rootParameterTables[CBV];
+        {
             RootTableCBV = TableTemplate;
-            D3D12_DESCRIPTOR_RANGE CBVs = RangeTemplate;
+            D3D12_DESCRIPTOR_RANGE& CBVs = descriptorRanges[CBV];
+            {
+                CBVs = RangeTemplate;
                 CBVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
                 CBVs.NumDescriptors = ResourceBindingLimits[CBV];
+            }
             RootTableCBV.DescriptorTable.pDescriptorRanges = &CBVs;
-    // SRVs: textures and read-only buffers:
+        }
+        // SRVs: textures and read-only buffers:
         D3D12_ROOT_PARAMETER& RootTableSRV = rootParameterTables[SRV];
+        {
             RootTableSRV = TableTemplate;
-            D3D12_DESCRIPTOR_RANGE SRVs = RangeTemplate;
+            D3D12_DESCRIPTOR_RANGE& SRVs = descriptorRanges[SRV];
+            {
+                SRVs = RangeTemplate;
                 SRVs.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
                 SRVs.NumDescriptors = ResourceBindingLimits[SRV];
+            }
             RootTableSRV.DescriptorTable.pDescriptorRanges = &SRVs;
+        }
+    }
 
     D3D12_ROOT_SIGNATURE_DESC rsd = { };
+    {
         rsd.NumParameters = NumSlots;
         rsd.pParameters = rootParameterTables;
         rsd.NumStaticSamplers = 0;
         rsd.pStaticSamplers = NULL;
         rsd.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+    }
     D3D_ROOT_SIGNATURE_VERSION Version = D3D_ROOT_SIGNATURE_VERSION_1;
     ID3DBlob *pSignBlob  = NULL;
     ID3DBlob *pSignError = NULL;
@@ -982,6 +1009,7 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
 
 WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12_HEAP_TYPE heaptype) {
     D3D12_RESOURCE_DESC desc = { };
+    {
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
         desc.Alignment = 0;                             // 0 defaults to 64KB alignment, which is mandatory for buffers
         desc.Width = length;
@@ -993,13 +1021,16 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
         desc.SampleDesc.Quality = 0;                    // ditto, (0)
         desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;   // ditto, (D3D12_TEXTURE_LAYOUT_ROW_MAJOR)
         desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    }
 
     D3D12_HEAP_PROPERTIES heapProps = { };              // CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_...)
+    {
         heapProps.Type = heaptype;
         heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
         heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
         heapProps.CreationNodeMask = 0;                 // 0 is equivalent to 0b0...01 (single adapter)
         heapProps.VisibleNodeMask  = 0;                 // ditto
+    }
 
     D3D12_HEAP_PROPERTIES *pHeapProperties = &heapProps;
     D3D12_HEAP_FLAGS HeapFlags = D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES;
@@ -1240,9 +1271,11 @@ d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
     ID3D12QueryHeap *pQueryHeap = NULL;
     {
         D3D12_QUERY_HEAP_DESC desc = { };
+        {
             desc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
             desc.Count = num_queries;
             desc.NodeMask = 0;
+        }
         HRESULT result = (*device)->CreateQueryHeap(&desc, IID_PPV_ARGS(&pQueryHeap));
         if (D3DError(result, pQueryHeap, user_context, "Unable to create timestamp query heap")) {
             return NULL;
@@ -1256,11 +1289,13 @@ d3d12_profiler *new_profiler(d3d12_device *device, size_t num_queries) {
     d3d12_buffer queryResultsBuffer = new_readback_buffer(device, size_in_bytes);
 
     d3d12_profiler *profiler = malloct<d3d12_profiler>();
+    {
         profiler->queryHeap = pQueryHeap;
         profiler->tick_frequency = Frequency;
         profiler->queryResultsBuffer = queryResultsBuffer;
         profiler->next_free_query = 0;
         profiler->max_queries = num_queries;
+    }
 
     return(profiler);
 }
@@ -1321,10 +1356,12 @@ WEAK d3d12_command_queue *new_command_queue(d3d12_device *device) {
     ID3D12CommandQueue *commandQueue = NULL;
     {
         D3D12_COMMAND_QUEUE_DESC cqDesc = { };
+        {
             cqDesc.Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
             cqDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
             cqDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
             cqDesc.NodeMask = 0;    // 0, for single GPU operation
+        }
         HRESULT result = (*device)->CreateCommandQueue(&cqDesc, IID_PPV_ARGS(&commandQueue));
         if (D3DError(result, commandQueue, NULL, "Unable to create the Direct3D 12 command queue")) {
             return NULL;
@@ -1390,6 +1427,7 @@ static d3d12_compute_pipeline_state *new_compute_pipeline_state_with_function(d3
     TRACELOG;
     ID3D12PipelineState *pipelineState = NULL;
     D3D12_COMPUTE_PIPELINE_STATE_DESC cpsd = { };
+    {
         cpsd.pRootSignature = function->rootSignature;
         cpsd.CS.pShaderBytecode = function->shaderBlob->GetBufferPointer();
         cpsd.CS.BytecodeLength  = function->shaderBlob->GetBufferSize();
@@ -1397,6 +1435,7 @@ static d3d12_compute_pipeline_state *new_compute_pipeline_state_with_function(d3
         cpsd.CachedPSO.pCachedBlob = NULL;
         cpsd.CachedPSO.CachedBlobSizeInBytes = 0;
         cpsd.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+    }
     HRESULT result = (*device)->CreateComputePipelineState(&cpsd, IID_PPV_ARGS(&pipelineState));
     if (D3DError(result, pipelineState, NULL, "Unable to create the Direct3D 12 pipeline state")) {
         return NULL;
@@ -1430,6 +1469,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     TRACELOG;
     ID3D12DescriptorHeap *descriptorHeap = NULL;
     D3D12_DESCRIPTOR_HEAP_DESC dhd = { };
+    {
         dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         dhd.NumDescriptors  = 0;
         dhd.NumDescriptors += ResourceBindingLimits[UAV];
@@ -1437,6 +1477,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         dhd.NumDescriptors += ResourceBindingLimits[SRV];
         dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         dhd.NodeMask = 0;
+    }
     HRESULT result = (*device)->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(&descriptorHeap));
     if (D3DError(result, descriptorHeap, NULL, "Unable to create the Direct3D 12 descriptor heap")) {
         return NULL;
@@ -1464,6 +1505,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     // initialize everything with null descriptors...
     for (uint32_t i = 0; i < ResourceBindingLimits[UAV]; ++i) {
         D3D12_UNORDERED_ACCESS_VIEW_DESC NullDescUAV = { };
+        {
             NullDescUAV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
             NullDescUAV.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
             NullDescUAV.Buffer.FirstElement = 0;
@@ -1471,20 +1513,24 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
             NullDescUAV.Buffer.StructureByteStride = 0;
             NullDescUAV.Buffer.CounterOffsetInBytes = 0;
             NullDescUAV.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+        }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[UAV];
         hCPU.ptr += i*descriptorSize;
         (*device)->CreateUnorderedAccessView(NULL, NULL, &NullDescUAV, hCPU);
     }
     for (uint32_t i = 0; i < ResourceBindingLimits[CBV]; ++i) {
         D3D12_CONSTANT_BUFFER_VIEW_DESC NullDescCBV = { };
+        {
             NullDescCBV.BufferLocation = 0;
             NullDescCBV.SizeInBytes = 0;
+        }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[CBV];
         hCPU.ptr += i*descriptorSize;
         Call_ID3D12Device_CreateConstantBufferView((*device), &NullDescCBV, hCPU);
     }
     for (uint32_t i = 0; i < ResourceBindingLimits[SRV]; ++i) {
         D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = { };
+        {
             NullDescSRV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
             NullDescSRV.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
             NullDescSRV.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -1492,6 +1538,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
             NullDescSRV.Buffer.NumElements = 0;
             NullDescSRV.Buffer.StructureByteStride = 0;
             NullDescSRV.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+        }
         D3D12_CPU_DESCRIPTOR_HANDLE hCPU = binder->CPU[SRV];
         hCPU.ptr += i*descriptorSize;
         Call_ID3D12Device_CreateShaderResourceView((*device), NULL, &NullDescSRV, hCPU);
@@ -1524,11 +1571,13 @@ WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *b
     halide_assert(user_context, buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     D3D12_RESOURCE_BARRIER barrier = { };
+    {
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
         barrier.Transition.pResource = buffer->resource;
         barrier.Transition.Subresource = 0;
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    }
 
     // NOTE(marcos): it might be possible to achieve higher asynchronicity with
     // special flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
@@ -1571,9 +1620,11 @@ WEAK void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer
     TRACELOG;
 
     D3D12_RESOURCE_BARRIER barrier = { };
+    {
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
         barrier.UAV.pResource = buffer->resource;
+    }
 
     (*cmdList)->ResourceBarrier(1, &barrier);
 }
@@ -1709,8 +1760,10 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             D3D12_GPU_VIRTUAL_ADDRESS pGPU = pResource->GetGPUVirtualAddress();
 
             D3D12_CONSTANT_BUFFER_VIEW_DESC cbvd = { };
+            {
                 cbvd.BufferLocation = pGPU;
                 cbvd.SizeInBytes = input_buffer->sizeInBytes;
+            }
 
             halide_assert(user_context, (index < ResourceBindingLimits[CBV]));
             D3D12_CPU_DESCRIPTOR_HANDLE hDescCBV = binder->CPU[CBV];
@@ -1750,6 +1803,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             // A View of a non-Structured Buffer cannot be created using a NULL Desc.
             // Default Desc parameters cannot be used, as a Format must be supplied.
             D3D12_UNORDERED_ACCESS_VIEW_DESC uavd = { };
+            {
                 uavd.Format = Format;
                 uavd.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
                 uavd.Buffer.FirstElement = FirstElement;
@@ -1757,6 +1811,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
                 uavd.Buffer.StructureByteStride = 0;
                 uavd.Buffer.CounterOffsetInBytes = 0;   // 0, since this is not an atomic counter
                 uavd.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+            }
 
             halide_assert(user_context, (index < ResourceBindingLimits[UAV]));
             D3D12_CPU_DESCRIPTOR_HANDLE hDescUAV = binder->CPU[UAV];
@@ -2376,6 +2431,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_device *device = d3d12_context.device;
 
     #if HALIDE_D3D12_RENDERDOC
+    TRACEPRINT(">>> RenderDoc Capture Start\n");
     StartCapturingGPUActivity();
     #endif
 
@@ -2530,6 +2586,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     #if HALIDE_D3D12_RENDERDOC
     FinishCapturingGPUActivity();
+    TRACEPRINT("<<< RenderDoc Capture Ended\n");
     #endif
 
     #if HALIDE_D3D12_PROFILING
