@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
         if ((types[i].is_int() || types[i].is_uint())) {
             // Metal does not support 64-bit integers.
             // neither does D3D12 with SM 5.1.
-            if ((t.has_feature(Target::Metal) ||
-                 t.has_feature(Target::D3D12Compute)) &&
+            if ((t.supports_device_api(DeviceAPI::Metal) ||
+                 t.supports_device_api(DeviceAPI::D3D12Compute)) &&
                 types[i].bits() >= 64) {
                 continue;
             }
