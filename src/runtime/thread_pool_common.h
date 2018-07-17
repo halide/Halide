@@ -225,15 +225,6 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     threads_available = parent_job->active_workers * parent_job->task.min_threads - parent_job->threads_reserved;
                 }
             }
-#if 0
-            // A job with may_block == false can always use the current thread.
-            // This adjustment allows it to do so by ensuring enough_threads is true.
-            // TODO(zvookin): The logic here is beyond a handwave. However improving it
-            // really requires putting the entire design on a more formal foundation.
-            if (!job->task.may_block) {
-                threads_available += 1;
-            }
-#endif
             enough_threads = threads_available >= job->task.min_threads;
 
             if (!enough_threads) {
