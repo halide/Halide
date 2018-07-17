@@ -8,7 +8,6 @@ namespace Internal {
 using std::map;
 using std::string;
 using std::vector;
-using std::set;
 
 class UniquifyVariableNames : public IRMutator2 {
 
