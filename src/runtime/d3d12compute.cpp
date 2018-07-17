@@ -2649,16 +2649,13 @@ WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct hal
     return 0;
 }
 
-WEAK int halide_d3d12compute_device_crop(void *user_context,
-                                         const struct halide_buffer_t *src,
-                                         struct halide_buffer_t *dst) {
-    TRACELOG;
+namespace {
 
-    // D3D12 buffer views are element-based, not byte-based
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
+WEAK int d3d12compute_device_crop_from_offset(void *user_context,
+                                              const struct halide_buffer_t *src,
+                                              int64_t offset,   /* offset in elements, not in bytes */
+                                              struct halide_buffer_t *dst) {
+    TRACELOG;
 
     d3d12_buffer *old_handle = reinterpret_cast<d3d12_buffer*>(src->device);
     ID3D12Resource *pResource = old_handle->resource;
@@ -2692,12 +2689,29 @@ WEAK int halide_d3d12compute_device_crop(void *user_context,
     return 0;
 }
 
+}  // namespace
+
+WEAK int halide_d3d12compute_device_crop(void *user_context,
+                                         const struct halide_buffer_t *src,
+                                         struct halide_buffer_t *dst) {
+    TRACELOG;
+    using namespace Halide::Runtime;
+    int64_t offset = Internal::calc_device_crop_byte_offset(src, dst);
+    // D3D12 buffer views are element-based, not byte-based
+    offset /= src->type.bytes();
+    return d3d12compute_device_crop_from_offset(user_context, src, offset, dst);
+}
+
 WEAK int halide_d3d12compute_device_slice(void *user_context,
                                           const struct halide_buffer_t *src,
                                           int slice_dim, int slice_pos,
                                           struct halide_buffer_t *dst) {
-    // TODO(marcos): implement slicing!
-    return 0;
+    TRACELOG;
+    using namespace Halide::Runtime;
+    int64_t offset = Internal::calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    // D3D12 buffer views are element-based, not byte-based
+    offset /= src->type.bytes();
+    return d3d12compute_device_crop_from_offset(user_context, src, offset, dst);
 }
 
 WEAK int halide_d3d12compute_device_release_crop(void *user_context, struct halide_buffer_t *buf) {
