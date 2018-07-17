@@ -61,11 +61,14 @@ inline bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     // First storage for value:
     storage_bytes += cache_value_size;
 
-    // NOTE(marcos): maybe enforce some alignment between value and key?
-    //storage_bytes = (storage_bytes + 7) / 8;
+    // Enforce some alignment between value and key:
+    const size_t alignment = 8;
+    storage_bytes += (alignment - 1);
+    storage_bytes /= alignment;         // positive integer division (floor)
+    storage_bytes *= alignment;
 
-    // Then storage for the key:
-    size_t key_offset = storage_bytes;
+    // Then storage for the key, starting immediately after the (aligned) value:
+    const size_t key_offset = storage_bytes;
     storage_bytes += key_size;
 
     // Do the single malloc call
