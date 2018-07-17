@@ -230,8 +230,8 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
 
                rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
                rewrite(x - (x/c0)*c0, x % c0, c0 > 0) ||
-               rewrite(((x + c0)/c1)*c1 - x, x % c1, c1 > 0 && c0 + 1 == c1) ||
-               rewrite(x - ((x + c0)/c1)*c1, -(x % c1), c1 > 0 && c0 + 1 == c1) ||
+               rewrite(((x + c0)/c1)*c1 - x, (-x) % c1, c1 > 0 && c0 + 1 == c1) ||
+               rewrite(x - ((x + c0)/c1)*c1, ((x + c0) % c1) + fold(-c0), c1 > 0 && c0 + 1 == c1) ||
                rewrite(x * c0 - y * c1, (x * fold(c0 / c1) - y) * c1, c0 % c1 == 0) ||
                rewrite(x * c0 - y * c1, (x - y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                // Various forms of (x +/- a)/c - (x +/- b)/c. We can
