@@ -354,8 +354,8 @@ void CodeGen_GLSL::visit(const Cast *op) {
     if (map_type(op->type) == map_type(value_type)) {
         Expr value = op->value;
         if (value_type.code() == Type::Float) {
-            // float->int conversions may need explicit truncation if the
-            // integer types is embedded into floats.  (Note: overflows are
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
             // considered undefined behavior, so we do nothing about values
             // that are out of range of the target type.)
             if (op->type.code() == Type::UInt) {
