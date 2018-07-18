@@ -87,31 +87,64 @@ string print_function(const Function &f) {
     return stream.str();
 }
 
-/** If function 'f' operation only involves pointwise copy from another
-  * function, return the name of the function from which it copies from.
-  * If the function being copied from is a tuple, we have to ensure that 'f'
-  * copies the whole tuple and not only some of the tuple values; otherwise,
-  * treat it as non pointwise copies. For non pointwise copy or if 'f' has
-  * update definitions or is an extern function, return an empty string.
-  */
-string get_pointwise_copy_producer(const Function &f,
+// Given a copy-elision pair, return true if the producer is computed
+// within the scope of the consumer's buffer.
+bool is_prod_within_cons_realization(const Function &prod_f,
+                                     const Function &cons_f,
+                                     bool is_cons_output) {
+    const LoopLevel &prod_compute_at = prod_f.schedule().compute_level();
+    if (prod_compute_at.is_inlined()) {
+        // If the producer is inlined (regardless of whether it is legal to be
+        // inlined or not), we should just ignore this.
+        debug(4) << "...Function \"" << cons_f.name() << "\" calls inlined function \""
+                 << prod_f.name() << "\"\n";
+        return false;
+    }
+    if (is_cons_output) {
+        // If the consumer is output of the pipeline, the producer is
+        // always in scope of the consumer's buffer
+        return true;
+    }
+    if (prod_compute_at.is_root()) {
+        debug(4) << "...Non-output function \"" << cons_f.name() << "\" calls function \""
+                 << prod_f.name() << "\", which is computed at root\n";
+        return false;
+    }
+
+    // TODO(psuriana): Need to add another pass to check if the producer is
+    // produced (store_at) before the consumer's buffer is allocated (compute_at).
+    //const LoopLevel &cons_store_at = cons_f.schedule().store_level();
+
+    return true;
+}
+
+// If there is a potentially valid copy-elision pair, return the name of the
+// function from which it copies from; otherwise, return an empty string.
+string get_elision_pair_candidates(const Function &f,
+                                   bool is_output,
                                    const map<string, Function> &env,
                                    const map<string, int> &num_callers,
                                    const set<string> &inlined) {
 
-    if (f.has_update_definition() || f.has_extern_definition() || inlined.count(f.name())) {
+    // Ignore the case when 'f' has updates or is an extern function or
+    // is inlined, since in these cases, the copy elision will not be valid.
+    if (f.has_update_definition() || f.has_extern_definition() ||
+        inlined.count(f.name())) {
         return "";
     }
 
     const vector<Expr> &f_args = f.definition().args();
 
-    string prod;
+    string prod = "";
     for (int i = 0; i < (int)f.values().size(); ++i) {
+        // Perform all valid inlining first to get the actual producer-consumer
+        // copy relation. This will ignore functions which are scheduled
+        // inlined but not actually legal to do so (e.g. if the function has
+        // updates or has specializations)
         Expr val = perform_inline(f.values()[i], env, inlined);
         if (const Call *call = val.as<Call>()) {
             if (call->call_type == Call::Halide) {
-                // Check if it is a pointwise copy. For tuple, check if 'f'
-                // copies the whole tuple values.
+                // Check 'f' only calls one function
                 if (!prod.empty() && (prod != call->name)) {
                     debug(4) << "...Function \"" << f.name() << "\" calls multiple "
                              << "functions: \"" << prod << "\" and \""
@@ -120,24 +153,22 @@ string get_pointwise_copy_producer(const Function &f,
                 }
                 prod = call->name;
 
-                // TODO(psuriana): How should we handle the case when 'prod'
-                // is scheduled to be inlined but not exactly inline-able
-                // (i.e. have update definition or specialization)?
-                if (env.at(prod).schedule().compute_level().is_inlined()) {
-                    debug(4) << "...Function \"" << f.name() << "\" calls \"inlined\" "
-                             << "function: \"" << prod << "\"\n";
+                if (!is_prod_within_cons_realization(env.at(prod), f, is_output)) {
+                    debug(4) << "...Function \"" << f.name() << "\" and "
+                             << "function \"" << prod << "\", is not a valid "
+                             << "copy-elision pair\n";
                     return "";
                 }
 
-                // Check if only 'f' calls 'prod'
+                // Check only 'f' calls 'prod'
                 const auto &iter = num_callers.find(prod);
                 if ((iter != num_callers.end()) && (iter->second > 1)) {
-                    debug(4) << "...Function \"" << f.name() << "\" (" << print_function(f)
-                             << ") is pointwise copies but \""
+                    debug(4) << "...Function \"" << f.name() << "\" is a simple copy but \""
                              << prod << "\" has multiple callers\n";
                     return "";
                 }
 
+                // Check 'f' and 'prod' have the same loop dimensions
                 Function prod_f = Function(call->func);
                 if (f.dimensions() != prod_f.dimensions()) {
                     debug(4) << "...Function \"" << f.name() << "\" and \""
@@ -147,21 +178,17 @@ string get_pointwise_copy_producer(const Function &f,
                 }
                 internal_assert(f_args.size() == call->args.size());
 
-                // TODO(psuriana): If this is a halide_buffer_copy, we can't
-                // simply compare the values() size since it is empty (right
-                // now we don't need to worry about this case, since
-                // we always return if the function has extern definition).
-                // Should we ignore halide_buffer_copy or not?
+                // Check 'f' and 'prod' have the same number of outputs
+                // (or tuple sizes)
                 if (f.outputs() != prod_f.outputs()) {
                     debug(4) << "...Function \"" << f.name() << "\" does not call "
                              << "the whole tuple values of function \""
                              << prod_f.name() << "\"(" << f.outputs()
-                             << " vs " << prod_f.outputs() << ")\n"
-                             << "\tcons -> " << print_function(f) << "\n"
-                             << "\tprod -> " << print_function(prod_f) << "\n";
+                             << " vs " << prod_f.outputs() << ")\n";
                     return "";
                 }
 
+                // Check f[i] also calls prod[i]
                 if (i != call->value_index) {
                     debug(4) << "...Function \"" << f.name() << "\" calls "
                              << prod_f.name() << "[" << call->value_index
@@ -172,7 +199,7 @@ string get_pointwise_copy_producer(const Function &f,
                 for (int j = 0; j < f.dimensions(); ++j) {
                     // Check if the call args are equivalent for both the
                     // RHS ('f') and LHS ('prod_f').
-                    // TODO(psuriana): Handle case for copy with some index shifting
+                    // TODO(psuriana): Handle case when copying with index shifting
                     if (!equal(f_args[j], call->args[j])) {
                         debug(4) << "At arg " << j << ", " << f.name() << " (arg: "
                                  << f_args[i] << ") != " << prod_f.name()
@@ -189,98 +216,78 @@ string get_pointwise_copy_producer(const Function &f,
             return "";
         }
     }
-
-    if (!prod.empty()) {
-        debug(4) << "...Found pointwise copy -> " << print_function(f) << "\n";
-    }
     return prod;
 }
 
 } // anonymous namespace
 
-map<string, string> get_valid_copy_elision_pairs(const map<string, Function> &env) {
+map<string, string> get_valid_copy_elision_pairs(
+        const vector<Function> &outputs, const map<string, Function> &env) {
 
-    // We should only consider the case when the function only has 1 caller
+    // Figure out the functions being (valid to be) inlined and the number
+    // of callers (excluding calls by itself, e.g. within update stages) of
+    // each functions within 'env'.
     map<string, int> num_callers;
     set<string> inlined;
     for (const auto &caller : env) {
-        debug(4) << "...Function: " << caller.first << ", inlined? "
-                 << caller.second.schedule().compute_level().is_inlined()
-                 << ", can be inlined? " << caller.second.can_be_inlined() << "\n";
         if (caller.second.can_be_inlined() &&
             caller.second.schedule().compute_level().is_inlined()) {
             inlined.insert(caller.first);
         }
         for (const auto &callee : find_direct_calls(caller.second)) {
             if (callee.first != caller.first) {
-                debug(4) << "\t\tadding callee: " << callee.first << "\n";
                 num_callers[callee.first] += 1;
-            } else {
-                debug(4) << "\t\tignoring self callee: " << callee.first << "\n";
             }
         }
     }
 
-    /*debug(0) << "\n\nINLINED FUNCTIONS: {";
-    for (const auto &s : inlined) {
-        debug(0) << s << ", ";
-    }
-    debug(0) << "}\n\n";*/
-
-    map<string, string> pointwise_copies;
+    map<string, string> elision_pairs;
     for (const auto &iter : env) {
-        // Ignore inlined functions
-        // TODO(psuriana): how should we handle the case when either the producer
-        // or the consumer of the copy-pair is inlined?
-        string copied_from = get_pointwise_copy_producer(iter.second, env, num_callers, inlined);
+        Function f = iter.second;
+        bool is_output = false;
+        for (const Function &o : outputs) {
+            is_output = is_output | o.same_as(f);
+        }
+        string copied_from =
+            get_elision_pair_candidates(f, is_output, env, num_callers, inlined);
         if (!copied_from.empty()) {
-            pointwise_copies.emplace(iter.first, copied_from);
+            elision_pairs.emplace(f.name(), copied_from);
         }
     }
 
-    /*debug(0) << "\nBEFORE Pointwise copies:\n";
-    for (const auto &p : pointwise_copies) {
-        debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
-        debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
-        debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
-    }
-    debug(0) << "\n\n";*/
-
-    // TODO(psuriana): Need to simplify copy-chaining
-    // TODO(psuriana): How do you handle the chaining case which involves
-    // halide_buffer_copy?
-    debug(4) << "\n\nTRY SIMPLIFY COPY CHAINING:\n";
+    // Simplify elision chaining. The following case {{"out" -> "g"}, {"g" -> "f"}}
+    // will be simplified into {{"out" -> "f"}, {"g" -> ""}}.
     bool fixed = false;
     while (!fixed) {
         fixed = true;
-        for (auto iter = pointwise_copies.begin(); iter != pointwise_copies.end(); ++iter) {
-            debug(4) << "...Checking cons: " << iter->first << ", prod: " << iter->second << "\n";
-
-            auto other = pointwise_copies.find(iter->second);
-            if (other != pointwise_copies.end()) {
+        for (auto iter = elision_pairs.begin(); iter != elision_pairs.end(); ++iter) {
+            auto other = elision_pairs.find(iter->second);
+            if (other != elision_pairs.end()) {
                 iter->second = other->second;
-                debug(4) << "\t\tfind (erasing) chain cons: " << other->first << ", prod: " << other->second << "\n";
-                //pointwise_copies.erase(other);
-                other->second = "";
-                //internal_assert(!pointwise_copies.count(iter->second)) << iter->second << " still in TMP\n";
+                other->second = ""; // Set the producer to be empty string
                 fixed = true;
             }
         }
     }
-    debug(4) << "\n\n";
 
-    /*debug(0) << "\nAFTER Pointwise copies:\n";
-    for (const auto &p : pointwise_copies) {
-        debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
-        debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
+    debug(0) << "\nElision pairs:\n";
+    for (const auto &p : elision_pairs) {
+        debug(0) << "cons: " << p.first << " (compute: " << env.at(p.first).schedule().store_level().to_string()
+                 << ", store: " << env.at(p.first).schedule().compute_level().to_string()
+                 << ") -> prod: " << p.second;
+        if (!p.second.empty()) {
+            debug(0) << " (compute: " << env.at(p.second).schedule().store_level().to_string()
+                     << ", store: " << env.at(p.second).schedule().compute_level().to_string() << ")";
+        }
+        debug(0) << "\n\tcons: " << print_function(env.at(p.first)) << "\n";
         if (p.second.empty()) {
-            debug(0) << "\t\tprod: NONE\n\n";
+            debug(0) << "\tprod: NONE\n\n";
         } else {
-            debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
+            debug(0) << "\tprod: " << print_function(env.at(p.second)) << "\n\n";
         }
     }
-    debug(0) << "\n\n";*/
-    return pointwise_copies;
+
+    return elision_pairs;
 }
 
 }  // namespace Internal

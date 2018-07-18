@@ -291,10 +291,33 @@ int test_8() {
     return 0;
 }
 
+int test_9() {
+    Func f("f"), g("g"), out("out");
+    Var x("x"), y("y");
+
+    f(x, y) = x + y;
+    g(x, y) = f(x, y);
+    out(x, y) = g(x, y) + 1;
+
+    f.compute_at(out, x);
+    g.compute_at(out, x);
+
+    Buffer<int> out_img = out.realize(20, 20);
+    out_img.for_each_element([&](int x, int y) {
+            int expected = x + y + 1;
+            if (out_img(x, y) != expected) {
+                printf("out_img(%d, %d) = %d instead of %d\n", x, y, out_img(x, y), expected);
+                abort();
+            }
+        });
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
-    /*printf("Running copy elision test 0\n");
+    printf("Running copy elision test 0\n");
     if (test_0() != 0) {
         return -1;
     }
@@ -327,7 +350,7 @@ int main(int argc, char **argv) {
     printf("Running copy elision test 6\n");
     if (test_6() != 0) {
         return -1;
-    }*/
+    }
 
     /*printf("Running copy elision test 7\n");
     if (test_7() != 0) {
@@ -336,6 +359,11 @@ int main(int argc, char **argv) {
 
     printf("Running copy elision test 8\n");
     if (test_8() != 0) {
+        return -1;
+    }
+
+    printf("Running copy elision test 9\n");
+    if (test_9() != 0) {
         return -1;
     }
 
