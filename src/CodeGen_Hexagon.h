@@ -61,6 +61,8 @@ protected:
     void visit(const GT *);
     void visit(const EQ *);
     void visit(const Select *);
+    void visit(const Allocate *);
+    void visit(const Free *);
     ///@}
 
     /** We ask for an extra vector on each allocation to enable fast
@@ -111,6 +113,14 @@ protected:
      * to manipulate the IR. This function avoids generating redundant
      * bitcasts. */
     llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
+
+private:
+    /** Generates code for computing the size of an allocation from a
+     * list of its extents and its size. Fires a runtime assert
+     * (halide_error) if the size overflows 2^31 -1, the maximum
+     * positive number an int32_t can hold. */
+    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+
 };
 
 }  // namespace Internal

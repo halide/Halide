@@ -4,6 +4,7 @@
 #include "HalideRuntimeHexagonDma.h"
 #include "printer.h"
 #include "mini_hexagon_dma.h"
+#include "hexagon_dma_pool.h"
 
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
 
@@ -359,6 +360,15 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         error(user_context) << "Freeing DMA Engine failed.\n";
         return halide_error_code_generic_error;
     }
+
+    if (Halide::Runtime::Internal::Hexagon::hexagon_cache_pool) {
+        int err = halide_hexagon_free_l2_pool(user_context);
+        if (err != 0) {
+            halide_print(user_context, "Freeing Cache Pool failed.\n");
+            return halide_error_code_generic_error;
+        }
+    }
+
 
     return halide_error_code_success;
 }
