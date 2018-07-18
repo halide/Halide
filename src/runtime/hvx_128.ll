@@ -412,3 +412,67 @@ define weak_odr <64 x i32> @halide.hexagon.vtmpy.vh.vh.b.b(<64 x i16> %low_v, <6
   %res = call <64 x i32> @llvm.hexagon.V6.vtmpyhb.128B(<64 x i32> %dv, i32 %const)
   ret <64 x i32> %res
 }
+
+declare void @llvm.hexagon.V6.vgathermh.128B(i8*, i32, i32, <32 x i32>)
+declare void @llvm.hexagon.V6.vgathermw.128B(i8*, i32, i32, <32 x i32>)
+
+define weak_odr <64 x i16> @halide.hexagon.vgather.h.h(i8* %base, i32 %gather_offset, i32 %store_offset, i32 %size, <64 x i16> %lut) nounwind uwtable {
+  %lut32 = bitcast <64 x i16> %lut to <32 x i32>
+  %base_ptr = ptrtoint i8* %base to i32
+  %store_at = add i32 %base_ptr, %store_offset
+  %gather_at = add i32 %base_ptr, %gather_offset
+  %gather_ptr = inttoptr i32 %gather_at to i8*
+  call void @llvm.hexagon.V6.vgathermh.128B(i8* %gather_ptr, i32 %store_at, i32 %size, <32 x i32> %lut32)
+  %vec_ptr = bitcast i8* %gather_ptr to <64 x i16>*
+  %res = load <64 x i16>, <64 x i16>* %vec_ptr
+  ret <64 x i16> %res
+}
+
+define weak_odr <32 x i32> @halide.hexagon.vgather.w.w(i8* %base, i32 %gather_offset, i32 %store_offset, i32 %size, <32 x i32> %lut) nounwind uwtable {
+  %base_ptr = ptrtoint i8* %base to i32
+  %store_at = add i32 %base_ptr, %store_offset
+  %gather_at = add i32 %base_ptr, %gather_offset
+  %gather_ptr = inttoptr i32 %gather_at to i8*
+  call void @llvm.hexagon.V6.vgathermw.128B(i8* %gather_ptr, i32 %store_at, i32 %size, <32 x i32> %lut)
+  %vec_ptr = bitcast i8* %gather_ptr to <32 x i32>*
+  %res = load <32 x i32>, <32 x i32>* %vec_ptr
+  ret <32 x i32> %res
+}
+
+declare void @llvm.hexagon.V6.vscattermh.128B(i32, i32, <32 x i32>, <32 x i32>)
+declare void @llvm.hexagon.V6.vscattermw.128B(i32, i32, <32 x i32>, <32 x i32>)
+
+define weak_odr <64 x i16> @halide.hexagon.vscatter.h.h(i8* %base, i32 %store_offset, i32 %size, <64 x i16> %idx, <64 x i16> %val) nounwind uwtable writeonly {
+  %idx32 = bitcast <64 x i16> %idx to <32 x i32>
+  %val32 = bitcast <64 x i16> %val to <32 x i32>
+  %base_ptr = ptrtoint i8* %base to i32
+  %store_at = add i32 %base_ptr, %store_offset
+  call void @llvm.hexagon.V6.vscattermh.128B(i32 %store_at, i32 %size, <32 x i32> %idx32, <32 x i32> %val32) nounwind writeonly
+  ret <64 x i16> %idx
+}
+
+define weak_odr <32 x i32> @halide.hexagon.vscatter.w.w(i8* %base, i32 %store_offset, i32 %size, <32 x i32> %idx, <32 x i32> %val) nounwind uwtable writeonly {
+  %base_ptr = ptrtoint i8* %base to i32
+  %store_at = add i32 %base_ptr, %store_offset
+  call void @llvm.hexagon.V6.vscattermw.128B(i32 %store_at, i32 %size, <32 x i32> %idx, <32 x i32> %val)
+  ret <32 x i32> %idx
+}
+
+declare void @llvm.hexagon.V6.vscattermh.add.128B(i32, i32, <32 x i32>, <32 x i32>)
+declare void @llvm.hexagon.V6.vscattermw.add.128B(i32, i32, <32 x i32>, <32 x i32>)
+
+define weak_odr <64 x i16> @halide.hexagon.vscatter_add.h.h(i8* %base, i32 %store_offset, i32 %size, <64 x i16> %idx, <64 x i16> %val) nounwind uwtable writeonly {
+  %idx32 = bitcast <64 x i16> %idx to <32 x i32>
+  %val32 = bitcast <64 x i16> %val to <32 x i32>
+  %base_ptr = ptrtoint i8* %base to i32
+  %store_at = add i32 %base_ptr, %store_offset
+  call void @llvm.hexagon.V6.vscattermh.add.128B(i32 %store_at, i32 %size, <32 x i32> %idx32, <32 x i32> %val32) nounwind writeonly
+  ret <64 x i16> %idx
+}
+
+define weak_odr <32 x i32> @halide.hexagon.vscatter_add.w.w(i8* %base, i32 %store_offset, i32 %size, <32 x i32> %idx, <32 x i32> %val) nounwind uwtable writeonly {
+  %base_ptr = ptrtoint i8* %base to i32
+  %store_at = add i32 %base_ptr, %store_offset
+  call void @llvm.hexagon.V6.vscattermw.add.128B(i32 %store_at, i32 %size, <32 x i32> %idx, <32 x i32> %val)
+  ret <32 x i32> %idx
+}

@@ -925,6 +925,8 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         Target::HVX_v62,
         Target::HVX_v65,
         Target::HVX_v66,
+        Target::HVX_scatter,
+        Target::HVX_gather,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {

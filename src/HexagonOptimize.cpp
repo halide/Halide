@@ -1320,6 +1320,8 @@ class EliminateInterleaves : public IRMutator2 {
             "halide.hexagon.deinterleave.vb",
             "halide.hexagon.deinterleave.vh",
             "halide.hexagon.deinterleave.vw",
+            "halide.hexagon.vscatter.h.h",
+            "halide.hexagon.vscatter.w.w",
         };
         if (not_interleavable.count(op->name) != 0) return false;
 
@@ -1949,7 +1951,547 @@ private:
     }
 };
 
+class Cache {
+    struct Memblock{
+        // What is stored. Track by name
+        // Where it is stored
+        // size of allocation in bytes
+        string name;
+        int offset;
+        int size;
+    };
+    // Total VTCM mem available
+    // Keep the list sorted in increasing order by offset value
+    vector<Memblock> used;
+    // A comparator function to compare two Memblocks.
+    static bool compareBlock(Memblock a, Memblock b) {
+        return a.offset < b.offset;
+    }
+
+public:
+    int total_size;
+    Cache(int total_size) : total_size(total_size) {}
+
+    // Check if we can allocate a "size" sized chunk. If possible return the
+    // start address of the allocation, else -1.
+    int is_available(int size) {
+        int prev = 0;
+        for (vector<Memblock>::iterator it = used.begin(); it != used.end(); ++it) {
+            if (it->offset - prev >= size) {
+                return prev;
+            }
+            // Last byte of previous allocation
+            prev = it->offset + it->size;
+        }
+        if (total_size - prev >= size) {
+            return prev;
+        }
+        return -1;
+    }
+
+    int alloc(string name, int size) {
+        // Check availability
+        int offset = is_available(size);
+        if (offset < 0) {
+            internal_error << "Trying to allocate more than available VTCM.\n";
+            return -1;
+        }
+        Memblock mb = {name, offset, size};
+        used.push_back(mb);
+        sort(used.begin(), used.end(), compareBlock);
+        return offset;
+    }
+
+    void release(string name) {
+        for (vector<Memblock>::iterator it = used.begin(); it != used.end(); ++it) {
+            if (it->name == name) {
+                used.erase(it);
+                return;
+            }
+        }
+        internal_error << "Trying to release unallocated VTCM block.\n";
+    }
+
+    bool contains(string name) {
+        for (vector<Memblock>::iterator it = used.begin(); it != used.end(); ++it) {
+            if (it->name == name) {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+// Try generating vscatters and vgathers instead of shuffles.
+// Assume the vtcm_buffer_name is the varaible name for base
+// address of the allocated vtcm. At present we only do only
+// one request vtcm call with single page allocation flag.
+// Some expressions for scatter-gathers are:
+//    1. out(x) = foo(lut(x)) -> vgather
+//    2. out(lut(x)) = foo(x) -> vscatter
+class ScatterGatherGenerator : public IRMutator {
+    // Data-structure to track store calls to and from VTCM.
+    // name -> name of buffer stored
+    // block -> code_block where found [lowest ancestor
+    //          of type if, else, for, LetStmt]
+    // memcpy_call -> buffer copy Store Stmt
+    struct StoreVtcm {
+        string name;
+        void* block;
+        Stmt memcpy_call;
+    };
+
+    string vtcm_buffer_name;
+    // Remember where all the data is free.
+    // TODO: place free calls at appropriate locations
+    Cache vtcm;
+    Target target;
+    Scope<Interval> bounds;
+    // Stmt to place inside block. A block here can be a
+    // for, if and else block. The Store stmt inside should
+    // be placed just before the last LetStmt after which we
+    // identify a vgather
+    vector<StoreVtcm> inside_block;
+    // This is the number of soft threads we create in
+    // our thread pool
+    const int max_threads = 4;
+    // If VTCM is used inside parallel loop we need to
+    // get one of the four slots for every VTCM memory
+    // we assign. This allocation is controlled by a
+    // VTCM_manager. See qurt_hvx_vtcm.cpp
+    bool uses_vtcm_inside_par = false;
+    // Level of current parallel nesting
+    int nested_par = 0;
+    // N vtcm_managers might be needed for n level nested
+    // parallelism.
+    vector<int> vtcm_manager_init_indices;
+    // Pointer to nearest if, else, for, LetStmt block
+    void* curr_block = nullptr;
+
+    using IRMutator::visit;
+
+    template <typename T>
+    void visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
+        IRMutator::visit(op);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
+    }
+
+    void visit(const Let *op) { visit_let(op); }
+
+    void visit(const LetStmt *op) {
+        void* prev_block = curr_block;
+        curr_block = (void *) (const_cast<LetStmt*>(op));
+        visit_let(op);
+        curr_block = prev_block;
+        // Since the inside_stmt might contain LetStmt variables,
+        // we need to add the inside_stmt statements just after the last
+        // LetStmt encountered.
+        Stmt inside_stmt = concat_stmts((void *) (const_cast<LetStmt*>(op)), inside_block);
+        if (inside_stmt.defined()) {
+            const LetStmt *letstmt = stmt.as<LetStmt>();
+            Stmt new_body = Block::make(inside_stmt, letstmt->body);
+            stmt = LetStmt::make(op->name, letstmt->value, std::move(new_body));
+        }
+    }
+
+    // Checks if the Store node has opportunities for scatter_accumulate.
+    // If yes, return true and set new_value to the new value for scatter_add.
+    bool is_scatter_acc(const string &name, const Expr &index, const Expr &value, Expr &new_value) {
+        Expr lhs = Load::make(value.type(), name, index, Buffer<>(),
+                               Parameter(), const_true(value.type().lanes()));
+        Expr wild = Variable::make(value.type(), "*");
+        vector<Expr> matches;
+        if (expr_match(lhs + wild, value, matches) || expr_match(wild + lhs, value, matches)) {
+            // Scatter accumulate found
+            new_value = matches[0];
+            return true;
+        }
+        new_value = value;
+        return false;
+    }
+
+
+    void visit(const Store *op) {
+        Type ty = op->value.type();
+        if (!is_one(op->predicate) || !ty.is_vector() || op->index.as<Ramp>()) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr value;
+        bool is_acc = is_scatter_acc(op->name, op->index, op->value, value);
+
+        Expr index = mutate(op->index);
+        value = mutate(value);
+
+        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
+
+        if (index_bounds.is_bounded() && target.has_feature(Target::HVX_scatter)) {
+            Expr index_span = span_of_bounds(index_bounds);
+            index_span = common_subexpression_elimination(index_span);
+            index_span = simplify(index_span);
+            // We don't have 8-bit vscatter. So we upcast our input to 16-bit
+            // and then downcast the result again to 8-bit.
+            const int old_elem_size = ty.bits()/8;
+            const int new_elem_size = (old_elem_size == 1) ? 2 : old_elem_size;
+
+            if (can_prove(index_span * new_elem_size < vtcm.total_size)) {
+                int const_extent = as_const_int(index_span) ?
+                                   *as_const_int(index_span) + 1 : vtcm.total_size;
+                Expr base = simplify(index_bounds.min);
+                int buff_mem = new_elem_size * const_extent;
+
+                // Cannot use VTCM if not enough mem is available.
+                if (vtcm.is_available(buff_mem * max_threads) > -1) {
+                    uses_vtcm_inside_par = (nested_par > 0);
+                    Expr buffer_at;
+                    // If scatter is inside a parallel then we create 4 continuous slots.
+                    // Each thread acquires one slot for each iteration of the block.
+                    if (nested_par > 0) {
+                        Expr vtcm_slot_var = Variable::make(Int(32), "vtcm_slot" +
+                                                            std::to_string(nested_par));
+                        buffer_at = vtcm.alloc(op->name + ".buffer",
+                                               buff_mem * max_threads) +
+                                    buff_mem * vtcm_slot_var;
+                    }
+                    else {
+                        buffer_at = vtcm.alloc(op->name + ".buffer", buff_mem);
+                    }
+                    // We need 2 Store statements:
+                    //    - Copy buffer data to VTCM -> Store
+                    //    - do a vscatter
+                    //    - a scatter release for synchronization
+                    //    - Copy VTCM data to buffer -> Store
+                    Type buffer_copy_ty = ty.with_lanes(const_extent);
+                    Type vtcm_copy_ty = ty.with_lanes(const_extent).with_bits(8 * new_elem_size);
+                    // Value for Store node to copy data from buffer.
+                    Expr buffer_copy = Load::make(buffer_copy_ty, op->name,
+                                                  Ramp::make(base, 1, const_extent),
+                                                  Buffer<>(), Parameter(), const_true(const_extent));
+                    // Value for Store node to copy data from VTCM.
+                    Expr vtcm_copy = Load::make(vtcm_copy_ty, vtcm_buffer_name,
+                                                Ramp::make(buffer_at/new_elem_size, 1, const_extent),
+                                                Buffer<>(), Parameter(), const_true(const_extent));
+                    // Make appropriate casts to handle 8-bit elements.
+                    if (old_elem_size == 1) {
+                        buffer_copy = cast(buffer_copy_ty.with_bits(16), buffer_copy);
+                        vtcm_copy = cast(vtcm_copy_ty.with_bits(8), vtcm_copy);
+                        value = cast(ty.with_bits(16), value);
+                    }
+                    Expr vtcm_base_var = Variable::make(Handle(), vtcm_buffer_name);
+                    // Place this call before the vscatter call.
+                    Stmt copy_to_vtcm = Store::make(vtcm_buffer_name, buffer_copy,
+                                              Ramp::make(buffer_at/new_elem_size, 1, const_extent),
+                                              Parameter(), const_true(const_extent));
+                    // Place this call after the vscatter call.
+                    Stmt copy_from_vtcm = Store::make(op->name, vtcm_copy,
+                                                      Ramp::make(base, 1, const_extent),
+                                                      Parameter(),
+                                                      cast(op->predicate.type().with_lanes(const_extent),
+                                                           op->predicate));
+                    // Place this call before the copy from vtcm call
+                    Stmt scatter_sync = Evaluate::make(Call::make(Int(32),
+                                                   "halide_scatter_release",
+                                                   {vtcm_base_var, buffer_at},
+                                                   Call::Extern));
+                    string suffix = (new_elem_size == 4) ? ".w.w" : ".h.h";
+                    if (is_acc) {
+                        suffix = "_add" + suffix;
+                    }
+
+                    Type out_ty = ty.with_bits(8 * new_elem_size);
+                    Expr shifted_index = simplify(cast(out_ty, index - base));
+                    stmt = Evaluate::make(Call::make(out_ty, "halide.hexagon.vscatter" + suffix,
+                                                   {vtcm_base_var, buffer_at, buff_mem - 1,
+                                                    new_elem_size * shifted_index, value},
+                                                   Call::PureExtern));
+                    vector<Stmt> calls = {copy_to_vtcm, stmt, scatter_sync, copy_from_vtcm};
+                    stmt = Block::make(calls);
+                    return;
+                }
+            }
+        }
+
+        if (is_acc) {
+            // We found a possible scatter_acc but could not generate scatter_add.
+            // So we need to reset the value.
+            value += Load::make(value.type(), op->name, index, Buffer<>(),
+                                Parameter(), const_true(value.type().lanes()));
+        }
+
+        if (!index.same_as(op->index) || !value.same_as(op->value)) {
+            stmt = Store::make(op->name, std::move(value),
+                               std::move(index), op->param,
+                               std::move(op->predicate));
+        } else {
+            stmt = op;
+        }
+    }
+
+    // Match vgathers here. Vgather expressions are indirect loads
+    // such as foo(lut(x))
+    void visit(const Load *op) {
+        // TODO: For ramps not a power of 2: Use VTCM.
+        if (!is_one(op->predicate) || !op->type.is_vector() ||
+            op->index.as<Ramp>() || !target.has_feature(Target::HVX_gather)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr index = mutate(op->index);
+        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
+
+        if (index_bounds.is_bounded()) {
+            Expr index_span = span_of_bounds(index_bounds);
+            index_span = common_subexpression_elimination(index_span);
+            index_span = simplify(index_span);
+
+            // We don't have 8-bit vgather. So we upcast our input to 16-bit
+            // and then downcast the result again to 8-bit.
+            const int old_load_size = op->type.bits()/8;
+            const int new_load_size = (old_load_size == 1) ? 2 : old_load_size;
+
+            if (can_prove(index_span * new_load_size < vtcm.total_size)) {
+                int const_extent = as_const_int(index_span) ?
+                                   *as_const_int(index_span) + 1 : vtcm.total_size;
+                Expr base = simplify(index_bounds.min);
+
+                // For gathers we have two types of allocations, one is
+                //  1. buff_mem -> This is the buffer we need to copy in which
+                //                 we are going to look up the indices.
+                //  2. gather_mem -> This is the output buffer as the output
+                //                   itself is in VTCM memory.
+                // For every allocation through vtcm_malloc we store the gathered
+                // data and then buffer data.
+                int buff_mem = new_load_size * const_extent;
+                int gather_mem = op->type.lanes() * new_load_size;
+
+                // Cannot use VTCM if not enough mem is available.
+                if (vtcm.is_available((gather_mem + buff_mem) * max_threads) > -1) {
+                    uses_vtcm_inside_par = (nested_par > 0);
+                    Expr gather_at, buffer_at;
+                    // If gather is inside a parallel then we create 4 continuous slots.
+                    // Each thread acquires one slot for each iteration of the block.
+                    if (nested_par > 0) {
+                        Expr vtcm_slot_var = Variable::make(Int(32), "vtcm_slot" +
+                                                            std::to_string(nested_par));
+                        gather_at = vtcm.alloc(op->name + ".gather", gather_mem * max_threads) +
+                                    gather_mem * vtcm_slot_var;
+                        buffer_at = vtcm.alloc(op->name + ".buffer", buff_mem * max_threads) +
+                                    buff_mem * vtcm_slot_var;
+                    }
+                    else {
+                        gather_at = vtcm.alloc(op->name + ".gather", gather_mem);
+                        buffer_at = vtcm.alloc(op->name + ".buffer", buff_mem);
+                    }
+
+                    // Add call to load the buffer into VTCM memory. In our example
+                    // this will correspond to loading foo starting from the base of
+                    // indices range.
+                    Expr buffer_to_copy = Load::make(op->type.with_lanes(const_extent),
+                                                     op->name,
+                                                     Ramp::make(base, 1, const_extent),
+                                                     op->image, op->param, const_true(const_extent));
+                    // Upcast the buffer if 8-bit elements found.
+                    if (old_load_size == 1) {
+                        buffer_to_copy = cast(op->type.with_bits(16).with_lanes(const_extent),
+                                              buffer_to_copy);
+                    }
+
+                    // Store buffer data in VTCM. This call needs to be placed
+                    // inside the curr_block.
+                    Stmt memcpy_call = Store::make(vtcm_buffer_name, buffer_to_copy,
+                                                   Ramp::make(buffer_at/new_load_size, 1, const_extent),
+                                                   op->param,
+                                                   cast(op->predicate.type().with_lanes(const_extent),
+                                                   op->predicate));
+                    // Place the Store node just above the Stmt containing the
+                    // load node.
+                    inside_block.push_back({op->name, curr_block, memcpy_call});
+
+                    string suffix = (new_load_size == 4) ? ".w.w" : ".h.h";
+
+                    Type out_ty = op->type.with_bits(8 * new_load_size);
+                    Expr shifted_index = simplify(cast(out_ty, index - base));
+                    Expr vtcm_base_var = Variable::make(Handle(), vtcm_buffer_name);
+                    Expr new_expr = Call::make(out_ty, "halide.hexagon.vgather" + suffix,
+                                               {vtcm_base_var, gather_at, buffer_at, buff_mem - 1,
+                                               new_load_size * shifted_index}, Call::PureExtern);
+                    // Cast the result back to 8-bit elements if required.
+                    expr = (old_load_size == 1) ? cast(op->type, new_expr) : new_expr;
+                    return;
+                }
+            }
+        }
+        if (!index.same_as(op->index)) {
+            expr = Load::make(op->type, op->name, std::move(index),
+                              op->image, op->param, op->predicate);
+        } else {
+            expr = op;
+        }
+    }
+
+    // Wraps stmt with calls to vtcm_manager_init and a
+    // destructor for for the vtcm_manager.
+    Stmt wrap_init(Stmt stmt, int init_index) {
+        Expr mutex_init_call = Call::make(Handle(), "halide_vtcm_manager_init",
+                                          {}, Call::Extern);
+        Expr mutex_init_var = Variable::make(Handle(), "vtcm_manager" +
+                                            std::to_string(init_index));
+        Expr mutex_destroy = Call::make(Int(32), Call::register_destructor,
+                                        {Expr("halide_vtcm_manager_destroy"),
+                                         mutex_init_var}, Call::Intrinsic);
+        stmt = Block::make(Evaluate::make(mutex_destroy), stmt);
+        stmt = LetStmt::make("vtcm_manager" + std::to_string(init_index),
+                             mutex_init_call, stmt);
+        return stmt;
+    }
+
+    // Generates call to halide_free_vtcm_slot.
+    Stmt generate_free_slot() {
+        Expr vtcm_slot_var = Variable::make(Int(32), "vtcm_slot" +
+                                            std::to_string(nested_par));
+        Expr mutex_init_var = Variable::make(Handle(), "vtcm_manager" +
+                                             std::to_string(nested_par));
+        Expr vtcm_slot_free_call = Call::make(Int(32), "halide_free_vtcm_slot",
+                                              {mutex_init_var, vtcm_slot_var},
+                                              Call::Extern);
+        Expr vtcm_slot_free_result = Variable::make(Int(32), "vtcm_slot_free" +
+                                                    std::to_string(nested_par));
+        Stmt assert_result = AssertStmt::make(EQ::make(vtcm_slot_free_result, 0),
+                                              vtcm_slot_free_result);
+        Stmt vtcm_slot_free_stmt = LetStmt::make("vtcm_slot_free" +
+                                                 std::to_string(nested_par),
+                                                 vtcm_slot_free_call,
+                                                 assert_result);
+        return vtcm_slot_free_stmt;
+    }
+
+    // Generates call to halide_get_vtcm_slot.
+    Stmt wrap_get_slot(Stmt stmt) {
+        Expr mutex_init_var = Variable::make(Handle(), "vtcm_manager" +
+                                             std::to_string(nested_par));
+        Expr vtcm_slot_call = Call::make(Int(32), "halide_get_vtcm_slot",
+                                         {mutex_init_var}, Call::Extern);
+        Expr vtcm_slot_var = Variable::make(Int(32), "vtcm_slot" +
+                                            std::to_string(nested_par));
+        Stmt vtcm_slot_stmt = LetStmt::make("vtcm_slot" +
+                                            std::to_string(nested_par),
+                                            vtcm_slot_call, stmt);
+        return vtcm_slot_stmt;
+    }
+
+    // Concat all Store stmt from matches for given block
+    Stmt concat_stmts(void *block, vector<StoreVtcm> &matches) {
+        Stmt stmt;
+        vector<StoreVtcm>::iterator iter = matches.begin();
+        for (; iter != matches.end();) {
+            if (block == iter->block) {
+                stmt = (stmt.defined()) ?
+                        Block::make(iter->memcpy_call, stmt) :
+                        iter->memcpy_call;
+                iter = matches.erase(iter);
+            }
+            else {
+                ++iter;
+            }
+        }
+        return stmt;
+    }
+
+    void visit(const For *op) {
+        void* prev_block = curr_block;
+        curr_block = (void *) (const_cast<For*>(op));
+
+        bool is_parallel = (op->for_type == ForType::Parallel);
+        nested_par += (is_parallel) ? 1 : 0;
+
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt body = mutate(op->body);
+
+        // Set the old block as the curr_block
+        curr_block = prev_block;
+
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            // If we detect a vtcm usage inside a parallel
+            // we need a new manager for it. Also we need to
+            // add get_slot and free_slot calls at start and
+            // end of the loop body.
+            if (is_parallel && uses_vtcm_inside_par) {
+                uses_vtcm_inside_par = false;
+                vtcm_manager_init_indices.push_back(nested_par);
+                Stmt free_slot_stmt = generate_free_slot();
+                body = Block::make(body, free_slot_stmt);
+                body = wrap_get_slot(body);
+            }
+            // Add all the before, inside, after loop stmt's at
+            // appropriate locations.
+            Stmt inside_stmt = concat_stmts((void *) (const_cast<For*>(op)), inside_block);
+            body = (inside_stmt.defined()) ? Block::make(inside_stmt, body) : body;
+            stmt = For::make(op->name, std::move(min), std::move(extent),
+                             op->for_type, op->device_api, std::move(body));
+            // Place all vtcm manager init calls before the first level
+            // parallel loop.
+            if (is_parallel && nested_par == 1 &&
+                vtcm_manager_init_indices.size() > 0) {
+                for (auto init_index : vtcm_manager_init_indices) {
+                    stmt = wrap_init(stmt, init_index);
+                }
+                vtcm_manager_init_indices.clear();
+            }
+        }
+        nested_par -= (is_parallel) ? 1 : 0;
+    }
+
+    void visit(const IfThenElse *op) {
+        void* prev_block = curr_block;
+        // Change curr_block to body of then case.
+        Expr condition = mutate(op->condition);
+        curr_block = (void *) (const_cast<Stmt*>(&op->then_case));
+        Stmt then_case = mutate(op->then_case);
+
+        Stmt inside_then_stmt = concat_stmts((void *) (const_cast<Stmt*>(&op->then_case)), inside_block);
+        then_case = (inside_then_stmt.defined()) ?
+                    Block::make(inside_then_stmt, then_case) : then_case;
+        // Change curr_block to body of else case.
+        curr_block = (void *) (const_cast<Stmt*>(&op->else_case));
+        Stmt else_case = mutate(op->else_case);
+
+        Stmt inside_else_stmt = concat_stmts((void *) (const_cast<Stmt*>(&op->else_case)), inside_block);
+        else_case = (inside_else_stmt.defined()) ?
+                    Block::make(inside_else_stmt, else_case) : else_case;
+        // Set curr_block to old value;
+        curr_block = prev_block;
+
+        if (condition.same_as(op->condition) &&
+            then_case.same_as(op->then_case) &&
+            else_case.same_as(op->else_case)) {
+            stmt = op;
+        } else {
+            stmt = IfThenElse::make(std::move(condition), std::move(then_case),
+                                    std::move(else_case));
+        }
+    }
+
+public:
+    ScatterGatherGenerator(string vtcm_buffer_name, int size, Target t) :
+        vtcm_buffer_name(vtcm_buffer_name), vtcm(Cache(size)), target(t) {}
+};
+
 }  // namespace
+
+
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // Replace indirect and other complicated loads with
@@ -1961,6 +2503,13 @@ Stmt vtmpy_generator(Stmt s) {
     // Generate vtmpy instruction if possible
     s = substitute_in_all_lets(s);
     s = VtmpyGenerator().mutate(s);
+    s = common_subexpression_elimination(s);
+    return s;
+}
+
+Stmt scatter_gather_generator(Stmt s, string vtcm_buffer_name, int size, Target t) {
+    s = substitute_in_all_lets(s);
+    s = ScatterGatherGenerator(vtcm_buffer_name, size, t).mutate(s);
     s = common_subexpression_elimination(s);
     return s;
 }

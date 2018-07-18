@@ -285,6 +285,50 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     return body;
 }
 
+class VtcmScanner : public IRVisitor {
+    using IRVisitor::visit;
+    bool vtcm_used;
+
+    void visit(const Call *op) {
+        if (op->name.find("halide.hexagon.vgather") != string::npos ||
+            op->name.find("halide.hexagon.vscatter") != string::npos) {
+            vtcm_used = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    VtcmScanner() {
+        vtcm_used = false;
+    }
+    bool uses_vtcm(Stmt s) {
+        s.accept(this);
+        return this->vtcm_used;
+    }
+};
+
+Stmt acquire_vtcm(Stmt stmt, string vtcm_base, int size) {
+    VtcmScanner scanner;
+    if (!scanner.uses_vtcm(stmt)) {
+        return stmt;
+    }
+    Expr vtcm_acquire = Call::make(Handle(), "halide_request_vtcm", {size, 1}, Call::Extern);
+    Expr vtcm_acquire_var = Variable::make(Handle(), vtcm_base);
+    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(0));
+    Stmt acquire_result = AssertStmt::make(NE::make(vtcm_acquire_var, dummy_obj), 6);
+    Expr vtcm_release = Call::make(Int(32), Call::register_destructor, {Expr("halide_release_vtcm"), vtcm_acquire_var}, Call::Intrinsic);
+    stmt = Block::make(Evaluate::make(vtcm_release), stmt);
+    stmt = Block::make(acquire_result, stmt);
+    stmt = LetStmt::make(vtcm_base, vtcm_acquire, stmt);
+    return stmt;
+}
+
+bool try_vtcm(Target t) {
+    return t.has_feature(Target::HVX_v65) &&
+           (t.has_feature(Target::HVX_scatter) ||
+           t.has_feature(Target::HVX_gather));
+}
+
 }// namespace
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
@@ -299,6 +343,24 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = sloppy_unpredicate_loads(body);
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
+
+    debug(1) << "Running VTCM checker...\n";
+    string vtcm_base_string = unique_name("vtcm_base");
+
+    // Set VTCM default to 256KB / 4 threads = 64KB
+    int vtcm_size = 64 * 1024;
+    if (try_vtcm(target)) {
+        // Vscatter-Vgather instructions on Hexagon require VTCM memory.
+        // Get max_vtcm_size from environment variable.
+        // Default max_vtcm_size = 64KB. Max VTCM memory = 256KB
+        vtcm_size = (getenv("HL_VTCM_SIZE")) ? atoi(getenv("HL_VTCM_SIZE")) : vtcm_size;
+        if (vtcm_size > 256 * 1024 || vtcm_size < 0) {
+            user_error << "Env HL_VTCM_SIZE not set properly. Value found: " << vtcm_size;
+        }
+        debug(1) << "VTCM size set to " << vtcm_size << "B\n"
+                 << "Runnning scatter-gather scanner...\n";
+        body = scatter_gather_generator(body, vtcm_base_string, vtcm_size, target);
+    }
 
     debug(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
@@ -336,6 +398,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
+
+    if (try_vtcm(target)) {
+        debug(1) << "Adding HAP calls to vtcm_acquire...\n";
+        body = acquire_vtcm(body, vtcm_base_string, vtcm_size);
+    }
 
     debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);

@@ -70,6 +70,7 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
   qurt_threads
   qurt_threads_tsan
