@@ -193,10 +193,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = debug_to_file(s, outputs, env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
 
-    debug(1) << "Forking asynchronous producers...\n";
-    s = fork_async_producers(s, env);
-    debug(2) << "Lowering after forking asynchronous producers:\n" << s << '\n';
-
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
     debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
@@ -204,6 +200,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
+
+    debug(1) << "Forking asynchronous producers...\n";
+    s = fork_async_producers(s, env);
+    debug(2) << "Lowering after forking asynchronous producers:\n" << s << '\n';
 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);

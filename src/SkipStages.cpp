@@ -285,13 +285,20 @@ private:
         }
     }
 
-    Stmt visit(const Provide *op) override {
+    Stmt visit(const ProducerConsumer *op) override {
+        // If the compute_predicate at this stage depends on something
+        // vectorized we should bail out.
         Stmt stmt = IRMutator2::visit(op);
-        if (op->name == buffer) {
-            return IfThenElse::make(compute_predicate, stmt);
-        } else {
-            return stmt;
+
+        if (op->is_producer) {
+            op = stmt.as<ProducerConsumer>();
+            internal_assert(op);
+            if (op->name == buffer) {
+                Stmt body = IfThenElse::make(compute_predicate, op->body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            }
         }
+        return stmt;
     }
 };
 
