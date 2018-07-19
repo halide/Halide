@@ -38,8 +38,9 @@
 #if !defined(COBJMACROS)
     #define  COBJMACROS
 #endif
-#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
 #include "mini_d3d12.h"
+
+#define HALIDE_D3D12_APPLY_ABI_PATCHES (1)
 #include "d3d12_abi_patch_64.h"
 
 // For all intents and purposes, we always want to use COMPUTE command lists
