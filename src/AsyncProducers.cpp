@@ -223,7 +223,8 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
     }
 
     Stmt visit(const Acquire *op) {
-        // Don't want to duplicate any semaphore acquires. Ones from folding should go to the producer side.
+        // Don't want to duplicate any semaphore acquires.
+        // Ones from folding should go to the producer side.
         const Variable *var = op->semaphore.as<Variable>();
         internal_assert(var);
         if (starts_with(var->name, func + ".folding_semaphore.")) {
