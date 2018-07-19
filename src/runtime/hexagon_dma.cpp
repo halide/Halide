@@ -463,11 +463,12 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
 
     // For now only copy device to host.
     // TODO: Figure out which other paths can be supported.
-    halide_assert(user_context, !from_host && to_host);
+    halide_assert(user_context, (!from_host && to_host) || (from_host && !to_host));
 
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_buffer_copy (user_context: " << user_context
-        << ", src: " << src << ", dst: " << dst << ")\n";
+        << ", src: " << src << ", dst: " << dst << "\n"
+        << ", DMA Read: " << to_host << ", DMA Write: " << from_host << ")\n";
 
     int nRet = halide_hexagon_dma_wrapper(user_context, src, dst);
    
