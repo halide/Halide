@@ -1883,7 +1883,6 @@ struct State {
             Buffer<float> schedule_features(batch_size, 18, padded_stages);
             schedule_features.fill(0.0f);
             Buffer<float> network_output(batch_size);
-
             // index of current stage whose features we are reading
             int stage = 0;
             // load pipeline features into input buffer
@@ -1928,8 +1927,7 @@ struct State {
             throughput_predictor->set_inputs(pipeline_features, schedule_features);
             throughput_predictor->prediction.realize(network_output);
 
-            cost = -network_output(0,0,0);
-
+            cost = network_output(0);
         }
 
         else {
@@ -2329,7 +2327,86 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     return "";
 }
 
+void test_convnet_correctness() {
+    int n = 1;
+    int stages = 10;
+    int min_stages = 22;
+    int padded_stages = std::max(stages, min_stages);
+    int lpad = (padded_stages - stages)/2; 
+
+    Halide::Buffer<float> pipeline_features(n, 56, 7, padded_stages);
+    Halide::Buffer<float> schedule_features(n, 18, padded_stages);
+    pipeline_features.fill(0.0);
+    schedule_features.fill(0.0);
+    Halide::Buffer<float> network_output(n);
+
+    std::default_random_engine generator;
+    std::normal_distribution<float> distribution(0.0,1.0);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < 56; j++) {
+            for (int k = 0; k < 7; k++) {
+                for (int l = 0; l < stages; l++) {
+                    float val = distribution(generator);
+                    pipeline_features(i, j, k, lpad+l) = val;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < 18; j++) {
+            for (int k = 0; k < stages; k++) {
+                float val = distribution(generator);
+                schedule_features(i,j,lpad+k) = val;
+            }
+        }
+    }
+
+    auto w = AutoScheduleModel::load_weights();
+    auto stats = AutoScheduleModel::load_stats();
+
+    ThroughputPredictorPipeline throughput_predictor(w, stats);
+    throughput_predictor.set_inputs(pipeline_features, schedule_features);
+    throughput_predictor.prediction.realize(network_output);
+
+    FILE *fpipe = fopen("/private/home/karimacma/Halide/pipeline.data", "ab");
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < 56; j++) {
+          for (int k = 0; k < 7; k++) {
+            for (int l = 0; l < padded_stages; l++) {
+              fwrite(&(pipeline_features(i, j, k, l)), sizeof(float), 1, fpipe);          
+            }
+          }
+        }
+    }
+    fclose(fpipe);
+
+    FILE *fsched = fopen("/private/home/karimacma/Halide/schedule.data", "ab");
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < 18; j++) {
+            for (int k = 0; k < padded_stages; k++) {
+                fwrite(&(schedule_features(i,j,k)), sizeof(float), 1, fsched);
+            }
+        }
+    }
+    fclose(fsched);
+
+    FILE *fpred = fopen("/private/home/karimacma/Halide/prediction.data", "ab");
+    for (int i = 0; i < n; i++) {
+        float cost = network_output(0);
+        fwrite(&cost, sizeof(float), 1, fpred);
+    }
+    fclose(fpred);
+
+    FILE *fstages = fopen("/private/home/karimacma/Halide/stages.data", "ab");
+    fwrite(&padded_stages, sizeof(int), 1, fstages);
+    fwrite(&n, sizeof(int), 1, fstages);
+    fclose(fstages);
+}
+
 void autoschedule_test() {
+    test_convnet_correctness();
+
     MachineParams params(16, 16 * 1024 * 1024, 40);
     size_t beam_size = 1;
     // Use a fixed target for the analysis to get consistent results from this test.

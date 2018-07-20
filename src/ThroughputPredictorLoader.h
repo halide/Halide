@@ -2,7 +2,6 @@
 #define HALIDE_INTERNAL_THROUGHPUT_PREDICTOR_LOADER_H
 
 #include "Buffer.h"
-
 #include <iostream>
 #include <assert.h>
 
@@ -43,18 +42,11 @@ extern "C" float halide_internal_weights_trunk_conv5_bias[];
 extern "C" int halide_internal_weights_trunk_conv5_bias_length;
 extern "C" float halide_internal_weights_trunk_conv5_weight[];
 extern "C" int halide_internal_weights_trunk_conv5_weight_length;
-extern "C" float halide_internal_weights_trunk_fc1_bias[];
-extern "C" int halide_internal_weights_trunk_fc1_bias_length;
-extern "C" float halide_internal_weights_trunk_fc1_weight[];
-extern "C" int halide_internal_weights_trunk_fc1_weight_length;
-extern "C" float halide_internal_weights_trunk_fc2_bias[];
-extern "C" int halide_internal_weights_trunk_fc2_bias_length;
-extern "C" float halide_internal_weights_trunk_fc2_weight[];
-extern "C" int halide_internal_weights_trunk_fc2_weight_length;
-extern "C" float halide_internal_weights_trunk_fc3_bias[];
-extern "C" int halide_internal_weights_trunk_fc3_bias_length;
-extern "C" float halide_internal_weights_trunk_fc3_weight[];
-extern "C" int halide_internal_weights_trunk_fc3_weight_length;
+extern "C" float halide_internal_weights_trunk_conv6_bias[];
+extern "C" int halide_internal_weights_trunk_conv6_bias_length;
+extern "C" float halide_internal_weights_trunk_conv6_weight[];
+extern "C" int halide_internal_weights_trunk_conv6_weight_length;
+
 
 namespace Halide {
 namespace Internal {
@@ -109,14 +101,8 @@ struct WeightShapes {
     int conv5_filter[3] = {160, 120, 3};
     int conv5_bias[1] = {160};
 
-    int fc1_filter[2] = {80, 160};
-    int fc1_bias[1] = {80};
-
-    int fc2_filter[2] = {40, 80};
-    int fc2_bias[1] = {40};
-
-    int fc3_filter[2] = {1, 40};
-    int fc3_bias[1] = {1};
+    int conv6_filter[1] = {160};
+    int conv6_bias[1] = {1};
 };
 
 struct Weights {
@@ -140,15 +126,9 @@ struct Weights {
 
     Buffer<float> conv5_filter;
     Buffer<float> conv5_bias;
-
-    Buffer<float> fc1_filter;
-    Buffer<float> fc1_bias;
-
-    Buffer<float> fc2_filter;
-    Buffer<float> fc2_bias;
-
-    Buffer<float> fc3_filter;
-    Buffer<float> fc3_bias;
+  
+    Buffer<float> conv6_filter;
+    Buffer<float> conv6_bias;
 };
 
 Weights load_weights() {
@@ -203,25 +183,11 @@ Weights load_weights() {
     weights.conv5_bias = Buffer<float>(halide_internal_weights_trunk_conv5_bias, 160);
     internal_assert(halide_internal_weights_trunk_conv5_bias_length == (int)weights.conv5_bias.size_in_bytes());
 
-    weights.fc1_filter = Buffer<float>(halide_internal_weights_trunk_fc1_weight, 160, 80);
-    weights.fc1_filter.transpose(0, 1);
-    internal_assert(halide_internal_weights_trunk_fc1_weight_length == (int)weights.fc1_filter.size_in_bytes());
+    weights.conv6_filter = Buffer<float>(halide_internal_weights_trunk_conv6_weight, 160);
+    internal_assert(halide_internal_weights_trunk_conv6_weight_length == (int)weights.conv6_filter.size_in_bytes());
 
-    weights.fc1_bias = Buffer<float>(halide_internal_weights_trunk_fc1_bias, 80);
-    internal_assert(halide_internal_weights_trunk_fc1_bias_length == (int)weights.fc1_bias.size_in_bytes());
-
-    weights.fc2_filter = Buffer<float>(halide_internal_weights_trunk_fc2_weight, 80, 40);
-    weights.fc2_filter.transpose(0, 1);
-    internal_assert(halide_internal_weights_trunk_fc2_weight_length == (int)weights.fc2_filter.size_in_bytes());
-
-    weights.fc2_bias = Buffer<float>(halide_internal_weights_trunk_fc2_bias, 40);
-    internal_assert(halide_internal_weights_trunk_fc2_bias_length == (int)weights.fc2_bias.size_in_bytes());
-
-    weights.fc3_filter = Buffer<float>(halide_internal_weights_trunk_fc3_weight, 40);
-    internal_assert(halide_internal_weights_trunk_fc3_weight_length == (int)weights.fc3_filter.size_in_bytes());
-
-    weights.fc3_bias = Buffer<float>::make_scalar(halide_internal_weights_trunk_fc3_bias);
-    internal_assert(halide_internal_weights_trunk_fc3_bias_length == (int)weights.fc3_bias.size_in_bytes());
+    weights.conv6_bias = Buffer<float>::make_scalar(halide_internal_weights_trunk_conv6_bias);
+    internal_assert(halide_internal_weights_trunk_conv6_bias_length == (int)weights.conv6_bias.size_in_bytes());
 
     return weights;
 }
