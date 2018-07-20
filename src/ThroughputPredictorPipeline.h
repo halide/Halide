@@ -29,22 +29,22 @@ public:
     Buffer<float> head2_bias;
 
     Buffer<float> filter1;
-    Buffer<float> bias1{40};
-    Buffer<float> filter2{40,40,3};
-    Buffer<float> bias2{40};
-    Buffer<float> filter3{80,40,3};
-    Buffer<float> bias3{80};
-    Buffer<float> filter4{120,80,3};
-    Buffer<float> bias4{120};
-    Buffer<float> filter5{160,120,3};
-    Buffer<float> bias5{160};
-    Buffer<float> filter6{160};
-    Buffer<float> bias6{1};
+    Buffer<float> bias1;
+    Buffer<float> filter2;
+    Buffer<float> bias2;
+    Buffer<float> filter3;
+    Buffer<float> bias3;
+    Buffer<float> filter4;
+    Buffer<float> bias4;
+    Buffer<float> filter5;
+    Buffer<float> bias5;
+    Buffer<float> filter6;
+    Buffer<float> bias6;
 
     Func f_head1_conv, f_head2_conv;
     Func f_head1_relu, f_head2_relu;
     Func f_head1_relu_padded, f_head2_relu_padded;
-    
+
     Func f_conv1_stage1, f_conv1_stage2, f_conv2, f_conv3, f_conv4, f_conv5, f_conv6;
     Func f_ReLU1, f_relu1_padded;
     Func f_ReLU2, f_relu2_padded;
@@ -161,11 +161,11 @@ public:
 
         // set boundary conditions for f_ReLU5
         f_relu5_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU5, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, (schedule_features.dim(2).extent()+6) / 4}});
-        
+
         f_conv6(n, w) = bias6();
         f_conv6(n, w) += filter6(r6) * f_relu5_padded(n, r6, w);
         f_ReLU6(n, w) = max(0, f_conv6(n, w));
-        
+
         // set boundary conditions for f_ReLU5
         f_relu6_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU6, 0.0f, {{Expr(), Expr()}, {0, (schedule_features.dim(2).extent()+6) / 4}});
 

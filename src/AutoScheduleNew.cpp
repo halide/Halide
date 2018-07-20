@@ -2342,7 +2342,7 @@ void test_convnet_correctness() {
     int stages = 10;
     int min_stages = 22;
     int padded_stages = std::max(stages, min_stages);
-    int lpad = (padded_stages - stages)/2; 
+    int lpad = (padded_stages - stages)/2;
 
     Halide::Buffer<float> pipeline_features(n, 56, 7, padded_stages);
     Halide::Buffer<float> schedule_features(n, 18, padded_stages);
@@ -2384,7 +2384,7 @@ void test_convnet_correctness() {
         for (int j = 0; j < 56; j++) {
           for (int k = 0; k < 7; k++) {
             for (int l = 0; l < padded_stages; l++) {
-              fwrite(&(pipeline_features(i, j, k, l)), sizeof(float), 1, fpipe);          
+              fwrite(&(pipeline_features(i, j, k, l)), sizeof(float), 1, fpipe);
             }
           }
         }
@@ -2415,7 +2415,7 @@ void test_convnet_correctness() {
 }
 
 void autoschedule_test() {
-    test_convnet_correctness();
+    // test_convnet_correctness();
 
     MachineParams params(16, 16 * 1024 * 1024, 40);
     size_t beam_size = 1;
