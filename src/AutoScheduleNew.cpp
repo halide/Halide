@@ -1538,14 +1538,21 @@ struct PartialScheduleNode {
                 if (parent->is_root()) {
                     const auto &l = dag.node_map.at(func)->stages[stage].loop;
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
+
+                    // HACK: Also require that all non-one dimensions
+                    // are individually at least the parallelism
+                    // parameter, to give maximum future subtiling
+                    // opportunities.
+                    bool ok = true;
                     int total = 1;
                     size_t idx = 0;
                     for (auto s : t) {
                         if (l[idx++].pure) {
                             total *= s;
+                            if (s != 1 && s < params.parallelism) ok = false;
                         }
                     }
-                    if (total < params.parallelism) continue;
+                    if (!ok || total < params.parallelism) continue;
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
@@ -1671,10 +1678,11 @@ struct PartialScheduleNode {
     struct FuncVars {
         double num_cores = 0; // How much parallelism do we need to exploit with this Func?
         struct FuncVar {
+            VarOrRVar orig;
             VarOrRVar var;
             int64_t extent = 0;
             bool outermost = false, parallel = false, exists = false;
-            FuncVar() : var(Var()) {}
+            FuncVar() : orig(Var()), var(Var()) {}
         };
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
     };
@@ -1708,6 +1716,7 @@ struct PartialScheduleNode {
                     FuncVars::FuncVar fv;
                     const auto &l = symbolic_loop[i];
                     fv.var = VarOrRVar(l.var, !l.pure);
+                    fv.orig = fv.var;
                     fv.extent = parent_bounds.loops[stage][i].second - parent_bounds.loops[stage][i].first + 1;
                     fv.outermost = true;
                     fv.parallel = false;
@@ -1741,13 +1750,16 @@ struct PartialScheduleNode {
                     internal_assert(innermost_var);
                     here = LoopLevel(func, innermost_var->var);
 
+                    // Only vectorize if the innermost pure var
+                    // derives from the innermost storage dimension.
+                    if (innermost_pure_var && func.args()[0] != innermost_pure_var->orig.name()) {
+                        innermost_pure_var = nullptr;
+                    }
+
                     if (innermost_pure_var) {
                         int split_factor = 1;
                         int vector_size = dag.node_map.at(func)->stages[stage].vector_size;
-                        if (innermost_pure_var->extent >= 2 * vector_size &&
-                            (((innermost_pure_var->extent + vector_size - 1) / vector_size) & 1) == 0) {
-                            split_factor = 2 * vector_size;
-                        } else if (innermost_pure_var->extent >= vector_size) {
+                        if (innermost_pure_var->extent >= vector_size) {
                             split_factor = vector_size;
                         } else if (innermost_pure_var->extent >= 16) {
                             split_factor = 16;
@@ -2138,6 +2150,7 @@ struct State {
             for (auto &v : p.second.vars) {
                 if (v.exists) vars.push_back(v.var);
             }
+
             stage.reorder(vars);
 
             // Figure out which dimensions are parallel and fuse them
