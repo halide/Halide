@@ -109,14 +109,21 @@ $(BIN)/runtime.gen: $(HALIDE_PATH)/tools/GenGen.cpp $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
 
-# Make the generator generate a Python extension:
-$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
-	$< -e h,cpp,py.c -g $(notdir $(basename $<)) -o $(BIN) target=host-no_runtime
-
 # Generate a runtime:
 $(BIN)/runtime.a: $(BIN)/runtime.gen
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN) target=host
+
+# Which target features to use for which test targets.
+target_features_addconstant=-legacy_buffer_wrappers-no_runtime
+target_features_bit=-no_runtime
+target_features_user_context=-user_context-legacy_buffer_wrappers-no_runtime
+
+# Make the generator generate a Python extension:
+$(BIN)/%.py.c $(BIN)/%.cpp $(BIN)/%.h: $(BIN)/%.gen
+	LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e h,cpp,py.c \
+	    -g $(notdir $(basename $<)) -o $(BIN) \
+	    target=host$(target_features_$(notdir $(basename $<)))
 
 # Compile the generated Python extension(s):
 $(BIN)/%.o: $(BIN)/%.cpp
@@ -137,9 +144,10 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.o $(BIN)/runtime.a
 
 # TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
 # every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
-.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub
+.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub test_correctness_user_context
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
+test_correctness_user_context_test: user_context.run ;
 test_correctness_pystub: $(BIN)/simplestub.so $(BIN)/complexstub.so $(BIN)/buildmethod.so $(BIN)/partialbuildmethod.so $(BIN)/nobuildmethod.so
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
