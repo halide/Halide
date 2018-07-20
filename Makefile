@@ -780,12 +780,8 @@ WEIGHTS_COMPONENTS = \
   trunk_conv4_weight \
   trunk_conv5_bias \
   trunk_conv5_weight \
-  trunk_fc1_bias \
-  trunk_fc1_weight \
-  trunk_fc2_bias \
-  trunk_fc2_weight \
-  trunk_fc3_bias \
-  trunk_fc3_weight \
+	trunk_conv6_bias \
+	trunk_conv6_weight \
   pipeline_mean \
   pipeline_std \
   schedule_mean \
