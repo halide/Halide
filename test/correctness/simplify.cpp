@@ -741,6 +741,7 @@ void check_bounds() {
     check(min(y, max(z, min(y, x))), min(max(x, z), y));
 
     check(max(min(x, 5), 1) == 1, x <= 1);
+    check(max(min(x, 5), 1) == 3, x == 3);
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
     {
