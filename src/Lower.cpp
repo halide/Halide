@@ -325,6 +325,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
+    s = unify_duplicate_lets(s);
     s = simplify(s);
     s = loop_invariant_code_motion(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";

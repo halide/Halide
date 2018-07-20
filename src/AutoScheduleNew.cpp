@@ -447,8 +447,9 @@ struct FunctionDAG {
                         check_type(op->type);
                     }
                     void check_type(Type t) {
-                        if (!narrowest_type.bits() ||
-                            t.bits() < narrowest_type.bits()) {
+                        if (t.bits() > 1 &&
+                            (!narrowest_type.bits() ||
+                             t.bits() < narrowest_type.bits())) {
                             narrowest_type = t;
                         }
                     }
@@ -1537,14 +1538,21 @@ struct PartialScheduleNode {
                 if (parent->is_root()) {
                     const auto &l = dag.node_map.at(func)->stages[stage].loop;
                     // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
+
+                    // HACK: Also require that all non-one dimensions
+                    // are individually at least the parallelism
+                    // parameter, to give maximum future subtiling
+                    // opportunities.
+                    bool ok = true;
                     int total = 1;
                     size_t idx = 0;
                     for (auto s : t) {
                         if (l[idx++].pure) {
                             total *= s;
+                            if (s != 1 && s < params.parallelism) ok = false;
                         }
                     }
-                    if (total < params.parallelism) continue;
+                    if (!ok || total < params.parallelism) continue;
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
@@ -1670,10 +1678,11 @@ struct PartialScheduleNode {
     struct FuncVars {
         double num_cores = 0; // How much parallelism do we need to exploit with this Func?
         struct FuncVar {
+            VarOrRVar orig;
             VarOrRVar var;
             int64_t extent = 0;
             bool outermost = false, parallel = false, exists = false;
-            FuncVar() : var(Var()) {}
+            FuncVar() : orig(Var()), var(Var()) {}
         };
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
     };
@@ -1707,6 +1716,7 @@ struct PartialScheduleNode {
                     FuncVars::FuncVar fv;
                     const auto &l = symbolic_loop[i];
                     fv.var = VarOrRVar(l.var, !l.pure);
+                    fv.orig = fv.var;
                     fv.extent = parent_bounds.loops[stage][i].second - parent_bounds.loops[stage][i].first + 1;
                     fv.outermost = true;
                     fv.parallel = false;
@@ -1726,37 +1736,43 @@ struct PartialScheduleNode {
             if (!size.empty()) {
                 if (innermost) {
                     // Find the innermost var, and the innermost pure var
-                    FuncVars::FuncVar innermost_var, innermost_pure_var;
-                    bool found_innermost = false, found_innermost_pure = false;;
-                    for (size_t i = 0; i < symbolic_loop.size() && !(found_innermost && found_innermost_pure); i++) {
-                        if (vars.vars[i].exists) {
-                            if (!found_innermost) {
-                                found_innermost = true;
-                                innermost_var = vars.vars[i];
-                            }
-                            if (!found_innermost_pure && symbolic_loop[i].pure) {
-                                found_innermost_pure = true;
-                                innermost_pure_var = vars.vars[i];
-                            }
+                    FuncVars::FuncVar *innermost_var = nullptr, *innermost_pure_var = nullptr;
+                    for (size_t i = 0; i < symbolic_loop.size(); i++) {
+                        if (!vars.vars[i].exists) continue;
+                        if (innermost_var == nullptr) {
+                            innermost_var = &vars.vars[i];
                         }
+                        if (innermost_pure_var == nullptr && symbolic_loop[i].pure) {
+                            innermost_pure_var = &vars.vars[i];
+                        }
+                        if (innermost_var && innermost_pure_var) break;
                     }
-                    internal_assert(found_innermost);
-                    here = LoopLevel(func, innermost_var.var);
+                    internal_assert(innermost_var);
+                    here = LoopLevel(func, innermost_var->var);
 
-                    if (found_innermost_pure) {
+                    // Only vectorize if the innermost pure var
+                    // derives from the innermost storage dimension.
+                    if (innermost_pure_var && func.args()[0] != innermost_pure_var->orig.name()) {
+                        innermost_pure_var = nullptr;
+                    }
+
+                    if (innermost_pure_var) {
+                        int split_factor = 1;
                         int vector_size = dag.node_map.at(func)->stages[stage].vector_size;
-                        if (innermost_pure_var.extent >= 2 * vector_size &&
-                            (((innermost_pure_var.extent + vector_size - 1) / vector_size) & 1) == 0) {
-                            s.vectorize(innermost_pure_var.var, 2 * vector_size);
-                        } else if (innermost_pure_var.extent >= vector_size) {
-                            s.vectorize(innermost_pure_var.var, vector_size);
-                        } else if (innermost_pure_var.extent >= 16) {
-                            s.vectorize(innermost_pure_var.var, 16);
-                        } else if (innermost_pure_var.extent >= 8) {
-                            s.vectorize(innermost_pure_var.var, 8);
-                        } else if (innermost_pure_var.extent >= 4) {
-                            s.vectorize(innermost_pure_var.var, 4);
+                        if (innermost_pure_var->extent >= vector_size) {
+                            split_factor = vector_size;
+                        } else if (innermost_pure_var->extent >= 16) {
+                            split_factor = 16;
+                        } else if (innermost_pure_var->extent >= 8) {
+                            split_factor = 8;
+                        } else if (innermost_pure_var->extent >= 4) {
+                            split_factor = 4;
                         }
+                        if (split_factor > 1) {
+                            s.vectorize(innermost_pure_var->var, split_factor);
+                        }
+                        innermost_pure_var->extent += split_factor - 1;
+                        innermost_pure_var->extent /= split_factor;
                     }
                 } else {
                     // Do the implied splits
@@ -1913,7 +1929,7 @@ struct State {
                 const auto &feats = features.at(n.func);
                 for (auto it = feats.rbegin(); it != feats.rend(); it++) {
                     const auto &feat = *it;
-                    if (feat.points_computed_total + feat.inlined_calls > 1.2*feat.points_computed_minimum) return false;
+                    if (feat.points_computed_total + feat.inlined_calls > 1.5*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(0, i, lpad+stage) = std::log(1+sched_stats[i]);
@@ -1930,7 +1946,9 @@ struct State {
             cost = network_output(0);
         }
 
-        else {
+        if (cost == 0) {
+            // Either we have no throughput predictor, or it predicted
+            // a throughput of zero. Fall back to manual cost model times epsilon.
             for (auto p : features) {
                 for (size_t s = 0; s < p.second.size(); s++) {
                     const auto &feat = p.second[s];
@@ -2053,6 +2071,7 @@ struct State {
                     }*/
                 }
             }
+            cost *= 1e-20;
         }
         cost_calculations++;
         return true;
@@ -2129,6 +2148,7 @@ struct State {
             for (auto &v : p.second.vars) {
                 if (v.exists) vars.push_back(v.var);
             }
+
             stage.reorder(vars);
 
             // Figure out which dimensions are parallel and fuse them
@@ -2153,12 +2173,12 @@ struct State {
                     stage.parallel(v.var);
                 }
                 if (!any_parallel) {
-                    // fused = v.var;
+                    //fused = v.var;
                     any_parallel = true;
                 } else if (i > 1) {
                     // Use the inner name, to not invalidate any compute_ats
-                    // f.fuse(v.var, fused, v.var); // To consider: fuse may break loop partitioning. Check for likelies
-                    // fused = v.var;
+                    //f.fuse(v.var, fused, v.var); // To consider: fuse may break loop partitioning. Check for likelies
+                    //fused = v.var;
                 }
             }
         }
@@ -2208,39 +2228,29 @@ State optimal_schedule(FunctionDAG &dag,
 
     std::function<void(State *)> enqueue_new_children = [&](State *s) {
 
-        // debug(0) << "\n** Generated child: ";
-        // s->calculate_cost(dag, params, true);
-        // s->dump();
+        //debug(0) << "\n** Generated child: ";
+        //s->dump();
 
         tick(double(s->num_funcs_scheduled) / dag.nodes.size());
         q.emplace(std::shared_ptr<State>(s));
     };
 
     for (int i = 0; ; i++) {
-
-        if (q.size() > (size_t)beam_size) {
-            decltype(q) trimmed;
-            while (trimmed.size() < (size_t)beam_size && !q.empty()) {
-                if ((q.size() == 1 && trimmed.empty()) || !random_dropout()) {
-                    trimmed.push(q.top());
-                }
-                q.pop();
-            }
-            q.swap(trimmed);
-        }
-
         decltype(q) pending;
         q.swap(pending);
-        while (!pending.empty()) {
+        for (int expanded = 0; expanded < beam_size && !pending.empty(); expanded++) {
             auto state = pending.top();
             pending.pop();
 
+            if (pending.size() > 1 && random_dropout()) {
+                expanded--;
+                continue;
+            }
 
             /*
               debug(0) << "** Queue top: ";
               state->dump();
             */
-
 
             if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
                 debug(0) << '\n';
@@ -2625,19 +2635,27 @@ void autoschedule_test() {
     }
 
     {
-        // A scan
+        // A scan with pointwise stages before and after
         Buffer<float> a(1024, 1024);
-        Func s("scan"), c("consumer");
+        Func before[5];
+        Func after[5];
+        Func s("scan");
         Var x, y;
+        before[0](x, y) = x + y;
+        for (int i = 1; i < 5; i++) {
+            before[i](x, y) = before[i-1](x, y) + 1;
+        }
         RDom r(1, 1023);
-        s(x, y) = undef<float>();
-        s(0, y) = a(0, y);
+        s(x, y) = before[4](x, y);
         s(r, y) += s(r-1, y);
-        c(x, y) = s(x, y);
+        after[0](x, y) = s(x, y);
+        for (int i = 1; i < 5; i++) {
+            after[i](x, y) = after[i-1](x, y) + 1;
+        }
 
-        c.estimate(x, 0, 1024).estimate(y, 0, 1024);
+        after[4].estimate(x, 0, 1024).estimate(y, 0, 1024);
 
-        vector<Function> outputs = {c.function()};
+        vector<Function> outputs = {after[4].function()};
         FunctionDAG dag(outputs, params, target);
         dag.dump();
         State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);

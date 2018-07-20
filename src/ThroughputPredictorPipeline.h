@@ -54,7 +54,6 @@ public:
     Func f_ReLU6, f_relu6_padded;
     Func f_pool3, f_pool3_padded, f_pool4, f_pool4_padded;
     Func f_reduce, prediction;
-    
 
     ThroughputPredictorPipeline(Weights weights, Stats stats) :
         feature_stats(stats),
@@ -105,8 +104,8 @@ public:
         f_head2_conv(n, c, w) = head2_bias(c);
         f_head2_conv(n, c, w) += head2_filter(c, r_head2) * schedule_features(n, r_head2, w);
         f_head2_relu(n, c, w) = max(0, f_head2_conv(n, c, w));
-        
-        // we want to enforce boundary conditions on f_head1_relu and f_head2_relu because conv1 pads with 1 zero on either 
+
+        // we want to enforce boundary conditions on f_head1_relu and f_head2_relu because conv1 pads with 1 zero on either
         // side of the width (i.e. final dimension) of its input. We set the valid range of the width from 0 to num_stages.
         f_head1_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head1_relu, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, schedule_features.dim(2).extent()}});
         f_head2_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head2_relu, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, schedule_features.dim(2).extent()}});
@@ -116,7 +115,7 @@ public:
         // have to do two stagees for conv1 to convolve over each head's outputs
         f_conv1_stage1(n, c, w) = bias1(c);
         f_conv1_stage1(n, c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * f_head1_relu_padded(n, r1_stage1.x, w + r1_stage1.y-1);
-        
+
         f_conv1_stage2(n, c, w) = f_conv1_stage1(n, c, w);
         f_conv1_stage2(n, c, w) += filter1(c, head1_filter.dim(0).extent()+r1_stage2.x, r1_stage2.y) * f_head2_relu_padded(n, r1_stage2.x, w+r1_stage2.y-1);
         f_ReLU1(n, c, w) = max(0, f_conv1_stage2(n, c, w));
@@ -126,20 +125,20 @@ public:
 
         f_conv2(n, c, w) = bias2(c);
         f_conv2(n, c, w) += filter2(c, r2.x, r2.y) * f_relu1_padded(n, r2.x, w+r2.y-1);
-        
+
         f_ReLU2(n, c, w) = max(0, f_conv2(n, c, w));
 
         // set boundary conditions for f_ReLU2
         f_relu2_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU2, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, schedule_features.dim(2).extent()}});
-        
+
         f_conv3(n, c, w) = bias3(c);
         f_conv3(n, c, w) += filter3(c, r3.x, r3.y) * f_relu2_padded(n, r3.x, w+r3.y-1);
         f_ReLU3(n, c, w) = max(0, f_conv3(n, c, w));
-     
+
         // set boundary conditions for f_ReLU3
         f_relu3_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU3, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, schedule_features.dim(2).extent()}});
-        
-        f_pool3(n, c, w) = 0.5f * (f_relu3_padded(n, c, w*2-1) + f_relu3_padded(n, c, w*2)); 
+
+        f_pool3(n, c, w) = 0.5f * (f_relu3_padded(n, c, w*2-1) + f_relu3_padded(n, c, w*2));
 
         // set boundary conditions for f_pool3
         f_pool3_padded = Halide::BoundaryConditions::constant_exterior(f_pool3, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, schedule_features.dim(2).extent()/2 + 1}});
@@ -147,15 +146,15 @@ public:
         f_conv4(n, c, w) = bias4(c);
         f_conv4(n, c, w) += filter4(c, r4.x, r4.y) * f_pool3_padded(n, r4.x, w+r4.y-1);
         f_ReLU4(n, c, w) = max(0, f_conv4(n, c, w));
-        
+
         // set boundary conditions for f_ReLU4
         f_relu4_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU4, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, schedule_features.dim(2).extent()/2 + 1}});
-        
-        f_pool4(n, c, w) = 0.5f * (f_relu4_padded(n, c, w*2-1) + f_relu4_padded(n, c, w*2)); 
+
+        f_pool4(n, c, w) = 0.5f * (f_relu4_padded(n, c, w*2-1) + f_relu4_padded(n, c, w*2));
 
         // set boundary conditions for f_pool4
         f_pool4_padded = Halide::BoundaryConditions::constant_exterior(f_pool4, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, (schedule_features.dim(2).extent()+6) / 4}});
-        
+
         f_conv5(n, c, w) = bias5(c);
         f_conv5(n, c, w) += filter5(c, r5.x, r5.y) * f_pool4_padded(n, r5.x, w+r5.y-1);
         f_ReLU5(n, c, w) = max(0, f_conv5(n, c, w));
@@ -177,7 +176,6 @@ public:
 
 
         // schedule
-
         f_head1_relu.compute_at(prediction, n);
         f_head2_relu.compute_at(prediction, n);
         f_ReLU1.compute_at(prediction, n);
