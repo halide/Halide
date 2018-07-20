@@ -20,7 +20,16 @@ WEAK int halide_can_use_target_features(int count, const uint64_t *features) {
 
 WEAK int halide_default_can_use_target_features(int count, const uint64_t *features) {
     // cpu features should never change, so call once and cache.
-    static CpuFeatures cpu_features = halide_get_cpu_features();
+    // Note that since CpuFeatures has a (trivial) ctor, compilers may insert guards
+    // for threadsafe initialization (per C++11); this can fail at link time
+    // on some systems (MSVC) because our runtime is a special beast. We'll
+    // work around this by using a sentinel for the initialization flag.
+    static bool initialized = false;
+    static CpuFeatures cpu_features;
+    if (!initialized) {
+        cpu_features = halide_get_cpu_features();
+        initialized = true;
+    }
 
     if (count != CpuFeatures::kWordCount) {
         // This should not happen unless our runtime is out of sync with the rest of libHalide.
