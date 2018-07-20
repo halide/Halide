@@ -443,6 +443,26 @@ private:
         }
     }
 
+    void init_from_legacy_buffer_t(const buffer_t &old_buf, halide_type_t t) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        assert(old_buf.elem_size == t.bytes());
+        buf.host = old_buf.host;
+        buf.type = t;
+        int d;
+        for (d = 0; d < 4 && old_buf.extent[d]; d++);
+        buf.dimensions = d;
+        make_shape_storage();
+        for (int i = 0; i < d; i++) {
+            buf.dim[i].min = old_buf.min[i];
+            buf.dim[i].extent = old_buf.extent[i];
+            buf.dim[i].stride = old_buf.stride[i];
+        }
+        buf.set_host_dirty(old_buf.host_dirty);
+        assert(old_buf.dev == 0 && "Cannot construct a Halide::Runtime::Buffer from a legacy buffer_t with a device allocation. Use halide_upgrade_buffer_t to upgrade it to a halide_buffer_t first.");
+    }
+
 public:
 
     typedef T ElemType;
@@ -562,28 +582,22 @@ public:
     }
 
     /** Make a Buffer from a halide_buffer_t */
-    Buffer(const halide_buffer_t &buf,
+    explicit Buffer(const halide_buffer_t &buf,
            BufferDeviceOwnership ownership = BufferDeviceOwnership::Unmanaged) {
         assert(T_is_void || buf.type == static_halide_type());
         initialize_from_buffer(buf, ownership);
     }
 
-    /** Make a Buffer from a legacy buffer_t. */
-    Buffer(const buffer_t &old_buf) {
-        assert(!T_is_void && old_buf.elem_size == static_halide_type().bytes());
-        buf.host = old_buf.host;
-        buf.type = static_halide_type();
-        int d;
-        for (d = 0; d < 4 && old_buf.extent[d]; d++);
-        buf.dimensions = d;
-        make_shape_storage();
-        for (int i = 0; i < d; i++) {
-            buf.dim[i].min = old_buf.min[i];
-            buf.dim[i].extent = old_buf.extent[i];
-            buf.dim[i].stride = old_buf.stride[i];
-        }
-        buf.set_host_dirty(old_buf.host_dirty);
-        assert(old_buf.dev == 0 && "Cannot construct a Halide::Runtime::Buffer from a legacy buffer_t with a device allocation. Use halide_upgrade_buffer_t to upgrade it to a halide_buffer_t first.");
+    /** Make a Buffer from a legacy buffer_t, with an explicit halide_type. */
+    explicit Buffer(const buffer_t &old_buf, halide_type_t t) {
+        init_from_legacy_buffer_t(old_buf, t);
+    }
+
+    /** Make a Buffer from a legacy buffer_t, which is assumed to match our static
+     * type. (Cannot use with Buffer<void>.) */
+    explicit Buffer(const buffer_t &old_buf) {
+        static_assert(!T_is_void, "Cannot construct a Buffer<void> from a buffer_t without an explicit type.");
+        init_from_legacy_buffer_t(old_buf, static_halide_type());
     }
 
     /** Populate the fields of a legacy buffer_t using this
@@ -966,6 +980,13 @@ public:
         }
     }
 
+    /** Initialize a Buffer from a pointer to the min coordinate and
+     * a vector describing the shape.  Does not take ownership of the
+     * data, and does not set the host_dirty flag. */
+    explicit inline Buffer(halide_type_t t, add_const_if_T_is_const<void> *data,
+                           const std::vector<halide_dimension_t> &shape)
+        : Buffer(t, data, (int) shape.size(), shape.data()) {}
+
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
@@ -978,6 +999,12 @@ public:
             buf.dim[i] = shape[i];
         }
     }
+
+    /** Initialize a Buffer from a pointer to the min coordinate and
+     * a vector describing the shape.  Does not take ownership of the
+     * data, and does not set the host_dirty flag. */
+    explicit inline Buffer(T *data, const std::vector<halide_dimension_t> &shape)
+        : Buffer(data, (int) shape.size(), shape.data()) {}
 
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. Will assert fail if there are
