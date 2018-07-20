@@ -58,19 +58,34 @@ Expr Simplify::visit(const EQ *op, ConstBounds *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
 
-    if (rewrite(c0 == 0, fold(c0 == 0)) ||
-        rewrite(x + c0 == 0, x == fold(-c0)) ||
-        rewrite(c0 - x == 0, x == c0)) {
-        return rewrite.result;
-    }
-
     if (rewrite(broadcast(x) == 0, broadcast(x == 0, lanes)) ||
         (no_overflow(delta.type()) && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
         rewrite(select(x, c0, y) == 0, !x && (y == 0), c0 != 0) ||
         rewrite(select(x, y, 0) == 0, !x || (y == 0)) ||
-        rewrite(select(x, y, c0) == 0, x && (y == 0), c0 != 0)) {
+        rewrite(select(x, y, c0) == 0, x && (y == 0), c0 != 0) ||
+        rewrite(max(x, y) - y == 0, x <= y) ||
+        rewrite(min(x, y) - y == 0, y <= x) ||
+        rewrite(max(y, x) - y == 0, x <= y) ||
+        rewrite(min(y, x) - y == 0, y <= x) ||
+        rewrite(y - max(x, y) == 0, x <= y) ||
+        rewrite(y - min(x, y) == 0, y <= x) ||
+        rewrite(y - max(y, x) == 0, x <= y) ||
+        rewrite(y - min(y, x) == 0, y <= x) ||
+        rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
+        rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
+        rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
+        rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0) ||
+        rewrite(max(x, 0) == 0, x <= 0) ||
+        rewrite(min(x, 0) == 0, 0 <= x)) {
+
         return mutate(std::move(rewrite.result), bounds);
+    }
+
+    if (rewrite(c0 == 0, fold(c0 == 0)) ||
+        rewrite(x + c0 == 0, x == fold(-c0)) ||
+        rewrite(c0 - x == 0, x == c0)) {
+        return rewrite.result;
     }
 
     if (const Sub *s = delta.as<Sub>()) {
