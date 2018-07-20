@@ -87,9 +87,17 @@ string print_function(const Function &f) {
     return stream.str();
 }
 
+bool var_name_match(string candidate, string var) {
+    internal_assert(var.find('.') == string::npos)
+        << "var_name_match expects unqualified names for the second argument. "
+        << "Name passed: " << var << "\n";
+    return (candidate == var) || Internal::ends_with(candidate, "." + var);
+}
+
 // Given a copy-elision pair, return true if the producer is computed
 // within the scope of the consumer's buffer.
-bool is_prod_within_cons_realization(const Function &prod_f,
+bool is_prod_within_cons_realization(const map<string, Function> &env,
+                                     const Function &prod_f,
                                      const Function &cons_f,
                                      bool is_cons_output) {
     const LoopLevel &prod_compute_at = prod_f.schedule().compute_level();
@@ -102,20 +110,54 @@ bool is_prod_within_cons_realization(const Function &prod_f,
     }
     if (is_cons_output) {
         // If the consumer is output of the pipeline, the producer is
-        // always in scope of the consumer's buffer
+        // always within the scope of the consumer's buffer
         return true;
     }
+
+    // If producer is computed at root and the consumer is not output of
+    // the pipeline, the producer will never be within the scope of the
+    // consumer's buffer
     if (prod_compute_at.is_root()) {
         debug(4) << "...Non-output function \"" << cons_f.name() << "\" calls function \""
                  << prod_f.name() << "\", which is computed at root\n";
         return false;
     }
 
-    // TODO(psuriana): Need to add another pass to check if the producer is
-    // produced (store_at) before the consumer's buffer is allocated (compute_at).
-    //const LoopLevel &cons_store_at = cons_f.schedule().store_level();
+    // TODO(psuriana): Ignore compute_with case for now
 
-    return true;
+    const LoopLevel &cons_store_at = cons_f.schedule().store_level();
+    if (cons_store_at.is_root()) {
+        // Since consumer is stored at root and the producer is not computed at
+        // root, the producer is always within the scope of the consumer's buffer
+        // (Since the producer is not computed at root, it can only be computed
+        // within the consumer scope; otherwise, it is not a valid schedule)
+        return true;
+    }
+
+    if (prod_compute_at.func() == cons_store_at.func()) {
+        // If the prod_compute_at and cons_store_at are at the same function,
+        // the compute loop needs to be within the store loop
+        const vector<Dim> &dims = env.at(prod_compute_at.func()).definition().schedule().dims();
+        const auto &compute_pos = std::find_if(dims.begin(), dims.end(),
+            [&prod_compute_at](const Dim &d) { return var_name_match(d.var, prod_compute_at.var().name()); });
+        const auto &store_pos = std::find_if(dims.begin(), dims.end(),
+            [&cons_store_at](const Dim &d) { return var_name_match(d.var, cons_store_at.var().name()); });
+        internal_assert((compute_pos != dims.end()) && (store_pos != dims.end()));
+        return compute_pos < store_pos;
+    }
+
+    // Keep traversing up the compute level until we find the function at
+    // which the consumer's buffer is realized. If we don't find it, the
+    // producer is not within the scope of the consumer's buffer.
+    bool in_scope = false;
+    for (LoopLevel level = prod_compute_at;
+         !in_scope && !level.is_inlined() && !level.is_root();
+         level = env.at(level.func()).schedule().compute_level()) {
+        if (level.func() == cons_store_at.func()) {
+            in_scope = true;
+        }
+    }
+    return in_scope;
 }
 
 // If there is a potentially valid copy-elision pair, return the name of the
@@ -153,10 +195,10 @@ string get_elision_pair_candidates(const Function &f,
                 }
                 prod = call->name;
 
-                if (!is_prod_within_cons_realization(env.at(prod), f, is_output)) {
-                    debug(4) << "...Function \"" << f.name() << "\" and "
-                             << "function \"" << prod << "\", is not a valid "
-                             << "copy-elision pair\n";
+                if (!is_prod_within_cons_realization(env, env.at(prod), f, is_output)) {
+                    debug(4) << "...Not a valid copy-elision pair: computation of Function \""
+                             << prod << "\" is not within the scope of realization of Function \""
+                             << f.name() << "\"\n";
                     return "";
                 }
 
@@ -281,11 +323,12 @@ map<string, string> get_valid_copy_elision_pairs(
         }
         debug(0) << "\n\tcons: " << print_function(env.at(p.first)) << "\n";
         if (p.second.empty()) {
-            debug(0) << "\tprod: NONE\n\n";
+            debug(0) << "\tprod: NONE";
         } else {
-            debug(0) << "\tprod: " << print_function(env.at(p.second)) << "\n\n";
+            debug(0) << "\tprod: " << print_function(env.at(p.second));
         }
     }
+    debug(0) << "\n\n";
 
     return elision_pairs;
 }
