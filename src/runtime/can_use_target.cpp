@@ -23,11 +23,13 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     // Note that since CpuFeatures has a (trivial) ctor, compilers may insert guards
     // for threadsafe initialization (per C++11); this can fail at link time
     // on some systems (MSVC) because our runtime is a special beast. We'll
-    // work around this by using a sentinel for the initialization flag.
+    // work around this by using a sentinel for the initialization flag and
+    // some horribleness with memcpy (which we can do since CpuFeatures is still POD).
     static bool initialized = false;
-    static CpuFeatures cpu_features;
+    static uint64_t cpu_features_storage[sizeof(CpuFeatures)/sizeof(uint64_t)] = {0};
     if (!initialized) {
-        cpu_features = halide_get_cpu_features();
+        CpuFeatures tmp = halide_get_cpu_features();
+        memcpy(&cpu_features_storage, &tmp, sizeof(tmp));
         initialized = true;
     }
 
@@ -38,10 +40,11 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
 #endif
         halide_error(NULL, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
     }
+    const CpuFeatures* cpu_features = reinterpret_cast<const CpuFeatures*>(&cpu_features_storage[0]);
     for (int i = 0; i < CpuFeatures::kWordCount; ++i) {
         uint64_t m;
-        if ((m = (features[i] & cpu_features.known[i])) != 0) {
-            if ((m & cpu_features.available[i]) != m) {
+        if ((m = (features[i] & cpu_features->known[i])) != 0) {
+            if ((m & cpu_features->available[i]) != m) {
                 return 0;
             }
         }
