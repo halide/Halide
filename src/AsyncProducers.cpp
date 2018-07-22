@@ -197,8 +197,9 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
                 return Evaluate::make(0);
             } else {
                 // Synchronize on the work done by the producer before beginning consumption
-                return Acquire::make(sema.back(), 1, op);
+                Expr acquire_sema = sema.back();
                 sema.pop_back();
+                return Acquire::make(acquire_sema, 1, op);
             }
         } else {
             return IRMutator2::visit(op);
