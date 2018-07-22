@@ -3182,7 +3182,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                     const Fork *continued_branches = node->rest.as<Fork>();
                     if (continued_branches == NULL) {
                         result = 0;
-                        op->rest.accept(this);
+                        node->rest.accept(this);
                         total_threads += result;
                     }
                     node = continued_branches;
@@ -3425,18 +3425,45 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
     create_assertion(did_succeed, Expr(), result);
 }
 
-void CodeGen_LLVM::get_parallel_tasks(Stmt s, vector<ParallelTask> &result, string prefix) {
+namespace {
+
+string task_debug_name(const std::pair<string, int> &prefix) {
+    if (prefix.second <= 1) {
+        return prefix.first;
+    } else {
+        return prefix.second + "_" + std::to_string(prefix.second - 1);
+    }
+}
+
+void add_fork(std::pair<string, int> &prefix) {
+    if (prefix.second == 0) {
+        prefix.first += ".fork";
+    }
+    prefix.second++;
+}
+
+void add_suffix(std::pair<string, int> &prefix, const string &suffix) {
+    if (prefix.second > 1) {
+        prefix.first +=  "_" + std::to_string(prefix.second - 1);
+        prefix.second = 0;
+    }
+    prefix.first += suffix;
+}
+
+}
+
+void CodeGen_LLVM::get_parallel_tasks(Stmt s, vector<ParallelTask> &result, std::pair<string, int> prefix) {
     const For *loop = s.as<For>();
     const Acquire *acquire = loop ? loop->body.as<Acquire>() : s.as<Acquire>();
     if (const Fork *f = s.as<Fork>()) {
-        prefix += ".fork";
+        add_fork(prefix);
         get_parallel_tasks(f->first, result, prefix);
         get_parallel_tasks(f->rest, result, prefix);
     } else if (!loop && acquire) {
         const Variable *v = acquire->semaphore.as<Variable>();
         internal_assert(v);
-        prefix += "." + v->name;
-        ParallelTask t {s, {}, "", 0, 1, const_false(), prefix};
+        add_suffix(prefix, "." + v->name);
+        ParallelTask t {s, {}, "", 0, 1, const_false(), task_debug_name(prefix)};
         while (acquire) {
             t.semaphores.push_back({acquire->semaphore, acquire->count});
             t.body = acquire->body;
@@ -3444,16 +3471,16 @@ void CodeGen_LLVM::get_parallel_tasks(Stmt s, vector<ParallelTask> &result, stri
         }
         result.push_back(t);
     } else if (loop && loop->for_type == ForType::Parallel) {
-        prefix += ".par_for." + loop->name;
-        result.push_back(ParallelTask {loop->body, {}, loop->name, loop->min, loop->extent, const_false(), prefix});
+        add_suffix(prefix, ".par_for." + loop->name);
+        result.push_back(ParallelTask {loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix)});
     } else if (loop &&
                loop->for_type == ForType::Serial &&
                acquire &&
                !expr_uses_var(acquire->count, loop->name)) {
         const Variable *v = acquire->semaphore.as<Variable>();
         internal_assert(v);
-        prefix += ".for." + v->name;
-        ParallelTask t {loop->body, {}, loop->name, loop->min, loop->extent, const_true(), prefix};
+        add_suffix(prefix, ".for." + v->name);
+        ParallelTask t {loop->body, {}, loop->name, loop->min, loop->extent, const_true(), task_debug_name(prefix)};
         while (acquire) {
             t.semaphores.push_back({acquire->semaphore, acquire->count});
             t.body = acquire->body;
@@ -3461,14 +3488,14 @@ void CodeGen_LLVM::get_parallel_tasks(Stmt s, vector<ParallelTask> &result, stri
         }
         result.push_back(t);
     } else {
-        prefix += "." + std::to_string(result.size());
-        result.push_back(ParallelTask {s, {}, "", 0, 1, const_false(), prefix});
+        add_suffix(prefix, "." + std::to_string(result.size()));
+        result.push_back(ParallelTask {s, {}, "", 0, 1, const_false(), task_debug_name(prefix)});
     }
 }
 
 void CodeGen_LLVM::do_as_parallel_task(Stmt s) {
     vector<ParallelTask> tasks;
-    get_parallel_tasks(s, tasks, function->getName().str());
+    get_parallel_tasks(s, tasks, { function->getName().str(), 0 });
     do_parallel_tasks(tasks);
 }
 

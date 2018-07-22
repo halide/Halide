@@ -273,7 +273,7 @@ protected:
         std::string name;
     };
     int task_depth;
-    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::string prefix);
+    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
     void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
     void do_as_parallel_task(Stmt s);
 
