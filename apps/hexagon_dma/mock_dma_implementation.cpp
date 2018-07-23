@@ -4,9 +4,10 @@
  * actual DMA functions.
  * This file is needed only if there is no hexagon SDK support or NO hexagon DMA support, in either case we replace
  * the DMA operations with normal memory operations */
-
+#define WEAK __attribute__((weak))
 #include "HalideRuntime.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
+#include "../../src/runtime/hexagon_dma_pool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -14,7 +15,6 @@
 
 
 #define HALIDE_MOCK_DMA_DEBUG
-
 
 // Mock Global Descriptor
 typedef struct {
@@ -60,6 +60,11 @@ typedef struct {
     int x; // in case we want to keep a count
     t_st_hw_descriptor *ptr;
 } dma_handle_t;
+
+int halide_hexagon_free_l2_pool(void *user_context) {
+    halide_print(user_context, "halide_hexagon_free_l2_pool mock implementation \n");
+    return 0;
+}
 
 static int nDmaPixelSize(int pix_fmt)
 {

@@ -1,11 +1,6 @@
 #ifndef _HEXAGON_DMA_POOL_H_
 #define _HEXAGON_DMA_POOL_H_
 
-namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
-//Global Variables
-WEAK void *hexagon_cache_pool = NULL;
-}}}}
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -13,6 +13,8 @@ typedef struct hexagon_local_cache {
 } hexagon_cache_pool_t;
 
 typedef hexagon_cache_pool_t* pcache_pool;
+
+WEAK pcache_pool hexagon_cache_pool = NULL;
 WEAK halide_mutex hexagon_cache_mutex;
 
 }}}}
@@ -24,8 +26,8 @@ using namespace Halide::Runtime::Internal::Hexagon;
 static inline void* free_unused_buffers(void* user_context) {
     // Walk the list and deallocate unused blocks.
     ScopedMutexLock lock(&hexagon_cache_mutex);
-    pcache_pool temp2 = (pcache_pool)hexagon_cache_pool;
-    pcache_pool prev_node = (pcache_pool)hexagon_cache_pool;
+    pcache_pool temp2 = hexagon_cache_pool;
+    pcache_pool prev_node = hexagon_cache_pool;
     while (temp2 != NULL) {
         if (temp2->used == false) {
             int err = HAP_cache_unlock(temp2->l2memory);
@@ -37,8 +39,8 @@ static inline void* free_unused_buffers(void* user_context) {
             prev_node->next = (temp2->next)->next;
             prev_node = temp2->next;
             // Set Head.
-            if (temp2 == (pcache_pool)hexagon_cache_pool) {
-                hexagon_cache_pool = (void *)temp2->next;
+            if (temp2 == hexagon_cache_pool) {
+                hexagon_cache_pool = temp2->next;
             }
             // Free node and reassign the variable.
             free(temp2);
@@ -55,7 +57,7 @@ static inline void* free_unused_buffers(void* user_context) {
 static inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
 
     pcache_pool prev = NULL;
-    pcache_pool temp = (pcache_pool)hexagon_cache_pool;
+    pcache_pool temp = hexagon_cache_pool;
     // Walk the list to find free buffer
     {
         ScopedMutexLock lock(&hexagon_cache_mutex);
@@ -101,7 +103,7 @@ static inline void *hexagon_cache_pool_get (void *user_context, size_t size, boo
         if (prev != NULL) {
             prev->next = temp;
         } else if (hexagon_cache_pool == NULL) {
-            hexagon_cache_pool = (void *)temp;
+            hexagon_cache_pool = temp;
         }
     }
     return (void*) temp->l2memory;
@@ -110,7 +112,7 @@ static inline void *hexagon_cache_pool_get (void *user_context, size_t size, boo
 static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
     halide_assert(user_context, cache_mem);
-    pcache_pool temp = (pcache_pool)hexagon_cache_pool;
+    pcache_pool temp = hexagon_cache_pool;
     bool found = false; 
     while (!found && (temp != NULL)) {
         if (temp->l2memory == cache_mem) {
@@ -123,8 +125,8 @@ static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
 
 static inline int hexagon_cache_pool_free(void *user_context) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
-    pcache_pool temp = (pcache_pool)hexagon_cache_pool;
-    pcache_pool prev = (pcache_pool)hexagon_cache_pool;
+    pcache_pool temp = hexagon_cache_pool;
+    pcache_pool prev = hexagon_cache_pool;
     int err = QURT_EOK;
     while (temp != NULL) {
         if (temp->l2memory != NULL) {
