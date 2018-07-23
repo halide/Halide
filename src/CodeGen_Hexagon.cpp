@@ -1993,7 +1993,7 @@ void CodeGen_Hexagon::visit(const NE *op) {
     }
 }
 
-Value *CodeGen_Hexagon::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
+Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(32));
@@ -2058,7 +2058,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             constant_bytes *= alloc->type.bytes();
             llvm_size = codegen(Expr(constant_bytes));
         } else {
-            llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+            llvm_size = codegen_cache_allocation_size(alloc->name, alloc->type, alloc->extents);
         }
  
         // Only allocate memory if the condition is true, otherwise 0.

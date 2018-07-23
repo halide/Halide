@@ -2,19 +2,8 @@
 #define _HEXAGON_DMA_POOL_H_
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
-
-typedef struct hexagon_local_cache {
-    void *l2memory;
-    bool used;
-    size_t bytes;
-    struct hexagon_local_cache *next; 
-} hexagon_cache_pool_t;
-
-typedef hexagon_cache_pool_t* pcache_pool;
 //Global Variables
-WEAK pcache_pool hexagon_cache_pool = NULL;
-WEAK halide_mutex hexagon_cache_mutex;
-
+WEAK void *hexagon_cache_pool = NULL;
 }}}}
 
 #ifdef __cplusplus
