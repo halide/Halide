@@ -807,7 +807,7 @@ struct AutoSchedule {
             set<string> declared_rvars;
             for (size_t i = 0; i < func.updates().size(); ++i) {
                 const vector<ReductionVariable> &rvars = func.updates()[i].schedule().rvars();
-                const set<string> &var_list = sched.used_vars.at(func.name()).at(i);
+                const set<string> &var_list = sched.used_vars.at(func.name()).at(i+1);
                 for (size_t j = 0; j < rvars.size(); ++j) {
                     if ((var_list.find(rvars[j].var) == var_list.end()) ||
                         (declared_rvars.find(rvars[j].var) != declared_rvars.end())) {
@@ -2601,7 +2601,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     internal_assert(!ordering.empty());
-    set<string> var_list;
+    set<string> var_list = {ordering[0].name()};
     string var_order = ordering[0].name();
     for (size_t o = 1; o < ordering.size(); o++) {
         var_order += ", " + ordering[o].name();
