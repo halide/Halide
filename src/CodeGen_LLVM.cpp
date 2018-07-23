@@ -3151,8 +3151,6 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         public:
             bool result = false;
         };
-        MayBlock may_block;
-        t.body.accept(&may_block);
 
         // TODO(zvookin|abadams): This makes multiple passes over the
         // IR to cover each node. (One tree walk produces the min
@@ -3236,7 +3234,6 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             num_tasks == 1 &&
             min_threads.result == 0 &&
             t.semaphores.empty() &&
-            !may_block.result &&
             !task_parent);
 
         // Make the array of semaphore acquisitions this task needs to do before it runs.
@@ -3390,8 +3387,6 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 7);
             builder->CreateStore(ConstantInt::get(i32_t, min_threads.result), slot_ptr);
             slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 8);
-            builder->CreateStore(ConstantInt::get(i8_t, may_block.result), slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 9);
             builder->CreateStore(serial, slot_ptr);
         }
     }

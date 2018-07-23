@@ -166,7 +166,7 @@ WEAK void print_job(work *job, const char *indent, const char *prefix = NULL) {
     }
     const char *name = job->task.name ? job->task.name : "<no name>";
     const char *parent_name = job->parent_job ? (job->parent_job->task.name ? job->parent_job->task.name : "<no name>") : "<no parent job>";
-    log_message(prefix << name << "[" << job << "] serial: " << job->task.serial << " active_workers: " << job->active_workers << " min: " << job->task.min << " extent: " << job->task.extent << " may_block: " << job->task.may_block << " siblings: " << job->siblings << " sibling count: " << job->sibling_count << " min_threads " << job->task.min_threads << " next_sempaphore: " << job->next_semaphore << " threads_reserved: " << job->threads_reserved << " parent_job: " << parent_name << "[" << job->parent_job << "]");
+    log_message(prefix << name << "[" << job << "] serial: " << job->task.serial << " active_workers: " << job->active_workers << " min: " << job->task.min << " extent: " << job->task.extent << << " siblings: " << job->siblings << " sibling count: " << job->sibling_count << " min_threads " << job->task.min_threads << " next_sempaphore: " << job->next_semaphore << " threads_reserved: " << job->threads_reserved << " parent_job: " << parent_name << "[" << job->parent_job << "]");
     for (int i = 0; i < job->task.num_semaphores; i++) {
         log_message(indent << "    semaphore " << (void *)job->task.semaphores[i].semaphore << " count " << job->task.semaphores[i].count << " val " << *(int *)job->task.semaphores[i].semaphore);
     }
@@ -553,7 +553,6 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.fn = NULL;
     job.task.min = min;
     job.task.extent = size;
-    job.task.may_block = false;
     job.task.serial = false;
     job.task.semaphores = NULL;
     job.task.num_semaphores = 0;
