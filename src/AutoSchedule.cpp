@@ -775,6 +775,9 @@ struct AutoSchedule {
     }
 
     friend std::ostream& operator<<(std::ostream &stream, const AutoSchedule &sched) {
+        stream << "// Delete this line if not using Generator\n";
+        stream << "Pipeline pipeline = get_pipeline();\n\n";
+
         for (const auto &iter : sched.internal_vars) {
             if (iter.second.is_rvar) {
                 stream << "RVar ";
