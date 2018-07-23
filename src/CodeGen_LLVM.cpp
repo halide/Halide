@@ -3163,11 +3163,6 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         class MinThreads : public IRVisitor {
             using IRVisitor::visit;
 
-            // TODO(zvookin|abadams): If there is a constraint that the
-            // Acquire has to be immediately inside a Fork or For node,
-            // this can be simplified.
-            int direct_acquires = 0;
-
             void visit(const Fork *op) {
                 ScopedValue<int> save(direct_acquires, 0);
 
@@ -3197,12 +3192,8 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             void visit(const For *op) {
                 result = 0;
 
-                const Acquire *acquire = op->body.as<Acquire>();
-
                 if (op->for_type == ForType::Parallel ||
-                    (op->for_type == ForType::Serial &&
-                     acquire &&
-                     !expr_uses_var(acquire->count, op->name))) {
+                    op->for_type == ForType::Serial) {
                     ScopedValue<int> save(direct_acquires, 0);
                     IRVisitor::visit(op);
                     if (direct_acquires > 0) {
@@ -3228,10 +3219,14 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             }
         public:
             int result = 0;
+            int direct_acquires = 0;
         };
         MinThreads min_threads;
         t.body.accept(&min_threads);
-          
+        if (min_threads.direct_acquires) {
+            min_threads.result++;
+        }
+
         // Decide if we're going to call do_par_for or
         // do_parallel_tasks. halide_do_par_for is simpler, but
         // assumes a bunch of things. Programs that don't use async
