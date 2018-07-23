@@ -25,8 +25,7 @@ int main(int argc, char **argv) {
     // Just take the red channel
     input.slice(2, 0);
 
-    Buffer<uint16_t> output(input.width() - 64, input.height() - 64);
-    output.set_min(32, 32);
+    Buffer<uint16_t> output(input.width(), input.height());
     int timing = atoi(argv[2]);
 
     stencil_chain(input, output);

@@ -4,7 +4,7 @@ namespace {
 
 class StencilChain : public Halide::Generator<StencilChain> {
 public:
-    GeneratorParam<int>     stencils{"stencils", 8, 1, 100};
+    GeneratorParam<int>     stencils{"stencils", 32, 1, 100};
 
     Input<Buffer<uint16_t>> input{"input", 2};
     Output<Buffer<uint16_t>> output{"output", 2};
@@ -15,8 +15,7 @@ public:
 
         Var x("x"), y("y");
 
-        Func f("input_wrap");
-        f(x, y) = input(x, y);
+        Func f = Halide::BoundaryConditions::repeat_edge(input);
 
         stages.push_back(f);
 
@@ -41,8 +40,8 @@ public:
             input.dim(0).set_bounds_estimate(0, width);
             input.dim(1).set_bounds_estimate(0, height);
             // Provide estimates on the pipeline output
-            output.estimate(x, 32, width - 64)
-                .estimate(y, 32, height - 64);
+            output.estimate(x, 0, width)
+                .estimate(y, 0, height);
         } else {
             // CPU schedule. No fusion.
             Var yi, yo, xo, xi, t;
