@@ -27,6 +27,7 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     // some horribleness with memcpy (which we can do since CpuFeatures is still POD).
     static bool initialized = false;
     static uint64_t cpu_features_storage[sizeof(CpuFeatures)/sizeof(uint64_t)] = {0};
+    static_assert(sizeof(cpu_features_storage) == sizeof(CpuFeatures), "Unexpected size");
     if (!initialized) {
         CpuFeatures tmp = halide_get_cpu_features();
         memcpy(&cpu_features_storage, &tmp, sizeof(tmp));
