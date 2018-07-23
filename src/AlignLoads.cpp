@@ -7,7 +7,7 @@
 #include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "HexagonAlignment.h"
+
 using std::vector;
 
 namespace Halide {
@@ -21,14 +21,17 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator2 {
 public:
-    AlignLoads(int alignment, const Scope<ModulusRemainder>& alignment_info)
-        : alignment_analyzer(alignment, alignment_info), required_alignment(alignment) {}
+    AlignLoads(int alignment, const Scope<ModulusRemainder> &alignment_info)
+        : required_alignment(alignment) {
+        this->alignment_info.set_containing_scope(&alignment_info);
+    }
 
 private:
-    HexagonAlignmentAnalyzer alignment_analyzer;
-
-    // Loads and stores should ideally be aligned to the vector width in bytes.
+    // The desired alignment of a vector load.
     int required_alignment;
+
+    // Alignment info for variables in scope.
+    Scope<ModulusRemainder> alignment_info;
 
     using IRMutator2::visit;
 
@@ -63,15 +66,30 @@ private:
             // non-constant strides.
             return IRMutator2::visit(op);
         }
+        int lanes = ramp->lanes;
+        int native_lanes = required_alignment / op->type.bytes();
+
         if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            // Handle ramps with stride 1, 2 or 3 only.
+            // If the ramp isn't stride 1, 2, or 3, don't handle it.
+
+            // TODO: We should handle reverse vector loads (stride ==
+            // -1), maybe others as well.
             return IRMutator2::visit(op);
         }
 
+        // If this is a parameter, the base_alignment should be
+        // host_alignment. Otherwise, this is an internal buffer,
+        // which we assume has been aligned to the required alignment.
         int aligned_offset = 0;
-        bool known_alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
-        int lanes = ramp->lanes;
-        int native_lanes = required_alignment / op->type.bytes();
+        bool known_alignment = false;
+        int base_alignment =
+            op->param.defined() ? op->param.host_alignment() : required_alignment;
+        if (base_alignment % required_alignment == 0) {
+            // We know the base is aligned. Try to find out the offset
+            // of the ramp base from an aligned offset.
+            known_alignment = reduce_expr_modulo(ramp->base, native_lanes, &aligned_offset,
+                                                 alignment_info);
+        }
 
         int stride = static_cast<int>(*const_stride);
         if (stride != 1) {
@@ -132,14 +150,14 @@ private:
     template<typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
         if (op->value.type() == Int(32)) {
-            alignment_analyzer.push(op->name, op->value);
+            alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
 
         Expr value = mutate(op->value);
         NodeType body = mutate(op->body);
 
         if (op->value.type() == Int(32)) {
-            alignment_analyzer.pop(op->name);
+            alignment_info.pop(op->name);
         }
 
         if (!value.same_as(op->value) || !body.same_as(op->body)) {
@@ -159,5 +177,5 @@ Stmt align_loads(Stmt s, int alignment, const Scope<ModulusRemainder> &alignment
     return AlignLoads(alignment, alignment_info).mutate(s);
 }
 
-} // namespace Internal
-} // namespace Halide
+}  // namespace Internal
+}  // namespace Halide

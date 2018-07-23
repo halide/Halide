@@ -11,7 +11,6 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "HexagonAlignment.h"
 #include <unordered_map>
 
 namespace Halide {
@@ -1026,12 +1025,8 @@ public:
 class EliminateInterleaves : public IRMutator2 {
     Scope<bool> vars;
 
-
     // We need to know when loads are a multiple of 2 native vectors.
     int native_vector_bits;
-
-    // Alignment analyzer for loads and stores
-    HexagonAlignmentAnalyzer alignment_analyzer;
 
     // We can't interleave booleans, so we handle them specially.
     bool in_bool_to_mask = false;
@@ -1214,11 +1209,6 @@ class EliminateInterleaves : public IRMutator2 {
 
     template <typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
-        // Push alignment info on the stack
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.push(op->name, op->value);
-        }
-
         Expr value = mutate(op->value);
         string deinterleaved_name;
         NodeType body;
@@ -1244,12 +1234,6 @@ class EliminateInterleaves : public IRMutator2 {
         } else {
             body = mutate(op->body);
         }
-
-        // Pop alignment info from the scope stack
-        if (op->value.type() == Int(32)) {
-            alignment_analyzer.pop(op->name);
-        }
-
         if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
         } else if (body.same_as(op->body)) {
@@ -1471,9 +1455,6 @@ class EliminateInterleaves : public IRMutator2 {
     };
     Scope<BufferState> buffers;
 
-    // False for buffers that have any loads or stores that are unaligned
-    Scope<bool> aligned_buffer_access;
-
     // Buffers we should deinterleave the storage of.
     Scope<bool> deinterleave_buffers;
 
@@ -1483,13 +1464,8 @@ class EliminateInterleaves : public IRMutator2 {
         // First, we need to mutate the op, to pull native interleaves
         // down, and to gather information about the loads and stores.
         buffers.push(op->name, BufferState::Unknown);
-
-        // Assume buffers are accessed by aligned loads and stores by default.
-        aligned_buffer_access.push(op->name, true);
-
         Stmt body = mutate(op->body);
-        bool deinterleave = (buffers.get(op->name) == BufferState::Interleaved) &&
-            (aligned_buffer_access.get(op->name) == true);
+        bool deinterleave = buffers.get(op->name) == BufferState::Interleaved;
         buffers.pop(op->name);
 
         // Second, if we decided it would be useful to deinterleave
@@ -1499,8 +1475,6 @@ class EliminateInterleaves : public IRMutator2 {
             body = mutate(op->body);
             deinterleave_buffers.pop(op->name);
         }
-
-        aligned_buffer_access.pop(op->name);
 
         if (!body.same_as(op->body) || !condition.same_as(op->condition)) {
             return Allocate::make(op->name, op->type, op->memory_type,
@@ -1538,14 +1512,8 @@ class EliminateInterleaves : public IRMutator2 {
                 // interleave itself, we don't want to change the
                 // buffer state.
             }
-            internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
-            bool &aligned_accesses = aligned_buffer_access.ref(op->name);
-            int aligned_offset = 0;
-
-            if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
-                aligned_accesses = false;
-            }
         }
+
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
@@ -1572,13 +1540,6 @@ class EliminateInterleaves : public IRMutator2 {
                 // which is only true if any of the stores are
                 // actually interleaved (and don't just yield an
                 // interleave).
-                internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
-                bool &aligned_accesses = aligned_buffer_access.ref(op->name);
-                int aligned_offset = 0;
-
-                if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
-                    aligned_accesses = false;
-                }
             } else {
                 // This is not a double vector load, so we can't
                 // deinterleave the storage of this buffer.
@@ -1596,8 +1557,7 @@ class EliminateInterleaves : public IRMutator2 {
     using IRMutator2::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes, Scope<ModulusRemainder>& alignment_info) :
-        native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes, alignment_info) {}
+    EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits) {}
 };
 
 // After eliminating interleaves, there may be some that remain. This
@@ -2017,7 +1977,7 @@ Stmt vtmpy_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder> &alignment_info) {
+Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);
@@ -2027,7 +1987,7 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder> &al
     s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8)), alignment_info).mutate(s);
+    s = EliminateInterleaves(t.natural_vector_size(Int(8))*8).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.
