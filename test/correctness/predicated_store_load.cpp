@@ -42,41 +42,26 @@ protected:
 };
 
 class CheckPredicatedStoreLoad : public IRMutator2 {
-    int has_store_count;
-    int has_load_count;
+    int expected_store_count;
+    int expected_load_count;
 public:
-    CheckPredicatedStoreLoad(bool store, bool load) :
-        has_store_count(store), has_load_count(load) {}
+    CheckPredicatedStoreLoad(int store, int load) :
+        expected_store_count(store), expected_load_count(load) {}
     using IRMutator2::mutate;
 
     Stmt mutate(const Stmt &s) override {
         CountPredicatedStoreLoad c;
         s.accept(&c);
 
-        if (has_store_count) {
-            if (c.store_count == 0) {
-                printf("There should be some predicated stores but didn't find any\n");
-                exit(-1);
-            }
-        } else {
-            if (c.store_count > 0) {
-                printf("There were %d predicated stores. There weren't supposed to be any stores\n",
-                       c.store_count);
-                exit(-1);
-            }
+        if (expected_store_count != c.store_count) {
+            printf("There were %d predicated stores; expect %d predicated stores\n",
+                    c.store_count, expected_store_count);
+            exit(-1);
         }
-
-        if (has_load_count) {
-            if (c.load_count == 0) {
-                printf("There should be some predicated loads but didn't find any\n");
-                exit(-1);
-            }
-        } else {
-            if (c.load_count > 0) {
-                printf("There were %d predicated loads. There weren't supposed to be any loads\n",
-                       c.load_count);
-                exit(-1);
-            }
+        if (expected_load_count != c.load_count) {
+            printf("There were %d predicated loads; expect %d predicated loads\n",
+                    c.load_count, expected_load_count);
+            exit(-1);
         }
         return s;
     }
@@ -104,7 +89,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 9));
     }
 
     Buffer<int> im = f.realize(170, 170);
@@ -133,7 +118,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
         f.hexagon().vectorize(x, 32);
     } else if (target.arch == Target::X86) {
         f.vectorize(x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
     }
 
     Buffer<int> im = f.realize(size, size);
@@ -171,7 +156,7 @@ int multiple_vectorized_predicate_test() {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(5, 10));
     }
 
     Buffer<int> im = f.realize(size, size);
@@ -204,7 +189,7 @@ int scalar_load_test() {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
     }
 
     Buffer<int> im = f.realize(160, 160);
@@ -239,7 +224,7 @@ int scalar_store_test() {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 3));
     }
 
     Buffer<int> im = f.realize(160, 160);
@@ -274,7 +259,7 @@ int not_dependent_on_vectorized_var_test() {
         f.update(0).hexagon().vectorize(r.z, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.z, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
     }
 
     Buffer<int> im = f.realize(160, 160, 160);
@@ -308,7 +293,7 @@ int no_op_store_test() {
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.update(1).vectorize(r.y, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
     }
 
     Buffer<int> im = f.realize(240, 240);
@@ -341,7 +326,7 @@ int vectorized_predicated_predicate_with_pure_call_test() {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
     }
 
     Buffer<int> im = f.realize(160, 160);
@@ -380,6 +365,7 @@ int vectorized_predicated_load_const_index_test() {
         f.update().hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update().vectorize(r.x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
     }
 
     Buffer<int> im = f.realize(100, 100);
@@ -387,6 +373,39 @@ int vectorized_predicated_load_const_index_test() {
     if (check_image(im, func)) {
         return -1;
     }
+    return 0;
+}
+
+int vectorized_predicated_load_lut_test() {
+    constexpr int vector_size = 4;
+    constexpr int lut_height = vector_size + 2; // Any non-even multiple of vector-size will do.
+    constexpr int dst_len = 100;
+
+    Buffer<int32_t> lut(2, lut_height);
+    lut.fill(0);
+
+    Var x("x");
+    Func dst("dst");
+
+    RDom r(0, lut_height);
+
+    dst(x) = 0.f;
+    dst(clamp(lut(0, r), 0, dst_len - 1)) += 1.f;
+
+    dst.output_buffer().dim(0).set_min(0).set_extent(dst_len);
+
+    Target target = get_jit_target_from_environment();
+    // Ignore the race condition so we can have predicated vectorized
+    // LUT loads on both LHS and RHS of the predicated vectorized store
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        dst.update().hexagon().allow_race_conditions().vectorize(r, vector_size);
+    } else if (target.arch == Target::X86) {
+        dst.update().allow_race_conditions().vectorize(r, vector_size);
+        dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 3));
+    }
+
+    dst.realize(dst_len);
+
     return 0;
 }
 
@@ -436,6 +455,11 @@ int main(int argc, char **argv) {
 
     printf("Running vectorized predicated load with constant index test\n");
     if (vectorized_predicated_load_const_index_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorized predicated load lut test\n");
+    if (vectorized_predicated_load_lut_test() != 0) {
         return -1;
     }
 
