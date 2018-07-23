@@ -67,7 +67,7 @@ pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds) {
     return {new_bounds, bounds_changed};
 }
 
-}
+}  // namespace
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
 void IRMutator::visit(const UIntImm *op)   {expr = op;}
@@ -315,16 +315,21 @@ void IRMutator::visit(const Realize *op) {
 }
 
 void IRMutator::visit(const Prefetch *op) {
+    Stmt body = mutate(op->body);
+    Expr condition = mutate(op->condition);
+
     Region new_bounds;
     bool bounds_changed;
 
     // Mutate the bounds
     std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
 
-    if (!bounds_changed) {
+    if (!bounds_changed &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
         stmt = op;
     } else {
-        stmt = Prefetch::make(op->name, op->types, new_bounds, op->param);
+        stmt = Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
     }
 }
 
@@ -445,7 +450,7 @@ Expr IRMutator2::visit(const Not *op) {
     return Not::make(std::move(a));
 }
 
-Expr IRMutator2::visit(const Select *op)  {
+Expr IRMutator2::visit(const Select *op) {
     Expr cond = mutate(op->condition);
     Expr t = mutate(op->true_value);
     Expr f = mutate(op->false_value);
@@ -464,7 +469,7 @@ Expr IRMutator2::visit(const Load *op) {
         return op;
     }
     return Load::make(op->type, op->name, std::move(index),
-                          op->image, op->param, std::move(predicate));
+                      op->image, op->param, std::move(predicate));
 }
 
 Expr IRMutator2::visit(const Ramp *op) {
@@ -501,7 +506,7 @@ Expr IRMutator2::visit(const Call *op) {
         return op;
     }
     return Call::make(op->type, op->name, new_args, op->call_type,
-                          op->func, op->value_index, op->image, op->param);
+                      op->func, op->value_index, op->image, op->param);
 }
 
 Expr IRMutator2::visit(const Let *op) {
@@ -552,7 +557,7 @@ Stmt IRMutator2::visit(const For *op) {
         return op;
     }
     return For::make(op->name, std::move(min), std::move(extent),
-                         op->for_type, op->device_api, std::move(body));
+                     op->for_type, op->device_api, std::move(body));
 }
 
 Stmt IRMutator2::visit(const Store *op) {
@@ -638,16 +643,21 @@ Stmt IRMutator2::visit(const Realize *op) {
 }
 
 Stmt IRMutator2::visit(const Prefetch *op) {
+    Stmt body = mutate(op->body);
+    Expr condition = mutate(op->condition);
+
     Region new_bounds;
     bool bounds_changed;
 
     // Mutate the bounds
     std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
 
-    if (!bounds_changed) {
+    if (!bounds_changed &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
         return op;
     }
-    return Prefetch::make(op->name, op->types, new_bounds, op->param);
+    return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
 }
 
 Stmt IRMutator2::visit(const Block *op) {

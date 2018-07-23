@@ -1,26 +1,26 @@
 #include <algorithm>
 #include <cmath>
 
-#include "FuseGPUThreadLoops.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "FuseGPUThreadLoops.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Bounds.h"
-#include "Substitute.h"
-#include "IREquality.h"
-#include "Simplify.h"
 #include "IRPrinter.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::sort;
+using std::string;
+using std::vector;
 
 namespace {
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
@@ -607,8 +607,8 @@ public:
 // Pull out any allocate node outside of the innermost thread
 // block. Should only be run after shared allocations have already
 // been extracted.
-class ExtractRegisterAllocations : public IRMutator {
-    using IRMutator::visit;
+class ExtractRegisterAllocations : public IRMutator2 {
+    using IRMutator2::visit;
 
     struct RegisterAllocation {
         string name;
@@ -620,16 +620,15 @@ class ExtractRegisterAllocations : public IRMutator {
 
     bool in_lane_loop = false;
 
-    void visit(const For *op) {
-        string old_loop_var = loop_var;
+    Stmt visit(const For *op) {
+        ScopedValue<string> old_loop_var(loop_var);
 
         if (op->for_type == ForType::GPULane) {
             loop_var = op->name;
             internal_assert(!in_lane_loop);
-            in_lane_loop = true;
-            IRMutator::visit(op);
-            in_lane_loop = false;
+            ScopedValue<bool> old_in_lane_loop(in_lane_loop, true);
             has_lane_loop = true;
+            return IRMutator2::visit(op);
         } else {
             if (op->for_type == ForType::GPUThread) {
                 has_thread_loop = true;
@@ -662,15 +661,13 @@ class ExtractRegisterAllocations : public IRMutator {
                 allocations.swap(old);
             }
 
-            stmt = For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
         }
-        loop_var = old_loop_var;
     }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) {
         if (in_lane_loop) {
-            IRMutator::visit(op);
-            return;
+            return IRMutator2::visit(op);
         }
 
         user_assert(op->memory_type == MemoryType::Stack ||
@@ -680,7 +677,8 @@ class ExtractRegisterAllocations : public IRMutator {
             << "it must live in stack memory or registers. "
             << "Shared allocations at this loop level are not yet supported.\n";
 
-        register_allocations.push(op->name, 0);
+        ScopedBinding<int> p(register_allocations, op->name, 0);
+
         RegisterAllocation alloc;
         alloc.name = op->name;
         alloc.type = op->type;
@@ -693,8 +691,7 @@ class ExtractRegisterAllocations : public IRMutator {
         alloc.memory_type = op->memory_type;
 
         allocations.push_back(alloc);
-        stmt = mutate(op->body);
-        register_allocations.pop(op->name);
+        return mutate(op->body);
     }
 
     template<typename ExprOrStmt, typename LetOrLetStmt>
@@ -716,12 +713,12 @@ class ExtractRegisterAllocations : public IRMutator {
         }
     }
 
-    void visit(const Let *op) {
-        expr = visit_let<Expr>(op);
+    Expr visit(const Let *op) {
+        return visit_let<Expr>(op);
     }
 
-    void visit(const LetStmt *op) {
-        stmt = visit_let<Stmt>(op);
+    Stmt visit(const LetStmt *op) {
+        return visit_let<Stmt>(op);
     }
 
 
@@ -938,5 +935,5 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     return s;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

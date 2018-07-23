@@ -1,30 +1,30 @@
 #include <iostream>
 
 #include "Bounds.h"
-#include "IRVisitor.h"
+#include "CSE.h"
+#include "Debug.h"
+#include "Deinterleave.h"
+#include "ExprUsesVar.h"
 #include "IR.h"
-#include "IROperator.h"
 #include "IREquality.h"
-#include "Simplify.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Param.h"
+#include "Simplify.h"
+#include "Solve.h"
 #include "Util.h"
 #include "Var.h"
-#include "Debug.h"
-#include "ExprUsesVar.h"
-#include "IRMutator.h"
-#include "CSE.h"
-#include "Deinterleave.h"
-#include "Param.h"
-#include "Solve.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::vector;
-using std::string;
 using std::pair;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 int static_sign(Expr x) {
@@ -42,7 +42,7 @@ int static_sign(Expr x) {
     }
     return 0;
 }
-} // anonymous namespace
+}  // anonymous namespace
 
 Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
     Interval interval = find_constant_bounds(e, scope);
@@ -339,8 +339,10 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+            return;
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min * b.min);
+            return;
         } else if (b.is_single_point()) {
             Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
@@ -840,7 +842,8 @@ private:
                 interval.max = Interval::pos_inf;
             }
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
+                   op->is_intrinsic(Call::likely_if_innermost) ||
+                   op->is_intrinsic(Call::strict_float)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -891,6 +894,12 @@ private:
             // loop to check perfect nesting.
             interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
                                 Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
+        } else if (op->is_intrinsic(Call::popcount) ||
+                   op->is_intrinsic(Call::count_leading_zeros) ||
+                   op->is_intrinsic(Call::count_trailing_zeros)) {
+            internal_assert(op->args.size() == 1);
+            interval = Interval(make_zero(op->type.element_of()),
+                                make_const(op->type.element_of(), op->args[0].type().bits()));
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
@@ -1603,7 +1612,8 @@ private:
                 Expr c = op->condition;
                 const Call *call = c.as<Call>();
                 if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost))) {
+                             call->is_intrinsic(Call::likely_if_innermost) ||
+                             call->is_intrinsic(Call::strict_float))) {
                     c = call->args[0];
                 }
                 const LT *lt = c.as<LT>();
@@ -2215,5 +2225,5 @@ void bounds_test() {
     std::cout << "Bounds test passed" << std::endl;
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

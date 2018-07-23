@@ -230,7 +230,6 @@ if (WITH_TEST_GENERATOR)
   halide_define_aot_test(mandelbrot)
   halide_define_aot_test(stubuser)
   halide_define_aot_test(variable_num_threads)
-  halide_define_aot_test(old_buffer_t)
   halide_define_aot_test(output_assign)
   halide_define_aot_test(external_code)
 
@@ -284,6 +283,9 @@ if (WITH_TEST_GENERATOR)
     halide_define_aot_test(gpu_object_lifetime
                            HALIDE_TARGET_FEATURES debug)
   # endif()
+
+  halide_define_aot_test(old_buffer_t
+                         HALIDE_TARGET_FEATURES legacy_buffer_wrappers)
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)

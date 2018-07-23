@@ -417,7 +417,7 @@ WEAK int halide_metal_device_free(void *user_context, halide_buffer_t* buf) {
 
     device_handle *handle = (device_handle *)buf->device;
     halide_assert(user_context, (((device_handle *)buf->device)->offset == 0) && "halide_metal_device_free on buffer obtained from halide_device_crop");
-    
+
     release_ns_object(handle->buf);
     free(handle);
     buf->device = 0;
@@ -816,21 +816,18 @@ WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buf
     return 0;
 }
 
-WEAK int halide_metal_device_crop(void *user_context,
-                                    const struct halide_buffer_t *src,
-                                    struct halide_buffer_t *dst) {
+namespace {
+
+WEAK int metal_device_crop_from_offset(void *user_context,
+                                       const struct halide_buffer_t *src,
+                                       int64_t offset,
+                                       struct halide_buffer_t *dst) {
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
         return metal_context.error;
     }
 
     dst->device_interface = src->device_interface;
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
-    offset *= src->type.bytes();
-
     device_handle *new_handle = (device_handle *)malloc(sizeof(device_handle));
     if (new_handle == NULL) {
         error(user_context) << "halide_metal_device_crop: malloc failed making device handle.\n";
@@ -841,8 +838,24 @@ WEAK int halide_metal_device_crop(void *user_context,
     new_handle->buf = ((device_handle *)src->device)->buf;
     new_handle->offset = ((device_handle *)src->device)->offset + offset;
     dst->device = (uint64_t)new_handle;
-
     return 0;
+}
+
+}  // namespace
+
+WEAK int halide_metal_device_crop(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return metal_device_crop_from_offset(user_context, src, offset, dst);
+}
+
+WEAK int halide_metal_device_slice(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    int slice_dim, int slice_pos,
+                                    struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return metal_device_crop_from_offset(user_context, src, offset, dst);
 }
 
 WEAK int halide_metal_device_release_crop(void *user_context,
@@ -861,7 +874,7 @@ WEAK int halide_metal_device_release_crop(void *user_context,
     #endif
 
     device_handle *handle = (device_handle *)buf->device;
-    
+
     release_ns_object(handle->buf);
     free(handle);
 
@@ -948,6 +961,7 @@ WEAK halide_device_interface_impl_t metal_device_interface_impl = {
     halide_metal_device_and_host_free,
     halide_default_buffer_copy,
     halide_metal_device_crop,
+    halide_metal_device_slice,
     halide_metal_device_release_crop,
     halide_metal_wrap_buffer,
     halide_metal_detach_buffer
@@ -964,6 +978,7 @@ WEAK halide_device_interface_t metal_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,

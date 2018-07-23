@@ -3,8 +3,8 @@
 
 #include "IRPrinter.h"
 
-#include "Associativity.h"
 #include "AssociativeOpsTable.h"
+#include "Associativity.h"
 #include "IROperator.h"
 #include "Module.h"
 #include "Target.h"
@@ -12,9 +12,9 @@
 namespace Halide {
 
 using std::ostream;
-using std::vector;
-using std::string;
 using std::ostringstream;
+using std::string;
+using std::vector;
 
 ostream &operator<<(ostream &out, const Type &type) {
     switch (type.code()) {
@@ -524,12 +524,17 @@ void IRPrinter::visit(const Select *op) {
 }
 
 void IRPrinter::visit(const Load *op) {
+    const bool has_pred = !is_one(op->predicate);
+    if (has_pred) {
+        stream << "(";
+    }
     stream << op->name << "[";
     print(op->index);
     stream << "]";
-    if (!is_one(op->predicate)) {
+    if (has_pred) {
         stream << " if ";
         print(op->predicate);
+        stream << ")";
     }
 }
 
@@ -620,15 +625,20 @@ void IRPrinter::visit(const For *op) {
 
 void IRPrinter::visit(const Store *op) {
     do_indent();
+    const bool has_pred = !is_one(op->predicate);
+    if (has_pred) {
+        stream << "predicate (" << op->predicate << ")\n";
+        indent += 2;
+        do_indent();
+    }
     stream << op->name << "[";
     print(op->index);
     stream << "] = ";
     print(op->value);
-    if (!is_one(op->predicate)) {
-        stream << " if ";
-        print(op->predicate);
-    }
     stream << '\n';
+    if (has_pred) {
+        indent -= 2;
+    }
 }
 
 void IRPrinter::visit(const Provide *op) {
@@ -709,6 +719,12 @@ void IRPrinter::visit(const Realize *op) {
 
 void IRPrinter::visit(const Prefetch *op) {
     do_indent();
+    const bool has_cond = !is_one(op->condition);
+    if (has_cond) {
+        stream << "if (" << op->condition << ") {\n";
+        indent += 2;
+        do_indent();
+    }
     stream << "prefetch " << op->name << "(";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
@@ -719,6 +735,12 @@ void IRPrinter::visit(const Prefetch *op) {
         if (i < op->bounds.size() - 1) stream << ", ";
     }
     stream << ")\n";
+    if (has_cond) {
+        indent -= 2;
+        do_indent();
+        stream << "}\n";
+    }
+    print(op->body);
 }
 
 void IRPrinter::visit(const Block *op) {
@@ -796,4 +818,5 @@ void IRPrinter::visit(const Shuffle *op) {
     }
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

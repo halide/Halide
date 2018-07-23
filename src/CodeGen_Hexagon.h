@@ -113,6 +113,7 @@ protected:
     llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -1,23 +1,22 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
+#include "Debug.h"
+#include "Deinterleave.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
-#include <map>
 #include <limits>
+#include <map>
 
 namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
-using std::map;
-
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
     : glc(src_stream, target) {
@@ -50,7 +49,7 @@ Type map_type(const Type &type) {
     }
     return result;
 }
-}
+}  // namespace
 
 string CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::print_type(Type type, AppendSpaceIfNeeded space) {
     Type mapped_type = map_type(type);
@@ -98,13 +97,28 @@ int thread_loop_workgroup_index(const string &name) {
      }
      return -1;
 }
-}
+}  // namespace
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
-    if (map_type(op->type) != map_type(value_type)) {
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code() == Type::Float) {
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code() == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code() == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        value.accept(this);
+        return;
+    } else {
         Type target_type = map_type(op->type);
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
@@ -117,7 +131,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
     } else {
         CodeGen_GLSLBase::visit(op);
     }
-
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
@@ -252,7 +265,7 @@ class FindSharedAllocations : public IRVisitor {
 public:
     vector<const Allocate *> allocs;
 };
-}
+}  // namespace
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                                                                     const string &name,
@@ -387,4 +400,5 @@ std::string CodeGen_OpenGLCompute_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
 
-}}
+}  // namespace Internal
+}  // namespace Halide

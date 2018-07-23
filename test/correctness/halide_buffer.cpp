@@ -1,6 +1,8 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
+#include <stdio.h>
+
 using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
@@ -26,46 +28,82 @@ void check_equal(const Buffer<T1> &a, const Buffer<T2> &b) {
     });
 }
 
+void test_copy(Buffer<float> a, Buffer<float> b) {
+    // Mess with the memory layout to make it more interesting
+    a.transpose(1, 2);
+
+    a.fill(1.0f);
+
+    assert(a.all_equal(1.0f));
+
+    b.fill([&](int x, int y, int c) {
+        return x + 100.0f * y + 100000.0f * c;
+    });
+
+    b.for_each_element([&](int x, int y, int c) {
+        assert(b(x, y, c) == x + 100.0f * y + 100000.0f * c);
+    });
+
+    check_equal(a, a.copy());
+
+    // Check copying from one subregion to another (with different memory layout)
+    Buffer<float> a_window = a.cropped(0, 20, 20).cropped(1, 50, 10);
+    Buffer<const float> b_window = b.cropped(0, 20, 20).cropped(1, 50, 10);
+    a_window.copy_from(b);
+
+    check_equal(a_window, b_window);
+
+    // You don't actually have to crop a.
+    a.fill(1.0f);
+    a.copy_from(b_window);
+    check_equal(a_window, b_window);
+
+    // The buffers can have dynamic type
+    Buffer<void> a_void(a);
+    Buffer<const void> b_void_window(b_window);
+    a.fill(1.0f);
+    a_void.copy_from(b_void_window);
+    check_equal(a_window, b_window);
+}
+
 int main(int argc, char **argv) {
     {
         // Check copying a buffer
         Buffer<float> a(100, 3, 80), b(120, 80, 3);
+        test_copy(a, b);
+    }
 
-        // Mess with the memory layout to make it more interesting
-        a.transpose(1, 2);
 
-        a.fill(1.0f);
+    {
+        // Check copying a buffer, using the halide_dimension_t pointer ctors
+        halide_dimension_t shape_a[] = {{0, 100, 1},
+                                        {0, 3, 1*100},
+                                        {0, 80, 1*100*3}};
+        Buffer<float> a(nullptr, 3, shape_a);
+        a.allocate();
 
-        assert(a.all_equal(1.0f));
+        halide_dimension_t shape_b[] = {{0, 120, 1},
+                                        {0, 80, 1*120},
+                                        {0, 3, 1*120*80}};
+        Buffer<float> b(nullptr, 3, shape_b);
+        b.allocate();
 
-        b.fill([&](int x, int y, int c) {
-            return x + 100.0f * y + 100000.0f * c;
-        });
+        test_copy(a, b);
+    }
 
-        b.for_each_element([&](int x, int y, int c) {
-            assert(b(x, y, c) == x + 100.0f * y + 100000.0f * c);
-        });
+    {
+        // Check copying a buffer, using the vector<halide_dimension_t> ctors
+        Buffer<float> a(nullptr, {{0, 100, 1},
+                                  {0, 3, 1*100},
+                                  {0, 80, 1*100*3}});
+        a.allocate();
 
-        check_equal(a, a.copy());
+        Buffer<float> b(nullptr, {{0, 120, 1},
+                                  {0, 80, 1*120},
+                                  {0, 3, 1*120*80}});
+        b.allocate();
 
-        // Check copying from one subregion to another (with different memory layout)
-        Buffer<float> a_window = a.cropped(0, 20, 20).cropped(1, 50, 10);
-        Buffer<const float> b_window = b.cropped(0, 20, 20).cropped(1, 50, 10);
-        a_window.copy_from(b);
-
-        check_equal(a_window, b_window);
-
-        // You don't actually have to crop a.
-        a.fill(1.0f);
-        a.copy_from(b_window);
-        check_equal(a_window, b_window);
-
-        // The buffers can have dynamic type
-        Buffer<void> a_void(a);
-        Buffer<const void> b_void_window(b_window);
-        a.fill(1.0f);
-        a_void.copy_from(b_void_window);
-        check_equal(a_window, b_window);
+        test_copy(a, b);
     }
 
     {

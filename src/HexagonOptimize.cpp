@@ -1,25 +1,26 @@
 #include "HexagonOptimize.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "ConciseCasts.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Lerp.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Scope.h"
-#include "Bounds.h"
-#include "Lerp.h"
+#include "HexagonAlignment.h"
 #include <unordered_map>
 
 namespace Halide {
 namespace Internal {
 
-using std::set;
-using std::vector;
-using std::string;
 using std::pair;
+using std::set;
+using std::string;
+using std::vector;
 
 using namespace Halide::ConciseCasts;
 
@@ -171,6 +172,80 @@ Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
+// Check if a pattern with flags 'flags' is supported on the target.
+bool check_pattern_target(int flags, const Target &target) {
+    if ((flags & (Pattern::v62orLater)) &&
+        !target.features_any_of({Target::HVX_v62, Target::HVX_v65, Target::HVX_v66})) {
+        return false;
+    }
+    if ((flags & (Pattern::v65orLater)) &&
+        !target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        return false;
+    }
+    if ((flags & (Pattern::v66orLater)) &&
+        !target.features_any_of({Target::HVX_v66})) {
+        return false;
+    }
+    return true;
+}
+
+// Check if the matches satisfy the given pattern flags, and mutate the matches
+// as specified by the flags.
+bool process_match_flags(vector<Expr> &matches, int flags) {
+    // The Pattern::Narrow*Op* flags are ordered such that the operand
+    // corresponds to the bit (with operand 0 corresponding to the least
+    // significant bit), so we can check for them all in a loop.
+    for (size_t i = 0; i < matches.size(); i++) {
+        Type t = matches[i].type();
+        Type target_t = t.with_bits(t.bits()/2);
+        if (flags & (Pattern::NarrowOp0 << i)) {
+            matches[i] = lossless_cast(target_t, matches[i]);
+        } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
+            matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
+        }
+        if (!matches[i].defined()) return false;
+    }
+
+    for (size_t i = Pattern::BeginExactLog2Op; i < Pattern::EndExactLog2Op; i++) {
+        // This flag is mainly to capture shifts. When the operand of a div or
+        // mul is a power of 2, we can use a shift instead.
+        if (flags & (Pattern::ExactLog2Op1 << (i - Pattern::BeginExactLog2Op))) {
+            int pow;
+            if (is_const_power_of_two_integer(matches[i], &pow)) {
+                matches[i] = cast(matches[i].type().with_lanes(1), pow);
+            } else {
+                return false;
+            }
+        }
+    }
+
+    for (size_t i = Pattern::BeginDeinterleaveOp; i < Pattern::EndDeinterleaveOp; i++) {
+        if (flags & (Pattern::DeinterleaveOp0 << (i - Pattern::BeginDeinterleaveOp))) {
+            internal_assert(matches[i].type().is_vector());
+            matches[i] = native_deinterleave(matches[i]);
+        }
+    }
+    if (flags & Pattern::SwapOps01) {
+        internal_assert(matches.size() >= 2);
+        std::swap(matches[0], matches[1]);
+    }
+    if (flags & Pattern::SwapOps12) {
+        internal_assert(matches.size() >= 3);
+        std::swap(matches[1], matches[2]);
+    }
+    return true;
+}
+
+// Replace an expression with the one specified by a pattern.
+Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
+    x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
+    if (p.flags & Pattern::InterleaveResult) {
+        // The pattern wants us to interleave the result.
+        x = native_interleave(x);
+    }
+    return x;
+}
+
 // Attempt to apply one of the patterns to x. If a match is
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
@@ -179,16 +254,9 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
     debug(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
-
-        if ((p.flags & (Pattern::v62orLater)) &&
-            !target.features_any_of({Target::HVX_v62, Target::HVX_v65, Target::HVX_v66}))
+        if (!check_pattern_target(p.flags, target)) {
             continue;
-        if ((p.flags & (Pattern::v65orLater)) &&
-            !target.features_any_of({Target::HVX_v65, Target::HVX_v66}))
-            continue;
-        if ((p.flags & (Pattern::v66orLater)) &&
-            !target.features_any_of({Target::HVX_v66}))
-            continue;
+        }
 
         if (expr_match(p.pattern, x, matches)) {
             debug(3) << "matched " << p.pattern << "\n";
@@ -197,62 +265,16 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
                 debug(3) << i << "\n";
             }
 
-            // The Pattern::Narrow*Op* flags are ordered such that
-            // the operand corresponds to the bit (with operand 0
-            // corresponding to the least significant bit), so we
-            // can check for them all in a loop.
-            bool is_match = true;
-            for (size_t i = 0; i < matches.size() && is_match; i++) {
-                Type t = matches[i].type();
-                Type target_t = t.with_bits(t.bits()/2);
-                if (p.flags & (Pattern::NarrowOp0 << i)) {
-                    matches[i] = lossless_cast(target_t, matches[i]);
-                } else if (p.flags & (Pattern::NarrowUnsignedOp0 << i)) {
-                    matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
-                }
-                if (!matches[i].defined()) is_match = false;
+            if (!process_match_flags(matches, p.flags)) {
+                continue;
             }
-            if (!is_match) continue;
 
-            for (size_t i = Pattern::BeginExactLog2Op; i < Pattern::EndExactLog2Op && is_match; i++) {
-                // This flag is mainly to capture shifts. When the
-                // operand of a div or mul is a power of 2, we can use
-                // a shift instead.
-                if (p.flags & (Pattern::ExactLog2Op1 << (i - Pattern::BeginExactLog2Op))) {
-                    int pow;
-                    if (is_const_power_of_two_integer(matches[i], &pow)) {
-                        matches[i] = cast(matches[i].type().with_lanes(1), pow);
-                    } else {
-                        is_match = false;
-                    }
-                }
-            }
-            if (!is_match) continue;
-
-            for (size_t i = Pattern::BeginDeinterleaveOp; i < Pattern::EndDeinterleaveOp; i++) {
-                if (p.flags &
-                    (Pattern::DeinterleaveOp0 << (i - Pattern::BeginDeinterleaveOp))) {
-                    internal_assert(matches[i].type().is_vector());
-                    matches[i] = native_deinterleave(matches[i]);
-                }
-            }
-            if (p.flags & Pattern::SwapOps01) {
-                internal_assert(matches.size() >= 2);
-                std::swap(matches[0], matches[1]);
-            }
-            if (p.flags & Pattern::SwapOps12) {
-                internal_assert(matches.size() >= 3);
-                std::swap(matches[1], matches[2]);
-            }
             // Mutate the operands with the given mutator.
             for (Expr &op : matches) {
                 op = op_mutator->mutate(op);
             }
-            x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
-            if (p.flags & Pattern::InterleaveResult) {
-                // The pattern wants us to interleave the result.
-                x = native_interleave(x);
-            }
+
+            x = replace_pattern(x, matches, p);
             debug(3) << "rewrote to: " << x << "\n";
             return x;
         }
@@ -724,6 +746,24 @@ private:
     }
 
     Expr visit(const Cast *op) override {
+        // Separate these so we can do some special handling below.
+        static const vector<Pattern> trunc_mpy = {
+            // Multiply keep high half
+            { "halide.hexagon.trunc_mpy.vw.vw", i32((wild_i64x*wild_i64x)/wild_i64), Pattern::NarrowOps },
+
+            // Scalar multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x*bc(wild_i32))/wild_i32), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((bc(wild_i32)*wild_i32x)/wild_i32), Pattern::NarrowOps | Pattern::SwapOps01 },
+
+            // Scalar and vector multiply keep high half, with multiplication by 2, and rounding.
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x*bc(wild_i32) + wild_i32)/wild_i32), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((bc(wild_i32)*wild_i32x + wild_i32)/wild_i32), Pattern::NarrowOps | Pattern::SwapOps01 },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x*wild_i32x + wild_i32)/wild_i32), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat((wild_i64x*wild_i64x + wild_i64)/wild_i64), Pattern::NarrowOps },
+
+            // Vector multiply keep high half, with multiplicatoin by 2.
+            { "halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat((wild_i64x*wild_i64x)/wild_i64), Pattern::NarrowOps },
+        };
 
         static const vector<Pattern> casts = {
             // Averaging
@@ -759,20 +799,6 @@ private:
             { "halide.hexagon.trunc_satb_rnd.vh",  i8_sat((wild_i32x + 128)/256), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
             { "halide.hexagon.trunc_satuh_rnd.vw", u16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
             { "halide.hexagon.trunc_sath_rnd.vw",  i16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
-
-            // Multiply keep high half
-            { "halide.hexagon.trunc_mpy.vw.vw", i32((wild_i64x*wild_i64x)/Expr(static_cast<int64_t>(1) << 32)), Pattern::NarrowOps },
-
-            // Scalar multiply keep high half, with multiplication by 2.
-            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x*bc(wild_i32))/32768), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((bc(wild_i32)*wild_i32x)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x*bc(wild_i32) + 16384)/32768), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((bc(wild_i32)*wild_i32x + 16384)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
-
-            // Vector multiply keep high half, with multiplication by 2.
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x*wild_i32x + 16384)/32768), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat((wild_i64x*wild_i64x)/Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat((wild_i64x*wild_i64x + (1 << 30))/Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
 
             // Saturating narrowing casts
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
@@ -860,6 +886,72 @@ private:
         if (op->type.is_vector()) {
             Expr cast = op;
 
+            // Truncating multiplies require special care, because the
+            // simplifier can cause them to have denominators we do not expect.
+            // If the simplifier cancels a factor out of these patterns, we can
+            // still use them, but we have to inject the factor back into the
+            // expression.
+            vector<Expr> matches;
+            for (const Pattern &p : trunc_mpy) {
+                if (!check_pattern_target(p.flags, target)) {
+                    continue;
+                }
+
+                if (expr_match(p.pattern, cast, matches)) {
+                    int log2_denominator = 0;
+                    if (matches.size() == 4) {
+                        // Rounding patterns have 4 operands, with the rounding
+                        // in the 3rd operand and the denominator in the 4th.
+                        if (!is_const_power_of_two_integer(matches[3], &log2_denominator)) {
+                            continue;
+                        }
+                        if (!can_prove(matches[2] * 2 == i64(1) << log2_denominator)) {
+                            continue;
+                        }
+                    } else {
+                        // The non-rounding patterns have the denominator in the 3rd operand.
+                        if (!is_const_power_of_two_integer(matches[2], &log2_denominator)) {
+                            continue;
+                        }
+                    }
+                    // Drop the divisor and the rounding.
+                    matches.resize(2);
+
+                    // If the power of 2 is not exactly 2^(bits of the result
+                    // type), we need to scale up the operand accordingly.
+                    int shift = cast.type().bits() - log2_denominator;
+                    if (p.intrin.find("mpy2") != std::string::npos) {
+                        // Account for a built-in factor of 2.
+                        shift -= 1;
+                    }
+
+                    // We need to build the scale into one of the operands,
+                    // which must be a constant.
+                    if (is_const(matches[0])) {
+                        matches[0] = simplify(matches[0] * (1 << shift));
+                    } else {
+                        // Just assume this is a constant. If it is, this will
+                        // work correctly (will simplify only if it doesn't
+                        // overflow the narrower type). If not, we will probably
+                        // fail to satisfy the match flags, but it also might
+                        // work...
+                        matches[1] = simplify(matches[1] * (1 << shift));
+                    }
+
+                    if (!process_match_flags(matches, p.flags)) {
+                        continue;
+                    }
+
+                    // Mutate the operands with the given mutator.
+                    for (Expr &op : matches) {
+                        op = mutate(op);
+                    }
+
+                    cast = replace_pattern(cast, matches, p);
+                    return cast;
+                }
+            }
+
             Expr new_expr = apply_patterns(cast, casts, target, this);
             if (!new_expr.same_as(cast)) {
                 return new_expr;
@@ -867,7 +959,6 @@ private:
 
             // If we didn't find a pattern, try using one of the
             // rewrites above.
-            vector<Expr> matches;
             for (auto i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
                     debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
@@ -923,8 +1014,12 @@ public:
 class EliminateInterleaves : public IRMutator2 {
     Scope<bool> vars;
 
+
     // We need to know when loads are a multiple of 2 native vectors.
     int native_vector_bits;
+
+    // Alignment analyzer for loads and stores
+    HexagonAlignmentAnalyzer alignment_analyzer;
 
     // We can't interleave booleans, so we handle them specially.
     bool in_bool_to_mask = false;
@@ -1107,6 +1202,11 @@ class EliminateInterleaves : public IRMutator2 {
 
     template <typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
+        // Push alignment info on the stack
+        if (op->value.type() == Int(32)) {
+            alignment_analyzer.push(op->name, op->value);
+        }
+
         Expr value = mutate(op->value);
         string deinterleaved_name;
         NodeType body;
@@ -1132,6 +1232,12 @@ class EliminateInterleaves : public IRMutator2 {
         } else {
             body = mutate(op->body);
         }
+
+        // Pop alignment info from the scope stack
+        if (op->value.type() == Int(32)) {
+            alignment_analyzer.pop(op->name);
+        }
+
         if (value.same_as(op->value) && body.same_as(op->body)) {
             return op;
         } else if (body.same_as(op->body)) {
@@ -1353,6 +1459,9 @@ class EliminateInterleaves : public IRMutator2 {
     };
     Scope<BufferState> buffers;
 
+    // False for buffers that have any loads or stores that are unaligned
+    Scope<bool> aligned_buffer_access;
+
     // Buffers we should deinterleave the storage of.
     Scope<bool> deinterleave_buffers;
 
@@ -1362,8 +1471,13 @@ class EliminateInterleaves : public IRMutator2 {
         // First, we need to mutate the op, to pull native interleaves
         // down, and to gather information about the loads and stores.
         buffers.push(op->name, BufferState::Unknown);
+
+        // Assume buffers are accessed by aligned loads and stores by default.
+        aligned_buffer_access.push(op->name, true);
+
         Stmt body = mutate(op->body);
-        bool deinterleave = buffers.get(op->name) == BufferState::Interleaved;
+        bool deinterleave = (buffers.get(op->name) == BufferState::Interleaved) &&
+            (aligned_buffer_access.get(op->name) == true);
         buffers.pop(op->name);
 
         // Second, if we decided it would be useful to deinterleave
@@ -1373,6 +1487,8 @@ class EliminateInterleaves : public IRMutator2 {
             body = mutate(op->body);
             deinterleave_buffers.pop(op->name);
         }
+
+        aligned_buffer_access.pop(op->name);
 
         if (!body.same_as(op->body) || !condition.same_as(op->condition)) {
             return Allocate::make(op->name, op->type, op->memory_type,
@@ -1410,8 +1526,14 @@ class EliminateInterleaves : public IRMutator2 {
                 // interleave itself, we don't want to change the
                 // buffer state.
             }
-        }
+            internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
+            bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+            int aligned_offset = 0;
 
+            if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+                aligned_accesses = false;
+            }
+        }
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
@@ -1438,6 +1560,13 @@ class EliminateInterleaves : public IRMutator2 {
                 // which is only true if any of the stores are
                 // actually interleaved (and don't just yield an
                 // interleave).
+                internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
+                bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+                int aligned_offset = 0;
+
+                if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+                    aligned_accesses = false;
+                }
             } else {
                 // This is not a double vector load, so we can't
                 // deinterleave the storage of this buffer.
@@ -1455,7 +1584,8 @@ class EliminateInterleaves : public IRMutator2 {
     using IRMutator2::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits) {}
+    EliminateInterleaves(int native_vector_bytes, Scope<ModulusRemainder>& alignment_info) :
+        native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes, alignment_info) {}
 };
 
 // After eliminating interleaves, there may be some that remain. This
@@ -1875,7 +2005,7 @@ Stmt vtmpy_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, Target t) {
+Stmt optimize_hexagon_instructions(Stmt s, Target t, Scope<ModulusRemainder> &alignment_info) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);
@@ -1885,7 +2015,7 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8))*8).mutate(s);
+    s = EliminateInterleaves(t.natural_vector_size(Int(8)), alignment_info).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.

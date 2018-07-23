@@ -306,16 +306,18 @@ private:
         internal_assert(op->types.size() == 1)
             << "Prefetch from multi-dimensional halide tuple should have been split\n";
 
+        Expr condition = mutate(op->condition);
+
         vector<Expr> prefetch_min(op->bounds.size());
         vector<Expr> prefetch_extent(op->bounds.size());
         vector<Expr> prefetch_stride(op->bounds.size());
         for (size_t i = 0; i < op->bounds.size(); i++) {
             prefetch_min[i] = mutate(op->bounds[i].min);
             prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->prefetch.param);
         }
 
-        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
+        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
         Expr base_address = Variable::make(Handle(), op->name);
         vector<Expr> args = {base_address, base_offset};
 
@@ -351,7 +353,12 @@ private:
             }
         }
 
-        return Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        if (!is_one(condition)) {
+            prefetch_call = IfThenElse::make(condition, prefetch_call);
+        }
+        Stmt body = mutate(op->body);
+        return Block::make(prefetch_call, body);
     }
 
     Stmt visit(const LetStmt *op) override {

@@ -5,14 +5,14 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <stdint.h>
 #include <bitset>
+#include <stdint.h>
 #include <string>
 
 #include "Error.h"
+#include "Expr.h"
 #include "Type.h"
 #include "Util.h"
-#include "Expr.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -27,7 +27,14 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, MIPS, Hexagon, POWERPC} arch;
+    enum Arch {
+        ArchUnknown = 0,
+        X86,
+        ARM,
+        MIPS,
+        Hexagon,
+        POWERPC,
+    } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -87,6 +94,9 @@ struct Target {
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
         StrictFloat = halide_target_feature_strict_float,
+        LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
+        TSAN = halide_target_feature_tsan,
+        ASAN = halide_target_feature_asan,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -337,9 +347,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api);
 namespace Internal {
 
 void target_test();
-
 }
 
-}
+}  // namespace Halide
 
 #endif

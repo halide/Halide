@@ -22,7 +22,7 @@ Stmt storage_flattening(Stmt s,
                         const std::map<std::string, Function> &env,
                         const Target &target);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

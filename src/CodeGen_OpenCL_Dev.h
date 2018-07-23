@@ -85,6 +85,7 @@ protected:
     CodeGen_OpenCL_C clc;
 };
 
-}}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

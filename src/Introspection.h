@@ -114,7 +114,7 @@ static bool test_a(const void *a_ptr, const std::string &my_name) {
     bool success = true;
     success &= Halide::Internal::check_introspection(&a->an_int, "int", my_name + ".an_int", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(&a->a_b, "HalideIntrospectionCanary::A::B", my_name + ".a_b", __FILE__ , __LINE__);
-    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A *", my_name + ".a_b.parent", __FILE__ , __LINE__);
+    success &= Halide::Internal::check_introspection(&a->a_b.parent, "HalideIntrospectionCanary::A \\*", my_name + ".a_b.parent", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(&a->a_b.a_float, "float", my_name + ".a_b.a_float", __FILE__ , __LINE__);
     success &= Halide::Internal::check_introspection(a->a_b.parent, "HalideIntrospectionCanary::A", my_name, __FILE__ , __LINE__);
     return success;
@@ -134,11 +134,11 @@ struct TestCompilationUnit {
         Halide::Internal::Introspection::test_compilation_unit(&test, &test_a, &offset_marker);
     }
 };
-}
+}  // namespace
 
 static TestCompilationUnit test_object;
 
-}
+}  // namespace HalideIntrospectionCanary
 
 #endif
 

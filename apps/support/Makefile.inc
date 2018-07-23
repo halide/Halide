@@ -45,7 +45,13 @@ GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --system-libs)
+HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --link-static --system-libs)
+
+ifeq ($(UNAME), Linux)
+# llvm-config doesn't always report -ltinfo in the system-libs. Detect it by seeing if llvm-config links to it.
+HALIDE_SYSTEM_LDFLAGS += $(shell ldd `which $(LLVM_CONFIG)` | grep libtinfo > /dev/null && echo -ltinfo)
+endif
+
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags) $(HALIDE_SYSTEM_LDFLAGS)
 
 LLVM_CONFIG ?= llvm-config
@@ -117,3 +123,10 @@ RUNARGS ?=
 #
 $(BIN)/%.run: $(BIN)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
+
+# Utility to convert raw video -> h264. HL_AVCONV=ffmpeg will work too.
+HL_AVCONV ?= avconv
+
+# Utility to show h264 video
+HL_VIDEOPLAYER ?= mplayer
+

@@ -1,11 +1,11 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
-#include "runtime/HalideBuffer.h"
-#include "IntrusivePtr.h"
-#include "Expr.h"
-#include "Util.h"
 #include "DeviceInterface.h"
+#include "Expr.h"
+#include "IntrusivePtr.h"
+#include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 
@@ -142,7 +142,7 @@ public:
         contents(new Internal::BufferContents) {
         contents->buf = std::move(buf);
         if (name.empty()) {
-            contents->name = Internal::make_entity_name(this, "Halide::Buffer<?", 'b');
+            contents->name = Internal::make_entity_name(this, "Halide:.*:Buffer<.*>", 'b');
         } else {
             contents->name = name;
         }
@@ -195,6 +195,14 @@ public:
                     int first, Args&&... rest) :
         Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
+
+    template<typename ...Args,
+             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+    explicit Buffer(Type t,
+                    Internal::add_const_if_T_is_const<T, void> *data,
+                    const std::vector<int> &sizes,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(t, data, sizes, name)) {}
 
     template<typename ...Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
@@ -489,7 +497,6 @@ public:
     };
     // @}
 
-
     /** Copy to the GPU, using the device API that is the default for the given Target. */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
         return copy_to_device(DeviceAPI::Default_GPU, t);
@@ -518,9 +525,8 @@ public:
     int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle);
     }
-
 };
 
-}
+}  // namespace Halide
 
 #endif

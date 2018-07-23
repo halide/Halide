@@ -1851,15 +1851,29 @@ struct Test {
         check("v*.w += vmpy(v*.h,r*.h)", hvx_width/1, i32_1 + i32(i16_1)*32767);
         check("v*.w += vmpy(v*.h,r*.h)", hvx_width/1, i32_1 + 32767*i32(i16_1));
 
-        check("vmpy(v*.h,v*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*i32(i16_2) + 16384)/32768));
-        check("vmpy(v*.h,r*.h):<<1:sat", hvx_width/2, i16_sat((i32(i16_1)*32767)/32768));
-        check("vmpy(v*.h,r*.h):<<1:sat", hvx_width/2, i16_sat((32767*i32(i16_1))/32768));
-        check("vmpy(v*.h,r*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*32767 + 16384)/32768));
-        check("vmpy(v*.h,r*.h):<<1:rnd:sat", hvx_width/2, i16_sat((32767*i32(i16_1) + 16384)/32768));
+        for (int factor : {1, 2}) {
+            check("vmpy(v*.h,v*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*i32(i16_2 * factor) + 16384)/32768));
 
-        check("vmpyo(v*.w,v*.h)", hvx_width/4, i32((i64(i32_1)*i64(i32_2))/(i64(1) << 32)));
-        check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2))/(i64(1) << 31)));
-        check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2) + (1 << 30))/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h)", hvx_width/4, i32((i64(i32_1)*i64(i32_2 * factor))/(i64(1) << 32)));
+            check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1 * factor)*i64(i32_2))/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2 * factor) + (1 << 30))/(i64(1) << 31)));
+        }
+
+        for (int scalar : {32766, 32767}) {
+            check("vmpy(v*.h,r*.h):<<1:sat", hvx_width/2, i16_sat((i32(i16_1)*scalar)/32768));
+            check("vmpy(v*.h,r*.h):<<1:sat", hvx_width/2, i16_sat((scalar*i32(i16_1))/32768));
+            check("vmpy(v*.h,r*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*scalar + 16384)/32768));
+            check("vmpy(v*.h,r*.h):<<1:rnd:sat", hvx_width/2, i16_sat((scalar*i32(i16_1) + 16384)/32768));
+        }
+
+        for (int scalar : {std::numeric_limits<int>::max() - 1, std::numeric_limits<int>::max()}) {
+            check("vmpyo(v*.w,v*.h)", hvx_width/4, i32((i64(i32_1)*scalar)/(i64(1) << 32)));
+            check("vmpyo(v*.w,v*.h)", hvx_width/4, i32((scalar*i64(i32_2))/(i64(1) << 32)));
+            check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1)*scalar)/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((scalar*i64(i32_2))/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*scalar + (1 << 30))/(i64(1) << 31)));
+            check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((scalar*i64(i32_2) + (1 << 30))/(i64(1) << 31)));
+        }
 
         check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*127 + i16(u8_2)*-128);
         check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*127 + 126*i16(u8_2));

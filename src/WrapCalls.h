@@ -17,7 +17,7 @@ namespace Internal {
   * call to their wrapper functions. */
 std::map<std::string, Function> wrap_func_calls(const std::map<std::string, Function> &env);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

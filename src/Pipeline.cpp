@@ -1,16 +1,16 @@
 #include <algorithm>
 
-#include "Pipeline.h"
 #include "Argument.h"
 #include "FindCalls.h"
 #include "Func.h"
-#include "InferArguments.h"
 #include "IRVisitor.h"
+#include "InferArguments.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
 #include "ParamMap.h"
+#include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 
@@ -18,9 +18,9 @@ using namespace Halide::Internal;
 
 namespace Halide {
 
-using std::vector;
-using std::string;
 using std::set;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -230,6 +230,14 @@ void Pipeline::compile_to_c(const string &filename,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(Outputs().c_source(output_name(filename, m, ".c")));
+}
+
+void Pipeline::compile_to_python_extension(const string &filename,
+                                           const vector<Argument> &args,
+                                           const string &fn_name,
+                                           const Target &target) {
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(Outputs().python_extension(output_name(filename, m, ".py.c")));
 }
 
 void Pipeline::print_loop_nest() {
@@ -755,16 +763,16 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
         for (size_t i = 0; i < outputs.r->size(); i++) {
             const halide_buffer_t *buf = (*outputs.r)[i].raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     } else if (outputs.buf) {
         args_result.store[arg_index++] = outputs.buf;
-        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << outputs.buf->host << "\n";
+        debug(1) << "JIT output buffer @ " << (const void *)outputs.buf << ", " << (const void *)outputs.buf->host << "\n";
     } else {
         for (const Buffer<> &buffer : *outputs.buffer_list) {
             const halide_buffer_t *buf = buffer.raw_buffer();
             args_result.store[arg_index++] = buf;
-            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << buf->host << "\n";
+            debug(1) << "JIT output buffer @ " << (const void *)buf << ", " << (const void *)buf->host << "\n";
         }
     }
 
@@ -828,13 +836,13 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 
     if (outputs.r) {
         for (size_t i = 0; i < outputs.r->size(); i++) {
-            user_assert((*outputs.r)[i].data() != nullptr)
+            user_assert((*outputs.r)[i].data() != nullptr || (*outputs.r)[i].has_device_allocation())
                 << "Buffer at " << &((*outputs.r)[i]) << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }
     } else if (outputs.buffer_list) {
-      for (const Buffer<> &buf : *outputs.buffer_list) {
-            user_assert(buf.data() != nullptr)
+        for (const Buffer<> &buf : *outputs.buffer_list) {
+            user_assert(buf.data() != nullptr || buf.has_device_allocation())
                 << "Buffer at " << &buf << " is unallocated. "
                 << "The Buffers in a Realization passed to realize must all be allocated\n";
         }

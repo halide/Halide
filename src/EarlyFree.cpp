@@ -1,9 +1,9 @@
 #include <map>
 
 #include "EarlyFree.h"
-#include "IRMutator.h"
-#include "IREquality.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "InjectHostDevBufferCopies.h"
 
 namespace Halide {
@@ -155,5 +155,5 @@ Stmt inject_early_frees(Stmt s) {
     return early_frees.mutate(s);
 }
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide

@@ -19,7 +19,7 @@ class Function;
  * the functions it uses. */
 std::string print_loop_nest(const std::vector<Function> &output_funcs);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -27,6 +27,14 @@ else
 endif
 endif
 
+ifeq ($(UNAME), Darwin)
+  # Anything that we us install_name_tool on needs these linker flags
+  # to ensure there is enough padding for install_name_tool to use
+  INSTALL_NAME_TOOL_LD_FLAGS=-Wl,-headerpad_max_install_names
+else
+  INSTALL_NAME_TOOL_LD_FLAGS=
+endif
+
 BAZEL ?= $(shell which bazel)
 
 SHELL = bash
@@ -47,6 +55,32 @@ LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/g'))
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
+
+SANITIZER_FLAGS ?=
+
+# TODO: this is suboptimal hackery; we should really add the relevant
+# support libs for the sanitizer(s) as weak symbols in Codegen_LLVM.
+# (Note also that, in general, most Sanitizers work most reliably with an all-Clang
+# build system.)
+
+ifneq (,$(findstring tsan,$(HL_TARGET)$(HL_JIT_TARGET)))
+
+# Note that attempting to use TSAN with the JIT can produce false positives
+# if libHalide is not also compiled with TSAN enabled; we tack the relevant
+# flag onto OPTIMIZE here, but that's really only effective if you ensure
+# to do a clean build before testing. (In general, most of the Sanitizers
+# only work well when used in a completely clean environment.)
+OPTIMIZE += -fsanitize=thread
+SANITIZER_FLAGS += -fsanitize=thread
+
+endif
+
+ifneq (,$(findstring asan,$(HL_TARGET)$(HL_JIT_TARGET)))
+OPTIMIZE += -fsanitize=address
+SANITIZER_FLAGS += -fsanitize=address
+endif
+
+COMMON_LD_FLAGS += $(SANITIZER_FLAGS)
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 
@@ -157,9 +191,7 @@ LLVM_SHARED_LIBS = -Wl,-rpath=$(LLVM_LIBDIR) -L $(LLVM_LIBDIR) -lLLVM
 
 LLVM_LIBS_FOR_SHARED_LIBHALIDE=$(if $(WITH_LLVM_INSIDE_SHARED_LIBHALIDE),$(LLVM_STATIC_LIBS),$(LLVM_SHARED_LIBS))
 
-LLVM_LD_FLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
-
-TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools
+TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer -fno-rtti -I $(ROOT_DIR)/tools $(SANITIZER_FLAGS)
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
@@ -400,6 +432,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
   RDom.cpp \
@@ -547,6 +580,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PythonExtensionGen.h \
   Qualify.h \
   Random.h \
   RealizationOrder.h \
@@ -646,6 +680,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_tempfile \
   posix_threads \
+  posix_threads_tsan \
   powerpc_cpu_features \
   prefetch \
   profiler \
@@ -654,6 +689,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_hvx \
   qurt_init_fini \
   qurt_threads \
+  qurt_threads_tsan \
   qurt_yield \
   runtime_api \
   ssp \
@@ -667,6 +703,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_tempfile \
   windows_threads \
+  windows_threads_tsan \
   windows_yield \
   write_debug_image \
   x86_cpu_features
@@ -725,7 +762,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# object files in which archives it uses to resolve
 	# symbols. We only care about the libLLVM ones.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(COMMON_LD_FLAGS) | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1| egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
@@ -750,7 +787,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_LD_FLAGS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1134,7 +1171,13 @@ $(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_exte
 	$(CURDIR)/$< -g cxx_mangling_define_extern $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-user_context -f "HalideTest::cxx_mangling_define_extern"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@  $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
-# pyramid needs a custom arg
+# This tests the specific features gated by the legacy_buffer_wrappers flag, thus
+# we need to enable it for this Generator.
+$(FILTERS_DIR)/old_buffer_t.a: $(BIN_DIR)/old_buffer_t.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g old_buffer_t -f old_buffer_t $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-legacy_buffer_wrappers
+
+# pyramid needs a custom arg.
 $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g pyramid -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime levels=10
@@ -1567,20 +1610,22 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	bazel build --verbose_failures :all
 
 .PHONY: test_python2
-test_python2: distrib
+test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
+		HALIDE_PATH=$(ROOT_DIR) \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
 		PYTHON=python \
 		PYBIND11_PATH=$(REAL_PYBIND11_PATH)
 
 .PHONY: test_python
-test_python: distrib
+test_python: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
+		HALIDE_PATH=$(ROOT_DIR) \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \
@@ -1765,6 +1810,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
@@ -1789,15 +1835,15 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/tools/halide_benchmark.h \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
-		halide/tools/halide_image_info.h
+		halide/tools/halide_image_info.h \
+		halide/tools/halide_trace_config.h
 	rm -rf halide
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz
 
-$(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
+$(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
 
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
-

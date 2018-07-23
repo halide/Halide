@@ -7,9 +7,9 @@
  * if there is any and computing the identity of the associative operator.
  */
 
+#include "AssociativeOpsTable.h"
 #include "IR.h"
 #include "IREquality.h"
-#include "AssociativeOpsTable.h"
 
 #include <functional>
 
@@ -103,7 +103,7 @@ AssociativeOp prove_associativity(
 
 void associativity_test();
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
