@@ -18,6 +18,9 @@ WEAK int halide_can_use_target_features(int count, const uint64_t *features) {
     return (*custom_can_use_target_features)(count, features);
 }
 
+// C++11 (and thus, static_assert) aren't available here. Use this old standby:
+#define fake_static_assert(VALUE) do { enum { __some_value = 1 / (!!(VALUE)) }; } while (0)
+
 WEAK int halide_default_can_use_target_features(int count, const uint64_t *features) {
     // cpu features should never change, so call once and cache.
     // Note that since CpuFeatures has a (trivial) ctor, compilers may insert guards
@@ -27,7 +30,7 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     // some horribleness with memcpy (which we can do since CpuFeatures is still POD).
     static bool initialized = false;
     static uint64_t cpu_features_storage[sizeof(CpuFeatures)/sizeof(uint64_t)] = {0};
-    static_assert(sizeof(cpu_features_storage) == sizeof(CpuFeatures), "Unexpected size");
+    fake_static_assert(sizeof(cpu_features_storage) == sizeof(CpuFeatures));
     if (!initialized) {
         CpuFeatures tmp = halide_get_cpu_features();
         memcpy(&cpu_features_storage, &tmp, sizeof(tmp));
