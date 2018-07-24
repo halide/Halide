@@ -74,8 +74,8 @@ __attribute__((always_inline))  uintptr_t atomic_and_fetch_release(uintptr_t *ad
 }
 
 template <typename T>
-__attribute__((always_inline)) T atomic_fetch_and_add_acquire_release(T *addr, T val) {
-    return __sync_and_and_fetch(addr, val);
+__attribute__((always_inline)) T atomic_fetch_add_acquire_release(T *addr, T val) {
+    return __sync_fetch_and_add(addr, val);
 }
 
 template <typename T>
@@ -147,7 +147,7 @@ __attribute__((always_inline))  uintptr_t atomic_and_fetch_release(uintptr_t *ad
 }
 
 template <typename T>
-__attribute__((always_inline))  T atomic_fetch_and_add_acquire_release(T *addr, T val) {
+__attribute__((always_inline))  T atomic_fetch_add_acquire_release(T *addr, T val) {
     return __atomic_fetch_add(addr, val, __ATOMIC_ACQ_REL);
 }
 

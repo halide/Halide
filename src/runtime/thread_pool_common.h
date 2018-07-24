@@ -6,7 +6,11 @@ extern "C" int syscall(int);
 
 namespace {
 int gettid() {
+#ifdef BITS_32
+    return syscall(224);
+#else
     return syscall(186);
+#endif
 }
 }
 
@@ -666,7 +670,7 @@ WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
-    int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_and_add_acquire_release(&sem->value, n);
+    int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
     // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
     if (old_val == 0) {
         // We may have just made a job runnable
