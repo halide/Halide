@@ -1,4 +1,4 @@
-#define EXTENDED_DEBUG 0
+#define EXTENDED_DEBUG 1
 
 #if EXTENDED_DEBUG
 // This code is currently setup for Linux debugging. Switch to using pthread_self on e.g. Mac OS X.
@@ -166,7 +166,7 @@ WEAK void print_job(work *job, const char *indent, const char *prefix = NULL) {
     }
     const char *name = job->task.name ? job->task.name : "<no name>";
     const char *parent_name = job->parent_job ? (job->parent_job->task.name ? job->parent_job->task.name : "<no name>") : "<no parent job>";
-    log_message(prefix << name << "[" << job << "] serial: " << job->task.serial << " active_workers: " << job->active_workers << " min: " << job->task.min << " extent: " << job->task.extent << << " siblings: " << job->siblings << " sibling count: " << job->sibling_count << " min_threads " << job->task.min_threads << " next_sempaphore: " << job->next_semaphore << " threads_reserved: " << job->threads_reserved << " parent_job: " << parent_name << "[" << job->parent_job << "]");
+    log_message(prefix << name << "[" << job << "] serial: " << job->task.serial << " active_workers: " << job->active_workers << " min: " << job->task.min << " extent: " << job->task.extent << " siblings: " << job->siblings << " sibling count: " << job->sibling_count << " min_threads " << job->task.min_threads << " next_sempaphore: " << job->next_semaphore << " threads_reserved: " << job->threads_reserved << " parent_job: " << parent_name << "[" << job->parent_job << "]");
     for (int i = 0; i < job->task.num_semaphores; i++) {
         log_message(indent << "    semaphore " << (void *)job->task.semaphores[i].semaphore << " count " << job->task.semaphores[i].count << " val " << *(int *)job->task.semaphores[i].semaphore);
     }
