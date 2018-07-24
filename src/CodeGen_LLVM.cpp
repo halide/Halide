@@ -3421,7 +3421,7 @@ string task_debug_name(const std::pair<string, int> &prefix) {
     if (prefix.second <= 1) {
         return prefix.first;
     } else {
-        return prefix.second + "_" + std::to_string(prefix.second - 1);
+        return prefix.first + "_" + std::to_string(prefix.second - 1);
     }
 }
 
