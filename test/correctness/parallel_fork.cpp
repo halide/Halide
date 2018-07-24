@@ -106,7 +106,6 @@ int main(int argc, char **argv) {
     fflush(stdout);
 
     both = make(AsyncComputeAt);
-    both.compile_to_lowered_stmt("/tmp/async_compute_at.stmt", {}, Text);
     call_count = 0;
     im = both.realize(10, 10, 2);
     count = call_count;
