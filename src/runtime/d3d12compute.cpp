@@ -1,6 +1,6 @@
 #ifndef BITS_64
     #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
-#endif
+#else  // BITS_64
 
 // Debugging utilities for back-end developers:
 #define HALIDE_D3D12_TRACE          (0)
@@ -464,7 +464,7 @@ struct d3d12_buffer {
 
     // if the buffer is an upload/readback staging heap:
     void *mapped;
-    volatile uint64_t ref_count;
+    volatile uint64_t ref_count /*__attribute__((aligned(8)))*/;
 
     operator bool() const { return resource != NULL; }
 };
@@ -551,7 +551,7 @@ WEAK IDXGIAdapter1 *dxgiAdapter = NULL;
 WEAK d3d12_device *device = NULL;
 WEAK d3d12_command_queue *queue = NULL;
 WEAK ID3D12Fence *queue_fence = NULL;
-WEAK volatile uint64_t queue_last_signal = 0;
+WEAK volatile uint64_t queue_last_signal /*__attribute__((aligned(8)))*/ = 0;
 WEAK ID3D12RootSignature *rootSignature = NULL;
 
 
@@ -2845,3 +2845,5 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
 };
 
 }}}} // namespace Halide::Runtime::Internal::D3D12Compute
+
+#endif  // BITS_64
