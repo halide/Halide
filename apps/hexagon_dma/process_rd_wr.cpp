@@ -20,8 +20,10 @@ int main(int argc, char **argv) {
     // Fill the input buffer with random data. This is just a plain old memory buffer
     const int buf_size = width * height;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
+    uint8_t *data_out = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
-        data_in[i] = ((uint8_t)rand()) >> 1;
+        data_in[i] = (uint8_t)rand() >> 1;
+        data_out[i] = 0;
     }
 
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height);
@@ -49,18 +51,27 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<uint8_t> output(width, height);
 
+    output.allocate();
+
+    output.device_wrap_native(halide_hexagon_dma_device_interface(),
+                             reinterpret_cast<uint64_t>(data_out));
+    output.set_device_dirty();
+
+    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine, false, eDmaFmt_RawData);
+
     int result = pipeline_rd_wr(input, output);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
 
-    output.copy_to_host();
+//    output.copy_to_host();
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint8_t correct = data_in[x + y*width ] * 2;
-            if (correct != output(x, y)) {
+            uint8_t result = data_out[x + y*width ];
+            if (correct != result){
                 static int cnt = 0;
-                printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, output(x, y));
+                printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, result);
                 if (++cnt > 20) abort();
             }
         }
@@ -68,11 +79,14 @@ int main(int argc, char **argv) {
 
     halide_hexagon_dma_unprepare(nullptr, input);
 
+    halide_hexagon_dma_unprepare(nullptr, output);
+
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
     free(data_in);
+    free(data_out);
 
     printf("Success!\n");
     return 0;

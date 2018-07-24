@@ -14,8 +14,10 @@ extern WEAK halide_device_interface_t hexagon_dma_device_interface;
 
 struct dma_device_handle {
     uint8_t *buffer;
-    int offset_x;
-    int offset_y;
+    int offset_rdx;
+    int offset_rdy;
+    int offset_wrx;
+    int offset_wry;
     void *dma_engine;
     int frame_width;
     int frame_height;
@@ -23,19 +25,19 @@ struct dma_device_handle {
     bool is_ubwc;
     bool is_write;
     t_eDmaFmt fmt;
-    void *cache_buf;
 };
 
 dma_device_handle *malloc_device_handle() {
     dma_device_handle *dev = (dma_device_handle *)malloc(sizeof(dma_device_handle));
     dev->buffer = 0;
-    dev->offset_x = 0;
-    dev->offset_y = 0;
+    dev->offset_rdx = 0;
+    dev->offset_rdy = 0;
+    dev->offset_wrx = 0;
+    dev->offset_wry = 0;
     dev->dma_engine = 0;
     dev->frame_width = 0;
     dev->frame_height = 0;
     dev->frame_stride = 0;
-    dev->cache_buf = 0;
     dev->is_ubwc = 0;
     dev->fmt = eDmaFmt_RawData;
     dev->is_write = 0;
@@ -132,22 +134,16 @@ static void desc_pool_free (void *user_context) {
     }
 }
 
-static inline void copy_from_cache(uint8_t *src, uint8_t *dest, int roi_height,
-           int roi_stride, int dest_stride, int pixelsize, int linesize) {
-    for (int y = 0; y < roi_height; y++) {
-        int sy = y * roi_stride * pixelsize;
-        int dy = y * dest_stride * pixelsize;
-        memcpy(&dest[dy], &src[sy], linesize);
-    }
-} 
-
 static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_t *src,
                                        struct halide_buffer_t *dst) {
-    dma_device_handle *dev = (dma_device_handle *)src->device;
+
+    dma_device_handle *dev = NULL;
+    dev = (dma_device_handle *)src->device;
 
     debug(user_context)
         << "Hexagon dev handle: buffer: " << dev->buffer
-        << " dev_offset(x: : " << dev->offset_x << " y: " << dev->offset_y  << ")"
+        << " dev_offset(rdx: : " << dev->offset_rdx << " rdy: " << dev->offset_rdy  << ")"
+        << " dev_offset(wrx: : " << dev->offset_wrx << " wry: " << dev->offset_wry  << ")"
         << " frame(w: " << dev->frame_width << " h: " << dev->frame_height << " s: " << dev->frame_stride << ")"
         << "\n";
 
@@ -194,11 +190,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     // Copy from Locked Cache to a temp DDR buffer
     // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
-    int buf_size = roi_stride * roi_height * dst->type.bytes();
+    int buf_size = roi_stride * roi_height * src->type.bytes();
     debug(user_context) << " cache buffer size " << buf_size << "\n";
-    if (dev->cache_buf == 0) {
-        dev->cache_buf = HAP_cache_lock(buf_size, 0);
-    }
     // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
     // We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format
     // because DMA treat RAW as a flattened buffer
@@ -213,15 +206,17 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     stDmaTransferParm.bIsFmtUbwc            = dev->is_ubwc;
     stDmaTransferParm.bUse16BitPaddingInL2  = 0;
     stDmaTransferParm.pDescBuf              = desc_addr;
-    stDmaTransferParm.pTcmDataBuf           = dev->cache_buf;
+    stDmaTransferParm.pTcmDataBuf           = reinterpret_cast<void *>(dst->host);
     stDmaTransferParm.pFrameBuf             = dev->buffer;
     if (dev->is_write) {
         stDmaTransferParm.eTransferType     = eDmaWrapper_L2ToDdr;
+        stDmaTransferParm.u16RoiX           = dev->offset_wrx * dst->dim[0].stride;
+        stDmaTransferParm.u16RoiY           = dev->offset_wry;
     } else {
         stDmaTransferParm.eTransferType     = eDmaWrapper_DdrToL2;
+        stDmaTransferParm.u16RoiX           = (dev->offset_rdx + dst->dim[0].min) * dst->dim[0].stride;
+        stDmaTransferParm.u16RoiY           = dev->offset_rdy + dst->dim[1].min;
     }
-    stDmaTransferParm.u16RoiX               = (dev->offset_x + dst->dim[0].min) * dst->dim[0].stride;
-    stDmaTransferParm.u16RoiY               = dev->offset_y + dst->dim[1].min;
 
     // DMA Driver implicitly halves the Height and Y Offset for chroma, based on Y/UV
     // planar relation for 4:2:0 format, to adjust the for plane size difference.
@@ -260,19 +255,6 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
-    }
-
-    uint8_t *dest = reinterpret_cast<uint8_t *>(dst->host);
-
-    // Copy from Locked Cache to a temp DDR buffer
-    // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
-    if (dest) {
-        const int pixelsize = dst->type.bytes();
-        const int linesize = roi_width * pixelsize;
-        uint8_t *cache_buf = reinterpret_cast<uint8_t *>(dev->cache_buf);
-        debug(user_context)
-            << "copy cache: " << "pixelsize= " << pixelsize << " linesize= " << linesize << "\n";
-        copy_from_cache(cache_buf, dest, roi_height, roi_stride, dst->dim[1].stride, pixelsize, linesize); 
     }
 
     desc_pool_put(user_context, desc_addr);
@@ -419,10 +401,6 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     halide_assert(user_context, buf->device);
 
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
-    if (dev->cache_buf) {
-        HAP_cache_unlock(dev->cache_buf);
-    }
-    dev->cache_buf = 0;
     debug(user_context) << "   dma_finish_frame -> ";
     int err = nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";
@@ -447,6 +425,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         halide_assert(user_context, dst_device_interface == &hexagon_dma_device_interface);
         // If the source is not hexagon_dma or host memory, ask the source
         // device interface to copy to dst host memory first.
+        debug(user_context) << "src->device_interface != &hexagon_dma_device_interface\n" ; 
         int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
         if (err) {
             return err;
@@ -470,7 +449,12 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         << ", src: " << src << ", dst: " << dst << "\n"
         << ", DMA Read: " << to_host << ", DMA Write: " << from_host << ")\n";
 
-    int nRet = halide_hexagon_dma_wrapper(user_context, src, dst);
+    int nRet;  
+    if ( dst_device_interface == &hexagon_dma_device_interface) {
+        nRet = halide_hexagon_dma_wrapper(user_context, dst, src);
+    } else {
+        nRet = halide_hexagon_dma_wrapper(user_context, src, dst);
+    }
    
     return nRet;
 }
@@ -589,11 +573,20 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
     dma_device_handle *dst_dev = malloc_device_handle();
     halide_assert(user_context, dst_dev);
     dst_dev->buffer = src_dev->buffer;
+
     // TODO: It's messy to have both this offset and the buffer mins,
     // try to reduce complexity here.
-    dst_dev->offset_x = src_dev->offset_x + dst->dim[0].min - src->dim[0].min;
-    dst_dev->offset_y = src_dev->offset_y + dst->dim[1].min - src->dim[1].min;
+    dst_dev->offset_wrx = src_dev->offset_wrx + dst->dim[0].min - src->dim[0].min;
+    dst_dev->offset_wry = src_dev->offset_wry + dst->dim[1].min - src->dim[1].min;
     dst_dev->dma_engine = src_dev->dma_engine;
+    dst_dev->frame_width = src_dev->frame_width;
+    dst_dev->frame_height = src_dev->frame_height;
+    dst_dev->frame_stride = src_dev->frame_stride;
+    dst_dev->is_ubwc = src_dev->is_ubwc;
+    dst_dev->is_write = src_dev->is_write;
+    dst_dev->fmt = src_dev->fmt;
+
+    dst->device = reinterpret_cast<uint64_t>(dst_dev); 
 
     return halide_error_code_success;
 }
