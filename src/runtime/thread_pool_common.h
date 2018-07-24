@@ -1,4 +1,4 @@
-#define EXTENDED_DEBUG 1
+#define EXTENDED_DEBUG 0
 
 #if EXTENDED_DEBUG
 // This code is currently setup for Linux debugging. Switch to using pthread_self on e.g. Mac OS X.
