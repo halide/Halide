@@ -69,7 +69,10 @@ private:
         }
 
         int aligned_offset = 0;
-        bool known_alignment = alignment_analyzer.is_aligned(op, &aligned_offset);
+        bool is_aligned = alignment_analyzer.is_aligned(op, &aligned_offset);
+        // We know the alignement_analyzer has been able to reason about alignment
+        // if the following is true.
+        bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
 
@@ -116,7 +119,7 @@ private:
             return Shuffle::make_concat(slices);
         }
 
-        if (known_alignment && aligned_offset != 0) {
+        if (!is_aligned && aligned_offset != 0) {
             // We know the offset of this load from an aligned
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
