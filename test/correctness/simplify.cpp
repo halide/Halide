@@ -218,10 +218,10 @@ void check_algebra() {
     check(y + x*y, (x + 1)*y);
     check(y - x*y, (1 - x)*y);
 
-    check(0/x, 0);
+    check(0/max(x, 1), 0);
     check(x/1, x);
     check(x/x, 1);
-    check((-1)/x, select(x < 0, 1, -1));
+    check((-1)/(x*2 + 1), select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
     check((x / 3) / 4, x / 12);
@@ -255,27 +255,27 @@ void check_algebra() {
     // Pull out the gcd of the numerator and divisor
     check((x * 3 + 5) / 9, (x + 1) / 3);
 
-    // Cancellations in non-const integer divisions
-    check((x*y)/x, y);
-    check((y*x)/x, y);
-    check((x*y + z)/x, z/x + y);
-    check((y*x + z)/x, z/x + y);
-    check((z + x*y)/x, z/x + y);
-    check((z + y*x)/x, z/x + y);
-    check((x*y - z)/x, (-z)/x + y);
-    check((y*x - z)/x, (-z)/x + y);
-    check((z - x*y)/x, z/x - y);
-    check((z - y*x)/x, z/x - y);
+    // Cancellations in integer divisions.
+    check((7*y)/7, y);
+    check((y*7)/7, y);
+    check((7*y + z)/7, z/7 + y);
+    check((y*7 + z)/7, z/7 + y);
+    check((z + 7*y)/7, z/7 + y);
+    check((z + y*7)/7, z/7 + y);
+    check((7*y - z)/7, (-z)/7 + y);
+    check((y*7 - z)/7, (-z)/7 + y);
+    check((z - 7*y)/7, z/7 - y);
+    check((z - y*7)/7, z/7 - y);
 
-    check((x + y)/x, y/x + 1);
-    check((y + x)/x, y/x + 1);
-    check((x - y)/x, (-y)/x + 1);
-    check((y - x)/x, y/x + (-1));
+    check((7 + y)/7, y/7 + 1);
+    check((y + 7)/7, y/7 + 1);
+    check((7 - y)/7, (-y)/7 + 1);
+    check((y - 7)/7, y/7 + (-1));
 
-    check(((x + y) + z)/x, (y + z)/x + 1);
-    check(((y + x) + z)/x, (y + z)/x + 1);
-    check((y + (x + z))/x, (y + z)/x + 1);
-    check((y + (z + x))/x, (y + z)/x + 1);
+    check(((7 + y) + z)/7, (y + z)/7 + 1);
+    check(((y + 7) + z)/7, (y + z)/7 + 1);
+    check((y + (7 + z))/7, (y + z)/7 + 1);
+    check((y + (z + 7))/7, (y + z)/7 + 1);
 
     check(xf / 4.0f, xf * 0.25f);
 
@@ -320,7 +320,9 @@ void check_algebra() {
     check(x/2 + x%2, (x + 1)/2);
     check(x%2 + x/2, (x + 1)/2);
     check(((x+1)/2)*2 - x, x%2);
-    check(x - ((x+1)/2)*2, -(x%2));
+    check(((x+2)/3)*3 - x, (-x)%3);
+    check(x - ((x+1)/2)*2, ((x + 1)%2 + -1));
+    check(x - ((x+2)/3)*3, ((x + 2)%3 + -2));
     check((x%2 + 4)/2, 2);
     check((x%2 + 5)/2, x%2 + 2);
 
@@ -737,6 +739,10 @@ void check_bounds() {
     check(min(max(z, min(y, x)), y), min(max(x, z), y));
     check(min(y, max(min(y, x), z)), min(max(x, z), y));
     check(min(y, max(z, min(y, x))), min(max(x, z), y));
+
+    check(max(min(x, 5), 1) == 1, x <= 1);
+    check(max(min(x, 5), 1) == 3, x == 3);
+    check(max(min(x, 5), 1) == 5, 5 <= x);
 
     {
         Expr one = 1;
@@ -1418,7 +1424,6 @@ int main(int argc, char **argv) {
     check_bitwise();
 
     // Miscellaneous cases that don't fit into one of the categories above.
-
     Expr x = Var("x"), y = Var("y");
 
     // Check that constant args to a stringify get combined
