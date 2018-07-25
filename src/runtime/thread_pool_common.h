@@ -197,7 +197,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
 
-        if (owned_job && owned_job->exit_status != 0) {
+        if (owned_job && owned_job->exit_status != 0 && owned_job->active_workers == 0) {
             while (job != owned_job) {
                 prev_ptr = &job->next_job;
                 job = job->next_job;
@@ -206,7 +206,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->task.extent = 0;
             continue; // So loop exit is always in the same place.
         }
-      
+
         dump_job_state();
 
         // Find a job to run, prefering things near the top of the stack.
@@ -364,10 +364,12 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->exit_status = result;
             // Mark all siblings as also failed.
             for (int i = 0; i < job->sibling_count; i++) {
+                log_message("Marking " << job->sibling_count << " siblings ");
                 if (job->siblings[i].exit_status == 0) {
                     job->siblings[i].exit_status = result;
-                    wake_owners |= job->siblings[i].owner_is_sleeping;
+                    wake_owners |= (job->active_workers == 0 && job->siblings[i].owner_is_sleeping);
                 }
+                log_message("Done marking siblings.");
             }
         }
 
@@ -384,7 +386,8 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         log_message("Done working on job " << job->task.name);
 
-        if (wake_owners || (!job->running() && job->owner_is_sleeping)) {
+        if (wake_owners ||
+            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != 0) && job->owner_is_sleeping)) {
             // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
         }
