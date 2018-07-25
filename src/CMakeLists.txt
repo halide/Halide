@@ -44,8 +44,6 @@ set(RUNTIME_CPP
   mips_cpu_features
   module_aot_ref_count
   module_jit_ref_count
-  msan
-  msan_stubs
   old_buffer_t
   opencl
   opengl

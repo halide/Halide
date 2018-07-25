@@ -47,7 +47,6 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
         return halide_error_code_copy_to_host_failed;
     }
     buf->set_device_dirty(false);
-    halide_msan_annotate_buffer_is_initialized(user_context, buf);
 
     return result;
 }

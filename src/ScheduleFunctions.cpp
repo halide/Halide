@@ -562,42 +562,6 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
             }
         }
 
-        Stmt annotate;
-        if (target.has_feature(Target::MSAN)) {
-            // Mark the buffers as initialized before calling out.
-            for (const auto &p: buffers_to_annotate) {
-                Expr buffer = p.first;
-                int dimensions = p.second;
-                // Return type is really 'void', but no way to represent that in our IR.
-                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Expr sizeof_buffer_t = cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
-                Stmt mark_buffer =
-                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
-                                              {buffer, sizeof_buffer_t}, Call::Extern));
-                Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer}, Call::Extern);
-                Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
-                Stmt mark_shape =
-                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
-                                              {shape, shape_size}, Call::Extern));
-                mark_buffer = Block::make(mark_buffer, mark_shape);
-                if (annotate.defined()) {
-                    annotate = Block::make(annotate, mark_buffer);
-                } else {
-                    annotate = mark_buffer;
-                }
-            }
-            for (const auto &buffer: buffers_contents_to_annotate) {
-                // Return type is really 'void', but no way to represent that in our IR.
-                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Stmt mark_contents = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
-                if (annotate.defined()) {
-                    annotate = Block::make(annotate, mark_contents);
-                } else {
-                    annotate = mark_contents;
-                }
-            }
-        }
-
         // Make the extern call
         Expr e = f.make_call_to_extern_definition(extern_call_args, target);
 
@@ -645,10 +609,6 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         for (size_t i = 0; i < lets.size(); i++) {
             check = LetStmt::make(lets[i].first, lets[i].second, check);
-        }
-
-        if (annotate.defined()) {
-            check = Block::make(annotate, check);
         }
 
         // Add the dummy outermost loop.

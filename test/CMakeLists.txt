@@ -290,8 +290,11 @@ if (WITH_TEST_GENERATOR)
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
 
-  halide_define_aot_test(msan
+  # LLVM only really support MSAN on Linux
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    halide_define_aot_test(msan
                          HALIDE_TARGET_FEATURES msan)
+  endif()
 
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types

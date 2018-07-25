@@ -293,7 +293,6 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         }
 
         ss << "\n";
-        ss.msan_annotate_is_initialized();
 
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
@@ -392,9 +391,6 @@ WEAK int halide_trace_helper(void *user_context,
     event.parent_id = parent_id;
     event.value_index = value_index;
     event.dimensions = dimensions;
-    halide_msan_annotate_memory_is_initialized(user_context, &event, sizeof(event));
-    halide_msan_annotate_memory_is_initialized(user_context, value, type_lanes * ((type_bits + 7) / 8));
-    halide_msan_annotate_memory_is_initialized(user_context, coords, dimensions * sizeof(int32_t));
     return halide_trace(user_context, &event);
 }
 

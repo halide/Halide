@@ -7,6 +7,12 @@ extern "C" void x86_cpuid_halide(int32_t *);
 
 static inline void cpuid(int32_t fn_id, int32_t *info) {
     info[0] = fn_id;
+    // pacify MSAN, since it doesn't recognize the changes made
+    // by the assembly code in x86_cpuid_halide and considers these
+    // to be uninitialized otherwise.
+    info[1] = 0;
+    info[2] = 0;
+    info[3] = 0;
     x86_cpuid_halide(info);
 }
 
