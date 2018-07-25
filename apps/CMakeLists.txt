@@ -20,6 +20,7 @@ add_subdirectory(linear_blur)
 add_subdirectory(local_laplacian)
 add_subdirectory(nl_means)
 add_subdirectory(resize)
+add_subdirectory(stencil_chain)
 
 # Don't add this one; it's deliberately standalone
 # add_subdirectory(wavelet)
