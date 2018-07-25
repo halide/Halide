@@ -1606,6 +1606,7 @@ TEST_APPS=\
 	local_laplacian \
 	nl_means \
 	resize \
+	stencil_chain \
 	wavelet \
 
 .PHONY: test_apps
