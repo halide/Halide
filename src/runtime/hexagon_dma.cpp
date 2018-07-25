@@ -216,7 +216,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     // Raw Format Planar
     if ((dev->fmt == eDmaFmt_RawData) &&
         (dst->dimensions == 3)) {
-        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * dst->dim[1].stride);
+        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * src->dim[1].stride);
     }
    
     // DMA Driver implicitly halves the Height and Y Offset for chroma, based on Y/UV
@@ -234,31 +234,42 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
             << " W: " << stDmaTransferParm.u16RoiW << " H: " << stDmaTransferParm.u16RoiH << ")"
             << " dst->dim[1].min: " << dst->dim[1].min << "\n" ;
     }
+    // TODO Check for async
+    void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_engine);
+    if (!dma_engine) {
+        debug(user_context) << "Hexagon: Dma Engine Allocation Faliure\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
 
     debug(user_context)
-        << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n";
-    nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
+        << "Hexagon: " << dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n";
+    nRet = nDmaWrapper_DmaTransferSetup(dma_engine, &stDmaTransferParm);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
     }
     
-    debug(user_context) << "Hexagon: " << dev->dma_engine << " move\n" ;
-    nRet = nDmaWrapper_Move(dev->dma_engine);
+    debug(user_context) << "Hexagon: " << dma_engine << " move\n" ;
+    nRet = nDmaWrapper_Move(dma_engine);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: nDmaWrapper_Move error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
     // TODO: separate out when Async feature (PR #2576) is ready and NUMA memory is addressed
-    debug(user_context) << "Hexagon: " << dev->dma_engine << " wait\n" ;
-    nRet = nDmaWrapper_Wait(dev->dma_engine);
+    debug(user_context) << "Hexagon: " << dma_engine << " wait\n" ;
+    nRet = nDmaWrapper_Wait(dma_engine);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
     desc_pool_put(user_context, desc_addr);
+    nRet = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine);
+    if (nRet != halide_error_code_success) {
+        debug(user_context) << "halide_hexagon_free_from_dma_pool:" << nRet << "\n";
+        return nRet;
+    }
     return halide_error_code_success;
 }
 
@@ -318,7 +329,7 @@ WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engin
 
     halide_assert(user_context, dma_engine);
     debug(user_context) << "    dma_allocate_dma_engine -> ";
-    *dma_engine = (void *)hDmaWrapper_AllocDma();
+    *dma_engine = halide_hexagon_allocate_dma_resource(user_context);
     debug(user_context) << "        " << dma_engine << "\n";
     if (!*dma_engine) {
         error(user_context) << "dma_allocate_dma_engine failed.\n";
@@ -336,19 +347,12 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     halide_assert(user_context, dma_engine);
     desc_pool_free(user_context);
 
-    int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
-    debug(user_context) << "    dma_free_dma_engine done\n";
+    // Free DMA Resources
+    int err = halide_hexagon_free_dma_resource(user_context, dma_engine);
+    debug(user_context) << "    dma_free_dma_pool done\n";
     if (err != 0) {
-        error(user_context) << "Freeing DMA Engine failed.\n";
+        error(user_context) << "Free DMA/Cache Pool failed.\n";
         return halide_error_code_generic_error;
-    }
-    // Free cache pool
-    if (Halide::Runtime::Internal::Hexagon::hexagon_cache_pool) {
-        err = halide_hexagon_free_l2_pool(user_context);
-        if (err != 0) {
-            error(user_context) << "Freeing Cache Pool failed.\n";
-            return halide_error_code_generic_error;
-        }
     }
     return halide_error_code_success;
 }
@@ -394,18 +398,18 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << buf << ")\n";
-
-    halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
+   //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
+   /* halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
     halide_assert(user_context, buf->device);
 
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     debug(user_context) << "   dma_finish_frame -> ";
-    int err = nDmaWrapper_FinishFrame(dev->dma_engine);
+    int err = 0; //nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";
     if (err != 0) {
         error(user_context) << "dma_finish_frame failed.\n";
         return halide_error_code_generic_error;
-    }
+    }*/
 
     return halide_error_code_success;
 }
@@ -602,14 +606,14 @@ WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer
         << "Hexagon: halide_hexagon_dma_device_sync (user_context: " << user_context
         << " buf: " << buf << ")\n";
 
-    dma_device_handle *dev = (dma_device_handle *)buf->device;
-    halide_assert(user_context, dev->dma_engine);
+ /* dma_device_handle *dev = (dma_device_handle *)buf->device;
+    halide_assert(user_context, dev->dma_pool);
     int err = nDmaWrapper_Wait(dev->dma_engine);
 
     if (err != 0) {
         error(user_context) << "dma_wait failed (" << err << ")\n";
         return halide_error_code_device_sync_failed;
-    }
+    }*/
 
     return halide_error_code_success;
 }

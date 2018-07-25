@@ -24,16 +24,20 @@ public:
         const int tile_width = 256;
         const int tile_height = 128;
 
-        output
-            .compute_root()
-            .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+        Expr fac = output.dim(1).extent()/2;
+
+        Var yo, yi;
+
+        output.split(y, yo, yi, fac);
+
+        output.compute_root()
+              .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+              .parallel(yo);
 
         // Schedule the copy to be computed at tiles with a
         // circular buffer of two tiles.
-        copy
-            .compute_at(output, tx)
-            .store_root()
-            .fold_storage(x, tile_width * 2)
+        copy.compute_at(output, tx)
+            .store_at(output, tx)
             .copy_to_host();
     }
 

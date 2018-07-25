@@ -3,6 +3,22 @@
 #include "scoped_mutex_lock.h"
 #include "hexagon_dma_pool.h"
 
+namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
+
+typedef struct hexagon_local_cache {
+    void *l2memory;
+    bool used;
+    size_t bytes;
+    struct hexagon_local_cache *next;
+} hexagon_cache_pool_t;
+
+typedef hexagon_cache_pool_t* pcache_pool;
+
+WEAK pcache_pool hexagon_cache_pool = NULL;
+WEAK halide_mutex hexagon_cache_mutex;
+
+}}}}
+
 extern "C" {
 
 using namespace Halide::Runtime::Internal::Hexagon;

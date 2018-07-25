@@ -119,7 +119,7 @@ private:
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
-    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+    llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
 };
 
 }  // namespace Internal
