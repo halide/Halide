@@ -8,9 +8,6 @@
 #include "HalideBuffer.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
 
-#define PLANE   2
-#define FORMAT  eDmaFmt_RawData
-
 int main(int argc, char **argv) {
     if (argc < 3) {
         printf("Usage: %s width height\n", argv[0]);
@@ -21,14 +18,14 @@ int main(int argc, char **argv) {
     const int height = atoi(argv[2]);
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
-    const int buf_size = width * height * PLANE;
+    const int buf_size = width * height * 4;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
 
-    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, PLANE);
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, PLANE);
+    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2, 2);
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 2, 2);
 
     // TODO: We shouldn't need to allocate a host buffer here, but the
     // current implementation of cropping + halide_buffer_copy needs
@@ -48,9 +45,12 @@ int main(int argc, char **argv) {
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
     // The Last parameter 0 indicate DMA Read
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, FORMAT);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_RawData);
+    // This to just to Valide the Assertion checkes for RAW Processing
+    // Assertion checks Fail for dimensions >=4
+    // Used last two dimensions as same value just to use a 4-D Buffer
 
-    Halide::Runtime::Buffer<uint8_t> output(width, height, PLANE);
+    Halide::Runtime::Buffer<uint8_t> output(width, height, 2, 2);
 
     int result = pipeline_err(input, output);
     if (result != 0) {

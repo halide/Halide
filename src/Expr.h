@@ -368,6 +368,9 @@ enum class MemoryType {
      * "local" in OpenCL, and "threadgroup" in metal. Can be shared
      * across GPU threads within the same block. */
     GPUShared,
+
+    /** Allocate Locked Cache Memory to act as local memory */
+    LockedCache,
 };
 
 namespace Internal {
