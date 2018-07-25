@@ -51,8 +51,7 @@ public:
             .compute_at(output_y, tx)
             .store_at(output_y, tx)
             .fold_storage(x, tile_width * 2)
-            .copy_to_host()
-            .align_storage(x, 256);
+            .copy_to_host();
 
         copy_uv
             .compute_at(output_uv, tx)
@@ -60,7 +59,6 @@ public:
             .bound(c, 0, 2)
             .fold_storage(x, tile_width * 2)
             .copy_to_host()
-            .align_storage(x, 256)
             .reorder_storage(c, x, y);
 
     }
