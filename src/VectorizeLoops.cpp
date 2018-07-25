@@ -322,7 +322,7 @@ class PredicateLoadStore : public IRMutator2 {
             return op;
         }
         vectorized = true;
-        return Store::make(op->name, value, op->index, op->param, predicate);
+        return Store::make(op->name, value, index, op->param, predicate);
     }
 
     Expr visit(const Call *op) override {
