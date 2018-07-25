@@ -38,7 +38,7 @@ public:
         // circular buffer of two tiles.
         copy
             .compute_at(output, tx)
-            .store_root()
+            .store_at(output, tx)
             .bound(c, 0, 4)
             .copy_to_host()
             .reorder_storage(c, x, y);
