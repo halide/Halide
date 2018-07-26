@@ -25,11 +25,7 @@ LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
 BIN ?= bin
 
-<<<<<<< HEAD
-all: $(BIN)/process-host $(BIN)/process_nv12-host $(BIN)/process_p010-host $(BIN)/process_rd_wr-host $(BIN)/process_err-host
-=======
-all: $(BIN)/process-host $(BIN)/process_nv12-host $(BIN)/process_p010-host $(BIN)/process_err-host $(BIN)/process_rawinterleaved-host $(BIN)/process_rawplanar-host
->>>>>>> origin/hex-dma2
+all: $(BIN)/process-host $(BIN)/process_nv12-host $(BIN)/process_p010-host $(BIN)/process_err-host $(BIN)/process_rd_wr-host $(BIN)/process_rawinterleaved-host $(BIN)/process_rawplanar-host
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)

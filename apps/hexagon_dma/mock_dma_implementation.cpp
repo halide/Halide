@@ -159,11 +159,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
                 // per line copy 
                 int ycache = yii * desc->stWord1.dst_roi_stride * pixelsize;
                 int RoiOffset = (x + (y_offset + y) * desc->stWord1.src_roi_stride) * pixelsize;
-<<<<<<< HEAD
                 int yddr = yii * desc->stWord1.src_roi_stride * pixelsize;
-=======
-                int ysrc = yii * desc->stWord1.src_roi_stride * pixelsize;
->>>>>>> origin/hex-dma2
                 int len = w * pixelsize;
 
                 if (desc->stWord0.dst_is_tcm) {

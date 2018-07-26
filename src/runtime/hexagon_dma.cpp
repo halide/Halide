@@ -196,13 +196,10 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         return halide_error_code_device_buffer_copy_failed;
     }
 
-<<<<<<< HEAD
     // Copy from Locked Cache to a temp DDR buffer
     // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
     int buf_size = roi_stride * roi_height * src->type.bytes();
     debug(user_context) << " cache buffer size " << buf_size << "\n";
-=======
->>>>>>> origin/hex-dma2
     // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
     // We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format
     // because DMA treat RAW as a flattened buffer
@@ -232,7 +229,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
     // Raw Format Planar
     if ((dev->fmt == eDmaFmt_RawData) &&
         (dst->dimensions == 3)) {
-        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * src->dim[1].stride);
+        stDmaTransferParm.u16RoiY = dev->offset_rdy + dst->dim[1].min + (dst->dim[2].min * src->dim[1].stride);
     }
    
     // DMA Driver implicitly halves the Height and Y Offset for chroma, based on Y/UV
@@ -374,19 +371,6 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         error(user_context) << "Free DMA/Cache Pool failed.\n";
         return halide_error_code_generic_error;
     }
-<<<<<<< HEAD
-
-    if (Halide::Runtime::Internal::Hexagon::hexagon_cache_pool) {
-        int err = halide_hexagon_free_l2_pool(user_context);
-        if (err != 0) {
-            halide_print(user_context, "Freeing Cache Pool failed.\n");
-            return halide_error_code_generic_error;
-        }
-    }
-
-
-=======
->>>>>>> origin/hex-dma2
     return halide_error_code_success;
 }
 

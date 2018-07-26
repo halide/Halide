@@ -119,10 +119,7 @@ DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(hexagon_cache_allocator)
-<<<<<<< HEAD
-=======
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
->>>>>>> origin/hex-dma2
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)

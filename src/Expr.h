@@ -369,11 +369,7 @@ enum class MemoryType {
      * across GPU threads within the same block. */
     GPUShared,
 
-<<<<<<< HEAD
-     /** Allocate Locked Cache Memory to act as local memory */
-=======
     /** Allocate Locked Cache Memory to act as local memory */
->>>>>>> origin/hex-dma2
     LockedCache,
 };
 

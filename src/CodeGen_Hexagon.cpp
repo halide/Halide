@@ -1993,11 +1993,7 @@ void CodeGen_Hexagon::visit(const NE *op) {
     }
 }
 
-<<<<<<< HEAD
-Value *CodeGen_Hexagon::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
-=======
 Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
->>>>>>> origin/hex-dma2
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(32));
@@ -2053,11 +2049,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
     }
 
     if (alloc->memory_type == MemoryType::LockedCache) {
-<<<<<<< HEAD
-        // We are not allowing Customized memory allocation for Locked Cache
-=======
         // We are not allowing Customized memory allocation for Locked Cache 
->>>>>>> origin/hex-dma2
         user_assert(!alloc->new_expr.defined()) << "Custom Expression not allowed for Memory Type Locked Cache\n";
 
         Value *llvm_size = nullptr;
@@ -2066,15 +2058,9 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             constant_bytes *= alloc->type.bytes();
             llvm_size = codegen(Expr(constant_bytes));
         } else {
-<<<<<<< HEAD
-            llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
-        }
-
-=======
             llvm_size = codegen_cache_allocation_size(alloc->name, alloc->type, alloc->extents);
         }
  
->>>>>>> origin/hex-dma2
         // Only allocate memory if the condition is true, otherwise 0.
         Value *llvm_condition = codegen(alloc->condition);
         if (llvm_size != nullptr) {
