@@ -14,10 +14,10 @@ extern WEAK halide_device_interface_t hexagon_dma_device_interface;
 
 struct dma_device_handle {
     uint8_t *buffer;
-    int offset_rdx;
-    int offset_rdy;
-    int offset_wrx;
-    int offset_wry;
+    uint16_t offset_rdx;
+    uint16_t offset_rdy;
+    uint16_t offset_wrx;
+    uint16_t offset_wry;
     void *dma_engine;
     int frame_width;
     int frame_height;
@@ -227,7 +227,11 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         (dev->fmt == eDmaFmt_TP10_UV) ||
         (dev->fmt == eDmaFmt_NV124R_UV)) {
         stDmaTransferParm.u16RoiH = roi_height * 2;
-        stDmaTransferParm.u16RoiY = (stDmaTransferParm.u16RoiY - dev->frame_height) * 2;
+        if (dev->is_write) {
+            stDmaTransferParm.u16RoiY = stDmaTransferParm.u16RoiY * 2;
+        } else {
+            stDmaTransferParm.u16RoiY = (stDmaTransferParm.u16RoiY - dev->frame_height) * 2;
+        }
         debug(user_context)
             << "u16Roi(X: " << stDmaTransferParm.u16RoiX << " Y: " << stDmaTransferParm.u16RoiY
             << " W: " << stDmaTransferParm.u16RoiW << " H: " << stDmaTransferParm.u16RoiH << ")"
@@ -573,7 +577,6 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
     dma_device_handle *dst_dev = malloc_device_handle();
     halide_assert(user_context, dst_dev);
     dst_dev->buffer = src_dev->buffer;
-
     // TODO: It's messy to have both this offset and the buffer mins,
     // try to reduce complexity here.
     dst_dev->offset_wrx = src_dev->offset_wrx + dst->dim[0].min - src->dim[0].min;

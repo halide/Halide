@@ -125,8 +125,8 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
         t_st_hw_descriptor *desc = dma_handle->ptr;
 
         while (desc != NULL) {
-            unsigned char *host_addr = reinterpret_cast<unsigned char *>(desc->stWord1.src_frm_base_addr);
-            unsigned char *dest_addr = reinterpret_cast<unsigned char *>(desc->stWord1.dst_frm_base_addr);
+            unsigned char *ddr_addr = reinterpret_cast<unsigned char *>(desc->stWord1.src_frm_base_addr);
+            unsigned char *cache_addr = reinterpret_cast<unsigned char *>(desc->stWord1.dst_frm_base_addr);
 
             int x = desc->stWord0.roiX;
             int y = desc->stWord0.roiY;
@@ -144,29 +144,36 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
                 y_offset = 0;
             }
 #ifdef HALIDE_MOCK_DMA_DEBUG
-            fprintf(stderr, "Processing descriptor %p -- host_addr: %p dest_addr: %p ROI(X: %u, Y: %u, W: %u, H: %u) SrcRoiStride: %u, DstRoiStride %u, Frm(W: %u, H: %u), y_offset: %u\n",
-                   desc, host_addr, dest_addr, x, y, w, h,
+            fprintf(stderr, "Processing descriptor %p -- DMAREAD: %d ddr_addr: %p cache_addr: %p ROI(X: %u, Y: %u, W: %u, H: %u) FrameStride: %u, CacheRoiStride %u, Frm(W: %u, H: %u), y_offset: %u\n",
+                   desc, desc->stWord0.dst_is_tcm, ddr_addr, cache_addr, x, y, w, h,
                    desc->stWord1.src_roi_stride, desc->stWord1.dst_roi_stride, desc->stWord0.frm_width, desc->stWord0.frm_height, y_offset);
             int cnt = 0;    // log first few lines
 #endif
             for (int yii = 0; yii < h; yii++) {
                 // per line copy 
-                int ydst = yii * desc->stWord1.dst_roi_stride * pixelsize;
+                int ycache = yii * desc->stWord1.dst_roi_stride * pixelsize;
                 int RoiOffset = (x + (y_offset + y) * desc->stWord1.src_roi_stride) * pixelsize;
-                int ysrc = yii * desc->stWord0.frm_width * pixelsize;
+                int yddr = yii * desc->stWord1.src_roi_stride * pixelsize;
                 int len = w * pixelsize;
+
+                if (desc->stWord0.dst_is_tcm) {
+                    memcpy(&cache_addr[ycache], &ddr_addr[RoiOffset + yddr], len);
+                } else {
+                    // DMA Write implementation
+                    memcpy(&ddr_addr[RoiOffset + yddr], &cache_addr[ycache], len);
+                }
+
 #ifdef HALIDE_MOCK_DMA_DEBUG
 #define DBG_LOG_LINES        2
                 if (cnt++ < DBG_LOG_LINES) {
-                    fprintf(stderr, "Processing line -- yii: %u ydst: %u RoiOffset: %u ysrc: %u dest: %p src: %p len: %u\n",
-                        yii, ydst, RoiOffset, ysrc,
-                        &dest_addr[ydst], &host_addr[RoiOffset + ysrc], len);
+                    fprintf(stderr, "Processing line -- yii: %u ycache: %u RoiOffset: %u yddr: %u cache_addr: %p ddr_addr: %p len: %u\n",
+                        yii, ycache, RoiOffset, yddr,
+                        &cache_addr[ycache], &ddr_addr[RoiOffset + yddr], len);
                 }
                 else {
                     if (cnt == (h-DBG_LOG_LINES)) cnt = 0;    // log last few lines
                 }
 #endif
-                memcpy(&dest_addr[ydst], &host_addr[RoiOffset + ysrc], len);
             }
             desc = reinterpret_cast<t_st_hw_descriptor *>(desc->stWord0.des_pointer);
         }
@@ -261,13 +268,8 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
     desc->stWord1.roiW                   = dma_transfer_parm->u16RoiW;
     desc->stWord1.src_roi_stride         = dma_transfer_parm->u16FrameStride;
     desc->stWord1.dst_roi_stride         = dma_transfer_parm->u16RoiStride;
-    if (desc->stWord0.dst_is_tcm) {
-        desc->stWord1.dst_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
-        desc->stWord1.src_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);
-    } else {
-        desc->stWord1.src_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
-        desc->stWord1.dst_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);
-    }
+    desc->stWord1.dst_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
+    desc->stWord1.src_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);    // must always point to start of frame buffer, and not start of component
     desc->stWord2.pix_fmt                = dma_transfer_parm->eFmt;
     
     return 0;
