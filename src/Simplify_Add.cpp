@@ -79,9 +79,15 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
                rewrite(x*y + x, x * (y + 1)) ||
                rewrite(y*x + x, (y + 1) * x, !is_const(x)) ||
                rewrite((x + c0)/c1 + c2, (x + fold(c0 + c1*c2))/c1) ||
+<<<<<<< HEAD
                rewrite((x + (y + c0)/c1) + c2, x + (y + (c0 + c1*c2))/c1) ||
                rewrite(((y + c0)/c1 + x) + c2, x + (y + (c0 + c1*c2))/c1) ||
                rewrite((c0 - x)/c1 + c2, (fold(c0 + c1*c2) - x)/c1, c0 != 0 && c1 != 0) || // When c0 is zero, this would fight another rule
+=======
+               rewrite((x + (y + c0)/c1) + c2, x + (y + fold(c0 + c1*c2))/c1) ||
+               rewrite(((y + c0)/c1 + x) + c2, x + (y + fold(c0 + c1*c2))/c1) ||
+               rewrite((c0 - x)/c1 + c2, (fold(c0 + c1*c2) - x)/c1, c1 != 0) ||
+>>>>>>> 565e2d9e17c7a582d3144e12f26ccdf3771239e1
                rewrite(x + (x + y)/c0, (fold(c0 + 1)*x + y)/c0) ||
                rewrite(x + (y + x)/c0, (fold(c0 + 1)*x + y)/c0) ||
                rewrite(x + (y - x)/c0, (fold(c0 - 1)*x + y)/c0) ||
