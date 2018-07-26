@@ -1439,7 +1439,16 @@ struct Test {
             hvx_width = 128;
         }
 
-        bool is_v62 = target.has_feature(Target::HVX_v62);
+        int isa_version;
+        if (target.has_feature(Halide::Target::HVX_v66)) {
+            isa_version = 66;
+        } else if (target.has_feature(Halide::Target::HVX_v65)) {
+            isa_version = 65;
+        } else if (target.has_feature(Halide::Target::HVX_v62)) {
+            isa_version = 62;
+        } else {
+            isa_version = 60;
+        }
 
         // Verify that unaligned loads use the right instructions, and don't try to use
         // immediates of more than 3 bits.
@@ -1497,7 +1506,7 @@ struct Test {
         check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(u32(u16_1) + u32(u16_2)));
         check("vadd(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1) + i32(i16_2)));
         check("vadd(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1) + i64(i32_2)));
-        if (is_v62) {
+        if (isa_version >= 62) {
             check("vadd(v*.uw,v*.uw):sat", hvx_width/4, u32_sat(u64(u32_1) + u64(u32_2)));
         }
 
@@ -1528,7 +1537,7 @@ struct Test {
         check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(u32(u16_1) + u32(u16_2)));
         check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1) + i32(i16_2)));
         check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1) + i64(i32_2)));
-        if (is_v62) {
+        if (isa_version >= 62) {
             check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width/2, u32_sat(u64(u32_1) + u64(u32_2)));
         }
 
@@ -1554,6 +1563,10 @@ struct Test {
         check("vnavg(v*.ub,v*.ub)", hvx_width/1, i8_sat((i16(u8_1) - i16(u8_2))/2));
         check("vnavg(v*.h,v*.h)", hvx_width/2, i16_sat((i32(i16_1) - i32(i16_2))/2));
         check("vnavg(v*.w,v*.w)", hvx_width/4, i32_sat((i64(i32_1) - i64(i32_2))/2));
+        if (isa_version >= 65) {
+            check("vavg(v*.b,v*.b)", hvx_width/1, i8((i16(i8_1) + i16(i8_2))/2));
+            check("vavg(v*.uw,v*.uw)", hvx_width/4, u32((u64(u32_1) + u64(u32_2))/2));
+        }
 
         // The behavior of shifts larger than the type behave differently
         // on HVX vs. the scalar processor, so we clamp.
@@ -1665,7 +1678,7 @@ struct Test {
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8_sat(i32_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8_sat(i32_1));
         check("v*.h = vsat(v*.w,v*.w)", hvx_width/1, u8_sat(i32(i16_1) << 8));
-        if (is_v62) {
+        if (isa_version >= 62) {
             // v62 - Saturating narrowing cast
             check("v*.uh = vsat(v*.uw, v*.uw)", hvx_width/2, u16_sat(u32_1));
         }
@@ -1767,7 +1780,7 @@ struct Test {
         check("vnot(v*)", hvx_width/2, ~u16_1);
         check("vnot(v*)", hvx_width/4, ~u32_1);
 
-        if (is_v62) {
+        if (isa_version >= 62) {
             // v62 - Broadcasting unsigned 8 bit and 16 bit scalars
             check("v*.b = vsplat(r*)", hvx_width/1, in_u8(0));
             check("v*.h = vsplat(r*)", hvx_width/2, in_u16(0));
@@ -1783,6 +1796,9 @@ struct Test {
 
         check("vabs(v*.h)", hvx_width/2, abs(i16_1));
         check("vabs(v*.w)", hvx_width/4, abs(i32_1));
+        if (isa_version >= 65) {
+            check("vabs(v*.b)", hvx_width/1, abs(i8_1));
+        }
 
         check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_2));
         check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));
@@ -1837,6 +1853,8 @@ struct Test {
         check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
         check("v*.h += vmpy(v*.ub,v*.b)", hvx_width/1, i16_1 + i16(i8_1) * i16(u8_2));
         check("v*.w += vmpy(v*.h,v*.uh)", hvx_width/2, i32_1 + i32(u16_1) * i32(i16_2));
+        check("v*.w += vmpy(v*.h, r*.h):sat", hvx_width/1, i32_1 + i32(i16_1)*32767);
+        check("v*.w += vmpy(v*.h, r*.h):sat", hvx_width/1, i32_1 + 32767*i32(i16_1));
 
         check("v*.uh += vmpy(v*.ub,r*.ub)", hvx_width/1, u16_1 + u16(u8_1) * 255);
         check("v*.h += vmpy(v*.ub,r*.b)", hvx_width/1, i16_1 + i16(u8_1) * 127);
@@ -1961,6 +1979,17 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 << (y % 32)));
         check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 >> (y % 32)));
+
+        if (isa_version >= 65) {
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 << i16(y % 16)));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16(y % 16) << i16_2));
+            check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 >> i16(y % 16)));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, u16_1 + (u16_2 * 16));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 * 16));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, u16_1 + (16 * u16_2));
+            check("v*.h += vasl(v*.h,r*)", hvx_width/2, i16_1 + (16 * i16_2));
+            check("v*.h += vasr(v*.h,r*)", hvx_width/2, i16_1 + (i16_2 / 16));
+        }
 
         check("vcl0(v*.uh)", hvx_width/2, count_leading_zeros(u16_1));
         check("vcl0(v*.uw)", hvx_width/4, count_leading_zeros(u32_1));
