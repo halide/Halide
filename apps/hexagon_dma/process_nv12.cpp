@@ -19,13 +19,13 @@ int main(int argc, char **argv) {
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
     
-    const int buf_size = width * height * 1.5;
+    const int buf_size = (width * height * 3) / 2;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
     // Creating the Input Data so that we can catch if there are any Errors in DMA   
-    int *data_in_int = reinterpret_cast<int *>(data_in);
-    for (int i = 0; i < (buf_size >> 2);  i++) {
-        data_in_int[i] = i;
+    for (int i = 0; i < buf_size;  i++) {
+        data_in[i] = ((uint8_t)rand()) >> 1;
     }
+
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, (3*height) / 2);
 
@@ -35,8 +35,6 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> input_y = input.cropped(1, 0, height);    // Luma plane only
     Halide::Runtime::Buffer<uint8_t> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
 
-    input_uv.allocate();
-    input_y.allocate();
 
     input_uv.embed(2, 0);
     input_uv.raw_buffer()->dim[2].extent = 2;

@@ -52,7 +52,6 @@ typedef struct desc_pool {
 
 typedef desc_pool_t *pdesc_pool;
 
-
 static pdesc_pool dma_desc_pool = NULL;
 
 static void *desc_pool_get (void *user_context) {
@@ -151,8 +150,19 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         << "size_in_bytes() src: " << static_cast<uint32>(src->size_in_bytes())
         << " dst: " << static_cast<uint32>(dst->size_in_bytes())
         << "\n";
+    
+    // Assert if buffer dimensions do not fulfill the format requirements
+    if (dev->fmt == eDmaFmt_RawData) {
+        halide_assert(user_context, src->dimensions <= 3);
+    }
+   
+    if ((dev->fmt == eDmaFmt_NV12_Y) ||
+        (dev->fmt == eDmaFmt_P010_Y) ||
+        (dev->fmt == eDmaFmt_TP10_Y) ||
+        (dev->fmt == eDmaFmt_NV124R_Y)) {
+        halide_assert(user_context, src->dimensions == 2);
+    }
 
-    // Changing the Format to Chroma or LUMA based on dimension    
     if ((dev->fmt == eDmaFmt_NV12_UV) ||
         (dev->fmt == eDmaFmt_P010_UV) ||
         (dev->fmt == eDmaFmt_TP10_UV) ||
@@ -163,7 +173,7 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         halide_assert(user_context, src->dim[2].min == 0);
         halide_assert(user_context, src->dim[2].extent == 2);
     }
-    // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
+
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {
         static_cast<uint16>(dst->dim[0].extent * dst->dim[0].stride),
         static_cast<uint16>(dst->dim[1].extent)
@@ -176,10 +186,8 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
 
     debug(user_context)
         << "Recommended ROI(w: " << roi_width << " h: " << roi_height << " s: " << roi_stride << ")\n";
-    halide_assert(user_context,(dst->dim[1].stride >= roi_stride));
-
-    // DMA driver Expect the Stride to be 256 Byte Aligned
-    halide_assert(user_context, (roi_stride % 256) == 0);
+    // Assert if destination stride is a multipe of recommended stride
+    halide_assert(user_context,((dst->dim[1].stride%roi_stride)== 0));
 
     // Return NULL if descriptor is not allocated
     void *desc_addr = desc_pool_get(user_context);
@@ -188,10 +196,13 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         return halide_error_code_device_buffer_copy_failed;
     }
 
+<<<<<<< HEAD
     // Copy from Locked Cache to a temp DDR buffer
     // TODO: This should be removed once the cache locking is addressed inside Halide Pipeline
     int buf_size = roi_stride * roi_height * src->type.bytes();
     debug(user_context) << " cache buffer size " << buf_size << "\n";
+=======
+>>>>>>> origin/hex-dma2
     // TODO: Currently we can only handle 2-D RAW Format, Will revisit this later for > 2-D
     // We need to make some adjustment to H, X and Y parameters for > 2-D RAW Format
     // because DMA treat RAW as a flattened buffer
@@ -218,6 +229,12 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
         stDmaTransferParm.u16RoiY           = dev->offset_rdy + dst->dim[1].min;
     }
 
+    // Raw Format Planar
+    if ((dev->fmt == eDmaFmt_RawData) &&
+        (dst->dimensions == 3)) {
+        stDmaTransferParm.u16RoiY = dev->offset_y + dst->dim[1].min + (dst->dim[2].min * src->dim[1].stride);
+    }
+   
     // DMA Driver implicitly halves the Height and Y Offset for chroma, based on Y/UV
     // planar relation for 4:2:0 format, to adjust the for plane size difference.
     // This driver adjustment is compensated here for Halide that treats Y/UV separately.
@@ -237,32 +254,42 @@ static int halide_hexagon_dma_wrapper (void *user_context, struct halide_buffer_
             << " W: " << stDmaTransferParm.u16RoiW << " H: " << stDmaTransferParm.u16RoiH << ")"
             << " dst->dim[1].min: " << dst->dim[1].min << "\n" ;
     }
+    // TODO Check for async
+    void *dma_engine = halide_hexagon_allocate_from_dma_pool(user_context, dev->dma_engine);
+    if (!dma_engine) {
+        debug(user_context) << "Hexagon: Dma Engine Allocation Faliure\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
 
     debug(user_context)
-        << "Hexagon: " << dev->dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n";
-    nRet = nDmaWrapper_DmaTransferSetup(dev->dma_engine, &stDmaTransferParm);
+        << "Hexagon: " << dma_engine << " transfer: " << stDmaTransferParm.pDescBuf << "\n";
+    nRet = nDmaWrapper_DmaTransferSetup(dma_engine, &stDmaTransferParm);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: DMA Transfer Error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
     }
     
-    debug(user_context) << "Hexagon: " << dev->dma_engine << " move\n" ;
-    nRet = nDmaWrapper_Move(dev->dma_engine);
+    debug(user_context) << "Hexagon: " << dma_engine << " move\n" ;
+    nRet = nDmaWrapper_Move(dma_engine);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: nDmaWrapper_Move error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
     // TODO: separate out when Async feature (PR #2576) is ready and NUMA memory is addressed
-    debug(user_context) << "Hexagon: " << dev->dma_engine << " wait\n" ;
-    nRet = nDmaWrapper_Wait(dev->dma_engine);
+    debug(user_context) << "Hexagon: " << dma_engine << " wait\n" ;
+    nRet = nDmaWrapper_Wait(dma_engine);
     if (nRet != QURT_EOK) {
         debug(user_context) << "Hexagon: nDmaWrapper_Wait error: " << nRet << "\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
     desc_pool_put(user_context, desc_addr);
-
+    nRet = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine);
+    if (nRet != halide_error_code_success) {
+        debug(user_context) << "halide_hexagon_free_from_dma_pool:" << nRet << "\n";
+        return nRet;
+    }
     return halide_error_code_success;
 }
 
@@ -322,7 +349,7 @@ WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engin
 
     halide_assert(user_context, dma_engine);
     debug(user_context) << "    dma_allocate_dma_engine -> ";
-    *dma_engine = (void *)hDmaWrapper_AllocDma();
+    *dma_engine = halide_hexagon_allocate_dma_resource(user_context);
     debug(user_context) << "        " << dma_engine << "\n";
     if (!*dma_engine) {
         error(user_context) << "dma_allocate_dma_engine failed.\n";
@@ -337,15 +364,17 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         << "Hexagon: halide_hexagon_dma_deallocate_engine (user_context: " << user_context
         << ", dma_engine: " << dma_engine << ")\n";
 
-    debug(user_context) << "    dma_free_dma_engine\n";
     halide_assert(user_context, dma_engine);
     desc_pool_free(user_context);
 
-    int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)dma_engine);
+    // Free DMA Resources
+    int err = halide_hexagon_free_dma_resource(user_context, dma_engine);
+    debug(user_context) << "    dma_free_dma_pool done\n";
     if (err != 0) {
-        error(user_context) << "Freeing DMA Engine failed.\n";
+        error(user_context) << "Free DMA/Cache Pool failed.\n";
         return halide_error_code_generic_error;
     }
+<<<<<<< HEAD
 
     if (Halide::Runtime::Internal::Hexagon::hexagon_cache_pool) {
         int err = halide_hexagon_free_l2_pool(user_context);
@@ -356,6 +385,8 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     }
 
 
+=======
+>>>>>>> origin/hex-dma2
     return halide_error_code_success;
 }
 
@@ -400,18 +431,18 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << buf << ")\n";
-
-    halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
+   //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
+   /* halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
     halide_assert(user_context, buf->device);
 
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     debug(user_context) << "   dma_finish_frame -> ";
-    int err = nDmaWrapper_FinishFrame(dev->dma_engine);
+    int err = 0; //nDmaWrapper_FinishFrame(dev->dma_engine);
     debug(user_context) << "        " << err << "\n";
     if (err != 0) {
         error(user_context) << "dma_finish_frame failed.\n";
         return halide_error_code_generic_error;
-    }
+    }*/
 
     return halide_error_code_success;
 }
@@ -623,14 +654,14 @@ WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer
         << "Hexagon: halide_hexagon_dma_device_sync (user_context: " << user_context
         << " buf: " << buf << ")\n";
 
-    dma_device_handle *dev = (dma_device_handle *)buf->device;
-    halide_assert(user_context, dev->dma_engine);
+ /* dma_device_handle *dev = (dma_device_handle *)buf->device;
+    halide_assert(user_context, dev->dma_pool);
     int err = nDmaWrapper_Wait(dev->dma_engine);
 
     if (err != 0) {
         error(user_context) << "dma_wait failed (" << err << ")\n";
         return halide_error_code_device_sync_failed;
-    }
+    }*/
 
     return halide_error_code_success;
 }

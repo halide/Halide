@@ -4,9 +4,10 @@
  * actual DMA functions.
  * This file is needed only if there is no hexagon SDK support or NO hexagon DMA support, in either case we replace
  * the DMA operations with normal memory operations */
-
+#define WEAK __attribute__((weak))
 #include "HalideRuntime.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
+#include "../../src/runtime/hexagon_dma_pool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -14,7 +15,6 @@
 
 
 #define HALIDE_MOCK_DMA_DEBUG
-
 
 // Mock Global Descriptor
 typedef struct {
@@ -61,6 +61,11 @@ typedef struct {
     t_st_hw_descriptor *ptr;
 } dma_handle_t;
 
+int halide_hexagon_free_l2_pool(void *user_context) {
+    halide_print(user_context, "halide_hexagon_free_l2_pool mock implementation \n");
+    return 0;
+}
+
 static int nDmaPixelSize(int pix_fmt)
 {
     int nRet = 0;
@@ -99,6 +104,7 @@ void *HAP_cache_lock(unsigned int size, void **paddr_ptr) {
 int HAP_cache_unlock(void *vaddr_ptr) {
     if (vaddr_ptr != 0) {
         free(vaddr_ptr);
+        vaddr_ptr = 0;
         return 0;
     }
     return 1;
@@ -153,7 +159,11 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
                 // per line copy 
                 int ycache = yii * desc->stWord1.dst_roi_stride * pixelsize;
                 int RoiOffset = (x + (y_offset + y) * desc->stWord1.src_roi_stride) * pixelsize;
+<<<<<<< HEAD
                 int yddr = yii * desc->stWord1.src_roi_stride * pixelsize;
+=======
+                int ysrc = yii * desc->stWord1.src_roi_stride * pixelsize;
+>>>>>>> origin/hex-dma2
                 int len = w * pixelsize;
 
                 if (desc->stWord0.dst_is_tcm) {
@@ -207,7 +217,9 @@ int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt fmt, bool is_ubwc,
 int32 nDmaWrapper_GetRecommendedIntermBufStride(t_eDmaFmt fmt,
                                                 t_StDmaWrapper_RoiAlignInfo *roi_size,
                                                  bool is_ubwc) {
-    return align(roi_size->u16W, 256);
+    // UBWC Not Supported
+    assert(is_ubwc == 0);
+    return roi_size->u16W;
 }
 
 int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaWrapper_DmaTransferSetup *dma_transfer_parm) {
