@@ -605,16 +605,7 @@ WEAK int halide_hexagon_dma_device_sync(void *user_context, struct halide_buffer
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_sync (user_context: " << user_context
         << " buf: " << buf << ")\n";
-
- /* dma_device_handle *dev = (dma_device_handle *)buf->device;
-    halide_assert(user_context, dev->dma_pool);
-    int err = nDmaWrapper_Wait(dev->dma_engine);
-
-    if (err != 0) {
-        error(user_context) << "dma_wait failed (" << err << ")\n";
-        return halide_error_code_device_sync_failed;
-    }*/
-
+    // TODO We need to check if any DMA specific action is required here
     return halide_error_code_success;
 }
 

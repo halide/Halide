@@ -15,14 +15,14 @@ typedef struct {
 } hexagon_dma_virtual_engine_t;
 
 typedef struct {
-    bool used;
-    bool assigned;
+    bool used; // DMA Engine is assigned to a virtual engine and in current use
+    bool assigned; // DMA Engine is assigned to a virtual engine
     void *engine_addr;
 } hexagon_dma_engine_t;
 
 typedef struct {
-hexagon_dma_engine_t dma_engine_list[MAX_NUMBER_OF_DMA_ENGINES];
-hexagon_dma_virtual_engine_t virtual_engine_list[MAX_NUMBER_OF_DMA_ENGINES];
+    hexagon_dma_engine_t dma_engine_list[MAX_NUMBER_OF_DMA_ENGINES];
+    hexagon_dma_virtual_engine_t virtual_engine_list[MAX_NUMBER_OF_DMA_ENGINES];
 } hexagon_dma_pool_t;
 
 hexagon_dma_pool_t *hexagon_dma_pool = NULL;
@@ -154,7 +154,6 @@ void *halide_hexagon_allocate_dma_resource(void *user_context) {
         }
     }
 
-    // halide_hexagon_max_number_of_dma_engines
     for (int i=0; i < MAX_NUMBER_OF_DMA_ENGINES; i++) {
         if (hexagon_dma_pool->virtual_engine_list[i].in_use == false) {
             hexagon_dma_pool->virtual_engine_list[i].in_use = true;
