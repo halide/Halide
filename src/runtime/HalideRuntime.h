@@ -1136,7 +1136,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_legacy_buffer_wrappers = 51,  ///< Emit legacy wrapper code for buffer_t (vs halide_buffer_t) when AOT-compiled.
     halide_target_feature_tsan = 52, ///< Enable hooks for TSAN support.
     halide_target_feature_asan = 53, ///< Enable hooks for ASAN support.
-    halide_target_feature_end = 54 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_d3d12compute = 54, ///< Enable Direct3D 12 Compute runtime.
+    halide_target_feature_end = 55 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
