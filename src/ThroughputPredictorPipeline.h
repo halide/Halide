@@ -41,19 +41,21 @@ public:
     Buffer<float> filter6;
     Buffer<float> bias6;
 
-    Func f_head1_conv, f_head2_conv;
-    Func f_head1_relu, f_head2_relu;
-    Func f_head1_relu_padded, f_head2_relu_padded;
+    Func f_head1_conv{"f_head1_conv"}, f_head2_conv{"f_head2_conv"};
+    Func f_head1_relu{"f_head1_relu"}, f_head2_relu{"f_head2_relu"};
+    Func f_head1_relu_padded{"f_head1_relu_padded"}, f_head2_relu_padded{"f_head2_relu_padded"};
 
-    Func f_conv1_stage1, f_conv1_stage2, f_conv2, f_conv3, f_conv4, f_conv5, f_conv6;
-    Func f_ReLU1, f_relu1_padded;
-    Func f_ReLU2, f_relu2_padded;
-    Func f_ReLU3, f_relu3_padded;
-    Func f_ReLU4, f_relu4_padded;
-    Func f_ReLU5, f_relu5_padded;
-    Func f_ReLU6, f_relu6_padded;
-    Func f_pool3, f_pool3_padded, f_pool4, f_pool4_padded;
-    Func f_reduce, prediction;
+    Func f_conv1_stage1{"f_conv1_stage1"}, f_conv1_stage2{"f_conv1_stage2"};
+    Func f_conv2{"f_conv2"}, f_conv3{"f_conv3"}, f_conv4{"f_conv4"}, f_conv5{"f_conv5"}, f_conv6{"f_conv6"};
+    Func f_ReLU1{"f_ReLU1"}, f_relu1_padded{"f_relu1_padded"};
+    Func f_ReLU2{"f_ReLU2"}, f_relu2_padded{"f_relu2_padded"};
+    Func f_ReLU3{"f_ReLU3"}, f_relu3_padded{"f_relu3_padded"};
+    Func f_ReLU4{"f_ReLU4"}, f_relu4_padded{"f_relu4_padded"};
+    Func f_ReLU5{"f_ReLU5"}, f_relu5_padded{"f_relu5_padded"};
+    Func f_ReLU6{"f_ReLU6"}, f_relu6_padded{"f_relu6_padded"};
+    Func f_pool3{"f_pool3"}, f_pool3_padded{"f_pool3_padded"};
+    Func f_pool4{"f_pool4"}, f_pool4_padded{"f_pool4_padded"};
+    Func f_reduce{"f_reduce"}, prediction{"prediction"};
 
     ThroughputPredictorPipeline(Weights weights, Stats stats) :
         feature_stats(stats),
