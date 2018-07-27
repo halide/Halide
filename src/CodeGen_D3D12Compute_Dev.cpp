@@ -675,7 +675,8 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(
     cast_expr += "as";
     switch (type.code()) {
         case halide_type_uint :
-            cast_expr += "u";
+            cast_expr += "uint";
+            break;
         case halide_type_int :
             cast_expr += "int";
             break;
@@ -1090,7 +1091,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "\n";
 
     // Write out the Halide math functions.
-    src_stream 
+    src_stream
              //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
                #if DEBUG_TYPES
                << "#define  int8   int\n"
