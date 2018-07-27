@@ -1061,8 +1061,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     }
 
     stream << "\n";
-
-    return;
 }
 
 void CodeGen_D3D12Compute_Dev::init_module() {
