@@ -1034,8 +1034,7 @@ struct PartialScheduleNode {
         }
     }
 
-    void compute_features(const FunctionDAG &dag,
-                          const MachineParams &params,
+    void compute_features(const MachineParams &params,
                           map<const FunctionDAG::Node *, const PartialScheduleNode *> &compute_site,
                           int64_t instances,
                           int64_t parallelism,
@@ -1055,7 +1054,7 @@ struct PartialScheduleNode {
 
         if (is_root()) {
             for (auto c : children) {
-                c->compute_features(dag, params, compute_site, subinstances, parallelism, this, root, features);
+                c->compute_features(params, compute_site, subinstances, parallelism, this, root, features);
             }
         } else {
 
@@ -1088,7 +1087,7 @@ struct PartialScheduleNode {
 
                 int64_t bytes_loaded = 0;
                 for (const auto *e : node->incoming_edges) {
-                    const auto &bounds = parent->get_bounds(e->producer, dag);
+                    const auto &bounds = parent->get_bounds(e->producer);
                     int64_t footprint = 1;
                     for (auto p : bounds.region_required) {
                         footprint *= (p.second - p.first + 1);
@@ -1109,7 +1108,7 @@ struct PartialScheduleNode {
                 feat.inner_parallelism = parallel_tasks;
                 feat.outer_parallelism = parallelism;
 
-                const auto &bounds = parent->get_bounds(node, dag);
+                const auto &bounds = parent->get_bounds(node);
 
                 feat.bytes_at_production = node->bytes_per_point;
                 for (auto p : bounds.region_computed) {
@@ -1123,7 +1122,7 @@ struct PartialScheduleNode {
             }
 
             for (auto c : children) {
-                c->compute_features(dag, params, compute_site, subinstances, subparallelism, this, root, features);
+                c->compute_features(params, compute_site, subinstances, subparallelism, this, root, features);
             }
 
             if (outermost_loop_for_this_stage) {
@@ -1133,7 +1132,7 @@ struct PartialScheduleNode {
 
         for (const auto *node : store_at) {
             // Figure out the features at the store_at level
-            const auto &bounds = get_bounds(node, dag);
+            const auto &bounds = get_bounds(node);
 
             for (size_t s = 0; s < node->stages.size(); s++) {
                 // TODO: Lift invariants from this loop. Most of it's the same for every stage.
@@ -1181,7 +1180,7 @@ struct PartialScheduleNode {
             for (auto &p : *features) {
                 const auto *node = p.first;
                 auto &feat_vec = p.second;
-                const auto &root_bounds = root.get_bounds(node, dag);
+                const auto &root_bounds = root.get_bounds(node);
                 int s = 0;
                 for (auto &feat : feat_vec) {
                     feat.bytes_at_root = node->bytes_per_point;
@@ -1222,7 +1221,7 @@ struct PartialScheduleNode {
 
     // The total bounds required of the given Func for one representative iteration of this loop. Computed lazily and cached.
     mutable map<const FunctionDAG::Node *, Bound> bounds;
-    const Bound &get_bounds(const FunctionDAG::Node *f, const FunctionDAG &dag) const {
+    const Bound &get_bounds(const FunctionDAG::Node *f) const {
         // debug(0) << "get_bounds of " << f.name() << " in loop over " << (is_root() ? "root" : func.name()) << '\n';
         auto it = bounds.find(f);
         if (it != bounds.end()) {
@@ -1254,10 +1253,10 @@ struct PartialScheduleNode {
                 << " at loop over " << (is_root() ? "root" : node->func.name()) << '\n';
             for (const auto *e : f->outgoing_edges) {
                 // Ignore consumers outside of this loop nest
-                if (!computes(e->consumer, dag)) {
+                if (!computes(e->consumer)) {
                     continue;
                 }
-                const auto &c_bounds = get_bounds(e->consumer, dag);
+                const auto &c_bounds = get_bounds(e->consumer);
                 const auto *c_node = e->consumer;
                 const auto &concrete_loop = c_bounds.loops[e->consumer_stage]; // For the concrete sizes of the loop
                 const auto &symbolic_loop = c_node->stages[e->consumer_stage].loop; // Just for the var names of the loop
@@ -1377,10 +1376,10 @@ struct PartialScheduleNode {
         */
     }
 
-    int64_t calls_per_instance(const FunctionDAG::Node *f, const FunctionDAG &dag) const {
+    int64_t calls_per_instance(const FunctionDAG::Node *f) const {
         int64_t result = 0;
         for (const auto &c : children) {
-            result += c->calls(f, dag);
+            result += c->calls(f);
         }
         for (const auto *e : f->outgoing_edges) {
             if (e->consumer == node && e->consumer_stage == stage_idx) {
@@ -1394,15 +1393,15 @@ struct PartialScheduleNode {
         return result;
     }
 
-    int64_t calls(const FunctionDAG::Node *f, const FunctionDAG &dag) const {
-        int result = calls_per_instance(f, dag);
+    int64_t calls(const FunctionDAG::Node *f) const {
+        int result = calls_per_instance(f);
         for (auto s : size) {
             result *= s;
         }
         return result;
     }
 
-    bool computes(const FunctionDAG::Node *f, const FunctionDAG &dag) const {
+    bool computes(const FunctionDAG::Node *f) const {
         if (f == node) {
             return true;
         }
@@ -1410,19 +1409,19 @@ struct PartialScheduleNode {
             return true;
         }
         for (const auto &c : children) {
-            if (c->computes(f, dag)) return true;
+            if (c->computes(f)) return true;
         }
         return false;
     }
 
     // Make a copy of the tree with the given func inlined.
-    PartialScheduleNode inline_func(const FunctionDAG::Node *f, const FunctionDAG &dag) const {
+    PartialScheduleNode inline_func(const FunctionDAG::Node *f) const {
         PartialScheduleNode result = *this;
 
         // Inline it into the children
         for (size_t i = 0; i < result.children.size(); i++) {
-            if (children[i]->calls(f, dag)) {
-                result.children[i] = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode(children[i]->inline_func(f, dag)));
+            if (children[i]->calls(f)) {
+                result.children[i] = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode(children[i]->inline_func(f)));
             }
         }
 
@@ -1445,8 +1444,8 @@ struct PartialScheduleNode {
         return result;
     }
 
-    void compute_here(const FunctionDAG::Node *f, const FunctionDAG &dag) {
-        auto bounds = get_bounds(f, dag);
+    void compute_here(const FunctionDAG::Node *f) {
+        auto bounds = get_bounds(f);
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
             auto node = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode);
             node->node = f;
@@ -1474,7 +1473,6 @@ struct PartialScheduleNode {
 
     // Return all possible ways to compute f in tiles.
     vector<PartialScheduleNode> compute_in_tiles(const FunctionDAG::Node *f,
-                                                 const FunctionDAG &dag,
                                                  const PartialScheduleNode *parent,
                                                  const MachineParams &params,
                                                  bool in_realization) const {
@@ -1482,8 +1480,8 @@ struct PartialScheduleNode {
 
         // Is it worth descending into this loop? If we don't end up doing less work, it's pointless.
         if (parent) {
-            int64_t parent_points = parent->get_bounds(f, dag).iteration_domain_points;
-            int64_t in_loop_points = get_bounds(f, dag).iteration_domain_points;
+            int64_t parent_points = parent->get_bounds(f).iteration_domain_points;
+            int64_t in_loop_points = get_bounds(f).iteration_domain_points;
             if (parent_points <= in_loop_points) {
                 return result;
             }
@@ -1493,7 +1491,7 @@ struct PartialScheduleNode {
         int child = -1;
         bool called_by_multiple_children = false;
         for (int i = 0; i < (int)children.size(); i++) {
-            if (children[i]->calls(f, dag)) {
+            if (children[i]->calls(f)) {
                 if (child != -1) {
                     called_by_multiple_children = true;
                 }
@@ -1511,7 +1509,7 @@ struct PartialScheduleNode {
         if (!in_realization || (!innermost && size[vector_dim] == 1)) {
             // Place the computation inside this loop
             PartialScheduleNode r = *this;
-            r.compute_here(f, dag);
+            r.compute_here(f);
             if (!in_realization) {
                 r.store_at.insert(f);
             } else {
@@ -1592,7 +1590,7 @@ struct PartialScheduleNode {
                 outer.innermost = false;
 
                 // Then move factors from the outer loop to the inner loop
-                auto parent_bounds = parent->get_bounds(node, dag);
+                auto parent_bounds = parent->get_bounds(node);
                 auto &b = outer.bounds[node];
 
                 // We're within the computation of a single stage of a
@@ -1628,7 +1626,7 @@ struct PartialScheduleNode {
 
                 // Site the computation inside the outer loop
                 PartialScheduleNode compute_at_here = outer;
-                compute_at_here.compute_here(f, dag);
+                compute_at_here.compute_here(f);
                 if (!in_realization) {
                     compute_at_here.store_at.insert(f);
                 } else {
@@ -1646,7 +1644,7 @@ struct PartialScheduleNode {
                     // loop.
                     PartialScheduleNode store_at_here = std::move(outer);
                     store_at_here.store_at.insert(f);
-                    auto v = inner->compute_in_tiles(f, dag, &store_at_here, params, true);
+                    auto v = inner->compute_in_tiles(f, &store_at_here, params, true);
                     for (PartialScheduleNode n : v) {
                         store_at_here.children.pop_back();
                         store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
@@ -1673,7 +1671,7 @@ struct PartialScheduleNode {
                     // level, so this would constrain parallelism.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, dag, this, params, store_here);
+                auto v = children[child]->compute_in_tiles(f, this, params, store_here);
                 for (PartialScheduleNode n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -1703,20 +1701,20 @@ struct PartialScheduleNode {
         vector<FuncVar> vars; // In order from innermost to outermost. Each group of d is one tiling.
     };
 
-    void apply(LoopLevel here, const FunctionDAG &dag,
+    void apply(LoopLevel here,
                map<const FunctionDAG::Node::Stage *, FuncVars> &vars_map,
                double num_cores,
                const PartialScheduleNode *parent) {
         if (is_root()) {
             for (auto &c : children) {
                 Func(c->node->func).compute_root();
-                c->apply(LoopLevel::root(), dag, vars_map, num_cores, this);
+                c->apply(LoopLevel::root(), vars_map, num_cores, this);
             }
         } else {
             auto it = vars_map.find(stage);
             const auto &symbolic_loop = stage->loop;
             if (it == vars_map.end()) {
-                const auto &parent_bounds = parent->get_bounds(node, dag);
+                const auto &parent_bounds = parent->get_bounds(node);
                 FuncVars vars;
                 vars.num_cores = num_cores;
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
@@ -1831,7 +1829,7 @@ struct PartialScheduleNode {
                 if (c->node != node) {
                     Func(c->node->func).compute_at(here);
                 }
-                c->apply(here, dag, vars_map, num_cores, this);
+                c->apply(here, vars_map, num_cores, this);
             }
         }
     }
@@ -1856,7 +1854,7 @@ struct State {
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
         map<const FunctionDAG::Node *, const PartialScheduleNode *> compute_site;
         map<const FunctionDAG::Node *, vector<ScheduleFeatures>> features;
-        root.compute_features(dag, params, compute_site, 1, 1, nullptr, root, &features);
+        root.compute_features(params, compute_site, 1, 1, nullptr, root, &features);
 
         if (verbose) {
             for (const auto &n : dag.nodes) {
@@ -2103,7 +2101,7 @@ struct State {
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[num_funcs_scheduled];
         for (const auto *e : node->outgoing_edges) {
-            internal_assert(root.computes(e->consumer, dag))
+            internal_assert(root.computes(e->consumer))
                 << "Partially scheduled code doesn't compute " << e->consumer->func.name()
                 << ", which is one of the consumers of " << node->func.name();
         }
@@ -2113,10 +2111,10 @@ struct State {
         // 1) Inline it
         if (node->stages.size() == 1 && !node->outgoing_edges.empty()) {
             auto child = new State(*this);
-            child->root = child->root.inline_func(node, dag);
+            child->root = child->root.inline_func(node);
             child->num_funcs_scheduled++;
             if (child->calculate_cost(dag, params, throughput_predictor)) {
-                internal_assert(child->root.computes(node, dag)) << "Failed to inline " << node->func.name() << '\n';
+                internal_assert(child->root.computes(node)) << "Failed to inline " << node->func.name() << '\n';
                 num_children++;
                 accept_child(child);
             }
@@ -2124,13 +2122,13 @@ struct State {
 
 
         // 2) Realize it somewhere
-        auto tile_options = root.compute_in_tiles(node, dag, nullptr, params, false);
+        auto tile_options = root.compute_in_tiles(node, nullptr, params, false);
         for (PartialScheduleNode n : tile_options) {
             auto child = new State(*this);
             child->root = std::move(n);
             child->num_funcs_scheduled++;
             if (child->calculate_cost(dag, params, throughput_predictor)) {
-                internal_assert(child->root.computes(node, dag)) << "Failed to inject realization of " << node->func.name() << '\n';
+                internal_assert(child->root.computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
                 num_children++;
                 accept_child(child);
             }
@@ -2144,9 +2142,9 @@ struct State {
         root.dump("");
     }
 
-    void apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
+    void apply_schedule(const MachineParams &params) {
         map<const FunctionDAG::Node::Stage *, PartialScheduleNode::FuncVars> vars_map;
-        root.apply(LoopLevel::root(), dag, vars_map, params.parallelism, nullptr);
+        root.apply(LoopLevel::root(), vars_map, params.parallelism, nullptr);
 
         for (auto &p : vars_map) {
             Stage stage(p.first->stage);
@@ -2337,10 +2335,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     optimal.calculate_cost(dag, params, &throughput_predictor, true);
 
     // Apply the schedules
-    optimal.apply_schedule(dag, params);
+    optimal.apply_schedule(params);
 
     // Print out the predicted runtime of each Func, so we can compare them to a profile
-    // optimal.print_predicted_runtimes(dag, params);
+    // optimal.print_predicted_runtimes(params);
 
 
     return "";
@@ -2457,7 +2455,7 @@ void autoschedule_test() {
         optimal.dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(dag, params);
+        optimal.apply_schedule(params);
         h.realize(1000, 1000);
 
     }
@@ -2491,7 +2489,7 @@ void autoschedule_test() {
         optimal.dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(dag, params);
+        optimal.apply_schedule(params);
         h.realize(1000, 1000);
     }
 
@@ -2515,7 +2513,7 @@ void autoschedule_test() {
         optimal.dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(dag, params);
+        optimal.apply_schedule(params);
         h.realize(2048, 2048);
     }
 
@@ -2538,7 +2536,7 @@ void autoschedule_test() {
         optimal.dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(dag, params);
+        optimal.apply_schedule(params);
         h.realize(2048, 2048);
 
         // optimal.print_predicted_runtimes(dag, params);
@@ -2567,7 +2565,7 @@ void autoschedule_test() {
         optimal.dump();
         debug(0) << '\n';
 
-        // optimal.apply_schedule(dag, params);
+        // optimal.apply_schedule(params);
         // f[N-1].realize(2048, 2048);
     }
 
