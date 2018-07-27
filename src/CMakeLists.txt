@@ -92,6 +92,7 @@ set(RUNTIME_CPP
   write_debug_image
   x86_cpu_features
   hexagon_cache_allocator
+  hexagon_dma_pool
 )
 
 set (RUNTIME_LL
