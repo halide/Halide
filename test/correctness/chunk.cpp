@@ -28,9 +28,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
             if (im(i,j) != 2*i) {
-			    printf("im[%d, %d] = %f (expected %d)\n", i, j, im(i,j), 2*i);
-				return -1;
-				
+	    	printf("im[%d, %d] = %f (expected %d)\n", i, j, im(i,j), 2*i);
+		return -1;		
             }
         }
     }
