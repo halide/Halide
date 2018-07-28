@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 			    // See tests/correctness/math.cpp.  Instead, we use an arbitrary
 			    // threshold here.
 				if (target.supports_device_api(DeviceAPI::D3D12Compute)) {
-                    double bigger = (im(i,j) > 2*i) ? im(i, j) : 2*i;
+                                        double bigger = (im(i,j) > 2*i) ? im(i, j) : 2*i;
 					if (fabs(im(i,j) - 2*i)/bigger < 0.00103) {
 						relatively_equal = true;
 					}
