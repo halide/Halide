@@ -1903,13 +1903,17 @@ struct State {
 
             const int pipeline_feat_size = 399;
             const int schedule_feat_size = 18;
-            const int batch_size = 1;
 
-            Buffer<float> pipeline_features(batch_size, 56, 7, padded_stages); // just predicting on batch size of 1 pipeline
-            pipeline_features.fill(0.0f);
-            Buffer<float> schedule_features(batch_size, 18, padded_stages);
-            schedule_features.fill(0.0f);
-            Buffer<float> network_output(batch_size);
+            Buffer<float> pipeline_features, schedule_features;
+            // Won't actually run anything until we call evaluate_costs...
+            int batch_idx = throughput_predictor->enqueue(padded_stages, &pipeline_features, &schedule_features, &cost);
+
+            // Buffer<float> pipeline_features(batch_size, 56, 7, padded_stages); // just predicting on batch size of 1 pipeline
+            // pipeline_features.fill(0.0f);
+            // Buffer<float> schedule_features(batch_size, 18, padded_stages);
+            // schedule_features.fill(0.0f);
+            // Buffer<float> network_output(batch_size);
+
             // index of current stage whose features we are reading
             int stage = 0;
             // load pipeline features into input buffer
@@ -1923,9 +1927,9 @@ struct State {
                     for (int i = 7; i < pipeline_feat_size; i++) {
                         int x = (i-7)/7;
                         int y = (i-7)%7;
-                        pipeline_features(0, x, y, lpad+stage) = pipeline_feats[i];
-                        pipeline_features(0, x, y, lpad+stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
-                        pipeline_features(0, x, y, lpad+stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
+                        pipeline_features(batch_idx, x, y, lpad+stage) = pipeline_feats[i];
+                        pipeline_features(batch_idx, x, y, lpad+stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
+                        pipeline_features(batch_idx, x, y, lpad+stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
                     }
 
                     stage += 1;
@@ -1943,21 +1947,21 @@ struct State {
                     if (feat.points_computed_total + feat.inlined_calls > 2*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
-                        schedule_features(0, i, lpad+stage) = std::log(1+sched_stats[i]);
-                        schedule_features(0, i, lpad+stage) -= throughput_predictor->feature_stats.schedule_mean(i);
-                        schedule_features(0, i, lpad+stage) /= throughput_predictor->feature_stats.schedule_std(i);
+                        schedule_features(batch_idx, i, lpad+stage) = std::log(1+sched_stats[i]);
+                        schedule_features(batch_idx, i, lpad+stage) -= throughput_predictor->feature_stats.schedule_mean(i);
+                        schedule_features(batch_idx, i, lpad+stage) /= throughput_predictor->feature_stats.schedule_std(i);
                     }
                     stage += 1;
                 }
             }
 
-            throughput_predictor->set_inputs(pipeline_features, schedule_features);
-            throughput_predictor->prediction.realize(network_output);
+            // throughput_predictor->set_inputs(pipeline_features, schedule_features);
+            // throughput_predictor->prediction.realize(network_output);
 
-            cost = network_output(0);
+            // cost = network_output(0);
         }
 
-        if (cost == 0) {
+        if (false && cost == 0) {
             // Either we have no throughput predictor, or it predicted
             // a throughput of zero. Fall back to manual cost model times epsilon.
             for (auto p : features) {
@@ -2232,13 +2236,16 @@ State optimal_schedule(FunctionDAG &dag,
         }
     };
 
+    // An unsorted staging area for before costs have been calculated
+    vector<std::shared_ptr<State>> unevaluated_states;
+
     std::function<void(State *)> enqueue_new_children = [&](State *s) {
 
         //debug(0) << "\n** Generated child: ";
         //s->dump();
 
         tick(double(s->num_funcs_scheduled) / dag.nodes.size());
-        q.emplace(std::shared_ptr<State>(s));
+        unevaluated_states.push_back(std::shared_ptr<State>(s));
     };
 
     for (int i = 0; ; i++) {
@@ -2266,6 +2273,13 @@ State optimal_schedule(FunctionDAG &dag,
 
             state->generate_children(dag, params, throughput_predictor, enqueue_new_children);
         }
+
+        // Now evaluate all the costs and place them in the priority queue
+        throughput_predictor->evaluate_costs();
+        for (auto s : unevaluated_states) {
+            q.push(s);
+        }
+        unevaluated_states.clear();
     }
 }
 

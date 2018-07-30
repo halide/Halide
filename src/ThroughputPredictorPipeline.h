@@ -178,6 +178,15 @@ public:
 
 
         // schedule
+        Expr batch_size = prediction.output_buffers()[0].dim(0).extent();
+        prediction.bound(n, 0, batch_size);
+        // pipeline_features.dim(0).set_bounds(0, batch_size);
+        // schedule_features.dim(0).set_bounds(0, batch_size);
+        Expr pipeline_length = schedule_features.dim(2).extent();
+        pipeline_features.dim(3).set_bounds(0, pipeline_length);
+        schedule_features.dim(2).set_bounds(0, pipeline_length);
+
+        Target t = get_jit_target_from_environment();
         f_head1_relu.compute_at(prediction, n);
         f_head2_relu.compute_at(prediction, n);
         f_ReLU1.compute_at(prediction, n);
@@ -188,35 +197,73 @@ public:
         f_pool4.compute_at(prediction, n);
         f_ReLU5.compute_at(prediction, n);
         f_ReLU6.compute_at(prediction, n);
-        f_reduce.compute_at(prediction, n);
+        prediction.compute_root()
+            .specialize(batch_size >= 8).vectorize(n, 8)
+            .specialize(batch_size >= 16).parallel(n, 2);
 
+        prediction.compile_jit(t);
 
-        Expr batch_size = pipeline_features.dim(0).extent();
-        prediction.bound(n, 0, batch_size);
-        pipeline_features.dim(0).set_bounds(0, batch_size);
-        schedule_features.dim(0).set_bounds(0, batch_size);
-        Expr pipeline_length = schedule_features.dim(2).extent();
-        pipeline_features.dim(3).set_bounds(0, pipeline_length);
-        schedule_features.dim(2).set_bounds(0, pipeline_length);
-
-        prediction.compute_root();
-
-        prediction.compile_jit();
+        benchmark();
     }
 
     void benchmark() {
-        Buffer<float> pipeline_feats(1000, 56, 7, 20), schedule_feats(1000, 18, 20);
+        const int batch_size = 800;
+        Buffer<float> pipeline_feats(batch_size, 56, 7, 20), schedule_feats(batch_size, 18, 20);
         pipeline_feats.fill(0.0f);
         schedule_feats.fill(0.0f);
         set_inputs(pipeline_feats, schedule_feats);
-        Buffer<float> out(1000);
+        Buffer<float> out(batch_size);
         auto t = Halide::Tools::benchmark([&]() {prediction.realize(out);});
-        debug(0) << "Throughput predictor runtime: " << (t * 1000) << " us\n";
+        debug(0) << "Throughput predictor runtime: " << ((t/batch_size) * 1000000) << " us\n";
     }
 
     void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats) {
-        pipeline_features.set(pipeline_feats);
-        schedule_features.set(schedule_feats);
+        pipeline_features.set(Buffer<float>(*pipeline_feats.raw_buffer()));
+        schedule_features.set(Buffer<float>(*schedule_feats.raw_buffer()));
+    }
+
+
+    Buffer<float> pipeline_feat_queue, schedule_feat_queue;
+    std::vector<double *> cost_queue;
+    int cursor;
+    int enqueue(int padded_stages, Buffer<float> *pipeline_feats, Buffer<float> *schedule_feats, double *cost) {
+        const int batch_size = 1024;
+        if (!pipeline_feat_queue.defined() || pipeline_feat_queue.dim(3).extent() != padded_stages) {
+            pipeline_feat_queue = Buffer<float>(batch_size, 56, 7, padded_stages);
+            schedule_feat_queue = Buffer<float>(batch_size, 18, padded_stages);
+            pipeline_feat_queue.fill(0.0f);
+            schedule_feat_queue.fill(0.0f);
+            cost_queue.clear();
+            cost_queue.resize(batch_size, nullptr);
+            cursor = 0;
+        }
+
+        if (cursor == batch_size) {
+            evaluate_costs();
+        }
+
+        *pipeline_feats = pipeline_feat_queue;
+        *schedule_feats = schedule_feat_queue;
+
+        cost_queue[cursor] = cost;
+        return cursor++;
+    }
+
+    void evaluate_costs() {
+        if (cursor == 0) return;
+
+        set_inputs(pipeline_feat_queue, schedule_feat_queue);
+        Buffer<float> costs = prediction.realize(cursor);
+
+        for (int i = 0; i < cursor; i++) {
+            internal_assert(cost_queue[i]) << "Cost queue entry was null: " << i << "\n";
+            *(cost_queue[i]) = costs(i);
+        }
+
+        pipeline_feat_queue.fill(0.0f);
+        schedule_feat_queue.fill(0.0f);
+        std::fill(cost_queue.begin(), cost_queue.end(), nullptr);
+        cursor = 0;
     }
 
 };
