@@ -79,6 +79,9 @@ DECLARE_CPP_INITMOD(cuda)
 #ifdef WITH_D3D12
 DECLARE_LL_INITMOD(d3d12_abi_patch_64)
 DECLARE_CPP_INITMOD(d3d12compute)
+#else
+DECLARE_NO_INITMOD(d3d12_abi_patch_64)
+DECLARE_NO_INITMOD(d3d12compute)
 #endif
 DECLARE_CPP_INITMOD(destructors)
 DECLARE_CPP_INITMOD(device_interface)
