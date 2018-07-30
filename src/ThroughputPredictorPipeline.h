@@ -187,23 +187,21 @@ public:
         schedule_features.dim(2).set_bounds(0, pipeline_length);
 
         Target t = get_jit_target_from_environment();
-        f_head1_relu.compute_at(prediction, n);
-        f_head2_relu.compute_at(prediction, n);
-        f_ReLU1.compute_at(prediction, n);
-        f_ReLU2.compute_at(prediction, n);
-        f_ReLU3.compute_at(prediction, n);
-        f_pool3.compute_at(prediction, n);
-        f_ReLU4.compute_at(prediction, n);
-        f_pool4.compute_at(prediction, n);
-        f_ReLU5.compute_at(prediction, n);
-        f_ReLU6.compute_at(prediction, n);
+        f_head1_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_head2_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_ReLU1.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_ReLU2.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_ReLU3.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_pool3.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_ReLU4.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_pool4.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_ReLU5.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
+        f_ReLU6.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
         prediction.compute_root()
             .specialize(batch_size >= 8).vectorize(n, 8)
             .specialize(batch_size >= 16).parallel(n, 2);
 
         prediction.compile_jit(t);
-
-        benchmark();
     }
 
     void benchmark() {
