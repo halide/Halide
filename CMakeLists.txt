@@ -163,6 +163,7 @@ option(TARGET_AMDGPU "Include AMDGPU target" ${WITH_AMDGPU})
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 option(HALIDE_ENABLE_RTTI "Enable RTTI" ${LLVM_ENABLE_RTTI})
 
