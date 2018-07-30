@@ -4849,6 +4849,9 @@ private:
             if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
                 return expr;
             }
+            if (is_zero(b)) {
+                return a;
+            }
 
             int64_t ib = 0;
             if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
@@ -5695,6 +5698,17 @@ private:
         return stmt;
     }
 
+    Stmt visit(const Prefetch *op) override {
+        Stmt stmt = IRMutator2::visit(op);
+
+        const Prefetch *p = stmt.as<Prefetch>();
+        if (is_zero(p->condition)) {
+            // Predicate is always false
+            return p->body;
+        } else {
+            return stmt;
+        }
+    }
 
     Stmt visit(const For *op) override {
         Expr new_min = mutate(op->min);

@@ -22,6 +22,7 @@ set(RUNTIME_CPP
   cache
   can_use_target
   cuda
+  d3d12compute
   destructors
   device_interface
   errors
@@ -107,6 +108,7 @@ set (RUNTIME_LL
   x86_avx
   x86_avx2
   x86_sse41
+  d3d12_abi_patch_64
 )
 
 set (RUNTIME_BC
@@ -233,6 +235,7 @@ set(RUNTIME_HEADER_FILES
   HalideRuntimeMetal.h
   HalideRuntimeOpenGL.h
   HalideRuntimeOpenGLCompute.h
+  HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
 )
@@ -267,6 +270,7 @@ set(HEADER_FILES
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
+  CodeGen_D3D12Compute_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
   CodeGen_Internal.h
@@ -355,6 +359,7 @@ set(HEADER_FILES
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PythonExtensionGen.h
   Qualify.h
   Random.h
   RealizationOrder.h
@@ -430,6 +435,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
+  CodeGen_D3D12Compute_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
   CodeGen_Hexagon.cpp
@@ -508,6 +514,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PrintLoopNest.cpp
   Prefetch.cpp
   Profiling.cpp
+  PythonExtensionGen.cpp
   Qualify.cpp
   RDom.cpp
   Random.cpp
@@ -623,6 +630,10 @@ endif()
 
 if (TARGET_METAL)
   target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
+endif()
+
+if (TARGET_D3D12COMPUTE)
+  target_compile_definitions(Halide PRIVATE "-DWITH_D3D12=1")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")

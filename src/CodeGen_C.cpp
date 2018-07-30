@@ -30,6 +30,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
 namespace {
 
@@ -305,6 +306,9 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGL)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+            }
+            if (target.has_feature(Target::D3D12Compute)) {
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << '\n';
             }
         }
         stream << "#endif\n";
@@ -1163,7 +1167,13 @@ private:
 
 )INLINE_CODE";
 
+        // Vodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
+        // emitting this long text string was regularly garbled in a predictable pattern;
+        // flushing the stream before or after heals it. Since C++ codegen is rarely
+        // on a compilation critical path, we'll just band-aid it in this way.
+        stream << std::flush;
         stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
+        stream << std::flush;
 
         for (const auto &t : vector_types) {
             string name = type_to_c_type(t, false, false);

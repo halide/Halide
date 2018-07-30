@@ -13,6 +13,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Outputs.h"
+#include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
 #include "WrapExternStages.h"
 
@@ -80,6 +81,20 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
     return path.substr(0, found) + suffix + path.substr(found);
 }
 
+// Given a pathname of the form /path/to/name.old, replace extension to produce /path/to/name.new.
+std::string replace_extension(const std::string &path, const std::string &new_ext) {
+    size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
+    if (last_path == std::string::npos) {
+        last_path = 0;
+    }
+    size_t dot = path.find('.', last_path);
+    if (dot == std::string::npos) {
+        return path + new_ext;
+    } else {
+        return path.substr(0, dot) + new_ext;
+    }
+}
+
 Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     Outputs out;
     if (!in.object_name.empty()) out.object_name = add_suffix(in.object_name, suffix);
@@ -91,17 +106,6 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     if (!in.stmt_html_name.empty()) out.stmt_html_name = add_suffix(in.stmt_html_name, suffix);
     if (!in.schedule_name.empty()) out.schedule_name = add_suffix(in.schedule_name, suffix);
     return out;
-}
-
-uint64_t target_feature_mask(const Target &target) {
-    static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
-    uint64_t feature_mask = 0;
-    for (int i = 0; i < Target::FeatureEnd; ++i) {
-        if (target.has_feature((Target::Feature) i)) {
-            feature_mask |= ((uint64_t) 1) << i;
-        }
-    }
-    return feature_mask;
 }
 
 }  // namespace
@@ -423,6 +427,19 @@ void Module::compile(const Outputs &output_files_arg) const {
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
+    if (!output_files.python_extension_name.empty()) {
+        debug(1) << "Module.compile(): python_extension_name " << output_files.python_extension_name << "\n";
+        std::string c_header_name = output_files.c_header_name;
+        if (c_header_name.empty()) {
+          // If we we're not generating a header right now, guess the filename.
+          c_header_name = replace_extension(output_files.python_extension_name, ".h");
+        }
+        std::ofstream file(output_files.python_extension_name);
+        Internal::PythonExtensionGen python_extension_gen(file,
+                                                          c_header_name,
+                                                          target());
+        python_extension_gen.compile(*this);
+    }
     if (!output_files.schedule_name.empty()) {
         debug(1) << "Module.compile(): schedule_name " << output_files.schedule_name << "\n";
         std::ofstream file(output_files.schedule_name);
@@ -486,7 +503,12 @@ void compile_multitarget(const std::string &fn_name,
     // (since x86-64-linux would be selected first due to ordering), but could
     // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
     // included). So we'll keep track of the common features as we walk thru the targets.
-    uint64_t runtime_features_mask = (uint64_t)-1LL;
+
+    // Using something like std::bitset would be arguably cleaner here, but we need an
+    // array-of-uint64 for calls to halide_can_use_target_features() anyway,
+    // so we'll just build and maintain in that form to avoid extra conversion.
+    constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
+    uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -544,14 +566,29 @@ void compile_multitarget(const std::string &fn_name,
         debug(1) << "compile_multitarget: compile_sub_target " << sub_out.object_name << "\n";
         sub_module.compile(sub_out);
 
-        const uint64_t cur_target_mask = target_feature_mask(target);
-        Expr can_use = (target == base_target) ?
-                        IntImm::make(Int(32), 1) :
-                        Call::make(Int(32), "halide_can_use_target_features",
-                                   {UIntImm::make(UInt(64), cur_target_mask)},
-                                   Call::Extern);
+        uint64_t cur_target_features[kFeaturesWordCount] = {0};
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            if (target.has_feature((Target::Feature) i)) {
+                cur_target_features[i >> 6] |= ((uint64_t) 1) << (i & 63);
+            }
+        }
 
-        runtime_features_mask &= cur_target_mask;
+        Expr can_use;
+        if (target != base_target) {
+            std::vector<Expr> features_struct_args;
+            for (int i = 0; i < kFeaturesWordCount; ++i) {
+                features_struct_args.push_back(UIntImm::make(UInt(64), cur_target_features[i]));
+            }
+            can_use = Call::make(Int(32), "halide_can_use_target_features",
+                                   {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
+                                   Call::Extern);
+        } else {
+            can_use = IntImm::make(Int(32), 1);
+        }
+
+        for (int i = 0; i < kFeaturesWordCount; ++i) {
+            runtime_features[i] &= cur_target_features[i];
+        }
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -562,13 +599,15 @@ void compile_multitarget(const std::string &fn_name,
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
         Target runtime_target(base_target.os, base_target.arch, base_target.bits);
-        // We never want NoRuntime set here.
-        runtime_features_mask &= ~(((uint64_t)(1)) << Target::NoRuntime);
-        if (runtime_features_mask) {
-            for (int i = 0; i < Target::FeatureEnd; ++i) {
-                if (runtime_features_mask & (((uint64_t) 1) << i)) {
-                    runtime_target.set_feature((Target::Feature) i);
-                }
+        for (int i = 0; i < Target::FeatureEnd; ++i) {
+            // We never want NoRuntime set here.
+            if (i == Target::NoRuntime) {
+                continue;
+            }
+            const int word = i >> 6;
+            const int bit = i & 63;
+            if (runtime_features[word] & (((uint64_t) 1) << bit)) {
+                runtime_target.set_feature((Target::Feature) i);
             }
         }
         Outputs runtime_out = Outputs().object(

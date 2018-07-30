@@ -2866,13 +2866,17 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
     int sizes[] = {x_size, y_size, z_size, w_size};
     for (size_t i = 0; i < outputs.size(); i++) {
         // We're not actually going to read from these outputs, so
-        // make the allocation tiny, then expand them with unsafe
-        // cropping.
+        // make the allocation tiny, then "expand" them by directly manipulating
+        // the halide_buffer_t fields. (We can't use crop because it explicitly
+        // disallows expanding the fields in this unsafe manner.)
         Buffer<> im = Buffer<>::make_scalar(func.output_types()[i]);
         for (int s : sizes) {
             if (!s) break;
             im.add_dimension();
-            im.crop(im.dimensions()-1, 0, s);
+            // buf.host is going to be wrong no matter what, so don't
+            // bother adjusting it.
+            im.raw_buffer()->dim[im.dimensions()-1].min = 0;
+            im.raw_buffer()->dim[im.dimensions()-1].extent = s;
         }
         outputs[i] = std::move(im);
     }
@@ -2974,6 +2978,13 @@ void Func::compile_to_lowered_stmt(const string &filename,
                                    StmtOutputFormat fmt,
                                    const Target &target) {
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
+}
+
+void Func::compile_to_python_extension(const string &filename_prefix,
+                                       const vector<Argument> &args,
+                                       const string &fn_name,
+                                       const Target &target) {
+    pipeline().compile_to_python_extension(filename_prefix, args, fn_name, target);
 }
 
 void Func::print_loop_nest() {

@@ -392,7 +392,13 @@ Funcs.
 // for simplicity.
 void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &strides, Range *x, Range *y,
                       int current_dimension = 0, int x_off = 0, int y_off = 0) {
-    if (current_dimension == dims.size()) {
+    if (current_dimension == 0) {
+        x->min = 2147483647;
+        x->extent = -2147483647;
+        y->min = 2147483647;
+        y->extent = -2147483647;
+    }
+    if (current_dimension == (int)dims.size()) {
         x->min = std::min(x->min, x_off);
         x->extent = std::max(x->extent, x_off);
         y->min = std::min(y->min, y_off);
@@ -418,7 +424,7 @@ void calc_2d_size(const std::vector<Range> &dims, const std::vector<Point> &stri
 
 // Given a FuncConfig, check each field for "use some reasonable default"
 // value and fill in something reasonable.
-void finalize_func_config_values(FuncInfo &fi) {
+void finalize_func_config_values(const GlobalConfig &globals, FuncInfo &fi) {
     // Make a FuncConfig with 'safe' defaults for everything,
     // then merge the existing cfg into it.
     FuncConfig safe;
@@ -432,7 +438,7 @@ void finalize_func_config_values(FuncInfo &fi) {
     safe.max = 1.0;
     safe.labels = {};
     safe.blank_on_end_realization = 0;
-    safe.uninitialized_memory_color = 0x00000000;
+    safe.uninitialized_memory_color = globals.default_uninitialized_memory_color;
 
     if (fi.type_and_dim_valid) {
         // Try to choose better values for min and max based on type.
@@ -458,19 +464,15 @@ void finalize_func_config_values(FuncInfo &fi) {
 
 // Given a FuncConfig, check each field for "use some reasonable default"
 // value and fill in something reasonable.
-void finalize_func_config_values(std::map<std::string, FuncInfo> &funcs) {
+void finalize_func_config_values(const GlobalConfig &globals, std::map<std::string, FuncInfo> &funcs) {
     for (auto &p : funcs) {
         auto &fi = p.second;
 
-        finalize_func_config_values(fi);
+        finalize_func_config_values(globals, fi);
     }
 }
 
 void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, FuncInfo &fi) {
-    if (fi.config_valid) {
-        return;
-    }
-
     assert(fi.type_and_dim_valid);
 
     const Point &pad = globals.auto_layout_pad;
@@ -780,6 +782,12 @@ void process_args(int argc, char **argv, VizState *state) {
             expect(i + 2 < argc, i);
             globals.auto_layout_grid.x = parse_int(argv[++i]);
             globals.auto_layout_grid.y = parse_int(argv[++i]);
+        } else if (next == "--uninit_default") {
+            expect(i + 3 < argc, i);
+            int r = parse_int(argv[++i]);
+            int g = parse_int(argv[++i]);
+            int b = parse_int(argv[++i]);
+            globals.default_uninitialized_memory_color = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else if (next == "--ignore_tags" || next == "--no-ignore_tags") {
             // Already processed, just continue
         } else if (next == "--verbose" || next == "--no-verbose") {
@@ -809,8 +817,8 @@ struct Surface {
             *dst = o;
         } else {
             // TODO: this could be done using 64-bit ops more simply
-            uint8_t *a = (uint8_t*)under;
-            uint8_t *b = (uint8_t*)over;
+            const uint8_t *a = (const uint8_t*)under;
+            const uint8_t *b = (const uint8_t*)over;
             uint8_t *d = (uint8_t*)dst;
             d[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
             d[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
@@ -846,30 +854,51 @@ struct Surface {
         }
     }
 
+    // Fill a rectangle in dst with color.
+    // opaque RGB(1,1,1) is a "magic" color that means "fill with checkerboard".
+    // dst is assumed to point to the start of a frame_size buffer.
+    void fill_rect(int left, int top, int width, int height, uint32_t color, uint32_t *dst) {
+        const int x_min = std::max(left, 0);
+        const int x_end = std::min(left + width, frame_size.x);
+        const int y_min = std::max(top, 0);
+        const int y_end = std::min(top + height, frame_size.y);
+        const int y_stride = frame_size.x - (x_end - x_min);
+        dst += y_min * frame_size.x + x_min;
+        if (color == 0xff010101) {
+            for (int y = y_min; y < y_end; y++) {
+                for (int x = x_min; x < x_end; x++) {
+                    const int check = ((x / 16) % 2) ^ ((y / 16) % 2);
+                    *dst++ = check ? 0xff808080 : 0xffffffff;
+                }
+                dst += y_stride;
+            }
+        } else {
+            for (int y = y_min; y < y_end; y++) {
+                for (int x = x_min; x < x_end; x++) {
+                    *dst++ = color;
+                }
+                dst += y_stride;
+            }
+        }
+    }
+
     // Set all boxes corresponding to positions in a Func's allocation to
     // the given color. Recursive to handle arbitrary
     // dimensionalities. Used by begin and end realization events.
     void do_fill_realization(uint32_t *dst, uint32_t color,
-                          const FuncInfo &fi, const halide_trace_packet_t &p,
-                          int current_dimension = 0, int x_off = 0, int y_off = 0) {
+                             const FuncInfo &fi, const halide_trace_packet_t &p,
+                             int current_dimension = 0, int x_off = 0, int y_off = 0) {
         if (2 * current_dimension == p.dimensions) {
             const int x_min = x_off * fi.config.zoom + fi.config.pos.x;
             const int y_min = y_off * fi.config.zoom + fi.config.pos.y;
             const int izoom = (int) ceil(fi.config.zoom);
-            for (int y = 0; y < izoom; y++) {
-                if (y_min + y < 0 || y_min + y >= frame_size.y) continue;
-                for (int x = 0; x < izoom; x++) {
-                    if (x_min + x < 0 || x_min + x >= frame_size.x) continue;
-                    int idx = (y_min + y) * frame_size.x + (x_min + x);
-                    dst[idx] = color;
-                }
-            }
+            fill_rect(x_min, y_min, izoom, izoom, color, dst);
         } else {
             const int *coords = p.coordinates();
             const int min = coords[current_dimension * 2 + 0];
             const int extent = coords[current_dimension * 2 + 1];
             // If we don't have enough strides, assume subsequent dimensions have stride (0, 0)
-            const Point pt = current_dimension < fi.config.strides.size() ? fi.config.strides.at(current_dimension) : Point{0, 0};
+            const Point pt = current_dimension < (int)fi.config.strides.size() ? fi.config.strides.at(current_dimension) : Point{0, 0};
             x_off += pt.x * min;
             y_off += pt.y * min;
             for (int i = 0; i < extent; i++) {
@@ -954,7 +983,7 @@ public:
         uint32_t *image_px = image.data();
         uint32_t *text_px  = text_buf.data();
         uint32_t *blend_px = blend.data();
-        for (int i = 0; i < image.size(); i++) {
+        for (size_t i = 0; i < image.size(); i++) {
             // anim over anim_decay -> anim_decay
             composite_one(anim_decay_px, anim_px, anim_decay_px);
             // anim_decay over image -> blend
@@ -1035,8 +1064,19 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 << " with cells of size " << cell_size.x << "x" << cell_size.y;
         }
 
+        // If globals.default_uninitialized_memory_color was never set, init to black or checkerboard.
+        if (state.globals.default_uninitialized_memory_color & 0xff000000) {
+            if (state.globals.auto_layout) {
+                // auto-layout defaults to checkerboard.
+                state.globals.default_uninitialized_memory_color = 0x00010101;
+            } else {
+                // non-auto-layout defaults to black, to preserve existing look.
+                state.globals.default_uninitialized_memory_color = 0x00000000;
+            }
+        }
+
         do_auto_layout(state);
-        finalize_func_config_values(state.funcs);
+        finalize_func_config_values(state.globals, state.funcs);
     };
 
 
