@@ -71,6 +71,9 @@ $(MODULE): $(PY_OBJS) $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
+# We don't want any of this auto-deleted
+.SECONDARY:
+
 $(BIN)/src/%.o: $(ROOT_DIR)/src/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) -c $< -o $@
@@ -100,12 +103,12 @@ $(BIN)/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(LIBHAL
 	$(CXX) $^ $(LDFLAGS) -shared -o $@
 
 # Compile the generators:
-$(BIN)/%.gen: $(HALIDE_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+$(BIN)/%.gen: $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
 
 # Special generator for generating a runtime:
-$(BIN)/runtime.gen: $(HALIDE_PATH)/tools/GenGen.cpp $(LIBHALIDE)
+$(BIN)/runtime.gen: $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp $(LIBHALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
 

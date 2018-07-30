@@ -43,7 +43,7 @@ public:
         if (base_alignment % required_alignment == 0) {
             // We know the base is aligned. Try to find out the offset
             // of the ramp base from an aligned offset.
-            known_alignment = reduce_expr_modulo(ramp->base, native_lanes, aligned_offset,
+            known_alignment = reduce_expr_modulo(index, native_lanes, aligned_offset,
                                                  alignment_info);
         }
         if (known_alignment && (*aligned_offset == 0)) {
