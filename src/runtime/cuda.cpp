@@ -778,6 +778,19 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     return err;
 }
 
+namespace {
+
+WEAK int cuda_device_crop_from_offset(const struct halide_buffer_t *src,
+                                      int64_t offset,
+                                      struct halide_buffer_t *dst) {
+    dst->device = src->device + offset;
+    dst->device_interface = src->device_interface;
+    dst->set_device_dirty(src->device_dirty());
+    return 0;
+}
+
+}  // namespace
+
 WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_t *src,
                                  struct halide_buffer_t *dst) {
     debug(user_context)
@@ -785,15 +798,21 @@ WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_
         << ", src: " << src << ", dst: " << dst << ")\n";
 
     // Pointer arithmetic works fine.
-    int64_t offset = 0;
-    for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
-    }
-    offset *= src->type.bytes();
-    dst->device = src->device + offset;
-    dst->device_interface = src->device_interface;
-    dst->set_device_dirty(src->device_dirty());
-    return 0;
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return cuda_device_crop_from_offset(src, offset, dst);
+}
+
+WEAK int halide_cuda_device_slice(void *user_context, const struct halide_buffer_t *src,
+                                  int slice_dim, int slice_pos,
+                                  struct halide_buffer_t *dst) {
+    debug(user_context)
+        << "CUDA: halide_cuda_device_slice (user_context: " << user_context
+        << ", src: " << src << ", slice_dim " << slice_dim << ", slice_pos "
+        << slice_pos << ", dst: " << dst << ")\n";
+
+    // Pointer arithmetic works fine.
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return cuda_device_crop_from_offset(src, offset, dst);
 }
 
 WEAK int halide_cuda_device_release_crop(void *user_context, struct halide_buffer_t *dst) {
@@ -1102,6 +1121,7 @@ WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_cuda_device_and_host_free,
     halide_cuda_buffer_copy,
     halide_cuda_device_crop,
+    halide_cuda_device_slice,
     halide_cuda_device_release_crop,
     halide_cuda_wrap_device_ptr,
     halide_cuda_detach_device_ptr,
@@ -1118,6 +1138,7 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_device_and_host_free,
     halide_buffer_copy,
     halide_device_crop,
+    halide_device_slice,
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,

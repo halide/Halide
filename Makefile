@@ -27,6 +27,14 @@ else
 endif
 endif
 
+ifeq ($(UNAME), Darwin)
+  # Anything that we us install_name_tool on needs these linker flags
+  # to ensure there is enough padding for install_name_tool to use
+  INSTALL_NAME_TOOL_LD_FLAGS=-Wl,-headerpad_max_install_names
+else
+  INSTALL_NAME_TOOL_LD_FLAGS=
+endif
+
 BAZEL ?= $(shell which bazel)
 
 SHELL = bash
@@ -95,6 +103,7 @@ WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGL ?= not-empty
+WITH_D3D12 ?= not-empty
 ifeq ($(OS), Windows_NT)
     WITH_INTROSPECTION ?=
 else
@@ -135,6 +144,9 @@ METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
 
 OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 
+D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12=1, )
+D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
+
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
@@ -160,6 +172,7 @@ CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
@@ -174,7 +187,7 @@ CXX_FLAGS += -funwind-tables
 print-%:
 	@echo '$*=$($*)'
 
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libs bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --link-static --libfiles bitwriter bitreader linker ipo mcjit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(METAL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB) $(POWERPC_LLVM_CONFIG_LIB) $(HEXAGON_LLVM_CONFIG_LIB) $(AMDGPU_LLVM_CONFIG_LIB))
 
 # Add a rpath to the llvm used for linking, in case multiple llvms are
 # installed. Bakes a path on the build system into the .so, so don't
@@ -352,6 +365,7 @@ SOURCE_FILES = \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_MIPS.cpp \
+  CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenGL_Dev.cpp \
@@ -489,6 +503,7 @@ HEADER_FILES = \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_MIPS.h \
+  CodeGen_D3D12Compute_Dev.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenGL_Dev.h \
@@ -631,6 +646,7 @@ RUNTIME_CPP_COMPONENTS = \
   cache \
   can_use_target \
   cuda \
+  d3d12compute \
   destructors \
   device_interface \
   errors \
@@ -704,6 +720,7 @@ RUNTIME_LL_COMPONENTS = \
   aarch64 \
   arm \
   arm_no_neon \
+  d3d12_abi_patch_64 \
   hvx_64 \
   hvx_128 \
   mips \
@@ -717,6 +734,7 @@ RUNTIME_LL_COMPONENTS = \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
+                            $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
@@ -779,7 +797,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1573,6 +1591,7 @@ TEST_APPS=\
 	local_laplacian \
 	nl_means \
 	resize \
+	stencil_chain \
 	wavelet \
 
 .PHONY: test_apps
@@ -1605,8 +1624,6 @@ test_python2: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
-		HALIDE_PATH=$(ROOT_DIR) \
-		HALIDE_RUNTIME=$(CURDIR)/$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python2_bindings \
 		PYTHON=python \
@@ -1617,8 +1634,6 @@ test_python: distrib $(BIN_DIR)/host/runtime.a
 	make -C $(ROOT_DIR)/python_bindings \
 		-f $(ROOT_DIR)/python_bindings/Makefile \
 		test \
-		HALIDE_PATH=$(ROOT_DIR) \
-		HALIDE_RUNTIME=$(CURDIR)/$(BIN_DIR)/host/runtime.a \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=python3 \

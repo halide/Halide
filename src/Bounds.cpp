@@ -339,8 +339,10 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+            return;
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min * b.min);
+            return;
         } else if (b.is_single_point()) {
             Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
