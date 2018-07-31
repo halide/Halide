@@ -32,7 +32,7 @@ public:
         // circular buffer of two tiles.
         copy
             .compute_at(output, tx)
-            .store_root()
+            .store_at(output, tx)
             .fold_storage(x, tile_width * 2)
             .copy_to_host();
     }

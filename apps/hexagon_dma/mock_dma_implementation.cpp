@@ -157,7 +157,7 @@ int32 nDmaWrapper_Move(t_DmaWrapper_DmaEngineHandle handle) {
 #endif
             for (int yii = 0; yii < h; yii++) {
                 // per line copy 
-                int ydst = yii * desc->stWord1.src_roi_stride * pixelsize;
+                int ydst = yii * desc->stWord1.dst_roi_stride * pixelsize;
                 int RoiOffset = (x + (y_offset + y) * desc->stWord1.src_roi_stride) * pixelsize;
                 int ysrc = yii * desc->stWord1.src_roi_stride * pixelsize;
                 int len = w * pixelsize;
@@ -206,7 +206,9 @@ int32 nDmaWrapper_GetRecommendedWalkSize(t_eDmaFmt fmt, bool is_ubwc,
 int32 nDmaWrapper_GetRecommendedIntermBufStride(t_eDmaFmt fmt,
                                                 t_StDmaWrapper_RoiAlignInfo *roi_size,
                                                  bool is_ubwc) {
-    return align(roi_size->u16W, 256);
+    // UBWC Not Supported
+    assert(is_ubwc == 0);
+    return roi_size->u16W;
 }
 
 int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaWrapper_DmaTransferSetup *dma_transfer_parm) {
