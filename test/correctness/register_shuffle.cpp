@@ -5,13 +5,15 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
-    if (!t.features_any_of({Target::CUDACapability30,
-                            Target::CUDACapability32,
-                            Target::CUDACapability35,
-                            Target::CUDACapability50,
+    if (!t.features_any_of({Target::CUDACapability50,
                             Target::CUDACapability61})) {
-        printf("This test requires cuda enabled with cuda capability 3.0 or greater\n");
-        return 0;
+        if (t.has_feature(Target::CUDA)) {
+            // Optimistically turn on capability 5, otherwise this test will never run on the buildbots
+            t.set_feature(Target::CUDACapability50);
+        } else {
+            printf("This test requires cuda enabled with cuda capability 3.0 or greater\n");
+            return 0;
+        }
     }
 
     {
@@ -378,6 +380,22 @@ int main(int argc, char **argv) {
                 }
             }
         }
+    }
+
+    {
+        // Test a case that caused combinatorial explosion
+        Var x;
+        Expr e = x;
+        for (int i = 0; i < 10; i++) {
+            e = fast_pow(e, e + 1);
+        }
+
+        Func f;
+        f(x) = e;
+
+        Var xo, xi;
+        f.gpu_tile(x, xo, xi, 32);
+        f.realize(1024);
     }
 
     printf("Success!\n");
