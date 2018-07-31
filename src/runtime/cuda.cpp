@@ -1030,6 +1030,40 @@ WEAK const halide_device_interface_t *halide_cuda_device_interface() {
     return &cuda_device_interface;
 }
 
+WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *minor) {
+    Context ctx(user_context);
+    if (ctx.error != 0) {
+        return ctx.error;
+    }
+
+    CUresult err;
+
+    CUdevice dev;
+    err = cuCtxGetDevice(&dev);
+    if (err != CUDA_SUCCESS) {
+        error(user_context)
+            << "CUDA: cuCtxGetDevice failed ("
+            << Halide::Runtime::Internal::Cuda::get_error_name(err)
+            << ")";
+        return err;
+    }
+
+    err = cuDeviceGetAttribute(major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
+    if (err == CUDA_SUCCESS) {
+        err = cuDeviceGetAttribute(minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
+    }
+
+    if (err != CUDA_SUCCESS) {
+        error(user_context)
+            << "CUDA: cuDeviceGetAttribute failed ("
+            << Halide::Runtime::Internal::Cuda::get_error_name(err)
+            << ")";
+        return err;
+    }
+
+    return 0;
+}
+
 namespace {
 __attribute__((destructor))
 WEAK void halide_cuda_cleanup() {
@@ -1142,6 +1176,7 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    halide_cuda_compute_capability,
     &cuda_device_interface_impl
 };
 

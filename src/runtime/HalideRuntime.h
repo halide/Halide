@@ -568,6 +568,7 @@ struct halide_device_interface_t {
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
+    int (*compute_capability)(void *user_context, int *major, int *minor);
     const struct halide_device_interface_impl_t *impl;
 };
 

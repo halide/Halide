@@ -2631,7 +2631,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     void *host = d3d12_malloc(buffer->size_in_bytes());
     buffer->host = (uint8_t*)host;
     dev_buffer->host_mirror = host;
-    debug(user_context) << TRACEINDENT 
+    debug(user_context) << TRACEINDENT
                         << "halide_d3d12compute_device_and_host_malloc"
                         << " device = " << (void*)buffer->device
                         << " d3d12_buffer = " << dev_buffer
@@ -2841,6 +2841,7 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    nullptr,
     &d3d12compute_device_interface_impl
 };
 
