@@ -294,7 +294,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                    << print_type(args[i].type) << " data[]; } "
                    << print_name(args[i].name) << ";\n";
         } else {
-            stream << "uniform " << print_type(args[i].type)
+            stream << "layout(location = " << i << ") uniform " << print_type(args[i].type)
                    << " " << print_name(args[i].name) << ";\n";
         }
     }

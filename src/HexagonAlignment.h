@@ -5,8 +5,9 @@
  * Class for analyzing Alignment of loads and stores for Hexagon.
  */
 
-#include "Scope.h"
+#include "IR.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
