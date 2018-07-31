@@ -576,6 +576,13 @@ public:
         return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
+    /** Reset the Buffer to be equivalent to a default-constructed Buffer
+     * of the same static type (if any); Buffer<void> will have its runtime
+     * type reset to uint8. The resulting buffer will have 0 dimensions and 1 element. */
+    void reset() {
+        *this = Buffer();
+    }
+
     Buffer() : shape() {
         buf.type = static_halide_type();
         make_shape_storage();
@@ -1098,9 +1105,10 @@ public:
      * or slice followed by copy to make a copy of only a portion of
      * the image. The new image uses the same memory layout as the
      * original, with holes compacted away. */
-    Buffer<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
+    template<typename T2 = T, int D2 = D>
+    Buffer<T2, D2> copy(void *(*allocate_fn)(size_t) = nullptr,
                       void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<T, D> dst = make_with_shape_of(*this, allocate_fn, deallocate_fn);
+        Buffer<T2, D2> dst = Buffer<T2, D2>::make_with_shape_of(*this, allocate_fn, deallocate_fn);
         dst.copy_from(*this);
         return dst;
     }
@@ -1672,6 +1680,14 @@ public:
         dst.allocate(allocate_fn, deallocate_fn);
 
         return dst;
+    }
+
+    /** Make a buffer with the same shape and type and memory nesting order as
+     * this buffer; this is syntactic sugar for the static make_with_shape_of method
+     * when src and dst types are identical. */
+    Buffer<T, D> make_with_shape_of(void *(*allocate_fn)(size_t) = nullptr,
+                                    void (*deallocate_fn)(void *) = nullptr) {
+        return make_with_shape_of(*this, allocate_fn, deallocate_fn);
     }
 
 private:
