@@ -806,11 +806,11 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
             err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
                                       src_idx + ((device_handle *)c.src)->offset, dst_idx  + ((device_handle *)c.dst)->offset,
                                       c.chunk_size, 0, NULL, NULL);
-        } else if (c.dst != c.src) {
+        } else if ((c.dst + dst_idx) != (c.src + src_idx)) {
             // Could reach here if a user called directly into the
             // opencl API for a device->host copy on a source buffer
             // with device_dirty = false.
-            memcpy((void *)c.dst, (void *)c.src, c.chunk_size);
+            memcpy((void *)(c.dst + dst_idx), (void *)(c.src + src_idx), c.chunk_size);
         }
 
         if (err) {
