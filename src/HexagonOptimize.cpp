@@ -677,6 +677,16 @@ private:
             { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x*bc(wild_u32)), Pattern::ExactLog2Op2 },
             { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (bc(wild_i32)*wild_i32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
             { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (bc(wild_u32)*wild_u32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_i16x + (wild_i16x << bc(wild_i16)), Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_u16x + (wild_u16x << bc(wild_u16)), Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_i16x + (bc(wild_i16) << wild_i16x), Pattern::SwapOps12 | Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_u16x + (bc(wild_u16) << wild_u16x), Pattern::SwapOps12 | Pattern::v65orLater },
+            { "halide.hexagon.add_shr.vh.vh.h", wild_i16x + (wild_i16x >> bc(wild_i16)), Pattern::v65orLater },
+            { "halide.hexagon.add_shr.vh.vh.h", wild_i16x + (wild_i16x/bc(wild_i16)), Pattern::ExactLog2Op2 | Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_i16x + (wild_i16x*bc(wild_i16)), Pattern::ExactLog2Op2 | Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_u16x + (wild_u16x*bc(wild_u16)), Pattern::ExactLog2Op2 | Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_i16x + (bc(wild_i16)*wild_i16x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 | Pattern::v65orLater },
+            { "halide.hexagon.add_shl.vh.vh.h", wild_u16x + (bc(wild_u16)*wild_u16x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 | Pattern::v65orLater },
 
             // Non-widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + wild_i16x*bc(wild_i16), Pattern::NarrowOp2 },
@@ -771,6 +781,8 @@ private:
             { "halide.hexagon.avg.vuh.vuh", u16((wild_u32x + wild_u32x)/2), Pattern::NarrowOps },
             { "halide.hexagon.avg.vh.vh", i16((wild_i32x + wild_i32x)/2), Pattern::NarrowOps },
             { "halide.hexagon.avg.vw.vw", i32((wild_i64x + wild_i64x)/2), Pattern::NarrowOps },
+            { "halide.hexagon.avg.vb.vb", i8((wild_i16x + wild_i16x)/2), Pattern::NarrowOps | Pattern::v65orLater },
+            { "halide.hexagon.avg.vuw.vuw", u32((wild_u64x + wild_u64x)/2), Pattern::NarrowOps | Pattern::v65orLater },
 
             { "halide.hexagon.avg_rnd.vub.vub", u8((wild_u16x + wild_u16x + 1)/2), Pattern::NarrowOps },
             { "halide.hexagon.avg_rnd.vuh.vuh", u16((wild_u32x + wild_u32x + 1)/2), Pattern::NarrowOps },
@@ -1507,7 +1519,7 @@ class EliminateInterleaves : public IRMutator2 {
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
-            if (!is_one(predicate)) {
+            if (!is_one(predicate) || !op->value.type().is_vector()) {
                 // TODO(psuriana): This store is predicated. Mark the buffer as
                 // not interleaved for now.
                 state = BufferState::NotInterleaved;

@@ -93,6 +93,7 @@ struct Target {
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
+        D3D12Compute = halide_target_feature_d3d12compute,
         StrictFloat = halide_target_feature_strict_float,
         LegacyBufferWrappers = halide_target_feature_legacy_buffer_wrappers,
         TSAN = halide_target_feature_tsan,
@@ -184,12 +185,12 @@ struct Target {
 
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
-     * CUDA, OpenCL, and Metal. We do not include OpenGL, because it
-     * is not capable of gpgpu, and is not scheduled via
+     * CUDA, OpenCL, Metal and D3D12Compute. We do not include OpenGL,
+     * because it is not capable of gpgpu, and is not scheduled via
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal) || has_feature(D3D12Compute);
     }
 
     /** Does this target allow using a certain type. Generally all
@@ -202,9 +203,10 @@ struct Target {
         if (t.bits() == 64) {
             if (t.is_float()) {
                 return !has_feature(Metal) &&
+                       !has_feature(D3D12Compute) &&
                        (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
             } else {
-                return !has_feature(Metal);
+                return !has_feature(Metal) && !has_feature(D3D12Compute);
             }
         }
         return true;
