@@ -578,7 +578,7 @@ public:
 
     /** Reset the Buffer to be equivalent to a default-constructed Buffer
      * of the same static type (if any); Buffer<void> will have its runtime
-     * type reset to uint8. The resulting buffer will have 0 dimensions and 1 element. */
+     * type reset to uint8. */
     void reset() {
         *this = Buffer();
     }
