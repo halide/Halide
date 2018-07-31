@@ -465,6 +465,7 @@ SOURCE_FILES = \
   UniquifyVariableNames.cpp \
   UnpackBuffers.cpp \
   UnrollLoops.cpp \
+  UnsafePromises.cpp \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \
@@ -615,6 +616,7 @@ HEADER_FILES = \
   UniquifyVariableNames.h \
   UnpackBuffers.h \
   UnrollLoops.h \
+  UnsafePromises.h \
   Util.h \
   Var.h \
   VaryingAttributes.h \
