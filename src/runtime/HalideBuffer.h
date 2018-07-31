@@ -684,6 +684,7 @@ public:
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
                                      alloc(other.alloc),
                                      dev_ref_count(other.dev_ref_count) {
+        assert_can_convert_from(other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
