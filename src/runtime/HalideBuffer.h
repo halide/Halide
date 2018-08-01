@@ -133,6 +133,10 @@ class Buffer {
                                                  add_const_if_T_is_const<uint8_t>,
                                                  T>::type;
 
+    /** T with constness removed. Useful for return type of copy(). */
+    using not_const_T = typename std::remove_const<T>::type;
+
+
     /** The type the elements are stored as. Equal to not_void_T
      * unless T is a pointer, in which case uint64_t. Halide stores
      * all pointer types as uint64s internally, even on 32-bit
@@ -1104,11 +1108,18 @@ public:
     /** Make a new image which is a deep copy of this image. Use crop
      * or slice followed by copy to make a copy of only a portion of
      * the image. The new image uses the same memory layout as the
-     * original, with holes compacted away. */
-    template<typename T2 = T, int D2 = D>
-    Buffer<T2, D2> copy(void *(*allocate_fn)(size_t) = nullptr,
-                      void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<T2, D2> dst = Buffer<T2, D2>::make_with_shape_of(*this, allocate_fn, deallocate_fn);
+     * original, with holes compacted away. Note that the returned
+     * Buffer is always of a non-const type T (ie:
+     *
+     *     Buffer<const T>.copy() -> Buffer<T> rather than Buffer<const T>
+     *
+     * which is always safe, since we are making a deep copy. (The caller
+     * can easily cast it back to Buffer<const T> if desired, which is
+     * always safe and free.)
+     */
+    Buffer<not_const_T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
+                                void (*deallocate_fn)(void *) = nullptr) const {
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_with_shape_of(*this, allocate_fn, deallocate_fn);
         dst.copy_from(*this);
         return dst;
     }

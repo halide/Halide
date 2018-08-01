@@ -54,8 +54,12 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
     check_equal(a_window, b_window);
 
     // Check copying from const to nonconst
-    Buffer<float> a_window_2 = b_window.copy<float>();
-    check_equal(a_window_2, b_window);
+    Buffer<float> a_window_nonconst = b_window.copy();
+    check_equal(a_window_nonconst, b_window);
+
+    // Check copying from const to const
+    Buffer<const float> a_window_const = b_window.copy();
+    check_equal(a_window_const, b_window);
 
     // You don't actually have to crop a.
     a.fill(1.0f);
@@ -206,25 +210,6 @@ int main(int argc, char **argv) {
         // the halide_buffer_t.
         for (size_t i = sizeof(halide_buffer_t); i < sizeof(buf); i++) {
             assert(!buf[i]);
-        }
-    }
-
-    {
-        // check make_with_shape_of()
-        Buffer<float> a = Buffer<float>::make_interleaved(100, 3, 80);
-        Buffer<float> b = a.make_with_shape_of(a);
-        Buffer<int> b_int = Buffer<int>::make_with_shape_of(a);
-
-        assert(a.dimensions() == 3);
-        assert(b.dimensions() == 3);
-        assert(b_int.dimensions() == 3);
-        for (int i = 0; i < 3; i++) {
-            assert(a.dim(i).min() == b.dim(i).min());
-            assert(a.dim(i).min() == b_int.dim(i).min());
-            assert(a.dim(i).extent() == b.dim(i).extent());
-            assert(a.dim(i).extent() == b_int.dim(i).extent());
-            assert(a.dim(i).stride() == b.dim(i).stride());
-            assert(a.dim(i).stride() == b_int.dim(i).stride());
         }
     }
 
