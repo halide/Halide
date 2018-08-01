@@ -852,7 +852,9 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         src = dst;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &opencl_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);

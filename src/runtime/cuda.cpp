@@ -738,7 +738,9 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         src = dst;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &metal_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
