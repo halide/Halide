@@ -1682,14 +1682,6 @@ public:
         return dst;
     }
 
-    /** Make a buffer with the same shape and type and memory nesting order as
-     * this buffer; this is syntactic sugar for the static make_with_shape_of method
-     * when src and dst types are identical. */
-    Buffer<T, D> make_with_shape_of(void *(*allocate_fn)(size_t) = nullptr,
-                                    void (*deallocate_fn)(void *) = nullptr) {
-        return make_with_shape_of(*this, allocate_fn, deallocate_fn);
-    }
-
 private:
 
     template<typename ...Args>
