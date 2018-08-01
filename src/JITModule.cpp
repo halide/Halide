@@ -616,6 +616,13 @@ enum RuntimeKind {
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    OpenCLDebug,
+    MetalDebug,
+    CUDADebug,
+    OpenGLDebug,
+    OpenGLComputeDebug,
+    HexagonDebug,
+    D3D12ComputeDebug,
     MaxRuntimeKind
 };
 
@@ -651,36 +658,57 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::D3D12Compute, false);
         string module_name;
         switch (runtime_kind) {
-        case OpenCL:
+        case OpenCLDebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
+        case OpenCL: // fallthrough
             one_gpu.set_feature(Target::OpenCL);
-            module_name = "opencl";
+            module_name += "opencl";
             break;
-        case Metal:
+        case MetalDebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
+        case Metal: // fallthough
             one_gpu.set_feature(Target::Metal);
-            module_name = "metal";
+            module_name += "metal";
             load_metal();
             break;
-        case CUDA:
+        case CUDADebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
+        case CUDA: // fallthrough
             one_gpu.set_feature(Target::CUDA);
-            module_name = "cuda";
+            module_name += "cuda";
             break;
-        case OpenGL:
+        case OpenGLDebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
+        case OpenGL: // fallthrough
             one_gpu.set_feature(Target::OpenGL);
-            module_name = "opengl";
+            module_name += "opengl";
             load_opengl();
             break;
-        case OpenGLCompute:
+        case OpenGLComputeDebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
+        case OpenGLCompute: // fallthrough
             one_gpu.set_feature(Target::OpenGLCompute);
-            module_name = "openglcompute";
+            module_name += "openglcompute";
             load_opengl();
             break;
+        case HexagonDebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
         case Hexagon:
             one_gpu.set_feature(Target::HVX_64);
-            module_name = "hexagon";
+            module_name += "hexagon";
             break;
-        case D3D12Compute:
+        case D3D12ComputeDebug:
+            one_gpu.set_feature(Target::Debug);
+            module_name = "debug_";
+        case D3D12Compute: // fallthrough
             one_gpu.set_feature(Target::D3D12Compute);
-            module_name = "d3d12compute";
+            module_name += "d3d12compute";
             #if !defined(_WIN32)
                 internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
             #endif
@@ -791,43 +819,50 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
-        JITModule m = make_module(for_module, target, OpenCL, result, create);
+        auto kind = target.has_feature(Target::Debug) ? OpenCLDebug : OpenCL;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::Metal)) {
-        JITModule m = make_module(for_module, target, Metal, result, create);
+        auto kind = target.has_feature(Target::Debug) ? MetalDebug : Metal;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::CUDA)) {
-        JITModule m = make_module(for_module, target, CUDA, result, create);
+        auto kind = target.has_feature(Target::Debug) ? CUDADebug : CUDA;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::OpenGL)) {
-        JITModule m = make_module(for_module, target, OpenGL, result, create);
+        auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::OpenGLCompute)) {
-        JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
+        auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        JITModule m = make_module(for_module, target, Hexagon, result, create);
+        auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }
     }
     if (target.has_feature(Target::D3D12Compute)) {
-        JITModule m = make_module(for_module, target, D3D12Compute, result, create);
+        auto kind = target.has_feature(Target::Debug) ? D3D12ComputeDebug : D3D12Compute;
+        JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
         }

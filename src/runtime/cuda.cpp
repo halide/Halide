@@ -690,12 +690,16 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
                             << " to " << (to_host ? "host" : "device") << ", "
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
+            copy_name = "cuMemcpyDtoH";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
+            copy_name = "cuMemcpyHtoD";
             err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
         } else if (!from_host && !to_host) {
+            copy_name = "cuMemcpyDtoD";
             err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (dst != src) {
+            copy_name = "memcpy";
             // Could reach here if a user called directly into the
             // cuda API for a device->host copy on a source buffer
             // with device_dirty = false.

@@ -179,9 +179,7 @@ Target get_host_target() {
 
 namespace {
 
-Target::Feature calculate_host_cuda_capability() {
-    Target t = get_host_target();
-    t.set_feature(Target::CUDA);
+Target::Feature calculate_host_cuda_capability(Target t) {
     const auto *interface = get_device_interface_for_device_api(DeviceAPI::CUDA, t);
     internal_assert(interface->compute_capability);
     int major, minor;
@@ -203,8 +201,8 @@ Target::Feature calculate_host_cuda_capability() {
     }
 }
 
-Target::Feature get_host_cuda_capability() {
-    static Target::Feature cap = calculate_host_cuda_capability();
+Target::Feature get_host_cuda_capability(Target t) {
+    static Target::Feature cap = calculate_host_cuda_capability(t);
     return cap;
 }
 
@@ -414,7 +412,7 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability50) &&
         !t.has_feature(Target::CUDACapability61)) {
         // Detect host cuda capability
-        t.set_feature(get_host_cuda_capability());
+        t.set_feature(get_host_cuda_capability(t));
     }
 
     if (arch_specified && !bits_specified) {
