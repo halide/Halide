@@ -104,6 +104,11 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
 
+    if (!lib_cuda) {
+        error(user_context) << "Could not find cuda system libraries";
+        return -1;
+    }
+
     // Note that this null-check of the context is *not* locked with
     // respect to device_release, so we may get a non-null context
     // that's in the process of being destroyed. Things will go badly
@@ -180,19 +185,21 @@ public:
         halide_start_clock(user_context);
 #endif
         error = halide_cuda_acquire_context(user_context, &context);
-        halide_assert(user_context, context != NULL);
         if (error != 0) {
             return;
         }
+
+        halide_assert(user_context, context != NULL);
 
         error = cuCtxPushCurrent(context);
     }
 
     INLINE ~Context() {
-        CUcontext old;
-        cuCtxPopCurrent(&old);
-
-        halide_cuda_release_context(user_context);
+        if (error == 0) {
+            CUcontext old;
+            cuCtxPopCurrent(&old);
+            halide_cuda_release_context(user_context);
+        }
     }
 };
 
@@ -1031,34 +1038,48 @@ WEAK const halide_device_interface_t *halide_cuda_device_interface() {
 }
 
 WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *minor) {
-    Context ctx(user_context);
-    if (ctx.error != 0) {
-        return ctx.error;
+    if (!lib_cuda) {
+        // If cuda can't be found, we want to return 0, 0 and it's not
+        // considered an error. So we should be very careful about
+        // looking for libcuda without tripping any errors in the rest
+        // of this runtime.
+        void *sym = halide_cuda_get_symbol(user_context, "cuInit");
+        if (!sym) {
+            *major = *minor = 0;
+            return 0;
+        }
     }
 
-    CUresult err;
+    {
+        Context ctx(user_context);
+        if (ctx.error != 0) {
+            return ctx.error;
+        }
 
-    CUdevice dev;
-    err = cuCtxGetDevice(&dev);
-    if (err != CUDA_SUCCESS) {
-        error(user_context)
-            << "CUDA: cuCtxGetDevice failed ("
-            << Halide::Runtime::Internal::Cuda::get_error_name(err)
-            << ")";
-        return err;
-    }
+        CUresult err;
 
-    err = cuDeviceGetAttribute(major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
-    if (err == CUDA_SUCCESS) {
-        err = cuDeviceGetAttribute(minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
-    }
+        CUdevice dev;
+        err = cuCtxGetDevice(&dev);
+        if (err != CUDA_SUCCESS) {
+            error(user_context)
+                << "CUDA: cuCtxGetDevice failed ("
+                << Halide::Runtime::Internal::Cuda::get_error_name(err)
+                << ")";
+            return err;
+        }
 
-    if (err != CUDA_SUCCESS) {
-        error(user_context)
-            << "CUDA: cuDeviceGetAttribute failed ("
-            << Halide::Runtime::Internal::Cuda::get_error_name(err)
-            << ")";
-        return err;
+        err = cuDeviceGetAttribute(major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
+        if (err == CUDA_SUCCESS) {
+            err = cuDeviceGetAttribute(minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
+        }
+
+        if (err != CUDA_SUCCESS) {
+            error(user_context)
+                << "CUDA: cuDeviceGetAttribute failed ("
+                << Halide::Runtime::Internal::Cuda::get_error_name(err)
+                << ")";
+            return err;
+        }
     }
 
     return 0;
