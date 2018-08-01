@@ -238,8 +238,10 @@ int do_device_to_device_copy(void *user_context, mtl_blit_command_encoder *encod
         buffer_to_buffer_1d_copy(encoder, ((device_handle *)c.src)->buf, c.src_begin + src_offset,
                                  ((device_handle *)c.dst)->buf, dst_offset, c.chunk_size);
     } else {
-        ssize_t src_off = 0, dst_off = 0;
-        for (int i = 0; i < (int)c.extent[d-1]; i++) {
+        // TODO: deal with negative strides. Currently the code in
+        // device_buffer_utils.h does not do so either.
+        uint64_t src_off = 0, dst_off = 0;
+        for (uint64_t i = 0; i < c.extent[d-1]; i++) {
             int err = do_device_to_device_copy(user_context, encoder, c, src_offset + src_off, dst_offset + dst_off, d - 1);
             dst_off += c.dst_stride_bytes[d-1];
             src_off += c.src_stride_bytes[d-1];
@@ -851,7 +853,7 @@ WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buf
 WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                  const struct halide_device_interface_t *dst_device_interface,
                                  struct halide_buffer_t *dst) {
-    // We only handle copies to cuda or to host
+    // We only handle copies to metal buffers or to host
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &metal_device_interface);
 
