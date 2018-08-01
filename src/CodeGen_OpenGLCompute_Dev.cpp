@@ -103,7 +103,22 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Cast *op) {
     Type value_type = op->value.type();
     // If both types are represented by the same GLSL type, no explicit cast
     // is necessary.
-    if (map_type(op->type) != map_type(value_type)) {
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code() == Type::Float) {
+            // float->int conversions may need explicit truncation if an
+            // integer type is embedded into a float. (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code() == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code() == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        value.accept(this);
+        return;
+    } else {
         Type target_type = map_type(op->type);
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
@@ -279,7 +294,7 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
                    << print_type(args[i].type) << " data[]; } "
                    << print_name(args[i].name) << ";\n";
         } else {
-            stream << "uniform " << print_type(args[i].type)
+            stream << "layout(location = " << i << ") uniform " << print_type(args[i].type)
                    << " " << print_name(args[i].name) << ";\n";
         }
     }

@@ -684,6 +684,7 @@ public:
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
                                      alloc(other.alloc),
                                      dev_ref_count(other.dev_ref_count) {
+        assert_can_convert_from(other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
@@ -1251,7 +1252,7 @@ public:
 
     /** Make an image which refers to the same data translated along
      * the first N dimensions. */
-    Buffer<T, D> translated(const std::vector<int> &delta) {
+    Buffer<T, D> translated(const std::vector<int> &delta) const {
         Buffer<T, D> im = *this;
         im.translate(delta);
         return im;
