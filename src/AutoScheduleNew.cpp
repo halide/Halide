@@ -1892,27 +1892,16 @@ struct State {
             // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
             int num_stages = 0;
-            int min_stages = 22;
-
             for (auto p : features) {
                 num_stages += p.second.size();
             }
-
-            int padded_stages = std::max(num_stages, min_stages);
-            int lpad = std::max(0, (padded_stages - num_stages)/2);
 
             const int pipeline_feat_size = 399;
             const int schedule_feat_size = 18;
 
             Buffer<float> pipeline_features, schedule_features;
             // Won't actually run anything until we call evaluate_costs...
-            int batch_idx = throughput_predictor->enqueue(padded_stages, &pipeline_features, &schedule_features, &cost);
-
-            // Buffer<float> pipeline_features(batch_size, 56, 7, padded_stages); // just predicting on batch size of 1 pipeline
-            // pipeline_features.fill(0.0f);
-            // Buffer<float> schedule_features(batch_size, 18, padded_stages);
-            // schedule_features.fill(0.0f);
-            // Buffer<float> network_output(batch_size);
+            int batch_idx = throughput_predictor->enqueue(num_stages, &pipeline_features, &schedule_features, &cost);
 
             // index of current stage whose features we are reading
             int stage = 0;
@@ -1927,9 +1916,7 @@ struct State {
                     for (int i = 7; i < pipeline_feat_size; i++) {
                         int x = (i-7)/7;
                         int y = (i-7)%7;
-                        pipeline_features(batch_idx, x, y, lpad+stage) = pipeline_feats[i];
-                        pipeline_features(batch_idx, x, y, lpad+stage) -= throughput_predictor->feature_stats.pipeline_mean(x,y);
-                        pipeline_features(batch_idx, x, y, lpad+stage) /= throughput_predictor->feature_stats.pipeline_std(x,y);
+                        pipeline_features(batch_idx, x, y, stage) = pipeline_feats[i];
                     }
 
                     stage += 1;
@@ -1947,9 +1934,7 @@ struct State {
                     if (feat.points_computed_total + feat.inlined_calls > 2*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
-                        schedule_features(batch_idx, i, lpad+stage) = std::log(1+sched_stats[i]);
-                        schedule_features(batch_idx, i, lpad+stage) -= throughput_predictor->feature_stats.schedule_mean(i);
-                        schedule_features(batch_idx, i, lpad+stage) /= throughput_predictor->feature_stats.schedule_std(i);
+                        schedule_features(batch_idx, i, stage) = sched_stats[i];
                     }
                     stage += 1;
                 }
@@ -2361,15 +2346,17 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 void test_convnet_correctness() {
     int n = 1;
     int stages = 10;
-    int min_stages = 22;
-    int padded_stages = std::max(stages, min_stages);
-    int lpad = (padded_stages - stages)/2;
 
-    Halide::Buffer<float> pipeline_features(n, 56, 7, padded_stages);
-    Halide::Buffer<float> schedule_features(n, 18, padded_stages);
-    pipeline_features.fill(0.0);
-    schedule_features.fill(0.0);
-    Halide::Buffer<float> network_output(n);
+    Halide::Buffer<float> pipeline_features;
+    Halide::Buffer<float> schedule_features;
+    double cost;
+
+    auto w = AutoScheduleModel::load_weights();
+    auto stats = AutoScheduleModel::load_stats();
+
+    ThroughputPredictorPipeline throughput_predictor(w, stats);
+
+    throughput_predictor.enqueue(10, &pipeline_features, &schedule_features, &cost);
 
     std::default_random_engine generator;
     std::normal_distribution<float> distribution(0.0,1.0);
@@ -2378,7 +2365,7 @@ void test_convnet_correctness() {
             for (int k = 0; k < 7; k++) {
                 for (int l = 0; l < stages; l++) {
                     float val = distribution(generator);
-                    pipeline_features(i, j, k, lpad+l) = val;
+                    pipeline_features(i, j, k, l) = val;
                 }
             }
         }
@@ -2388,26 +2375,21 @@ void test_convnet_correctness() {
         for (int j = 0; j < 18; j++) {
             for (int k = 0; k < stages; k++) {
                 float val = distribution(generator);
-                schedule_features(i,j,lpad+k) = val;
+                schedule_features(i, j, k) = val;
             }
         }
     }
 
-    auto w = AutoScheduleModel::load_weights();
-    auto stats = AutoScheduleModel::load_stats();
-
-    ThroughputPredictorPipeline throughput_predictor(w, stats);
-    throughput_predictor.set_inputs(pipeline_features, schedule_features);
-    throughput_predictor.prediction.realize(network_output);
+    throughput_predictor.evaluate_costs();
 
     FILE *fpipe = fopen("/private/home/karimacma/Halide/pipeline.data", "ab");
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < 56; j++) {
-          for (int k = 0; k < 7; k++) {
-            for (int l = 0; l < padded_stages; l++) {
-              fwrite(&(pipeline_features(i, j, k, l)), sizeof(float), 1, fpipe);
+            for (int k = 0; k < 7; k++) {
+                for (int l = 0; l < stages; l++) {
+                    fwrite(&(pipeline_features(i, j, k, l)), sizeof(float), 1, fpipe);
+                }
             }
-          }
         }
     }
     fclose(fpipe);
@@ -2415,7 +2397,7 @@ void test_convnet_correctness() {
     FILE *fsched = fopen("/private/home/karimacma/Halide/schedule.data", "ab");
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < 18; j++) {
-            for (int k = 0; k < padded_stages; k++) {
+            for (int k = 0; k < stages; k++) {
                 fwrite(&(schedule_features(i,j,k)), sizeof(float), 1, fsched);
             }
         }
@@ -2424,13 +2406,13 @@ void test_convnet_correctness() {
 
     FILE *fpred = fopen("/private/home/karimacma/Halide/prediction.data", "ab");
     for (int i = 0; i < n; i++) {
-        float cost = network_output(0);
-        fwrite(&cost, sizeof(float), 1, fpred);
+        float c = cost;
+        fwrite(&c, sizeof(float), 1, fpred);
     }
     fclose(fpred);
 
     FILE *fstages = fopen("/private/home/karimacma/Halide/stages.data", "ab");
-    fwrite(&padded_stages, sizeof(int), 1, fstages);
+    fwrite(&stages, sizeof(int), 1, fstages);
     fwrite(&n, sizeof(int), 1, fstages);
     fclose(fstages);
 }

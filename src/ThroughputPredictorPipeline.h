@@ -19,8 +19,7 @@ public:
 
     Stats feature_stats;
 
-    Buffer<float> schedule_std;
-    Buffer<float> schedule_mean;
+    Param<int> first_valid_param, num_stages_param;
 
     Buffer<float> head1_filter;
     Buffer<float> head1_bias;
@@ -56,6 +55,8 @@ public:
     Func f_pool3{"f_pool3"}, f_pool3_padded{"f_pool3_padded"};
     Func f_pool4{"f_pool4"}, f_pool4_padded{"f_pool4_padded"};
     Func f_reduce{"f_reduce"}, prediction{"prediction"};
+    Func normalized_pipeline_features{"normalized_pipeline_features"};
+    Func normalized_schedule_features{"normalized_schedule_features"};
 
     ThroughputPredictorPipeline(Weights weights, Stats stats) :
         feature_stats(stats),
@@ -69,7 +70,7 @@ public:
         filter6(weights.conv6_filter), bias6(weights.conv6_bias) {
 
 
-        Var c("c"), w("w"), n("n");
+        Var c("c"), w("w"), n("n"), i("i"), j("j"), s("s");
 
         RDom r_head1(head1_filter.dim(1).min(), head1_filter.dim(1).extent(),
                      head1_filter.dim(2).min(), head1_filter.dim(2).extent());
@@ -99,12 +100,21 @@ public:
         // reduce over a region that expands to 3x1 convs from the first two stages to the last two stages with zero padding
         RDom r_reduce(0, ( schedule_features.dim(2).extent() + 6 ) / 4);
 
+        normalized_pipeline_features(n, i, j, s) = 0.0f;
+        RDom r_s(first_valid_param, num_stages_param);
+        normalized_pipeline_features(n, i, j, r_s) =
+            (pipeline_features(n, i, j, r_s - first_valid_param) - feature_stats.pipeline_mean(i, j)) / feature_stats.pipeline_std(i, j);
+
+        normalized_schedule_features(n, i, s) = 0.0f;
+        normalized_schedule_features(n, i, r_s) =
+            (fast_log(schedule_features(n, i, r_s - first_valid_param) + 1) - feature_stats.schedule_mean(i)) / feature_stats.schedule_std(i);
+
         f_head1_conv(n, c, w) = head1_bias(c);
-        f_head1_conv(n, c, w) += head1_filter(c, r_head1.x, r_head1.y) * pipeline_features(n, r_head1.x, r_head1.y, w);
+        f_head1_conv(n, c, w) += head1_filter(c, r_head1.x, r_head1.y) * normalized_pipeline_features(n, r_head1.x, r_head1.y, w);
         f_head1_relu(n, c, w) = max(0, f_head1_conv(n, c, w));
 
         f_head2_conv(n, c, w) = head2_bias(c);
-        f_head2_conv(n, c, w) += head2_filter(c, r_head2) * schedule_features(n, r_head2, w);
+        f_head2_conv(n, c, w) += head2_filter(c, r_head2) * normalized_schedule_features(n, r_head2, w);
         f_head2_relu(n, c, w) = max(0, f_head2_conv(n, c, w));
 
         // we want to enforce boundary conditions on f_head1_relu and f_head2_relu because conv1 pads with 1 zero on either
@@ -187,6 +197,12 @@ public:
         schedule_features.dim(2).set_bounds(0, pipeline_length);
 
         Target t = get_jit_target_from_environment();
+        normalized_pipeline_features.compute_at(prediction, n)
+            .specialize(batch_size >= 8).vectorize(n, 8);
+        normalized_pipeline_features.update().specialize(batch_size >= 8).vectorize(n, 8);
+        normalized_schedule_features.compute_at(prediction, n)
+            .specialize(batch_size >= 8).vectorize(n, 8);
+        normalized_schedule_features.update().specialize(batch_size >= 8).vectorize(n, 8);
         f_head1_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
         f_head2_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
         f_ReLU1.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
@@ -202,6 +218,8 @@ public:
             .specialize(batch_size >= 16).parallel(n, 2);
 
         prediction.compile_jit(t);
+
+        benchmark();
     }
 
     void benchmark() {
@@ -209,24 +227,32 @@ public:
         Buffer<float> pipeline_feats(batch_size, 56, 7, 20), schedule_feats(batch_size, 18, 20);
         pipeline_feats.fill(0.0f);
         schedule_feats.fill(0.0f);
-        set_inputs(pipeline_feats, schedule_feats);
+        set_inputs(pipeline_feats, schedule_feats, 0, 20);
         Buffer<float> out(batch_size);
         auto t = Halide::Tools::benchmark([&]() {prediction.realize(out);});
         debug(0) << "Throughput predictor runtime: " << ((t/batch_size) * 1000000) << " us\n";
     }
 
-    void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats) {
+    void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats, int first_valid, int num_stages) {
         pipeline_features.set(Buffer<float>(*pipeline_feats.raw_buffer()));
         schedule_features.set(Buffer<float>(*schedule_feats.raw_buffer()));
+        first_valid_param.set(first_valid);
+        num_stages_param.set(num_stages);
     }
 
 
     Buffer<float> pipeline_feat_queue, schedule_feat_queue;
     std::vector<double *> cost_queue;
-    int cursor;
-    int enqueue(int padded_stages, Buffer<float> *pipeline_feats, Buffer<float> *schedule_feats, double *cost) {
+    int cursor, first_valid, num_stages;
+    int enqueue(int ns, Buffer<float> *pipeline_feats, Buffer<float> *schedule_feats, double *cost) {
+        num_stages = ns;
+        int min_stages = 22;
+        int padded_stages = std::max(num_stages, min_stages);
+        first_valid = std::max(0, (padded_stages - num_stages)/2);
+
         const int batch_size = 1024;
-        if (!pipeline_feat_queue.defined() || pipeline_feat_queue.dim(3).extent() != padded_stages) {
+        if (!pipeline_feat_queue.defined() ||
+            pipeline_feat_queue.dim(3).extent() != padded_stages) {
             pipeline_feat_queue = Buffer<float>(batch_size, 56, 7, padded_stages);
             schedule_feat_queue = Buffer<float>(batch_size, 18, padded_stages);
             pipeline_feat_queue.fill(0.0f);
@@ -250,7 +276,7 @@ public:
     void evaluate_costs() {
         if (cursor == 0) return;
 
-        set_inputs(pipeline_feat_queue, schedule_feat_queue);
+        set_inputs(pipeline_feat_queue, schedule_feat_queue, first_valid, num_stages);
         Buffer<float> costs = prediction.realize(cursor);
 
         for (int i = 0; i < cursor; i++) {
