@@ -1,5 +1,7 @@
 #ifndef BITS_64
-    #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
+    // Don't emit a message: some environments will consider this as a "warning",
+    // and we generally build with warnings-as-errors enabled.
+    // #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
