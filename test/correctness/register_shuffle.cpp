@@ -7,13 +7,8 @@ int main(int argc, char **argv) {
 
     if (!t.features_any_of({Target::CUDACapability50,
                             Target::CUDACapability61})) {
-        if (t.has_feature(Target::CUDA)) {
-            // Optimistically turn on capability 5, otherwise this test will never run on the buildbots
-            t.set_feature(Target::CUDACapability50);
-        } else {
-            printf("This test requires cuda enabled with cuda capability 3.0 or greater\n");
-            return 0;
-        }
+        printf("This test requires cuda enabled with cuda capability 5.0 or greater\n");
+        return 0;
     }
 
     {
