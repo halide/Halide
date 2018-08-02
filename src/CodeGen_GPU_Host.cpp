@@ -367,7 +367,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
-        Value *gpu_arg_sizes_arr;
+        Value *gpu_arg_sizes_arr = nullptr;
         bool runtime_run_takes_types = gpu_codegen->kernel_run_takes_types();
 
         if (!runtime_run_takes_types) {

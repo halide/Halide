@@ -35,8 +35,8 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() override { return "openglcompute"; }
-    bool kernel_run_takes_types() override { return true; };
+    std::string api_unique_name() { return "openglcompute"; }
+    bool kernel_run_takes_types() { return true; };
 
     
 protected:
