@@ -210,6 +210,7 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
                << "#define HALIDE_" << print_name(guard) << '\n'
+               << "#include <assert.h>\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -1590,6 +1591,67 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         // And also the metadata.
         stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+
+        // Emit an overload that accepts const buffers for inputs (but only
+        // if we have at least one input buffer, and only if the function is
+        // being emitted in NameMangling::CPlusPlus mode)
+        int num_input_buffers = 0;
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer() && args[i].is_input()) {
+                num_input_buffers++;
+            }
+        }
+
+        if (num_input_buffers > 0 && name_mangling == NameMangling::CPlusPlus) {
+            // We make this opt-in (via #define HALIDE_ALLOW_CONST_INPUT_BUFFERS=1)
+            // because the inline function requires that HalideRuntime.h be included
+            // first in order to compile.
+            stream << "\n#if defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n";
+            stream << "inline int " << simple_name << "(";
+            for (size_t i = 0; i < args.size(); i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                if (args[i].is_buffer()) {
+                    if (args[i].is_input()) {
+                        stream << "const ";
+                    }
+                    stream << "struct halide_buffer_t *"
+                           << print_name(args[i].name)
+                           << "_buffer";
+                } else {
+                    stream << print_type(args[i].type, AppendSpace)
+                           << print_name(args[i].name);
+                }
+            }
+            stream << ") HALIDE_FUNCTION_ATTRS {\n";
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    std::string n = print_name(args[i].name) + "_buffer";
+                    stream << "    assert(!" << n << "->is_bounds_query() && \"The input '" << args[i].name << "' is being passed as a const Buffer, but is being used for bounds query, which needs to mutate some fields of the Buffer. Use a non-const Buffer here instead.\");\n";
+                }
+            }
+
+            stream << "    return " << simple_name << "(";
+            for (size_t i = 0; i < args.size(); i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                if (args[i].is_buffer()) {
+                    std::string n = print_name(args[i].name) + "_buffer";
+                    if (args[i].is_input()) {
+                        stream << "const_cast<struct halide_buffer_t *>(" << n << ")";
+                    } else {
+                        stream << n;
+                    }
+                } else {
+                    stream << print_name(args[i].name);
+                }
+            }
+            stream << ");\n";
+            stream << "}\n";
+            stream << "\n#endif  // defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n";
+        }
     }
 
     if (!namespaces.empty()) {
