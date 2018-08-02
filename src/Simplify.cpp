@@ -4802,7 +4802,36 @@ private:
             else_case = mutate(else_case);
         }
 
-        if (condition.same_as(op->condition) &&
+        // Pull out common nodes
+        const Acquire *then_acquire = then_case.as<Acquire>();
+        const Acquire *else_acquire = else_case.as<Acquire>();
+        const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
+        const ProducerConsumer *else_pc = else_case.as<ProducerConsumer>();
+        const Block *then_block = then_case.as<Block>();
+        const Block *else_block = else_case.as<Block>();
+        if (then_acquire &&
+            else_acquire &&
+            equal(then_acquire->semaphore, else_acquire->semaphore) &&
+            equal(then_acquire->count, else_acquire->count)) {
+            return Acquire::make(then_acquire->semaphore, then_acquire->count,
+                                 mutate(IfThenElse::make(condition, then_acquire->body, else_acquire->body)));
+        } else if (then_pc &&
+                   else_pc &&
+                   then_pc->name == else_pc->name &&
+                   then_pc->is_producer == else_pc->is_producer) {
+            return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
+                                          mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+        } else if (then_block &&
+                   else_block &&
+                   equal(then_block->first, else_block->first)) {
+            return Block::make(then_block->first,
+                               mutate(IfThenElse::make(condition, then_block->rest, else_block->rest)));
+        } else if (then_block &&
+                   else_block &&
+                   equal(then_block->rest, else_block->rest)) {
+            return Block::make(mutate(IfThenElse::make(condition, then_block->first, else_block->first)),
+                               then_block->rest);
+        } else if (condition.same_as(op->condition) &&
             then_case.same_as(op->then_case) &&
             else_case.same_as(op->else_case)) {
             return op;
@@ -5729,8 +5758,19 @@ private:
             bounds_info.pop(op->name);
         }
 
+        const IfThenElse *ifelse = new_body.as<IfThenElse>();
+
         if (is_no_op(new_body)) {
             return new_body;
+        } else if (ifelse &&
+                   op->device_api == DeviceAPI::None &&
+                   !ifelse->else_case.defined() &&
+                   !expr_uses_var(ifelse->condition, op->name) &&
+                   is_pure(ifelse->condition)) {
+            // Pull the if outside the for
+            Stmt then = ifelse->then_case;
+            then = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, then);
+            return IfThenElse::make(ifelse->condition, then);
         } else if (op->min.same_as(new_min) &&
             op->extent.same_as(new_extent) &&
             op->body.same_as(new_body)) {
@@ -5908,6 +5948,21 @@ private:
             return op;
         } else {
             return Block::make(first, rest);
+        }
+    }
+
+    Stmt visit(const Fork *op) override {
+        Stmt first = mutate(op->first);
+        Stmt rest = mutate(op->rest);
+        if (is_no_op(first)) {
+            return rest;
+        } else if (is_no_op(rest)) {
+            return first;
+        } else if (op->first.same_as(first) &&
+                   op->rest.same_as(rest)) {
+            return op;
+        } else {
+            return Fork::make(first, rest);
         }
     }
 };

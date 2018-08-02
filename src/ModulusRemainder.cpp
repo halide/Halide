@@ -51,11 +51,13 @@ public:
     void visit(const AssertStmt *);
     void visit(const ProducerConsumer *);
     void visit(const For *);
+    void visit(const Acquire *);
     void visit(const Store *);
     void visit(const Provide *);
     void visit(const Allocate *);
     void visit(const Realize *);
     void visit(const Block *);
+    void visit(const Fork *);
     void visit(const IfThenElse *);
     void visit(const Free *);
     void visit(const Evaluate *);
@@ -410,6 +412,10 @@ void ComputeModulusRemainder::visit(const For *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
+void ComputeModulusRemainder::visit(const Acquire *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
 void ComputeModulusRemainder::visit(const Store *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
@@ -427,6 +433,10 @@ void ComputeModulusRemainder::visit(const Realize *) {
 }
 
 void ComputeModulusRemainder::visit(const Block *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const Fork *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 

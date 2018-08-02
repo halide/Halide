@@ -154,6 +154,7 @@ struct halide_cond {
 
 WEAK void halide_cond_signal(struct halide_cond *cond);
 WEAK void halide_cond_broadcast(struct halide_cond *cond);
+WEAK void halide_cond_signal(struct halide_cond *cond);
 WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 
 WEAK int halide_trace_helper(void *user_context,

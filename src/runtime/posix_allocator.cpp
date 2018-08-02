@@ -1,6 +1,8 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
 
+#include "printer.h"
+
 extern "C" {
 
 extern void *malloc(size_t);

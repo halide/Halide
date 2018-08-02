@@ -26,6 +26,8 @@ public:
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement accept())
     template<typename T> friend struct ExprNode;
+
+
     template<typename T> friend struct StmtNode;
 
     virtual void visit(const IntImm *);
@@ -59,6 +61,7 @@ protected:
     virtual void visit(const LetStmt *);
     virtual void visit(const AssertStmt *);
     virtual void visit(const ProducerConsumer *);
+    virtual void visit(const Acquire *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
@@ -66,6 +69,7 @@ protected:
     virtual void visit(const Free *);
     virtual void visit(const Realize *);
     virtual void visit(const Block *);
+    virtual void visit(const Fork *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
@@ -136,6 +140,8 @@ protected:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
+    void visit(const Acquire *) override;
+    void visit(const Fork *) override;
     // @}
 };
 
