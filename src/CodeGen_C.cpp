@@ -210,8 +210,11 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
                << "#define HALIDE_" << print_name(guard) << '\n'
-               << "#include <assert.h>\n"
                << "#include <stdint.h>\n"
+               << "#if defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n"
+               << "#include <assert.h>\n"
+               << "#include \"HalideRuntime.h\"\n"
+               << "#endif  // defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
                << "// to the Halide pipeline.\n"
