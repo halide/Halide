@@ -1795,9 +1795,14 @@ struct PartialScheduleNode {
                             parent.exists = false;
                             parent.extent = 1;
                         } else {
-                            Var outer(parent.var.name() + "o"), inner(parent.var.name() + "i");
+                            VarOrRVar outer(Var(parent.var.name() + "o"));
+                            VarOrRVar inner(Var(parent.var.name() + "i"));
+                            if (parent.var.is_rvar) {
+                                outer = RVar(parent.var.name() + "o");
+                                inner = RVar(parent.var.name() + "i");
+                            }
                             debug(0) << "Splitting " << parent.var.name() << " by " << factor << '\n';
-                            if (parent.extent % factor == 0 && stage == 0) {
+                            if (!parent.var.is_rvar && parent.extent % factor == 0 && stage == 0) {
                                 // TODO: If the actual size doesn't match the estimates, this could make some bad assumptions.
                                 s.split(parent.var, outer, inner, (int)factor, TailStrategy::RoundUp);
                             } else {
@@ -2325,10 +2330,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
     }
 
+    debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
+
     debug(0) << "** Optimal schedule:\n";
     optimal.dump();
-
-    debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     // Just to get the debugging prints to fire
     optimal.calculate_cost(dag, params, &throughput_predictor, true);
@@ -2448,6 +2453,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -2482,6 +2488,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -2506,6 +2513,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -2529,6 +2537,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -2558,6 +2567,7 @@ void autoschedule_test() {
         State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -2579,6 +2589,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2605,6 +2616,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2633,6 +2645,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -2665,6 +2678,7 @@ void autoschedule_test() {
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
