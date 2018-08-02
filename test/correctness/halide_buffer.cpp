@@ -53,6 +53,14 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
 
     check_equal(a_window, b_window);
 
+    // Check copying from const to nonconst
+    Buffer<float> a_window_nonconst = b_window.copy();
+    check_equal(a_window_nonconst, b_window);
+
+    // Check copying from const to const
+    Buffer<const float> a_window_const = b_window.copy();
+    check_equal(a_window_const, b_window);
+
     // You don't actually have to crop a.
     a.fill(1.0f);
     a.copy_from(b_window);
@@ -203,6 +211,31 @@ int main(int argc, char **argv) {
         for (size_t i = sizeof(halide_buffer_t); i < sizeof(buf); i++) {
             assert(!buf[i]);
         }
+    }
+
+    {
+        // check reset()
+        Buffer<float> a(100, 3, 80);
+
+        assert(a.dimensions() == 3);
+        assert(a.number_of_elements() == 100 * 3 * 80);
+        assert(a.type() == halide_type_of<float>());
+
+        a.reset();
+        assert(a.dimensions() == 0);
+        assert(a.number_of_elements() == 1);
+        assert(a.type() == halide_type_of<float>());
+
+        Buffer<> b(halide_type_of<float>(), 10, 10);
+
+        assert(b.dimensions() == 2);
+        assert(b.number_of_elements() == 10 * 10);
+        assert(b.type() == halide_type_of<float>());
+
+        b.reset();
+        assert(b.dimensions() == 0);
+        assert(b.number_of_elements() == 1);
+        assert(b.type() == halide_type_of<uint8_t>());
     }
 
     printf("Success!\n");
