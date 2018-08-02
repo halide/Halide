@@ -805,10 +805,10 @@ inline const halide_type_t *tmp_code_to_halide_type() {
 // return true iff the buffer storage has no padding between
 // any elements, and is in strictly planar order.
 template<typename ImageType>
-bool buffer_is_compact_planar(ImageType &im) {
+bool buffer_is_compact_planar(const ImageType &im) {
     const halide_type_t im_type = im.type();
     const size_t elem_size = (im_type.bits / 8);
-    if (((uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (uint8_t*) im.end()) {
+    if (((const uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t*) im.end()) {
         return false;
     }
     for (int d = 1; d < im.dimensions(); ++d) {
