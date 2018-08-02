@@ -553,7 +553,8 @@ public:
 
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
-    T *begin() const {
+    // @{
+    T *begin() {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
@@ -563,8 +564,14 @@ public:
         return (T *)(buf.host + index * type().bytes());
     }
 
+    const T *begin() const {
+        return const_cast<Buffer*>(this)->begin();
+    }
+    // @}
+
     /** A pointer to one beyond the element with the highest address. */
-    T *end() const {
+    // @{
+    T *end() {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
@@ -574,6 +581,11 @@ public:
         index += 1;
         return (T *)(buf.host + index * type().bytes());
     }
+
+    const T *end() const {
+        return const_cast<Buffer*>(this)->end();
+    }
+    // @}
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
@@ -1856,15 +1868,61 @@ private:
     // out their strides in the d'th dimension, and assert that their
     // sizes match in that dimension.
     template<typename T2, int D2, typename ...Args>
-    void extract_strides(int d, int *strides, const Buffer<T2, D2> *first, Args... rest) {
-        assert(first->dimensions() == dimensions());
-        assert(first->dim(d).min() == dim(d).min() &&
-               first->dim(d).max() == dim(d).max());
-        *strides++ = first->dim(d).stride();
-        extract_strides(d, strides, rest...);
+    void extract_strides(int d, int *strides, const Buffer<T2, D2> &first, Args&&... rest) const {
+        assert(first.dimensions() == dimensions());
+        assert(first.dim(d).min() == dim(d).min() &&
+               first.dim(d).max() == dim(d).max());
+        *strides++ = first.dim(d).stride();
+        extract_strides(d, strides, std::forward<Args>(rest)...);
     }
 
-    void extract_strides(int d, int *strides) {}
+    void extract_strides(int d, int *strides) const {}
+
+    template<typename ...Args, int N = sizeof...(Args) + 1>
+    bool init_for_each_value_task_dim(for_each_value_task_dim<N> *t, Args&&... other_buffers) const {
+        for (int i = 0; i <= dimensions(); i++) {
+            for (int j = 0; j < N; j++) {
+                t[i].stride[j] = 0;
+            }
+            t[i].extent = 1;
+        }
+
+        for (int i = 0; i < dimensions(); i++) {
+            extract_strides(i, t[i].stride, *this, std::forward<Args>(other_buffers)...);
+            t[i].extent = dim(i).extent();
+            // Order the dimensions by stride, so that the traversal is cache-coherent.
+            for (int j = i; j > 0 && t[j].stride[0] < t[j-1].stride[0]; j--) {
+                std::swap(t[j], t[j-1]);
+            }
+        }
+
+        // flatten dimensions where possible to make a larger inner
+        // loop for autovectorization.
+        int d = dimensions();
+        for (int i = 1; i < d; i++) {
+            bool flat = true;
+            for (int j = 0; j < N; j++) {
+                flat = flat && t[i-1].stride[j] * t[i-1].extent == t[i].stride[j];
+            }
+            if (flat) {
+                t[i-1].extent *= t[i].extent;
+                for (int j = i; j < dimensions(); j++) {
+                    t[j] = t[j+1];
+                }
+                i--;
+                d--;
+            }
+        }
+
+        bool innermost_strides_are_one = false;
+        if (dimensions() > 0) {
+            innermost_strides_are_one = true;
+            for (int j = 0; j < N; j++) {
+                innermost_strides_are_one &= t[0].stride[j] == 1;
+            }
+        }
+        return innermost_strides_are_one;
+    }
 
     // The template function that constructs the loop nest for for_each_value
     template<int d, bool innermost_strides_are_one, typename Fn, typename... Ptrs>
@@ -1914,52 +1972,14 @@ public:
      * effectively lifts a function of scalars to an element-wise
      * function of buffers. This produces code that the compiler can
      * autovectorize. This is slightly cheaper than for_each_element,
-     * because it does not need to track the coordinates. */
+     * because it does not need to track the coordinates. (Note that
+     * const Buffer(s) can only receive values or const references.) */
+    // @{
     template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
-    void for_each_value(Fn &&f, Args... other_buffers) {
+    void for_each_value(Fn &&f, Args&&... other_buffers) {
         for_each_value_task_dim<N> *t =
             (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
-        for (int i = 0; i <= dimensions(); i++) {
-            for (int j = 0; j < N; j++) {
-                t[i].stride[j] = 0;
-            }
-            t[i].extent = 1;
-        }
-
-        for (int i = 0; i < dimensions(); i++) {
-            extract_strides(i, t[i].stride, this, &other_buffers...);
-            t[i].extent = dim(i).extent();
-            // Order the dimensions by stride, so that the traversal is cache-coherent.
-            for (int j = i; j > 0 && t[j].stride[0] < t[j-1].stride[0]; j--) {
-                std::swap(t[j], t[j-1]);
-            }
-        }
-
-        // flatten dimensions where possible to make a larger inner
-        // loop for autovectorization.
-        int d = dimensions();
-        for (int i = 1; i < d; i++) {
-            bool flat = true;
-            for (int j = 0; j < N; j++) {
-                flat = flat && t[i-1].stride[j] * t[i-1].extent == t[i].stride[j];
-            }
-            if (flat) {
-                t[i-1].extent *= t[i].extent;
-                for (int j = i; j < dimensions(); j++) {
-                    t[j] = t[j+1];
-                }
-                i--;
-                d--;
-            }
-        }
-
-        bool innermost_strides_are_one = false;
-        if (dimensions() > 0) {
-            innermost_strides_are_one = true;
-            for (int j = 0; j < N; j++) {
-                innermost_strides_are_one &= t[0].stride[j] == 1;
-            }
-        }
+        bool innermost_strides_are_one = init_for_each_value_task_dim<Args...>(t, other_buffers...);
 
         if (innermost_strides_are_one) {
             for_each_value_helper<true>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
@@ -1967,6 +1987,20 @@ public:
             for_each_value_helper<false>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
         }
     }
+
+    template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
+    void for_each_value(Fn &&f, Args&&... other_buffers) const {
+        for_each_value_task_dim<N> *t =
+            (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
+        bool innermost_strides_are_one = init_for_each_value_task_dim<Args...>(t, other_buffers...);
+
+        if (innermost_strides_are_one) {
+            for_each_value_helper<true>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
+        } else {
+            for_each_value_helper<false>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
+        }
+    }
+    // @}
 
 private:
 
