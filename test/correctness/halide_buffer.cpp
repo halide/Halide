@@ -238,6 +238,104 @@ int main(int argc, char **argv) {
         assert(b.type() == halide_type_of<uint8_t>());
     }
 
+    {
+        // Check for_each_value on a const buffer(s)
+        const int W = 5, H = 4, C = 3;
+        Buffer<int> zero(W, H, C);
+        zero.fill(0);
+
+        const Buffer<int> a = zero.copy();
+        const Buffer<const int> a_const = a;
+        const Buffer<int> b = zero.copy();
+        const Buffer<const int> b_const = b;
+        Buffer<int> c = zero.copy();
+        int counter;
+
+        counter = 0;
+        a.for_each_value([&](const int &a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value, int b_value) { counter += 1; }, b);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value, const int &b_value) { counter += 1; }, b);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](const int &a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value, int b_value) { counter += 1; }, b_const);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value, const int &b_value) { counter += 1; }, b_const);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
+            counter += 1;
+            c_value_ref = 1;
+        }, b, c);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(1));
+
+        counter = 0;
+        c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
+            counter += 1;
+            c_value_ref = 2;
+        }, b, a);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(2));
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
+            counter += 1;
+            c_value_ref = 1;
+        }, b_const, c);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(1));
+
+        counter = 0;
+        c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
+            counter += 1;
+            c_value_ref = 2;
+        }, b_const, a_const);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(2));
+
+        // Won't compile: a_const is const T, can't specify a nonconst ref for value
+        // a_const.for_each_value([&](int &a_value) { });
+
+        // Won't compile: b_const is const, can't specify a nonconst ref for value
+        // a.for_each_value([&](int a_value, int &b_value) { }, b_const);
+
+        // Won't compile: a is const, can't specify a nonconst ref for value
+        // c.for_each_value([&](int c_value, int &a_value, int &b_value) { }, a_const, b);
+
+        // Won't compile: a and b are const, can't specify a nonconst ref for value
+        // c.for_each_value([&](int c_value, int a_value, int &b_value) { }, a_const, b_const);
+    }
+
     printf("Success!\n");
     return 0;
 }
