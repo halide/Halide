@@ -439,6 +439,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
             debug_arguments(&main_func);
         }
         result_module.append(main_func);
+
+        // Append a wrapper for this pipeline that accepts old buffer_ts
+        // and upgrades them. It will use the same name, so it will
+        // require C++ linkage. We don't need it when jitting.
+        if (!t.has_feature(Target::JIT)) {
+            add_legacy_wrapper(result_module, main_func);
+        }
     }
 
     if (bounds_query_stmt.defined()) {
@@ -457,13 +464,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
             debug_arguments(&bounds_query_func);
         }
         result_module.append(bounds_query_func);
-    }
-
-    // Append a wrapper for this pipeline that accepts old buffer_ts
-    // and upgrades them. It will use the same name, so it will
-    // require C++ linkage. We don't need it when jitting.
-    if (!t.has_feature(Target::JIT)) {
-        add_legacy_wrapper(result_module, main_func);
     }
 
     // Also append any wrappers for extern stages that expect the old buffer_t
