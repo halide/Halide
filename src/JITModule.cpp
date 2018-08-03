@@ -139,6 +139,8 @@ public:
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
+    JITModule::Symbol bounds_query_entrypoint;
+    JITModule::Symbol bounds_query_argv_entrypoint;
 
     std::string name;
 };
@@ -316,13 +318,16 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     std::map<std::string, Symbol> exports;
 
-    Symbol entrypoint;
-    Symbol argv_entrypoint;
+    Symbol entrypoint, bounds_query_entrypoint, argv_entrypoint, bounds_query_argv_entrypoint;;
     if (!function_name.empty()) {
         entrypoint = compile_and_get_function(*ee, function_name);
         exports[function_name] = entrypoint;
         argv_entrypoint = compile_and_get_function(*ee, function_name + "_argv");
         exports[function_name + "_argv"] = argv_entrypoint;
+        bounds_query_entrypoint = compile_and_get_function(*ee, function_name + "_bounds_query");
+        exports[function_name + "_bounds_query"] = bounds_query_entrypoint;
+        bounds_query_argv_entrypoint = compile_and_get_function(*ee, function_name + "_bounds_query_argv");
+        exports[function_name + "_bounds_query_argv"] = bounds_query_argv_entrypoint;
     }
 
     for (size_t i = 0; i < requested_exports.size(); i++) {
@@ -349,6 +354,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->dependencies = dependencies;
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
+    jit_module->bounds_query_entrypoint = bounds_query_entrypoint;
+    jit_module->bounds_query_argv_entrypoint = bounds_query_argv_entrypoint;
     jit_module->name = function_name;
 }
 
@@ -372,16 +379,32 @@ void *JITModule::main_function() const {
     return jit_module->entrypoint.address;
 }
 
+void *JITModule::bounds_query_function() const {
+    return jit_module->bounds_query_entrypoint.address;
+}
+
 JITModule::Symbol JITModule::entrypoint_symbol() const {
     return jit_module->entrypoint;
+}
+
+JITModule::Symbol JITModule::bounds_query_entrypoint_symbol() const {
+    return jit_module->bounds_query_entrypoint;
 }
 
 int (*JITModule::argv_function() const)(const void **) {
     return (int (*)(const void **))jit_module->argv_entrypoint.address;
 }
 
+int (*JITModule::bounds_query_argv_function() const)(const void **) {
+    return (int (*)(const void **))jit_module->bounds_query_argv_entrypoint.address;
+}
+
 JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module->argv_entrypoint;
+}
+
+JITModule::Symbol JITModule::bounds_query_argv_entrypoint_symbol() const {
+    return jit_module->bounds_query_argv_entrypoint;
 }
 
 static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set <const JITModuleContents *> &already_seen) {

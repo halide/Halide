@@ -16,22 +16,25 @@ int dump_to_file(halide_buffer_t *input, const char *filename,
                  int desired_min, int desired_extent,
                  halide_buffer_t *) {
     // Note the final output buffer argument is unused.
-    if (input->is_bounds_query()) {
-        // Request some range of the input buffer
-        input->dim[0].min = desired_min;
-        input->dim[0].extent = desired_extent;
-    } else {
-        FILE *f = fopen(filename, "w");
-        // Depending on the schedule, other consumers, etc, Halide may
-        // have evaluated more than we asked for, so don't assume that
-        // the min and extents match what we requested.
-        int *base = ((int *)input->host) - input->dim[0].min;
-        for (int i = desired_min; i < desired_min + desired_extent; i++) {
-            fprintf(f, "%d\n", base[i]);
-        }
-        fclose(f);
+    FILE *f = fopen(filename, "w");
+    // Depending on the schedule, other consumers, etc, Halide may
+    // have evaluated more than we asked for, so don't assume that
+    // the min and extents match what we requested.
+    int *base = ((int *)input->host) - input->dim[0].min;
+    for (int i = desired_min; i < desired_min + desired_extent; i++) {
+        fprintf(f, "%d\n", base[i]);
     }
+    fclose(f);
 
+    return 0;
+}
+
+extern "C" DLLEXPORT
+int dump_to_file_bounds_query(halide_buffer_t *input, const char *filename,
+                 int desired_min, int desired_extent,
+                 halide_buffer_t *) {
+    input->dim[0].min = desired_min;
+    input->dim[0].extent = desired_extent;
     return 0;
 }
 

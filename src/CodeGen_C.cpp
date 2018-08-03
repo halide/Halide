@@ -1537,6 +1537,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
+            if (args[i].is_const) {
+                stream << "const ";
+            }
             stream << "struct halide_buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";

@@ -154,7 +154,7 @@ void wrap_legacy_extern_stages(Module m) {
     // its functions, so we have to iterate with some care.
     size_t num_functions = m.functions().size();
     for (size_t i = 0; i < num_functions; i++) {
-        wrap.prefix = "_halide_wrapper_" + m.functions()[i].name + "_";
+        wrap.prefix = "_halide_wrapper_" + m.name() + "_";
         Stmt old_body = m.functions()[i].body;
         Stmt new_body = wrap.mutate(old_body);
         m.functions()[i].body = new_body;
@@ -172,6 +172,7 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
     vector<Stmt> upgrades, downgrades;
     vector<Expr> call_args;
     vector<pair<string, Expr>> new_buffers;
+    Expr any_bounds_query = const_false();
     for (LoweredArgument arg : fn.args) {
         if (arg.kind == Argument::InputScalar) {
             args.push_back(arg);
@@ -209,6 +210,7 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
 
             Expr bounds_query = Call::make(Bool(), Call::buffer_is_bounds_query,
                                            {new_buffer_var}, Call::Extern);
+            any_bounds_query = any_bounds_query || bounds_query;
             downgrade = IfThenElse::make(bounds_query, downgrade, downgrade_device);
             downgrades.push_back(downgrade);
 
@@ -232,7 +234,8 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
         call_type = Call::ExternCPlusPlus;
     }
     Expr inner_call = Call::make(Int(32), fn.name, call_args, call_type);
-    Stmt body = make_checked_call(inner_call);
+    Expr inner_bounds_query = Call::make(Int(32), fn.name + "_bounds_query", call_args, call_type);
+    Stmt body = IfThenElse::make(any_bounds_query, make_checked_call(inner_bounds_query), make_checked_call(inner_call));
     body = Block::make({Block::make(upgrades), body, Block::make(downgrades)});
 
     while (!new_buffers.empty()) {

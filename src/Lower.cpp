@@ -151,6 +151,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
+    Stmt bounds_query;
     s = add_image_checks(s, outputs, t, order, env, func_bounds);
     debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
@@ -288,6 +289,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = inject_early_frees(s);
     debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
 
+    // Fork the stmt into the two entrypoints
+    Stmt bounds_query_stmt;
+    debug(1) << "Forking bounds query logic into separate entrypoint...\n";
+    bounds_query_stmt = simplify(substitute("is_bounds_query_entrypoint", const_true(), s));
+    s = simplify(substitute("is_bounds_query_entrypoint", const_false(), s));
+    debug(2) << "Lowering after forking bounds query logic:...\n" << bounds_query_stmt << "\n" << s << "\n";
+
     if (t.has_feature(Target::Profile)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
@@ -419,6 +427,23 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     };
     s = StrengthenRefs().mutate(s);
 
+    if (bounds_query_stmt.defined()) {
+        // We never want metadata on the bounds query entrypoint.
+        auto l = linkage_type;
+        if (l == LinkageType::ExternalPlusMetadata) {
+            l = LinkageType::ExternalPlusArgv;
+        }
+        LoweredFunc bounds_query_func(pipeline_name + "_bounds_query", public_args, bounds_query_stmt, l);
+        if (t.has_feature(Target::Debug)) {
+            debug_arguments(&bounds_query_func);
+        }
+        result_module.append(bounds_query_func);
+    }
+
+    // For the main func, the buffer args are const
+    for (auto &a : public_args) {
+        a.is_const |= a.is_buffer();
+    }
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 
     // If we're in debug mode, add code that prints the args.

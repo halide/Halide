@@ -11,31 +11,34 @@
 extern "C" DLLEXPORT int extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     assert(in->type == halide_type_of<int>());
     assert(out->type == halide_type_of<int>());
-    if (in->host == nullptr || out->host == nullptr) {
-        // We require input size = output size, and just for fun,
-        // we'll require that the output size must be a multiple of 17
 
-        if (out->is_bounds_query()) {
-            out->dim[0].extent = ((out->dim[0].extent + 16)/17)*17;
-        }
-        if (in->is_bounds_query()) {
-            in->dim[0].extent = out->dim[0].extent;
-            in->dim[0].min = out->dim[0].min;
-        }
-
-    } else {
-        assert(out->dim[0].extent % 17 == 0);
-        printf("in: %d %d, out: %d %d\n",
-               in->dim[0].min, in->dim[0].extent,
-               out->dim[0].min, out->dim[0].extent);
-        int32_t *in_origin = (int32_t *)in->host - in->dim[0].min;
-        int32_t *out_origin = (int32_t *)out->host - out->dim[0].min;
-        for (int i = out->dim[0].min; i < out->dim[0].min + out->dim[0].extent; i++) {
-            out_origin[i] = in_origin[i] * i;
-        }
+    assert(out->dim[0].extent % 17 == 0);
+    printf("in: %d %d, out: %d %d\n",
+           in->dim[0].min, in->dim[0].extent,
+           out->dim[0].min, out->dim[0].extent);
+    int32_t *in_origin = (int32_t *)in->host - in->dim[0].min;
+    int32_t *out_origin = (int32_t *)out->host - out->dim[0].min;
+    for (int i = out->dim[0].min; i < out->dim[0].min + out->dim[0].extent; i++) {
+        out_origin[i] = in_origin[i] * i;
     }
     return 0;
 }
+
+
+extern "C" DLLEXPORT int extern_stage_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
+    // We require input size = output size, and just for fun,
+    // we'll require that the output size must be a multiple of 17
+
+    if (out->is_bounds_query()) {
+        out->dim[0].extent = ((out->dim[0].extent + 16)/17)*17;
+    }
+    if (in->is_bounds_query()) {
+        in->dim[0].extent = out->dim[0].extent;
+        in->dim[0].min = out->dim[0].min;
+    }
+    return 0;
+}
+
 
 using namespace Halide;
 

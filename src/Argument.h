@@ -53,16 +53,30 @@ struct Argument {
      * Note that type.lanes should always be 1 here. */
     Type type;
 
+    /** If this is a buffer parameter, is the buffer struct itself
+     * (not the data) const vs mutable. */
+    bool is_const;
+
     /** If this is a scalar parameter, then these are its default, min, max values.
      * By default, they are left unset, implying "no default, no min, no max". */
     Expr def, min, max;
 
-    Argument() : kind(InputScalar), dimensions(0) {}
-    Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions,
-                Expr _def = Expr(),
-                Expr _min = Expr(),
-                Expr _max = Expr()) :
-        name(_name), kind(_kind), dimensions((uint8_t) _dimensions), type(_type), def(_def), min(_min), max(_max) {
+    Argument() : kind(InputScalar), dimensions(0), is_const(false) {}
+    Argument(const std::string &_name,
+             Kind _kind,
+             const Type &_type,
+             int _dimensions,
+             Expr _def = Expr(),
+             Expr _min = Expr(),
+             Expr _max = Expr()) :
+        name(_name),
+        kind(_kind),
+        dimensions((uint8_t) _dimensions),
+        type(_type),
+        is_const(false),
+        def(_def),
+        min(_min),
+        max(_max) {
         internal_assert(_dimensions >= 0 && _dimensions <= 255);
         user_assert(!(is_scalar() && dimensions != 0))
             << "Scalar Arguments must specify dimensions of 0";

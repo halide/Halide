@@ -665,7 +665,7 @@ public:
             }
 
             // Make the extern call
-            Expr e = func.make_call_to_extern_definition(bounds_inference_args, target);
+            Expr e = func.make_bounds_query_to_extern_definition(bounds_inference_args, target);
 
             // Check if it succeeded
             string result_name = unique_name('t');

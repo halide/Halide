@@ -786,6 +786,7 @@ Pipeline::make_externs_jit_module(const Target &target,
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
     JITModule free_standing_jit_externs;
+    std::map<std::string, JITExtern> bounds_query_externs;
     for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
          iter != externs_in_out.end();
          iter++) {
@@ -797,8 +798,12 @@ Pipeline::make_externs_jit_module(const Target &target,
             pipeline.compile_jit(target);
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
-            free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
+            free_standing_jit_externs.add_symbol_for_export(iter->first,
+                                                            pipeline_contents.jit_module.entrypoint_symbol());
+            free_standing_jit_externs.add_symbol_for_export(iter->first + "_bounds_query",
+                                                            pipeline_contents.jit_module.bounds_query_entrypoint_symbol());
             void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
+            void *bounds_query_address = pipeline_contents.jit_module.bounds_query_entrypoint_symbol().address;
             std::vector<Type> arg_types;
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
@@ -817,6 +822,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             }
             ExternSignature signature(Int(32), false, arg_types);
             iter->second = ExternCFunction(address, signature);
+            bounds_query_externs.emplace(iter->first + "_bounds_query", ExternCFunction(bounds_query_address, signature));
         } else {
             free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }
@@ -824,6 +830,10 @@ Pipeline::make_externs_jit_module(const Target &target,
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
         result.push_back(free_standing_jit_externs);
     }
+    // The Pipeline externs each forked into a pair of extern C
+    // externs - one for the bounds query entrypoint and one for the
+    // main entrypoint.
+    externs_in_out.insert(bounds_query_externs.begin(), bounds_query_externs.end());
     return result;
 }
 
@@ -1010,7 +1020,7 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = contents->jit_module.argv_function()(args.store);
+        int exit_status = contents->jit_module.bounds_query_argv_function()(args.store);
         jit_context.report_if_error(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

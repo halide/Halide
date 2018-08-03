@@ -27,16 +27,28 @@ void my_free(void *user_context, void *ptr) {
 
 // An extern stage that copies input -> output
 extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+    Halide::Runtime::Buffer<void>(*out).copy_from(Halide::Runtime::Buffer<void>(*in));
+    return 0;
+}
+
+// An extern stage that copies input -> output
+extern "C" DLLEXPORT int simple_buffer_copy_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
-    } else {
-        Halide::Runtime::Buffer<void>(*out).copy_from(Halide::Runtime::Buffer<void>(*in));
     }
     return 0;
 }
 
 // An extern stage accesses the input in a non-monotonic way in the y dimension.
 extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+    // This extern stage is only used to see if it produces an
+    // expected bounds error, so just fill it with a sentinel value.
+    Halide::Runtime::Buffer<int>(*out).fill(99);
+    return 0;
+}
+
+// An extern stage accesses the input in a non-monotonic way in the y dimension.
+extern "C" DLLEXPORT int zigzag_buffer_copy_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
         int y_min = in->dim[1].min;
@@ -54,10 +66,6 @@ extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t
         }
         in->dim[1].min = y_min;
         in->dim[1].extent = y_max - y_min + 1;
-    } else {
-        // This extern stage is only used to see if it produces an
-        // expected bounds error, so just fill it with a sentinel value.
-        Halide::Runtime::Buffer<int>(*out).fill(99);
     }
     return 0;
 }

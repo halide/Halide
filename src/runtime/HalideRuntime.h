@@ -1071,7 +1071,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
     halide_target_feature_debug = 1,  ///< Turn on debug info and output for runtime code.
     halide_target_feature_no_asserts = 2,  ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query = 3, ///< Disable the bounds querying functionality.
+    halide_deprecated_target_feature_no_bounds_query = 3, ///< Deprecated. Has no effect.
 
     halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.

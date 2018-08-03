@@ -22,26 +22,10 @@ int round_down(int x, int m) {
     else return (x / m) * m;
 }
 
+int desired_row_extent = 0;
+
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
-    static int desired_row_extent = 0;
-    if (out->is_bounds_query()) {
-        // Bounds query mode. To make life interesting, let's add some
-        // arbitrary constraints on what we can produce.
-
-        // The start and end of the x coord must be a multiple of 10.
-        int max_plus_one = out->dim[0].min + out->dim[0].extent;
-        max_plus_one = round_up(max_plus_one, 10);
-        out->dim[0].min = round_down(out->dim[0].min, 10);
-        out->dim[0].extent = max_plus_one - out->dim[0].min;
-        desired_row_extent = out->dim[0].extent;
-
-        // There must be at least 40 scanlines.
-        if (out->dim[1].extent < 40) {
-            out->dim[1].extent = 40;
-        }
-        return 0;
-    }
     assert(out->host);
     assert(out->type == halide_type_of<float>());
     assert(out->dimensions == 2);
@@ -64,12 +48,28 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
     return 0;
 }
 
+
+extern "C" DLLEXPORT int make_data_bounds_query(halide_buffer_t *out) {
+    // Bounds query mode. To make life interesting, let's add some
+    // arbitrary constraints on what we can produce.
+
+    // The start and end of the x coord must be a multiple of 10.
+    int max_plus_one = out->dim[0].min + out->dim[0].extent;
+    max_plus_one = round_up(max_plus_one, 10);
+    out->dim[0].min = round_down(out->dim[0].min, 10);
+    out->dim[0].extent = max_plus_one - out->dim[0].min;
+    desired_row_extent = out->dim[0].extent;
+
+    // There must be at least 40 scanlines.
+    if (out->dim[1].extent < 40) {
+        out->dim[1].extent = 40;
+    }
+    return 0;
+}
+
+
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t *out2) {
-    if (!out1->host || !out2->host) {
-        // Bounds query mode. We're ok with any requested output size (Halide guarantees they match).
-        return 0;
-    }
     assert(out1->dimensions == 2 && out2->dimensions == 2);
     assert(out1->host && out1->type == halide_type_of<float>() && out1->dim[0].stride == 1);
     assert(out2->host && out2->type == halide_type_of<float>() && out2->dim[0].stride == 1);
@@ -90,6 +90,11 @@ extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t 
             dst2[x] = cosf(x_coord + y_coord);
         }
     }
+    return 0;
+}
+
+extern "C" DLLEXPORT int make_data_multi_bounds_query(halide_buffer_t *out1, halide_buffer_t *out2) {
+    // Bounds query mode. We're ok with any requested output size (Halide guarantees they match).
     return 0;
 }
 

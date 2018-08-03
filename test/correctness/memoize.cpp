@@ -17,45 +17,54 @@ using namespace Halide;
 int call_count = 0;
 
 extern "C" DLLEXPORT int count_calls(halide_buffer_t *out) {
-    if (!out->is_bounds_query()) {
-        call_count++;
-        Halide::Runtime::Buffer<uint8_t>(*out).fill(42);
-    }
+    call_count++;
+    Halide::Runtime::Buffer<uint8_t>(*out).fill(42);
+    return 0;
+}
+
+extern "C" DLLEXPORT int count_calls_bounds_query(halide_buffer_t *out) {
+    // Bounds queries are still necessary with no inputs because a
+    // pipeline may have constraints on what output shapes it accepts.
     return 0;
 }
 
 int call_count_with_arg = 0;
 
 extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, halide_buffer_t *out) {
-    if (!out->is_bounds_query()) {
-        call_count_with_arg++;
-        Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
-    }
+    call_count_with_arg++;
+    Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
+    return 0;
+}
+
+extern "C" DLLEXPORT int count_calls_with_arg_bounds_query(uint8_t val, halide_buffer_t *out) {
     return 0;
 }
 
 int call_count_with_arg_parallel[8];
 
 extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, halide_buffer_t *out) {
-    if (!out->is_bounds_query()) {
-        call_count_with_arg_parallel[out->dim[2].min]++;
-        Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
-    }
+    call_count_with_arg_parallel[out->dim[2].min]++;
+    Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
+    return 0;
+}
+
+extern "C" DLLEXPORT int count_calls_with_arg_parallel_bounds_query(uint8_t val, halide_buffer_t *out) {
     return 0;
 }
 
 int call_count_staged[4];
 
 extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_buffer_t *in, halide_buffer_t *out) {
-    if (in->is_bounds_query()) {
-        for (int i = 0; i < out->dimensions; i++) {
-            in->dim[i] = out->dim[i];
-        }
-    } else if (!out->is_bounds_query()) {
-        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
-        call_count_staged[stage]++;
-        Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
-        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
+    assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
+    call_count_staged[stage]++;
+    Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
+    out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
+    return 0;
+}
+
+extern "C" DLLEXPORT int count_calls_staged_bounds_query(int32_t stage, uint8_t val, halide_buffer_t *in, halide_buffer_t *out) {
+    for (int i = 0; i < out->dimensions; i++) {
+        in->dim[i] = out->dim[i];
     }
     return 0;
 }

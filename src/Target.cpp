@@ -218,7 +218,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
     {"no_asserts", Target::NoAsserts},
-    {"no_bounds_query", Target::NoBoundsQuery},
     {"sse41", Target::SSE41},
     {"avx", Target::AVX},
     {"avx2", Target::AVX2},
@@ -345,6 +344,8 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             t = get_host_target();
+        } else if (tok == "no_bounds_query") {
+            user_warning << "The no_bounds_query target flag is deprecated. Ignoring.";
         } else if (tok == "32" || tok == "64" || tok == "0") {
             if (bits_specified) {
                 return false;

@@ -11,11 +11,48 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
     int min = out->dim[0].min;
     int max = out->dim[0].min + out->dim[0].extent - 1;
 
-    int extent = out->dim[0].extent;
     int flipped_min = -max;
     int flipped_max = -min;
 
-    if (in1->host == nullptr || in2->host == nullptr) {
+    assert(in1->type == halide_type_of<uint8_t>());
+    assert(in2->type == halide_type_of<int32_t>());
+    assert(out->type == halide_type_of<uint8_t>());
+
+    printf("Computing flip_x over [%d %d]\n", min, max);
+
+    // Check the inputs are as large as we expected. They should
+    // be, if the below bounds inference code is right.
+    assert(in1->dim[0].min <= flipped_min &&
+           in1->dim[0].min + in1->dim[0].extent > flipped_max);
+    assert(in2->dim[0].min <= flipped_min &&
+           in2->dim[0].min + in2->dim[0].extent > flipped_max);
+
+    // Check the strides are what we want.
+    assert(in1->dim[0].stride == 1 && in2->dim[0].stride == 1 && out->dim[0].stride == 1);
+
+    // Get pointers to the origin from each of the inputs (because
+    // we're flipping about the origin)
+    uint8_t *dst = (uint8_t *)(out->host) - out->dim[0].min;
+    uint8_t *src1 = (uint8_t *)(in1->host) - in1->dim[0].min;
+    int *src2 = (int *)(in2->host) - in2->dim[0].min;
+
+    // Do the flip.
+    for (int i = min; i <= max; i++) {
+        dst[i] = src1[-i] + src2[-i];
+    }
+
+    return 0;
+}
+
+
+extern "C" DLLEXPORT int flip_x_bounds_query(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
+    int min = out->dim[0].min;
+    int max = out->dim[0].min + out->dim[0].extent - 1;
+
+    int extent = out->dim[0].extent;
+    int flipped_min = -max;
+
+    if (in1->is_bounds_query() || in2->is_bounds_query()) {
         // If any of the inputs have a null host pointer, we're in
         // bounds inference mode, and should mutate those input
         // buffers that have a null host pointer.
@@ -32,37 +69,11 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
         // any size output.
 
         //printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
-    } else {
-        assert(in1->type == halide_type_of<uint8_t>());
-        assert(in2->type == halide_type_of<int32_t>());
-        assert(out->type == halide_type_of<uint8_t>());
-
-        printf("Computing flip_x over [%d %d]\n", min, max);
-
-        // Check the inputs are as large as we expected. They should
-        // be, if the above bounds inference code is right.
-        assert(in1->dim[0].min <= flipped_min &&
-               in1->dim[0].min + in1->dim[0].extent > flipped_max);
-        assert(in2->dim[0].min <= flipped_min &&
-               in2->dim[0].min + in2->dim[0].extent > flipped_max);
-
-        // Check the strides are what we want.
-        assert(in1->dim[0].stride == 1 && in2->dim[0].stride == 1 && out->dim[0].stride == 1);
-
-        // Get pointers to the origin from each of the inputs (because
-        // we're flipping about the origin)
-        uint8_t *dst = (uint8_t *)(out->host) - out->dim[0].min;
-        uint8_t *src1 = (uint8_t *)(in1->host) - in1->dim[0].min;
-        int *src2 = (int *)(in2->host) - in2->dim[0].min;
-
-        // Do the flip.
-        for (int i = min; i <= max; i++) {
-            dst[i] = src1[-i] + src2[-i];
-        }
     }
 
     return 0;
 }
+
 
 using namespace Halide;
 

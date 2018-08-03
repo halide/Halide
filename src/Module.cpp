@@ -625,8 +625,6 @@ void compile_multitarget(const std::string &fn_name,
 
         // Always build with NoRuntime: that's handled as a separate module.
         //
-        // Always build with NoBoundsQuery: underlying code will implement that (or not).
-        //
         // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
         // only way to propagate a nonzero result code to our caller. (Note that this
         // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
@@ -634,7 +632,6 @@ void compile_multitarget(const std::string &fn_name,
         // at least for real-world code.)
         Target wrapper_target = base_target
             .with_feature(Target::NoRuntime)
-            .with_feature(Target::NoBoundsQuery)
             .without_feature(Target::NoAsserts);
 
         // If the base target specified the Matlab target, we want the Matlab target

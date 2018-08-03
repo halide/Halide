@@ -47,7 +47,6 @@ struct Target {
         JIT = halide_target_feature_jit,
         Debug = halide_target_feature_debug,
         NoAsserts = halide_target_feature_no_asserts,
-        NoBoundsQuery = halide_target_feature_no_bounds_query,
         SSE41 = halide_target_feature_sse41,
         AVX = halide_target_feature_avx,
         AVX2 = halide_target_feature_avx2,
