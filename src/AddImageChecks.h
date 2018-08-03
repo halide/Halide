@@ -27,7 +27,8 @@ Stmt add_image_checks(Stmt s,
                       const Target &t,
                       const std::vector<std::string> &order,
                       const std::map<std::string, Function> &env,
-                      const FuncValueBounds &fb);
+                      const FuncValueBounds &fb,
+                      const std::string &pipeline_name);
 
 }  // namespace Internal
 }  // namespace Halide

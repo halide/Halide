@@ -95,7 +95,8 @@ Stmt add_image_checks(Stmt s,
                       const Target &t,
                       const vector<string> &order,
                       const map<string, Function> &env,
-                      const FuncValueBounds &fb) {
+                      const FuncValueBounds &fb,
+                      const std::string &pipeline_name) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
 
@@ -139,6 +140,7 @@ Stmt add_image_checks(Stmt s,
     vector<Stmt> asserts_host_alignment;
     vector<Stmt> asserts_host_non_null;
     vector<Stmt> buffer_rewrites;
+    vector<Stmt> asserts_no_bounds_query;
 
     // Inject the code that conditionally returns if we're in inference mode
     Expr any_bounds_query = const_false();
@@ -546,6 +548,13 @@ Stmt add_image_checks(Stmt s,
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
 
+        // For all buffers, check they have either host or dev set
+        {
+            Expr error = Call::make(Int(32), "halide_error_buffer_is_bounds_query",
+                                    {pipeline_name, name}, Call::Extern);;
+            asserts_no_bounds_query.push_back(AssertStmt::make(!inference_mode, error));
+        }
+
         // For the buffers used on host, check the host field is non-null
         Expr host_ptr = Variable::make(Handle(), name, image, param, ReductionDomain());
         if (used_on_host) {
@@ -617,17 +626,19 @@ Stmt add_image_checks(Stmt s,
         }
     }
 
+    // Inject the checks that we're not in bounds query mode
+    for (size_t i = asserts_no_bounds_query.size(); i > 0; i--) {
+        s = Block::make(asserts_no_bounds_query[i-1], s);
+    }
+
     // Make the pipeline code conditional on which entrypoint this
     // Stmt ends up in.
-    Expr is_bounds_query_entrypoint = Variable::make(Bool(), "is_bounds_query_entrypoint");
-    Expr wrong_entrypoint_error = -12345; // TODO
-    s = Block::make(AssertStmt::make(is_bounds_query_entrypoint || !any_bounds_query, wrong_entrypoint_error), s);
-
     // Inject the code that does the buffer rewrites for inference mode.
     Stmt rewrite_block = Evaluate::make(0);
     for (size_t i = buffer_rewrites.size(); i > 0; i--) {
         rewrite_block = Block::make(buffer_rewrites[i-1], rewrite_block);
     }
+    Expr is_bounds_query_entrypoint = Variable::make(Bool(), "is_bounds_query_entrypoint");
     s = IfThenElse::make(is_bounds_query_entrypoint, rewrite_block, s);
 
     if (!no_asserts) {

@@ -285,4 +285,12 @@ WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     return halide_error_code_buffer_is_null;
 }
 
+WEAK int halide_error_buffer_is_bounds_query(void *user_context, const char *routine, const char *arg_name) {
+    error(user_context) << "Buffer " << arg_name
+                        << " passed to " << routine << " is a bounds query buffer. "
+                        << "This form of bounds query has been deprecated. "
+                        << "Make the same call to " << routine << "_bounds_query instead.";
+    return halide_error_code_buffer_is_bounds_query;
+}
+
 }  // extern "C"

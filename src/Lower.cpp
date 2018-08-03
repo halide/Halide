@@ -152,7 +152,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // inference.
     debug(1) << "Adding checks for images\n";
     Stmt bounds_query;
-    s = add_image_checks(s, outputs, t, order, env, func_bounds);
+    s = add_image_checks(s, outputs, t, order, env, func_bounds, pipeline_name);
     debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
