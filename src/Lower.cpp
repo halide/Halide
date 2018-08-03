@@ -427,7 +427,26 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     };
     s = StrengthenRefs().mutate(s);
 
+    {
+        // For the main func, the buffer args are const
+        for (auto &a : public_args) {
+            a.is_const |= a.is_buffer();
+        }
+        LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
+
+        // If we're in debug mode, add code that prints the args.
+        if (t.has_feature(Target::Debug)) {
+            debug_arguments(&main_func);
+        }
+        result_module.append(main_func);
+    }
+
     if (bounds_query_stmt.defined()) {
+        // For the bounds query func, the buffer args are mutable
+        for (auto &a : public_args) {
+            a.is_const &= !a.is_buffer();
+        }
+
         // We never want metadata on the bounds query entrypoint.
         auto l = linkage_type;
         if (l == LinkageType::ExternalPlusMetadata) {
@@ -439,19 +458,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         }
         result_module.append(bounds_query_func);
     }
-
-    // For the main func, the buffer args are const
-    for (auto &a : public_args) {
-        a.is_const |= a.is_buffer();
-    }
-    LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
-
-    // If we're in debug mode, add code that prints the args.
-    if (t.has_feature(Target::Debug)) {
-        debug_arguments(&main_func);
-    }
-
-    result_module.append(main_func);
 
     // Append a wrapper for this pipeline that accepts old buffer_ts
     // and upgrades them. It will use the same name, so it will
