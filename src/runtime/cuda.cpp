@@ -106,6 +106,9 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 
     if (!lib_cuda) {
         error(user_context) << "Could not find cuda system libraries";
+        // Note: The other reason this error could fire is if someone
+        // calls halide_cuda_acquire_context directly instead of using
+        // the Context class and cuda hasn't been loaded yet.
         return -1;
     }
 
@@ -561,6 +564,11 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t* buf) {
 WEAK int halide_cuda_device_release(void *user_context) {
     debug(user_context)
         << "CUDA: halide_cuda_device_release (user_context: " <<  user_context << ")\n";
+
+    // If we haven't even loaded libcuda, don't load it just to quit.
+    if (!lib_cuda) {
+        return 0;
+    }
 
     int err;
     CUcontext ctx;

@@ -312,7 +312,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling " << module_name << "\n";
+    debug(1) << "JIT compiling " << module_name << " for " << target.to_string() << "\n";
 
     std::map<std::string, Symbol> exports;
 
@@ -641,11 +641,14 @@ JITModule &shared_runtimes(RuntimeKind k) {
 JITModule &make_module(llvm::Module *for_module, Target target,
                        RuntimeKind runtime_kind, const std::vector<JITModule> &deps,
                        bool create) {
+
     JITModule &runtime = shared_runtimes(runtime_kind);
     if (!runtime.compiled() && create) {
         // Ensure that JIT feature is set on target as it must be in
         // order for the right runtime components to be added.
         target.set_feature(Target::JIT);
+        // msan doesn't work for jit modules
+        target.set_feature(Target::MSAN, false);
 
         Target one_gpu(target);
         one_gpu.set_feature(Target::OpenCL, false);
