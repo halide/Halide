@@ -593,6 +593,7 @@ void target_test() {
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
         if (i == halide_target_feature_unused_23) continue;
+        if (i == halide_target_feature_unused_3) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
     std::cout << "Target test passed" << std::endl;
