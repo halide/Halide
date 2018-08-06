@@ -1856,15 +1856,15 @@ private:
     // out their strides in the d'th dimension, and assert that their
     // sizes match in that dimension.
     template<typename T2, int D2, typename ...Args>
-    void extract_strides(int d, int *strides, const Buffer<T2, D2> *first, Args... rest) {
-        assert(first->dimensions() == dimensions());
-        assert(first->dim(d).min() == dim(d).min() &&
-               first->dim(d).max() == dim(d).max());
-        *strides++ = first->dim(d).stride();
-        extract_strides(d, strides, rest...);
+    void extract_strides(int d, int *strides, const Buffer<T2, D2> &first, Args&&... rest) const {
+        assert(first.dimensions() == dimensions());
+        assert(first.dim(d).min() == dim(d).min() &&
+               first.dim(d).max() == dim(d).max());
+        *strides++ = first.dim(d).stride();
+        extract_strides(d, strides, std::forward<Args>(rest)...);
     }
 
-    void extract_strides(int d, int *strides) {}
+    void extract_strides(int d, int *strides) const {}
 
     // The template function that constructs the loop nest for for_each_value
     template<int d, bool innermost_strides_are_one, typename Fn, typename... Ptrs>
@@ -1914,9 +1914,15 @@ public:
      * effectively lifts a function of scalars to an element-wise
      * function of buffers. This produces code that the compiler can
      * autovectorize. This is slightly cheaper than for_each_element,
-     * because it does not need to track the coordinates. */
+     * because it does not need to track the coordinates.
+     *
+     * Note that constness of Buffers is preserved: a const Buffer<T> (for either
+     * 'this' or the other-buffers arguments) will allow mutation of the
+     * buffer contents, while a Buffer<const T> will not. Attempting to specify
+     * a mutable reference for the lambda argument of a Buffer<const T>
+     * will result in a compilation error. */
     template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
-    void for_each_value(Fn &&f, Args... other_buffers) {
+    void for_each_value(Fn &&f, Args&&... other_buffers) const {
         for_each_value_task_dim<N> *t =
             (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
         for (int i = 0; i <= dimensions(); i++) {
@@ -1927,7 +1933,7 @@ public:
         }
 
         for (int i = 0; i < dimensions(); i++) {
-            extract_strides(i, t[i].stride, this, &other_buffers...);
+            extract_strides(i, t[i].stride, *this, std::forward<Args>(other_buffers)...);
             t[i].extent = dim(i).extent();
             // Order the dimensions by stride, so that the traversal is cache-coherent.
             for (int j = i; j > 0 && t[j].stride[0] < t[j-1].stride[0]; j--) {
