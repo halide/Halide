@@ -1587,12 +1587,17 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header() && f.linkage == LinkageType::ExternalPlusMetadata) {
-        // Emit the argv version
-        stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
-
-        // And also the metadata.
-        stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+    if (is_header()) {
+        switch (f.linkage) {
+        case LinkageType::ExternalPlusMetadata:
+            stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+        case LinkageType::ExternalPlusArgv: // fallthrough
+            stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
+            break;
+        default:
+            // Other linkage types come with no extra declared functions.
+            break;
+        }
     }
 
     if (!namespaces.empty()) {

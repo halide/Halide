@@ -162,7 +162,7 @@ struct Target {
     }
 
     /** Return a copy of the target with the given feature set.
-     * This is convenient when enabling certain features (e.g. NoBoundsQuery)
+     * This is convenient when enabling certain features (e.g. NoAsserts)
      * in an initialization list, where the target to be mutated may be
      * a const reference. */
     Target with_feature(Feature f) const {
@@ -172,7 +172,7 @@ struct Target {
     }
 
     /** Return a copy of the target with the given feature cleared.
-     * This is convenient when disabling certain features (e.g. NoBoundsQuery)
+     * This is convenient when disabling certain features (e.g. NoAsserts)
      * in an initialization list, where the target to be mutated may be
      * a const reference. */
     Target without_feature(Feature f) const {

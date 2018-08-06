@@ -46,7 +46,6 @@ class AXPYGenerator :
 
     void generate() {
         assert(get_target().has_feature(Target::NoAsserts));
-        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
@@ -96,7 +95,6 @@ class DotGenerator :
 
     void generate() {
         assert(get_target().has_feature(Target::NoAsserts));
-        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
@@ -151,7 +149,6 @@ class AbsSumGenerator :
 
     void generate() {
         assert(get_target().has_feature(Target::NoAsserts));
-        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         Expr size = x_.width();
@@ -191,4 +188,3 @@ HALIDE_REGISTER_GENERATOR(DotGenerator<float>, sdot)
 HALIDE_REGISTER_GENERATOR(DotGenerator<double>, ddot)
 HALIDE_REGISTER_GENERATOR(AbsSumGenerator<float>, sasum)
 HALIDE_REGISTER_GENERATOR(AbsSumGenerator<double>, dasum)
-
