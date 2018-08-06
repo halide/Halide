@@ -29,10 +29,14 @@ struct ExternFuncArgument {
     Expr expr;
     Internal::Parameter image_param;
 
+    // Only relevant for buffer args. Distinguishes between const
+    // halide_buffer_t * and halide_buffer_t *.
+    bool is_const = false;
+
     ExternFuncArgument(Internal::FunctionPtr f): arg_type(FuncArg), func(f) {}
 
     template<typename T>
-    ExternFuncArgument(Buffer<T> b): arg_type(BufferArg), buffer(b) {}
+    ExternFuncArgument(Buffer<T> b, bool is_const = false): arg_type(BufferArg), buffer(b), is_const(is_const) {}
     ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
     ExternFuncArgument(int e): arg_type(ExprArg), expr(e) {}
     ExternFuncArgument(float e): arg_type(ExprArg), expr(e) {}
@@ -218,6 +222,11 @@ public:
      * function has no extern definition. */
     Expr make_call_to_extern_definition(const std::vector<Expr> &args,
                                         const Target &t) const;
+
+    /** Make a bounds query call node to the extern definition. An
+     * error if the function has no extern definition. */
+    Expr make_bounds_query_to_extern_definition(const std::vector<Expr> &args,
+                                                const Target &t) const;
 
     /** Check if the extern function being called expects the legacy
      * buffer_t type. */

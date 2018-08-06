@@ -47,7 +47,6 @@ struct Target {
         JIT = halide_target_feature_jit,
         Debug = halide_target_feature_debug,
         NoAsserts = halide_target_feature_no_asserts,
-        NoBoundsQuery = halide_target_feature_no_bounds_query,
         SSE41 = halide_target_feature_sse41,
         AVX = halide_target_feature_avx,
         AVX2 = halide_target_feature_avx2,
@@ -163,7 +162,7 @@ struct Target {
     }
 
     /** Return a copy of the target with the given feature set.
-     * This is convenient when enabling certain features (e.g. NoBoundsQuery)
+     * This is convenient when enabling certain features (e.g. NoAsserts)
      * in an initialization list, where the target to be mutated may be
      * a const reference. */
     Target with_feature(Feature f) const {
@@ -173,7 +172,7 @@ struct Target {
     }
 
     /** Return a copy of the target with the given feature cleared.
-     * This is convenient when disabling certain features (e.g. NoBoundsQuery)
+     * This is convenient when disabling certain features (e.g. NoAsserts)
      * in an initialization list, where the target to be mutated may be
      * a const reference. */
     Target without_feature(Feature f) const {

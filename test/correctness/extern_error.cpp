@@ -11,9 +11,14 @@ using namespace Halide;
 
 bool extern_error_called = false;
 extern "C" DLLEXPORT
-int extern_error(void *user_context, buffer_t *out) {
+int extern_error(void *user_context, halide_buffer_t *out) {
     extern_error_called = true;
     return -1;
+}
+
+extern "C" DLLEXPORT
+int extern_error_bounds_query(void *user_context, halide_buffer_t *out) {
+    return 0;
 }
 
 bool error_occurred = false;

@@ -22,29 +22,34 @@ extern "C" DLLEXPORT int copy(halide_buffer_t *in, halide_buffer_t *out) {
     dump_buffer_shape(in);
     */
 
+    // Check the sizes and strides match. This is not guaranteed
+    // by the interface, but it should happen with this schedule
+    // because we compute the input to the extern stage at the
+    // same granularity as the extern stage.
+
+    assert(in->dim[0] == out->dim[0]);
+    assert(in->dim[1] == out->dim[1]);
+
+    size_t sz = out->type.bytes() * out->dim[0].extent * out->dim[1].extent;
+
+    // Make sure we can safely do a dense memcpy. Should be true because the extent..
+    assert(out->dim[0].stride == 1 && out->dim[1].stride == out->dim[0].extent);
+
+    memcpy(out->host, in->host, sz);
+
+    return 0;
+}
+
+
+extern "C" DLLEXPORT int copy_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         // Give it the same shape as the output
         in->dim[0] = out->dim[0];
         in->dim[1] = out->dim[1];
-    } else {
-        // Check the sizes and strides match. This is not guaranteed
-        // by the interface, but it should happen with this schedule
-        // because we compute the input to the extern stage at the
-        // same granularity as the extern stage.
-
-        assert(in->dim[0] == out->dim[0]);
-        assert(in->dim[1] == out->dim[1]);
-
-        size_t sz = out->type.bytes() * out->dim[0].extent * out->dim[1].extent;
-
-        // Make sure we can safely do a dense memcpy. Should be true because the extent..
-        assert(out->dim[0].stride == 1 && out->dim[1].stride == out->dim[0].extent);
-
-        memcpy(out->host, in->host, sz);
     }
-
     return 0;
 }
+
 
 using namespace Halide;
 

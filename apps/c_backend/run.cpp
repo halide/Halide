@@ -12,26 +12,29 @@ extern "C" int an_extern_func(int x, int y) {
     return x + y;
 }
 
-extern "C" int an_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" int an_extern_stage(const halide_buffer_t *in, const halide_buffer_t *out) {
+    assert(out->host);
+    int result = 0;
+    int16_t *origin = (int16_t *)in->host;
+    origin -= in->dim[0].min * in->dim[0].stride;
+    origin -= in->dim[1].min * in->dim[1].stride;
+    for (int y = 0; y < 10; y++) {
+        for (int x = 0; x < 10; x++) {
+            result += origin[x * in->dim[0].stride + y * in->dim[1].stride];
+        }
+    }
+    int16_t *dst = (int16_t *)(out->host);
+    dst[0] = result;
+    return 0;
+}
+
+extern "C" int an_extern_stage_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         // We expect a 2D input.
         in->dim[0].extent = 10;
         in->dim[1].extent = 10;
         in->dim[0].min = 0;
         in->dim[1].min = 0;
-    } else {
-        assert(out->host);
-        int result = 0;
-        int16_t *origin = (int16_t *)in->host;
-        origin -= in->dim[0].min * in->dim[0].stride;
-        origin -= in->dim[1].min * in->dim[1].stride;
-        for (int y = 0; y < 10; y++) {
-            for (int x = 0; x < 10; x++) {
-                result += origin[x * in->dim[0].stride + y * in->dim[1].stride];
-            }
-        }
-        int16_t *dst = (int16_t *)(out->host);
-        dst[0] = result;
     }
     return 0;
 }

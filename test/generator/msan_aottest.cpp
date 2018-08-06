@@ -21,15 +21,6 @@ using namespace Halide::Runtime;
 
 // Just copies in -> out.
 extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
-    if (in->is_bounds_query()) {
-        in->dim[0].extent = 4;
-        in->dim[1].extent = 4;
-        in->dim[2].extent = 3;
-        in->dim[0].min = 0;
-        in->dim[1].min = 0;
-        in->dim[2].min = 0;
-        return 0;
-    }
     if (!out->host) {
         fprintf(stderr, "msan_extern_stage failure\n");
         return -1;
@@ -41,6 +32,19 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     out->set_host_dirty();
     return 0;
 }
+
+extern "C" int msan_extern_stage_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
+    if (in->is_bounds_query()) {
+        in->dim[0].extent = 4;
+        in->dim[1].extent = 4;
+        in->dim[2].extent = 3;
+        in->dim[0].min = 0;
+        in->dim[1].min = 0;
+        in->dim[2].min = 0;
+    }
+    return 0;
+}
+
 
 extern "C" void halide_error(void *user_context, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the

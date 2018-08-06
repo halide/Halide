@@ -420,7 +420,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                             buf_name += "." + std::to_string(k);
                         }
                         buf_name += ".buffer";
-                        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+                        Expr buffer = Variable::make(type_of<const struct halide_buffer_t *>(), buf_name);
                         extern_call_args.push_back(buffer);
                         buffers_to_annotate.push_back({buffer, input.dimensions()});
                         buffers_contents_to_annotate.push_back(buffer);
@@ -468,7 +468,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                                                    args, Call::Extern);
 
                         string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
-                        extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+                        extern_call_args.push_back(Variable::make(type_of<const struct halide_buffer_t *>(), buf_name));
                         buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
                         buffers_contents_to_annotate.push_back(cropped_input);
                         lets.push_back({ buf_name, cropped_input });
@@ -478,13 +478,13 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                 Buffer<> b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<const struct halide_buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
                 buffers_to_annotate.push_back({buf, b.dimensions()});
                 buffers_contents_to_annotate.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
+                Expr buf = Variable::make(type_of<const struct halide_buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
                 // Do not annotate ImageParams: both the buffer_t itself,
                 // and the contents it points to, should be filled by the caller;
@@ -509,7 +509,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                     buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
-                Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+                Expr buffer = Variable::make(type_of<const struct halide_buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
@@ -553,7 +553,7 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                 output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args, Call::Extern);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+                extern_call_args.push_back(Variable::make(type_of<const struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
                 buffers_to_annotate.push_back({extern_call_args.back(), f.dimensions()});

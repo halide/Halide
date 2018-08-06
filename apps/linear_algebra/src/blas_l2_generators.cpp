@@ -33,7 +33,6 @@ class GEMVGenerator :
 
     void generate() {
         assert(get_target().has_feature(Target::NoAsserts));
-        assert(get_target().has_feature(Target::NoBoundsQuery));
 
         const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
         const int unroll_size = 4;

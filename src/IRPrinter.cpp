@@ -283,6 +283,9 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
+    case LinkageType::ExternalPlusArgv:
+        stream << "external_plus_argv";
+        break;
     case LinkageType::External:
         stream << "external";
         break;

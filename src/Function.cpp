@@ -821,12 +821,14 @@ NameMangling Function::extern_definition_name_mangling() const {
     return contents->extern_mangling;
 }
 
-Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
-                                              const Target &target) const {
-    internal_assert(has_extern_definition());
-
+namespace {
+Expr make_call_to_extern_definition_helper(const std::string &name,
+                                           const std::vector<Expr> &args,
+                                           NameMangling mangling,
+                                           const Target &target,
+                                           FunctionPtr func) {
     Call::CallType call_type = Call::Extern;
-    switch (contents->extern_mangling) {
+    switch (mangling) {
     case NameMangling::Default:
         call_type = (target.has_feature(Target::CPlusPlusMangling) ?
                      Call::ExternCPlusPlus :
@@ -839,7 +841,32 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
         call_type = Call::Extern;
         break;
     }
-    return Call::make(Int(32), contents->extern_function_name, args, call_type, contents);
+    return Call::make(Int(32), name, args, call_type, func);
+}
+}
+
+Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
+                                              const Target &target) const {
+    internal_assert(has_extern_definition());
+    return make_call_to_extern_definition_helper(contents->extern_function_name,
+                                                 args,
+                                                 contents->extern_mangling,
+                                                 target,
+                                                 contents);
+}
+
+Expr Function::make_bounds_query_to_extern_definition(const std::vector<Expr> &args,
+                                                      const Target &target) const {
+    internal_assert(has_extern_definition());
+    string name = contents->extern_function_name;
+    if (!contents->extern_uses_old_buffer_t) {
+        name += "_bounds_query";
+    }
+    return make_call_to_extern_definition_helper(name,
+                                                 args,
+                                                 contents->extern_mangling,
+                                                 target,
+                                                 contents);
 }
 
 bool Function::extern_definition_uses_old_buffer_t() const {

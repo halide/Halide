@@ -984,6 +984,10 @@ enum halide_error_code_t {
 
     /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
     halide_error_code_bad_dimensions = -43,
+
+    /** A halide_buffer_t * in bounds query mode was passed to a
+     * Halide routine not expecting it. */
+    halide_error_code_buffer_is_bounds_query = -44,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1062,6 +1066,7 @@ extern int halide_error_no_device_interface(void *user_context);
 extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
+extern int halide_error_buffer_is_bounds_query(void *user_context, const char *routine, const char *buf_name);
 
 // @}
 
@@ -1071,7 +1076,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
     halide_target_feature_debug = 1,  ///< Turn on debug info and output for runtime code.
     halide_target_feature_no_asserts = 2,  ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query = 3, ///< Disable the bounds querying functionality.
+    halide_target_feature_unused_3 = 3, ///< Deprecated. Was no_bounds_query, which now has no effect.
 
     halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.

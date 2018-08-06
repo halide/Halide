@@ -79,7 +79,6 @@ void set_alignment_host_ptr(ImageParam &i, int align, std::map<string, int> &m) 
 
 int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     Target t = get_jit_target_from_environment();
-    t.set_feature(Target::NoBoundsQuery);
     f.compute_root();
     Stmt s = Internal::lower_main_stmt({f.function()}, f.name(), t);
     CountHostAlignmentAsserts c(m);

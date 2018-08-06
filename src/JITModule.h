@@ -63,11 +63,19 @@ struct JITModule {
      * a Halide Func compilation at all. */
     void *main_function() const;
 
+    /** A pointer to the raw halide bounds query entrypoint. It has
+     * the same true type as the main_function. */
+    void *bounds_query_function() const;
+
     /** Returns the Symbol structure for the routine documented in
      * main_function. Returning a Symbol allows access to the LLVM
      * type as well as the address. The address and type will be nullptr
      * if the module has not been compiled. */
     Symbol entrypoint_symbol() const;
+
+    /** Returns the Symbol structure for the routine documented in
+     * bounds_query_function. */
+    Symbol bounds_query_entrypoint_symbol() const;
 
     /** Returns the Symbol structure for the argv wrapper routine
      * corresponding to the entrypoint. The argv wrapper is callable
@@ -77,14 +85,19 @@ struct JITModule {
      * has not been compiled. */
     Symbol argv_entrypoint_symbol() const;
 
-    /** A slightly more type-safe wrapper around the raw halide
-     * module. Takes it arguments as an array of pointers that
+    /** Returns the Symbol structure for the argv wrapper routine
+        corresponding to the bounds query entrypoint. */
+    Symbol bounds_query_argv_entrypoint_symbol() const;
+
+    /** A slightly more type-safe wrapper around the raw halide module
+     * entrypoints. Takes it arguments as an array of pointers that
      * correspond to the arguments to \ref main_function . This will
-     * be nullptr for a JITModule which has not yet been compiled or one
-     * that is not a Halide Func compilation at all. */
+     * be nullptr for a JITModule which has not yet been compiled or
+     * one that is not a Halide Func compilation at all. */
     // @{
     typedef int (*argv_wrapper)(const void **args);
     argv_wrapper argv_function() const;
+    argv_wrapper bounds_query_argv_function() const;
     // @}
 
     /** Add another JITModule to the dependency chain. Dependencies

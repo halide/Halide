@@ -70,7 +70,7 @@ class WrapExternStages : public IRMutator2 {
         for (Argument a : args) {
             if (a.kind == Argument::InputBuffer ||
                 a.kind == Argument::OutputBuffer) {
-                Expr new_buffer_var = Variable::make(type_of<struct halide_buffer_t *>(), a.name + ".buffer");
+                Expr new_buffer_var = Variable::make(type_of<const struct halide_buffer_t *>(), a.name + ".buffer");
 
                 // Allocate some stack space for the old buffer
                 string old_buffer_name = a.name + ".old_buffer_t";
@@ -154,7 +154,7 @@ void wrap_legacy_extern_stages(Module m) {
     // its functions, so we have to iterate with some care.
     size_t num_functions = m.functions().size();
     for (size_t i = 0; i < num_functions; i++) {
-        wrap.prefix = "_halide_wrapper_" + m.functions()[i].name + "_";
+        wrap.prefix = "_halide_wrapper_" + m.name() + "_";
         Stmt old_body = m.functions()[i].body;
         Stmt new_body = wrap.mutate(old_body);
         m.functions()[i].body = new_body;
@@ -170,18 +170,22 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
     // Build the arguments to the wrapper function
     vector<LoweredArgument> args;
     vector<Stmt> upgrades, downgrades;
-    vector<Expr> call_args;
+    vector<Expr> call_args, query_args;
     vector<pair<string, Expr>> new_buffers;
+    Expr any_bounds_query = const_false();
     for (LoweredArgument arg : fn.args) {
         if (arg.kind == Argument::InputScalar) {
             args.push_back(arg);
-            call_args.push_back(Variable::make(arg.type, arg.name));
+            Expr v = Variable::make(arg.type, arg.name);
+            call_args.push_back(v);
+            query_args.push_back(v);
         } else {
             // Buffer arguments become opaque pointers
             args.emplace_back(arg.name, Argument::InputScalar, type_of<buffer_t *>(), 0);
 
             string new_buffer_name = arg.name + ".upgraded";
             Expr new_buffer_var = Variable::make(type_of<struct halide_buffer_t *>(), new_buffer_name);
+            Expr const_new_buffer_var = Variable::make(type_of<const struct halide_buffer_t *>(), new_buffer_name);
 
             Expr old_buffer_var = Variable::make(type_of<struct buffer_t *>(), arg.name);
 
@@ -209,6 +213,7 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
 
             Expr bounds_query = Call::make(Bool(), Call::buffer_is_bounds_query,
                                            {new_buffer_var}, Call::Extern);
+            any_bounds_query = any_bounds_query || bounds_query;
             downgrade = IfThenElse::make(bounds_query, downgrade, downgrade_device);
             downgrades.push_back(downgrade);
 
@@ -221,7 +226,8 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
                                            Call::Extern);
             upgrades.push_back(make_checked_call(upgrade_call));
 
-            call_args.push_back(new_buffer_var);
+            call_args.push_back(const_new_buffer_var);
+            query_args.push_back(new_buffer_var);
         }
     }
 
@@ -232,7 +238,10 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
         call_type = Call::ExternCPlusPlus;
     }
     Expr inner_call = Call::make(Int(32), fn.name, call_args, call_type);
-    Stmt body = make_checked_call(inner_call);
+
+    // TODO make call_args mutable
+    Expr inner_bounds_query = Call::make(Int(32), fn.name + "_bounds_query", query_args, call_type);
+    Stmt body = IfThenElse::make(any_bounds_query, make_checked_call(inner_bounds_query), make_checked_call(inner_call));
     body = Block::make({Block::make(upgrades), body, Block::make(downgrades)});
 
     while (!new_buffers.empty()) {

@@ -86,7 +86,6 @@ void define_enums(py::module &m) {
         .value("JIT", Target::Feature::JIT)
         .value("Debug", Target::Feature::Debug)
         .value("NoAsserts", Target::Feature::NoAsserts)
-        .value("NoBoundsQuery", Target::Feature::NoBoundsQuery)
         .value("SSE41", Target::Feature::SSE41)
         .value("AVX", Target::Feature::AVX)
         .value("AVX2", Target::Feature::AVX2)

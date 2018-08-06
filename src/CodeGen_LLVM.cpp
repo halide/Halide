@@ -489,7 +489,7 @@ MangledNames get_mangled_names(const std::string &name,
                 mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
             } else if (arg.kind == Argument::InputBuffer ||
                        arg.kind == Argument::OutputBuffer) {
-                mangle_args.push_back(ExternFuncArgument(Buffer<>()));
+                mangle_args.push_back(ExternFuncArgument(Buffer<>(), arg.is_const));
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
@@ -562,7 +562,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusArgv) {
+            add_argv_wrapper(names.argv_name);
+        } else if (f.linkage == LinkageType::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                 names.simple_name, f.args, input.get_metadata_name_map());

@@ -94,17 +94,17 @@ int main(int argc, char **argv) {
 
     // with_feature
     t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41});
-    t2 = t1.with_feature(Target::NoAsserts).with_feature(Target::NoBoundsQuery);
+    t2 = t1.with_feature(Target::NoAsserts);
     ts = t2.to_string();
-    if (ts != "x86-32-linux-no_asserts-no_bounds_query-sse41") {
+    if (ts != "x86-32-linux-no_asserts-sse41") {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
 
     // without_feature
     t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41, Target::NoAsserts});
-    // Note that NoBoundsQuery wasn't set here, so 'without' is a no-op
-    t2 = t1.without_feature(Target::NoAsserts).without_feature(Target::NoBoundsQuery);
+    // Note that AVX2 wasn't set here, so 'without' is a no-op
+    t2 = t1.without_feature(Target::NoAsserts).without_feature(Target::AVX2);
     ts = t2.to_string();
     if (ts != "x86-32-linux-sse41") {
        printf("to_string failure: %s\n", ts.c_str());

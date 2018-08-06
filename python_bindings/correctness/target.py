@@ -86,14 +86,14 @@ def test_target():
 
     # with_feature
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41])
-    t2 = t1.with_feature(hl.TargetFeature.NoAsserts).with_feature(hl.TargetFeature.NoBoundsQuery)
+    t2 = t1.with_feature(hl.TargetFeature.NoAsserts)
     ts = t2.to_string()
-    assert ts == "x86-32-linux-no_asserts-no_bounds_query-sse41"
+    assert ts == "x86-32-linux-no_asserts-sse41"
 
     # without_feature
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41, hl.TargetFeature.NoAsserts])
-    # Note that NoBoundsQuery wasn't set here, so 'without' is a no-op
-    t2 = t1.without_feature(hl.TargetFeature.NoAsserts).without_feature(hl.TargetFeature.NoBoundsQuery)
+    # Note that AVX2 wasn't set here, so 'without' is a no-op
+    t2 = t1.without_feature(hl.TargetFeature.NoAsserts).without_feature(hl.TargetFeature.AVX2)
     ts = t2.to_string()
     assert ts == "x86-32-linux-sse41"
 

@@ -9,20 +9,25 @@
 
 // An extern stage that translates.
 extern "C" DLLEXPORT int copy_and_check_strides(halide_buffer_t *in, halide_buffer_t *out) {
+    // Check that the storage has been reordered.
+    assert(out->dim[0].stride > out->dim[1].stride);
+    Halide::Runtime::Buffer<uint8_t> out_buf(*out);
+    out_buf.copy_from(Halide::Runtime::Buffer<uint8_t>(*in));
+    return 0;
+}
+
+
+// An extern stage that translates.
+extern "C" DLLEXPORT int copy_and_check_strides_bounds_query(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         for (int i = 0; i < 2; i++) {
             in->dim[i].min = out->dim[i].min;
             in->dim[i].extent = out->dim[i].extent;
         }
-    } else if (!out->is_bounds_query()) {
-        // Check that the storage has been reordered.
-        assert(out->dim[0].stride > out->dim[1].stride);
-        Halide::Runtime::Buffer<uint8_t> out_buf(*out);
-        out_buf.copy_from(Halide::Runtime::Buffer<uint8_t>(*in));
     }
-
     return 0;
 }
+
 
 using namespace Halide;
 
@@ -46,7 +51,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x, y);
 
     f.compute_root().reorder_storage(y, x);
-    
+
     input.set(input_buffer);
     Buffer<uint8_t> output = g.realize(W, H);
     for (int i = 0; i < H; i++) {

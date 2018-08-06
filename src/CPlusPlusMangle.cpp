@@ -292,7 +292,13 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
         result += "X";
     } else {
         for (const auto &arg : args) {
-            result += prev_decls.check_and_enter_type(mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct halide_buffer_t *>(), target, prev_decls));
+            if (arg.is_expr()) {
+                result += prev_decls.check_and_enter_type(mangle_type(arg.expr.type(), target, prev_decls));
+            } else if (arg.is_const) {
+                result += prev_decls.check_and_enter_type(mangle_type(type_of<const struct halide_buffer_t *>(), target, prev_decls));
+            } else {
+                result += prev_decls.check_and_enter_type(mangle_type(type_of<struct halide_buffer_t *>(), target, prev_decls));
+            }
         }
         // I think ending in a 'Z' only happens for nested function types, which never
         // occurs with Halide, but putting it in anyway per.
@@ -585,7 +591,13 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
     }
 
     for (const auto &arg : args) {
-        result += mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct halide_buffer_t *>(), target, prevs);
+        if (arg.is_expr()) {
+            result += mangle_type(arg.expr.type(), target, prevs);
+        } else if (arg.is_const) {
+            result += mangle_type(type_of<const struct halide_buffer_t *>(), target, prevs);
+        } else {
+            result += mangle_type(type_of<struct halide_buffer_t *>(), target, prevs);
+        }
     }
 
     return result;

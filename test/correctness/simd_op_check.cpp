@@ -80,7 +80,6 @@ struct Test {
 
     Test() {
         target = get_target_from_environment()
-            .with_feature(Target::NoBoundsQuery)
             .with_feature(Target::NoAsserts)
             .with_feature(Target::NoRuntime);
         use_avx512_knl = target.has_feature(Target::AVX512_KNL);
@@ -2136,6 +2135,8 @@ check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*
 
 int main(int argc, char **argv) {
     Test test;
+
+    num_threads = 1;
 
     if (argc > 1) {
         test.filter = argv[1];
