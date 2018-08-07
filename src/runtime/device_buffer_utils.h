@@ -44,17 +44,21 @@ struct device_copy {
 };
 
 
-WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
+WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off, void *user_context) {
     // Skip size-1 dimensions
     while (d >= 0 && copy.extent[d] == 1) d--;
 
     if (d == -1) {
-        const void *from = (void *)(copy.src + src_off);
-        void *to = (void *)(copy.dst + dst_off);
-        memcpy(to, from, copy.chunk_size);
+        const uint8_t *from = (uint8_t *)(copy.src + src_off);
+        uint8_t *to = (uint8_t *)(copy.dst + dst_off);
+        //memcpy(to, from, copy.chunk_size);
+        for (size_t s = 0; s < copy.chunk_size; s++) {
+             debug(user_context) << "Copy byte " << (int)from[s] << " from " << &from[s] << " to " << &to[s] << "\n";
+            to[s] = from[s];
+        }
     } else {
         for (uint64_t i = 0; i < copy.extent[d]; i++) {
-            copy_memory_helper(copy, d - 1, src_off, dst_off);
+            copy_memory_helper(copy, d - 1, src_off, dst_off, user_context);
             src_off += copy.src_stride_bytes[d];
             dst_off += copy.dst_stride_bytes[d];
         }
@@ -64,7 +68,7 @@ WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, in
 WEAK void copy_memory(const device_copy &copy, void *user_context) {
     // If this is a zero copy buffer, these pointers will be the same.
     if (copy.src != copy.dst) {
-        copy_memory_helper(copy, MAX_COPY_DIMS-1, copy.src_begin, 0);
+        copy_memory_helper(copy, MAX_COPY_DIMS-1, copy.src_begin, 0, user_context);
     } else {
         debug(user_context) << "copy_memory: no copy needed as pointers are the same.\n";
     }
