@@ -1022,7 +1022,8 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    if (debug::debug_level() >= 3) {
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Before LLVM optimizations:\n";
         #if LLVM_VERSION >= 50
         module->print(dbgs(), nullptr, false, true);
         #else
