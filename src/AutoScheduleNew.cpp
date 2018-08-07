@@ -1376,29 +1376,20 @@ struct PartialScheduleNode {
         */
     }
 
-    int64_t calls_per_instance(const FunctionDAG::Node *f) const {
-        int64_t result = 0;
+    bool calls(const FunctionDAG::Node *f) const {
         for (const auto &c : children) {
-            result += c->calls(f);
+            if (c->calls(f)) return true;
         }
         for (const auto *e : f->outgoing_edges) {
             if (e->consumer == node && e->consumer_stage == stage_idx) {
-                result += e->calls;
+                return true;
             }
             auto it = inlined.find(e->consumer);
             if (it != inlined.end()) {
-                result += e->calls * it->second;
+                return true;
             }
         }
-        return result;
-    }
-
-    int64_t calls(const FunctionDAG::Node *f) const {
-        int result = calls_per_instance(f);
-        for (auto s : size) {
-            result *= s;
-        }
-        return result;
+        return false;
     }
 
     bool computes(const FunctionDAG::Node *f) const {
@@ -2076,7 +2067,6 @@ struct State {
                     }*/
                 }
             }
-            cost *= 1e-20;
         }
         cost_calculations++;
         return true;
@@ -2098,6 +2088,20 @@ struct State {
             internal_assert(root.computes(e->consumer))
                 << "Partially scheduled code doesn't compute " << e->consumer->func.name()
                 << ", which is one of the consumers of " << node->func.name();
+        }
+
+        if (!node->outgoing_edges.empty() && !root.calls(node)) {
+            debug(0) << "In state:\n";
+            dump();
+            debug(0) << node->func.name() << " is consumed by:\n";
+            for (const auto *e : node->outgoing_edges) {
+                debug(0) << e->consumer->func.name() << " stage " << e->consumer_stage << "\n";
+                debug(0) << "Which in turn consumes:\n";
+                for (const auto *e2 : e->consumer->incoming_edges) {
+                    debug(0) << "  " << e2->producer->func.name() << "\n";
+                }
+            }
+            internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
         }
 
         int num_children = 0;
@@ -2265,7 +2269,9 @@ State optimal_schedule(FunctionDAG &dag,
         }
 
         // Now evaluate all the costs and place them in the priority queue
-        throughput_predictor->evaluate_costs();
+        if (throughput_predictor) {
+            throughput_predictor->evaluate_costs();
+        }
         for (auto s : unevaluated_states) {
             q.push(s);
         }
@@ -2308,6 +2314,10 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     auto stats = AutoScheduleModel::load_stats();
 
     ThroughputPredictorPipeline throughput_predictor(w, stats);
+    ThroughputPredictorPipeline *tp = &throughput_predictor;
+    if (get_env_variable("HL_USE_MANUAL_COST_MODEL") == "1") {
+        tp = nullptr;
+    }
 
     State optimal;
 
@@ -2315,7 +2325,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            State s = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
+            State s = optimal_schedule(dag, outputs, params, tp, beam_size);
             if (beam_size == 1 || s.cost < optimal.cost) {
                 optimal = s;
             }
@@ -2327,7 +2337,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         }
     } else {
         // Use a fixed beam size
-        optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
+        optimal = optimal_schedule(dag, outputs, params, tp, beam_size);
     }
 
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
@@ -2336,7 +2346,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     optimal.dump();
 
     // Just to get the debugging prints to fire
-    optimal.calculate_cost(dag, params, &throughput_predictor, true);
+    optimal.calculate_cost(dag, params, tp, true);
 
     // Apply the schedules
     optimal.apply_schedule(params);
