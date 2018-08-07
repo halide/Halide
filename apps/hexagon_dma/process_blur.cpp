@@ -8,13 +8,6 @@
 #include "HalideBuffer.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
 
-template <typename T>
-T clamp(T x, T min, T max) {
-    if (x < min) x = min;
-    if (x > max) x = max;
-    return x;
-}
-
 void halide_print(void *user_context, const char *msg) {
     printf("halide_print %s\n", msg);
 }
@@ -69,7 +62,8 @@ int main(int argc, char **argv) {
             for (int rx = -2; rx <= 2; rx++) {
                 uint16_t blur_y = 0;
                 for (int ry = -2; ry <= 2; ry++) {
-                    uint16_t in_rxy = data_in[clamp(x + rx, 0, width - 1)+  width * clamp(y + ry, 0, height - 1) ];
+                    //uint16_t in_rxy = data_in[clamp(x + rx, 0, width - 1)+  width * clamp(y + ry, 0, height - 1) ];
+                    uint16_t in_rxy = data_in[std::max(0, std::min(x + rx, width)) +  width * std::max(0, std::min(y + ry, height))];
                     blur_y += in_rxy * gaussian5[ry + 2];
                 }
                 blur_y += 8;

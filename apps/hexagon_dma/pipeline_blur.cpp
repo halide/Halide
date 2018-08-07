@@ -25,17 +25,21 @@ public:
         // We need a wrapper for the output so we can schedule the
         // multiply update in tiles.
         Func copy("copy");
-        Func input_bounded("input_bounded");
+        Func copy_bounded("copy_bounded");
         Func blur_y{"blur_y"};
 
-        input_bounded(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
-        copy(x, y) = input_bounded(x, y);
-        blur_y(x, y) = blur5(copy(x, y - 2),
-                                copy(x, y - 1),
-                                copy(x, y    ),
-                                copy(x, y + 1),
-                                copy(x, y + 2));
+        copy(x, y) = input(x, y);
+        Expr bounded_x = max(input.dim(0).min(), min(x, input.dim(0).extent()));
+        Expr bounded_y = max(input.dim(1).min(), min(y, input.dim(1).extent()));
+        copy_bounded(x,y) =  copy(bounded_x, bounded_y); 
+
+
+        blur_y(x, y) = blur5(copy_bounded(x, y - 2),
+                                copy_bounded(x, y - 1),
+                                copy_bounded(x, y    ),
+                                copy_bounded(x, y + 1),
+                                copy_bounded(x, y + 2));
         output(x, y) = blur5(blur_y(x - 2, y),
                               blur_y(x - 1, y),
                               blur_y(x,     y),
@@ -55,7 +59,6 @@ public:
         Expr fac = output.dim(1).extent()/2;
 
         Var yo, yi;
-        input_bounded.compute_root();
 
         output.split(y, yo, yi, fac);
 
