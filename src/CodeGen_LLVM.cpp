@@ -1123,8 +1123,8 @@ void CodeGen_LLVM::optimize_module() {
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
 
-    debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
+        debug(2) << "After LLVM optimizations:\n";
         #if LLVM_VERSION >= 50
         module->print(dbgs(), nullptr, false, true);
         #else

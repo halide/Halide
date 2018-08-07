@@ -152,6 +152,7 @@ void write_symbol_table(std::ostream &out,
 #endif
 
     llvm::LLVMContext context;
+    context.setDiscardValueNames(true);
     for (size_t i = 0, n = members.size(); i < n; ++i) {
         llvm::MemoryBufferRef member_buffer = members[i].Buf->getMemBufferRef();
         llvm::Expected<std::unique_ptr<llvm::object::SymbolicFile>> obj_or_err =

@@ -23,7 +23,7 @@ namespace {
 /** If an integer expression varies linearly with the variables in the
  * scope, return the linear term. Otherwise return an undefined
  * Expr. */
-Expr is_linear(Expr e, const Scope<Expr> &linear) {
+Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     if (e.type() != Int(32)) {
         return Expr();
     }
@@ -218,10 +218,12 @@ class LoopCarryOverLoop : public IRMutator2 {
     }
 
     Stmt visit(const Store *op) override {
+        debug(0) << "LoopCarryOverLoop: Store "<<Stmt(op)<<"\n";
         return lift_carried_values_out_of_stmt(op);
     }
 
     Stmt visit(const Block *op) override {
+        debug(0) << "LoopCarryOverLoop: Block "<<Stmt(op)<<"\n";
         vector<Stmt> v = block_to_vector(op);
 
         vector<Stmt> stores;
@@ -245,7 +247,7 @@ class LoopCarryOverLoop : public IRMutator2 {
     }
 
     Stmt lift_carried_values_out_of_stmt(const Stmt &orig_stmt) {
-        debug(4) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
+        debug(2) << "About to lift carried values out of stmt: " << orig_stmt << "\n";
 
         // The stmts, as graphs (lets subtituted in). We must only use
         // graph-aware methods to touch these, lest we incur
@@ -256,7 +258,10 @@ class LoopCarryOverLoop : public IRMutator2 {
         FindLoads find_loads;
         graph_stmt.accept(&find_loads);
 
-        debug(4) << "Found " << find_loads.result.size() << " loads\n";
+        debug(2) << "Found " << find_loads.result.size() << " loads\n";
+        for (const Load *load : find_loads.result) {
+            debug(2) << "   Load is: " << Expr(load) << "\n";
+        }
 
         // Group equal loads
         vector<vector<const Load *>> loads;
@@ -301,7 +306,7 @@ class LoopCarryOverLoop : public IRMutator2 {
                     next_predicates[j].defined() &&
                     graph_equal(predicates[i], next_predicates[j])) {
                     chains.push_back({j, i});
-                    debug(3) << "Found carried value:\n"
+                    debug(2) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
                              << j << ":  -> " << Expr(loads[j][0]) << "\n";
                 }
@@ -317,12 +322,21 @@ class LoopCarryOverLoop : public IRMutator2 {
         while (!done) {
             done = true;
             for (size_t i = 0; i < chains.size(); i++) {
-                if (chains[i].empty()) continue;
+                if (chains[i].empty()) {
+                    continue;
+                }
                 for (size_t j = 0; j < chains.size(); j++) {
-                    if (chains[j].empty()) continue;
+                    if (chains[j].empty()) {
+                        continue;
+                    }
                     if (chains[i].back() == chains[j].front()) {
                         chains[i].insert(chains[i].end(), chains[j].begin()+1, chains[j].end());
                         chains[j].clear();
+                            debug(2) << "chain["<<i<<"] -> ";
+                            for (int ii : chains[i]) {
+                                debug(2) << ii << " ";
+                            }
+                            debug(2) << ", chain["<<j<<"] -> EMPTY\n";
                         done = false;
                     }
                 }
@@ -338,13 +352,13 @@ class LoopCarryOverLoop : public IRMutator2 {
 
         // Sort the carry chains by decreasing order of size. The
         // longest ones get the most reuse of each value.
-        std::sort(chains.begin(), chains.end(),
+        std::stable_sort(chains.begin(), chains.end(),
                   [&](const vector<int> &c1, const vector<int> &c2){return c1.size() > c2.size();});
 
         for (const vector<int> &c : chains) {
-            debug(3) << "Found chain of carried values:\n";
+            debug(2) << "Found chain of carried values:\n";
             for (int i : c) {
-                debug(3) << i << ":  <- " << indices[i] << "\n";
+                debug(2) << i << ":  <- " << indices[i] << "\n";
             }
         }
 
@@ -513,6 +527,7 @@ class LoopCarry : public IRMutator2 {
     }
 
     Stmt visit(const For *op) override {
+        debug(0) << "LoopCarry: op->for_type "<<(int)op->for_type<<" is_one "<<is_one(op->extent)<<" -> "<<op->extent<<"\n";
         if (op->for_type == ForType::Serial && !is_one(op->extent)) {
             Stmt stmt;
             Stmt body = mutate(op->body);

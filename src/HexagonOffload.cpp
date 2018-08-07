@@ -837,7 +837,7 @@ class InjectHexagonRpc : public IRMutator2 {
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
-        params.push_back(Call::make(type_of<size_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
+        params.push_back(Call::make(type_of<uint64_t*>(), Call::make_struct, arg_sizes, Call::Intrinsic));
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
@@ -947,6 +947,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
 
 Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_code) {
     llvm::LLVMContext context;
+    context.setDiscardValueNames(true);
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
     // Write intermediate bitcode to disk if requested.
@@ -965,11 +966,12 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
     if (debug::debug_level() >= min_debug_level) {
-        debug(0) << "Hexagon device code assembly: " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(0) << "BEGIN Hexagon device code assembly: " << "\n";
         debug(0) << assembly.c_str() << "\n";
+        debug(0) << "END Hexagon device code assembly: " << "\n";
     }
 
     auto obj = Elf::Object::parse_object(object.data(), object.size());

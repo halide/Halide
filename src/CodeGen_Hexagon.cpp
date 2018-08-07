@@ -334,8 +334,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Carrying values across loop iterations...\n";
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
+    debug(2) << "Lowering after loop_carry:\n" << body << "\n\n";
     body = simplify(body);
-    debug(2) << "Lowering after forwarding stores:\n" << body << "\n\n";
+    debug(2) << "Lowering after loop_carry+simplify:\n" << body << "\n\n";
 
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";

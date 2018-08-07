@@ -266,6 +266,7 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
     }
 
     llvm::LLVMContext context;
+    context.setDiscardValueNames(true);
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
     llvm::SmallVector<char, 4096> object;
