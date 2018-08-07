@@ -2105,7 +2105,7 @@ void CodeGen_C::visit(const Call *op) {
         Expr a0 = op->args[0];
         rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
         rhs << "(" << arg << ")";
     } else if (op->is_intrinsic(Call::alloca)) {
