@@ -480,11 +480,11 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
             if (arg_types[i].code == halide_type_int) {
                 int value;
                 if (arg_types[i].bits == 8) {
-                    value = *((char *)args[i]);
+                    value = *((int8_t *)args[i]);
                 } else if (arg_types[i].bits == 16) {
-                    value = *((short *)args[i]);
+                    value = *((int16_t *)args[i]);
                 } else if (arg_types[i].bits == 32) {
-                    value = *((int *)args[i]);
+                    value = *((int32_t *)args[i]);
                 } else {
                   // error
                   return -1;
@@ -504,11 +504,11 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
             } else if (arg_types[i].code == halide_type_uint) {
                 unsigned value;
                 if (arg_types[i].bits == 8) {
-                    value = *((unsigned char *)args[i]);
+                    value = *((uint8_t *)args[i]);
                 } else if (arg_types[i].bits == 16) {
-                    value = *((unsigned short *)args[i]);
+                    value = *((uint16_t *)args[i]);
                 } else if (arg_types[i].bits == 32) {
-                    value = *((unsigned int *)args[i]);
+                    value = *((uint32_t *)args[i]);
                 } else {
                   // error
                   return -1;
