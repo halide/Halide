@@ -1538,18 +1538,26 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
+
+    std::vector<std::string> arg_names(args.size()), arg_types(args.size());
+    int num_input_buffers = 0;
+
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            stream << "struct halide_buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
+            if (args[i].is_input()) {
+                num_input_buffers++;
+            }
+            arg_names[i] = print_name(args[i].name) + "_buffer";
+            arg_types[i] = "struct halide_buffer_t *";
         } else {
-            stream << print_type(args[i].type, AppendSpace)
-                   << print_name(args[i].name);
+            arg_names[i] = print_name(args[i].name);
+            arg_types[i] = print_type(args[i].type, AppendSpace);
         }
-
-        if (i < args.size()-1) stream << ", ";
+        if (i > 0) {
+            stream << ", ";
+        }
+        stream << arg_types[i] << arg_names[i];
     }
 
     if (is_header()) {
@@ -1598,13 +1606,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // Emit an overload that accepts const buffers for inputs (but only
         // if we have at least one input buffer, and only if the function is
         // being emitted in NameMangling::CPlusPlus mode)
-        int num_input_buffers = 0;
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer() && args[i].is_input()) {
-                num_input_buffers++;
-            }
-        }
-
         if (num_input_buffers > 0 && name_mangling == NameMangling::CPlusPlus) {
             // We make this opt-in (via #define HALIDE_ALLOW_CONST_INPUT_BUFFERS=1)
             // because the inline function requires that HalideRuntime.h be included
@@ -1615,45 +1616,56 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                 if (i > 0) {
                     stream << ", ";
                 }
-                if (args[i].is_buffer()) {
-                    if (args[i].is_input()) {
-                        stream << "const ";
-                    }
-                    stream << "struct halide_buffer_t *"
-                           << print_name(args[i].name)
-                           << "_buffer";
-                } else {
-                    stream << print_type(args[i].type, AppendSpace)
-                           << print_name(args[i].name);
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    stream << "const ";
                 }
+                stream << arg_types[i] << arg_names[i];
             }
             stream << ") HALIDE_FUNCTION_ATTRS {\n";
+
             for (size_t i = 0; i < args.size(); i++) {
                 if (args[i].is_buffer() && args[i].is_input()) {
-                    std::string n = print_name(args[i].name) + "_buffer";
-                    stream << "    assert(!" << n << "->is_bounds_query() && \"The input '" << args[i].name << "' is being passed as a const Buffer, but is being used for bounds query, which needs to mutate some fields of the Buffer. Use a non-const Buffer here instead.\");\n";
+                    const std::string &n = arg_names[i];
+                    stream << "    assert(!" << n << "->is_bounds_query() && "
+                        "\"The input '" << args[i].name << "' is being passed as a const Buffer to function '" << f.name <<
+                        "', but is being used for bounds query, which needs to mutate some fields of the Buffer. "
+                        "Use a non-const Buffer here instead.\");\n";
+                    stream << "    #ifndef NDEBUG\n";
+                    stream << "    const uint64_t device_" << n << " = " << n << "->device;\n";
+                    stream << "    const uint64_t flags_" << n << " = " << n << "->flags;\n";
+                    stream << "    #endif  // NDEBUG\n";
                 }
             }
 
-            stream << "    return " << simple_name << "(";
+            stream << "    const int " << simple_name << "_result = " << simple_name << "(";
             for (size_t i = 0; i < args.size(); i++) {
                 if (i > 0) {
                     stream << ", ";
                 }
-                if (args[i].is_buffer()) {
-                    std::string n = print_name(args[i].name) + "_buffer";
-                    if (args[i].is_input()) {
-                        stream << "const_cast<struct halide_buffer_t *>(" << n << ")";
-                    } else {
-                        stream << n;
-                    }
+                const std::string &n = arg_names[i];
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    stream << "const_cast<struct halide_buffer_t *>(" << n << ")";
                 } else {
-                    stream << print_name(args[i].name);
+                    stream << n;
                 }
             }
             stream << ");\n";
+
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    const std::string &n = arg_names[i];
+                    stream << "    assert(device_" << n << " == " << n << "->device && "
+                        "\"The device field of '" << args[i].name << "' was mutated illegally inside function '" << f.name << "',"
+                        " but was declared const. Use a non-const Buffer here instead.\");\n";
+                    stream << "    assert(flags_" << n << " == " << n << "->flags && "
+                        "\"The flags field of '" << args[i].name << "' was mutated illegally inside function '" << f.name << "',"
+                        " but was declared const. Use a non-const Buffer here instead.\");\n";
+                }
+            }
+
+            stream << "    return " << simple_name << "_result;\n";
             stream << "}\n";
-            stream << "\n#endif  // defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n";
+            stream << "#endif  // defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n";
         }
     }
 
