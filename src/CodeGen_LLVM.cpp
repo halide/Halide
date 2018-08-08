@@ -1249,38 +1249,44 @@ void CodeGen_LLVM::visit(const Variable *op) {
 }
 
 void CodeGen_LLVM::visit(const Add *op) {
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateFAdd(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWAdd(a, b);
     } else {
-        value = builder->CreateAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateAdd(a, b);
     }
 }
 
 void CodeGen_LLVM::visit(const Sub *op) {
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateFSub(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWSub(a, b);
     } else {
-        value = builder->CreateSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateSub(a, b);
     }
 }
 
 void CodeGen_LLVM::visit(const Mul *op) {
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateFMul(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWMul(a, b);
     } else {
-        value = builder->CreateMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateMul(a, b);
     }
 }
 
