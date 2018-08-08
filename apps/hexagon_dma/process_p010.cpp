@@ -22,9 +22,8 @@ int main(int argc, char **argv) {
     const int buf_size = (width * height * 3) / 2;
     uint16_t *data_in = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
     // Creating the Input Data so that we can catch if there are any Errors in DMA
-    int *data_in_int = reinterpret_cast<int *>(data_in);
-    for (int i = 0; i < (buf_size >> 1);  i++) {
-        data_in_int[i] = i;
+    for (int i = 0; i < buf_size;  i++) {
+        data_in[i] =  ((uint16_t)rand()) >> 1;
     }
     Halide::Runtime::Buffer<uint16_t> input(nullptr, width, (3 * height) / 2);
 
@@ -57,15 +56,15 @@ int main(int argc, char **argv) {
     
     Halide::Runtime::Buffer<uint16_t> output(width, (3 * height) / 2);
     Halide::Runtime::Buffer<uint16_t> output_y = output.cropped(1, 0, height);    // Luma plane only
-    Halide::Runtime::Buffer<uint16_t> output_c = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<uint16_t> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
-    output_c.embed(2, 0);
-    output_c.raw_buffer()->dim[2].extent = 2;
-    output_c.raw_buffer()->dim[2].stride = 1;
-    output_c.raw_buffer()->dim[0].stride = 2;
-    output_c.raw_buffer()->dim[0].extent = width / 2;
+    output_uv.embed(2, 0);
+    output_uv.raw_buffer()->dim[2].extent = 2;
+    output_uv.raw_buffer()->dim[2].stride = 1;
+    output_uv.raw_buffer()->dim[0].stride = 2;
+    output_uv.raw_buffer()->dim[0].extent = width / 2;
 
-    int result = pipeline_p010(input_y, input_uv, output_y, output_c);
+    int result = pipeline_p010(input_y, input_uv, output_y, output_uv);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }

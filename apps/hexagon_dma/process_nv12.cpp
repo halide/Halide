@@ -59,17 +59,17 @@ int main(int argc, char **argv) {
     
     Halide::Runtime::Buffer<uint8_t> output(width, (height * 1.5));
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<uint8_t> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
-    output_c.embed(2, 0);
-    output_c.raw_buffer()->dim[2].extent = 2;
-    output_c.raw_buffer()->dim[2].stride = 1;
+    output_uv.embed(2, 0);
+    output_uv.raw_buffer()->dim[2].extent = 2;
+    output_uv.raw_buffer()->dim[2].stride = 1;
 
-    output_c.raw_buffer()->dim[0].stride = 2;
-    output_c.raw_buffer()->dim[0].extent = width / 2;
+    output_uv.raw_buffer()->dim[0].stride = 2;
+    output_uv.raw_buffer()->dim[0].extent = width / 2;
 
 
-    int result = pipeline_nv12(input_y, input_uv, output_y, output_c);
+    int result = pipeline_nv12(input_y, input_uv, output_y, output_uv);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }

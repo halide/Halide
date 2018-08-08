@@ -275,12 +275,15 @@ int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle handle, t_StDmaW
     desc->stWord1.roiW                   = dma_transfer_parm->u16RoiW;
     if (desc->stWord0.dst_is_tcm) {
         desc->stWord1.dst_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
-        desc->stWord1.src_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);    // must always point to start of frame buffer, and not start of component
+         // must always point to start of frame buffer, and not start of component
+        desc->stWord1.src_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);
         desc->stWord1.src_roi_stride         = dma_transfer_parm->u16FrameStride;
         desc->stWord1.dst_roi_stride         = dma_transfer_parm->u16RoiStride;
     } else {
         desc->stWord1.src_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pTcmDataBuf);
-        desc->stWord1.dst_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);    // must always point to start of frame buffer, and not start of component
+        // must always point to start of frame buffer, and not start of component
+        desc->stWord1.dst_frm_base_addr      = reinterpret_cast<uintptr_t>(dma_transfer_parm->pFrameBuf);
+        // We are in dma write so dst roi stride is the frame stride and src stride is tcm stride
         desc->stWord1.dst_roi_stride         = dma_transfer_parm->u16FrameStride;
         desc->stWord1.src_roi_stride         = dma_transfer_parm->u16RoiStride;
     }

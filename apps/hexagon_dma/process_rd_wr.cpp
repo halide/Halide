@@ -23,9 +23,8 @@ int main(int argc, char **argv) {
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
     uint8_t *data_out = (uint8_t *)malloc(buf_size);
     // Creating the Input Data so that we can catch if there are any Errors in DMA
-    int *data_in_int = reinterpret_cast<int *>(data_in);
-    for (int i = 0; i < (buf_size >> 2);  i++) {
-        data_in_int[i] = i;
+    for (int i = 0; i < buf_size ;  i++) {
+        data_in[i] =  ((uint8_t)rand()) >> 1;
         data_out[i] = 0;
     }
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2);
@@ -62,18 +61,18 @@ int main(int argc, char **argv) {
     
     Halide::Runtime::Buffer<uint8_t> output(width, (height * 1.5));
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);    // Luma plane only
-    Halide::Runtime::Buffer<uint8_t> output_c = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<uint8_t> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
-    output_c.embed(2, 0);
-    output_c.raw_buffer()->dimensions = 3;
-    output_c.raw_buffer()->dim[2].extent = 2;
-    output_c.raw_buffer()->dim[2].stride = 1;
+    output_uv.embed(2, 0);
+    output_uv.raw_buffer()->dimensions = 3;
+    output_uv.raw_buffer()->dim[2].extent = 2;
+    output_uv.raw_buffer()->dim[2].stride = 1;
 
-    output_c.raw_buffer()->dim[0].stride = 2;
-    output_c.raw_buffer()->dim[0].extent = width / 2;
+    output_uv.raw_buffer()->dim[0].stride = 2;
+    output_uv.raw_buffer()->dim[0].extent = width / 2;
 
     output_y.set_device_dirty();
-    output_c.set_device_dirty();
+    output_uv.set_device_dirty();
 
 
     output_y.device_wrap_native(halide_hexagon_dma_device_interface(),
@@ -81,13 +80,13 @@ int main(int argc, char **argv) {
 
     halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, eDmaFmt_NV12_Y);
 
-    output_c.device_wrap_native(halide_hexagon_dma_device_interface(),
+    output_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_out));
 
-    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_c, dma_engine, false, eDmaFmt_NV12_UV);
+    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, eDmaFmt_NV12_UV);
 
 
-    int result = pipeline_rd_wr(input_y, input_uv, output_y, output_c);
+    int result = pipeline_rd_wr(input_y, input_uv, output_y, output_uv);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
@@ -108,7 +107,7 @@ int main(int argc, char **argv) {
     halide_hexagon_dma_unprepare(nullptr, input_uv);
  
     halide_hexagon_dma_unprepare(nullptr, output_y);
-    halide_hexagon_dma_unprepare(nullptr, output_c);
+    halide_hexagon_dma_unprepare(nullptr, output_uv);
 
     // We're done with the DMA engine, release it. This would also be
     // done automatically by device_free.
