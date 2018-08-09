@@ -1516,7 +1516,7 @@ struct PartialScheduleNode {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_dim, vector_size);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_dim, innermost ? vector_size : 1);
 
             for (auto t : tilings) {
                 if (parent->is_root()) {
@@ -1940,11 +1940,8 @@ struct State {
             // throughput_predictor->prediction.realize(network_output);
 
             // cost = network_output(0);
-        }
-
-        if (false && cost == 0) {
-            // Either we have no throughput predictor, or it predicted
-            // a throughput of zero. Fall back to manual cost model times epsilon.
+        } else {
+            // We have no throughput predictor.
             for (auto p : features) {
                 for (size_t s = 0; s < p.second.size(); s++) {
                     const auto &feat = p.second[s];
