@@ -1249,13 +1249,28 @@ void CodeGen_LLVM::visit(const Variable *op) {
 
 void CodeGen_LLVM::visit(const Add *op) {
     if (op->type.is_float()) {
-        value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
+        Value *b = codegen(op->b);
+        Value *a = codegen(op->a);
+        exit(1);
+        value = builder->CreateFAdd(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
+        // order doesn't matter here
+        Value *b = codegen(op->b);
+        Value *a = codegen(op->a);
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWAdd(a, b);
     } else {
-        value = builder->CreateAdd(codegen(op->a), codegen(op->b));
+    #if 1
+        // Produce as-expected code
+        Value *b = codegen(op->b);
+        Value *a = codegen(op->a);
+    #else
+        // Produce incorrect HVX code
+        Value *a = codegen(op->a);
+        Value *b = codegen(op->b);
+    #endif
+        value = builder->CreateAdd(a, b);
     }
 }
 
