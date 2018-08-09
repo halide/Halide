@@ -372,12 +372,6 @@ private:
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
 
-        if (b_uses_var && !a_uses_var) {
-            std::swap(a, b);
-            std::swap(a_uses_var, b_uses_var);
-            std::swap(a_failed, b_failed);
-        }
-
         Expr expr;
         if (a_uses_var && !b_uses_var) {
             if (add_a && !a_failed &&
