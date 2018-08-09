@@ -77,7 +77,7 @@ inline bool stmt_or_expr_uses_var(StmtOrExpr e, const std::string &v,
  */
 inline bool expr_uses_var(Expr e, const std::string &v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
-    return stmt_or_expr_uses_var(e, v);
+    return stmt_or_expr_uses_var(e, v, s);
 }
 
 /** Test if a statement references the given variable,
@@ -86,7 +86,7 @@ inline bool expr_uses_var(Expr e, const std::string &v,
  */
 inline bool stmt_uses_var(Stmt stmt, const std::string &v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
-    return stmt_or_expr_uses_var(stmt, v);
+    return stmt_or_expr_uses_var(stmt, v, s);
 }
 
 /** Test if an expression references any of the variables in a scope,
