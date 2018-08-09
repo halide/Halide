@@ -49,21 +49,16 @@ public:
         // circular buffer of two tiles.
         copy_y
             .compute_at(output_y, tx)
-  	    .store_at(output_y, ty)
-            .fold_storage(x, tile_width * 2)
-	    .async();
-
-	copy_y.in().store_at(output_y, ty).compute_at(output_y, tx).copy_to_host();
+            .store_at(output_y, ty)
+            .copy_to_host().async().fold_storage(x, tile_width * 2);
 
         copy_uv
             .compute_at(output_uv, tx)
             .store_at(output_uv, ty)
             .bound(c, 0, 2)
-            .fold_storage(x, tile_width * 2)
             .reorder_storage(c, x, y)
-	    .async();
-
-	copy_uv.in().compute_at(output_uv, tx).store_at(output_uv, ty).copy_to_host();
+            .copy_to_host().async()
+          .fold_storage(x, tile_width * 2);
     }
 
 };
