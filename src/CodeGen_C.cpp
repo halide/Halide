@@ -1628,7 +1628,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // (but only if the function is being emitted in NameMangling::CPlusPlus mode)
         if (name_mangling == NameMangling::CPlusPlus) {
 
-            stream << "\n#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+
+            stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers of the appropriate types\n";
+            stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
 
             const auto emit_fn_wrapper = [this, &simple_name, &emit_args, &arg_info](
                     std::function<void(std::ostream &o, const ArgInfo &a)> preflight_fn,
