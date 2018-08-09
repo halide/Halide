@@ -1554,6 +1554,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     for (const auto &arg : args) {
         arg_info.push_back({arg, type_to_c_type(arg.type, false), escaped_name(arg.name)});
         if (arg.is_buffer()) {
+            arg_info.back().escaped_name += "_buffer";
             if (arg.is_input()) {
                 input_buffers++;
             } else {
