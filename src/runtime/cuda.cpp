@@ -104,14 +104,6 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, &context != NULL);
 
-    if (!lib_cuda) {
-        error(user_context) << "Could not find cuda system libraries";
-        // Note: The other reason this error could fire is if someone
-        // calls halide_cuda_acquire_context directly instead of using
-        // the Context class and cuda hasn't been loaded yet.
-        return -1;
-    }
-
     // Note that this null-check of the context is *not* locked with
     // respect to device_release, so we may get a non-null context
     // that's in the process of being destroyed. Things will go badly
@@ -180,10 +172,6 @@ public:
     INLINE Context(void *user_context) : user_context(user_context),
                                          context(NULL),
                                          error(CUDA_SUCCESS) {
-        if (cuInit == NULL) {
-            load_libcuda(user_context);
-        }
-
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
@@ -193,6 +181,7 @@ public:
         }
 
         halide_assert(user_context, context != NULL);
+        halide_assert(user_context, cuInit != NULL);
 
         error = cuCtxPushCurrent(context);
     }
@@ -246,6 +235,14 @@ WEAK module_state *find_module_for_context(const registered_filters *filters, CU
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
+    if (!cuInit) {
+        load_libcuda(user_context);
+        if (!cuInit) {
+            error(user_context) << "Could not find cuda system libraries";
+            return CUDA_ERROR_FILE_NOT_FOUND;
+        }
+    }
+
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuInit failed: "
@@ -261,6 +258,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
                             << get_error_name(err);
         return err;
     }
+
     if (deviceCount <= 0) {
         halide_error(user_context, "CUDA: No devices available");
         return CUDA_ERROR_NO_DEVICE;
