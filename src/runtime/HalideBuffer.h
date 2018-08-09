@@ -1037,6 +1037,12 @@ public:
     }
     // @}
 
+    /** Get a mutable pointer to the raw halide_buffer_t this wraps,
+     * even if const; this should be used with caution. */
+    halide_buffer_t *mutable_raw_buffer() const {
+        return const_cast<halide_buffer_t*>(&buf);
+    }
+
     /** Provide a cast operator to halide_buffer_t *, so that
      * instances can be passed directly to Halide filters. */
     operator halide_buffer_t *() {
@@ -2197,7 +2203,7 @@ public:
      * bounds. Compared to doing the host pointer check directly,
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
-    bool is_bounds_query() {
+    bool is_bounds_query() const {
         return buf.is_bounds_query();
     }
 
