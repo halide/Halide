@@ -1552,7 +1552,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     std::vector<ArgInfo> arg_info;
     int input_buffers = 0, output_buffers = 0;
     for (const auto &arg : args) {
-        arg_info.push_back({arg, type_to_c_type(arg.type, false), escaped_name(arg.name)});
+        arg_info.push_back({arg, type_to_c_type(arg.type, !arg.is_buffer()), escaped_name(arg.name)});
         if (arg.is_buffer()) {
             arg_info.back().escaped_name += "_buffer";
             if (arg.is_input()) {
@@ -1575,7 +1575,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         if (a.arg.is_buffer()) {
             o << "struct halide_buffer_t *";
         } else {
-            o << a.c_type << " ";
+            o << a.c_type;
         }
         o << a.escaped_name;
     });
@@ -1652,7 +1652,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                 if (a.arg.is_buffer()) {
                     o << "::Halide::Runtime::Buffer<" + a.c_type + "> &";
                 } else {
-                    o << a.c_type << " ";
+                    o << a.c_type;
                 }
                 o << a.escaped_name;
             };
@@ -1705,7 +1705,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                         o << "::Halide::Runtime::Buffer<" + a.c_type + "> *";
                     }
                 } else {
-                    o << a.c_type << " ";
+                    o << a.c_type;
                 }
                 o << a.escaped_name;
             };
