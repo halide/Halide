@@ -10,22 +10,32 @@ class Downsample : public Halide::Generator<Downsample> {
 
   void generate() {
     Var x, y;
-    Func downx, downy, convx, convy, im16;
+    Func convx, convy, im16;
     im16(x, y) = u16(repeat_edge(input_)(x, y));
     convx(x, y) = im16(x - 2, y) +
-                     4 * (im16(x - 1, y) + im16(x + 1, y)) +
+                     4 * im16(x - 1, y) +
                      6 * im16(x, y) +
+                     4 * im16(x + 1, y) +
                      im16(x + 2, y);
-    convy(x, y) = convx(x, y - 2) +
-                     4 * (convx(x, y - 1) + convx(x, y + 1)) +
-                     6 * convx(x, y) +
-                     convx(x, y + 2);
-    downx(x, y) = convy(2 * x, y);
-    downy(x, y) = downx(x, 2 * y);
-    output_(x, y) = u8(downy(x, y) >> 8);
+    convy(x) = convx(x, -2) +
+                     4 * convx(x, -1) +
+                     6 * convx(x, 0) +
+                     4 * convx(x, 1) +
+                     convx(x, 2);
+    output_(x, y) = convy(2 * x);
+
+    // don't set any of these
+    //input_.dim(0).set_min(0);
+    //input_.dim(0).set_extent(4);
+    //input_.dim(1).set_min(0);
+    //input_.dim(1).set_extent(1);
+
+    // don't bound the min of output.x
+    output_.bound_extent(x, 4);
+    output_.bound(y, 0, 1);
 
     auto target = get_target();
-    if (target.has_feature(Target::HVX_128) || target.has_feature(Target::HVX_64)) {
+    if (target.has_feature(Target::HVX_128)) {
       output_.hexagon();
     } else {
       // nothing
