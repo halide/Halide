@@ -6,7 +6,7 @@ using namespace Halide::BoundaryConditions;
 class Downsample : public Halide::Generator<Downsample> {
  public:
   Input<Buffer<uint8_t>> input_{"input", 2};
-  Output<Buffer<uint8_t>> output_{"output", 2};
+  Output<Buffer<uint16_t>> output_{"output", 2};
 
   void generate() {
     Var x, y;
