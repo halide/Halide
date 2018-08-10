@@ -1,16 +1,16 @@
 #include "DerivativeUtils.h"
 
-#include "IRVisitor.h"
+#include "CSE.h"
+#include "FindCalls.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IREquality.h"
-#include "Simplify.h"
-#include "FindCalls.h"
+#include "IRVisitor.h"
+#include "Monotonic.h"
 #include "RealizationOrder.h"
+#include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "CSE.h"
-#include "Monotonic.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,8 +40,6 @@ bool has_variable(const Expr &expr, const std::string &name) {
     VariableFinder finder;
     return finder.find(expr, name);
 }
-
-
 
 class LetFinder : public IRGraphVisitor {
 public:
@@ -114,13 +112,13 @@ private:
 };
 
 std::vector<std::string> gather_variables(const Expr &expr,
-                const std::vector<std::string> &filter) {
-        VariableGatherer gatherer;
-        return gatherer.gather(expr, filter);
+                                          const std::vector<std::string> &filter) {
+    VariableGatherer gatherer;
+    return gatherer.gather(expr, filter);
 }
 
 std::vector<std::string> gather_variables(const Expr &expr,
-                const std::vector<Var> &filter) {
+                                          const std::vector<Var> &filter) {
     std::vector<std::string> str_filter;
     str_filter.reserve(filter.size());
     for (const auto &var : filter) {
@@ -145,17 +143,19 @@ public:
         if (op->reduction_domain.defined()) {
             const std::vector<ReductionVariable> &domain =
                 op->reduction_domain.domain();
-            for (int i = 0; i < (int)domain.size(); i++) {
+            for (int i = 0; i < (int) domain.size(); i++) {
                 const ReductionVariable &rv = domain[i];
                 if (rv.var == op->name) {
                     rvar_map[op->name] = ReductionVariableInfo{
-                        rv.min, rv.extent, i, op->reduction_domain, op->name};
+                        rv.min, rv.extent, i, op->reduction_domain, op->name
+                    };
                     return;
                 }
             }
             internal_error << "Unknown reduction variable encountered";
         }
     }
+
 private:
     std::map<std::string, ReductionVariableInfo> rvar_map;
 };
@@ -165,11 +165,11 @@ std::map<std::string, ReductionVariableInfo> gather_rvariables(Expr expr) {
 }
 
 std::map<std::string, ReductionVariableInfo> gather_rvariables(Tuple tuple) {
-        RVarGatherer gatherer;
+    RVarGatherer gatherer;
     for (const auto &expr : tuple.as_vector()) {
         gatherer.gather(expr);
     }
-        return gatherer.get_rvar_map();
+    return gatherer.get_rvar_map();
 }
 
 Expr add_let_expression(const Expr &expr,
@@ -183,7 +183,7 @@ Expr add_let_expression(const Expr &expr,
         changed = false;
         for (const auto &let_variable : let_variables) {
             if (has_variable(ret, let_variable) &&
-                    !has_let_defined(ret, let_variable)) {
+                !has_let_defined(ret, let_variable)) {
                 auto value = let_var_mapping.find(let_variable)->second;
                 ret = Let::make(let_variable, value, ret);
                 changed = true;
@@ -197,8 +197,8 @@ Expr add_let_expression(const Expr &expr,
  */
 class ExpressionSorter : public IRGraphVisitor {
 public:
-    using IRGraphVisitor::visit;
     using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
 
     std::vector<Expr> sort(const Expr &expr);
 
@@ -206,8 +206,10 @@ public:
     void visit(const Let *op);
     void visit(const Variable *op);
     void visit(const Select *op);
+
 protected:
     void include(const Expr &e);
+
 private:
     std::set<const IRNode *> visited_exprs;
     std::vector<Expr> expr_list;
@@ -260,8 +262,8 @@ void ExpressionSorter::include(const Expr &e) {
 }
 
 std::vector<Expr> sort_expressions(const Expr &expr) {
-        ExpressionSorter sorter;
-        return sorter.sort(expr);
+    ExpressionSorter sorter;
+    return sorter.sort(expr);
 }
 
 std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
@@ -292,7 +294,7 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
     std::vector<std::string> order = realization_order(functions, env).first;
 
     std::map<std::string, Box> bounds;
-    for (int i = 0; i < (int)funcs.size(); i++) {
+    for (int i = 0; i < (int) funcs.size(); i++) {
         const Func &func = funcs[i];
         const FuncBounds &func_bounds = output_bounds[i];
         std::vector<Interval> func_bounds_interval;
@@ -308,7 +310,7 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
         assert(bounds.find(*it) != bounds.end());
         const Box &current_bounds = bounds[*it];
         assert(func.args().size() == current_bounds.size());
-        for (int i = 0; i < (int)current_bounds.size(); i++) {
+        for (int i = 0; i < (int) current_bounds.size(); i++) {
             std::string arg = func.args()[i].name();
             scope.push(arg, current_bounds[i]);
         }
@@ -328,13 +330,13 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
                 }
             }
         }
-        for (int i = 0; i < (int)current_bounds.size(); i++) {
+        for (int i = 0; i < (int) current_bounds.size(); i++) {
             scope.pop(func.args()[i].name());
         }
     }
     for (auto &it : bounds) {
         auto &bound = it.second;
-        for (int i = 0; i < (int)bound.size(); i++) {
+        for (int i = 0; i < (int) bound.size(); i++) {
             bound[i].min = common_subexpression_elimination(simplify(bound[i].min));
             bound[i].max = common_subexpression_elimination(simplify(bound[i].max));
         }
@@ -344,15 +346,15 @@ std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
 
 std::map<std::string, Box> inference_bounds(const Func &func,
                                             const FuncBounds &output_bounds) {
-    return inference_bounds(std::vector<Func>{func},
-                            std::vector<FuncBounds>{output_bounds});
+    return inference_bounds(std::vector<Func>{ func },
+                            std::vector<FuncBounds>{ output_bounds });
 }
 
 std::vector<std::pair<Expr, Expr>> box_to_vector(const Box &bounds) {
     std::vector<std::pair<Expr, Expr>> ret;
     ret.reserve(bounds.size());
     for (const auto &b : bounds.bounds) {
-        ret.push_back({b.min, b.max - b.min + 1});
+        ret.push_back({ b.min, b.max - b.min + 1 });
     }
     return ret;
 }
@@ -361,9 +363,9 @@ bool equal(const RDom &bounds0, const RDom &bounds1) {
     if (bounds0.domain().domain().size() != bounds1.domain().domain().size()) {
         return false;
     }
-    for (int bid = 0; bid < (int)bounds0.domain().domain().size(); bid++) {
+    for (int bid = 0; bid < (int) bounds0.domain().domain().size(); bid++) {
         if (!equal(bounds0[bid].min(), bounds1[bid].min()) ||
-                !equal(bounds0[bid].extent(), bounds1[bid].extent())) {
+            !equal(bounds0[bid].extent(), bounds1[bid].extent())) {
             return false;
         }
     }
@@ -392,6 +394,7 @@ public:
             rdom = op->reduction_domain;
         }
     }
+
 private:
     ReductionDomain rdom;
 };
@@ -455,12 +458,14 @@ public:
             if (op->image.defined()) {
                 buffer_calls[op->name] = BufferInfo{
                     op->image.dimensions(),
-                    op->type};
+                    op->type
+                };
             } else {
                 assert(op->param.defined());
                 buffer_calls[op->name] = BufferInfo{
                     op->param.dimensions(),
-                    op->type};
+                    op->type
+                };
             }
         }
     }
@@ -492,14 +497,13 @@ public:
     std::set<std::string> implicit_variables;
 };
 
-
 std::set<std::string> find_implicit_variables(Expr expr) {
     ImplicitVariablesFinder finder;
     return finder.find(expr);
 }
 
 Expr substitute_rdom_predicate(
-        const std::string &name, const Expr &replacement, const Expr &expr) {
+    const std::string &name, const Expr &replacement, const Expr &expr) {
     Expr substituted = substitute(name, replacement, expr);
     std::map<std::string, ReductionVariableInfo> rvars =
         gather_rvariables(substituted);
@@ -517,5 +521,5 @@ Expr substitute_rdom_predicate(
     return substituted;
 }
 
-} // namespace Internal
-} // namespace Halide
+}  // namespace Internal
+}  // namespace Halide

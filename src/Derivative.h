@@ -5,13 +5,13 @@
  *  Automatic differentiation
  */
 
-#include "Module.h"
 #include "Expr.h"
 #include "Func.h"
+#include "Module.h"
 
-#include <vector>
 #include <array>
 #include <set>
+#include <vector>
 
 namespace Halide {
 
@@ -30,13 +30,13 @@ struct Derivative {
         if (!bounded) {
             name += "_unbounded";
         }
-        auto it = adjoints.find(FuncKey{name, update_id});
+        auto it = adjoints.find(FuncKey{ name, update_id });
         assert(it != adjoints.end());
         return it->second;
     }
 
     Func operator()(const Buffer<> &buffer) const {
-        auto it = adjoints.find(FuncKey{buffer.name(), -1});
+        auto it = adjoints.find(FuncKey{ buffer.name(), -1 });
         assert(it != adjoints.end());
         return it->second;
     }
@@ -82,6 +82,6 @@ void derivative_test();
 
 }
 
-}
+}  // namespace Halide
 
 #endif

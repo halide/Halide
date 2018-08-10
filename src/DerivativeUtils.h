@@ -1,12 +1,12 @@
 #ifndef HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 #define HALIDE_INTERNAL_DERIVATIVE_UTILS_H
 
+#include "Bounds.h"
+#include "Derivative.h"
 #include "Expr.h"
-#include "Var.h"
 #include "RDom.h"
 #include "Scope.h"
-#include "Derivative.h"
-#include "Bounds.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -29,10 +29,9 @@ Expr remove_let_definitions(const Expr &expr);
  * Return a list of variables that expr depends on and are in the filter
  */
 std::vector<std::string> gather_variables(const Expr &expr,
-    const std::vector<std::string> &filter);
+                                          const std::vector<std::string> &filter);
 std::vector<std::string> gather_variables(const Expr &expr,
-    const std::vector<Var> &filter);
-
+                                          const std::vector<Var> &filter);
 
 /**
  * Return a list of reduction variables the expression or tuple depends on
@@ -103,7 +102,7 @@ std::set<std::string> find_implicit_variables(Expr expr);
 Expr substitute_rdom_predicate(
     const std::string &name, const Expr &replacement, const Expr &expr);
 
-}
-}
+}  // namespace Internal
+}  // namespace Halide
 
 #endif
