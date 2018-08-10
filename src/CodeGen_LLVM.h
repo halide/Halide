@@ -446,7 +446,7 @@ protected:
     Scope<ModulusRemainder> alignment_info;
 
 private:
-
+    int cntr;
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;

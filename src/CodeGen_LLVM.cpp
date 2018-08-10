@@ -261,6 +261,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     destructor_block(nullptr),
     strict_float(t.has_feature(Target::StrictFloat)) {
     initialize_llvm();
+    cntr = 0;
 }
 
 namespace {
@@ -1261,16 +1262,30 @@ void CodeGen_LLVM::visit(const Add *op) {
         // code for loop indices.
         value = builder->CreateNSWAdd(a, b);
     } else {
-    #if 1
-        // Produce as-expected code
-        Value *b = codegen(op->b);
-        Value *a = codegen(op->a);
-    #else
+    // #if 0
+    //     // Produce as-expected code
+    //     Value *b = codegen(op->b);
+    //     Value *a = codegen(op->a);
+    // #else
         // Produce incorrect HVX code
-        Value *a = codegen(op->a);
-        Value *b = codegen(op->b);
-    #endif
-        value = builder->CreateAdd(a, b);
+        Value *a;
+        Value *b;
+        debug(0) << "cntr1 = " << cntr << "\n";
+        if (cntr < 60) {
+            a = codegen(op->a);
+            b = codegen(op->b);
+            cout<< "a before b\n";
+            value = builder->CreateAdd(a, b);
+
+        } else {
+            b = codegen(op->b);
+            a = codegen(op->a);
+            cout <<"b before a\n";
+            value = builder->CreateAdd(a, b);
+        }
+        cntr += 1;
+        debug(0) << "cntr2 = " << cntr << "\n";
+    // #endif
     }
 }
 
