@@ -41,6 +41,29 @@
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
+// HALIDE_FALLTHROUGH_INTENDED
+//
+// Add a compiler-specific annotation to indicate that a switch-label fallthru
+// is intentional; some compiler environments will aggressively complain
+// without such annotation (eg Clang with -Wimplicit-fallthrough).
+// There must be no statements between this and the next label.
+//
+// See also:
+// http://clang.llvm.org/docs/AttributeReference.html#fallthrough-clang-fallthrough
+
+#if defined(__clang__) && defined(__has_warning)
+  #if __has_feature(cxx_attributes) && __has_warning("-Wimplicit-fallthrough")
+    #define HALIDE_FALLTHROUGH_INTENDED [[clang::fallthrough]]
+  #endif
+#elif defined(__GNUC__) && __GNUC__ >= 7
+  #define HALIDE_FALLTHROUGH_INTENDED [[gnu::fallthrough]]
+#endif
+
+#ifndef HALIDE_FALLTHROUGH_INTENDED
+  #define HALIDE_FALLTHROUGH_INTENDED \
+    do { } while (0)
+#endif
+
 // On windows, Halide needs a larger stack than the default MSVC provides
 #ifdef _MSC_VER
 #pragma comment(linker, "/STACK:8388608,1048576")
