@@ -518,8 +518,8 @@ void CodeGen_ARM::visit(const Min *op) {
         Value *undef = UndefValue::get(f32x2);
         Constant *zero = ConstantInt::get(i32_t, 0);
         Value *a = codegen(op->a);
-        Value *b = codegen(op->b);
         Value *a_wide = builder->CreateInsertElement(undef, a, zero);
+        Value *b = codegen(op->b);
         Value *b_wide = builder->CreateInsertElement(undef, b, zero);
         Value *wide_result;
         if (target.bits == 32) {
