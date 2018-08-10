@@ -663,6 +663,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         switch (runtime_kind) {
         case OpenCLDebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::OpenCL);
             module_name = "debug_opencl";
             break;
         case OpenCL:
@@ -671,6 +672,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case MetalDebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::Metal);
             module_name = "debug_metal";
             break;
         case Metal:
@@ -680,6 +682,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case CUDADebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::CUDA);
             module_name = "debug_cuda";
             break;
         case CUDA:
@@ -688,6 +691,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case OpenGLDebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::OpenGL);
             module_name = "debug_opengl";
             break;
         case OpenGL:
@@ -697,6 +701,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "debug_openglcompute";
             break;
         case OpenGLCompute:
@@ -706,6 +711,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::HVX_64);
             module_name = "debug_hexagon";
             break;
         case Hexagon:
@@ -714,6 +720,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             break;
         case D3D12ComputeDebug:
             one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::D3D12Compute);
             module_name = "debug_d3d12compute";
             break;
         case D3D12Compute:
