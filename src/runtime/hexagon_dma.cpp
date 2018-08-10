@@ -6,6 +6,22 @@
 #include "mini_hexagon_dma.h"
 #include "hexagon_dma_pool.h"
 
+#define ASSERT_FORMAT(user_context) {\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_RawData == eDmaFmt_RawData);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV12 == eDmaFmt_NV12);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV12_Y == eDmaFmt_NV12_Y);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV12_UV == eDmaFmt_NV12_UV);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_P010 == eDmaFmt_P010);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_P010_Y == eDmaFmt_P010_Y);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_P010_UV == eDmaFmt_P010_UV);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_TP10 == eDmaFmt_TP10);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_TP10_Y == eDmaFmt_TP10_Y);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_TP10_UV == eDmaFmt_TP10_UV);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV124R == eDmaFmt_NV124R);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV124R_Y == eDmaFmt_NV124R_Y);\
+    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV124R_UV == eDmaFmt_NV124R_UV);\
+}
+
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
 
 extern WEAK halide_device_interface_t hexagon_dma_device_interface;
@@ -375,12 +391,13 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
 }
 
 
-inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_engine, bool is_ubwc, int fmt, bool is_write ) {
+inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_engine, bool is_ubwc, t_eDmaFmt fmt, bool is_write ) {
     halide_assert(user_context, dma_engine);
+    ASSERT_FORMAT(user_context);
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     dev->dma_engine = dma_engine;
     dev->is_ubwc = is_ubwc;
-    dev->fmt = (t_eDmaFmt) fmt;
+    dev->fmt = fmt;
     dev->is_write = is_write;
     // To compensate driver's adjustment for UV plane size
     if ((dev->fmt == eDmaFmt_NV12_UV) ||
@@ -395,39 +412,26 @@ inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf,
 
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_engine, bool is_ubwc, int fmt ) {
+                                                     void *dma_engine, bool is_ubwc, t_image_fmt fmt ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
-
-    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, fmt, 0);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  (t_eDmaFmt)fmt, 0);
 }
 WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_engine, bool is_ubwc, int fmt ) {
+                                                     void *dma_engine, bool is_ubwc, t_image_fmt fmt ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
 
-    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, fmt, 1);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  (t_eDmaFmt)fmt, 1);
 }
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << buf << ")\n";
-   //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
-   /* halide_assert(user_context, buf->device_interface == halide_hexagon_dma_device_interface());
-    halide_assert(user_context, buf->device);
-
-    dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
-    debug(user_context) << "   dma_finish_frame -> ";
-    int err = 0; //nDmaWrapper_FinishFrame(dev->dma_engine);
-    debug(user_context) << "        " << err << "\n";
-    if (err != 0) {
-        error(user_context) << "dma_finish_frame failed.\n";
-        return halide_error_code_generic_error;
-    }*/
-
+    //TODO Since we are moving the call to finishframe to dma pool . Need to check what we can do here
     return halide_error_code_success;
 }
 

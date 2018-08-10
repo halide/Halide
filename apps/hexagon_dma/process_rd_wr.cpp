@@ -49,12 +49,12 @@ int main(int argc, char **argv) {
     input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_in));
 
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, eDmaFmt_NV12_UV);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, hex_fmt_NV12_UV);
 
     input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_in));
 
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, eDmaFmt_NV12_Y);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, hex_fmt_NV12_Y);
 
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
@@ -78,12 +78,12 @@ int main(int argc, char **argv) {
     output_y.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_out));
 
-    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, eDmaFmt_NV12_Y);
+    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_y, dma_engine, false, hex_fmt_NV12_Y);
 
     output_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_out));
 
-    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, eDmaFmt_NV12_UV);
+    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, hex_fmt_NV12_UV);
 
 
     int result = pipeline_rd_wr(input_y, input_uv, output_y, output_uv);

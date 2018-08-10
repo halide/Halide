@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
     // The Last parameter 0 indicate DMA Read
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, eDmaFmt_RawData);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, hex_fmt_RawData);
 
     Halide::Runtime::Buffer<uint8_t> output(width, height);
 
