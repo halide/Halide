@@ -663,53 +663,60 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         switch (runtime_kind) {
         case OpenCLDebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
-        case OpenCL: // fallthrough
+            module_name = "debug_opencl";
+            break;
+        case OpenCL:
             one_gpu.set_feature(Target::OpenCL);
             module_name += "opencl";
             break;
         case MetalDebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
-        case Metal: // fallthough
+            module_name = "debug_metal";
+            break;
+        case Metal:
             one_gpu.set_feature(Target::Metal);
             module_name += "metal";
             load_metal();
             break;
         case CUDADebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
-        case CUDA: // fallthrough
+            module_name = "debug_cuda";
+            break;
+        case CUDA:
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
             break;
         case OpenGLDebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
-        case OpenGL: // fallthrough
+            module_name = "debug_opengl";
+            break;
+        case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
             module_name += "opengl";
             load_opengl();
             break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
-        case OpenGLCompute: // fallthrough
+            module_name = "debug_openglcompute";
+            break;
+        case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name += "openglcompute";
             load_opengl();
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
+            module_name = "debug_hexagon";
+            break;
         case Hexagon:
             one_gpu.set_feature(Target::HVX_64);
             module_name += "hexagon";
             break;
         case D3D12ComputeDebug:
             one_gpu.set_feature(Target::Debug);
-            module_name = "debug_";
-        case D3D12Compute: // fallthrough
+            module_name = "debug_d3d12compute";
+            break;
+        case D3D12Compute:
             one_gpu.set_feature(Target::D3D12Compute);
             module_name += "d3d12compute";
             #if !defined(_WIN32)
