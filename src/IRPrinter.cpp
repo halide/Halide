@@ -97,6 +97,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::Hexagon:
         out << "<Hexagon>";
         break;
+    case DeviceAPI::D3D12Compute:
+        out << "<D3D12Compute>";
+        break;
     }
     return out;
 }
