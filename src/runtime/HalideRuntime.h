@@ -586,7 +586,7 @@ extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
 
 /** Copy image data from host memory to device memory. This should not
  * be called directly; Halide handles copying to the device
- * automatically.  If interface is NULL and the bug has a non-zero dev
+ * automatically.  If interface is NULL and the buf has a non-zero dev
  * field, the device associated with the dev handle will be
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
