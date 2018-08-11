@@ -1343,36 +1343,76 @@ private:
     // Map variable name to all other vars which values depend on that variable.
     map<VarInstance, set<VarInstance>> children;
 
+    bool in_producer{false};
+    map<std::string, Expr> buffer_lets;
+
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
-        if (!consider_calls) return;
+        if (consider_calls) {
+            if (op->is_intrinsic(Call::if_then_else)) {
+                assert(op->args.size() == 3);
+                // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
+                // only takes Stmts as arguments.
+                Stmt then_case = Evaluate::make(op->args[1]);
+                Stmt else_case = Evaluate::make(op->args[2]);
+                Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                equivalent_if.accept(this);
+                return;
+            }
 
-        if (op->is_intrinsic(Call::if_then_else)) {
-            assert(op->args.size() == 3);
-            // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
-            // only takes Stmts as arguments.
-            Stmt then_case = Evaluate::make(op->args[1]);
-            Stmt else_case = Evaluate::make(op->args[2]);
-            Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
-            equivalent_if.accept(this);
-            return;
+            IRGraphVisitor::visit(op);
+
+            if (op->call_type == Call::Halide ||
+                op->call_type == Call::Image) {
+                for (Expr e : op->args) {
+                    e.accept(this);
+                }
+                if (op->name == func || func.empty()) {
+                    Box b(op->args.size());
+                    b.used = const_true();
+                    for (size_t i = 0; i < op->args.size(); i++) {
+                        b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                    }
+                    merge_boxes(boxes[op->name], b);
+                }
+            }
         }
 
-        IRVisitor::visit(op);
+        if (op->is_extern() && in_producer) {
+            if (op->name == "halide_buffer_copy") {
+                // Call doesn't yet have user_context inserted, so size is 3.
+                internal_assert(op->args.size() == 3) << "Unexpected arg list size for halide_buffer_copy\n";
+                if (equal(op->args[1], make_device_interface_call(DeviceAPI::Host))) {
+                    const Variable *var = op->args[2].as<Variable>();
+                    if (var != nullptr && var->type == type_of<halide_buffer_t *>()) {
+                        if (func.empty() || starts_with(var->name, func)) {
+                            const auto iter = buffer_lets.find(var->name);
+                            if (iter != buffer_lets.end()) {
+                                const Call *crop_call = iter->second.as<Call>();
+                                if (crop_call != nullptr && crop_call->name == Call::buffer_crop && crop_call->args.size() == 5) {
+                                    const Variable *in_buf = crop_call->args[2].as<Variable>();
+                                    const Call *mins_struct = crop_call->args[3].as<Call>();
+                                    const Call *extents_struct = crop_call->args[4].as<Call>();
+                                    if (in_buf != nullptr && mins_struct != nullptr && extents_struct != nullptr &&
+                                        (in_buf->name == (func + ".buffer")) &&
+                                        mins_struct->name == Call::make_struct && extents_struct->name == Call::make_struct) {
+                                        Box b(mins_struct->args.size());
+                                        b.used = const_true();
+                                        for (size_t i = 0; i < mins_struct->args.size(); i++) {
+                                            Interval min_interval = bounds_of_expr_in_scope(mins_struct->args[i], scope, func_bounds);
+                                            Interval max_interval = bounds_of_expr_in_scope(mins_struct->args[i] + extents_struct->args[i] - 1, scope, func_bounds);
+                                            b[i] = Interval(min_interval.min, max_interval.max);
+                                        }
+                                        merge_boxes(boxes[func], b);
+                                    }
+                                }
 
-        if (op->call_type == Call::Halide ||
-            op->call_type == Call::Image) {
-            for (Expr e : op->args) {
-                e.accept(this);
-            }
-            if (op->name == func || func.empty()) {
-                Box b(op->args.size());
-                b.used = const_true();
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+
+                            }
+                        }
+                    }
                 }
-                merge_boxes(boxes[op->name], b);
             }
         }
     }
@@ -1426,9 +1466,12 @@ private:
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
-        if (consider_calls) {
-            op->value.accept(this);
+        if (op->value.type() == type_of<struct halide_buffer_t *>()) {
+            buffer_lets[op->name] = op->value;
         }
+
+        op->value.accept(this);
+
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
 
         bool fixed = value_bounds.min.same_as(value_bounds.max);
@@ -1469,6 +1512,10 @@ private:
                     }
                 }
             }
+        }
+
+        if (op->value.type() == type_of<struct halide_buffer_t *>()) {
+            buffer_lets.erase(op->name);
         }
     }
 
@@ -1789,6 +1836,7 @@ private:
     }
 
     void visit(const Provide *op) {
+      debug(1) << "Got provide for " << Stmt(op) << ".\n";
         if (consider_provides) {
             if (op->name == func || func.empty()) {
                 Box b(op->args.size());
@@ -1806,6 +1854,15 @@ private:
             for (size_t i = 0; i < op->values.size(); i++) {
                 op->values[i].accept(this);
             }
+        }
+    }
+
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer && (op->name == func || func.empty())) {
+            ScopedValue<bool> save_in_producer(in_producer, true);
+            IRGraphVisitor::visit(op);
+        } else {
+            IRGraphVisitor::visit(op);
         }
     }
 };
