@@ -2001,6 +2001,103 @@ private:
     }
 };
 
+// Try generating vscatters and vgathers instead of shuffles.
+// At present, we request VTCM memory with single page allocation flag for all
+// store_in allocations. So it's always safe to generate a vgather.
+// Some expressions which generate vscatter-vgathers are:
+//     1. out(x) = lut(foo(x)) -> vgather
+//     2. out(idx(x)) = foo(x) -> vscatter
+// For gathers out and lut should be in VTCM in a single page.
+class ScatterGatherGenerator : public IRMutator {
+    Scope<Interval> bounds;
+    std::unordered_map<string, const Allocate *> allocations;
+
+    using IRMutator::visit;
+
+    template <typename T>
+    void visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
+        IRMutator::visit(op);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
+    }
+
+    void visit(const Let *op) { visit_let(op); }
+
+    void visit(const LetStmt *op) { visit_let(op); }
+
+    void visit(const Allocate *op) {
+        // Create a map of the allocation
+        allocations[op->name] = op;
+        IRMutator::visit(op);
+    }
+
+    // Try to match expressions of the form:
+    //     out(x) = lut(foo(x))
+    // to generate vgathers. Here, out and lut should have
+    // store_in(MemoryType::VTCM) directive.
+    Expr is_gather(const Load *op, const Expr dst_base, const Expr dst_index) {
+        Type ty = op->type;
+        const Allocate *alloc = allocations[op->name];
+        if (op->index.as<Ramp>() || !alloc ||
+            alloc->memory_type != MemoryType::Vtcm || !is_one(op->predicate) ||
+            !ty.is_vector() || ty.bits() == 8) {
+            return Expr();
+        }
+
+        Expr index = mutate(ty.bits()/8 * op->index);
+        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
+        if (ty.bits() == 16 && index_bounds.is_bounded()) {
+            Expr index_span = span_of_bounds(index_bounds);
+            index_span = common_subexpression_elimination(index_span);
+            index_span = simplify(index_span);
+            // We need to downcast the index values to 16 bit signed. So all the
+            // the indices must be less than 1 << 15.
+            // int max_idx = (ty.code() == Type::UInt) ? 1 << 16 : 1 << 15;
+            if (!can_prove(index_span < (1 << 15))) {
+                return Expr();
+            }
+        }
+        // Calculate the size of the buffer lut in bytes.
+        Expr size = ty.bits()/8;
+        for (size_t i = 0; i < alloc->extents.size(); i++) {
+            size *= alloc->extents[i];
+        }
+        Expr src = Variable::make(Handle(), op->name);
+        Expr new_index = mutate(cast(ty, index));
+
+        return Call::make(ty, "gather", {dst_base, dst_index, src, size-1, new_index},
+                          Call::PureIntrinsic);
+    }
+
+    void visit(const Store *op) {
+        Type ty = op->value.type();
+        const Allocate *alloc = allocations[op->name];
+        // Add checks for index bound.
+        if (op->index.as<Ramp>()) {
+            if (alloc && alloc->memory_type == MemoryType::Vtcm &&
+                is_one(op->predicate) && ty.is_vector() && ty.bits() != 8 &&
+                op->value.as<Load>()) {
+                // Check for gather
+                Expr dst_base = Variable::make(Handle(), op->name);
+                Expr dst_index = (ty.bits()/8) * op->index.as<Ramp>()->base;
+                Expr value = is_gather(op->value.as<Load>(), dst_base, dst_index);
+                if (value.defined()) {
+                    // Found a gather
+                    stmt = Evaluate::make(value);
+                    return;
+                }
+            }
+            IRMutator::visit(op);
+            return;
+        }
+    }
+};
+
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -2013,6 +2110,14 @@ Stmt vtmpy_generator(Stmt s) {
     // Generate vtmpy instruction if possible
     s = substitute_in_all_lets(s);
     s = VtmpyGenerator().mutate(s);
+    s = common_subexpression_elimination(s);
+    return s;
+}
+
+Stmt scatter_gather_generator(Stmt s) {
+    // Generate vscatter-vgather instruction if target >= v65
+    s = substitute_in_all_lets(s);
+    s = ScatterGatherGenerator().mutate(s);
     s = common_subexpression_elimination(s);
     return s;
 }

@@ -309,6 +309,12 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
 
+    if (target.has_feature(Target::HVX_v65)) {
+        // Generate vscatter-vgathers before optimize_hexagon_shuffles.
+        debug(1) << "Looking for vscatter-vgather...\n";
+        body = scatter_gather_generator(body);
+    }
+
     debug(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
     const int lut_alignment = 64;
@@ -1897,6 +1903,29 @@ void CodeGen_Hexagon::visit(const Call *op) {
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
         value = builder->CreateCall(prefetch_fn, args);
+        return;
+    }
+
+    if(op->is_intrinsic("gather")) {
+        internal_assert(op->args.size() == 5);
+        int index_lanes = op->type.lanes();
+        int intrin_lanes = native_vector_bits()/op->type.bits();
+        // Cut up the indices into appropriately-sized pieces.
+        vector<Value *> results;
+        string suffix = (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        for (int start = 0; start < index_lanes; start += intrin_lanes) {
+            vector <Value *>args;
+            Value *new_index = slice_vector(codegen(op->args[4]), start, intrin_lanes);
+            args.push_back(codegen(op->args[0]));
+            args.push_back(codegen(op->args[1] + start * op->type.bits()/8));
+            args.push_back(codegen(op->args[2]));
+            args.push_back(codegen(op->args[3]));
+            args.push_back(new_index);
+            string name = "halide.hexagon.vgather" + suffix;
+            llvm::Function *fn = module->getFunction(name);
+            results.push_back(builder->CreateCall(fn, args));
+        }
+        value = concat_vectors(results);
         return;
     }
 

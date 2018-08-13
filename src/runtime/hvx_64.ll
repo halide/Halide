@@ -411,3 +411,29 @@ define weak_odr <32 x i32> @halide.hexagon.vtmpy.vh.vh.b.b(<32 x i16> %low_v, <3
   %res = call <32 x i32> @llvm.hexagon.V6.vtmpyhb(<32 x i32> %dv, i32 %const)
   ret <32 x i32> %res
 }
+
+declare void @llvm.hexagon.V6.vgathermh(i8*, i32, i32, <16 x i32>)
+declare void @llvm.hexagon.V6.vgathermw(i8*, i32, i32, <16 x i32>)
+
+define weak_odr <32 x i16> @halide.hexagon.vgather.h.h(i16* %dst_base_ptr, i32 %dst_index, i16* %src_16ptr, i32 %size, <32 x i16> %lut) nounwind uwtable {
+  %lut32 = bitcast <32 x i16> %lut to <16 x i32>
+  %src = ptrtoint i16* %src_16ptr to i32
+  %dst_base = ptrtoint i16* %dst_base_ptr to i32
+  %dst = add i32 %dst_base, %dst_index
+  %dst_ptr = inttoptr i32 %dst to i8*
+  call void @llvm.hexagon.V6.vgathermh(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %lut32)
+  %vec_ptr = bitcast i16* %src_16ptr to <32 x i16>*
+  %res = load <32 x i16>, <32 x i16>* %vec_ptr
+  ret <32 x i16> %res
+}
+
+define weak_odr <16 x i32> @halide.hexagon.vgather.w.w(i32* %dst_base_ptr, i32 %dst_index, i32* %src_32ptr, i32 %size, <16 x i32> %lut) nounwind uwtable {
+  %src = ptrtoint i32* %src_32ptr to i32
+  %dst_base = ptrtoint i32* %dst_base_ptr to i32
+  %dst = add i32 %dst_base, %dst_index
+  %dst_ptr = inttoptr i32 %dst to i8*
+  call void @llvm.hexagon.V6.vgathermw(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %lut)
+  %vec_ptr = bitcast i32* %src_32ptr to <16 x i32>*
+  %res = load <16 x i32>, <16 x i32>* %vec_ptr
+  ret <16 x i32> %res
+}
