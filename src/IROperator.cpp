@@ -814,6 +814,7 @@ Expr fast_exp(Expr x_full) {
     result = common_subexpression_elimination(result);
     return result;
 }
+
 Expr stringify(const std::vector<Expr> &args) {
     return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
                                 args, Internal::Call::Intrinsic);
@@ -858,9 +859,9 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
 }
 
 Expr require(Expr condition, const std::vector<Expr> &args) {
-    user_assert(condition.defined()) << "Require of undefined condition\n";
-    user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
-    user_assert(args.at(0).defined()) << "Require of undefined value\n";
+    user_assert(condition.defined()) << "Require of undefined condition.\n";
+    user_assert(condition.type().is_bool()) << "Require condition must be a boolean type.\n";
+    user_assert(args.at(0).defined()) << "Require of undefined value.\n";
 
     Expr requirement_failed_error =
         Internal::Call::make(Int(32),
@@ -968,6 +969,19 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
         result[i] = select(condition, true_value[i], false_value[i]);
     }
     return result;
+}
+
+Expr unsafe_promise_clamped(Expr value, Expr min, Expr max) {
+    user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
+    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
+    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+
+    // Min and max are allowed to be undefined with the meaning of no bound on that side.
+
+    return Internal::Call::make(value.type(),
+                                Internal::Call::unsafe_promise_clamped,
+                                {value, n_min_val, n_max_val},
+                                Internal::Call::Intrinsic);
 }
 
 }  // namespace Halide
