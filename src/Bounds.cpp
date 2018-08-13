@@ -794,6 +794,22 @@ private:
     }
 
     void visit(const Call *op) {
+        // Using the strict_float feature flag wraps a strict_float()
+        // call around every Expr that is of type float, so it's easy
+        // to get nestings that are many levels deep; the bounds of this
+        // call are *always* exactly that of its first argument, so short
+        // circuit it here before checking for const_args. This is important
+        // because evaluating const_args for such a deeply nested case
+        // essentially becomes O(n^2) doing work that is unnecessary, making
+        // otherwise simple pipelines take several minutes to compile.
+        //
+        // TODO: are any other intrinsics worth including here as well?
+        if (op->is_intrinsic(Call::strict_float)) {
+            assert(op->args.size() == 1);
+            op->args[0].accept(this);
+            return;
+        }
+
         // If the args are const we can return the call of those args
         // for pure functions. For other types of functions, the same
         // call in two different places might produce different
@@ -845,8 +861,7 @@ private:
             Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
             full_clamp.accept(this);
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost) ||
-                   op->is_intrinsic(Call::strict_float)) {
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
