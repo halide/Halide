@@ -1,6 +1,7 @@
 #include "Halide.h"
 
 using namespace Halide;
+#define LINE_BUFFERING 1
 
 // Define a 1D Gaussian blur (a [1 4 6 4 1] filter) of 5 elements.
 Expr blur5(Expr x0, Expr x1, Expr x2, Expr x3, Expr x4) {
@@ -60,17 +61,27 @@ public:
 
         Var yo, yi;
 
-        output.split(y, yo, yi, fac);
+#if LINE_BUFFERING
+        output.compute_root()
+              .split(y, yo, yi, fac)
+              .parallel(yo);
 
+        // Schedule the copy to be computed at lines with a
+        // circular buffer of two lines.
+        copy.compute_at(output, yi)
+            .store_at(output, yo)
+            .copy_to_host();
+            //.fold_storage(y, 5);
+#else
         output.compute_root()
               .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
               .parallel(yo);
-
         // Schedule the copy to be computed at tiles with a
         // circular buffer of two tiles.
         copy.compute_at(output, tx)
             .store_at(output, tx)
             .copy_to_host();
+#endif
     }
 
 };
