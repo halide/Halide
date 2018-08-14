@@ -4,7 +4,8 @@
 
 using namespace Halide;
 
-Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc, int offset = 0) {
+Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc, int offset = 0,
+                                                 DeviceAPI api = DeviceAPI::Default_GPU) {
     Var x, y;
     Func f;
     f(x, y) = x + y * 256 + offset;
@@ -13,7 +14,7 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc, int offset = 
         f.hexagon();
     } else {
         Var xi, yi;
-        f.gpu_tile(x, y, xi, yi, 8, 8);
+        f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, api);
     }
 
     Buffer<int32_t> result = f.realize(128, 128);
@@ -139,7 +140,7 @@ int main(int argc, char **argv) {
         Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({ {32, 64} , {32, 64} });
         assert(gpu_buf3.raw_buffer()->device_interface != nullptr);
 
-        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, gpu_buf1.raw_buffer()->device_interface, gpu_buf3) == 0);
+        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, gpu_buf3.raw_buffer()->device_interface, gpu_buf3) == 0);
         gpu_buf2.set_device_dirty();
         gpu_buf2.copy_to_host();
 
@@ -154,6 +155,127 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Test copying between different device APIs. Probably will not
+    // run on test infrastructure as we do not configure more than one
+    // GPU API at a time. For now, special case CUDA and OpenCL as these are
+    // the most likely to be supported together. (OpenGL would be a candidate
+    // but buffer_copy support needs to be added.)
+    if (target.has_feature(Target::CUDA) && target.has_feature(Target::OpenCL)) {
+        printf("Test cross device copy device to device.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+            assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf2, gpu_buf1.raw_buffer()->device_interface, gpu_buf1) == 0);
+            gpu_buf1.copy_to_host();
+
+            for (int i = 0; i < 128; i++) {
+                for (int j = 0; j < 128; j++) {
+                    assert(gpu_buf1(i, j) == (i + j * 256 + 256000));
+                }
+            }
+        }
+
+        printf("Test cross device copy device to device -- subset area.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({ {32, 64} , {32, 64} });
+            assert(gpu_buf3.raw_buffer()->device_interface != nullptr);
+
+            assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, gpu_buf3.raw_buffer()->device_interface, gpu_buf3) == 0);
+            gpu_buf2.set_device_dirty();
+            gpu_buf2.copy_to_host();
+
+            for (int i = 0; i < 128; i++) {
+                for (int j = 0; j < 128; j++) {
+                    bool in_gpu3 = (i >= gpu_buf3.dim(0).min()) &&
+                                   (i < (gpu_buf3.dim(0).min() + gpu_buf3.dim(0).extent())) &&
+                                   (j >= gpu_buf3.dim(1).min()) &&
+                                   (j < (gpu_buf3.dim(1).min() + gpu_buf3.dim(1).extent()));
+                    assert(gpu_buf2(i, j) == (i + j * 256 + (in_gpu3 ? 0 : 256000)));
+                }
+            }
+        }
+
+        printf("Test cross device copy device to device no source host.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+            halide_buffer_t no_host_src = *gpu_buf2.raw_buffer();
+            no_host_src.host = nullptr;
+
+            assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, &no_host_src, gpu_buf1.raw_buffer()->device_interface, gpu_buf1) == 0);
+            gpu_buf1.copy_to_host();
+
+            for (int i = 0; i < 128; i++) {
+                for (int j = 0; j < 128; j++) {
+                    assert(gpu_buf1(i, j) == (i + j * 256 + 256000));
+                }
+            }
+        }
+
+        printf("Test cross device copy device to device no dest host.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+            halide_buffer_t no_host_dst = *gpu_buf1.raw_buffer();
+            no_host_dst.host = nullptr;
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+            assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf2, gpu_buf1.raw_buffer()->device_interface, &no_host_dst) == 0);
+            gpu_buf1.set_device_dirty();
+            gpu_buf1.copy_to_host();
+
+            for (int i = 0; i < 128; i++) {
+                for (int j = 0; j < 128; j++) {
+                    assert(gpu_buf1(i, j) == (i + j * 256 + 256000));
+                }
+            }
+        }
+
+        printf("Test cross device copy device to device no source or dest host.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+            halide_buffer_t no_host_dst = *gpu_buf1.raw_buffer();
+            no_host_dst.host = nullptr;
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+            halide_buffer_t no_host_src = *gpu_buf2.raw_buffer();
+            no_host_src.host = nullptr;
+
+            int err = gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, &no_host_src, gpu_buf1.raw_buffer()->device_interface, &no_host_dst);
+            if (err == 0) {
+                gpu_buf1.set_device_dirty();
+                gpu_buf1.copy_to_host();
+
+                for (int i = 0; i < 128; i++) {
+                    for (int j = 0; j < 128; j++) {
+                        assert(gpu_buf1(i, j) == (i + j * 256 + 256000));
+                    }
+                }
+            } else {
+                // halide_buffer_copy is not guaranteed to handle cross device case without host memory in one of the buffers.
+                assert(err == halide_error_code_incompatible_device_interface);
+                printf("Cross device with no host buffers case is not handled. Ignoring (correct) error.\n");
+            }
+        }
+    }
+    
     printf("Success!\n");
 
     return 0;

@@ -690,12 +690,16 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
                             << " to " << (to_host ? "host" : "device") << ", "
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
+          debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
+          debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
         } else if (!from_host && !to_host) {
+          debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (dst != src) {
+          debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             // Could reach here if a user called directly into the
             // cuda API for a device->host copy on a source buffer
             // with device_dirty = false.
@@ -727,15 +731,11 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &cuda_device_interface);
 
-    if (src->device_dirty() &&
+    if ((src->device_dirty() || src->host == NULL) && 
         src->device_interface != &cuda_device_interface) {
         halide_assert(user_context, dst_device_interface == &cuda_device_interface);
-        // If the source is not cuda or host memory, ask the source
-        // device interface to copy to dst host memory first.
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (err) return err;
-        // Now just copy from src to host
-        src = dst;
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
 
     bool from_host = (src->device_interface != &cuda_device_interface) ||
