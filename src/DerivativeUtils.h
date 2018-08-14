@@ -97,10 +97,22 @@ std::map<std::string, BufferInfo> find_buffer_calls(const Func &func);
  */
 std::set<std::string> find_implicit_variables(Expr expr);
 /**
- *  Substitute the variable. Also replace all occurence in rdom.where() predicates.
+ * Substitute the variable. Also replace all occurence in rdom.where() predicates.
  */
 Expr substitute_rdom_predicate(
     const std::string &name, const Expr &replacement, const Expr &expr);
+/**
+ * Return true if expr contains call to func_name
+ */
+bool is_calling_function(
+    const std::string &func_name, const Expr &expr,
+    const std::map<std::string, Expr> &let_var_mapping);
+/**
+ * Return true if expr depends on any function or buffer
+ */
+bool is_calling_function(
+    const Expr &expr,
+    const std::map<std::string, Expr> &let_var_mapping);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -31,7 +31,7 @@ struct Derivative {
             name += "_unbounded";
         }
         auto it = adjoints.find(FuncKey{ name, update_id });
-        assert(it != adjoints.end());
+        internal_assert(it != adjoints.end()) << "Could not find Func " << name << "\n";
         return it->second;
     }
 
@@ -79,7 +79,6 @@ void print_func(const Func &func, const PrintFuncOptions &options = PrintFuncOpt
 namespace Internal {
 
 void derivative_test();
-
 }
 
 }  // namespace Halide

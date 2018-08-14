@@ -7,25 +7,30 @@ int main(int argc, char **argv) {
     ImageParam coeffs(Float(64), 1);
     Param<double> learning_rate;
     Func approx_sin;
-    Var x;
+    Var x, y;
 
     Expr fx = x / cast<double>(1023);
     RDom r(coeffs);
+    Expr r_flipped = coeffs.dim(0).max() - r;
 
-    // We'll evaluate polynomial using Horner's method
-    // FIXME: This non-commutative reduction actually causes a problem
-    // for the current autodiff algorithm.
-    // approx_sin(x) = cast<double>(0);
-    // approx_sin(x) = (approx_sin(x)*fx + coeffs(coeffs.dim(0).max() - r));
+    // We'll evaluate polynomial using Horner's method. We need to
+    // save the intermediate results for the backwards pass to use. It
+    // is an error to ask for a derivative through a non-commutative
+    // reduction, but non-commutative scans (which save all the
+    // partial results) are fine. We'll leave the ultimate result at
+    // index 0.
+    approx_sin(x, y) = cast<double>(0);
+    approx_sin(x, r_flipped) = approx_sin(x, r_flipped + 1)*fx + coeffs(r_flipped);
 
-    // Evaluate the polynomial directly
-    approx_sin(x) = sum(pow(fx, r) * coeffs(r));
+    // Evaluate the polynomial directly. This is a commutative
+    // reduction, which is allowed.
+    // approx_sin(x) = sum(pow(fx, r) * coeffs(r));
 
     Func exact_sin;
     exact_sin(x) = sin(fx);
 
     Func err;
-    err(x) += pow(approx_sin(x) - exact_sin(x), 2);
+    err(x) = pow(approx_sin(x, 0) - exact_sin(x), 2);
 
     RDom d(0, 1024);
     Func total_err;
@@ -43,14 +48,39 @@ int main(int argc, char **argv) {
     // Schedule
     err.compute_root().vectorize(x, 4);
     new_coeffs.compute_root().vectorize(x, 4);
-    approx_sin.compute_root().vectorize(x, 4);
+    approx_sin.compute_root().vectorize(x, 4).update().vectorize(x, 4);
     exact_sin.compute_root().vectorize(x, 4);
-
-    // d_err_d(coeffs) is just a Func, and you can schedule it
-    Var i = d_err_d(coeffs).args()[0];
-    d_err_d(coeffs).compute_root().vectorize(i, 4).unroll(i);
-
     total_err.compute_root();
+
+    Var v;
+
+    // d_err_d(coeffs) is just a Func, and you can schedule it. TODO:
+    // Make it use the same variable names as the forward equivalent.
+    /*
+    Var v = d_err_d(coeffs).args()[0];
+    d_err_d(coeffs).compute_root().vectorize(v, 4);
+    */
+
+    v = d_err_d(coeffs, -1, false).args()[0];
+    d_err_d(coeffs, -1, false).compute_root().vectorize(v, 4);
+
+    // Each stages of a Func with update stages gets a separate derivative Func.
+    v = d_err_d(approx_sin, -1).args()[0];
+    d_err_d(approx_sin, -1).compute_root().vectorize(v, 4);
+
+    v = d_err_d(approx_sin, 0, false).args()[0];
+    d_err_d(approx_sin, 0, false).compute_root().vectorize(v, 4);
+
+    v = d_err_d(approx_sin, 0).args()[0];
+    d_err_d(approx_sin, 0).compute_root().vectorize(v, 4);
+
+    v = d_err_d(err, -1, false).args()[0];
+    d_err_d(err, -1, false).compute_root().vectorize(v, 4);
+
+    /*
+    v = d_err_d(err, -1).args()[0];
+    d_err_d(err, -1).compute_root().vectorize(v, 4);
+    */
 
     // Not necessary, but makes the IR easier to read
     new_coeffs.bound(x, 0, 8);
