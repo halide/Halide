@@ -359,7 +359,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                         not_overwriting_cond = simplify(not_overwriting_cond ||
                                                         (self_ref_args[arg_id] != update_args[arg_id]));
                     }
-                    debug(0) << not_overwriting_cond << "\n";
                     not_overwriting_cond = and_condition_over_domain(
                         not_overwriting_cond, varying);
                     // Needs to be true for all self reference
@@ -371,7 +370,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 // we don't use it in this update we are good.
                 // Otherwise we throw an error
                 if (!is_not_overwriting && adjoints_used_by_others) {
-                    std::cerr << "func.name():" << func.name() << ", update_id:" << update_id << std::endl;
                     error();
                 }
 
@@ -449,25 +447,30 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         current_func = func;
 
         FuncKey func_key{ func.name(), func.num_update_definitions() - 1 };
-        // Set up boundary condition for the last adjoint
-        Func &adjoint_func = adjoint_funcs[func_key];
-        const Box &bounds = func_bounds[func.name()];
-
-        // Save a pointer to the unbounded def. Useful for scheduling
-        FuncKey unbounded_func_key{ func.name() + "_unbounded", func_key.second };
-        adjoint_funcs[unbounded_func_key] = adjoint_func;
-
-        if (adjoint_func.values().size() == 1) {
-            Type type = adjoint_func.values()[0].type();
-            adjoint_func = BoundaryConditions::constant_exterior(
-                adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
-        } else {
-            std::vector<Expr> values(adjoint_func.values().size());
-            for (int i = 0; i < (int) values.size(); i++) {
-                values[i] = make_const(adjoint_func.values()[i].type(), 0.0);
+        // Set up boundary condition for the last adjoint, for
+        // non overwriting scans, we delay the boundary condition
+        // setup since the gradients depend on itself.
+        auto add_boundary_condition = [&](const FuncKey &func_key) {
+            Func &adjoint_func = adjoint_funcs[func_key];
+            const Box &bounds = func_bounds[func.name()];
+            // Save a pointer to the unbounded def. Useful for scheduling
+            FuncKey unbounded_func_key{ func.name() + "_unbounded", func_key.second };
+            adjoint_funcs[unbounded_func_key] = adjoint_func;
+            if (adjoint_func.values().size() == 1) {
+                Type type = adjoint_func.values()[0].type();
+                adjoint_func = BoundaryConditions::constant_exterior(
+                    adjoint_func, make_const(type, 0.0), box_to_vector(bounds));
+            } else {
+                std::vector<Expr> values(adjoint_func.values().size());
+                for (int i = 0; i < (int) values.size(); i++) {
+                    values[i] = make_const(adjoint_func.values()[i].type(), 0.0);
+                }
+                adjoint_func = BoundaryConditions::constant_exterior(
+                    adjoint_func, Tuple(values), box_to_vector(bounds));
             }
-            adjoint_func = BoundaryConditions::constant_exterior(
-                adjoint_func, Tuple(values), box_to_vector(bounds));
+        };
+        if (non_overwriting_scans.find(func_key) == non_overwriting_scans.end()) {
+            add_boundary_condition(func_key);
         }
 
         // Traverse from the last update to first
@@ -475,6 +478,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
              update_id >= -1; update_id--) {
             current_update_id = update_id;
             FuncKey func_key{ func.name(), update_id };
+            Func adjoint_func = adjoint_funcs[func_key];
             internal_assert(func_bounds.find(func.name()) != func_bounds.end());
             // The propagation of adjoints to self reference goes to
             // current update instead of previous if it's a non overwriting scan
@@ -604,6 +608,12 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 }
             }
             if (is_current_non_overwriting_scan) {
+                if (update_id == func.num_update_definitions() - 1) {
+                    // Set up the delayed boundary condition now we're done with
+                    // the updates
+                    add_boundary_condition(func_key);
+                }
+
                 // Now, if we detect a non-overwriting scan operation,
                 // the update of adjoints
                 // goes to the current function.
@@ -903,7 +913,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
                 self_reference_adjoint[op->value_index] =
                     simplify(self_reference_adjoint[op->value_index] + adjoint);
                 std::vector<Expr> args = op->args;
-                for (int i = 0; i < (int)args.size(); i++) {
+                for (int i = 0; i < (int) args.size(); i++) {
                     args[i] = add_let_expression(args[i], let_var_mapping, let_variables);
                 }
                 self_reference_args.push_back(args);
