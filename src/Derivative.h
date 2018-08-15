@@ -9,8 +9,8 @@
 #include "Func.h"
 #include "Module.h"
 
-#include <array>
 #include <set>
+#include <map>
 #include <vector>
 
 namespace Halide {
@@ -40,6 +40,27 @@ struct Derivative {
         assert(it != adjoints.end());
         return it->second;
     }
+
+    /** Get the entire chain of new synthesized Funcs that compute the
+     * derivative of a given user-written Func for the purpose of
+     * scheduling. */
+    std::vector<Func> funcs(const Func &func) const {
+        std::vector<Func> result;
+        FuncKey k {func.name(), -1};
+        FuncKey k_unbounded = k;
+        k_unbounded.first += "_unbounded";
+        for (int i = func.num_update_definitions() - 1; i >= -1; i--) {
+            k.second = k_unbounded.second = i;
+            auto it = adjoints.find(k);
+            internal_assert(it != adjoints.end()) << "Could not find derivative of " << k.first << " " << k.second << "\n";
+            result.push_back(it->second);
+            it = adjoints.find(k_unbounded);
+            if (it != adjoints.end()) {
+                result.push_back(it->second);
+            }
+    }
+        return result;
+    }
 };
 
 /**
@@ -68,17 +89,8 @@ Derivative propagate_adjoints(const Func &output);
 Func propagate_tangents(const Func &output,
                         const std::map<std::string, Func> &tangents);
 
-struct PrintFuncOptions {
-    bool ignore_non_adjoints = false;
-    bool ignore_bc = false;
-    int depth = -1;
-    std::map<std::string, Expr> variables;
-};
-void print_func(const Func &func, const PrintFuncOptions &options = PrintFuncOptions());
-
 namespace Internal {
 
-void derivative_test();
 }
 
 }  // namespace Halide
