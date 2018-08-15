@@ -53,7 +53,7 @@ static inline void* free_unused_buffers(void* user_context) {
 }
 
 // Retry logic if enabled will walk the list and deallocate unused blocks to make room for a larger block size
-// Onec all unused blocks are deallocaed it will try to allocate a larger block
+// Once all unused blocks are deallocated it will try to allocate a larger block
 static inline void *hexagon_cache_pool_get (void *user_context, size_t size, bool retry) {
 
     pcache_pool prev = NULL;
@@ -113,11 +113,10 @@ static inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
     halide_assert(user_context, cache_mem);
     pcache_pool temp = hexagon_cache_pool;
-    bool found = false; 
-    while (!found && (temp != NULL)) {
+    while (temp != NULL) {
         if (temp->l2memory == cache_mem) {
             temp->used = false;
-            found = true;
+            return;
         }
         temp = temp->next;
     }

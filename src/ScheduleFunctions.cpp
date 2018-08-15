@@ -15,6 +15,7 @@
 #include "Target.h"
 #include "Var.h"
 #include "Prefetch.h"
+#include "CopyElision.h"
 
 #include <algorithm>
 
@@ -72,6 +73,80 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
+class CurrentRealizationInScope : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Realize *op) {
+        funcs.insert(op->name);
+    }
+
+public:
+    set<string> funcs;
+    CurrentRealizationInScope() {}
+};
+
+class ReplaceWithUndef : public IRMutator2 {
+public:
+    ReplaceWithUndef(const map<string, string> &elision_pairs)
+        : elision_pairs(elision_pairs), current_producer("") {}
+
+private:
+    const map<string, string> &elision_pairs;
+    string current_producer;
+
+    using IRMutator2::visit;
+
+    Stmt visit(const ProducerConsumer *op) override {
+        string old_producer = current_producer;
+        if (op->is_producer) {
+            current_producer = op->name;
+        }
+        Stmt stmt = IRMutator2::visit(op);
+        current_producer = old_producer;
+        return stmt;
+    }
+
+    Stmt visit(const Provide *op) override {
+        if (elision_pairs.count(op->name) && (current_producer == op->name)) {
+            debug(4) << "...Replacing values stored by Func \"" << op->name
+                     << "\" with undef\n";
+            vector<Expr> undef_values(op->values.size());
+            for (size_t i = 0; i < op->values.size(); ++i) {
+                undef_values[i] = undef(op->values[i].type());
+            }
+            return Provide::make(op->name, undef_values, op->args);
+        } else {
+            return IRMutator2::visit(op);
+        }
+    }
+};
+
+class SubstituteCalls : public IRMutator2 {
+    using IRMutator2::visit;
+
+    const map<string, Function> &env;
+    string from, to;
+
+    Expr visit(const Call *op) override {
+        Expr expr = IRMutator2::visit(op);
+        op = expr.as<Call>();
+        internal_assert(op);
+
+        if ((op->call_type == Call::Halide) && op->func.defined() && (from == op->name)) {
+            debug(4) << "...Replacing call to Func \"" << op->name << "\" with "
+                     << "call to Func \"" << to << "\"\n";
+            expr = Call::make(op->type, to, op->args, op->call_type,
+                              env.at(to).get_contents(), op->value_index,
+                              op->image, op->param);
+        }
+        return expr;
+    }
+public:
+    SubstituteCalls(const map<string, Function> &env,
+                    const string &from, const string &to)
+        : env(env), from(from), to(to) {}
+};
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest_helper(string func_name,
                                     string prefix,
@@ -82,12 +157,24 @@ Stmt build_provide_loop_nest_helper(string func_name,
                                     const vector<Expr> &predicates,
                                     const FuncSchedule &func_s,
                                     const StageSchedule &stage_s,
-                                    bool is_update) {
+                                    bool is_update,
+                                    const map<string, string> &elision_pairs,
+                                    const map<string, Function> &env) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt stmt = Provide::make(func_name, values, site);
+    Stmt stmt;
+    const auto &iter = std::find_if(elision_pairs.begin(), elision_pairs.end(),
+        [&func_name](const std::pair<string, string> &cp) { return (cp.second == func_name); });
+    if (iter != elision_pairs.end()) {
+        internal_assert(iter->second == func_name);
+        stmt = Provide::make(iter->first, values, site);
+        stmt = SubstituteCalls(env, func_name, iter->first).mutate(stmt);
+    } else {
+        stmt = Provide::make(func_name, values, site);
+    }
+    internal_assert(stmt.defined());
 
     // A map of the dimensions for which we know the extent is a
     // multiple of some Expr. This can happen due to a bound, or
@@ -329,7 +416,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
                              const vector<string> &dims,
                              const FuncSchedule &f_sched,
                              const Definition &def,
-                             bool is_update) {
+                             bool is_update,
+                             const map<string, string> &elision_pairs) {
 
     internal_assert(!is_update == def.is_init());
 
@@ -353,8 +441,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 
     // Default schedule/values if there is no specialization
     Stmt stmt = build_provide_loop_nest_helper(
-        func_name, prefix, start_fuse, dims, site, values,
-        def.split_predicate(), f_sched, def.schedule(), is_update);
+        func_name, prefix, start_fuse, dims, site, values, def.split_predicate(),
+        f_sched, def.schedule(), is_update, elision_pairs, env);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
@@ -366,7 +454,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         Stmt then_case;
         if (s.failure_message.empty()) {
             then_case = build_provide_loop_nest(env, func_name, prefix, start_fuse, dims,
-                                                f_sched, s_def, is_update);
+                                                f_sched, s_def, is_update, elision_pairs);
         } else {
             internal_assert(equal(c, const_true()));
             // specialize_fail() should only be possible on the final specialization
@@ -390,7 +478,8 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(const map<string, Function> &env, Function f, const Target &target) {
+Stmt build_produce(const map<string, Function> &env, Function f, const Target &target,
+                   const map<string, string> &elision_pairs) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -408,11 +497,24 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // extern function call.
         vector<pair<Expr, int>> buffers_to_annotate;
         vector<Expr> buffers_contents_to_annotate;
+
+        string copy_new_dst_name;
+        if (extern_name == "halide_buffer_copy") {
+            const auto &iter = std::find_if(elision_pairs.begin(), elision_pairs.end(),
+                [&f](const std::pair<string, string> &cp) { return (cp.second == f.name()); });
+            if (iter != elision_pairs.end()) {
+                copy_new_dst_name = iter->first;
+                debug(4) << "...Replacing halide_buffer_copy store into: \"" << f.name()
+                         << "\" with store into: " << copy_new_dst_name << "\n\n";
+            }
+        }
+
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
+
                 if (input.schedule().store_level() == input.schedule().compute_level()) {
                     for (int k = 0; k < input.outputs(); k++) {
                         string buf_name = input.name();
@@ -501,8 +603,13 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
         // ones already injected by allocation bounds inference. If
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
+        //
+        // For copy elision, it is necessary to make a crop of the output
+        // buffer since the original buffer might be might be larger
+        // than the region being copied (stored into).
         vector<pair<Expr, Expr>> cropped_buffers;
-        if (f.schedule().store_level() == f.schedule().compute_level()) {
+        if ((f.schedule().store_level() == f.schedule().compute_level()) &&
+            copy_new_dst_name.empty()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
@@ -516,12 +623,12 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
                 buffers_to_annotate.push_back({buffer, f.dimensions()});
             }
         } else {
-            // Store level doesn't match compute level. Make an output
-            // buffer just for this subregion.
+            // Store level doesn't match compute level or copy elision
+            // happens. Make an output buffer just for this subregion.
             string stage_name = f.name() + ".s0.";
             const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
-                string src_buf_name = f.name();
+                string src_buf_name = copy_new_dst_name.empty() ? f.name() : copy_new_dst_name;
                 if (f.outputs() > 1) {
                     src_buf_name += "." + std::to_string(j);
                 }
@@ -552,7 +659,8 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
                 output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args, Call::Extern);
 
-                string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
+                string buf_name = copy_new_dst_name.empty() ? f.name() : copy_new_dst_name;
+                buf_name += "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
@@ -660,12 +768,15 @@ Stmt build_produce(const map<string, Function> &env, Function f, const Target &t
 
         string prefix = f.name() + ".s0.";
         vector<string> dims = f.args();
-        return build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), f.definition(), false);
+        return build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(),
+                                       f.definition(), false, elision_pairs);
     }
 }
 
 // Build the loop nests that update a function (assuming it's a reduction).
-vector<Stmt> build_update(const map<string, Function> &env, Function f) {
+vector<Stmt> build_update(const map<string, Function> &env,
+                          Function f,
+                          const map<string, string> &elision_pairs) {
 
     vector<Stmt> updates;
 
@@ -675,16 +786,19 @@ vector<Stmt> build_update(const map<string, Function> &env, Function f) {
         string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
 
         vector<string> dims = f.args();
-        Stmt loop = build_provide_loop_nest(env, f.name(), prefix, -1, dims, f.schedule(), def, true);
+        Stmt loop = build_provide_loop_nest(env, f.name(), prefix, -1, dims,
+                                            f.schedule(), def, true, elision_pairs);
         updates.push_back(loop);
     }
 
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(const map<string, Function> &env, Function func, const Target &target) {
-    Stmt produce = build_produce(env, func, target);
-    vector<Stmt> updates = build_update(env, func);
+pair<Stmt, Stmt> build_production(const map<string, Function> &env, Function func,
+                                  const Target &target,
+                                  const map<string, string> &elision_pairs) {
+    Stmt produce = build_produce(env, func, target, elision_pairs);
+    vector<Stmt> updates = build_update(env, func, elision_pairs);
 
     // Combine the update steps
     Stmt merged_updates = Block::make(updates);
@@ -788,11 +902,14 @@ public:
     bool is_output, found_store_level, found_compute_level;
     const Target &target;
     const map<string, Function> &env;
+    const map<string, string> &elision_pairs;
 
     InjectRealization(const Function &f, bool o, const Target &t,
-                      const map<string, Function> &env)
+                      const map<string, Function> &env,
+                      const map<string, string> &elision_pairs)
         : func(f), is_output(o), found_store_level(false),
-          found_compute_level(false), target(t), env(env) {}
+          found_compute_level(false), target(t), env(env),
+          elision_pairs(elision_pairs) {}
 
 private:
     // Determine if 'loop_name' is the right level to inject produce/realize node
@@ -851,7 +968,7 @@ private:
     }
 
     Stmt build_pipeline(Stmt consumer) {
-        pair<Stmt, Stmt> realization = build_production(env, func, target);
+        pair<Stmt, Stmt> realization = build_production(env, func, target, elision_pairs);
 
         Stmt producer;
         if (realization.first.defined() && realization.second.defined()) {
@@ -1207,13 +1324,16 @@ public:
     bool found_store_level, found_compute_level;
     const Target &target;
     const map<string, Function> &env;
+    const map<string, string> &elision_pairs;
     LoopLevel compute_level;
     LoopLevel store_level;
 
     InjectGroupRealization(const vector<Function> &g, const vector<bool> &o,
-                           const Target &t, const map<string, Function> &env)
+                           const Target &t, const map<string, Function> &env,
+                           const map<string, string> &elision_pairs)
             : group(g), is_output_list(o), found_store_level(false),
-              found_compute_level(false), target(t), env(env) {
+              found_compute_level(false), target(t), env(env),
+              elision_pairs(elision_pairs) {
         internal_assert(!group.empty());
         internal_assert(group.size() == is_output_list.size());
 
@@ -1447,7 +1567,7 @@ private:
 
         const vector<string> f_args = f.args();
         Stmt produce = build_provide_loop_nest(env, f.name(), prefix, start_fuse, f_args,
-                                               f.schedule(), def, is_update);
+                                               f.schedule(), def, is_update, elision_pairs);
 
         // Strip off the containing lets. The bounds of the parent fused loop
         // (i.e. the union bounds) might refer to them, so we need to move them
@@ -2240,6 +2360,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
+    map<string, string> elision_pairs = get_valid_copy_elision_pairs(outputs, env);
+
     for (size_t i = fused_groups.size(); i > 0; --i) {
         const vector<string> &group = fused_groups[i-1];
         vector<Function> funcs;
@@ -2281,18 +2403,22 @@ Stmt schedule_functions(const vector<Function> &outputs,
                 s = inline_function(s, funcs[0]);
             } else {
                 debug(1) << "Injecting realization of " << funcs[0].name() << '\n';
-                InjectRealization injector(funcs[0], is_output_list[0], target, env);
+                InjectRealization injector(funcs[0], is_output_list[0], target, env, elision_pairs);
                 s = injector.mutate(s);
                 internal_assert(injector.found_store_level && injector.found_compute_level);
             }
         } else {
-            InjectGroupRealization injector(funcs, is_output_list, target, env);
+            InjectGroupRealization injector(funcs, is_output_list, target, env, elision_pairs);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
         }
 
         debug(2) << s << '\n';
     }
+
+    // Replace the values being stored by the consumers of copy-elision
+    // pairs with undefs
+    s = ReplaceWithUndef(elision_pairs).mutate(s);
 
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
