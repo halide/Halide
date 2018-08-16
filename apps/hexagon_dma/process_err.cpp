@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     // We then need to prepare for copying to host. Attempting to copy
     // to host without doing this is an error.
     // The Last parameter 0 indicate DMA Read
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, hex_fmt_RawData);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, halide_hexagon_fmt_RawData);
     // This to just to Valide the Assertion checkes for RAW Processing
     // Assertion checks Fail for dimensions >=4
     // Used last two dimensions as same value just to use a 4-D Buffer

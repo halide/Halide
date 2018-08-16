@@ -6,22 +6,6 @@
 #include "mini_hexagon_dma.h"
 #include "hexagon_dma_pool.h"
 
-#define ASSERT_FORMAT(user_context) {\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_RawData == eDmaFmt_RawData);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV12 == eDmaFmt_NV12);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV12_Y == eDmaFmt_NV12_Y);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV12_UV == eDmaFmt_NV12_UV);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_P010 == eDmaFmt_P010);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_P010_Y == eDmaFmt_P010_Y);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_P010_UV == eDmaFmt_P010_UV);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_TP10 == eDmaFmt_TP10);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_TP10_Y == eDmaFmt_TP10_Y);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_TP10_UV == eDmaFmt_TP10_UV);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV124R == eDmaFmt_NV124R);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV124R_Y == eDmaFmt_NV124R_Y);\
-    halide_assert(user_context, (t_eDmaFmt)hex_fmt_NV124R_UV == eDmaFmt_NV124R_UV);\
-}
-
 namespace Halide { namespace Runtime { namespace Internal { namespace HexagonDma {
 
 extern WEAK halide_device_interface_t hexagon_dma_device_interface;
@@ -146,6 +130,40 @@ static void desc_pool_free (void *user_context) {
             temp = temp->next;
             free(temp2);
         }
+    }
+}
+
+static t_eDmaFmt halide_hexagon_get_dma_format(const halide_hexagon_image_fmt_t format) {
+ 
+    //A giant switch case here :)
+    switch(format) {
+        case halide_hexagon_fmt_NV12:
+            return eDmaFmt_NV12;
+        case halide_hexagon_fmt_NV12_Y:
+            return eDmaFmt_NV12_Y;
+        case halide_hexagon_fmt_NV12_UV:
+            return eDmaFmt_NV12_UV;
+        case halide_hexagon_fmt_P010:
+            return eDmaFmt_P010;
+        case halide_hexagon_fmt_P010_Y:
+            return eDmaFmt_P010_Y;
+        case halide_hexagon_fmt_P010_UV:
+            return eDmaFmt_P010_UV;
+        case halide_hexagon_fmt_TP10:
+            return eDmaFmt_TP10;
+        case halide_hexagon_fmt_TP10_Y:
+            return eDmaFmt_TP10_Y;
+        case halide_hexagon_fmt_TP10_UV:
+            return eDmaFmt_TP10_UV;
+        case halide_hexagon_fmt_NV124R:
+            return eDmaFmt_NV124R;
+        case halide_hexagon_fmt_NV124R_Y:
+            return eDmaFmt_NV124R_Y;
+        case halide_hexagon_fmt_NV124R_UV:
+            return eDmaFmt_NV124R_UV;
+        case halide_hexagon_fmt_RawData:
+        default:
+            return eDmaFmt_RawData;
     }
 }
 
@@ -393,7 +411,6 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
 
 inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_engine, bool is_ubwc, t_eDmaFmt fmt, bool is_write ) {
     halide_assert(user_context, dma_engine);
-    ASSERT_FORMAT(user_context);
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     dev->dma_engine = dma_engine;
     dev->is_ubwc = is_ubwc;
@@ -412,19 +429,20 @@ inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf,
 
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_engine, bool is_ubwc, t_image_fmt fmt ) {
+                                                     void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
-    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  (t_eDmaFmt)fmt, 0);
+    t_eDmaFmt format = halide_hexagon_get_dma_format(fmt);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  format, 0);
 }
 WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                     void *dma_engine, bool is_ubwc, t_image_fmt fmt ) {
+                                                     void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt ) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ", dma_engine: " << dma_engine << ")\n";
-
-    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  (t_eDmaFmt)fmt, 1);
+    t_eDmaFmt format = halide_hexagon_get_dma_format(fmt);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc,  format, 1);
 }
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {

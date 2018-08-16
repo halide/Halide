@@ -10,23 +10,23 @@ extern "C" {
 /*!
  * Image Formats to prepare the application for DMA Transfer
  */
-typedef enum __attribute__((aligned(4))) image_fmt {
-    hex_fmt_RawData,
-    hex_fmt_NV12,
-    hex_fmt_NV12_Y,
-    hex_fmt_NV12_UV,
-    hex_fmt_P010,
-    hex_fmt_P010_Y,
-    hex_fmt_P010_UV,
-    hex_fmt_TP10,
-    hex_fmt_TP10_Y,
-    hex_fmt_TP10_UV,
-    hex_fmt_NV124R,
-    hex_fmt_NV124R_Y,
-    hex_fmt_NV124R_UV,
-    hex_fmt_Invalid,
-    hex_fmt_MAX,
-} t_image_fmt;
+typedef enum {
+    halide_hexagon_fmt_RawData,
+    halide_hexagon_fmt_NV12,
+    halide_hexagon_fmt_NV12_Y,
+    halide_hexagon_fmt_NV12_UV,
+    halide_hexagon_fmt_P010,
+    halide_hexagon_fmt_P010_Y,
+    halide_hexagon_fmt_P010_UV,
+    halide_hexagon_fmt_TP10,
+    halide_hexagon_fmt_TP10_Y,
+    halide_hexagon_fmt_TP10_UV,
+    halide_hexagon_fmt_NV124R,
+    halide_hexagon_fmt_NV124R_Y,
+    halide_hexagon_fmt_NV124R_UV,
+    halide_hexagon_fmt_Invalid,
+    halide_hexagon_fmt_MAX,
+} halide_hexagon_image_fmt_t;
 
 /** \file
  *  Routines specific to the Halide Hexagon host-side runtime.
@@ -59,9 +59,9 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
 extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
 extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, t_image_fmt fmt);
+                                                       void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, t_image_fmt fmt);
+                                                       void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 ///@}
 

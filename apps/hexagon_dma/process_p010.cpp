@@ -44,12 +44,12 @@ int main(int argc, char **argv) {
     input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
                                 reinterpret_cast<uint64_t>(data_in));
 
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, hex_fmt_P010_UV);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, halide_hexagon_fmt_P010_UV);
 
     input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
                                reinterpret_cast<uint64_t>(data_in));
 
-    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, hex_fmt_P010_Y);
+    halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_y, dma_engine, false, halide_hexagon_fmt_P010_Y);
 
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
