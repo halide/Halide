@@ -1540,23 +1540,10 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 
 void CodeGen_LLVM::visit(const Select *op) {
-    if (op->type == Int(32)) {
-        // llvm has a performance bug inside of loop strength
-        // reduction that barfs on long chains of selects. To avoid
-        // it, we use bit-masking instead.
-        Value *cmp = codegen(op->condition);
-        Value *a = codegen(op->true_value);
-        Value *b = codegen(op->false_value);
-        cmp = builder->CreateIntCast(cmp, i32_t, true);
-        a = builder->CreateAnd(a, cmp);
-        cmp = builder->CreateNot(cmp);
-        b = builder->CreateAnd(b, cmp);
-        value = builder->CreateOr(a, b);
-    } else {
-        value = builder->CreateSelect(codegen(op->condition),
-                                      codegen(op->true_value),
-                                      codegen(op->false_value));
-    }
+    Value *cmp = codegen(op->condition);
+    Value *a = codegen(op->true_value);
+    Value *b = codegen(op->false_value);
+    value = builder->CreateSelect(cmp, a, b);
 }
 
 namespace {
