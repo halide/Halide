@@ -65,7 +65,7 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
              rewrite(x + (c0 - y), (x - y) + c0) ||
              rewrite((x - y) + (y - z), x - z) ||
              rewrite((x - y) + (z - x), z - y) ||
-             rewrite(y*c0 + x, x - y*(-c0), c0 < 0 && -c0 > 0) ||
+             rewrite(x + y*c0, x - y*(-c0), c0 < 0 && -c0 > 0) ||
              rewrite(x*c0 + y, y - x*(-c0), c0 < 0 && -c0 > 0 && !is_const(y)) ||
              rewrite(x*y + z*y, (x + z)*y) ||
              rewrite(x*y + y*z, (x + z)*y) ||
@@ -92,14 +92,16 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
                rewrite((y + x)/c0 + x, (y + fold(c0 + 1)*x)/c0) ||
                rewrite(min(x, y - z) + z, min(x + z, y)) ||
                rewrite(min(y - z, x) + z, min(y, x + z)) ||
-               rewrite(min(y + c0, x) + c1, min(x + c1, y), c0 + c1 == 0) ||
+               rewrite(min(x, y + c0) + c1, min(x + c1, y), c0 + c1 == 0) ||
+               rewrite(min(y + c0, x) + c1, min(y, x + c1), c0 + c1 == 0) ||
                rewrite(z + min(x, y - z), min(z + x, y)) ||
                rewrite(z + min(y - z, x), min(y, z + x)) ||
                rewrite(z + max(x, y - z), max(z + x, y)) ||
                rewrite(z + max(y - z, x), max(y, z + x)) ||
                rewrite(max(x, y - z) + z, max(x + z, y)) ||
                rewrite(max(y - z, x) + z, max(y, x + z)) ||
-               rewrite(max(y + c0, x) + c1, max(x + c1, y), c0 + c1 == 0) ||
+               rewrite(max(x, y + c0) + c1, max(x + c1, y), c0 + c1 == 0) ||
+               rewrite(max(y + c0, x) + c1, max(y, x + c1), c0 + c1 == 0) ||
                rewrite(max(x, y) + min(x, y), x + y) ||
                rewrite(max(x, y) + min(y, x), x + y))) ||
              (no_overflow_int(op->type) &&
@@ -113,8 +115,9 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
                rewrite((x/c0)*c0 + (x%c0 - z), x - z, c0 != 0) ||
                rewrite((x/c0)*c0 + (z + x%c0), x + z, c0 != 0) ||
                rewrite(x/2 + x%2, (x + 1) / 2) ||
-               rewrite(((c0 - x)/c1)*c1 + x, c0 - ((c0 - x) % c1), c1 > 0) ||
-               rewrite(((c0 - x)/c1 + y)*c1 + x, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
+               rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
+               rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
+               rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
             return mutate(std::move(rewrite.result), bounds);
         }
 
