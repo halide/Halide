@@ -15,7 +15,7 @@ endif
 # flag on os x, and testing this on one platform is sufficient.
 UNAME = $(shell uname)
 ifeq ($(UNAME), Darwin)
-	LDFLAGS += -Wl,-stack_size -Wl,0xa0000
+	LDFLAGS += -Wl,-stack_size -Wl,0x100000
 endif
 
 $(BIN)/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
