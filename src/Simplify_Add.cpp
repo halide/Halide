@@ -115,6 +115,7 @@ Expr Simplify::visit(const Add *op, ConstBounds *bounds) {
                rewrite((x/c0)*c0 + (x%c0 - z), x - z, c0 != 0) ||
                rewrite((x/c0)*c0 + (z + x%c0), x + z, c0 != 0) ||
                rewrite(x/2 + x%2, (x + 1) / 2) ||
+
                rewrite(x + ((c0 - x)/c1)*c1, c0 - ((c0 - x) % c1), c1 > 0) ||
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
                rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0))))) {
