@@ -3,10 +3,14 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#include "pipeline_err.h"
+#include "pipeline_blur.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
+
+void halide_print(void *user_context, const char *msg) {
+    printf("halide_print %s\n", msg);
+}
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -18,19 +22,15 @@ int main(int argc, char **argv) {
     const int height = atoi(argv[2]);
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
-    const int buf_size = width * height * 4;
+    const int buf_size = width * height;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
 
-    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2, 2);
-    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 2, 2);
+    Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height);
+    Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height);
 
-    // TODO: We shouldn't need to allocate a host buffer here, but the
-    // current implementation of cropping + halide_buffer_copy needs
-    // it to work correctly.
-    input.allocate();
 
     // Give the input the buffer we want to DMA from.
     input.device_wrap_native(halide_hexagon_dma_device_interface(),
@@ -46,24 +46,36 @@ int main(int argc, char **argv) {
     // to host without doing this is an error.
     // The Last parameter 0 indicate DMA Read
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, halide_hexagon_fmt_RawData);
-    // This to just to Valide the Assertion checkes for RAW Processing
-    // Assertion checks Fail for dimensions >=4
-    // Used last two dimensions as same value just to use a 4-D Buffer
 
-    Halide::Runtime::Buffer<uint8_t> output(width, height, 2, 2);
+    Halide::Runtime::Buffer<uint8_t> output(width, height);
 
-    int result = pipeline_err(input, output);
+    int result = pipeline_blur(input, output);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
 
     output.copy_to_host();
+    const uint16_t gaussian5[] = { 1, 4, 6, 4, 1 };
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            uint8_t correct = data_in[x + y*width ] * 2;
-            if (correct != output(x, y)) {
+            uint16_t blur = 0;
+            for (int rx = -2; rx <= 2; rx++) {
+                uint16_t blur_y = 0;
+                for (int ry = -2; ry <= 2; ry++) {
+                    //uint16_t in_rxy = data_in[clamp(x + rx, 0, width - 1)+  width * clamp(y + ry, 0, height - 1) ];
+                    uint16_t in_rxy = data_in[std::max(0, std::min(x + rx, width)) +  width * std::max(0, std::min(y + ry, height))];
+                    blur_y += in_rxy * gaussian5[ry + 2];
+                }
+                blur_y += 8;
+                blur_y /= 16;
+                blur += blur_y * gaussian5[rx + 2];
+            }
+            blur += 8;
+            blur /= 16;    
+
+            if (blur != output(x, y)) {
                 static int cnt = 0;
-                printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, output(x, y));
+                printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, blur, output(x, y));
                 if (++cnt > 20) abort();
             }
         }

@@ -7,6 +7,25 @@
 extern "C" {
 #endif
 
+/*!
+ * Image Formats to prepare the application for DMA Transfer
+ */
+typedef enum {
+    halide_hexagon_fmt_RawData,
+    halide_hexagon_fmt_NV12,
+    halide_hexagon_fmt_NV12_Y,
+    halide_hexagon_fmt_NV12_UV,
+    halide_hexagon_fmt_P010,
+    halide_hexagon_fmt_P010_Y,
+    halide_hexagon_fmt_P010_UV,
+    halide_hexagon_fmt_TP10,
+    halide_hexagon_fmt_TP10_Y,
+    halide_hexagon_fmt_TP10_UV,
+    halide_hexagon_fmt_NV124R,
+    halide_hexagon_fmt_NV124R_Y,
+    halide_hexagon_fmt_NV124R_UV
+} halide_hexagon_image_fmt_t;
+
 /** \file
  *  Routines specific to the Halide Hexagon host-side runtime.
  */
@@ -38,9 +57,9 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
 extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
 extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, int fmt);
+                                                       void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                                                       void *dma_engine, bool is_ubwc, int fmt);
+                                                       void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 ///@}
 
