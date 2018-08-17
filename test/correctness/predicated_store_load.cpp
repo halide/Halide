@@ -67,7 +67,7 @@ public:
     }
 };
 
-int vectorized_predicated_store_scalarized_predicated_load_test() {
+int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t) {
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
 
@@ -84,10 +84,9 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
     f(x, y) = 10;
     f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 9));
     }
@@ -100,7 +99,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
     return 0;
 }
 
-int vectorized_dense_load_with_stride_minus_one_test() {
+int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     int size = 73;
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
@@ -113,10 +112,9 @@ int vectorized_dense_load_with_stride_minus_one_test() {
 
     f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.vectorize(x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
     }
@@ -132,7 +130,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     return 0;
 }
 
-int multiple_vectorized_predicate_test() {
+int multiple_vectorized_predicate_test(const Target &t) {
     int size = 100;
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
@@ -151,10 +149,9 @@ int multiple_vectorized_predicate_test() {
     f(x, y) = 10;
     f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
     }
@@ -167,7 +164,7 @@ int multiple_vectorized_predicate_test() {
     return 0;
 }
 
-int scalar_load_test() {
+int scalar_load_test(const Target &t) {
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
 
@@ -184,10 +181,9 @@ int scalar_load_test() {
     f(x, y) = 10;
     f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
     }
@@ -200,7 +196,7 @@ int scalar_load_test() {
     return 0;
 }
 
-int scalar_store_test() {
+int scalar_store_test(const Target &t) {
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
 
@@ -219,10 +215,9 @@ int scalar_store_test() {
 
     f.update(0).allow_race_conditions();
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 1));
     }
@@ -235,7 +230,7 @@ int scalar_store_test() {
     return 0;
 }
 
-int not_dependent_on_vectorized_var_test() {
+int not_dependent_on_vectorized_var_test(const Target &t) {
     Var x("x"), y("y"), z("z");
     Func f ("f"), g("g"), ref("ref");
 
@@ -254,10 +249,9 @@ int not_dependent_on_vectorized_var_test() {
 
     f.update(0).allow_race_conditions();
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.z, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.z, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
     }
@@ -270,7 +264,7 @@ int not_dependent_on_vectorized_var_test() {
     return 0;
 }
 
-int no_op_store_test() {
+int no_op_store_test(const Target &t) {
     Var x("x"), y("y");
     Func f ("f"), ref("ref");
 
@@ -286,11 +280,10 @@ int no_op_store_test() {
     f(2*r.x + 1, r.y) = f(2*r.x + 1, r.y);
     f(2*r.x, 3*r.y) = f(2*r.x, 3*r.y);
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
         f.update(1).hexagon().vectorize(r.y, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.update(1).vectorize(r.y, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
@@ -304,7 +297,7 @@ int no_op_store_test() {
     return 0;
 }
 
-int vectorized_predicated_predicate_with_pure_call_test() {
+int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
 
@@ -321,10 +314,9 @@ int vectorized_predicated_predicate_with_pure_call_test() {
     f(x, y) = 10;
     f(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
     }
@@ -337,7 +329,7 @@ int vectorized_predicated_predicate_with_pure_call_test() {
     return 0;
 }
 
-int vectorized_predicated_load_const_index_test() {
+int vectorized_predicated_load_const_index_test(const Target &t) {
     Buffer<int> in(100, 100);
     for (int y = 0; y < 100; y++) {
         for (int x = 0; x < 100; x++) {
@@ -360,10 +352,9 @@ int vectorized_predicated_load_const_index_test() {
     f(x, y) = x + y;
     f(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
 
-    Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update().hexagon().vectorize(r.x, 32);
-    } else if (target.arch == Target::X86) {
+    } else if (t.arch == Target::X86) {
         f.update().vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
     }
@@ -376,7 +367,14 @@ int vectorized_predicated_load_const_index_test() {
     return 0;
 }
 
-int vectorized_predicated_load_lut_test() {
+int vectorized_predicated_load_lut_test(const Target &t) {
+    if (t.arch != Target::X86) {
+        // This test will fail on Hexagon as the LUT is larger than 16 bits.
+        // Since using less than 16-bit LUT will make the predicate on the
+        // vector store/load disappear, only run the test for X86.
+        return 0;
+    }
+
     constexpr int vector_size = 4;
     constexpr int lut_height = vector_size + 2; // Any non-even multiple of vector-size will do.
     constexpr int dst_len = 100;
@@ -394,15 +392,10 @@ int vectorized_predicated_load_lut_test() {
 
     dst.output_buffer().dim(0).set_min(0).set_extent(dst_len);
 
-    Target target = get_jit_target_from_environment();
     // Ignore the race condition so we can have predicated vectorized
     // LUT loads on both LHS and RHS of the predicated vectorized store
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        dst.update().hexagon().allow_race_conditions().vectorize(r, vector_size);
-    } else if (target.arch == Target::X86) {
-        dst.update().allow_race_conditions().vectorize(r, vector_size);
-        dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 3));
-    }
+    dst.update().allow_race_conditions().vectorize(r, vector_size);
+    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 3));
 
     dst.realize(dst_len);
 
@@ -412,54 +405,55 @@ int vectorized_predicated_load_lut_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    Target t = get_jit_target_from_environment();
 
     printf("Running vectorized dense load with stride minus one test\n");
-    if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
+    if (vectorized_dense_load_with_stride_minus_one_test(t) != 0) {
         return -1;
     }
 
     printf("Running multiple vectorized predicate test\n");
-    if (multiple_vectorized_predicate_test() != 0) {
+    if (multiple_vectorized_predicate_test(t) != 0) {
         return -1;
     }
 
     printf("Running vectorized predicated store scalarized predicated load test\n");
-    if (vectorized_predicated_store_scalarized_predicated_load_test() != 0) {
+    if (vectorized_predicated_store_scalarized_predicated_load_test(t) != 0) {
         return -1;
     }
 
     printf("Running scalar load test\n");
-    if (scalar_load_test() != 0) {
+    if (scalar_load_test(t) != 0) {
         return -1;
     }
 
     printf("Running scalar store test\n");
-    if (scalar_store_test() != 0) {
+    if (scalar_store_test(t) != 0) {
         return -1;
     }
 
     printf("Running not dependent on vectorized var test\n");
-    if (not_dependent_on_vectorized_var_test() != 0) {
+    if (not_dependent_on_vectorized_var_test(t) != 0) {
         return -1;
     }
 
     printf("Running no-op store test\n");
-    if (no_op_store_test() != 0) {
+    if (no_op_store_test(t) != 0) {
         return -1;
     }
 
     printf("Running vectorized predicated with pure call test\n");
-    if (vectorized_predicated_predicate_with_pure_call_test() != 0) {
+    if (vectorized_predicated_predicate_with_pure_call_test(t) != 0) {
         return -1;
     }
 
     printf("Running vectorized predicated load with constant index test\n");
-    if (vectorized_predicated_load_const_index_test() != 0) {
+    if (vectorized_predicated_load_const_index_test(t) != 0) {
         return -1;
     }
 
     printf("Running vectorized predicated load lut test\n");
-    if (vectorized_predicated_load_lut_test() != 0) {
+    if (vectorized_predicated_load_lut_test(t) != 0) {
         return -1;
     }
 

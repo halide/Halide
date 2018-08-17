@@ -184,14 +184,6 @@ namespace Halide { namespace Runtime { namespace Internal {
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
 
-// Return a mask with all CPU-specific features supported by the current CPU set.
-struct CpuFeatures {
-    uint64_t known;     // mask of the CPU features we know how to detect
-    uint64_t available; // mask of the CPU features that are available
-                              // (always a subset of 'known')
-};
-extern WEAK CpuFeatures halide_get_cpu_features();
-
 template <typename T>
 __attribute__((always_inline)) void swap(T &a, T &b) {
     T t = a;

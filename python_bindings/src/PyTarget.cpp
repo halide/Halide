@@ -15,7 +15,7 @@ std::string target_repr(const Target &t) {
 
 void define_target(py::module &m) {
     // Disambiguate some ambigious methods
-    int (Target::*natural_vector_size_method)(Type) const = &Target::natural_vector_size;
+    int (Target::*natural_vector_size_method)(const Type &t) const = &Target::natural_vector_size;
     bool (Target::*supports_type1_method)(const Type &t) const = &Target::supports_type;
     bool (Target::*supports_type2_method)(const Type &t, DeviceAPI device) const = &Target::supports_type;
 
