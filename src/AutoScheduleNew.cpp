@@ -1884,7 +1884,7 @@ struct State {
         cost = 0;
 
         // use either deep network or linear model to predict cost
-        if (throughput_predictor && false) {
+        if (throughput_predictor) {
             // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
             int num_stages = 0;
