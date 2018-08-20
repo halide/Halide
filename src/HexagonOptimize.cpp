@@ -2008,32 +2008,33 @@ private:
 //     1. out(x) = lut(foo(x)) -> vgather
 //     2. out(idx(x)) = foo(x) -> vscatter
 // For gathers out and lut should be in VTCM in a single page.
-class ScatterGatherGenerator : public IRMutator {
+class ScatterGatherGenerator : public IRMutator2 {
     Scope<Interval> bounds;
     std::unordered_map<string, const Allocate *> allocations;
 
-    using IRMutator::visit;
+    using IRMutator2::visit;
 
-    template <typename T>
-    void visit_let(const T *op) {
+    template <typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
         // We only care about vector lets.
         if (op->value.type().is_vector()) {
             bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         }
-        IRMutator::visit(op);
+        NodeType node = IRMutator2::visit(op);
         if (op->value.type().is_vector()) {
             bounds.pop(op->name);
         }
+        return node;
     }
 
-    void visit(const Let *op) { visit_let(op); }
+    Expr visit(const Let *op) { return visit_let<Expr>(op); }
 
-    void visit(const LetStmt *op) { visit_let(op); }
+    Stmt visit(const LetStmt *op) { return visit_let<Stmt>(op); }
 
-    void visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) {
         // Create a map of the allocation
         allocations[op->name] = op;
-        IRMutator::visit(op);
+        return IRMutator2::visit(op);
     }
 
     // Try to match expressions of the form:
@@ -2043,13 +2044,15 @@ class ScatterGatherGenerator : public IRMutator {
     Expr is_gather(const Load *op, const Expr dst_base, const Expr dst_index) {
         Type ty = op->type;
         const Allocate *alloc = allocations[op->name];
-        if (op->index.as<Ramp>() || !alloc ||
-            alloc->memory_type != MemoryType::Vtcm || !is_one(op->predicate) ||
+        if (!alloc || alloc->memory_type != MemoryType::VTCM) {
+            return Expr();
+        }
+        if (op->index.as<Ramp>() || !is_one(op->predicate) ||
             !ty.is_vector() || ty.bits() == 8) {
             return Expr();
         }
 
-        Expr index = mutate(ty.bits()/8 * op->index);
+        Expr index = mutate(ty.bytes() * op->index);
         Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
         if (ty.bits() == 16 && index_bounds.is_bounded()) {
             Expr index_span = span_of_bounds(index_bounds);
@@ -2057,44 +2060,39 @@ class ScatterGatherGenerator : public IRMutator {
             index_span = simplify(index_span);
             // We need to downcast the index values to 16 bit signed. So all the
             // the indices must be less than 1 << 15.
-            // int max_idx = (ty.code() == Type::UInt) ? 1 << 16 : 1 << 15;
             if (!can_prove(index_span < (1 << 15))) {
                 return Expr();
             }
         }
         // Calculate the size of the buffer lut in bytes.
-        Expr size = ty.bits()/8;
+        Expr size = ty.bytes();
         for (size_t i = 0; i < alloc->extents.size(); i++) {
             size *= alloc->extents[i];
         }
         Expr src = Variable::make(Handle(), op->name);
-        Expr new_index = mutate(cast(ty, index));
+        Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
 
         return Call::make(ty, "gather", {dst_base, dst_index, src, size-1, new_index},
-                          Call::PureIntrinsic);
+                          Call::Intrinsic);
     }
 
-    void visit(const Store *op) {
+    Stmt visit(const Store *op) {
         Type ty = op->value.type();
         const Allocate *alloc = allocations[op->name];
-        // Add checks for index bound.
-        if (op->index.as<Ramp>()) {
-            if (alloc && alloc->memory_type == MemoryType::Vtcm &&
-                is_one(op->predicate) && ty.is_vector() && ty.bits() != 8 &&
-                op->value.as<Load>()) {
-                // Check for gather
-                Expr dst_base = Variable::make(Handle(), op->name);
-                Expr dst_index = (ty.bits()/8) * op->index.as<Ramp>()->base;
-                Expr value = is_gather(op->value.as<Load>(), dst_base, dst_index);
-                if (value.defined()) {
-                    // Found a gather
-                    stmt = Evaluate::make(value);
-                    return;
-                }
+
+        if (alloc && alloc->memory_type == MemoryType::VTCM &&
+            is_one(op->predicate) && ty.is_vector() && ty.bits() != 8 &&
+            op->index.as<Ramp>() && op->value.as<Load>()) {
+            // Check for gather
+            Expr dst_base = Variable::make(Handle(), op->name);
+            Expr dst_index = op->index.as<Ramp>()->base;
+            Expr value = is_gather(op->value.as<Load>(), dst_base, dst_index);
+            if (value.defined()) {
+                // Found a gather
+                return Evaluate::make(value);
             }
-            IRMutator::visit(op);
-            return;
         }
+        return IRMutator2::visit(op);
     }
 };
 

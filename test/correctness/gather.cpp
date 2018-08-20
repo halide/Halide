@@ -15,7 +15,7 @@ int test() {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W+1; x++) {
             int idx = (ITYPE)rand();
-            input(x, y) = idx; //std::max(idx, -idx);
+            input(x, y) = idx; // std::max(idx, -idx);
         }
     }
 
@@ -31,8 +31,8 @@ int test() {
 
     // Implement: output(x, y) = lut(input(x, y), input(x+1, y))
     // output and lut must have store_in(MemoryType::VTCM) to generate vgathers.
-    Expr xCoord = clamp(input(x, y), 0, W-1);
-    Expr yCoord = clamp(input(x+1, y), 0, H-1);
+    Expr xCoord = clamp(cast<int32_t>(input(x, y)), 0, W-1);
+    Expr yCoord = clamp(cast<int32_t>(input(x+1, y)), 0, H-1);
     lut_vtcm(x, y) = lut(x, y);
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
@@ -42,12 +42,12 @@ int test() {
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
         lut_vtcm
             .compute_at(output, y)
-            .store_in(MemoryType::Vtcm)
+            .store_in(MemoryType::VTCM)
             .vectorize(x, vector_size/2);
 
         output_vtcm
             .compute_at(output, y)
-            .store_in(MemoryType::Vtcm)
+            .store_in(MemoryType::VTCM)
             .vectorize(x, vector_size/2);
 
         output
@@ -76,7 +76,7 @@ int test() {
 int main() {
     if (
         // !test<uint16_t>()
-         !test<int16_t>()
+        !test<int16_t>()
         // !test<uint32_t>()
         // !test<int32_t>()
         ) return 1;

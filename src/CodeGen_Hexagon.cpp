@@ -1908,6 +1908,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if(op->is_intrinsic("gather")) {
         internal_assert(op->args.size() == 5);
+        internal_assert(op->type.bits() != 8);
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits()/op->type.bits();
         // Cut up the indices into appropriately-sized pieces.
@@ -1917,7 +1918,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             vector <Value *>args;
             Value *new_index = slice_vector(codegen(op->args[4]), start, intrin_lanes);
             args.push_back(codegen(op->args[0]));
-            args.push_back(codegen(op->args[1] + start * op->type.bits()/8));
+            args.push_back(codegen(op->args[1] + start));
             args.push_back(codegen(op->args[2]));
             args.push_back(codegen(op->args[3]));
             args.push_back(new_index);

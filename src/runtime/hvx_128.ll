@@ -416,25 +416,23 @@ define weak_odr <64 x i32> @halide.hexagon.vtmpy.vh.vh.b.b(<64 x i16> %low_v, <6
 declare void @llvm.hexagon.V6.vgathermh.128B(i8*, i32, i32, <32 x i32>)
 declare void @llvm.hexagon.V6.vgathermw.128B(i8*, i32, i32, <32 x i32>)
 
-define weak_odr <64 x i16> @halide.hexagon.vgather.h.h(i16* %dst_base_ptr, i32 %dst_index, i16* %src_16ptr, i32 %size, <64 x i16> %lut) nounwind uwtable {
+define weak_odr <64 x i16> @halide.hexagon.vgather.h.h(i16* %dst_base, i32 %dst_index, i16* %src_ptr, i32 %size, <64 x i16> %lut) nounwind uwtable {
   %lut32 = bitcast <64 x i16> %lut to <32 x i32>
-  %src = ptrtoint i16* %src_16ptr to i32
-  %dst_base = ptrtoint i16* %dst_base_ptr to i32
-  %dst = add i32 %dst_base, %dst_index
-  %dst_ptr = inttoptr i32 %dst to i8*
+  %src = ptrtoint i16* %src_ptr to i32
+  %dst_16ptr = getelementptr i16, i16* %dst_base, i32 %dst_index
+  %dst_ptr = bitcast i16* %dst_16ptr to i8*
   call void @llvm.hexagon.V6.vgathermh.128B(i8* %dst_ptr, i32 %src, i32 %size, <32 x i32> %lut32)
-  %vec_ptr = bitcast i16* %src_16ptr to <64 x i16>*
+  %vec_ptr = bitcast i16* %src_ptr to <64 x i16>*
   %res = load <64 x i16>, <64 x i16>* %vec_ptr
   ret <64 x i16> %res
 }
 
-define weak_odr <32 x i32> @halide.hexagon.vgather.w.w(i32* %dst_base_ptr, i32 %dst_index, i32* %src_32ptr, i32 %size, <32 x i32> %lut) nounwind uwtable {
-  %src = ptrtoint i32* %src_32ptr to i32
-  %dst_base = ptrtoint i32* %dst_base_ptr to i32
-  %dst = add i32 %dst_base, %dst_index
-  %dst_ptr = inttoptr i32 %dst to i8*
+define weak_odr <32 x i32> @halide.hexagon.vgather.w.w(i32* %dst_base, i32 %dst_index, i32* %src_ptr, i32 %size, <32 x i32> %lut) nounwind uwtable {
+  %src = ptrtoint i32* %src_ptr to i32
+  %dst_32ptr = getelementptr i32, i32* %dst_base, i32 %dst_index
+  %dst_ptr = bitcast i32* %dst_32ptr to i8*
   call void @llvm.hexagon.V6.vgathermw.128B(i8* %dst_ptr, i32 %src, i32 %size, <32 x i32> %lut)
-  %vec_ptr = bitcast i32* %src_32ptr to <32 x i32>*
+  %vec_ptr = bitcast i32* %src_ptr to <32 x i32>*
   %res = load <32 x i32>, <32 x i32>* %vec_ptr
   ret <32 x i32> %res
 }
