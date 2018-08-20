@@ -9,13 +9,12 @@ int test() {
     const int W = 1024;
     const int H = 2;
 
-    // srand(time(0));
-
+    srand(time(0));
     Buffer<ITYPE> input(W+1, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W+1; x++) {
             int idx = (ITYPE)rand();
-            input(x, y) = idx; // std::max(idx, -idx);
+            input(x, y) = idx;
         }
     }
 
@@ -59,13 +58,12 @@ int test() {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            // printf("(%d, %d) = %d\n", x, y, input(x,  y));
             int xCoord = std::max(std::min((int)(input(x, y)), W-1), 0);
             int yCoord = std::max(std::min((int)(input(x+1, y)), H-1), 0);
             ITYPE correct = lut(xCoord, yCoord);
             if (output_buf(x, y) != correct) {
                 printf("output(%d, %d) = %d instead of %d\n", x, y, output_buf(x, y), correct);
-                // return false;
+                return false;
             }
         }
     }
@@ -74,12 +72,10 @@ int test() {
 }
 
 int main() {
-    if (
-        // !test<uint16_t>()
-        !test<int16_t>()
-        // !test<uint32_t>()
-        // !test<int32_t>()
-        ) return 1;
+    if (!test<uint16_t>() ||
+        // !test<int16_t>() ||
+        !test<uint32_t>() ||
+        !test<int32_t>()) return 1;
     printf("Success!\n");
     return 0;
 }
