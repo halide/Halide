@@ -1884,7 +1884,7 @@ struct State {
         cost = 0;
 
         // use either deep network or linear model to predict cost
-        if (throughput_predictor) {
+        if (throughput_predictor && false) {
             // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
             int num_stages = 0;
@@ -1950,118 +1950,44 @@ struct State {
                     // the universe to benchmark. We define 'silly' as
                     // doing more than 10x redundant recompute for any one
                     // stage.
-                    if (feat.points_computed_total + feat.inlined_calls > 2*feat.points_computed_minimum) return false;
+                    if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
 
                     if (verbose) {
                         debug(0) << "Schedule features for " << p.first->func.name() << " stage " << s << "\n";
                         feat.dump();
                     }
-                    // This is model v0, to bootstrap training data
-                    // generation for an actual model. Just wrote down
-                    // something reasonable-sounding that corresponds
-                    // roughly to the Ravi cost model, then tuned the two
-                    // constants to have OK performance on local
-                    // laplacian.
+
                     auto &stage = p.first->stages[s];
-                    double compute_cost = 0;
-                    const int *pipeline_feat = (const int *)(&stage.features);
-                    for (size_t i = 0; i < sizeof(stage.features) / sizeof(int); i++) {
-                        // A very crude compute cost that just adds up the histograms
+                    double compute_cost = 0, compute_cost_inlined = 0;
+                    const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
+                    for (size_t i = 0; i < sizeof(stage.features.op_histogram) / sizeof(int); i++) {
+                        // A very crude compute cost that just adds up the op histograms
                         compute_cost += pipeline_feat[i];
                     }
-                    compute_cost *= feat.points_computed_total + feat.inlined_calls;
+                    // Inlining saves a store+load, and some addressing math.
+                    compute_cost_inlined = compute_cost - 2;
+                    compute_cost *= feat.points_computed_total;
+                    compute_cost_inlined *= feat.inlined_calls;
+                    compute_cost += compute_cost_inlined;
 
-                    // Get a bonus for large inner loops and a penalty for small ones
+                    double cache_misses = 0, cost_of_miss = 0;
                     if (feat.inlined_calls == 0) {
-                        compute_cost *= 0.9 + 10.0 / feat.innermost_pure_loop_extent;
+                        // Count cache misses assuming the buffer is
+                        // consumed in a cache-coherent order. Divide
+                        // by innermost_bytes_at_production because we
+                        // assume streaming prefetchers work.
+                        cache_misses = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
+                        // On a typical Intel CPU, the relationship
+                        // between cache size (per core that uses that
+                        // cache, so divide by num cores for L3) and
+                        // cycle latency is roughly linear.
+                        cost_of_miss = feat.bytes_at_production * 0.000037 + 2.8;
                     }
-
-                    // Pay a super-linear penalty for large
-                    // allocations. Nothing wrong with them per-se, but
-                    // they're a good indicator of poor producer-consumer
-                    // locality in Halide.
-                    double memory_cost = 5 * feat.bytes_at_production * std::log(feat.bytes_at_production + 1);
+                    double num_consumers = p.first->outgoing_edges.size();
+                    double memory_cost = 150.0 * num_consumers * cache_misses * cost_of_miss;
                     memory_cost *= feat.num_realizations;
 
                     cost += compute_cost + memory_cost;
-
-                    /*
-                    // Model v1 is a least-squares fit on the features and
-                    // the features squared trying to predict
-                    // throughput. PipelineFeatures were used in the
-                    // prediction, but are ignored here because we're only
-                    // comparing different schedules for the same
-                    // pipeline. Some of the ScheduleFeatures also have
-                    // that property (the ones computed at root), but we
-                    // include them here for convenience. If you look at
-                    // the non-trivial coefficients on things that depend
-                    // on the schedule you'll see that it has basically
-                    // learned one thing:
-
-                    // Large innermost_bytes_at_realization is good,
-                    // unless it gets *really* large. Have spatial
-                    // coherence on output cache lines and don't break
-                    // vectorization.
-
-                    // Smaller effects include:
-
-                    // - More points computed per realization is better
-                    // (amortize malloc overhead)
-
-                    // - Fewer points computed total is better (minimize
-                    // redundant recompute)
-
-                    // - Fewer bytes per realization is better (fit into
-                    // local cache). Recall that we want *more* bytes
-                    // along the innermost dimension, so this is really a
-                    // constraint on the height of a tile)
-
-                    double linear_weights[] = {
-                        7.44107243e-08,
-                        -6.61684316e-08,
-                        1.38209663e-06,
-                        -9.72775735e-07,
-                        -2.15445520e-06,
-                        1.64845721e-06,
-                        1.42242235e-07,
-                        1.58736644e-07,
-                        -9.37325174e-08,
-                        1.77330511e-09,
-                        -1.21396794e-06,
-                        6.31298712e-07,
-                        -8.20550970e-08,
-                        8.74631069e-01,
-                        -1.68220271e-07,
-                        -8.74630980e-01,
-                        3.83216062e-08,
-                        -5.86168533e-07
-                    };
-                    double square_weights[] = {
-                        -1.07675757e-09,
-                        -3.02034990e-09,
-                        3.34156891e-09,
-                        2.31720771e-09,
-                        6.04231900e-08,
-                        -6.81740558e-08,
-                        -1.08771382e-08,
-                        -1.92484135e-08,
-                        5.48552892e-09,
-                        -1.05536441e-09,
-                        -7.13883484e-09,
-                        6.89300573e-09,
-                        2.32452547e-08,
-                        -1.00000000e+00,
-                        1.32440828e-08,
-                        9.99999996e-01,
-                        -2.18566372e-09,
-                        1.41639965e-08
-                    };
-
-                    const int64_t *sched_stats = (const int64_t *)(&feat);
-                    for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
-                        double w = std::log(1 + sched_stats[i]);
-                        cost -= (linear_weights[i] + square_weights[i] * w) * w;
-                    }*/
                 }
             }
         }
