@@ -12,6 +12,7 @@
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "Param.h"
+#include "PurifyIndexMath.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Util.h"
@@ -339,8 +340,10 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+            return;
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min * b.min);
+            return;
         } else if (b.is_single_point()) {
             Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
@@ -792,6 +795,22 @@ private:
     }
 
     void visit(const Call *op) {
+        // Using the strict_float feature flag wraps a strict_float()
+        // call around every Expr that is of type float, so it's easy
+        // to get nestings that are many levels deep; the bounds of this
+        // call are *always* exactly that of its first argument, so short
+        // circuit it here before checking for const_args. This is important
+        // because evaluating const_args for such a deeply nested case
+        // essentially becomes O(n^2) doing work that is unnecessary, making
+        // otherwise simple pipelines take several minutes to compile.
+        //
+        // TODO: are any other intrinsics worth including here as well?
+        if (op->is_intrinsic(Call::strict_float)) {
+            assert(op->args.size() == 1);
+            op->args[0].accept(this);
+            return;
+        }
+
         // If the args are const we can return the call of those args
         // for pure functions. For other types of functions, the same
         // call in two different places might produce different
@@ -839,9 +858,11 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 interval.max = Interval::pos_inf;
             }
+        } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
+            Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
+            full_clamp.accept(this);
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost) ||
-                   op->is_intrinsic(Call::strict_float)) {
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -1317,6 +1338,7 @@ private:
         string var;
         int instance;
         VarInstance(const string &v, int i) : var(v), instance(i) {}
+        VarInstance() {};
 
         bool operator==(const VarInstance &other) const {
             return (var == other.var) && (instance == other.instance);
@@ -1424,108 +1446,146 @@ private:
 
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
-        if (consider_calls) {
-            op->value.accept(this);
-        }
-        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
 
-        bool fixed = value_bounds.min.same_as(value_bounds.max);
-        value_bounds.min = simplify(value_bounds.min);
-        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
+        using is_let_stmt = typename std::is_same<LetOrLetStmt, LetStmt>;
 
-        if (is_small_enough_to_substitute(value_bounds.min) &&
-            (fixed || is_small_enough_to_substitute(value_bounds.max))) {
-            ScopedBinding<Interval> p(scope, op->name, value_bounds);
-            op->body.accept(this);
-        } else {
-            string max_name = unique_name('t');
-            string min_name = unique_name('t');
-            {
-                ScopedBinding<Interval> p(scope, op->name, Interval(Variable::make(op->value.type(), min_name),
-                                                                Variable::make(op->value.type(), max_name)));
-                op->body.accept(this);
+        // LetStmts can be deeply stacked, and this visitor is called
+        // before dead lets are eliminated, so we move all the
+        // internal state off the call stack into an explicit stack on
+        // the heap.
+        struct Frame {
+            set<string> old_let_vars;
+            const LetOrLetStmt *op;
+            VarInstance vi;
+            CollectVars collect;
+            string max_name, min_name;
+            Interval value_bounds;
+            Frame(const LetOrLetStmt *op) : op(op), collect(op->name) {}
+        };
+
+        vector<Frame> frames;
+        decltype(op->body) result;
+        while (op) {
+            frames.emplace_back(op);
+            Frame &f = frames.back();
+            push_var(op->name);
+
+            if (is_let_stmt::value) {
+                f.vi = get_var_instance(op->name);
+
+                // Update the 'children' map.
+                op->value.accept(&f.collect);
+                for (const auto &v : f.collect.vars) {
+                    children[get_var_instance(v)].insert(f.vi);
+                }
+
+                // If this let stmt is a redefinition of a previous one, we should
+                // remove the old let stmt from the 'children' map since it is
+                // no longer valid at this point.
+                if ((f.vi.instance > 0) && let_stmts.contains(op->name)) {
+                    const Expr &val = let_stmts.get(op->name);
+                    CollectVars collect(op->name);
+                    val.accept(&collect);
+                    f.old_let_vars = collect.vars;
+
+                    VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance-1);
+                    for (const auto &v : f.old_let_vars) {
+                        internal_assert(vars_renaming.count(v));
+                        children[get_var_instance(v)].erase(old_vi);
+                    }
+                }
+                let_stmts.push(op->name, op->value);
             }
 
-            for (pair<const string, Box> &i : boxes) {
-                Box &box = i.second;
-                for (size_t i = 0; i < box.size(); i++) {
-                    if (box[i].has_lower_bound()) {
-                        if (expr_uses_var(box[i].min, max_name)) {
-                            box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+            if (consider_calls) {
+                op->value.accept(this);
+            }
+
+            f.value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
+
+            bool fixed = f.value_bounds.min.same_as(f.value_bounds.max);
+            f.value_bounds.min = simplify(f.value_bounds.min);
+            f.value_bounds.max = fixed ? f.value_bounds.min : simplify(f.value_bounds.max);
+
+            if (is_small_enough_to_substitute(f.value_bounds.min) &&
+                (fixed || is_small_enough_to_substitute(f.value_bounds.max))) {
+                scope.push(op->name, f.value_bounds);
+            } else {
+                f.max_name = unique_name('t');
+                f.min_name = unique_name('t');
+                scope.push(op->name, Interval(Variable::make(op->value.type(), f.min_name),
+                                              Variable::make(op->value.type(), f.max_name)));
+            }
+
+            result = op->body;
+            op = result.template as<LetOrLetStmt>();
+        }
+
+        result.accept(this);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            // Pop the value bounds
+            scope.pop(it->op->name);
+
+            if (!it->min_name.empty()) {
+                // We made up new names for the bounds of the
+                // value, and need to rewrap any boxes we're
+                // returning with appropriate lets.
+                for (pair<const string, Box> &i : boxes) {
+                    Box &box = i.second;
+                    for (size_t i = 0; i < box.size(); i++) {
+                        if (box[i].has_lower_bound()) {
+                            if (expr_uses_var(box[i].min, it->max_name)) {
+                                box[i].min = Let::make(it->max_name, it->value_bounds.max, box[i].min);
+                            }
+                            if (expr_uses_var(box[i].min, it->min_name)) {
+                                box[i].min = Let::make(it->min_name, it->value_bounds.min, box[i].min);
+                            }
                         }
-                        if (expr_uses_var(box[i].min, min_name)) {
-                            box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
-                        }
-                    }
-                    if (box[i].has_upper_bound()) {
-                        if (expr_uses_var(box[i].max, max_name)) {
-                            box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                        }
-                        if (expr_uses_var(box[i].max, min_name)) {
-                            box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                        if (box[i].has_upper_bound()) {
+                            if (expr_uses_var(box[i].max, it->max_name)) {
+                                box[i].max = Let::make(it->max_name, it->value_bounds.max, box[i].max);
+                            }
+                            if (expr_uses_var(box[i].max, it->min_name)) {
+                                box[i].max = Let::make(it->min_name, it->value_bounds.min, box[i].max);
+                            }
                         }
                     }
                 }
             }
+
+            if (is_let_stmt::value) {
+                let_stmts.pop(it->op->name);
+
+                // If this let stmt shadowed an outer one, we need
+                // to re-insert the children from the previous let
+                // stmt into the map.
+                if (!it->old_let_vars.empty()) {
+                    internal_assert(it->vi.instance > 0);
+                    VarInstance old_vi = VarInstance(it->vi.var, it->vi.instance-1);
+                    for (const auto &v : it->old_let_vars) {
+                        internal_assert(vars_renaming.count(v));
+                        children[get_var_instance(v)].insert(old_vi);
+                    }
+                }
+
+                // Remove the children from the current let stmt.
+                for (const auto &v : it->collect.vars) {
+                    internal_assert(vars_renaming.count(v));
+                    children[get_var_instance(v)].erase(it->vi);
+                }
+            }
+
+            pop_var(it->op->name);
         }
     }
 
     void visit(const Let *op) {
-        push_var(op->name);
         visit_let(op);
-        pop_var(op->name);
     }
 
     void visit(const LetStmt *op) {
-        push_var(op->name);
-        VarInstance vi = get_var_instance(op->name);
-
-        // Update the 'children' map.
-        CollectVars collect(op->name);
-        op->value.accept(&collect);
-        for (const auto &v : collect.vars) {
-            children[get_var_instance(v)].insert(vi);
-        }
-
-        // If this let stmt is a redefinition of a previous one, we should
-        // remove the old let stmt from the 'children' map since it is
-        // no longer valid at this point.
-        set<string> old_let_vars;
-        if ((vi.instance > 0) && let_stmts.contains(op->name)) {
-            const Expr &val = let_stmts.get(op->name);
-            CollectVars collect(op->name);
-            val.accept(&collect);
-            old_let_vars = collect.vars;
-
-            VarInstance old_vi = VarInstance(vi.var, vi.instance-1);
-            for (const auto &v : old_let_vars) {
-                internal_assert(vars_renaming.count(v));
-                children[get_var_instance(v)].erase(old_vi);
-            }
-        }
-
-        {
-            ScopedBinding<Expr> p(let_stmts, op->name, op->value);
-            visit_let(op);
-        }
-
-        // Re-insert the children from the previous let stmt into the map.
-        if (!old_let_vars.empty()) {
-            internal_assert(vi.instance > 0);
-            VarInstance old_vi = VarInstance(vi.var, vi.instance-1);
-            for (const auto &v : old_let_vars) {
-                internal_assert(vars_renaming.count(v));
-                children[get_var_instance(v)].insert(old_vi);
-            }
-        }
-
-        // Remove the children from the current let stmt.
-        for (const auto &v : collect.vars) {
-            internal_assert(vars_renaming.count(v));
-            children[get_var_instance(v)].erase(vi);
-        }
-
-        pop_var(op->name);
+        visit_let(op);
     }
 
     struct LetBound {
@@ -1686,7 +1746,7 @@ private:
                     }
 
                     Interval bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
-                    if (bi.has_upper_bound()) {
+                    if (bi.has_upper_bound() && i.has_upper_bound()) {
                         if (lt) {
                             i.max = min(likely_i.max, bi.max - 1);
                         }
@@ -1694,7 +1754,7 @@ private:
                             i.max = min(likely_i.max, bi.max);
                         }
                     }
-                    if (bi.has_lower_bound()) {
+                    if (bi.has_lower_bound() && i.has_lower_bound()) {
                         if (gt) {
                             i.min = max(likely_i.min, bi.min + 1);
                         }
@@ -1857,6 +1917,16 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
     // Combine the two maps.
     for (pair<const string, Box> &i : provides.boxes) {
         merge_boxes(calls.boxes[i.first], i.second);
+    }
+
+    // Make evaluating these boxes side-effect-free
+    for (auto &p : calls.boxes) {
+        auto &box = p.second;
+        box.used = purify_index_math(box.used);
+        for (Interval &i : box.bounds) {
+            i.min = purify_index_math(i.min);
+            i.max = purify_index_math(i.max);
+        }
     }
 
     return calls.boxes;

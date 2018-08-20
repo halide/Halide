@@ -24,10 +24,10 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
         const int lanes = op->type.lanes();
 
         if (rewrite(c0 - c1, fold(c0 - c1)) ||
-            rewrite(IRMatcher::Indeterminate() * x, a) ||
-            rewrite(x * IRMatcher::Indeterminate(), b) ||
-            rewrite(IRMatcher::Overflow() * x, a) ||
-            rewrite(x * IRMatcher::Overflow(), b) ||
+            rewrite(IRMatcher::Indeterminate() - x, a) ||
+            rewrite(x - IRMatcher::Indeterminate(), b) ||
+            rewrite(IRMatcher::Overflow() - x, a) ||
+            rewrite(x - IRMatcher::Overflow(), b) ||
             rewrite(x - 0, x)) {
             return rewrite.result;
         }
@@ -230,8 +230,8 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
 
                rewrite((x/c0)*c0 - x, -(x % c0), c0 > 0) ||
                rewrite(x - (x/c0)*c0, x % c0, c0 > 0) ||
-               rewrite(((x + c0)/c1)*c1 - x, x % c1, c1 > 0 && c0 + 1 == c1) ||
-               rewrite(x - ((x + c0)/c1)*c1, -(x % c1), c1 > 0 && c0 + 1 == c1) ||
+               rewrite(((x + c0)/c1)*c1 - x, (-x) % c1, c1 > 0 && c0 + 1 == c1) ||
+               rewrite(x - ((x + c0)/c1)*c1, ((x + c0) % c1) + fold(-c0), c1 > 0 && c0 + 1 == c1) ||
                rewrite(x * c0 - y * c1, (x * fold(c0 / c1) - y) * c1, c0 % c1 == 0) ||
                rewrite(x * c0 - y * c1, (x - y * fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                // Various forms of (x +/- a)/c - (x +/- b)/c. We can
@@ -239,7 +239,7 @@ Expr Simplify::visit(const Sub *op, ConstBounds *bounds) {
                // on which of a or b is a constant, and we also need to
                // catch the cases where that constant is zero.
                rewrite(((x + y) + z)/c0 - ((y + x) + w)/c0, ((x + y) + z)/c0 - ((x + y) + w)/c0, c0 > 0) ||
-               rewrite((x + y)/c0 - (y + x)/c0, 0) ||
+               rewrite((x + y)/c0 - (y + x)/c0, 0, c0 != 0) ||
                rewrite((x + y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) + (y - c1))/c0, c0 > 0) ||
                rewrite((x + c1)/c0 - (x + y)/c0, ((fold(c0 + c1 - 1) - y) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0) ||
                rewrite((x - y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) - y - c1)/c0, c0 > 0) ||

@@ -264,10 +264,12 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
+    {"d3d12compute", Target::D3D12Compute},
     {"strict_float", Target::StrictFloat},
     {"legacy_buffer_wrappers", Target::LegacyBufferWrappers},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
+    {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"new_autoscheduler", Target::NewAutoscheduler},
     // NOTE: When adding features to this map, be sure to update
     // PyEnums.cpp and halide.cmake as well.
@@ -526,7 +528,75 @@ bool Target::supported() const {
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
+#if !defined(WITH_D3D12)
+    bad |= has_feature(Target::D3D12Compute);
+#endif
     return !bad;
+}
+
+void Target::set_feature(Feature f, bool value) {
+    if (f == FeatureEnd) return;
+    user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+    features.set(f, value);
+}
+
+void Target::set_features(std::vector<Feature> features_to_set, bool value) {
+    for (Feature f : features_to_set) {
+        set_feature(f, value);
+    }
+}
+
+bool Target::has_feature(Feature f) const {
+    if (f == FeatureEnd) return true;
+    user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+    return features[f];
+}
+
+bool Target::features_any_of(std::vector<Feature> test_features) const {
+    for (Feature f : test_features) {
+        if (has_feature(f)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Target::features_all_of(std::vector<Feature> test_features) const {
+    for (Feature f : test_features) {
+        if (!has_feature(f)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Target Target::with_feature(Feature f) const {
+    Target copy = *this;
+    copy.set_feature(f);
+    return copy;
+}
+
+Target Target::without_feature(Feature f) const {
+    Target copy = *this;
+    copy.set_feature(f, false);
+    return copy;
+}
+
+bool Target::has_gpu_feature() const {
+    return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal) || has_feature(D3D12Compute);
+}
+
+bool Target::supports_type(const Type &t) const {
+    if (t.bits() == 64) {
+        if (t.is_float()) {
+            return !has_feature(Metal) &&
+                   !has_feature(D3D12Compute) &&
+                   (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+        } else {
+            return !has_feature(Metal) && !has_feature(D3D12Compute);
+        }
+    }
+    return true;
 }
 
 bool Target::supports_type(const Type &t, DeviceAPI device) const {
@@ -548,6 +618,10 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         if (t.is_float() && t.bits() == 64) {
             return has_feature(Target::CLDoubles);
         }
+    } else if (device == DeviceAPI::D3D12Compute) {
+        // Shader Model 5.x can optionally support double-precision; 64-bit int
+        // types are not supported.
+        return t.bits() < 64;
     }
 
     return true;
@@ -571,7 +645,58 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
     case DeviceAPI::Hexagon:       return Target::HVX_128;
+    case DeviceAPI::D3D12Compute:  return Target::D3D12Compute;
     default:                       return Target::FeatureEnd;
+    }
+}
+
+int Target::natural_vector_size(const Halide::Type &t) const {
+    user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
+        << "natural_vector_size cannot be used on a Target with Unknown values.\n";
+
+    const bool is_integer = t.is_int() || t.is_uint();
+    const int data_size = t.bytes();
+
+    if (arch == Target::Hexagon) {
+        if (is_integer) {
+            // HVX is either 64 or 128 *byte* vector size.
+            if (has_feature(Halide::Target::HVX_128)) {
+                return 128 / data_size;
+            } else if (has_feature(Halide::Target::HVX_64)) {
+                return 64 / data_size;
+            } else {
+                user_error << "Target uses hexagon arch without hvx_128 or hvx_64 set.\n";
+                return 0;
+            }
+        } else {
+            // HVX does not have vector float instructions.
+            return 1;
+        }
+    } else if (arch == Target::X86) {
+        if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
+                           has_feature(Halide::Target::AVX512_Cannonlake))) {
+            // AVX512BW exists on Skylake and Cannonlake
+            return 64 / data_size;
+        } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
+                                    has_feature(Halide::Target::AVX512_KNL) ||
+                                    has_feature(Halide::Target::AVX512_Skylake) ||
+                                    has_feature(Halide::Target::AVX512_Cannonlake))) {
+            // AVX512F is on all AVX512 architectures
+            return 64 / data_size;
+        } else if (has_feature(Halide::Target::AVX2)) {
+            // AVX2 uses 256-bit vectors for everything.
+            return 32 / data_size;
+        } else if (!is_integer && has_feature(Halide::Target::AVX)) {
+            // AVX 1 has 256-bit vectors for float, but not for
+            // integer instructions.
+            return 32 / data_size;
+        } else {
+            // SSE was all 128-bit. We ignore MMX.
+            return 16 / data_size;
+        }
+    } else {
+        // Assume 128-bit vectors on other targets.
+        return 16 / data_size;
     }
 }
 

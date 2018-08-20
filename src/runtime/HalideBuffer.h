@@ -133,6 +133,10 @@ class Buffer {
                                                  add_const_if_T_is_const<uint8_t>,
                                                  T>::type;
 
+    /** T with constness removed. Useful for return type of copy(). */
+    using not_const_T = typename std::remove_const<T>::type;
+
+
     /** The type the elements are stored as. Equal to not_void_T
      * unless T is a pointer, in which case uint64_t. Halide stores
      * all pointer types as uint64s internally, even on 32-bit
@@ -443,6 +447,26 @@ private:
         }
     }
 
+    void init_from_legacy_buffer_t(const buffer_t &old_buf, halide_type_t t) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        assert(old_buf.elem_size == t.bytes());
+        buf.host = old_buf.host;
+        buf.type = t;
+        int d;
+        for (d = 0; d < 4 && old_buf.extent[d]; d++);
+        buf.dimensions = d;
+        make_shape_storage();
+        for (int i = 0; i < d; i++) {
+            buf.dim[i].min = old_buf.min[i];
+            buf.dim[i].extent = old_buf.extent[i];
+            buf.dim[i].stride = old_buf.stride[i];
+        }
+        buf.set_host_dirty(old_buf.host_dirty);
+        assert(old_buf.dev == 0 && "Cannot construct a Halide::Runtime::Buffer from a legacy buffer_t with a device allocation. Use halide_upgrade_buffer_t to upgrade it to a halide_buffer_t first.");
+    }
+
 public:
 
     typedef T ElemType;
@@ -556,34 +580,35 @@ public:
         return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
+    /** Reset the Buffer to be equivalent to a default-constructed Buffer
+     * of the same static type (if any); Buffer<void> will have its runtime
+     * type reset to uint8. */
+    void reset() {
+        *this = Buffer();
+    }
+
     Buffer() : shape() {
         buf.type = static_halide_type();
         make_shape_storage();
     }
 
     /** Make a Buffer from a halide_buffer_t */
-    Buffer(const halide_buffer_t &buf,
+    explicit Buffer(const halide_buffer_t &buf,
            BufferDeviceOwnership ownership = BufferDeviceOwnership::Unmanaged) {
         assert(T_is_void || buf.type == static_halide_type());
         initialize_from_buffer(buf, ownership);
     }
 
-    /** Make a Buffer from a legacy buffer_t. */
-    Buffer(const buffer_t &old_buf) {
-        assert(!T_is_void && old_buf.elem_size == static_halide_type().bytes());
-        buf.host = old_buf.host;
-        buf.type = static_halide_type();
-        int d;
-        for (d = 0; d < 4 && old_buf.extent[d]; d++);
-        buf.dimensions = d;
-        make_shape_storage();
-        for (int i = 0; i < d; i++) {
-            buf.dim[i].min = old_buf.min[i];
-            buf.dim[i].extent = old_buf.extent[i];
-            buf.dim[i].stride = old_buf.stride[i];
-        }
-        buf.set_host_dirty(old_buf.host_dirty);
-        assert(old_buf.dev == 0 && "Cannot construct a Halide::Runtime::Buffer from a legacy buffer_t with a device allocation. Use halide_upgrade_buffer_t to upgrade it to a halide_buffer_t first.");
+    /** Make a Buffer from a legacy buffer_t, with an explicit halide_type. */
+    explicit Buffer(const buffer_t &old_buf, halide_type_t t) {
+        init_from_legacy_buffer_t(old_buf, t);
+    }
+
+    /** Make a Buffer from a legacy buffer_t, which is assumed to match our static
+     * type. (Cannot use with Buffer<void>.) */
+    explicit Buffer(const buffer_t &old_buf) {
+        static_assert(!T_is_void, "Cannot construct a Buffer<void> from a buffer_t without an explicit type.");
+        init_from_legacy_buffer_t(old_buf, static_halide_type());
     }
 
     /** Populate the fields of a legacy buffer_t using this
@@ -670,6 +695,7 @@ public:
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
                                      alloc(other.alloc),
                                      dev_ref_count(other.dev_ref_count) {
+        assert_can_convert_from(other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
@@ -966,6 +992,13 @@ public:
         }
     }
 
+    /** Initialize a Buffer from a pointer to the min coordinate and
+     * a vector describing the shape.  Does not take ownership of the
+     * data, and does not set the host_dirty flag. */
+    explicit inline Buffer(halide_type_t t, add_const_if_T_is_const<void> *data,
+                           const std::vector<halide_dimension_t> &shape)
+        : Buffer(t, data, (int) shape.size(), shape.data()) {}
+
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data and does not set the host_dirty flag. */
@@ -978,6 +1011,12 @@ public:
             buf.dim[i] = shape[i];
         }
     }
+
+    /** Initialize a Buffer from a pointer to the min coordinate and
+     * a vector describing the shape.  Does not take ownership of the
+     * data, and does not set the host_dirty flag. */
+    explicit inline Buffer(T *data, const std::vector<halide_dimension_t> &shape)
+        : Buffer(data, (int) shape.size(), shape.data()) {}
 
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. Will assert fail if there are
@@ -1069,10 +1108,18 @@ public:
     /** Make a new image which is a deep copy of this image. Use crop
      * or slice followed by copy to make a copy of only a portion of
      * the image. The new image uses the same memory layout as the
-     * original, with holes compacted away. */
-    Buffer<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
-                      void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<T, D> dst = make_with_shape_of(*this, allocate_fn, deallocate_fn);
+     * original, with holes compacted away. Note that the returned
+     * Buffer is always of a non-const type T (ie:
+     *
+     *     Buffer<const T>.copy() -> Buffer<T> rather than Buffer<const T>
+     *
+     * which is always safe, since we are making a deep copy. (The caller
+     * can easily cast it back to Buffer<const T> if desired, which is
+     * always safe and free.)
+     */
+    Buffer<not_const_T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
+                                void (*deallocate_fn)(void *) = nullptr) const {
+        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_with_shape_of(*this, allocate_fn, deallocate_fn);
         dst.copy_from(*this);
         return dst;
     }
@@ -1224,7 +1271,7 @@ public:
 
     /** Make an image which refers to the same data translated along
      * the first N dimensions. */
-    Buffer<T, D> translated(const std::vector<int> &delta) {
+    Buffer<T, D> translated(const std::vector<int> &delta) const {
         Buffer<T, D> im = *this;
         im.translate(delta);
         return im;
@@ -1809,15 +1856,15 @@ private:
     // out their strides in the d'th dimension, and assert that their
     // sizes match in that dimension.
     template<typename T2, int D2, typename ...Args>
-    void extract_strides(int d, int *strides, const Buffer<T2, D2> *first, Args... rest) {
-        assert(first->dimensions() == dimensions());
-        assert(first->dim(d).min() == dim(d).min() &&
-               first->dim(d).max() == dim(d).max());
-        *strides++ = first->dim(d).stride();
-        extract_strides(d, strides, rest...);
+    void extract_strides(int d, int *strides, const Buffer<T2, D2> &first, Args&&... rest) const {
+        assert(first.dimensions() == dimensions());
+        assert(first.dim(d).min() == dim(d).min() &&
+               first.dim(d).max() == dim(d).max());
+        *strides++ = first.dim(d).stride();
+        extract_strides(d, strides, std::forward<Args>(rest)...);
     }
 
-    void extract_strides(int d, int *strides) {}
+    void extract_strides(int d, int *strides) const {}
 
     // The template function that constructs the loop nest for for_each_value
     template<int d, bool innermost_strides_are_one, typename Fn, typename... Ptrs>
@@ -1867,9 +1914,15 @@ public:
      * effectively lifts a function of scalars to an element-wise
      * function of buffers. This produces code that the compiler can
      * autovectorize. This is slightly cheaper than for_each_element,
-     * because it does not need to track the coordinates. */
+     * because it does not need to track the coordinates.
+     *
+     * Note that constness of Buffers is preserved: a const Buffer<T> (for either
+     * 'this' or the other-buffers arguments) will allow mutation of the
+     * buffer contents, while a Buffer<const T> will not. Attempting to specify
+     * a mutable reference for the lambda argument of a Buffer<const T>
+     * will result in a compilation error. */
     template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
-    void for_each_value(Fn &&f, Args... other_buffers) {
+    void for_each_value(Fn &&f, Args&&... other_buffers) const {
         for_each_value_task_dim<N> *t =
             (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
         for (int i = 0; i <= dimensions(); i++) {
@@ -1880,7 +1933,7 @@ public:
         }
 
         for (int i = 0; i < dimensions(); i++) {
-            extract_strides(i, t[i].stride, this, &other_buffers...);
+            extract_strides(i, t[i].stride, *this, std::forward<Args>(other_buffers)...);
             t[i].extent = dim(i).extent();
             // Order the dimensions by stride, so that the traversal is cache-coherent.
             for (int j = i; j > 0 && t[j].stride[0] < t[j-1].stride[0]; j--) {

@@ -369,7 +369,12 @@ Expr Simplify::visit(const Call *op, ConstBounds *bounds) {
                          << Expr(op) << "\n";
         }
 
-        Expr result = mutate(op->args[1], bounds);
+        Expr result;
+        {
+            // Can assume the condition is true when evaluating the value.
+            auto t = scoped_truth(cond);
+            result = mutate(op->args[1], bounds);
+        }
 
         if (is_one(cond)) {
             return result;

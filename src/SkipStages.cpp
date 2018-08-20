@@ -333,20 +333,32 @@ private:
     }
 
     Stmt visit(const LetStmt *op) override {
-        bool should_pop = false;
-        if (in_vector_loop &&
-            expr_uses_vars(op->value, vector_vars)) {
-            should_pop = true;
-            vector_vars.push(op->name);
+        struct Frame {
+            const LetStmt *op;
+            bool vector_var;
+        };
+        vector<Frame> frames;
+        Stmt result;
+
+        while (op) {
+            bool vector_var = in_vector_loop && expr_uses_vars(op->value, vector_vars);
+            frames.push_back({op, vector_var});
+            if (vector_var) {
+                vector_vars.push(op->name);
+            }
+            result = op->body;
+            op = result.as<LetStmt>();
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        result = mutate(result);
 
-        if (should_pop) {
-            vector_vars.pop(op->name);
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->vector_var) {
+                vector_vars.pop(it->op->name);
+            }
+            result = LetStmt::make(it->op->name, it->op->value, result);
         }
-
-        return stmt;
+        return result;
     }
 
     Stmt visit(const Realize *op) override {

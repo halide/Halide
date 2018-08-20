@@ -32,7 +32,7 @@ Expr Simplify::visit(const Mod *op, ConstBounds *bounds) {
             rewrite(x % IRMatcher::Indeterminate(), b) ||
             rewrite(IRMatcher::Overflow() % x, a) ||
             rewrite(x % IRMatcher::Overflow(), b) ||
-            rewrite(0 % x, 0) ||
+            rewrite(0 % x, 0, can_prove(x != 0, this)) ||
             (!op->type.is_float() &&
              (rewrite(x % 0, IRMatcher::Indeterminate()) ||
               rewrite(x % 1, 0)))) {
@@ -49,6 +49,8 @@ Expr Simplify::visit(const Mod *op, ConstBounds *bounds) {
                rewrite((y + x * c0) % c1, y % c1, c0 % c1 == 0) ||
                rewrite((x * c0 - y) % c1, (-y) % c1, c0 % c1 == 0) ||
                rewrite((y - x * c0) % c1, y % c1, c0 % c1 == 0) ||
+               rewrite((x - y) % 2, (x + y) % 2) || // Addition and subtraction are the same modulo 2, because -1 == 1
+
                rewrite(ramp(x, c0) % broadcast(c1), broadcast(x, lanes) % c1, c0 % c1 == 0) ||
                rewrite(ramp(x, c0) % broadcast(c1), ramp(x % c1, c0, lanes),
                        // First and last lanes are the same when...

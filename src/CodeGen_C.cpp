@@ -30,6 +30,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
 namespace {
 
@@ -115,6 +116,16 @@ inline A reinterpret(const B &b) {
 }
 inline float float_from_bits(uint32_t bits) {
     return reinterpret<float, uint32_t>(bits);
+}
+
+template<typename T>
+inline uint8_t halide_count_leading_zeros(T v) {
+    int bits = sizeof(v) * 8;
+    while (v) {
+        v >>= 1;
+        bits--;
+    }
+    return bits;
 }
 
 template<typename T>
@@ -295,6 +306,9 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGL)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+            }
+            if (target.has_feature(Target::D3D12Compute)) {
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << '\n';
             }
         }
         stream << "#endif\n";
@@ -1954,6 +1968,10 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
+    } else if (op->is_intrinsic(Call::count_leading_zeros)) {
+        internal_assert(op->args.size() == 1);
+        string a0 = print_expr(op->args[0]);
+        rhs << "halide_count_leading_zeros(" << a0 << ")";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
