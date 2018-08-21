@@ -1497,7 +1497,7 @@ struct PartialScheduleNode {
             while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
         }
 
-        if (!in_realization || (!innermost && size[vector_dim] == 1)) {
+        if (!innermost && (!in_realization || size[vector_dim] == 1)) {
             // Place the computation inside this loop
             PartialScheduleNode r = *this;
             r.compute_here(f);
