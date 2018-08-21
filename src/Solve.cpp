@@ -348,6 +348,61 @@ private:
         return expr;
     }
 
+    Expr visit(const Div *op) override {
+        bool old_uses_var = uses_var;
+        uses_var = false;
+        bool old_failed = failed;
+        failed = false;
+        Expr a = mutate(op->a);
+        bool a_uses_var = uses_var;
+        bool a_failed = failed;
+
+        internal_assert(!is_const(op->a) || !a_uses_var)
+                << op->a << ", " << uses_var << "\n";
+
+        uses_var = false;
+        failed = false;
+        Expr b = mutate(op->b);
+        bool b_uses_var = uses_var;
+        bool b_failed = failed;
+        uses_var = old_uses_var || a_uses_var || b_uses_var;
+        failed = old_failed || a_failed || b_failed;
+
+        const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+
+        Expr expr;
+        if (a_uses_var && !b_uses_var) {
+            if (add_a && !a_failed &&
+                can_prove(add_a->a / b * b == add_a->a)) {
+                // (f(x) + a) / b -> f(x) / b + a / b
+                expr = mutate(simplify(add_a->a / b) + add_a->b / b);
+            } else if (sub_a && !a_failed &&
+                       can_prove(sub_a->a / b * b == sub_a->a)) {
+                // (f(x) - a) / b -> f(x) / b - a / b
+                expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
+            } else if (mul_a && !a_failed &&
+                       can_prove(mul_a->b / b * b == mul_a->b)) {
+                // (f(x) * a) / b -> f(x) * (a / b)
+                expr = mutate(mul_a->a * (mul_a->b / b));
+            }
+        } else if (is_const(a) && is_const(b)) {
+            // Do some constant-folding
+            expr = simplify(a / b);
+            internal_assert(!uses_var && !a_uses_var && !b_uses_var);
+        }
+
+        if (!expr.defined()) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = a / b;
+            }
+        }
+        return expr;
+    }
+
     Expr visit(const Call *op) override {
         // Ignore likely intrinsics
         if (op->is_intrinsic(Call::likely) ||
@@ -1424,6 +1479,17 @@ void solve_test() {
     // A let statement
     check_solve(Let::make("z", 3 + 5*x, y + z < 8),
           x <= (((8 - (3 + y)) - 1)/5));
+
+    // Check solver with expressions containing division
+    check_solve(x + (x*2) / 2, x*2);
+    check_solve(x + (x*2 + y) / 2, x*2 + (y / 2));
+    check_solve(x + (x*2 - y) / 2, x*2 - (y / 2)) ;
+    check_solve(x + (-(x*2) / 2), x*0 + 0);
+    check_solve(x + (-(x*2 + -3)) / 2, x*0 + 1);
+    check_solve(x + (z - (x*2 + -3)) / 2, x*0 + (z - (-3)) / 2);
+    check_solve(x + (y*16 + (z - (x * 2 + -1))) / 2,
+                (x * 0) + (((z - -1) + (y*16)) / 2));
+
 
     // A let statement where the variable gets used twice.
     check_solve(Let::make("z", 3 + 5*x, y + (z + z) < 8),

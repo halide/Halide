@@ -2089,6 +2089,15 @@ private:
                 return mutate(mul_a->a / make_const(op->type, div_imp(ib, ia)));
             }
         } else if (no_overflow(op->type) &&
+                   mul_a &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ia < 0 &&
+                   ib > 0 &&
+                   ia % ib == 0) {
+            // (x * (-4)) / 2 -> x * (-2)
+            return mutate(mul_a->a * make_const(op->type, div_imp(ia, ib)));
+        } else if (no_overflow(op->type) &&
                    add_a &&
                    mul_a_a &&
                    const_int(mul_a_a->b, &ia) &&
