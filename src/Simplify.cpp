@@ -5727,6 +5727,17 @@ private:
         return stmt;
     }
 
+    Stmt visit(const Prefetch *op) override {
+        Stmt stmt = IRMutator2::visit(op);
+
+        const Prefetch *p = stmt.as<Prefetch>();
+        if (is_zero(p->condition)) {
+            // Predicate is always false
+            return p->body;
+        } else {
+            return stmt;
+        }
+    }
 
     Stmt visit(const For *op) override {
         Expr new_min = mutate(op->min);

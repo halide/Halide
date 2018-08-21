@@ -339,8 +339,10 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+            return;
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min * b.min);
+            return;
         } else if (b.is_single_point()) {
             Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
@@ -792,6 +794,22 @@ private:
     }
 
     void visit(const Call *op) {
+        // Using the strict_float feature flag wraps a strict_float()
+        // call around every Expr that is of type float, so it's easy
+        // to get nestings that are many levels deep; the bounds of this
+        // call are *always* exactly that of its first argument, so short
+        // circuit it here before checking for const_args. This is important
+        // because evaluating const_args for such a deeply nested case
+        // essentially becomes O(n^2) doing work that is unnecessary, making
+        // otherwise simple pipelines take several minutes to compile.
+        //
+        // TODO: are any other intrinsics worth including here as well?
+        if (op->is_intrinsic(Call::strict_float)) {
+            assert(op->args.size() == 1);
+            op->args[0].accept(this);
+            return;
+        }
+
         // If the args are const we can return the call of those args
         // for pure functions. For other types of functions, the same
         // call in two different places might produce different
@@ -839,9 +857,11 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 interval.max = Interval::pos_inf;
             }
+        } else if (op->is_intrinsic(Call::unsafe_promise_clamped)) {
+            Expr full_clamp = clamp(op->args[0], op->args[1], op->args[2]);
+            full_clamp.accept(this);
         } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost) ||
-                   op->is_intrinsic(Call::strict_float)) {
+                   op->is_intrinsic(Call::likely_if_innermost)) {
             assert(op->args.size() == 1);
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -1650,7 +1670,7 @@ private:
                         }
 
                         Interval bi = bounds_of_expr_in_scope(b, scope, func_bounds);
-                        if (bi.has_upper_bound()) {
+                        if (bi.has_upper_bound() && i.has_upper_bound()) {
                             if (lt) {
                                 i.max = min(likely_i.max, bi.max - 1);
                             }
@@ -1658,7 +1678,7 @@ private:
                                 i.max = min(likely_i.max, bi.max);
                             }
                         }
-                        if (bi.has_lower_bound()) {
+                        if (bi.has_lower_bound() && i.has_lower_bound()) {
                             if (gt) {
                                 i.min = max(likely_i.min, bi.min + 1);
                             }
@@ -1681,7 +1701,7 @@ private:
                         }
 
                         Interval ai = bounds_of_expr_in_scope(a, scope, func_bounds);
-                        if (ai.has_upper_bound()) {
+                        if (ai.has_upper_bound() && i.has_upper_bound()) {
                             if (gt) {
                                 i.max = min(likely_i.max, ai.max - 1);
                             }
@@ -1689,7 +1709,7 @@ private:
                                 i.max = min(likely_i.max, ai.max);
                             }
                         }
-                        if (ai.has_lower_bound()) {
+                        if (ai.has_lower_bound() && i.has_lower_bound()) {
                             if (lt) {
                                 i.min = max(likely_i.min, ai.min + 1);
                             }
