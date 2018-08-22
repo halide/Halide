@@ -3312,7 +3312,7 @@ bool inline_unbounded(const vector<Function> &outputs,
         }
         inlined = true;
         debug(4) << "Function \"" << order[i] << "\" is unbounded\n";
-        for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+        for (int j = i + 1; j < (int)order.size(); ++j) {
             internal_assert(order[i] != order[j]);
             Function f2 = env.at(order[j]);
             debug(5) << "Inline unbounded function \"" << f1.name()

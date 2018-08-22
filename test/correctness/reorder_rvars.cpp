@@ -24,7 +24,9 @@ int main(int argc, char **argv) {
 
         // Reorder g
         g.reorder(y, x);
-        g.update(0).reorder(r1.x, y, x, r1.y);
+        // It is legal to reorder r1.x and r1.y
+        // because stage g.update(0) is associative.
+        g.update(0).reorder(r1.y, y, x, r1.x);
         g.update(1).reorder(r2.x, x, r2.y, r2.z);
         g.compute_root();
         f.compute_root();
