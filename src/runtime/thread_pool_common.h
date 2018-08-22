@@ -448,12 +448,21 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     }
 
-    if (job_has_acquires || job_may_block) {
-        log_message("enqueue_work_already_locked adding one to min_threads.");
-        min_threads += 1;
-    }
-    
     if (task_parent == NULL) {
+        // This is here because some top-level jobs may block, but are not accounted for
+        // in any enclosing min_threads count. In order to handle extern stages and such
+        // correctly, we likely need to make the total min_threads for an invocation of
+        // a pipeline a property of the entire thing. This approach works because we use
+        // the increased min_threads count to increase the size of the thread pool. It should
+        // even be safe against reservation races because this is happening under the work
+        // queue lock and that lock will be held into running the job. However that's many
+        // lines of code from here to there and it is not guaranteed this will be the first
+        // job run.
+        if (job_has_acquires || job_may_block) {
+            log_message("enqueue_work_already_locked adding one to min_threads.");
+            min_threads += 1;
+        }
+    
         // Spawn more threads if necessary.
         while (work_queue.threads_created < MAX_THREADS &&
                ((work_queue.threads_created < work_queue.desired_threads_working - 1) ||
@@ -469,8 +478,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
             work_queue.threads_reserved++;
         }
     } else {
-      log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
-        halide_assert(NULL, (min_threads <= (task_parent->task.min_threads - task_parent->threads_reserved)) && "Logic error: thread over commit.\n");
+        log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
+        halide_assert(NULL, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
+                                             task_parent->threads_reserved)) && "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }

@@ -3146,24 +3146,45 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
         // compiling a given node.) Ideally we'd move to a lowering pass
         // that converts our parallelism constructs to Call nodes, or
         // direct hardware operations in some cases.
+        // Also, this code has to exactly mirror the logic in get_parallel_tasks.
+        // It would be better to do one pass on the tree and centralize the task
+        // deduction logic in one place.
         class MinThreads : public IRVisitor {
             using IRVisitor::visit;
 
-            void visit(const Fork *op) {
-                ScopedValue<int> save(direct_acquires, 0);
+            std::pair<Stmt, int> skip_acquires(Stmt first) {
+                int count = 0;
+                while (first.defined()) {
+                    const Acquire *acq = first.as<Acquire>();
+                    if (acq == nullptr) {
+                        break;
+                    }
+                    count++;
+                    first = acq->body;
+                }
+                return { first, count };
+            }
 
+            void visit(const Fork *op) {
                 int total_threads = 0;
+                int direct_acquires = 0;
                 // Take the sum of min threads across all
                 // cascaded Fork nodes.
                 const Fork *node = op;
                 while (node != NULL) {
                     result = 0;
-                    node->first.accept(this);
+                    auto after_acquires = skip_acquires(node->first);
+                    direct_acquires += after_acquires.second;
+                    
+                    after_acquires.first.accept(this);
                     total_threads += result;
+
                     const Fork *continued_branches = node->rest.as<Fork>();
                     if (continued_branches == NULL) {
                         result = 0;
-                        node->rest.accept(this);
+                        after_acquires = skip_acquires(node->rest);
+                        direct_acquires += after_acquires.second;
+                        after_acquires.first.accept(this);
                         total_threads += result;
                     }
                     node = continued_branches;
@@ -3178,21 +3199,32 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             void visit(const For *op) {
                 result = 0;
 
-                if (op->for_type == ForType::Parallel ||
-                    op->for_type == ForType::Serial) {
-                    ScopedValue<int> save(direct_acquires, 0);
+                if (op->for_type == ForType::Parallel) {
                     IRVisitor::visit(op);
-                    if (direct_acquires > 0) {
+                    if (result > 0) {
+                        result += 1;
+                    }
+                } else if (op->for_type == ForType::Serial) {
+                    auto after_acquires = skip_acquires(op->body);
+                    if (after_acquires.second > 0 &&
+                        !expr_uses_var(op->body.as<Acquire>()->count, op->name)) {
+                        after_acquires.first.accept(this);
                         result++;
+                    } else {
+                        IRVisitor::visit(op);
                     }
                 } else {
                     IRVisitor::visit(op);
                 }
             }
- 
+
+            // This is a "standalone" Acquire and will result in its own task.
+            // Treat it requiring one more thread than its body.
             void visit(const Acquire *op) {
-                IRVisitor::visit(op);
-                direct_acquires++;
+                result = 0;
+                auto after_inner_acquires = skip_acquires(op);
+                after_inner_acquires.first.accept(this);
+                result = result + 1;
             }
  
             void visit(const Block *op) {
@@ -3205,13 +3237,9 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             }
         public:
             int result = 0;
-            int direct_acquires = 0;
         };
         MinThreads min_threads;
         t.body.accept(&min_threads);
-        if (min_threads.direct_acquires) {
-            min_threads.result++;
-        }
 
         // Decide if we're going to call do_par_for or
         // do_parallel_tasks. halide_do_par_for is simpler, but
