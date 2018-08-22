@@ -449,8 +449,13 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
         << " dst_device_interface: " << (void *)dst_device_interface << "\n"
         << " dst: " << *dst << "\n";
 
-    // Figure out a better thing here.
-    // halide_error_code_incompatible_device_interface
+    // The right thing is that all devices have to support
+    // device-to-device and device-to/from-arbitrarty-pointer.  This
+    // means there will always have to be a device specifc version of
+    // this function and the default can go away or fail. At present
+    // there are some devices, e.g. OpenGL and OpenGLCompute, for which
+    // this is not yet implemented.
+
     return halide_error_code_device_buffer_copy_failed;
 }
 
