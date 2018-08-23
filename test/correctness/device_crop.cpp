@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         gpu_buf.copy_to_host();
         for (int i = 0; i < 64; i++) {
             for (int j = 0; j < 64; j++) {
-              assert(gpu_buf(32 + i, 32 + j) == (i + 32) + 256 * (j + 32));
+                assert(gpu_buf(32 + i, 32 + j) == (i + 32) + 256 * (j + 32));
             }
         }
     }
