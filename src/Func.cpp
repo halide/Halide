@@ -1546,11 +1546,22 @@ Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
-    // Check whether the operator is associative and commutative.
-    const auto &prover_result = prove_associativity(func_name, args, values);
-    const bool is_associative_and_commutative
-            = prover_result.associative() && prover_result.commutative();
+    bool is_associative_and_commutative = false;
 
+    bool any_rvars = false;
+    for (const auto &dim : definition.schedule().dims()) {
+        if (!dim.is_pure()) {
+            any_rvars = true;
+            break;
+        }
+    }
+    if (any_rvars) {
+        // Check whether the operator is associative and commutative.
+        const auto &prover_result = prove_associativity(func_name, args, values);
+        is_associative_and_commutative
+                = prover_result.associative() && prover_result.commutative();
+    }
+    
     reorder_vars(definition.schedule().dims(), &vars[0], vars.size(), *this,
                  is_associative_and_commutative);
     return *this;
