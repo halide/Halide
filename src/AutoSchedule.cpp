@@ -1312,6 +1312,14 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
+        if (!pipeline_bounds.count(f.first)) {
+            // If a function does not have a pipeline bound (i.e. it can be
+            // statically proven that no one ever uses it), we should not
+            // consider it during the grouping.
+            debug(5) << "Creating partitioner: ignore function \"" << f.first
+                     << "\" since it has empty pipeline bounds\n";
+            continue;
+        }
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
@@ -3286,6 +3294,11 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
                                     const map<string, Function> &env) {
     set<string> unbounded;
     for (const auto &iter : env) {
+        if (!pipeline_bounds.count(iter.first)) {
+            debug(5) << "...Skip checking function \"" << iter.first
+                     << "\" since it does not have pipeline bounds\n";
+            continue;
+        }
         const Function &f = iter.second;
         if (!f.can_be_inlined() || used_by_extern_func(env, f)) {
             continue;

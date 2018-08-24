@@ -12,6 +12,7 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  alignment_64
   android_clock
   android_host_cpu_count
   android_io
