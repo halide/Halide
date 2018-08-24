@@ -806,11 +806,11 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
             err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
                                       src_idx + ((device_handle *)c.src)->offset, dst_idx  + ((device_handle *)c.dst)->offset,
                                       c.chunk_size, 0, NULL, NULL);
-        } else if (c.dst != c.src) {
+        } else if ((c.dst + dst_idx) != (c.src + src_idx)) {
             // Could reach here if a user called directly into the
             // opencl API for a device->host copy on a source buffer
             // with device_dirty = false.
-            memcpy((void *)c.dst, (void *)c.src, c.chunk_size);
+            memcpy((void *)(c.dst + dst_idx), (void *)(c.src + src_idx), c.chunk_size);
         }
 
         if (err) {
@@ -841,18 +841,16 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &opencl_device_interface);
 
-    if (src->device_dirty() &&
+    if ((src->device_dirty() || src->host == NULL) &&
         src->device_interface != &opencl_device_interface) {
         halide_assert(user_context, dst_device_interface == &opencl_device_interface);
-        // If the source is not opencl or host memory, ask the source
-        // device interface to copy to dst host memory first.
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (err) return err;
-        // Now just copy from src to host
-        src = dst;
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &opencl_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);

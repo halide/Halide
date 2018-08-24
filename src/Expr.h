@@ -329,7 +329,8 @@ enum class DeviceAPI {
     OpenGLCompute,
     Metal,
     Hexagon,
-    HexagonDma
+    HexagonDma,
+    D3D12Compute,
 };
 
 /** An array containing all the device apis. Useful for iterating
@@ -343,7 +344,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon,
-                                     DeviceAPI::HexagonDma};
+                                     DeviceAPI::HexagonDma,
+                                     DeviceAPI::D3D12Compute};
 
 /** An enum describing different address spaces to be used with Func::store_in. */
 enum class MemoryType {
