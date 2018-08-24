@@ -23,6 +23,7 @@ using std::vector;
 namespace {
 
 #ifdef _MSC_VER
+#include <intrin.h>
 static void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
