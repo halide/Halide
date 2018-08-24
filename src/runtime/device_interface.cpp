@@ -505,6 +505,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
                                    (src->host == NULL || !src->host_dirty());
     const bool to_device = dst_device_interface != NULL;
     const bool to_host = dst_device_interface == NULL;
+    const bool from_host_valid = !src->device_dirty() || (src->device_interface == NULL);
     const bool from_host_exists = src->host != NULL;
     const bool to_host_exists = dst->host != NULL;
 
@@ -523,7 +524,11 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
             return halide_error_code_incompatible_device_interface;
         }
 
-        if (to_host) {
+        if (to_host && from_host_valid) {
+            device_copy c = make_buffer_copy(src, true, dst, true);
+            copy_memory(c, user_context);
+            err = 0;
+        } else if (to_host) {
             debug(user_context) << "halide_buffer_copy_already_locked: to host case.\n";
             err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
             // Return on success or an error indicating something other
