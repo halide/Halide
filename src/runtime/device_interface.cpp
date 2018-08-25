@@ -449,8 +449,13 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
         << " dst_device_interface: " << (void *)dst_device_interface << "\n"
         << " dst: " << *dst << "\n";
 
-    // Figure out a better thing here.
-    // halide_error_code_incompatible_device_interface
+    // The right thing is that all devices have to support
+    // device-to-device and device-to/from-arbitrarty-pointer.  This
+    // means there will always have to be a device specifc version of
+    // this function and the default can go away or fail. At present
+    // there are some devices, e.g. OpenGL and OpenGLCompute, for which
+    // this is not yet implemented.
+
     return halide_error_code_device_buffer_copy_failed;
 }
 
@@ -500,6 +505,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
                                    (src->host == NULL || !src->host_dirty());
     const bool to_device = dst_device_interface != NULL;
     const bool to_host = dst_device_interface == NULL;
+    const bool from_host_valid = !src->device_dirty() || (src->device_interface == NULL);
     const bool from_host_exists = src->host != NULL;
     const bool to_host_exists = dst->host != NULL;
 
@@ -518,7 +524,11 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
             return halide_error_code_incompatible_device_interface;
         }
 
-        if (to_host) {
+        if (to_host && from_host_valid) {
+            device_copy c = make_buffer_copy(src, true, dst, true);
+            copy_memory(c, user_context);
+            err = 0;
+        } else if (to_host) {
             debug(user_context) << "halide_buffer_copy_already_locked: to host case.\n";
             err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
             // Return on success or an error indicating something other

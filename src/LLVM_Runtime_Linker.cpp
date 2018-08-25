@@ -67,6 +67,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
+DECLARE_CPP_INITMOD(alignment_64)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
@@ -779,6 +780,16 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 t.has_feature(Target::HVX_64) ||
                 t.has_feature(Target::HVX_128)) {
                 modules.push_back(get_initmod_alignment_128(c, bits_64, debug));
+            } else if (t.arch == Target::X86) {
+                // AVX-512 requires 64-byte alignment. Could only increase alignment
+                // if AVX-512 is in the target, but that falls afoul of linking
+                // multiple versions of a filter for different levels of x86 -- weak
+                // linking will pick one of the alignment modules unpredictably.
+                // Another way to go is to query the CPU features and align by
+                // 64 oonly if the procesor has AVX-512.
+                // The choice to go 64 all the time is for simplicity and on the idea
+                // that it won't be a noticeable cost in the majority of x86 usage.
+                modules.push_back(get_initmod_alignment_64(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
             }

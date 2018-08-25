@@ -231,10 +231,7 @@ WEAK mtl_device *metal_api_checked_device;
 namespace {
 int do_device_to_device_copy(void *user_context, mtl_blit_command_encoder *encoder,
                              const device_copy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
-    if (d > MAX_COPY_DIMS) {
-        error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
-        return -1;
-    } else if (d == 0) {
+    if (d == 0) {
         buffer_to_buffer_1d_copy(encoder, ((device_handle *)c.src)->buf, c.src_begin + src_offset,
                                  ((device_handle *)c.dst)->buf, dst_offset, c.chunk_size);
     } else {
@@ -853,6 +850,11 @@ WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buf
 WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                  const struct halide_device_interface_t *dst_device_interface,
                                  struct halide_buffer_t *dst) {
+    if (dst->dimensions > MAX_COPY_DIMS) {
+        error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
     // We only handle copies to metal buffers or to host
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &metal_device_interface);
