@@ -82,9 +82,12 @@ private:
 static void *const user_context = NULL;
 //
 #if HALIDE_D3D12_TRACE
-    #ifndef DEBUG_RUNTIME
-    #define debug(x) Printer<BasicPrinter>(x)
-    #endif//DEBUG_RUNTIME
+    // it's better to use StackPrinter<> instead of Printer<> (debug(ctx)) when
+    // tracing calls because Printer<> calls 'halide_malloc()' which can fail;
+    // there's even a test for it (generator_aot_cleanup_on_error), simulating
+    // a halide_malloc failure, and user code should not affect debug-tracing
+    #define trace(x) StackPrinter<4096, BasicPrinter>(x)
+
     static volatile int indent_lock = 0;
     static const char indent_pattern [] = "   ";
     static char  indent [2048] = { };
@@ -106,7 +109,7 @@ static void *const user_context = NULL;
         }
     };
     #define TRACEINDENT     ((const char*)indent)
-    #define TRACEPRINT(msg) debug(user_context) << TRACEINDENT << msg;
+    #define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
     #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
 #else
     #define TRACEINDENT ""
@@ -998,10 +1001,11 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
     TRACELOG;
 
     static int32_t total_dispatches = 0;
-    debug(user_context) << TRACEINDENT
-                        << "Dispatching threadgroups (number " << total_dispatches++ << ") "
-                           "blocks(" << blocks_x << ", " << blocks_y << ", " << blocks_z << " ) "
-                           "threads(" << threads_x << ", " << threads_y << ", " << threads_z << ")\n";
+    TRACEPRINT(
+        "Dispatching threadgroups (number " << total_dispatches++ << ")"
+        " blocks("  <<  blocks_x << ", " <<  blocks_y << ", " <<  blocks_z << ")"
+        " threads(" << threads_x << ", " << threads_y << ", " << threads_z << ")\n"
+    );
 
     (*cmdList)->Dispatch(blocks_x, blocks_y, blocks_z);
 }
@@ -2071,9 +2075,7 @@ extern "C" {
 WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    debug(user_context) << TRACEINDENT
-                        << "(user_context: " << user_context
-                        << ", buf: " << buf << ")\n";
+    TRACEPRINT( "(user_context: " << user_context << ", buf: " << buf << ")\n" );
 
     size_t size = buf->size_in_bytes();
     halide_assert(user_context, size != 0);
@@ -2087,7 +2089,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         halide_assert(user_context, buf->dim[i].stride > 0);
     }
 
-    debug(user_context) << TRACEINDENT << "allocating " << *buf << "\n";
+    TRACEPRINT( "allocating " << *buf << "\n" );
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -2111,7 +2113,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2120,9 +2122,10 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    debug(user_context) << TRACEINDENT
-                        << "halide_d3d12compute_device_free called on buf "
-                        << buf << " device is " << buf->device << "\n";
+    TRACEPRINT(
+           "halide_d3d12compute_device_free called on buf "
+        << buf << " device is " << buf->device << "\n"
+    );
 
     if (buf->device == 0) {
         return 0;
@@ -2136,7 +2139,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2179,13 +2182,13 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after_compile = halide_current_time_ns(user_context);
-        debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n";
+        TRACEPRINT( "Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n" );
         #endif
     }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT( "Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2246,7 +2249,7 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT( "Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2323,11 +2326,12 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     device_copy c = make_host_to_device_copy(buffer);
     halide_assert(user_context, c.dst == buffer->device);
     d3d12_buffer *copy_dst = reinterpret_cast<d3d12_buffer*>(c.dst);
-    debug(user_context) << TRACEINDENT
-                        << "halide_d3d12compute_copy_to_device dev = " << (void*)buffer->device
-                        << " d3d12_buffer = " << copy_dst
-                        << " host = " << buffer->host
-                        << "\n";
+    TRACEPRINT(
+           "halide_d3d12compute_copy_to_device dev = " << (void*)buffer->device
+        << " d3d12_buffer = " << copy_dst
+        << " host = " << buffer->host
+        << "\n"
+    );
     // 'memcpy' to staging buffer:
     size_t total_size = buffer->size_in_bytes();
     halide_assert(user_context, total_size > 0);
@@ -2353,9 +2357,10 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT
-                        << "Time for halide_d3d12compute_copy_to_device: "
-                        << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT(
+           "Time for halide_d3d12compute_copy_to_device: "
+        << (t_after - t_before) / 1.0e6 << " ms\n"
+    );
     #endif
 
     return 0;
@@ -2401,7 +2406,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_copy_to_host: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT( "Time for halide_d3d12compute_copy_to_host: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2608,7 +2613,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << TRACEINDENT << "Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    TRACEPRINT( "Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2633,11 +2638,12 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     void *host = d3d12_malloc(buffer->size_in_bytes());
     buffer->host = (uint8_t*)host;
     dev_buffer->host_mirror = host;
-    debug(user_context) << TRACEINDENT
-                        << "halide_d3d12compute_device_and_host_malloc"
-                        << " device = " << (void*)buffer->device
-                        << " d3d12_buffer = " << dev_buffer
-                        << " host = " << buffer->host << "\n";
+    TRACEPRINT(
+           "halide_d3d12compute_device_and_host_malloc"
+        << " device = " << (void*)buffer->device
+        << " d3d12_buffer = " << dev_buffer
+        << " host = " << buffer->host << "\n"
+    );
 
     return result;
 }
@@ -2681,13 +2687,15 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
     // later on when 'set_input()' is called...
     new_handle->elements = old_handle->elements - offset;
 
-    TRACEPRINT("--- "
+    TRACEPRINT(
+           "--- "
         << (void*)old_handle  << " | " << (void*)old_handle->halide << " | "
         << old_handle->offset << " : " << old_handle->elements << " : " << old_handle->sizeInBytes
         << "   ->   "
         << (void*)new_handle  << " | " << (void*)new_handle->halide << " | "
         << new_handle->offset << " : " << new_handle->elements << " : " << new_handle->sizeInBytes
-        << "\n");
+        << "\n"
+    );
 
     return 0;
 }
