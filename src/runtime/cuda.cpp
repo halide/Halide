@@ -678,8 +678,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
-                                  uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
+WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
+                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -712,7 +712,7 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
+            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
             src_off += c.src_stride_bytes[d-1];
             if (err) {
@@ -769,7 +769,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
+        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
