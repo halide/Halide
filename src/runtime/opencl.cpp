@@ -779,10 +779,10 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
-                                  const device_copy &c,
-                                  int64_t src_idx, int64_t dst_idx,
-                                  int d, bool from_host, bool to_host) {
+WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
+                                         const device_copy &c,
+                                         int64_t src_idx, int64_t dst_idx,
+                                         int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -820,7 +820,7 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, ctx, c,
+            int err = opencl_do_multidimensional_copy(user_context, ctx, c,
                                                src_idx + src_off, dst_idx + dst_off,
                                                d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
@@ -879,7 +879,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+        err = opencl_do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
 
         // The reads/writes above are all non-blocking, so empty the command
         // queue before we proceed so that other host code won't write
