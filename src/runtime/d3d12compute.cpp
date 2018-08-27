@@ -32,7 +32,6 @@
 #include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
-#include "hashmap.h"
 
 #if !defined(INITGUID)
     #define  INITGUID
@@ -196,6 +195,10 @@ static T zero_struct() {
     T zero = { };
     return zero;
 }
+
+#define hashmap_malloc  d3d12_malloc
+#define hashmap_free    d3d12_free
+#include "hashmap.h"
 
 template<typename ID3D12T>
 static const char *d3d12typename(ID3D12T*) {

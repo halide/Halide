@@ -6,6 +6,14 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
+#ifndef hashmap_malloc
+#define hashmap_malloc(size)    halide_malloc(NULL, size)
+#endif//hashmap_malloc
+
+#ifndef hashmap_free
+#define hashmap_free(memory)    halide_free(NULL, memory)
+#endif//hashmap_free
+
 namespace Halide { namespace Runtime { namespace Internal {
 
 inline bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
@@ -72,7 +80,7 @@ inline bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     storage_bytes += key_size;
 
     // Do the single malloc call
-    metadata_storage = (uint8_t *)halide_malloc(NULL, storage_bytes);
+    metadata_storage = (uint8_t *)hashmap_malloc(storage_bytes);
     if (!metadata_storage) {
         return false;
     }
@@ -95,7 +103,7 @@ inline bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 
 inline void CacheEntry::destroy(destroy_value_func destroy_value) {
     destroy_value(value, value_size);
-    halide_free(NULL, metadata_storage);
+    hashmap_free(metadata_storage);
 }
 
 struct HashMap {
@@ -191,7 +199,7 @@ inline void HashMap::prune() {
 
             // Deallocate the entry.
             prune_candidate->destroy(destroy_value);
-            halide_free(NULL, prune_candidate);
+            hashmap_free(prune_candidate);
         }
 
         prune_candidate = more_recent;
@@ -312,7 +320,7 @@ inline int HashMap::store(void *user_context,
     }
 
     // key not found: create new entry
-    CacheEntry *new_entry = (CacheEntry*)halide_malloc(NULL, sizeof(CacheEntry));
+    CacheEntry *new_entry = (CacheEntry*)hashmap_malloc(sizeof(CacheEntry));
     bool inited = new_entry->init(cache_key, size, h, cache_value, cache_value_size, copy_value);
     halide_assert(user_context, inited);
 
@@ -356,7 +364,7 @@ inline void HashMap::cleanup() {
         while (entry != NULL) {
             CacheEntry *next = entry->next;
             entry->destroy(destroy_value);
-            halide_free(NULL, entry);
+            hashmap_free(entry);
             entry = next;
         }
     }
