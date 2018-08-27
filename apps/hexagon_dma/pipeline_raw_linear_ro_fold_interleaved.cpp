@@ -38,12 +38,13 @@ public:
         // circular buffer of two tiles.
         copy
             .compute_at(output, tx)
-            .store_at(output, tx)
+            .store_at(output, ty)
             .bound(c, 0, 4)
             .copy_to_host()
-            .reorder_storage(c, x, y);
+            .reorder_storage(c, x, y)
+            .fold_storage(x, tile_width * 2);
     }
 
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_ro_fold_interleaved)

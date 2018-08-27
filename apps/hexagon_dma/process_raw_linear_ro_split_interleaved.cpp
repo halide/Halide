@@ -3,10 +3,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#include "pipeline_rawplanar.h"
+#include "pipeline_raw_linear_ro_split_interleaved.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
-#include "../../src/runtime/mini_hexagon_dma.h"
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -25,6 +24,8 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height, 4);
+
+    input = input.make_interleaved(width, height, 4);
  
     // Give the input the buffer we want to DMA from.
     input.device_wrap_native(halide_hexagon_dma_device_interface(), reinterpret_cast<uint64_t>(data_in));
@@ -43,21 +44,23 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<uint8_t> output(width, height, 4);
 
+    output = output.make_interleaved(width, height, 4);
+
     printf("before pipeline\n");
 
-    int result = pipeline_rawplanar(input, output);
+    int result = pipeline_raw_linear_ro_split_interleaved(input, output);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
 
-    for (int z=0; z < 4; z++) {
-    	for (int y=0; y < height; y++) {
-            for (int x=0; x < width; x++) {
-                uint8_t correct = data_in[x + y*width + z * width * height] * 2;
+    for (int y=0; y < height; y++) {
+        for (int x=0; x < width; x++) {
+            for (int z=0; z < 4; z++) {      
+                uint8_t correct = data_in[x*4 + z + y*width*4] * 2;
                 if (correct != output(x, y, z)) {
-                    static int cnt = 0;
-                    printf("Mismatch at x=%d y=%d z=%d: %d != %d\n", x, y, z, correct, output(x, y, z));
-                    if (++cnt > 20) abort();
+                static int cnt = 0;
+                printf("Mismatch at x=%d y=%d z=%d: %d != %d\n", x, y, z, correct, output(x, y, z));
+                  if (++cnt > 20) abort();
                 }
             }
         }

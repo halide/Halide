@@ -23,19 +23,16 @@ public:
         const int tile_width = 64;
         const int tile_height = 32;
 
-        Expr fac = output.dim(1).extent()/2;
-        Var yo, yi;
-        output.split(y, yo, yi, fac);
         output.compute_root()
-              .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-              .parallel(yo);
+              .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
         Stage(output)
             .set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
         // Schedule the copy to be computed at tiles with a
         // circular buffer of two tiles.
         input_copy.compute_at(output, tx)
-                  .copy_to_host();
+                  .store_at(output, ty)
+                  .copy_to_host().fold_storage(x, tile_width * 2);
 
         work.compute_at(output, tx);
 
@@ -46,4 +43,4 @@ public:
 
 };
 
-HALIDE_REGISTER_GENERATOR(DmaPipeline, dma_pipeline_rd_wr_raw)
+HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_rw_fold_planar)

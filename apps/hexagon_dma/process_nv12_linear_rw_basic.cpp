@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#include "pipeline_rd_wr.h"
+#include "pipeline_nv12_linear_rw_basic.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output_uv, dma_engine, false, halide_hexagon_fmt_NV12_UV);
 
 
-    int result = pipeline_rd_wr(input_y, input_uv, output_y, output_uv);
+    int result = pipeline_nv12_linear_rw_basic(input_y, input_uv, output_y, output_uv);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }

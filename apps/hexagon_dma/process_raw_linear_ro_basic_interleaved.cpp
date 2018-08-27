@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#include "pipeline_rawinterleaved.h"
+#include "pipeline_raw_linear_ro_basic_interleaved.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 #include "../../src/runtime/mini_hexagon_dma.h"
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 
     printf("before pipeline\n");
 
-    int result = pipeline_rawinterleaved(input, output);
+    int result = pipeline_raw_linear_ro_basic_interleaved(input, output);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }

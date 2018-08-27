@@ -3,10 +3,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "halide_benchmark.h"
-#include "pipeline_p010.h"
+#include "pipeline_p010_linear_ro_split.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
-#include "../../src/runtime/mini_hexagon_dma.h"
 
 int main(int argc, char **argv) {
     if (argc < 3) {
@@ -64,7 +63,7 @@ int main(int argc, char **argv) {
     output_uv.raw_buffer()->dim[0].stride = 2;
     output_uv.raw_buffer()->dim[0].extent = width / 2;
 
-    int result = pipeline_p010(input_y, input_uv, output_y, output_uv);
+    int result = pipeline_p010_linear_ro_split(input_y, input_uv, output_y, output_uv);
     if (result != 0) {
         printf("pipeline failed! %d\n", result);
     }
