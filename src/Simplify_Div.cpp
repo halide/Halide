@@ -43,8 +43,13 @@ Expr Simplify::visit(const Div *op, ConstBounds *bounds) {
             rewrite(x / 1, x) ||
             (!op->type.is_float() &&
              rewrite(x / 0, IRMatcher::Indeterminate())) ||
+<<<<<<< HEAD
             rewrite(0 / x, 0) ||
             rewrite(x / x, 1) ||
+=======
+            rewrite(0 / x, 0, can_prove(x != 0, this)) ||
+            rewrite(x / x, 1, can_prove(x != 0, this)) ||
+>>>>>>> 26e2625ad072996c979dd1430efcbdd5625a76c9
             rewrite(c0 / c1, fold(c0 / c1))) {
             return rewrite.result;
         }
