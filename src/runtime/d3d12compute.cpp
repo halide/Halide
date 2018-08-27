@@ -5,7 +5,7 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE          (0)
+#define HALIDE_D3D12_TRACE          (1)
 #define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
 #define HALIDE_D3D12_PROFILING      (0)
@@ -2662,6 +2662,13 @@ WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct hal
     return 0;
 }
 
+WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                         const struct halide_device_interface_t *dst_device_interface,
+                                         struct halide_buffer_t *dst) {
+    TRACELOG;
+    return 0;
+}
+
 namespace {
 
 WEAK int d3d12compute_device_crop_from_offset(void *user_context,
@@ -2832,7 +2839,7 @@ WEAK halide_device_interface_impl_t d3d12compute_device_interface_impl = {
     halide_d3d12compute_copy_to_device,
     halide_d3d12compute_device_and_host_malloc,
     halide_d3d12compute_device_and_host_free,
-    halide_default_buffer_copy,
+    halide_d3d12compute_buffer_copy,
     halide_d3d12compute_device_crop,
     halide_d3d12compute_device_slice,
     halide_d3d12compute_device_release_crop,
