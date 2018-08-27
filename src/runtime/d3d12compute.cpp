@@ -150,9 +150,9 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 
 #define d3d12_debug_break (*((volatile int8_t*)NULL) = 0)
 
-#ifndef UNUSED
-#define UNUSED(x) ((void)x)
-#endif//UNUSED
+#ifndef MAYBE_UNUSED
+#define MAYBE_UNUSED(x) ((void) x)
+#endif//MAYBE_UNUSED
 
 #if HALIDE_D3D12_RENDERDOC
 #if HALIDE_D3D12_DEBUG_LAYER
@@ -1004,6 +1004,7 @@ WEAK void dispatch_threadgroups(d3d12_compute_command_list *cmdList,
     TRACELOG;
 
     static int32_t total_dispatches = 0;
+    MAYBE_UNUSED(total_dispatches);
     TRACEPRINT(
         "Dispatching threadgroups (number " << total_dispatches++ << ")"
         " blocks("  <<  blocks_x << ", " <<  blocks_y << ", " <<  blocks_z << ")"
@@ -1803,7 +1804,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             // SizeInBytes is here just for debugging/logging purposes in TRACEPRINT.
             // Because TRACEPRINT might turn into "nothing" (when call-tracing is not
             // enabled) the compiler might warn about unused variables...
-            UNUSED(SizeInBytes);
+            MAYBE_UNUSED(SizeInBytes);
 
             TRACEPRINT("--- [" << index << "] : "
                 << (void*)input_buffer << " | " << (void*)input_buffer->halide << " | "
