@@ -1485,15 +1485,12 @@ Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-namespace {
-// An helper function for reordering vars in a schedule.
-void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size,
-                  const Stage &stage, bool is_associative_and_commutative) {
-    vector<Dim> dims = dims_old;
+Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
+    const vector<Dim> &dims = definition.schedule().dims();
 
     // Tag all the vars with their locations in the dims list.
-    vector<size_t> idx(size);
-    for (size_t i = 0; i < size; i++) {
+    vector<size_t> idx(vars.size());
+    for (size_t i = 0; i < idx.size(); i++) {
         bool found = false;
         for (size_t j = 0; j < dims.size(); j++) {
             if (var_name_match(dims[j].var, vars[i].name())) {
@@ -1501,30 +1498,41 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size,
                 found = true;
             }
         }
-        user_assert(found)
-            << "In schedule for " << stage.name()
-            << ", could not find var " << vars[i].name()
-            << " to reorder in the argument list.\n"
-            << stage.dump_argument_list();
+        user_assert(found) << "In schedule for " << name()
+                           << ", could not find var " << vars[i].name()
+                           << " to reorder in the argument list.\n"
+                           << dump_argument_list();
     }
 
     // Look for illegal reorderings
-    if (!is_associative_and_commutative) {
-        // It is illegal to reorder RVar if the stage is not associative
-        // or not commutative.
-        for (size_t i = 0; i < idx.size(); i++) {
-            if (dims[idx[i]].is_pure()) continue;
-            for (size_t j = i+1; j < idx.size(); j++) {
-                if (dims[idx[j]].is_pure()) continue;
+    // It is illegal to reorder RVar if the stage is not associative
+    // or not commutative.
+    // As a performance optimization, run the associativity prover
+    // only necessary.
+    bool has_run_prover = false;
+    bool is_associative_and_commutative = false;
+    for (size_t i = 0; i < idx.size(); i++) {
+        if (dims[idx[i]].is_pure()) continue;
+        for (size_t j = i + 1; j < idx.size(); j++) {
+            if (dims[idx[j]].is_pure()) continue;
 
-                if (idx[i] > idx[j]) {
-                    user_error
-                            << "In schedule for " << stage.name()
-                            << ", can't reorder RVars " << vars[i].name()
-                            << " and " << vars[j].name()
-                            << " because it may change the meaning of the "
-                            << "algorithm.\n";
+            if (idx[i] > idx[j]) {
+                if (!has_run_prover) {
+                    const auto &prover_result =
+                            prove_associativity(function.name(),
+                                                definition.args(),
+                                                definition.values());
+                    is_associative_and_commutative = prover_result.associative() &&
+                                                     prover_result.commutative();
+                    has_run_prover = true;
                 }
+                // Check whether the operator is associative and commutative.
+                user_assert(has_run_prover && is_associative_and_commutative)
+                        << "In schedule for " << name()
+                        << ", can't reorder RVars " << vars[i].name() << " and "
+                        << vars[j].name()
+                        << " because it may change the meaning of the "
+                        << "algorithm.\n";
             }
         }
     }
@@ -1533,26 +1541,12 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size,
     vector<size_t> sorted = idx;
     std::sort(sorted.begin(), sorted.end());
 
-    for (size_t i = 0; i < size; i++) {
-        dims[sorted[i]] = dims_old[idx[i]];
+    // Update dimensions
+    vector<Dim> new_dims = dims;
+    for (size_t i = 0; i < idx.size(); i++) {
+        new_dims[sorted[i]] = dims[idx[i]];
     }
-
-    dims_old.swap(dims);
-}
-}
-
-Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
-    const string &func_name = function.name();
-    vector<Expr> &args = definition.args();
-    vector<Expr> &values = definition.values();
-
-    // Check whether the operator is associative and commutative.
-    const auto &prover_result = prove_associativity(func_name, args, values);
-    const bool is_associative_and_commutative
-            = prover_result.associative() && prover_result.commutative();
-
-    reorder_vars(definition.schedule().dims(), &vars[0], vars.size(), *this,
-                 is_associative_and_commutative);
+    definition.schedule().dims().swap(new_dims);
     return *this;
 }
 
