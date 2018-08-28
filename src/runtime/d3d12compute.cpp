@@ -2319,6 +2319,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    halide_assert(user_context, buffer);
     halide_assert(user_context, buffer->host && buffer->device);
 
     D3D12ContextHolder d3d12_context (user_context, true);
@@ -2331,7 +2332,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     halide_assert(user_context, c.dst == buffer->device);
     d3d12_buffer *copy_dst = reinterpret_cast<d3d12_buffer*>(c.dst);
     TRACEPRINT(
-           "halide_d3d12compute_copy_to_device dev = " << (void*)buffer->device
+           " dev = " << (void*)buffer->device
         << " d3d12_buffer = " << copy_dst
         << " host = " << buffer->host
         << "\n"
@@ -2361,10 +2362,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT(
-           "Time for halide_d3d12compute_copy_to_device: "
-        << (t_after - t_before) / 1.0e6 << " ms\n"
-    );
+    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2377,6 +2375,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    halide_assert(user_context, buffer);
     halide_assert(user_context, buffer->host && buffer->device);
     halide_assert(user_context, buffer->dimensions <= MAX_COPY_DIMS);
     if (buffer->dimensions > MAX_COPY_DIMS) {
@@ -2410,7 +2409,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time for halide_d3d12compute_copy_to_host: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
     #endif
 
     return 0;
@@ -2666,7 +2665,106 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                                          const struct halide_device_interface_t *dst_device_interface,
                                          struct halide_buffer_t *dst) {
     TRACELOG;
-    return 0;
+
+    if (dst->dimensions > MAX_COPY_DIMS) {
+        error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
+    // We only handle copies to d3d12 device or to host
+    halide_assert( user_context, (dst_device_interface == NULL) ||
+                                 (dst_device_interface == &d3d12compute_device_interface) );
+
+    if ((src->device_dirty() || src->host == NULL) && 
+        src->device_interface != &d3d12compute_device_interface) {
+        halide_assert(user_context, dst_device_interface == &d3d12compute_device_interface);
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    bool from_host = (src->device_interface != &d3d12compute_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
+    bool to_host = !dst_device_interface;
+
+    halide_assert(user_context, from_host || src->device);
+    halide_assert(user_context,   to_host || dst->device);
+
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    MAYBE_UNUSED(c);
+
+    int err = 0;
+    {
+        D3D12ContextHolder d3d12_context (user_context, true);
+        if (d3d12_context.error != 0) {
+            return d3d12_context.error;
+        }
+
+        TRACEPRINT(
+            "(user_context: " << user_context <<
+            ", src: " << src << ", dst: " << dst << ")\n"
+        );
+
+        #ifdef DEBUG_RUNTIME
+        uint64_t t_before = halide_current_time_ns(user_context);
+        #endif
+
+        // Device only case
+        if (!from_host && !to_host) {
+            TRACEPRINT("device-to-device case.\n");
+            //mtl_command_buffer *blit_command_buffer = new_command_buffer(d3d12_context.queue);
+            //mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(blit_command_buffer);
+            //do_device_to_device_copy(user_context, blit_encoder, c, ((device_handle *)c.src)->offset,
+            //                         ((device_handle *)c.dst)->offset, dst->dimensions);
+            //end_encoding(blit_encoder);
+            //commit_command_buffer(blit_command_buffer);
+        } else {
+            if (!from_host) {
+                // device-to-host:
+                halide_assert(user_context, to_host);
+                halide_d3d12compute_copy_to_host(user_context, NULL);
+            } else {
+                // host-to-device:
+                halide_assert(user_context, !to_host);
+                halide_d3d12compute_copy_to_device(user_context, NULL);
+            }
+            /*
+            if (!from_host) {
+                halide_d3d12compute_device_sync_internal(d3d12_context.device, src);
+                //c.src = (uint64_t)buffer_contents(((device_handle *)c.src)->buf) + ((device_handle *)c.src)->offset;
+            }
+
+            d3d12_buffer *dst_buffer = NULL;
+            if (!to_host) {
+                //dst_buffer = ((device_handle *)c.dst)->buf;
+                if (from_host) {
+                    //c.dst = (uint64_t)buffer_contents(dst_buffer) + ((device_handle *)c.dst)->offset;
+                }
+            }
+
+            copy_memory(c, user_context);
+
+            if (!to_host) {
+                if (is_buffer_managed(dst_buffer)) {
+                    size_t total_size = dst->size_in_bytes();
+                    halide_assert(user_context, total_size != 0);
+                    size_t offset = 0;
+                    size_t length = total_size;
+                    did_modify_range(dst_buffer, offset, length);
+                }
+                // Synchronize as otherwise host source memory might still be read from after return.
+                halide_d3d12compute_device_sync_internal(d3d12_context.device, dst);
+            }
+            */
+        }
+
+        #ifdef DEBUG_RUNTIME
+        uint64_t t_after = halide_current_time_ns(user_context);
+        TRACEPRINT("    Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
+        #endif
+    }
+
+    return err;
 }
 
 namespace {
