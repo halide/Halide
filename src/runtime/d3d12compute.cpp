@@ -542,15 +542,15 @@ static size_t number_of_elements(const halide_buffer_t *buffer) {
     // elements in the stride regions.
 
     size_t size_in_bytes = buffer->size_in_bytes();
-    halide_assert(NULL, (size_in_bytes > 0));
+    halide_assert(user_context, (size_in_bytes > 0));
 
     size_t element_size = 1;
     element_size *= buffer->type.bytes();
     element_size *= buffer->type.lanes;
-    halide_assert(NULL, (element_size > 0));
+    halide_assert(user_context, (element_size > 0));
 
     size_t elements = size_in_bytes / element_size;
-    halide_assert(NULL, (size_in_bytes % element_size) == 0);
+    halide_assert(user_context, (size_in_bytes % element_size) == 0);
 
     return elements;
 }
@@ -1567,7 +1567,7 @@ WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *b
     TRACELOG;
 
     d3d12_buffer::transfer_t *xfer = buffer->xfer;
-    halide_assert(NULL, (xfer != NULL));
+    halide_assert(user_context, (xfer != NULL));
 
     UINT64 DstOffset = xfer->offset;
     UINT64 SrcOffset = xfer->offset;
@@ -1760,8 +1760,8 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             // NOTE(marcos): constant buffers are only used internally by the
             // runtime; users cannot create, control or access them, so it is
             // expected that no halide_buffer_t will be associated with them:
-            halide_assert(NULL, input_buffer->halide == NULL);
-            halide_assert(NULL, input_buffer->format == DXGI_FORMAT_UNKNOWN);
+            halide_assert(user_context, input_buffer->halide == NULL);
+            halide_assert(user_context, input_buffer->format == DXGI_FORMAT_UNKNOWN);
 
             ID3D12Resource *pResource = input_buffer->resource;
             D3D12_GPU_VIRTUAL_ADDRESS pGPU = pResource->GetGPUVirtualAddress();
