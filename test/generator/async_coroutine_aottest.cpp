@@ -350,12 +350,17 @@ int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *task
 int main(int argc, char **argv) {
     Halide::Runtime::Buffer<int> out(16, 16, 16);
 
+    printf("Getting baseline time.\n");
+
     // Get a baseline runtime.
     // TODO: this shouldn't deadlock when done with one thread, but sometimes it does!
     double reference_time =
         Halide::Tools::benchmark(3, 3, [&]() {
+                printf("Running benchmark...\n");
                 async_coroutine(out);
     });
+
+    printf("Installing custom parallel runtime.\n");
 
     // Now install a custom parallel runtime
     halide_set_custom_parallel_runtime(
