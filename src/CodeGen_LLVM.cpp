@@ -1258,38 +1258,44 @@ void CodeGen_LLVM::visit(const Variable *op) {
 }
 
 void CodeGen_LLVM::visit(const Add *op) {
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateFAdd(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWAdd(a, b);
     } else {
-        value = builder->CreateAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateAdd(a, b);
     }
 }
 
 void CodeGen_LLVM::visit(const Sub *op) {
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateFSub(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWSub(a, b);
     } else {
-        value = builder->CreateSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateSub(a, b);
     }
 }
 
 void CodeGen_LLVM::visit(const Mul *op) {
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateFMul(a, b);
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        value = builder->CreateNSWMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateNSWMul(a, b);
     } else {
-        value = builder->CreateMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateMul(a, b);
     }
 }
 
@@ -1316,7 +1322,13 @@ void CodeGen_LLVM::visit(const Div *op) {
 
     int shift_amount;
     if (op->type.is_float()) {
-        value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
+        // Don't call codegen() multiple times within an argument list:
+        // order-of-evaluation isn't guaranteed and can vary by compiler,
+        // leading to different LLVM IR ordering, which makes comparing
+        // output hard.
+        Value *a = codegen(op->a);
+        Value *b = codegen(op->b);
+        value = builder->CreateFDiv(a, b);
     } else if (is_const_power_of_two_integer(op->b, &shift_amount) &&
                (op->type.is_int() || op->type.is_uint())) {
         value = codegen(op->a >> shift_amount);
@@ -1476,7 +1488,6 @@ void CodeGen_LLVM::visit(const NE *op) {
 void CodeGen_LLVM::visit(const LT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-
     Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOLT(a, b);
@@ -1527,15 +1538,20 @@ void CodeGen_LLVM::visit(const GE *op) {
 }
 
 void CodeGen_LLVM::visit(const And *op) {
-    value = builder->CreateAnd(codegen(op->a), codegen(op->b));
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
+    value = builder->CreateAnd(a, b);
 }
 
 void CodeGen_LLVM::visit(const Or *op) {
-    value = builder->CreateOr(codegen(op->a), codegen(op->b));
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
+    value = builder->CreateOr(a, b);
 }
 
 void CodeGen_LLVM::visit(const Not *op) {
-    value = builder->CreateNot(codegen(op->a));
+    Value *a = codegen(op->a);
+    value = builder->CreateNot(a);
 }
 
 
@@ -1581,7 +1597,8 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     if (type.is_handle()) {
         return codegen_buffer_pointer(base_address, UInt(64, type.lanes()), index);
     } else {
-        return codegen_buffer_pointer(base_address, type, codegen(index));
+        Value *i = codegen(index);
+        return codegen_buffer_pointer(base_address, type, i);
     }
 }
 
@@ -1868,7 +1885,8 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
 }
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
-    value = create_broadcast(codegen(op->value), op->lanes);
+    Value *v = codegen(op->value);
+    value = create_broadcast(v, op->lanes);
 }
 
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
@@ -2109,7 +2127,8 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
     if (ramp && is_one(ramp->stride)) { // Dense vector load
-        value = codegen_dense_vector_load(op, codegen(op->predicate));
+        Value *vpred = codegen(op->predicate);
+        value = codegen_dense_vector_load(op, vpred);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
         vector<int> indices(ramp->lanes);
@@ -2171,16 +2190,23 @@ void CodeGen_LLVM::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
-        value = builder->CreateAnd(codegen(op->args[0]), codegen(op->args[1]));
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        value = builder->CreateAnd(a, b);
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         internal_assert(op->args.size() == 2);
-        value = builder->CreateXor(codegen(op->args[0]), codegen(op->args[1]));
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        value = builder->CreateXor(a, b);
     } else if (op->is_intrinsic(Call::bitwise_or)) {
         internal_assert(op->args.size() == 2);
-        value = builder->CreateOr(codegen(op->args[0]), codegen(op->args[1]));
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        value = builder->CreateOr(a, b);
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
-        value = builder->CreateNot(codegen(op->args[0]));
+        Value *a = codegen(op->args[0]);
+        value = builder->CreateNot(a);
     } else if (op->is_intrinsic(Call::reinterpret)) {
         internal_assert(op->args.size() == 1);
         Type dst = op->type;
@@ -2218,17 +2244,22 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
         } else {
-            value = builder->CreateBitCast(codegen(op->args[0]), llvm_dst);
+            Value *a = codegen(op->args[0]);
+            value = builder->CreateBitCast(a, llvm_dst);
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
+        value = builder->CreateShl(a, b);
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
+        Value *a = codegen(op->args[0]);
+        Value *b = codegen(op->args[1]);
         if (op->type.is_int()) {
-            value = builder->CreateAShr(codegen(op->args[0]), codegen(op->args[1]));
+            value = builder->CreateAShr(a, b);
         } else {
-            value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
+            value = builder->CreateLShr(a, b);
         }
     } else if (op->is_intrinsic(Call::abs)) {
 
@@ -2312,7 +2343,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         std::vector<llvm::Type*> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
         llvm::Function *fn = Intrinsic::getDeclaration(module.get(), Intrinsic::ctpop, arg_type);
-        CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
+        Value *a = codegen(op->args[0]);
+        CallInst *call = builder->CreateCall(fn, a);
         value = call;
     } else if (op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros)) {
@@ -2373,7 +2405,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (cond.type().is_vector()) {
             scalarize(op);
         } else {
-            create_assertion(codegen(cond), op->args[2]);
+            Value *c = codegen(cond);
+            create_assertion(c, op->args[2]);
             value = codegen(op->args[1]);
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
@@ -2482,10 +2515,10 @@ void CodeGen_LLVM::visit(const Call *op) {
                     call_args.push_back(codegen(op->args[i]));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_bool()) {
-                    call_args.push_back(builder->CreateSelect(
-                        codegen(op->args[i]),
-                        codegen(StringImm::make("true")),
-                        codegen(StringImm::make("false"))));
+                    Value *a = codegen(op->args[i]);
+                    Value *t = codegen(StringImm::make("true"));
+                    Value *f = codegen(StringImm::make("false"));
+                    call_args.push_back(builder->CreateSelect(a, t, f));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {
                     call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
@@ -2674,8 +2707,8 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
-                selected_value = builder->CreateSelect(codegen(sub_fn.cond),
-                                                       sub_fn.fn_ptr, selected_value);
+                Value *c = codegen(sub_fn.cond);
+                selected_value = builder->CreateSelect(c, sub_fn.fn_ptr, selected_value);
             }
         }
         builder->CreateStore(selected_value, global);
