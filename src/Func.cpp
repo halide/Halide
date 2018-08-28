@@ -1485,15 +1485,16 @@ Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
     return *this;
 }
 
-namespace {
-// An helper function for reordering vars in a schedule.
-void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size,
-                  const Stage &stage, bool is_associative_and_commutative) {
+Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
+    const string &func_name = function.name();
+    vector<Expr> &args = definition.args();
+    vector<Expr> &values = definition.values();
+    vector<Dim> &dims_old = definition.schedule().dims();
     vector<Dim> dims = dims_old;
 
     // Tag all the vars with their locations in the dims list.
-    vector<size_t> idx(size);
-    for (size_t i = 0; i < size; i++) {
+    vector<size_t> idx(vars.size());
+    for (size_t i = 0; i < vars.size(); i++) {
         bool found = false;
         for (size_t j = 0; j < dims.size(); j++) {
             if (var_name_match(dims[j].var, vars[i].name())) {
@@ -1502,28 +1503,32 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size,
             }
         }
         user_assert(found)
-            << "In schedule for " << stage.name()
+            << "In schedule for " << name()
             << ", could not find var " << vars[i].name()
             << " to reorder in the argument list.\n"
-            << stage.dump_argument_list();
+            << dump_argument_list();
     }
 
-    // Look for illegal reorderings
-    if (!is_associative_and_commutative) {
-        // It is illegal to reorder RVar if the stage is not associative
-        // or not commutative.
-        for (size_t i = 0; i < idx.size(); i++) {
-            if (dims[idx[i]].is_pure()) continue;
-            for (size_t j = i+1; j < idx.size(); j++) {
-                if (dims[idx[j]].is_pure()) continue;
-
-                if (idx[i] > idx[j]) {
-                    user_error
-                            << "In schedule for " << stage.name()
+    // It is illegal to reorder RVars if the stage is not associative
+    // or not commutative. Look for RVar reorderings and try to do the
+    // necessary proof if any are found.
+    bool associativity_proven = false;
+    for (size_t i = 0; !associativity_proven && i < idx.size(); i++) {
+        if (!dims[idx[i]].is_pure()) {
+            for (size_t j = i+1; !associativity_proven && j < idx.size(); j++) {
+                if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
+                    // Generate an error if the operator is not both associative and commutative.
+                    const auto &prover_result = prove_associativity(func_name, args, values);
+                    associativity_proven = prover_result.associative() &&
+                                           prover_result.commutative();
+                    if (!associativity_proven) {
+                        user_error
+                            << "In schedule for " << name()
                             << ", can't reorder RVars " << vars[i].name()
                             << " and " << vars[j].name()
                             << " because it may change the meaning of the "
                             << "algorithm.\n";
+                    }
                 }
             }
         }
@@ -1533,37 +1538,12 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size,
     vector<size_t> sorted = idx;
     std::sort(sorted.begin(), sorted.end());
 
-    for (size_t i = 0; i < size; i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         dims[sorted[i]] = dims_old[idx[i]];
     }
 
     dims_old.swap(dims);
-}
-}
 
-Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
-    const string &func_name = function.name();
-    vector<Expr> &args = definition.args();
-    vector<Expr> &values = definition.values();
-
-    bool is_associative_and_commutative = false;
-
-    bool any_rvars = false;
-    for (const auto &dim : definition.schedule().dims()) {
-        if (!dim.is_pure()) {
-            any_rvars = true;
-            break;
-        }
-    }
-    if (any_rvars) {
-        // Check whether the operator is associative and commutative.
-        const auto &prover_result = prove_associativity(func_name, args, values);
-        is_associative_and_commutative
-                = prover_result.associative() && prover_result.commutative();
-    }
-    
-    reorder_vars(definition.schedule().dims(), &vars[0], vars.size(), *this,
-                 is_associative_and_commutative);
     return *this;
 }
 
