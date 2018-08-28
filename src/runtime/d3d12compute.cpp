@@ -683,6 +683,10 @@ static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
     return dbuffer;
 }
 
+static const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
+    return peel_buffer( const_cast<halide_buffer_t*>(hbuffer) );
+}
+
 static struct halide_buffer_t *peel_buffer(d3d12_buffer *dbuffer) {
     halide_assert(user_context, (dbuffer != NULL));
     struct halide_buffer_t *hbuffer = dbuffer->halide;
@@ -725,10 +729,7 @@ WEAK int unwrap_buffer(struct halide_buffer_t *buf) {
         return 0;
     }
 
-    d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
-    halide_assert(user_context, (dbuffer->halide != NULL));
-    //halide_assert(user_context, (dbuffer->halide == buf));    // <- this assert appears to be too strong for device_crop buffers...
-    halide_assert(user_context, (buf->device_interface == &d3d12compute_device_interface));
+    d3d12_buffer *dbuffer = peel_buffer(buf);
 
     dbuffer->halide = NULL;
     buf->device_interface->impl->release_module();
@@ -2231,7 +2232,7 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struc
     d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
     d3d12_buffer *dev_buffer = NULL;
     if (buffer != NULL) {
-        dev_buffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
+        dev_buffer = peel_buffer(buffer);
         if (is_buffer_managed(dev_buffer)) {
             synchronize_resource(blitCmdList, dev_buffer);
         }
@@ -2405,7 +2406,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
         return d3d12_context.error;
     }
 
-    d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
+    d3d12_buffer *dbuffer = peel_buffer(buffer);
 
     size_t total_size = dbuffer->sizeInBytes;
     d3d12_buffer *staging = &readback;
@@ -2573,8 +2574,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         }
         halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
         halide_buffer_t *hbuffer = (halide_buffer_t*)args[i];
-        uint64_t handle = hbuffer->device;
-        d3d12_buffer *buffer = reinterpret_cast<d3d12_buffer*>(handle);
+        d3d12_buffer *buffer = peel_buffer(hbuffer);
         set_input_buffer(binder, buffer, uav_index);    // register(u#)
         uav_index++;
     }
@@ -2604,8 +2604,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
             continue;
         }
         halide_buffer_t *hbuffer = (halide_buffer_t*)args[i];
-        uint64_t handle = hbuffer->device;
-        d3d12_buffer *buffer = reinterpret_cast<d3d12_buffer*>(handle);
+        d3d12_buffer *buffer = peel_buffer(hbuffer);
         compute_barrier(cmdList, buffer);
     }
 
@@ -2647,7 +2646,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
         return result;
     }
 
-    d3d12_buffer *dev_buffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
+    d3d12_buffer *dev_buffer = peel_buffer(buffer);
     halide_assert(user_context, (buffer->host == NULL));
     halide_assert(user_context, (dev_buffer->host_mirror == NULL));
     // NOTE(marcos): a dedicated d3d12 staging heap just for this buffer would
@@ -2671,13 +2670,23 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
 
 WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
-    d3d12_buffer *dev_buffer = reinterpret_cast<d3d12_buffer*>(buffer->device);
+    d3d12_buffer *dev_buffer = peel_buffer(buffer);
     halide_assert(user_context, (dev_buffer->host_mirror != NULL));
     halide_assert(user_context, (dev_buffer->host_mirror == (void*)buffer->host));
     halide_d3d12compute_device_free(user_context, buffer);
     buffer->host = NULL;    // <- Halide expects this to be null upon return
     return 0;
 }
+
+namespace {
+
+WEAK int d3d12compute_buffer_copy(d3d12_buffer *src, d3d12_buffer *dst) {
+    TRACELOG;
+
+    return 0;
+}
+
+}  // namespace
 
 WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                          const struct halide_device_interface_t *dst_device_interface,
@@ -2793,7 +2802,7 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
                                               struct halide_buffer_t *dst) {
     TRACELOG;
 
-    d3d12_buffer *old_handle = reinterpret_cast<d3d12_buffer*>(src->device);
+    const d3d12_buffer *old_handle = peel_buffer(src);
     ID3D12Resource *pResource = old_handle->resource;
     uint64_t opaqued = reinterpret_cast<uint64_t>(pResource);
 
@@ -2803,7 +2812,7 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
         return ret;
     }
 
-    d3d12_buffer *new_handle = reinterpret_cast<d3d12_buffer*>(dst->device);
+    d3d12_buffer *new_handle = peel_buffer(dst);
     halide_assert(user_context, (new_handle != NULL));
     halide_assert(user_context, (new_handle->halide == dst));
     halide_assert(user_context, (src->device_interface == dst->device_interface));
@@ -2901,7 +2910,7 @@ WEAK int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buf
         return 0;
     }
 
-    d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
+    d3d12_buffer *dbuffer = peel_buffer(buf);
     unwrap_buffer(buf);
 
     // it is safe to simply call release_d3d12_object() here:
@@ -2920,8 +2929,7 @@ WEAK uintptr_t halide_d3d12compute_get_buffer(void *user_context, struct halide_
     if (buf->device == NULL) {
         return 0;
     }
-    halide_assert(user_context, (buf->device_interface == &d3d12compute_device_interface));
-    d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(buf->device);
+    d3d12_buffer *dbuffer = peel_buffer(buf);
     ID3D12Resource *pResource = dbuffer->resource;
     uintptr_t opaqued = reinterpret_cast<uintptr_t>(pResource);
     return opaqued;
