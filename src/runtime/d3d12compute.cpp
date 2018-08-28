@@ -673,6 +673,24 @@ void release_d3d12_object<d3d12_compute_pipeline_state>(d3d12_compute_pipeline_s
 
 extern WEAK halide_device_interface_t d3d12compute_device_interface;
 
+static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
+    halide_assert(user_context, (hbuffer != NULL));
+    halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(hbuffer->device);
+    halide_assert(user_context, (dbuffer != NULL));
+    halide_assert(user_context, (dbuffer->halide != NULL));
+    //halide_assert(user_context, (dbuffer->halide == hbuffer));    // <- this assert appears to be too strong for device_crop buffers...
+    return dbuffer;
+}
+
+static struct halide_buffer_t *peel_buffer(d3d12_buffer *dbuffer) {
+    halide_assert(user_context, (dbuffer != NULL));
+    struct halide_buffer_t *hbuffer = dbuffer->halide;
+    halide_assert(user_context, (hbuffer != NULL));
+    halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    return hbuffer;
+}
+
 WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     halide_assert(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
