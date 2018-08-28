@@ -59,12 +59,12 @@ ValType convert_halide_type_to_val_type(const Type &halide_t) {
         if (halide_t.bits() == 8) {
             val_t = ValType::Int8;
         } else if (halide_t.bits() == 16) {
-            val_t = ValType::UInt16;
+            val_t = ValType::Int16;
         } else if (halide_t.bits() == 32) {
-            val_t = ValType::UInt32;
+            val_t = ValType::Int32;
         } else {
             internal_assert(halide_t.bits() == 64);
-            val_t = ValType::UInt64;
+            val_t = ValType::Int64;
         }
     } else {
         internal_assert(halide_t.is_float());
