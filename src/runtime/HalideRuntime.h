@@ -96,12 +96,21 @@ struct halide_mutex {
     uintptr_t _private[1];
 };
 
+/** Cross platform condition variable. Must be initialized to 0. */
+struct halide_cond {
+    uintptr_t _private[1];
+};
+
 /** A basic set of mutex and condition variable functions, which call
  * platform specific code for mutual exclusion. Equivalent to posix
  * calls. */
 //@{
 extern void halide_mutex_lock(struct halide_mutex *mutex);
 extern void halide_mutex_unlock(struct halide_mutex *mutex);
+extern void halide_cond_signal(struct halide_cond *cond);
+extern void halide_cond_broadcast(struct halide_cond *cond);
+extern void halide_cond_signal(struct halide_cond *cond);
+extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool

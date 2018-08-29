@@ -176,8 +176,8 @@ void call_in_new_context(execution_context *from,
 
 // We'll throw one big lock around this whole thing. It's only
 // released by a thread when inside of Halide code.
-std::mutex big_lock;
-std::condition_variable_any wake_workers;
+halide_mutex big_lock = { { 0 } };
+halide_cond wake_workers = { { 0 } };
 
 struct my_semaphore {
     int count = 0;
@@ -239,7 +239,7 @@ void scheduler(execution_context *parent, execution_context *this_context, void 
         }
         if (!runnable_contexts.empty()) {
             //printf("Waking a worker\n");
-            wake_workers.notify_one();
+            halide_cond_signal(&wake_workers);
         }
         switch_context(this_context, next);
     }
@@ -266,8 +266,10 @@ int semaphore_release_already_locked(halide_semaphore_t *s, int count) {
 }
 
 int semaphore_release(halide_semaphore_t *s, int count) {
-    std::lock_guard<std::mutex> lock(big_lock);
-    return semaphore_release_already_locked(s, count);
+    halide_mutex_lock(&big_lock);
+    int result = semaphore_release_already_locked(s, count);
+    halide_mutex_unlock(&big_lock);
+    return result;
 }
 
 // A blocking version of semaphore acquire that enters the task system
@@ -305,9 +307,9 @@ void do_one_task(execution_context *parent, execution_context *this_context, voi
             //printf("Acquiring task semaphore\n");
             semaphore_acquire(this_context, task->semaphores[j].semaphore, task->semaphores[j].count);
         }
-        big_lock.unlock();
+        halide_mutex_unlock(&big_lock);
         task->fn(nullptr, i, 1, task->closure, nullptr);
-        big_lock.lock();
+        halide_mutex_lock(&big_lock);
     }
     semaphore_release_already_locked(completion_sema, 1);
     dead_contexts.push_back(this_context);
@@ -318,7 +320,7 @@ void do_one_task(execution_context *parent, execution_context *this_context, voi
 
 int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *tasks, void *parent_pass_through) {
     // We're leaving Halide code, so grab the lock until we return
-    std::lock_guard<std::mutex> lock(big_lock);
+    halide_mutex_lock(&big_lock);
 
     // Make this context schedulable.
     execution_context *this_context = new execution_context;
@@ -342,6 +344,8 @@ int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *task
     // Wait until the children are done.
     //printf("Acquiring parent semaphore\n");
     semaphore_acquire(this_context, &parent_sema, 1);
+
+    halide_mutex_unlock(&big_lock);
 
     // Re-entering Halide code
     return 0;
@@ -375,7 +379,7 @@ int main(int argc, char **argv) {
     // Start up the scheduler
     printf("Starting scheduler context\n");
     execution_context root_context;
-    big_lock.lock();
+    halide_mutex_lock(&big_lock);
     call_in_new_context(&root_context, &scheduler_context, scheduler, nullptr);
     printf("Scheduler running...\n");
 
@@ -387,14 +391,15 @@ int main(int argc, char **argv) {
     for (int i = 1; i < halide_set_num_threads(0); i++) {
         futures.push_back(
             std::async(std::launch::async, [&](int i) {
-                    std::lock_guard<std::mutex> lock(big_lock);
+                    halide_mutex_lock(&big_lock);
                     execution_context worker_context;
                     while (!done) {
                         idle_worker_contexts.push_back(&worker_context);
                         switch_context(&worker_context, &scheduler_context);
                         if (done) break;
-                        wake_workers.wait(big_lock);
+                        halide_cond_wait(&wake_workers, &big_lock);
                     }
+                    halide_mutex_unlock(&big_lock);
                 }, i));
     }
 
@@ -403,14 +408,14 @@ int main(int argc, char **argv) {
         printf("Entering Halide\n");
         custom_time =
             Halide::Tools::benchmark(3, 3, [&]() {
-                big_lock.unlock();
+                halide_mutex_unlock(&big_lock);
                 async_coroutine(out);
-                big_lock.lock();
+                halide_mutex_lock(&big_lock);
             });
         printf("Left Halide\n");
         done = true;
-        wake_workers.notify_all();
-        big_lock.unlock();
+        halide_cond_broadcast(&wake_workers);
+        halide_mutex_unlock(&big_lock);
     };
     std::async(std::launch::async, work).get();
 
