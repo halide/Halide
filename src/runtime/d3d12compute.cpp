@@ -91,6 +91,8 @@ static void *const user_context = NULL;
     static const char indent_pattern [] = "   ";
     static char  indent [2048] = { };
     static int   indent_end   = 0;
+    #define TRACEINDENT     ((const char*)indent)
+    #define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
     struct TraceLogScope {
         TraceLogScope() {
             while (__sync_lock_test_and_set(&indent_lock, 1)) {}
@@ -104,11 +106,10 @@ static void *const user_context = NULL;
             for (const char *p = indent_pattern; *p; ++p) {
                 indent[--indent_end] = '\0';
             }
+            TRACEPRINT("^^^\n");
             __sync_lock_release(&indent_lock);
         }
     };
-    #define TRACEINDENT     ((const char*)indent)
-    #define TRACEPRINT(msg) trace(user_context) << TRACEINDENT << msg;
     #define TRACELOG        TRACEPRINT("[@]" << __FUNCTION__ << "\n"); TraceLogScope trace_scope___;
 #else
     #define TRACEINDENT ""
@@ -674,27 +675,49 @@ void release_d3d12_object<d3d12_compute_pipeline_state>(d3d12_compute_pipeline_s
 extern WEAK halide_device_interface_t d3d12compute_device_interface;
 
 static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
+    TRACELOG;
     halide_assert(user_context, (hbuffer != NULL));
-    halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    //halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    if (hbuffer->device_interface != &d3d12compute_device_interface)
+    {
+        TRACEPRINT("hbuffer->device_interface: " << (void*)hbuffer->device_interface << "\n");
+        TRACEPRINT("d3d12compute_device_interface: " << (void*)&d3d12compute_device_interface << "\n");
+    }
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(hbuffer->device);
     halide_assert(user_context, (dbuffer != NULL));
     halide_assert(user_context, (dbuffer->halide != NULL));
-    //halide_assert(user_context, (dbuffer->halide == hbuffer));    // <- this assert appears to be too strong for device_crop buffers...
+    // the condition below appears to happen for device_crop buffers...
+    if (hbuffer != dbuffer->halide)
+    {
+        TRACEPRINT("hbuffer: " << (void*)hbuffer << "\n");
+        TRACEPRINT("dbuffer->halide: " << (void*)dbuffer->halide << "\n");
+        TRACEPRINT("hbuffer->device: " << (void*)hbuffer->device << "\n");
+        TRACEPRINT("dbuffer: " << (void*) dbuffer << "\n");
+    }
+    //halide_assert(user_context, (hbuffer == dbuffer->halide));  // <- paranoia!!!
     return dbuffer;
 }
 
 static const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
     return peel_buffer( const_cast<halide_buffer_t*>(hbuffer) );
 }
-
+/*
+// DANGEROUS!
 static struct halide_buffer_t *peel_buffer(d3d12_buffer *dbuffer) {
+    TRACELOG;
     halide_assert(user_context, (dbuffer != NULL));
     struct halide_buffer_t *hbuffer = dbuffer->halide;
     halide_assert(user_context, (hbuffer != NULL));
-    halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    halide_assert(user_context, (dbuffer == peel_buffer(hbuffer)));  // <- paranoia!!!
+    //halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
+    if (hbuffer->device_interface != &d3d12compute_device_interface)
+    {
+        TRACEPRINT("hbuffer->device_interface: " << (void*)hbuffer->device_interface << "\n");
+        TRACEPRINT("d3d12compute_device_interface: " << (void*)&d3d12compute_device_interface << "\n");
+    }
     return hbuffer;
 }
-
+*/
 WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     halide_assert(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
@@ -716,6 +739,7 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
 
     dbuffer->halide = hbuffer;
     hbuffer->device = reinterpret_cast<uint64_t>(dbuffer);
+    halide_assert(user_context, (hbuffer->device_interface == NULL));
     hbuffer->device_interface = &d3d12compute_device_interface;
     hbuffer->device_interface->impl->use_module();
 
@@ -1594,6 +1618,10 @@ WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *b
     ID3D12Resource *pDstBuffer = NULL;
     ID3D12Resource *pSrcBuffer = NULL;
 
+    if (buffer->state != D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+    {
+        TRACEPRINT("buffer->state: " << buffer->state << "\n");
+    }
     halide_assert(user_context, buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     D3D12_RESOURCE_BARRIER barrier = { };
@@ -2219,7 +2247,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
 namespace {
 
-inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struct halide_buffer_t *buffer) {
+inline void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer *dev_buffer) {
     TRACELOG;
 
     // NOTE(marcos): a copy/dma command list would be ideal here, but it would
@@ -2230,9 +2258,7 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struc
     static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
     d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
     d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
-    d3d12_buffer *dev_buffer = NULL;
-    if (buffer != NULL) {
-        dev_buffer = peel_buffer(buffer);
+    if (dev_buffer != NULL) {
         if (is_buffer_managed(dev_buffer)) {
             synchronize_resource(blitCmdList, dev_buffer);
         }
@@ -2252,6 +2278,12 @@ inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struc
 
     release_object(blitCmdList);
     release_object(sync_command_allocator);
+}
+
+inline void halide_d3d12compute_device_sync_internal(d3d12_device *device, struct halide_buffer_t *buffer) {
+    TRACELOG;
+    d3d12_buffer *dbuffer = peel_buffer(buffer);
+    d3d12compute_device_sync_internal(device, dbuffer);
 }
 
 }
@@ -2331,6 +2363,77 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
     return 0;
 }
 
+namespace {
+
+WEAK int d3d12compute_buffer_copy(d3d12_device *device,
+                                  d3d12_buffer *src,
+                                  d3d12_buffer *dst,
+                                  size_t src_byte_offset,
+                                  size_t dst_byte_offset,
+                                  size_t num_bytes) {
+    TRACELOG;
+
+    halide_assert(user_context, device);
+    halide_assert(user_context, src);
+    halide_assert(user_context, dst);
+    halide_assert(user_context, (src->type != d3d12_buffer::Unknown));
+    halide_assert(user_context, (dst->type != d3d12_buffer::Unknown));
+    // constant buffers are only used internally (Halide never expose them)
+    // (uploads to constant buffers are managed automatically by Map/Unmap)
+    halide_assert(user_context, (src->type != d3d12_buffer::Constant));
+    halide_assert(user_context, (dst->type != d3d12_buffer::Constant));
+
+    halide_assert(user_context, num_bytes > 0);
+
+    if (src->type == d3d12_buffer::Upload) {
+        // host-to-device via staging buffer:
+        halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
+        halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
+        halide_assert(user_context, (dst->xfer == NULL));
+        // TODO: assert that offsets and sizes are within bounds
+        d3d12_buffer::transfer_t xfer = { };
+            xfer.staging = src;
+            xfer.offset  = 0;
+            xfer.size    = 0;
+        dst->xfer = &xfer;
+        did_modify_range(dst, src_byte_offset, num_bytes);
+        d3d12compute_device_sync_internal(device, dst);
+        return 0;
+    }
+
+    if (dst->type == d3d12_buffer::ReadBack) {
+        // device-to-host via staging buffer:
+        halide_assert(user_context, (src->type != d3d12_buffer::Upload));
+        halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
+        halide_assert(user_context, (dst->xfer == NULL));
+        // TODO: assert that offsets and sizes are within bounds
+        d3d12_buffer::transfer_t xfer = { };
+            xfer.staging = dst;
+            xfer.offset  = dst_byte_offset;
+            xfer.size    = num_bytes;
+        src->xfer = &xfer;
+        // issue copy command from device to staging memory
+        did_modify_range(src, dst_byte_offset, num_bytes);
+        d3d12compute_device_sync_internal(device, src);
+        return 0;
+    }
+
+    // device-to-device:
+    halide_assert(user_context, (src->type != d3d12_buffer::Upload));
+    halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
+    halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
+    halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
+
+    // ReadWrite, ReadOnly and WriteOnly are shader usage hints, not copy hints
+    // (there's no need to worry about them during device-to-device transfers)
+
+    // ...
+
+    return 0;
+}
+
+}  // namespace
+
 WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t *buffer) {
     TRACELOG;
 
@@ -2346,38 +2449,21 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
         return d3d12_context.error;
     }
 
-    // 1. copy data from host src buffer to the upload staging buffer:
+    // 1. memcpy from halide host memory to "upload" staging memory
     device_copy c = make_host_to_device_copy(buffer);
-    halide_assert(user_context, c.dst == buffer->device);
-    d3d12_buffer *copy_dst = reinterpret_cast<d3d12_buffer*>(c.dst);
-    TRACEPRINT(
-           " dev = " << (void*)buffer->device
-        << " d3d12_buffer = " << copy_dst
-        << " host = " << buffer->host
-        << "\n"
-    );
-    // 'memcpy' to staging buffer:
+    halide_assert(user_context, (c.dst == buffer->device));
+    d3d12_buffer *dst = peel_buffer(buffer);
+    halide_assert(user_context, buffer->size_in_bytes() == dst->sizeInBytes);
     size_t total_size = buffer->size_in_bytes();
-    halide_assert(user_context, total_size > 0);
     d3d12_buffer *staging = &upload;
     size_t byte_offset = suballocate(d3d12_context.device, staging, total_size);
     void *staging_base = buffer_contents(staging);
     c.dst = reinterpret_cast<uint64_t>(staging_base);
     copy_memory(c, user_context);
 
-    // 2. issue a copy command from the upload buffer to the device buffer
-    halide_assert(user_context, (copy_dst->type == d3d12_buffer::ReadOnly) || (copy_dst->type == d3d12_buffer::ReadWrite));
-    halide_assert(user_context, (staging->type == d3d12_buffer::Upload));
-    halide_assert(user_context, (copy_dst->xfer == NULL));
-    d3d12_buffer::transfer_t xfer = { };
-        xfer.staging = staging;
-        xfer.offset = 0;
-        xfer.size = 0;
-    copy_dst->xfer = &xfer;
-    if (is_buffer_managed(copy_dst)) {
-        did_modify_range(copy_dst, byte_offset, total_size);
-        halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
-    }
+    // 2. upload data to device (through the "upload" staging memory):
+    d3d12compute_buffer_copy(d3d12_context.device, staging,     dst,
+                                                   byte_offset, 0,   total_size);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -2396,8 +2482,8 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
 
     halide_assert(user_context, buffer);
     halide_assert(user_context, buffer->host && buffer->device);
-    halide_assert(user_context, buffer->dimensions <= MAX_COPY_DIMS);
     if (buffer->dimensions > MAX_COPY_DIMS) {
+        halide_assert(user_context, false);
         return -1;
     }
 
@@ -2406,24 +2492,19 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
         return d3d12_context.error;
     }
 
-    d3d12_buffer *dbuffer = peel_buffer(buffer);
-
-    size_t total_size = dbuffer->sizeInBytes;
+    // 1. download data from device (copy to the "readback" staging memory):
+    d3d12_buffer *src = peel_buffer(buffer);
     d3d12_buffer *staging = &readback;
+    halide_assert(user_context, buffer->size_in_bytes() == src->sizeInBytes);
+    size_t total_size = src->sizeInBytes;
     size_t byte_offset = suballocate(d3d12_context.device, staging, total_size);
+    d3d12compute_buffer_copy(d3d12_context.device, src, staging,
+                                                   0,   byte_offset, total_size);
 
-    // 1. issue copy command from device to staging memory
-    d3d12_buffer::transfer_t xfer = { };
-        xfer.staging = staging;
-        xfer.offset = byte_offset;
-        xfer.size   = total_size;
-    dbuffer->xfer = &xfer;
-    halide_d3d12compute_device_sync_internal(d3d12_context.device, buffer);
-
-    // 2. memcopy from staging memory to host
-    void *src_data = buffer_contents(xfer.staging);
+    // 2. memcpy from "readback" staging memory to halide host memory
+    void *staging_data = buffer_contents(staging);
     device_copy c = make_device_to_host_copy(buffer);
-    c.src = reinterpret_cast<uint64_t>(src_data);
+    c.src = reinterpret_cast<uint64_t>(staging_data);
     copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
@@ -2678,16 +2759,6 @@ WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct hal
     return 0;
 }
 
-namespace {
-
-WEAK int d3d12compute_buffer_copy(d3d12_buffer *src, d3d12_buffer *dst) {
-    TRACELOG;
-
-    return 0;
-}
-
-}  // namespace
-
 WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                          const struct halide_device_interface_t *dst_device_interface,
                                          struct halide_buffer_t *dst) {
@@ -2738,7 +2809,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
 
         // Device only case
         if (!from_host && !to_host) {
-            TRACEPRINT("device-to-device case.\n");
+            TRACEPRINT("device-to-device case\n");
             //mtl_command_buffer *blit_command_buffer = new_command_buffer(d3d12_context.queue);
             //mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(blit_command_buffer);
             //do_device_to_device_copy(user_context, blit_encoder, c, ((device_handle *)c.src)->offset,
@@ -2748,12 +2819,18 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
         } else {
             if (!from_host) {
                 // device-to-host:
+                TRACEPRINT("device-to-host case\n");
                 halide_assert(user_context, to_host);
-                halide_d3d12compute_copy_to_host(user_context, NULL);
+                d3d12_buffer *src(NULL), *dst(NULL);
+                size_t src_offset(0), dst_offset(0), num_bytes(0);
+                d3d12compute_buffer_copy(d3d12_context.device, src, dst, src_offset, dst_offset, num_bytes);
             } else {
                 // host-to-device:
+                TRACEPRINT("host-to-device case\n");
                 halide_assert(user_context, !to_host);
-                halide_d3d12compute_copy_to_device(user_context, NULL);
+                d3d12_buffer *src(NULL), *dst(NULL);
+                size_t src_offset(0), dst_offset(0), num_bytes(0);
+                d3d12compute_buffer_copy(d3d12_context.device, src, dst, src_offset, dst_offset, num_bytes);
             }
             /*
             if (!from_host) {
