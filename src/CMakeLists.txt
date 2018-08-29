@@ -13,6 +13,7 @@ set(RUNTIME_CPP
   alignment_128
   alignment_32
   alignment_64
+  android_allocator
   android_clock
   android_host_cpu_count
   android_io
@@ -80,6 +81,7 @@ set(RUNTIME_CPP
   ssp
   to_string
   tracing
+  windows_allocator
   windows_clock
   windows_cuda
   windows_get_symbol

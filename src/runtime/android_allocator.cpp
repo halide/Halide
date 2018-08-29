@@ -3,23 +3,13 @@
 
 extern "C" {
 
-extern void *posix_memalign(void **memptr, size_t alignment, size_t size);
+extern void *memalign(size_t alignment, size_t size);
 extern void free(void *);
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
+    // Android doesn't provide posix_memalign().
     const size_t alignment = halide_malloc_alignment();
-#ifdef DEBUG_RUNTIME
-    // posix_memalign requires that the alignment be at least sizeof(void*).
-    // Halide should always handle this, but check in Debug mode, just in case.
-    if (alignment < sizeof(void*)) {
-        halide_error(user_context, "halide_default_malloc: alignment is too small\n");
-    }
-#endif
-    void *ptr = NULL;
-    if (posix_memalign(&ptr, (size_t) alignment, x) != 0) {
-        ptr = NULL;
-    }
-    return ptr;
+    return memalign(alignment, x);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {

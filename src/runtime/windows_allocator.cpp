@@ -3,27 +3,20 @@
 
 extern "C" {
 
-extern void *posix_memalign(void **memptr, size_t alignment, size_t size);
-extern void free(void *);
+// MSVC doesn't provide memalign or posix_memalign,
+// but does provide its own API.
+extern void *_aligned_malloc(size_t, size_t);
+extern void _aligned_free(void *);
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     const size_t alignment = halide_malloc_alignment();
-#ifdef DEBUG_RUNTIME
-    // posix_memalign requires that the alignment be at least sizeof(void*).
-    // Halide should always handle this, but check in Debug mode, just in case.
-    if (alignment < sizeof(void*)) {
-        halide_error(user_context, "halide_default_malloc: alignment is too small\n");
-    }
-#endif
-    void *ptr = NULL;
-    if (posix_memalign(&ptr, (size_t) alignment, x) != 0) {
-        ptr = NULL;
-    }
-    return ptr;
+    // Arguments are reverse order from memalign()
+    return _aligned_malloc(x, alignment);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {
-    free(ptr);
+    // MSVC doesn't allow you to use free() for this.
+    _aligned_free(ptr);
 }
 
 }

@@ -639,6 +639,7 @@ RUNTIME_CPP_COMPONENTS = \
   alignment_128 \
   alignment_32 \
   alignment_64 \
+  android_allocator \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -706,6 +707,7 @@ RUNTIME_CPP_COMPONENTS = \
   ssp \
   to_string \
   tracing \
+  windows_allocator \
   windows_clock \
   windows_cuda \
   windows_get_symbol \
