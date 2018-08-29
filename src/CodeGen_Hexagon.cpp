@@ -2174,15 +2174,5 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
     }
 }
 
-void CodeGen_Hexagon::visit(const Free *stmt) {
-    Allocation alloc = allocations.get(stmt->name);
-
-    internal_assert(alloc.destructor);
-    trigger_destructor(alloc.destructor_function, alloc.destructor);
-
-    allocations.pop(stmt->name);
-    sym_pop(stmt->name);
-}
-
 }  // namespace Internal
 }  // namespace Halide
