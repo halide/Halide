@@ -143,9 +143,16 @@ void call_in_new_context(execution_context *from,
         "movq 8(%%rsp), %%r15\n"
         "movq %%rsp, (%0)\n" // Save the stack pointer for the 'from' context
         "movq %1, %%rsp\n"   // Restore the stack pointer for the 'to' context
-        "movq %2, %%rdi\n"   // Set the args for the function call
+// Set the args for the function call
+#ifdef _WIN32 // Microsoft calling convention is different.
+        "movq %2, %%rcx\n"
+        "movq %3, %%rdx\n"
+        "movq %4, %%r8\n"
+#else
+        "movq %2, %%rdi\n"
         "movq %3, %%rsi\n"
         "movq %4, %%rdx\n"
+#endif
         "callq *%5\n"        // Call the function inside the 'to' context
         "int $3\n"           // The function should never return, instead it should switch contexts elsewhere.
         "return_loc%=:\n"    // When we re-enter the 'from' context we start here
@@ -354,17 +361,17 @@ int do_par_tasks(void *user_context, int num_tasks, halide_parallel_task_t *task
 int main(int argc, char **argv) {
     Halide::Runtime::Buffer<int> out(16, 16, 16);
 
-    printf("Getting baseline time.\n");
+    fprintf(stderr, "Getting baseline time.\n");
 
     // Get a baseline runtime.
     // TODO: this shouldn't deadlock when done with one thread, but sometimes it does!
     double reference_time =
         Halide::Tools::benchmark(3, 3, [&]() {
-                printf("Running benchmark...\n");
+                fprintf(stderr, "Running benchmark...\n");
                 async_coroutine(out);
     });
 
-    printf("Installing custom parallel runtime.\n");
+    fprintf(stderr, "Installing custom parallel runtime.\n");
 
     // Now install a custom parallel runtime
     halide_set_custom_parallel_runtime(
@@ -377,13 +384,13 @@ int main(int argc, char **argv) {
         semaphore_release);
 
     // Start up the scheduler
-    printf("Starting scheduler context\n");
+    fprintf(stderr, "Starting scheduler context\n");
     execution_context root_context;
     halide_mutex_lock(&big_lock);
     call_in_new_context(&root_context, &scheduler_context, scheduler, nullptr);
-    printf("Scheduler running...\n");
+    fprintf(stderr, "Scheduler running...\n");
 
-    printf("Starting worker threads\n");
+    fprintf(stderr, "Starting worker threads\n");
 
     // Add some worker threads to the mix
     std::vector<std::future<void>> futures;
@@ -405,14 +412,14 @@ int main(int argc, char **argv) {
 
     double custom_time;
     auto work = [&]() {
-        printf("Entering Halide\n");
+        fprintf(stderr, "Entering Halide\n");
         custom_time =
             Halide::Tools::benchmark(3, 3, [&]() {
                 halide_mutex_unlock(&big_lock);
                 async_coroutine(out);
                 halide_mutex_lock(&big_lock);
             });
-        printf("Left Halide\n");
+        fprintf(stderr, "Left Halide\n");
         done = true;
         halide_cond_broadcast(&wake_workers);
         halide_mutex_unlock(&big_lock);
@@ -425,39 +432,39 @@ int main(int argc, char **argv) {
         futures.pop_back();
     }
 
-    printf("Validating result\n");
+    fprintf(stderr, "Validating result\n");
 
     out.for_each_element([&](int x, int y, int z) {
             int correct = 8*(x + y + z);
             if (out(x, y, z) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n",
+                fprintf(stderr, "out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
                 exit(-1);
             }
         });
 
-    printf("Context switches: %d\n", context_switches);
-    printf("Max stacks allocated: %d\n", stacks_high_water);
-    printf("Stacks still allocated: %d (1 expected)\n", stacks_allocated);
+    fprintf(stderr, "Context switches: %d\n", context_switches);
+    fprintf(stderr, "Max stacks allocated: %d\n", stacks_high_water);
+    fprintf(stderr, "Stacks still allocated: %d (1 expected)\n", stacks_allocated);
     free(scheduler_context.stack_bottom);
     if (stacks_high_water > 50) {
-        printf("Runaway stack allocation!\n");
+        fprintf(stderr, "Runaway stack allocation!\n");
         return -1;
     }
     if (stacks_allocated != 1) {
-        printf("Zombie stacks\n");
+        fprintf(stderr, "Zombie stacks\n");
         return -1;
     }
 
-    printf("Default threadpool time: %f\n", reference_time);
-    printf("Custom threadpool time: %f\n", custom_time);
+    fprintf(stderr, "Default threadpool time: %f\n", reference_time);
+    fprintf(stderr, "Custom threadpool time: %f\n", custom_time);
 
-    printf("Success!\n");
+    fprintf(stderr, "Success!\n");
     return 0;
 }
 #else
 int main(int argc, char **argv) {
-    printf("Test skipped as it is x86_64 specific.\n");
+    fprintf(stderr, "Test skipped as it is x86_64 specific.\n");
     return 0;
 }
 #endif
