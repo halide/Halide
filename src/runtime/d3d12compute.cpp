@@ -5,7 +5,7 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE          (1)
+#define HALIDE_D3D12_TRACE          (0)
 #define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
 #define HALIDE_D3D12_PROFILING      (0)
@@ -2306,7 +2306,7 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
     }
 
     if (device) {
-        halide_d3d12compute_device_sync_internal(device, NULL);
+        d3d12compute_device_sync_internal(device, NULL);
 
         // Unload the modules attached to this device. Note that the list
         // nodes themselves are not freed, only the program objects are
