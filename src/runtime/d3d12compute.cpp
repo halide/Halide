@@ -682,12 +682,7 @@ extern WEAK halide_device_interface_t d3d12compute_device_interface;
 static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
     TRACELOG;
     halide_assert(user_context, (hbuffer != NULL));
-    //halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
-    if (hbuffer->device_interface != &d3d12compute_device_interface)
-    {
-        TRACEPRINT("hbuffer->device_interface: " << (void*)hbuffer->device_interface << "\n");
-        TRACEPRINT("d3d12compute_device_interface: " << (void*)&d3d12compute_device_interface << "\n");
-    }
+    halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(hbuffer->device);
     halide_assert(user_context, (dbuffer != NULL));
     halide_assert(user_context, (dbuffer->halide));
