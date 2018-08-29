@@ -426,10 +426,14 @@ int main(int argc, char **argv) {
     };
     std::async(std::launch::async, work).get();
 
+    fprintf(stderr, "Back from work async\n");
     // Join the workers.
     while (!futures.empty()) {
+        fprintf(stderr, "Joining future.\n");
         futures.back().get();
+        fprintf(stderr, "Joined future popping back.\n");
         futures.pop_back();
+        fprintf(stderr, "Future poped.\n");
     }
 
     fprintf(stderr, "Validating result\n");
