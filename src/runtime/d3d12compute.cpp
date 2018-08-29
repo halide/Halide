@@ -1574,96 +1574,6 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     return binder;
 }
 
-WEAK void did_modify_range(d3d12_buffer *buffer, size_t offset, size_t length) {
-    TRACELOG;
-
-    d3d12_buffer::transfer_t *xfer = buffer->xfer;
-    halide_assert(user_context, (xfer != NULL));
-    xfer->offset = offset;
-    xfer->size   = length;
-}
-
-WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
-    TRACELOG;
-
-    d3d12_buffer::transfer_t *xfer = buffer->xfer;
-    halide_assert(user_context, (xfer != NULL));
-
-    UINT64 DstOffset = xfer->offset;
-    UINT64 SrcOffset = xfer->offset;
-    UINT64 NumBytes  = xfer->size;
-    ID3D12Resource *pDstBuffer = NULL;
-    ID3D12Resource *pSrcBuffer = NULL;
-
-    if (buffer->state != D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-    {
-        TRACEPRINT("buffer->state: " << buffer->state << "\n");
-    }
-    halide_assert(user_context, buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-    D3D12_RESOURCE_BARRIER barrier = { };
-    {
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource = buffer->resource;
-        barrier.Transition.Subresource = 0;
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    }
-
-    // NOTE(marcos): it might be possible to achieve higher asynchronicity with
-    // special flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
-
-    d3d12_buffer *staging = xfer->staging;
-    switch (staging->type) {
-        case d3d12_buffer::Upload :
-            pDstBuffer = buffer->resource;
-            pSrcBuffer = staging->resource;
-            DstOffset = buffer->offsetInBytes;
-            halide_assert(user_context, staging->state == D3D12_RESOURCE_STATE_GENERIC_READ);
-            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
-            break;
-        case d3d12_buffer::ReadBack :
-            unmap_buffer(staging);
-            pDstBuffer = staging->resource;
-            pSrcBuffer = buffer->resource;
-            SrcOffset = buffer->offsetInBytes;
-            halide_assert(user_context, staging->state == D3D12_RESOURCE_STATE_COPY_DEST);
-            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
-            break;
-        default :
-            TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
-            halide_assert(user_context, false);
-            break;
-    }
-
-    TRACEPRINT("--- "
-        << (void*)buffer << " | " << (void*)buffer->halide << " | "
-        << SrcOffset << " : " << DstOffset << " : " << NumBytes
-        << "\n");
-
-    (*cmdList)->ResourceBarrier(1, &barrier);
-    (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
-    swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
-    (*cmdList)->ResourceBarrier(1, &barrier);
-}
-
-WEAK void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
-    TRACELOG;
-
-    D3D12_RESOURCE_BARRIER barrier = { };
-    {
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.UAV.pResource = buffer->resource;
-    }
-
-    (*cmdList)->ResourceBarrier(1, &barrier);
-}
-
-WEAK bool is_buffer_managed(d3d12_buffer *buffer) {
-    return buffer->xfer != NULL;
-}
-
 static d3d12_library *new_library_with_source(d3d12_device *device, const char *source, size_t source_len) {
     TRACELOG;
     // Unlike Metal, Direct3D 12 does not have the concept of a "shader library"
@@ -2223,6 +2133,96 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 }
 
 namespace {
+
+WEAK void did_modify_range(d3d12_buffer *buffer, size_t offset, size_t length) {
+    TRACELOG;
+
+    d3d12_buffer::transfer_t *xfer = buffer->xfer;
+    halide_assert(user_context, (xfer != NULL));
+    xfer->offset = offset;
+    xfer->size   = length;
+}
+
+WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
+    TRACELOG;
+
+    d3d12_buffer::transfer_t *xfer = buffer->xfer;
+    halide_assert(user_context, (xfer != NULL));
+
+    UINT64 DstOffset = xfer->offset;
+    UINT64 SrcOffset = xfer->offset;
+    UINT64 NumBytes  = xfer->size;
+    ID3D12Resource *pDstBuffer = NULL;
+    ID3D12Resource *pSrcBuffer = NULL;
+
+    if (buffer->state != D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+    {
+        TRACEPRINT("buffer->state: " << buffer->state << "\n");
+    }
+    halide_assert(user_context, buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    D3D12_RESOURCE_BARRIER barrier = { };
+    {
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource = buffer->resource;
+        barrier.Transition.Subresource = 0;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    }
+
+    // NOTE(marcos): it might be possible to achieve higher asynchronicity with
+    // special flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
+
+    d3d12_buffer *staging = xfer->staging;
+    switch (staging->type) {
+        case d3d12_buffer::Upload :
+            pDstBuffer = buffer->resource;
+            pSrcBuffer = staging->resource;
+            DstOffset = buffer->offsetInBytes;
+            halide_assert(user_context, staging->state == D3D12_RESOURCE_STATE_GENERIC_READ);
+            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
+            break;
+        case d3d12_buffer::ReadBack :
+            unmap_buffer(staging);
+            pDstBuffer = staging->resource;
+            pSrcBuffer = buffer->resource;
+            SrcOffset = buffer->offsetInBytes;
+            halide_assert(user_context, staging->state == D3D12_RESOURCE_STATE_COPY_DEST);
+            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            break;
+        default :
+            TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
+            halide_assert(user_context, false);
+            break;
+    }
+
+    TRACEPRINT("--- "
+        << (void*)buffer << " | " << (void*)buffer->halide << " | "
+        << SrcOffset << " : " << DstOffset << " : " << NumBytes
+        << "\n");
+
+    (*cmdList)->ResourceBarrier(1, &barrier);
+    (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
+    swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
+    (*cmdList)->ResourceBarrier(1, &barrier);
+}
+
+WEAK void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
+    TRACELOG;
+
+    D3D12_RESOURCE_BARRIER barrier = { };
+    {
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.UAV.pResource = buffer->resource;
+    }
+
+    (*cmdList)->ResourceBarrier(1, &barrier);
+}
+
+WEAK bool is_buffer_managed(d3d12_buffer *buffer) {
+    return buffer->xfer != NULL;
+}
 
 inline void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer *dev_buffer) {
     TRACELOG;
