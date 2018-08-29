@@ -460,7 +460,12 @@ struct d3d12_buffer {
         ReadBack
     } type;
 
-    halide_buffer_t *halide;
+    // UNSAFE to keep a pointer to a 'halide_buffer_t' since it is a POD type
+    // that can be re-assigned / re-scoped outside of this runtime module...
+    //halide_buffer_t *halide;
+    // keeping a copy of it is a bit overkill, so we'll use a flag:
+    bool halide;
+    halide_type_t halide_type;
 
     struct transfer_t {
         d3d12_buffer *staging;
@@ -685,39 +690,14 @@ static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
     }
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(hbuffer->device);
     halide_assert(user_context, (dbuffer != NULL));
-    halide_assert(user_context, (dbuffer->halide != NULL));
-    // the condition below appears to happen for device_crop buffers...
-    if (hbuffer != dbuffer->halide)
-    {
-        TRACEPRINT("hbuffer: " << (void*)hbuffer << "\n");
-        TRACEPRINT("dbuffer->halide: " << (void*)dbuffer->halide << "\n");
-        TRACEPRINT("hbuffer->device: " << (void*)hbuffer->device << "\n");
-        TRACEPRINT("dbuffer: " << (void*) dbuffer << "\n");
-    }
-    //halide_assert(user_context, (hbuffer == dbuffer->halide));  // <- paranoia!!!
+    halide_assert(user_context, (dbuffer->halide));
     return dbuffer;
 }
 
 static const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
     return peel_buffer( const_cast<halide_buffer_t*>(hbuffer) );
 }
-/*
-// DANGEROUS!
-static struct halide_buffer_t *peel_buffer(d3d12_buffer *dbuffer) {
-    TRACELOG;
-    halide_assert(user_context, (dbuffer != NULL));
-    struct halide_buffer_t *hbuffer = dbuffer->halide;
-    halide_assert(user_context, (hbuffer != NULL));
-    halide_assert(user_context, (dbuffer == peel_buffer(hbuffer)));  // <- paranoia!!!
-    //halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
-    if (hbuffer->device_interface != &d3d12compute_device_interface)
-    {
-        TRACEPRINT("hbuffer->device_interface: " << (void*)hbuffer->device_interface << "\n");
-        TRACEPRINT("d3d12compute_device_interface: " << (void*)&d3d12compute_device_interface << "\n");
-    }
-    return hbuffer;
-}
-*/
+
 WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     halide_assert(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
@@ -725,7 +705,7 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     }
 
     halide_assert(user_context, (dbuffer->resource != NULL));
-    halide_assert(user_context, (dbuffer->halide == NULL));
+    halide_assert(user_context, (!dbuffer->halide));
 
     dbuffer->offset = 0;
     dbuffer->offsetInBytes = 0;
@@ -737,7 +717,8 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
         return -3;
     }
 
-    dbuffer->halide = hbuffer;
+    dbuffer->halide = (hbuffer != NULL);
+    dbuffer->halide_type = hbuffer->type;
     hbuffer->device = reinterpret_cast<uint64_t>(dbuffer);
     halide_assert(user_context, (hbuffer->device_interface == NULL));
     hbuffer->device_interface = &d3d12compute_device_interface;
@@ -755,7 +736,8 @@ WEAK int unwrap_buffer(struct halide_buffer_t *buf) {
 
     d3d12_buffer *dbuffer = peel_buffer(buf);
 
-    dbuffer->halide = NULL;
+    dbuffer->halide = false;
+    dbuffer->halide_type = halide_type_t();
     buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     buf->device = 0;
@@ -1807,8 +1789,8 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             // NOTE(marcos): constant buffers are only used internally by the
             // runtime; users cannot create, control or access them, so it is
             // expected that no halide_buffer_t will be associated with them:
-            halide_assert(user_context, input_buffer->halide == NULL);
-            halide_assert(user_context, input_buffer->format == DXGI_FORMAT_UNKNOWN);
+            halide_assert(user_context, !input_buffer->halide);
+            halide_assert(user_context,  input_buffer->format == DXGI_FORMAT_UNKNOWN);
 
             ID3D12Resource *pResource = input_buffer->resource;
             D3D12_GPU_VIRTUAL_ADDRESS pGPU = pResource->GetGPUVirtualAddress();
@@ -1839,7 +1821,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
 
             DXGI_FORMAT Format = input_buffer->format;
             if (Format == DXGI_FORMAT_UNKNOWN) {
-                d3d12_halt("unsupported buffer element type: " << input_buffer->halide->type);
+                d3d12_halt("unsupported buffer element type: " << input_buffer->halide_type);
             }
 
             UINT FirstElement = input_buffer->offset;
@@ -2891,7 +2873,7 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
 
     d3d12_buffer *new_handle = peel_buffer(dst);
     halide_assert(user_context, (new_handle != NULL));
-    halide_assert(user_context, (new_handle->halide == dst));
+    halide_assert(user_context, (new_handle->halide_type == dst->type));
     halide_assert(user_context, (src->device_interface == dst->device_interface));
 
     new_handle->offset = old_handle->offset + offset;
