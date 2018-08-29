@@ -2143,52 +2143,90 @@ WEAK void did_modify_range(d3d12_buffer *buffer, size_t offset, size_t length) {
     xfer->size   = length;
 }
 
-WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
+static void buffer_copy_command(d3d12_copy_command_list *cmdList,
+                                d3d12_buffer *src, d3d12_buffer *dst,
+                                uint64_t src_byte_offset, uint64_t dst_byte_offset,
+                                uint64_t num_bytes_copy) {
+    TRACELOG;
+
+    ID3D12Resource *pSrcBuffer = src->resource;
+    ID3D12Resource *pDstBuffer = dst->resource;
+
+    D3D12_RESOURCE_BARRIER src_barrier = { };
+    {
+        src_barrier.Type  = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        src_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        src_barrier.Transition.pResource   = pSrcBuffer;
+        src_barrier.Transition.Subresource = 0;
+        src_barrier.Transition.StateBefore = src->state;
+        src_barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        if (src->state == D3D12_RESOURCE_STATE_GENERIC_READ) {
+            halide_assert(user_context, src->type == d3d12_buffer::Upload);
+            src_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+        } else {
+            halide_assert(user_context, src->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+    }
+
+    D3D12_RESOURCE_BARRIER dst_barrier = { };
+    {
+        dst_barrier.Type  = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        dst_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        dst_barrier.Transition.pResource   = pDstBuffer;
+        dst_barrier.Transition.Subresource = 0;
+        dst_barrier.Transition.StateBefore = dst->state;
+        dst_barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
+        if (dst->state == D3D12_RESOURCE_STATE_COPY_DEST) {
+            halide_assert(user_context, dst->type == d3d12_buffer::ReadBack);
+        } else {
+            halide_assert(user_context, dst->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+    }
+
+    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &src_barrier);
+    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &dst_barrier);
+
+    UINT64 SrcOffset = src_byte_offset;
+    UINT64 DstOffset = dst_byte_offset;
+    UINT64 NumBytes  = num_bytes_copy;
+
+    (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
+
+    swap(src_barrier.Transition.StateBefore, src_barrier.Transition.StateAfter);  // restore resource state
+    swap(dst_barrier.Transition.StateBefore, dst_barrier.Transition.StateAfter);  // restore resource state
+
+    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &src_barrier);
+    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &dst_barrier);
+}
+
+WEAK void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
     TRACELOG;
 
     d3d12_buffer::transfer_t *xfer = buffer->xfer;
     halide_assert(user_context, (xfer != NULL));
 
-    UINT64 DstOffset = xfer->offset;
-    UINT64 SrcOffset = xfer->offset;
-    UINT64 NumBytes  = xfer->size;
-    ID3D12Resource *pDstBuffer = NULL;
-    ID3D12Resource *pSrcBuffer = NULL;
-
-    if (buffer->state != D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-    {
-        TRACEPRINT("buffer->state: " << buffer->state << "\n");
-    }
-    halide_assert(user_context, buffer->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-    D3D12_RESOURCE_BARRIER barrier = { };
-    {
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource = buffer->resource;
-        barrier.Transition.Subresource = 0;
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    }
-
-    // NOTE(marcos): it might be possible to achieve higher asynchronicity with
-    // special flags like D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY / END_ONLY?
+    d3d12_buffer* src = NULL;
+    d3d12_buffer *dst = NULL;
+    uint64_t src_byte_offset = xfer->offset;
+    uint64_t dst_byte_offset = xfer->offset;
+    uint64_t num_bytes_copy  = xfer->size;
 
     d3d12_buffer *staging = xfer->staging;
     switch (staging->type) {
         case d3d12_buffer::Upload :
-            pDstBuffer = buffer->resource;
-            pSrcBuffer = staging->resource;
-            DstOffset = buffer->offsetInBytes;
-            halide_assert(user_context, staging->state == D3D12_RESOURCE_STATE_GENERIC_READ);
-            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
+            src = staging;
+            dst = buffer;
+            dst_byte_offset = buffer->offsetInBytes;
             break;
         case d3d12_buffer::ReadBack :
             unmap_buffer(staging);
-            pDstBuffer = staging->resource;
-            pSrcBuffer = buffer->resource;
-            SrcOffset = buffer->offsetInBytes;
-            halide_assert(user_context, staging->state == D3D12_RESOURCE_STATE_COPY_DEST);
-            barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
+            src = buffer;
+            dst = staging;
+            src_byte_offset = buffer->offsetInBytes;
             break;
         default :
             TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
@@ -2197,14 +2235,11 @@ WEAK void synchronize_resource(d3d12_copy_command_list *cmdList, d3d12_buffer *b
     }
 
     TRACEPRINT("--- "
-        << (void*)buffer << " | " << (void*)buffer->halide << " | "
-        << SrcOffset << " : " << DstOffset << " : " << NumBytes
+        << (void*)buffer << " | " << buffer->halide_type << " | "
+        << src_byte_offset << " : " << dst_byte_offset << " : " << num_bytes_copy
         << "\n");
 
-    (*cmdList)->ResourceBarrier(1, &barrier);
-    (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
-    swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);    // restore resource state
-    (*cmdList)->ResourceBarrier(1, &barrier);
+    buffer_copy_command(cmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes_copy);
 }
 
 WEAK void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
@@ -2237,7 +2272,7 @@ inline void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer
     d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
     if (dev_buffer != NULL) {
         if (is_buffer_managed(dev_buffer)) {
-            synchronize_resource(blitCmdList, dev_buffer);
+            synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
         }
     }
     commit_command_list(blitCmdList);
