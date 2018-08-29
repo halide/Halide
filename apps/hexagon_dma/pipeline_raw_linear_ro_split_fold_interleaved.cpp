@@ -34,7 +34,7 @@ public:
 
         output
             .compute_root()
-            .reorder(c, x, yi)
+            .reorder(c, x, yo)
             .bound(c, 0, 4)
             .tile(x, yi, tx, ty, ta, tb, tile_width, tile_height, TailStrategy::RoundUp)
             .parallel(yo); 

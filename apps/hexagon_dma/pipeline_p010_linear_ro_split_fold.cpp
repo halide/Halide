@@ -49,7 +49,7 @@ public:
 
         output_uv
             .compute_root()
-            .reorder(c, x, yix)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+            .reorder(c, x, yox)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
             .bound(c, 0, 2)
             .tile(x, yix, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
             .parallel(yox);

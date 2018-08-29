@@ -57,7 +57,7 @@ public:
 
         output_uv
             .compute_root()
-            .reorder(c, x, yix)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+            .reorder(c, x, yox)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
             .bound(c, 0, 2)
             .tile(x, yix, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
             .parallel(yox);
@@ -66,7 +66,7 @@ public:
         // circular buffer of two tiles.
         input_copy_y.compute_at(output_y, tx)
                     .store_at(output_y, ty) 
-                    .copy_to_host().async().fold_storage(x, tile_width * 2);
+                    .copy_to_host().fold_storage(x, tile_width * 2);
 
         Stage(output_y)
             .set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -81,7 +81,7 @@ public:
         input_copy_uv.compute_at(output_uv, tx)
                      .store_at(output_uv, ty)
                      .bound(c, 0, 2)
-                     .copy_to_host().async()
+                     .copy_to_host()
                      .reorder_storage(c, x, y)
                      .fold_storage(x, tile_width * 2);
 
