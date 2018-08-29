@@ -173,7 +173,11 @@ void call_in_new_context(execution_context *from,
         "popq %%rax\n"
         : // No outputs
         : "r"(&(from->stack)), "r"(to->stack), "r"(from), "r"(to), "r"(arg), "r"(f)
+#ifdef _WIN32 // Microsoft calling convention is different.
+        : "memory", "rcx", "rdx", "r8"
+#else
         : "memory", "rdi", "rsi", "rdx"
+#endif
         );
 }
 
