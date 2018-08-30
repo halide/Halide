@@ -2877,6 +2877,27 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
             }
             err = do_multidimensional_copy(d3d12_context.device, c, src_offset, dst_offset, dimensions);
         } else {
+#if 0
+            if (!from_host) {
+                halide_d3d12compute_copy_to_host(user_context, src);
+                d3d12_buffer *dsrc = peel_buffer(src);
+                c.src = reinterpret_cast<uint64_t>(src->host) + dsrc->offsetInBytes;
+            }
+
+            d3d12_buffer *dst_buffer;
+            if (!to_host) {
+                dst_buffer = peel_buffer(dst);
+                if (from_host) {
+                    c.dst = reinterpret_cast<uint64_t>(dst->host) + dst_buffer->offsetInBytes;
+                }
+            }
+
+            copy_memory(c, user_context);
+
+            if (!to_host) {
+                halide_d3d12compute_copy_to_device(user_context, dst);
+            }
+#else
             if (from_host) {
                 // host-to-device:
                 TRACEPRINT("host-to-device case\n");
@@ -2902,12 +2923,14 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 // sync device src buffer with host src buffer:
                 //if (src->device_dirty()) {
                     halide_d3d12compute_copy_to_host(user_context, src);
+                    //halide_copy_to_host(user_context, src);
                 //}
                 // copy host src buffer to host dst buffer:
                 d3d12_buffer *dsrc = peel_buffer(src);
                 c.src = reinterpret_cast<uint64_t>(src->host) + dsrc->offsetInBytes;
                 copy_memory(c, user_context);
             }
+#endif
         }
 
         #ifdef DEBUG_RUNTIME
