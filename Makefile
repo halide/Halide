@@ -992,9 +992,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2093
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_coroutine,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2093
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
