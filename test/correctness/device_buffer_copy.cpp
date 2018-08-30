@@ -155,6 +155,44 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test copy from device no src host.\n");
+    {
+        Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
+        assert(gpu_buf.raw_buffer()->device_interface != nullptr);
+        halide_buffer_t no_host_src = *gpu_buf.raw_buffer();
+        no_host_src.host = nullptr;
+        no_host_src.set_device_dirty(false);
+
+        Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
+        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, &no_host_src, nullptr, cpu_buf) == 0);
+        
+        for (int i = 0; i < 128; i++) {
+            for (int j = 0; j < 128; j++) {
+                assert(cpu_buf(i, j) == (i + j * 256));
+            }
+        }
+    }
+
+    printf("Test copy to device no dest host.\n");
+    {
+        Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);
+        assert(gpu_buf.raw_buffer()->device_interface != nullptr);
+        halide_buffer_t no_host_dst = *gpu_buf.raw_buffer();
+        no_host_dst.host = nullptr;
+
+        Halide::Runtime::Buffer<int32_t> cpu_buf(128, 128);
+        cpu_buf.fill(0);
+        assert(gpu_buf.raw_buffer()->device_interface->buffer_copy(nullptr, cpu_buf, gpu_buf.raw_buffer()->device_interface, &no_host_dst) == 0);
+        gpu_buf.set_device_dirty(true);
+
+        gpu_buf.copy_to_host();
+        for (int i = 0; i < 128; i++) {
+            for (int j = 0; j < 128; j++) {
+                assert(gpu_buf(i, j) == 0);
+            }
+        }
+    }
+
     // Test copying between different device APIs. Probably will not
     // run on test infrastructure as we do not configure more than one
     // GPU API at a time. For now, special case CUDA and OpenCL as these are
