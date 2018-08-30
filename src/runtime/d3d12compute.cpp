@@ -2456,8 +2456,8 @@ static int d3d12compute_buffer_copy(d3d12_device *device,
     return 0;
 }
 
-int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
-                             uint64_t src_offset,  uint64_t dst_offset,  int dimensions) {
+static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
+                                    uint64_t src_offset,  uint64_t dst_offset,  int dimensions) {
     if (dimensions == 0) {
         d3d12_buffer *dsrc = reinterpret_cast<d3d12_buffer*>(c.src);
         d3d12_buffer *ddst = reinterpret_cast<d3d12_buffer*>(c.dst);
@@ -2480,8 +2480,8 @@ int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
         if (err) {
             return err;
         }
-        dst_off += c.dst_stride_bytes[d-1];
-        src_off += c.src_stride_bytes[d-1];
+        dst_off = c.dst_stride_bytes[d-1];
+        src_off = c.src_stride_bytes[d-1];
     }
 
     return 0;
