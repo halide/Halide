@@ -5,8 +5,8 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE          (1)
-#define HALIDE_D3D12_DEBUG_LAYER    (1)
+#define HALIDE_D3D12_TRACE          (0)
+#define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
 #define HALIDE_D3D12_PROFILING      (0)
 #define HALIDE_D3D12_PIX            (0)
@@ -2462,7 +2462,6 @@ static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
         d3d12_buffer *dsrc = reinterpret_cast<d3d12_buffer*>(c.src);
         d3d12_buffer *ddst = reinterpret_cast<d3d12_buffer*>(c.dst);
         halide_assert(user_context, (dsrc->halide_type == ddst->halide_type));
-        src_offset += c.src_begin;
         TRACEPRINT("src_offset: " << src_offset << "\n");
         TRACEPRINT("dst_offset: " << dst_offset << "\n");
         TRACEPRINT("c.chunk_size: " << c.chunk_size << "\n");
@@ -2507,18 +2506,21 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     // 1. memcpy from halide host memory to "upload" staging memory
     device_copy c = make_host_to_device_copy(buffer);
     halide_assert(user_context, (c.dst == buffer->device));
-    d3d12_buffer *dst = peel_buffer(buffer);
-    halide_assert(user_context, buffer->size_in_bytes() == dst->sizeInBytes);
-    size_t total_size = buffer->size_in_bytes();
+    d3d12_buffer *dev_buffer = peel_buffer(buffer);
+    halide_assert(user_context, buffer->size_in_bytes() == dev_buffer->sizeInBytes);
+    size_t total_size = dev_buffer->sizeInBytes;
     d3d12_buffer *staging = &upload;
-    size_t byte_offset = suballocate(d3d12_context.device, staging, total_size);
+    size_t staging_byte_offset = suballocate(d3d12_context.device, staging, total_size);
+    // the 'host' buffer already points to the beginning of the cropped region
+    size_t dev_byte_offset = dev_buffer->offsetInBytes; // handle cropping
+    c.src = reinterpret_cast<uint64_t>(buffer->host) + 0;
     void *staging_base = buffer_contents(staging);
-    c.dst = reinterpret_cast<uint64_t>(staging_base);
+    c.dst = reinterpret_cast<uint64_t>(staging_base) + staging_byte_offset;
     copy_memory(c, user_context);
 
     // 2. upload data to device (through the "upload" staging memory):
-    d3d12compute_buffer_copy(d3d12_context.device, staging,     dst,
-                                                   byte_offset, 0,   total_size);
+    d3d12compute_buffer_copy(d3d12_context.device, staging,             dev_buffer,
+                                                   staging_byte_offset, dev_byte_offset, total_size);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -2548,18 +2550,21 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
     }
 
     // 1. download data from device (copy to the "readback" staging memory):
-    d3d12_buffer *src = peel_buffer(buffer);
+    d3d12_buffer *dev_buffer = peel_buffer(buffer);
     d3d12_buffer *staging = &readback;
-    halide_assert(user_context, buffer->size_in_bytes() == src->sizeInBytes);
-    size_t total_size = buffer->size_in_bytes();
-    size_t byte_offset = suballocate(d3d12_context.device, staging, total_size);
-    d3d12compute_buffer_copy(d3d12_context.device, src, staging,
-                                                   0,   byte_offset, total_size);
+    halide_assert(user_context, buffer->size_in_bytes() == dev_buffer->sizeInBytes);
+    size_t total_size = dev_buffer->sizeInBytes;
+    size_t dev_byte_offset = dev_buffer->offsetInBytes; // handle cropping
+    size_t staging_byte_offset = suballocate(d3d12_context.device, staging, total_size);
+    d3d12compute_buffer_copy(d3d12_context.device, dev_buffer,      staging,
+                                                   dev_byte_offset, staging_byte_offset, total_size);
 
     // 2. memcpy from "readback" staging memory to halide host memory
-    void *staging_data = buffer_contents(staging);
     device_copy c = make_device_to_host_copy(buffer);
-    c.src = reinterpret_cast<uint64_t>(staging_data);
+    void *staging_data = buffer_contents(staging);
+    c.src = reinterpret_cast<uint64_t>(staging_data) + staging_byte_offset;
+    // the 'host' buffer already points to the beginning of the cropped region
+    c.dst = reinterpret_cast<uint64_t>(buffer->host) + 0;
     copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
@@ -2864,13 +2869,13 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
             TRACEPRINT("device-to-device case\n");
             d3d12_buffer *dsrc = peel_buffer(src);
             d3d12_buffer *ddst = peel_buffer(dst);
-            size_t src_offset = dsrc->offsetInBytes;
+            size_t src_offset = dsrc->offsetInBytes + c.src_begin;
             size_t dst_offset = ddst->offsetInBytes;
             D3D12ContextHolder d3d12_context (user_context, true);
             if (d3d12_context.error != 0) {
                 return d3d12_context.error;
             }
-            do_multidimensional_copy(d3d12_context.device, c, src_offset, dst_offset, dimensions);
+            err = do_multidimensional_copy(d3d12_context.device, c, src_offset, dst_offset, dimensions);
         } else {
             if (from_host) {
                 // host-to-device:
@@ -2895,9 +2900,9 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 halide_assert(user_context, (src->device_interface == &d3d12compute_device_interface));
                 halide_assert(user_context, (dst->device_interface == NULL));
                 // sync device src buffer with host src buffer:
-                if (src->device_dirty()) {
-                    halide_copy_to_host(user_context, src);
-                }
+                //if (src->device_dirty()) {
+                    halide_d3d12compute_copy_to_host(user_context, src);
+                //}
                 // copy host src buffer to host dst buffer:
                 d3d12_buffer *dsrc = peel_buffer(src);
                 c.src = reinterpret_cast<uint64_t>(src->host) + dsrc->offsetInBytes;
