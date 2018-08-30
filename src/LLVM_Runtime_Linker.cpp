@@ -692,11 +692,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
-                if (t.has_feature(Target::MinGW)) {
-                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_windows_allocator(c, bits_64, debug));
-                }
+                modules.push_back(get_initmod_windows_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
