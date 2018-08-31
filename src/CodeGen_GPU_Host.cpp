@@ -501,7 +501,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         Constant *zero = ConstantInt::get(i32_t, 0);
         Value *zeros[] = {zero, zero};
-        
+
+        // Order-of-evaluation is guaranteed to be in order in brace-init-lists,
+        // so the multiple calls to codegen here are fine
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state(api_unique_name)),

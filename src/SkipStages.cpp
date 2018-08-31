@@ -47,7 +47,8 @@ public:
     PredicateFinder(const string &b, bool s) : predicate(const_false()),
                                                buffer(b),
                                                varies(false),
-                                               treat_selects_as_guards(s) {}
+                                               treat_selects_as_guards(s),
+                                               in_produce(false) {}
 
 private:
 
@@ -55,8 +56,11 @@ private:
     string buffer;
     bool varies;
     bool treat_selects_as_guards;
+    bool in_produce;
     Scope<> varying;
     Scope<> in_pipeline;
+    Scope<> local_buffers;
+
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -111,10 +115,9 @@ private:
 
     void visit(const ProducerConsumer *op) {
         ScopedBinding<> bind(in_pipeline, op->name);
-        if (op->is_producer) {
-            if (op->name != buffer) {
-                op->body.accept(this);
-            }
+        if (op->is_producer && op->name == buffer) {
+            ScopedValue<bool> sv(in_produce, true);
+            IRVisitor::visit(op);
         } else {
             IRVisitor::visit(op);
         }
@@ -217,9 +220,21 @@ private:
 
         IRVisitor::visit(op);
 
-        if (op->name == buffer || extern_call_uses_buffer(op, buffer)) {
+        if (!in_produce && (op->name == buffer || extern_call_uses_buffer(op, buffer))) {
             predicate = const_true();
         }
+    }
+
+    void visit(const Provide *op) {
+        IRVisitor::visit(op);
+        if (in_produce && op->name != buffer && !local_buffers.contains(op->name)) {
+            predicate = const_true();
+        }
+    }
+
+    void visit(const Realize *op) {
+        ScopedBinding<> bind(local_buffers, op->name);
+        IRVisitor::visit(op);
     }
 
     void visit(const Allocate *op) {
