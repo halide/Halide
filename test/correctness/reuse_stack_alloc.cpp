@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     f(x) = x;
     f.compute_root();
 
-    g(x) = f(x);
+    g(x) = f(x) + 1;
     g.compute_root();
 
     // Create a function that uses an undefined buffer after f is
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     h(x) += g(x);
     h.compute_root();
 
-    k(x) = h(x);
+    k(x) = h(x) + 1;
     k.compute_root();
 
     // Bound it so the allocations go on the stack.
@@ -28,8 +28,8 @@ int main(int argc, char **argv) {
 
     Buffer<int> result = k.realize(16);
     for (int i = 0; i < result.width(); i++) {
-        if (result(i) != 2 * i) {
-            printf("Error! Allocation did not get reused at %d (%d != %d)\n", i, result(i), 2 * i);
+        if (result(i) != 2*i + 2) {
+            printf("Error! Allocation did not get reused at %d (%d != %d)\n", i, result(i), 2*i + 2);
             return -1;
         }
     }

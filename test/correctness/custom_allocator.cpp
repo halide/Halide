@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     Var x;
 
     f(x) = x;
-    g(x) = f(x);
+    g(x) = f(x) + 1;
     f.compute_root();
 
     g.set_custom_allocator(my_malloc, my_free);

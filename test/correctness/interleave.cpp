@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
         // Test interleave 3 vectors:
         Func planar, interleaved;
         planar(x, y) = Halide::cast<float>( 3 * x + y );
-        interleaved(x, y) = planar(x, y);
+        interleaved(x, y) = planar(x, y) + 1;
 
         Var xy("xy");
         planar
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 3; y++) {
-                float correct = 3*x + y;
+                float correct = 3*x + y + 1;
                 float delta = buff3(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, buff3(x,y), correct);

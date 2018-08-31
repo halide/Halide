@@ -184,8 +184,17 @@ string get_elision_pair_candidates(const Function &f,
         // inlined but not actually legal to do so (e.g. if the function has
         // updates or has specializations)
         Expr val = perform_inline(f.values()[i], env, inlined);
+        debug(0) << "\n\nCHECKING FUNC: " << f.name() << "\n";
+        debug(0) << "\t...value at " << i << " -> " << val << "\n";
+        debug(0) << "\t\t...is a call? " << (val.as<Call>() != nullptr) << "\n";
         if (const Call *call = val.as<Call>()) {
             if (call->call_type == Call::Halide) {
+                if (f.schedule().memory_type() != env.at(call->name).schedule().memory_type()) {
+                    // Ignore call if they have different memory types
+                    debug(4) << "...Ignore \"" << call->name << "\" since it is at "
+                             << "different memory than \"" << f.name() << "\"\n";
+                    continue;
+                }
                 // Check 'f' only calls one function
                 if (!prod.empty() && (prod != call->name)) {
                     debug(4) << "...Function \"" << f.name() << "\" calls multiple "
@@ -193,25 +202,25 @@ string get_elision_pair_candidates(const Function &f,
                              << call->name << "\"\n";
                     return "";
                 }
-                prod = call->name;
 
-                if (!is_prod_within_cons_realization(env, env.at(prod), f, is_output)) {
+                Function prod_f = Function(call->func);
+
+                if (!is_prod_within_cons_realization(env, env.at(prod_f.name()), f, is_output)) {
                     debug(4) << "...Not a valid copy-elision pair: computation of Function \""
-                             << prod << "\" is not within the scope of realization of Function \""
+                             << prod_f.name() << "\" is not within the scope of realization of Function \""
                              << f.name() << "\"\n";
                     return "";
                 }
 
-                // Check only 'f' calls 'prod'
-                const auto &iter = num_callers.find(prod);
+                // Check only 'f' calls 'prod_f'
+                const auto &iter = num_callers.find(prod_f.name());
                 if ((iter != num_callers.end()) && (iter->second > 1)) {
                     debug(4) << "...Function \"" << f.name() << "\" is a simple copy but \""
-                             << prod << "\" has multiple callers\n";
+                             << prod_f.name() << "\" has multiple callers\n";
                     return "";
                 }
 
-                // Check 'f' and 'prod' have the same loop dimensions
-                Function prod_f = Function(call->func);
+                // Check 'f' and 'prod_f' have the same loop dimensions
                 if (f.dimensions() != prod_f.dimensions()) {
                     debug(4) << "...Function \"" << f.name() << "\" and \""
                              << prod_f.name() << "\" have different dimensions ("
@@ -220,7 +229,7 @@ string get_elision_pair_candidates(const Function &f,
                 }
                 internal_assert(f_args.size() == call->args.size());
 
-                // Check 'f' and 'prod' have the same number of outputs
+                // Check 'f' and 'prod_f' have the same number of outputs
                 // (or tuple sizes)
                 if (f.outputs() != prod_f.outputs()) {
                     debug(4) << "...Function \"" << f.name() << "\" does not call "
@@ -230,7 +239,7 @@ string get_elision_pair_candidates(const Function &f,
                     return "";
                 }
 
-                // Check f[i] also calls prod[i]
+                // Check f[i] also calls prod_f[i]
                 if (i != call->value_index) {
                     debug(4) << "...Function \"" << f.name() << "\" calls "
                              << prod_f.name() << "[" << call->value_index
@@ -250,6 +259,8 @@ string get_elision_pair_candidates(const Function &f,
                         return "";
                     }
                 }
+
+                prod = call->name;
             }
         } else if (!prod.empty()) {
             debug(4) << "...Function \"" << f.name() << "\" does not call "
@@ -323,7 +334,7 @@ map<string, string> get_valid_copy_elision_pairs(
         }
         debug(0) << "\n\tcons: " << print_function(env.at(p.first)) << "\n";
         if (p.second.empty()) {
-            debug(0) << "\tprod: NONE";
+            debug(0) << "\tprod: NONE\n";
         } else {
             debug(0) << "\tprod: " << print_function(env.at(p.second));
         }
