@@ -2907,10 +2907,11 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 halide_assert(user_context, (src->host != NULL));
                 // it's possible for 'dst->host' to be null, so we can't always memcpy from 'src->host'
                 // to 'dst-host' and push/sync changes with 'halide_d3d12compute_copy_to_device' ...
+                halide_assert(user_context, (dst->device == c.dst));
                 if (dst->host != NULL) {
                     // 1. copy 'src->host' buffer to 'dst->host' buffer:
-                    d3d12_buffer *ddst = peel_buffer(dst);
-                    c.dst = reinterpret_cast<uint64_t>(dst->host) + ddst->offsetInBytes;
+                    // host buffers already account for the beginning of cropped regions
+                    c.dst = reinterpret_cast<uint64_t>(dst->host);
                     copy_memory(c, user_context);
                     // 2. sync 'dst->host' buffer with 'dst->device' buffer:
                     //dst->set_host_dirty();
@@ -2919,6 +2920,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                         //halide_copy_to_device(user_context, dst, dst->device_interface);
                     //}
                 } else {
+                    TRACEPRINT("dst->host is NULL\n");
                     D3D12ContextHolder d3d12_context (user_context, true);
                     if (d3d12_context.error != 0) {
                         return d3d12_context.error;
@@ -2948,6 +2950,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 halide_assert(user_context, (dst->host != NULL));
                 // it's possible for 'src->host' to be null, so we can't always pull/sync changes with
                 // 'halide_d3d12compute_copy_to_host' and then memcpy from 'src->host' to 'dst-host'...
+                halide_assert(user_context, (src->device == c.src));
                 if (src->host != NULL) {
                     // 1. sync 'src->device' buffer with 'src->host' buffer:
                     //if (src->device_dirty()) {
@@ -2955,10 +2958,11 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                         //halide_copy_to_host(user_context, src);
                     //}
                     // 2. copy 'src->host' buffer to 'dst->host' buffer:
-                    d3d12_buffer *dsrc = peel_buffer(src);
-                    c.src = reinterpret_cast<uint64_t>(src->host) + dsrc->offsetInBytes;
+                    // host buffers already account for the beginning of cropped regions
+                    c.src = reinterpret_cast<uint64_t>(src->host);
                     copy_memory(c, user_context);
                 } else {
+                    TRACEPRINT("src->host is NULL\n");
                     D3D12ContextHolder d3d12_context (user_context, true);
                     if (d3d12_context.error != 0) {
                         return d3d12_context.error;
