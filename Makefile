@@ -1136,8 +1136,6 @@ $(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$
 	@mkdir -p $(@D)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
-NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
-
 GEN_AOT_OUTPUTS=-e static_library,h,cpp
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
@@ -1205,6 +1203,10 @@ $(FILTERS_DIR)/memory_profiler_mandelbrot.a: $(BIN_DIR)/memory_profiler_mandelbr
 $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g alias_with_offset_42 -f alias_with_offset_42 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+
+$(FILTERS_DIR)/constinput.a: $(BIN_DIR)/constinput.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g constinput -f constinput $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \

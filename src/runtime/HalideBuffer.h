@@ -1037,11 +1037,17 @@ public:
     }
     // @}
 
+#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)
+    // Don't provide an implicit cast operator to halide_buffer_t*;
+    // instead, rely on the explicitly-typed wrappers we generate,
+    // which provide better type safety.
+#else
     /** Provide a cast operator to halide_buffer_t *, so that
      * instances can be passed directly to Halide filters. */
     operator halide_buffer_t *() {
         return &buf;
     }
+#endif
 
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a

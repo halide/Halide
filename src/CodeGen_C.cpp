@@ -211,6 +211,11 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
                << "#define HALIDE_" << print_name(guard) << '\n'
                << "#include <stdint.h>\n"
+               << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n"
+               << "#include <assert.h>\n"
+               << "#include \"HalideRuntime.h\"\n"
+               << "#include \"HalideBuffer.h\"\n"
+               << "#endif  // defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
                << "// to the Halide pipeline.\n"
@@ -416,6 +421,27 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     }
     if (include_space && needs_space)
         oss << " ";
+    return oss.str();
+}
+
+string escaped_name(const string &name) {
+    ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
+    for (size_t i = 0; i < name.size(); i++) {
+        if (name[i] == '.') {
+            oss << '_';
+        } else if (name[i] == '$') {
+            oss << "__";
+        } else if (name[i] != '_' && !isalnum(name[i])) {
+            oss << "___";
+        }
+        else oss << name[i];
+    }
     return oss.str();
 }
 
@@ -1226,24 +1252,7 @@ string CodeGen_C::print_reinterpret(Type type, Expr e) {
 }
 
 string CodeGen_C::print_name(const string &name) {
-    ostringstream oss;
-
-    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
-    if (isalpha(name[0])) {
-        oss << '_';
-    }
-
-    for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.') {
-            oss << '_';
-        } else if (name[i] == '$') {
-            oss << "__";
-        } else if (name[i] != '_' && !isalnum(name[i])) {
-            oss << "___";
-        }
-        else oss << name[i];
-    }
-    return oss.str();
+    return escaped_name(name);
 }
 
 namespace {
@@ -1493,6 +1502,45 @@ void CodeGen_C::compile(const Module &input) {
     }
 }
 
+namespace {
+
+struct ArgInfo {
+    Argument arg;
+    std::string c_type;
+    std::string escaped_name;
+};
+
+enum BufferDeclType {
+    ByRef,
+    ByPtr,
+    ConstByRef,
+    ConstByPtr
+};
+
+template<BufferDeclType t>
+void DeclFnArg(std::ostream &o, const ArgInfo &a) {
+    if (a.arg.is_buffer()) {
+        o << "::Halide::Runtime::Buffer<"
+          << ((a.arg.is_input() && (t == ConstByPtr || t == ConstByRef)) ? "const " : "")
+          << a.c_type
+          << "> "
+          << ((t == ByRef || t == ConstByRef) ? "&" : "*");
+    } else {
+        o << a.c_type;
+    }
+    o << a.escaped_name;
+}
+
+template<BufferDeclType t>
+void PassFnArg(std::ostream &o, const ArgInfo &a) {
+    o << a.escaped_name;
+    if (a.arg.is_buffer()) {
+        o << ((t == ByRef || t == ConstByRef) ? "." : "->") << "raw_buffer()";
+    }
+}
+
+}  // namespace
+
 void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
     if (is_header() && f.linkage == LinkageType::Internal) {
@@ -1534,24 +1582,44 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
-    stream << "int " << simple_name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            stream << "struct halide_buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
-        } else {
-            stream << print_type(args[i].type, AppendSpace)
-                   << print_name(args[i].name);
-        }
 
-        if (i < args.size()-1) stream << ", ";
+    std::vector<ArgInfo> arg_info;
+    int input_buffers = 0, output_buffers = 0;
+    for (const auto &arg : args) {
+        arg_info.push_back({arg, type_to_c_type(arg.type, !arg.is_buffer()), escaped_name(arg.name)});
+        if (arg.is_buffer()) {
+            arg_info.back().escaped_name += "_buffer";
+            if (arg.is_input()) {
+                input_buffers++;
+            } else {
+                output_buffers++;
+            }
+        }
     }
 
+    using EmitArgFn = std::function<void(std::ostream &o, const ArgInfo &a)>;
+    const auto emit_args = [this, &arg_info](EmitArgFn fn) {
+        for (size_t i = 0; i < arg_info.size(); i++) {
+            if (i > 0) stream << ", ";
+            fn(stream, arg_info[i]);
+        }
+    };
+
+    stream << "int " << simple_name << "(";
+    emit_args([](std::ostream &o, const ArgInfo &a) {
+        if (a.arg.is_buffer()) {
+            o << "struct halide_buffer_t *";
+        } else {
+            o << a.c_type;
+        }
+        o << a.escaped_name;
+    });
+    stream << ") HALIDE_FUNCTION_ATTRS";
+
     if (is_header()) {
-        stream << ") HALIDE_FUNCTION_ATTRS;\n";
+        stream << ";\n";
     } else {
-        stream << ") HALIDE_FUNCTION_ATTRS {\n";
+        stream << " {\n";
         indent += 1;
 
         if (uses_gpu_for_loops) {
@@ -1590,6 +1658,36 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         // And also the metadata.
         stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+
+        // Emit overload(s) that accept Halide::Runtime::Buffers instead of halide_buffer_t
+        // (but only if the function is being emitted in NameMangling::CPlusPlus mode)
+        if (name_mangling == NameMangling::CPlusPlus) {
+            stream << "\n// C++ wrappers to accept Halide::Runtime::Buffers of the appropriate types\n";
+            stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+
+            const auto emit_fn_wrapper = [this, &simple_name, &emit_args](EmitArgFn decl_fn_arg, EmitArgFn pass_fn_arg) {
+                stream << "inline int " << simple_name << "(";
+                emit_args(decl_fn_arg);
+                stream << ") HALIDE_FUNCTION_ATTRS {\n";
+                stream << "    return " << simple_name << "(";
+                emit_args(pass_fn_arg);
+                stream << ");\n";
+                stream << "}\n";
+            };
+
+            emit_fn_wrapper(DeclFnArg<ConstByRef>, PassFnArg<ConstByRef>);
+            emit_fn_wrapper(DeclFnArg<ConstByPtr>, PassFnArg<ConstByPtr>);
+            if (input_buffers > 0) {
+                // We could get away without the ByRef variants (since those calls
+                // will work with the ConstByRef variants via implicit temporaries),
+                // but saving a trivial amount of inline temporary construction
+                // is worthwhile, and these are cheap.
+                emit_fn_wrapper(DeclFnArg<ByRef>, PassFnArg<ByRef>);
+                emit_fn_wrapper(DeclFnArg<ByPtr>, PassFnArg<ByPtr>);
+            }
+
+            stream << "#endif  // defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
+        }
     }
 
     if (!namespaces.empty()) {
@@ -2028,7 +2126,7 @@ void CodeGen_C::visit(const Call *op) {
         Expr a0 = op->args[0];
         rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
         rhs << "(" << arg << ")";
     } else if (op->is_intrinsic(Call::alloca)) {
