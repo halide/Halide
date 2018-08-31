@@ -351,6 +351,10 @@ public:
             output.estimate(output.args()[0], 0, 2000);
             output.estimate(output.args()[1], 0, 2000);
             output.estimate(output.args()[2], 0, 3);
+
+            output.dim(0).set_bounds(0, 2000);
+            output.dim(1).set_bounds(0, 2000);
+            output.dim(2).set_bounds(0, 3);
         }
     }
 };
