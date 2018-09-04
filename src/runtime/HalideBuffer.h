@@ -1124,6 +1124,19 @@ public:
         return dst;
     }
 
+    /** Make a copy of the Buffer which shares the underlying host and/or device
+     * allocations as the existing Buffer. This is purely syntactic sugar for
+     * cases where you have a const reference to a Buffer but need a temporary
+     * non-const copy (e.g. to make a call into AOT-generated Halide code), and want a terse
+     * inline way to create a temporary. \code
+     * void call_my_func(const Buffer<const uint8_t>& input) {
+     *     my_func(input.alias(), output);
+     * }\endcode
+     */
+    inline Buffer<T, D> alias() const {
+        return *this;
+    }
+
     /** Fill a Buffer with the values at the same coordinates in
      * another Buffer. Restricts itself to coordinates contained
      * within the intersection of the two buffers. If the two Buffers
