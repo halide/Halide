@@ -227,6 +227,7 @@ void check_algebra() {
     check((x / 3) / 4, x / 12);
     check((x*4)/2, x*2);
     check((x*2)/4, x/2);
+    check((x*(-4))/2, x*(-2));
     check((x*4 + y)/2, y/2 + x*2);
     check((y + x*4)/2, y/2 + x*2);
     check((x*4 - y)/2, (0 - y)/2 + x*2);
