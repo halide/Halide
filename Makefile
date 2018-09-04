@@ -471,6 +471,7 @@ SOURCE_FILES = \
   UniquifyVariableNames.cpp \
   UnpackBuffers.cpp \
   UnrollLoops.cpp \
+  UnsafePromises.cpp \
   Util.cpp \
   Var.cpp \
   VaryingAttributes.cpp \
@@ -622,6 +623,7 @@ HEADER_FILES = \
   UniquifyVariableNames.h \
   UnpackBuffers.h \
   UnrollLoops.h \
+  UnsafePromises.h \
   Util.h \
   Var.h \
   VaryingAttributes.h \
@@ -636,6 +638,7 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
+  alignment_64 \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -833,7 +836,9 @@ RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
 # win32 is tied to x86 due to the use of the __stdcall calling convention
 RUNTIME_TRIPLE_WIN_32 = "i386-unknown-unknown-unknown"
 
-RUNTIME_CXX_FLAGS = -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic
+# -std=gnu++98 is deliberate; we do NOT want c++11 here,
+# as we don't want static locals to get thread synchronization stuff.
+RUNTIME_CXX_FLAGS = -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fpic -std=gnu++98
 $(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d

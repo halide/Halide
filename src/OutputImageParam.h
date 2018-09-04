@@ -42,7 +42,7 @@ protected:
 public:
 
     /** Construct a null image parameter handle. */
-    OutputImageParam() {}
+    OutputImageParam() : kind(Argument::InputScalar) {}
 
     /** Get the name of this Param */
     const std::string &name() const;

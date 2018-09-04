@@ -36,7 +36,9 @@ public:
     virtual std::string print_gpu_name(const std::string &name);
 
     std::string api_unique_name() { return "openglcompute"; }
+    bool kernel_run_takes_types() const { return true; }
 
+    
 protected:
 
     class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {

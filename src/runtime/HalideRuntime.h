@@ -587,7 +587,7 @@ extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
 
 /** Copy image data from host memory to device memory. This should not
  * be called directly; Halide handles copying to the device
- * automatically.  If interface is NULL and the bug has a non-zero dev
+ * automatically.  If interface is NULL and the buf has a non-zero dev
  * field, the device associated with the dev handle will be
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
@@ -1138,7 +1138,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_tsan = 52, ///< Enable hooks for TSAN support.
     halide_target_feature_asan = 53, ///< Enable hooks for ASAN support.
     halide_target_feature_d3d12compute = 54, ///< Enable Direct3D 12 Compute runtime.
-    halide_target_feature_end = 55 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_check_unsafe_promises = 55, ///< Insert assertions for promises.
+    halide_target_feature_end = 56 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

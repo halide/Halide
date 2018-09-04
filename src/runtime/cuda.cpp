@@ -691,8 +691,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
-                                  uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
+WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
+                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -703,16 +703,16 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
                             << " to " << (to_host ? "host" : "device") << ", "
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
-            copy_name = "cuMemcpyDtoH";
+            debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
-            copy_name = "cuMemcpyHtoD";
+            debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
         } else if (!from_host && !to_host) {
-            copy_name = "cuMemcpyDtoD";
+            debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (dst != src) {
-            copy_name = "memcpy";
+            debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size <<")\n";
             // Could reach here if a user called directly into the
             // cuda API for a device->host copy on a source buffer
             // with device_dirty = false.
@@ -725,7 +725,7 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
+            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
             src_off += c.src_stride_bytes[d-1];
             if (err) {
@@ -744,18 +744,16 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &cuda_device_interface);
 
-    if (src->device_dirty() &&
+    if ((src->device_dirty() || src->host == NULL) &&
         src->device_interface != &cuda_device_interface) {
         halide_assert(user_context, dst_device_interface == &cuda_device_interface);
-        // If the source is not cuda or host memory, ask the source
-        // device interface to copy to dst host memory first.
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (err) return err;
-        // Now just copy from src to host
-        src = dst;
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &cuda_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
@@ -784,7 +782,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
+        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
