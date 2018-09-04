@@ -1512,19 +1512,14 @@ struct ArgInfo {
 
 enum BufferDeclType {
     ByRef,
-    ByPtr,
-    ConstByRef,
-    ConstByPtr
+    ByPtr
 };
 
 template<BufferDeclType t>
 void DeclFnArg(std::ostream &o, const ArgInfo &a) {
     if (a.arg.is_buffer()) {
-        o << "::Halide::Runtime::Buffer<"
-          << ((a.arg.is_input() && (t == ConstByPtr || t == ConstByRef)) ? "const " : "")
-          << a.c_type
-          << "> "
-          << ((t == ByRef || t == ConstByRef) ? "&" : "*");
+        o << "::Halide::Runtime::Buffer<T_" << a.escaped_name << "> "
+          << ((t == ByRef) ? "&" : "*");
     } else {
         o << a.c_type;
     }
@@ -1535,7 +1530,10 @@ template<BufferDeclType t>
 void PassFnArg(std::ostream &o, const ArgInfo &a) {
     o << a.escaped_name;
     if (a.arg.is_buffer()) {
-        o << ((t == ByRef || t == ConstByRef) ? "." : "->") << "raw_buffer()";
+        o << ((t == ByRef) ? "." : "->")
+          << "template as<"
+          << (a.arg.is_input() ? "const " : "") << a.c_type
+          << ">().raw_buffer()";
     }
 }
 
@@ -1666,6 +1664,13 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             stream << "#if defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
 
             const auto emit_fn_wrapper = [this, &simple_name, &emit_args](EmitArgFn decl_fn_arg, EmitArgFn pass_fn_arg) {
+                stream << "template<";
+                emit_args([](std::ostream &o, const ArgInfo &a) {
+                    if (a.arg.is_buffer()) {
+                        o << "typename T_" << a.escaped_name;
+                    }
+                });
+                stream << ">\n";
                 stream << "inline int " << simple_name << "(";
                 emit_args(decl_fn_arg);
                 stream << ") HALIDE_FUNCTION_ATTRS {\n";
@@ -1675,16 +1680,8 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                 stream << "}\n";
             };
 
-            emit_fn_wrapper(DeclFnArg<ConstByRef>, PassFnArg<ConstByRef>);
-            emit_fn_wrapper(DeclFnArg<ConstByPtr>, PassFnArg<ConstByPtr>);
-            if (input_buffers > 0) {
-                // We could get away without the ByRef variants (since those calls
-                // will work with the ConstByRef variants via implicit temporaries),
-                // but saving a trivial amount of inline temporary construction
-                // is worthwhile, and these are cheap.
-                emit_fn_wrapper(DeclFnArg<ByRef>, PassFnArg<ByRef>);
-                emit_fn_wrapper(DeclFnArg<ByPtr>, PassFnArg<ByPtr>);
-            }
+            emit_fn_wrapper(DeclFnArg<ByRef>, PassFnArg<ByRef>);
+            emit_fn_wrapper(DeclFnArg<ByPtr>, PassFnArg<ByPtr>);
 
             stream << "#endif  // defined(HALIDE_RUNTIME_BUFFER_WRAPPERS)\n";
         }
