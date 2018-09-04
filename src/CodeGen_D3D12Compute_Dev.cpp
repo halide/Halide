@@ -452,7 +452,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
     if (op->name == "__shared") {
         internal_assert(value_type.bits() <= 32);
         Type promoted = value_type.with_bits(32);
-		ostringstream rhs;
+                ostringstream rhs;
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
             << " = "

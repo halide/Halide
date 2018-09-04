@@ -499,9 +499,12 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         trace_loads
         trace_stores
         trace_realizations
+        d3d12compute
         strict_float
         legacy_buffer_wrappers
         tsan
+        asan
+        check_unsafe_promises
       )
     # Synthesize a one-or-two-char abbreviation based on the feature's position
     # in the KNOWN_FEATURES list.
@@ -615,13 +618,17 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
 
   add_custom_target(${EXEC_TARGET} DEPENDS ${args_OUTPUTS})
 
-  # As of CMake 3.x, add_custom_command() recognizes executable target names in its COMMAND.
+  # LLVM may leak memory during generator execution. If projects are built with address sanitizer enabled,
+  # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
+  # To work around this, we execute generators with an environment setting to disable leak checking.
+  set(RUN_WITHOUT_LEAKCHECK ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0")
+
   if(NOT WIN32)
     add_custom_command(
       OUTPUT ${args_OUTPUTS}
       DEPENDS ${args_GENERATOR_BINARY}
       COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
-      COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
+      COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
   else()
@@ -631,7 +638,7 @@ function(_halide_add_exec_generator_target EXEC_TARGET)
       COMMAND ${CMAKE_COMMAND} -E echo copying $<TARGET_FILE:${HALIDE_COMPILER_LIB}> to "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${HALIDE_COMPILER_LIB}> "$<TARGET_FILE_DIR:${args_GENERATOR_BINARY}>"
       COMMAND ${CMAKE_COMMAND} -E echo Running $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
-      COMMAND ${args_GENERATOR_BINARY} ${args_GENERATOR_ARGS}
+      COMMAND ${RUN_WITHOUT_LEAKCHECK} $<TARGET_FILE:${args_GENERATOR_BINARY}> ${args_GENERATOR_ARGS}
       COMMENT "${EXTRA_OUTPUTS_COMMENT}"
     )
   endif()

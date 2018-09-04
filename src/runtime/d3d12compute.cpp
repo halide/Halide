@@ -1,5 +1,7 @@
 #ifndef BITS_64
-    #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
+    // Don't emit a message: some environments will consider this as a "warning",
+    // and we generally build with warnings-as-errors enabled.
+    // #pragma message "The Halide Direct3D 12 back-end is not yet supported on 32bit targets..."
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
@@ -2631,7 +2633,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     void *host = d3d12_malloc(buffer->size_in_bytes());
     buffer->host = (uint8_t*)host;
     dev_buffer->host_mirror = host;
-    debug(user_context) << TRACEINDENT 
+    debug(user_context) << TRACEINDENT
                         << "halide_d3d12compute_device_and_host_malloc"
                         << " device = " << (void*)buffer->device
                         << " d3d12_buffer = " << dev_buffer
