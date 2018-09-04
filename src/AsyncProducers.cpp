@@ -392,7 +392,7 @@ class InitializeSemaphores : public IRMutator2 {
                 stmt = LetStmt::make(op->name, sema_allocate, stmt);
 
                 // Re-wrap any other lets
-                while (lets.size()) {
+                while (!lets.empty()) {
                     stmt = LetStmt::make(lets.back().first, lets.back().second, stmt);
                 }
                 return stmt;
