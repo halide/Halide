@@ -1135,6 +1135,7 @@ public:
     */
     template<typename T2, int D2>
     void copy_from(const Buffer<T2, D2> &other) {
+        static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
         assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
         assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
@@ -2197,7 +2198,7 @@ public:
      * bounds. Compared to doing the host pointer check directly,
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
-    bool is_bounds_query() {
+    bool is_bounds_query() const {
         return buf.is_bounds_query();
     }
 
