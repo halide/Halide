@@ -123,6 +123,8 @@ struct PipelineFeatures {
         scalar_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],       // First col is all zero                  f(y, 2, z*8)
         gather_scatter_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];            // Not one of the three categories above  f(x, x, sqrt(y))
 
+    int native_vector_size; // The native vector size for the narrowest type used.
+
     // TODO: We should possibly feed these Jacobians directly
     // to the net rather than computing the properties above.
 
@@ -173,7 +175,8 @@ struct PipelineFeatures {
                      << "      Vectorizable:   " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
                      << "      Strided:        " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
                      << "      Scalar:         " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
-                     << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
+                     << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n'
+                     << "     Native vector size: " << native_vector_size << '\n';
         }
     }
 
@@ -790,6 +793,7 @@ struct FunctionDAG {
                     v = common_subexpression_elimination(simplify(v)); // Get things into canonical form
                     v.accept(&featurizer);
                 }
+                stage.features.native_vector_size = stage.vector_size;
             }
         }
     }
@@ -909,7 +913,7 @@ struct ScheduleFeatures {
     int64_t innermost_bytes_at_production = 0;
     int64_t innermost_bytes_at_root = 0;
 
-    int64_t bytes_read_per_tile = 0; // Number of bytes loaded from all inputs per tile (TODO: Not particularly useful without knowing how many times this runs)
+    int64_t bytes_read_per_tile = 0; // Number of bytes loaded from alnputs per tile (TODO: Not particularly useful without knowing how many times this runs)
 
     int64_t inlined_calls = 0; // For inlined Funcs, how many calls are made to this Func total
 
@@ -919,6 +923,10 @@ struct ScheduleFeatures {
     int64_t allocation_bytes_read_per_realization = 0; // The sum of the sizes of the allocations accessed per production. Gives a hint as to the likely locality of it.
 
     int64_t working_set = 0; // The sum of the sizes of the allocations within the production of this Func. Probably a good thing if it fits in cache.
+
+    int64_t vector_size = 0; // The vectorization factor (#simd lanes) to be used to compute this stage. Wasted work if innermost_pure_loop is not a multiple of this, or if it's smaller than the stage's native vector size (which is in the pipeline features).
+
+    int64_t rounded_innermost_pure_loop_extent = 0; // Innermost pure loop extend rounded up to the next multiple of the vector size
 
     void dump() const {
         debug(0) << "    num_realizations:                      " << num_realizations << '\n'
@@ -942,7 +950,9 @@ struct ScheduleFeatures {
                  << "    bytes_read_per_realization:            " << bytes_read_per_realization << '\n'
                  << "    lines_read_per_realization:            " << lines_read_per_realization << '\n'
                  << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
-                 << "    working_set:                           " << working_set << '\n';
+                 << "    working_set:                           " << working_set << '\n'
+                 << "    vector_size:                           " << vector_size << '\n'
+                 << "    rounded_innermost_pure_loop_extent     " << rounded_innermost_pure_loop_extent << '\n';
     }
 };
 
@@ -1086,186 +1096,7 @@ struct PartialScheduleNode {
             for (auto c : children) {
                 c->compute_features(params, compute_site, store_site, subinstances, parallelism, this, root, &working_set_here, features);
             }
-        } else {
 
-            int64_t parallel_tasks = parent->is_root() ? pure_loop_instances : 1;
-            int64_t subparallelism = parallel_tasks * parallelism;
-
-            // Figure out the features at the compute_at level
-            vector<ScheduleFeatures> &func_features = (*features)[node];
-            if (func_features.empty()) {
-                func_features.resize(node->stages.size());
-            }
-            ScheduleFeatures &feat = func_features[stage_idx];
-
-            if (innermost) {
-                // Figure out the features at the innermost loop cluster level
-                feat.innermost_loop_extent = size.empty() ? 1 : size[0];
-
-                feat.innermost_pure_loop_extent = 1;
-                size_t i = 0;
-                for (auto l : stage->loop) {
-                    if (l.pure) {
-                        feat.innermost_pure_loop_extent = size[i];
-                        break;
-                    }
-                    i++;
-                }
-            }
-
-            const bool at_production = parent->node != node;
-            const bool at_pure_production = at_production && stage_idx == 0;
-
-            if (at_production) {
-                feat.num_productions = instances;
-                feat.inner_parallelism = parallel_tasks;
-                feat.outer_parallelism = parallelism;
-
-                const auto &bounds = parent->get_bounds(node);
-
-                feat.bytes_at_production = node->bytes_per_point;
-                for (auto p : bounds.region_computed) {
-                    feat.bytes_at_production *= (p.second - p.first) + 1;
-                }
-                int64_t innermost_storage_extent = 1;
-                if (!bounds.region_computed.empty()) {
-                    innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
-                }
-                feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
-            }
-
-            for (auto c : children) {
-                c->compute_features(params, compute_site, store_site, subinstances, subparallelism, this, root, &working_set_here, features);
-            }
-
-            if (at_production) {
-                for (const auto *node : store_at) {
-                    working_set_here += (*features)[node][0].bytes_at_production;
-                }
-                feat.working_set = working_set_here;
-            }
-
-            *working_set += working_set_here;
-
-            int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
-            if (innermost || at_production) {
-                // Pick the site at which we will compute the footprint relationship
-                const auto *consumer_store_site = innermost ? parent : store_site.find(node)->second;
-                int consumer_instances = innermost ? instances : feat.num_realizations;
-
-                vector<const FunctionDAG::Node *> pending;
-                pending.push_back(node);
-                while (!pending.empty()) {
-                    const auto &next = pending.back()->incoming_edges;
-                    pending.pop_back();
-                    for (const auto *e : next) {
-                        auto it = compute_site.find(e->producer);
-                        if (it == compute_site.end()) {
-                            // Producer was inlined, recursively examine its inputs
-                            pending.push_back(e->producer);
-                            continue;
-                        }
-
-                        const auto *producer_compute_site = it->second;
-                        const auto *producer_store_site = store_site.find(e->producer)->second;
-                        const auto &bounds = consumer_store_site->get_bounds(e->producer);
-                        const auto &producer_compute_bounds = producer_compute_site->get_bounds(e->producer);
-                        const auto &producer_store_bounds = producer_store_site->get_bounds(e->producer);
-                        int64_t footprint = e->producer->bytes_per_point;
-                        int64_t compute_footprint = footprint;
-                        int64_t store_footprint = footprint;
-                        int64_t line_footprint = 1;
-                        int64_t compute_line_footprint = 1;
-                        int64_t store_line_footprint = 1;
-                        bool discontinuous = false;
-
-                        internal_assert(bounds.region_required.size() == producer_compute_bounds.region_computed.size());
-                        internal_assert(bounds.region_required.size() == producer_store_bounds.region_computed.size());
-                        for (size_t i = 0; i < bounds.region_required.size(); i++) {
-                            auto p = bounds.region_required[i];
-                            auto compute_p = producer_compute_bounds.region_computed[i];
-                            auto store_p = producer_store_bounds.region_required[i];
-                            int64_t extent = p.second - p.first + 1;
-                            int64_t compute_extent = compute_p.second - compute_p.first + 1;
-                            int64_t store_extent = store_p.second - store_p.first + 1;
-                            footprint *= extent;
-                            compute_footprint *= compute_extent;
-                            store_footprint *= store_extent;
-                            if (discontinuous) {
-                                line_footprint *= extent;
-                                compute_line_footprint *= compute_extent;
-                                store_line_footprint *= store_extent;
-                            }
-                            // Allocated extent might be smaller than extent if
-                            // the producer was fused into this consumer. If
-                            // it's larger, we may be reading from something
-                            // that was computed at a much coarser
-                            // granularity.
-                            // discontinuous |= (store_extent > extent);
-                            discontinuous = true;
-                        }
-
-
-                        int64_t store_instances_per_consumption = 1;
-                        const auto &producer_feat = (*features)[e->producer];
-                        if (!producer_feat.empty()) {
-                            // The producer's realization is nested inside this Func's realization
-                            const int64_t producer_store_instances = producer_feat[0].num_realizations;
-                            if (producer_store_instances > consumer_instances) {
-                                store_instances_per_consumption = producer_store_instances / consumer_instances;
-                            }
-                        }
-
-                        allocation_bytes_loaded += compute_footprint;
-
-                        if (store_instances_per_consumption > 1) {
-                            // The producer is nested inside the consumer
-                            bytes_loaded += store_footprint * store_instances_per_consumption;
-                            // Due to folding, the actual buffer size is smaller than the bounds at the store level
-                            lines_loaded += store_line_footprint * store_instances_per_consumption;
-                        } else {
-                            // The consumer is consuming some portion of a larger producer computed earlier
-                            bytes_loaded += footprint;
-                            lines_loaded += line_footprint;
-                        }
-                    }
-                }
-            }
-
-            // TODO: consider input images in these bytes-read metrics.
-            if (innermost) {
-                feat.bytes_read_per_tile = bytes_loaded;
-            }
-
-            if (at_production) {
-                feat.bytes_read_per_realization = bytes_loaded;
-                feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
-                feat.lines_read_per_realization = lines_loaded;
-
-                if (!at_pure_production) {
-                    // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
-                    // TODO: This overbills scatters, or writes to a restriction region.
-                    feat.bytes_read_per_realization += feat.bytes_at_production;
-                    feat.lines_read_per_realization++; // It's accessed contiguously
-                    feat.allocation_bytes_read_per_realization += feat.bytes_at_production;
-                }
-            }
-
-            if (at_pure_production) {
-                feat.points_computed_per_production = feat.points_computed_total / instances;
-            }
-        }
-
-        // Track features for inlined Funcs
-        for (auto p : inlined) {
-            auto &f = p.first;
-            vector<ScheduleFeatures> &func_features = (*features)[f];
-            func_features.resize(1);
-            auto &feat = func_features[0];
-            feat.inlined_calls += p.second * subinstances;
-        }
-
-        if (is_root()) {
             // Figure out the root-level features for every Func
             for (auto &p : *features) {
                 const auto *node = p.first;
@@ -1290,6 +1121,200 @@ struct PartialScheduleNode {
                     s++;
                 }
             }
+
+            return;
+        }
+
+        int64_t parallel_tasks = parent->is_root() ? pure_loop_instances : 1;
+        int64_t subparallelism = parallel_tasks * parallelism;
+
+        // Figure out the features at the compute_at level
+        vector<ScheduleFeatures> &func_features = (*features)[node];
+        if (func_features.empty()) {
+            func_features.resize(node->stages.size());
+        }
+        ScheduleFeatures &feat = func_features[stage_idx];
+
+        if (innermost) {
+            // Figure out the features at the innermost loop cluster level
+            feat.innermost_loop_extent = size.empty() ? 1 : size[0];
+
+            feat.innermost_pure_loop_extent = 1;
+            size_t i = 0;
+            for (auto l : stage->loop) {
+                if (l.pure) {
+                    feat.innermost_pure_loop_extent = size[i];
+                    break;
+                }
+                i++;
+            }
+        }
+
+        const bool at_production = parent->node != node;
+        const bool at_pure_production = at_production && stage_idx == 0;
+
+        if (at_production) {
+            feat.num_productions = instances;
+            feat.inner_parallelism = parallel_tasks;
+            feat.outer_parallelism = parallelism;
+            feat.vector_size = stage->vector_size;
+
+            const auto &bounds = parent->get_bounds(node);
+
+            feat.bytes_at_production = node->bytes_per_point;
+            for (auto p : bounds.region_computed) {
+                feat.bytes_at_production *= (p.second - p.first) + 1;
+            }
+            int64_t innermost_storage_extent = 1;
+            if (!bounds.region_computed.empty()) {
+                innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
+            }
+            feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
+        }
+
+        for (auto c : children) {
+            c->compute_features(params, compute_site, store_site, subinstances, subparallelism, this, root, &working_set_here, features);
+        }
+
+        if (at_production) {
+            for (const auto *node : store_at) {
+                working_set_here += (*features)[node][0].bytes_at_production;
+            }
+            feat.working_set = working_set_here;
+            feat.rounded_innermost_pure_loop_extent = ((feat.innermost_pure_loop_extent + feat.vector_size - 1) / feat.vector_size) * feat.vector_size;
+        }
+
+        *working_set += working_set_here;
+
+        int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
+        if (innermost || at_production) {
+            // Pick the site at which we will compute the footprint relationship
+            const auto *consumer_store_site = innermost ? parent : store_site.find(node)->second;
+            int consumer_instances = innermost ? instances : feat.num_realizations;
+
+            vector<const FunctionDAG::Node *> pending;
+            pending.push_back(node);
+            while (!pending.empty()) {
+                const auto &next = pending.back()->incoming_edges;
+                pending.pop_back();
+                for (const auto *e : next) {
+                    auto it = compute_site.find(e->producer);
+                    if (it == compute_site.end()) {
+                        // Producer was inlined, recursively examine its inputs
+                        pending.push_back(e->producer);
+                        continue;
+                    }
+
+                    const auto *producer_compute_site = it->second;
+                    const auto *producer_store_site = store_site.find(e->producer)->second;
+                    const auto &bounds = consumer_store_site->get_bounds(e->producer);
+                    const auto &producer_compute_bounds = producer_compute_site->get_bounds(e->producer);
+                    const auto &producer_store_bounds = producer_store_site->get_bounds(e->producer);
+                    int64_t footprint = e->producer->bytes_per_point;
+                    int64_t compute_footprint = footprint;
+                    int64_t store_footprint = footprint;
+                    int64_t line_footprint = 1;
+                    int64_t compute_line_footprint = 1;
+                    int64_t store_line_footprint = 1;
+                    bool discontinuous = false;
+
+                    internal_assert(bounds.region_required.size() == producer_compute_bounds.region_computed.size());
+                    internal_assert(bounds.region_required.size() == producer_store_bounds.region_computed.size());
+                    for (size_t i = 0; i < bounds.region_required.size(); i++) {
+                        auto p = bounds.region_required[i];
+                        auto compute_p = producer_compute_bounds.region_computed[i];
+                        auto store_p = producer_store_bounds.region_required[i];
+                        int64_t extent = p.second - p.first + 1;
+                        int64_t compute_extent = compute_p.second - compute_p.first + 1;
+                        int64_t store_extent = store_p.second - store_p.first + 1;
+                        footprint *= extent;
+                        compute_footprint *= compute_extent;
+                        store_footprint *= store_extent;
+                        if (discontinuous) {
+                            line_footprint *= extent;
+                            compute_line_footprint *= compute_extent;
+                            store_line_footprint *= store_extent;
+                        }
+                        // Allocated extent might be smaller than extent if
+                        // the producer was fused into this consumer. If
+                        // it's larger, we may be reading from something
+                        // that was computed at a much coarser
+                        // granularity.
+                        // discontinuous |= (store_extent > extent);
+                        discontinuous = true;
+                    }
+
+
+                    int64_t store_instances_per_consumption = 1;
+                    const auto &producer_feat = (*features)[e->producer];
+                    if (!producer_feat.empty()) {
+                        // The producer's realization is nested inside this Func's realization
+                        const int64_t producer_store_instances = producer_feat[0].num_realizations;
+                        if (producer_store_instances > consumer_instances) {
+                            store_instances_per_consumption = producer_store_instances / consumer_instances;
+                        }
+                    }
+
+                    allocation_bytes_loaded += compute_footprint;
+
+                    if (store_instances_per_consumption > 1) {
+                        // The producer is nested inside the consumer
+                        bytes_loaded += store_footprint * store_instances_per_consumption;
+                        // Due to folding, the actual buffer size is smaller than the bounds at the store level
+                        lines_loaded += store_line_footprint * store_instances_per_consumption;
+                    } else {
+                        // The consumer is consuming some portion of a larger producer computed earlier
+                        bytes_loaded += footprint;
+                        lines_loaded += line_footprint;
+                    }
+                }
+            }
+        }
+
+        // TODO: consider input images in these bytes-read metrics.
+        if (innermost) {
+            feat.bytes_read_per_tile = bytes_loaded;
+        }
+
+        if (at_production) {
+            feat.bytes_read_per_realization = bytes_loaded;
+            feat.allocation_bytes_read_per_realization = allocation_bytes_loaded;
+            feat.lines_read_per_realization = lines_loaded;
+
+            if (!at_pure_production) {
+                // Also pessimistically assume this update definition relies on the entirety of the produced region so far.
+                // TODO: This overbills scatters, or writes to a restriction region.
+                feat.bytes_read_per_realization += feat.bytes_at_production;
+                feat.lines_read_per_realization++; // It's accessed contiguously
+                feat.allocation_bytes_read_per_realization += feat.bytes_at_production;
+            }
+        }
+
+        if (at_pure_production) {
+            feat.points_computed_per_production = feat.points_computed_total / instances;
+        }
+
+        // Track features for inlined Funcs
+        for (auto p : inlined) {
+            auto &f = p.first;
+            vector<ScheduleFeatures> &func_features = (*features)[f];
+            func_features.resize(1);
+            auto &inlined_feat = func_features[0];
+            inlined_feat.inlined_calls += p.second * subinstances;
+            if (inlined_feat.vector_size > 0) {
+                inlined_feat.vector_size = std::min(inlined_feat.vector_size, (int64_t)stage->vector_size);
+            } else {
+                inlined_feat.vector_size = feat.vector_size;
+            }
+            if (inlined_feat.innermost_pure_loop_extent > 0) {
+                inlined_feat.innermost_pure_loop_extent = std::min(inlined_feat.innermost_pure_loop_extent,
+                                                                   feat.innermost_pure_loop_extent);
+            } else {
+                inlined_feat.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
+            }
+            inlined_feat.rounded_innermost_pure_loop_extent =
+                ((inlined_feat.innermost_pure_loop_extent + inlined_feat.vector_size - 1) /
+                 inlined_feat.vector_size) * inlined_feat.vector_size;
         }
     }
 
@@ -2045,12 +2070,20 @@ struct State {
                     }
 
                     // We can only compute in multiples of the vector size
+                    /*
                     if (feat.inlined_calls == 0) {
                         int64_t vectors = (feat.innermost_pure_loop_extent + stage.vector_size - 1) / stage.vector_size;
                         vectors *= feat.points_computed_total / feat.innermost_pure_loop_extent;
                         compute_cost = per_element_compute_cost * vectors * stage.vector_size;
                         // TODO: doesn't capture compute inflation on stages inlined into this one! Need vector overcompute as a feature, probably
                     }
+                    */
+                    compute_cost = per_element_compute_cost * feat.points_computed_total;
+
+                    // Figure out vector overcompute
+                    const int native_vector_size = stage.features.native_vector_size;
+                    const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
+                    const double vector_recompute = (double)feat.rounded_innermost_pure_loop_extent / feat.innermost_pure_loop_extent;
 
                     if (feat.inner_parallelism > 1) {
                         // Few parallel tasks may be a bad idea due to
@@ -2084,6 +2117,8 @@ struct State {
                     const double per_element_compute_cost_inlined = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
                     const double compute_cost_inlined = per_element_compute_cost_inlined * feat.inlined_calls;
                     compute_cost += compute_cost_inlined;
+
+                    compute_cost *= idle_simd_lanes * vector_recompute;
 
                     double cache_misses = 0, cost_of_miss = 0;
                     if (feat.inlined_calls == 0) {
@@ -2292,18 +2327,33 @@ State optimal_schedule(FunctionDAG &dag,
 
         //debug(0) << "\n** Generated child: ";
         //s->dump();
-        //s->calculate_cost(dag, params, nullptr, true);
+        // s->calculate_cost(dag, params, nullptr, true);
 
         tick(double(s->num_funcs_scheduled) / dag.nodes.size());
         unevaluated_states.push_back(std::shared_ptr<State>(s));
     };
 
     for (int i = 0; ; i++) {
-        decltype(q) pending, deferred;
+        decltype(q) pending;
         q.swap(pending);
 
-        // int depth = 1;
-        // std::set<uint64_t> hashes;
+        // Apply cost penalties to the queue according to structural uniqueness
+        /*
+        std::map<uint64_t, int> hashes;
+        for (int depth = 1; depth < 3; depth++) {
+            hashes.clear();
+            while (!pending.empty()) {
+                auto state = pending.top();
+                pending.pop();
+                uint64_t h = state->structural_hash(depth);
+                state->cost *= (1 + 0.01 * hashes[h]);
+                hashes[h]++;
+                q.push(state);
+            }
+            q.swap(pending);
+        }
+        */
+
 
         int expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
@@ -2312,30 +2362,25 @@ State optimal_schedule(FunctionDAG &dag,
             pending.pop();
 
             if (pending.size() > 1 && random_dropout()) {
+                debug(0) << "Dropping state\n";
                 continue;
             }
-
-            // Stratify the beam by decisions close to the root of the
-            // tree. We are more likely to need to backtrack on these.
-            /*
-            uint64_t h = state->structural_hash(depth);
-            if (hashes.count(h)) {
-                deferred.push(state);
-                if (pending.empty()) {
-                    // Haven't expanded beam_size states yet. Increase
-                    // structural comparison depth and reconsider
-                    // previously overlooked states.
-                    depth++;
-                    hashes.clear();
-                    pending.swap(deferred);
-                }
-                continue;
-            }
-            hashes.insert(h);
-            */
 
             if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
                 debug(0) << '\n';
+
+                /*
+                debug(0) << "Optimal state?\n";
+                state->dump();
+
+                debug(0) << "Rest of queue:\n";
+                while (!pending.empty()) {
+                    pending.top()->calculate_cost(dag, params, nullptr, true);
+                    pending.top()->dump();
+                    pending.pop();
+                }
+                */
+
                 return *state;
             }
 
@@ -2811,6 +2856,36 @@ void autoschedule_test() {
         throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
+    }
+
+    {
+        Func f_u8("f_u8");
+        Func f_u64_1("f_u64_1");
+        Func f_u64_2("f_u64_2");
+        Buffer<uint8_t> a(1024 * 1024 + 2);
+
+        Var x;
+        f_u8(x) = (min(a(x) + 1, 17) * a(x+1) + a(x+2)) * a(x) * a(x) * a(x + 1) * a(x + 1);
+        f_u64_1(x) = cast<uint64_t>(f_u8(x)) + 1;
+        f_u64_2(x) = f_u64_1(x) * 3;
+
+        // Ignoring the types, it would make sense to inline
+        // everything into f_64_2 but this would vectorize fairly
+        // narrowly, which is a waste of work for the first Func.
+
+        f_u64_2.estimate(x, 0, 1024 * 1024);
+
+        vector<Function> outputs = {f_u64_2.function()};
+        FunctionDAG dag(outputs, params, target);
+        dag.dump();
+        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
+
+        debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
+        optimal.dump();
+        debug(0) << '\n';
+
     }
 
 }
