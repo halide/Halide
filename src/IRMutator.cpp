@@ -1,7 +1,10 @@
 #include "IRMutator.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
+
+IRPrinter irp(std::cerr);
 
 using std::pair;
 using std::vector;

@@ -1906,7 +1906,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    if(op->is_intrinsic("gather")) {
+    if (op->is_intrinsic("gather")) {
         internal_assert(op->args.size() == 5);
         internal_assert(op->type.bits() != 8);
         int index_lanes = op->type.lanes();
@@ -1914,19 +1914,24 @@ void CodeGen_Hexagon::visit(const Call *op) {
         // Cut up the indices into appropriately-sized pieces.
         vector<Value *> results;
         string suffix = (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        string name = "halide.hexagon.vgather" + suffix;
+        llvm::Function *fn = module->getFunction(name);
+
+        Value *dst_buffer = codegen(op->args[0]);
+        Value *src_ptr = codegen(op->args[2]);
+        Value *size = codegen(op->args[3]);
+        Value *index = codegen(op->args[4]);
+
         for (int start = 0; start < index_lanes; start += intrin_lanes) {
             vector <Value *>args;
-            Value *new_index = slice_vector(codegen(op->args[4]), start, intrin_lanes);
-            args.push_back(codegen(op->args[0]));
+            Value *new_index = slice_vector(index, start, intrin_lanes);
+            args.push_back(dst_buffer);
             args.push_back(codegen(op->args[1] + start));
-            args.push_back(codegen(op->args[2]));
-            args.push_back(codegen(op->args[3]));
+            args.push_back(src_ptr);
+            args.push_back(size);
             args.push_back(new_index);
-            string name = "halide.hexagon.vgather" + suffix;
-            llvm::Function *fn = module->getFunction(name);
-            results.push_back(builder->CreateCall(fn, args));
+            value = builder->CreateCall(fn, args);
         }
-        value = concat_vectors(results);
         return;
     }
 
@@ -2050,6 +2055,25 @@ void CodeGen_Hexagon::visit(const NE *op) {
         Expr eq = Not::make(EQ::make(op->a, op->b));
         eq = eliminate_bool_vectors(eq);
         eq.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
+}
+
+void CodeGen_Hexagon::visit(const Allocate *op) {
+    if (op->memory_type == MemoryType::VTCM && !op->new_expr.defined()) {
+        // Calculate size of allocation.
+        Expr size = op->type.bytes();
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            size *= op->extents[i];
+        }
+        Expr new_expr = Call::make(Handle(), "halide_vtcm_malloc", {size},
+                                   Call::Extern);
+        string free_function = "halide_vtcm_free";
+        Stmt new_alloc = Allocate::make(op->name, op->type, op->memory_type,
+                                        op->extents, op->condition, op->body,
+                                        new_expr, free_function);
+        new_alloc.accept(this);
     } else {
         CodeGen_Posix::visit(op);
     }

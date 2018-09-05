@@ -179,9 +179,8 @@ LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
 
 bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o bin/%/libsim_qurt.a bin/%/libsim_qurt_vtcm.a
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o \
-	bin/$*/known_symbols.o bin/$*/libsim_qurt.a bin/$*/libsim_qurt_vtcm.a $(LIBDL) \
-	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o bin/$*/known_symbols.o bin/$*/libsim_qurt.a $(LIBDL) \
+	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) bin/$*/libsim_qurt_vtcm.a --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	--dynamic-linker= -E --force-dynamic
 	#$(CC-$*) -m$* -mG0lib -G0 -ldl -lc -lstandalone -lgcc  $^ $(LIBDL) -o $@
 

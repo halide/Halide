@@ -6,41 +6,46 @@ using namespace Halide;
 // hexagon DSP.
 template<typename ITYPE>
 int test() {
-    const int W = 1024;
-    const int H = 2;
+
+    const int W_img = 128;
+    const int H_img = 8;
+    const int W_lut = 256;
+    const int H_lut = 32;
 
     srand(time(0));
-    Buffer<ITYPE> input(W+1, H);
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W+1; x++) {
-            int idx = (ITYPE)rand();
-            input(x, y) = idx;
-        }
-    }
 
-    Buffer<ITYPE> lut(W, H);
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            lut(x, y) = (ITYPE)(rand());
+    // Separate channel for xCoord and yCoord for LUT index.
+    Buffer<ITYPE> input(W_img, 2);
+    for (int x = 0; x < W_img; x++) {
+        input(x, 0) = (ITYPE)rand() % W_lut;
+        input(x, 1) = (ITYPE)rand() % H_lut;
+    }
+    // Two Dimensional LUT.
+    Buffer<ITYPE> lut(W_lut, H_lut);
+    for (int y = 0; y < H_lut; y++) {
+        for (int x = 0; x < W_lut; x++) {
+            lut(x, y) = (ITYPE)rand();
         }
     }
 
     Var x, y;
     Func lut_vtcm, output_vtcm, output;
 
-    // Implement: output(x, y) = lut(input(x, y), input(x+1, y))
+    // Implement: output(x, y) = lut(input(x, 0), input(x, 1))
     // output and lut must have store_in(MemoryType::VTCM) to generate vgathers.
-    Expr xCoord = clamp(cast<int32_t>(input(x, y)), 0, W-1);
-    Expr yCoord = clamp(cast<int32_t>(input(x+1, y)), 0, H-1);
+    Expr xCoord = clamp(cast<int32_t>(input(x, 0)), 0, W_lut-1);
+    Expr yCoord = clamp(cast<int32_t>(input(x, 1)), 0, H_lut-1);
     lut_vtcm(x, y) = lut(x, y);
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
-    Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        Target target = get_jit_target_from_environment();
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+        Var yi;
+
         lut_vtcm
-            .compute_at(output, y)
+            .compute_at(output, Var::outermost())
             .store_in(MemoryType::VTCM)
             .vectorize(x, vector_size/2);
 
@@ -51,15 +56,17 @@ int test() {
 
         output
             .hexagon()
+            .split(y, y, yi, H_img/2)
+            .parallel(y)
             .vectorize(x, vector_size/2);
     }
 
-    Buffer<ITYPE> output_buf = output.realize(W, H);
+    Buffer<ITYPE> output_buf = output.realize(W_img, H_img);
 
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            int xCoord = std::max(std::min((int)(input(x, y)), W-1), 0);
-            int yCoord = std::max(std::min((int)(input(x+1, y)), H-1), 0);
+    for (int y = 0; y < H_img; y++) {
+        for (int x = 0; x < W_img; x++) {
+            int xCoord = std::max(std::min((int)(input(x, 0)), W_lut-1), 0);
+            int yCoord = std::max(std::min((int)(input(x, 1)), H_lut-1), 0);
             ITYPE correct = lut(xCoord, yCoord);
             if (output_buf(x, y) != correct) {
                 printf("output(%d, %d) = %d instead of %d\n", x, y, output_buf(x, y), correct);
@@ -73,7 +80,7 @@ int test() {
 
 int main() {
     if (!test<uint16_t>() ||
-        // !test<int16_t>() ||
+        !test<int16_t>() ||
         !test<uint32_t>() ||
         !test<int32_t>()) return 1;
     printf("Success!\n");

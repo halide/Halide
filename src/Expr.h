@@ -368,6 +368,11 @@ enum class MemoryType {
      * "local" in OpenCL, and "threadgroup" in metal. Can be shared
      * across GPU threads within the same block. */
     GPUShared,
+
+    /** Vector Tightly Coupled Memory. HVX (Hexagon) local memory available on
+     * v65+. This memory has higher performance and lower power. Ideal for
+     * intermediate buffers. Necessary for vgather-vscatter instructions
+     * on Hexagon */
     VTCM,
 };
 

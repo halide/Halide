@@ -85,10 +85,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
-
-    internal_assert(memory_type != MemoryType::VTCM ||
-                    target.has_feature(Target::HVX_v65));
-
     if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
@@ -97,7 +93,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
             user_error << "Total size for allocation " << name << " is constant but exceeds " << str_max_size << ".";
         } else if (memory_type == MemoryType::Heap ||
-                   memory_type == MemoryType::VTCM ||
                    (memory_type != MemoryType::Stack &&
                     memory_type != MemoryType::Register &&
                     !can_allocation_fit_on_stack(stack_bytes))) {
@@ -187,11 +182,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         if (new_expr.defined()) {
             allocation.ptr = codegen(new_expr);
         } else {
-            string malloc_nm = (memory_type == MemoryType::VTCM) ?
-                               "halide_vtcm_malloc" : "halide_malloc";
             // call malloc
-            llvm::Function *malloc_fn = module->getFunction(malloc_nm);
-            internal_assert(malloc_fn) << "Could not find " << malloc_nm << " in module\n";
+            llvm::Function *malloc_fn = module->getFunction("halide_malloc");
+            internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
             #if LLVM_VERSION < 50
             malloc_fn->setDoesNotAlias(0);
             #else
@@ -202,7 +195,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             ++arg_iter;  // skip the user context *
             llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-            debug(4) << "Creating call to " << malloc_nm << " for allocation " << name
+            debug(4) << "Creating call to halide_malloc for allocation " << name
                      << " of size " << type.bytes();
             for (Expr e : extents) {
                 debug(4) << " x " << e;
@@ -235,8 +228,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Register a destructor for this allocation.
         if (free_function.empty()) {
-            free_function = (memory_type == MemoryType::VTCM) ?
-                                   "halide_vtcm_free" : "halide_free";
+            free_function = "halide_free";
         }
         llvm::Function *free_fn = module->getFunction(free_function);
         internal_assert(free_fn) << "Could not find " << free_function << " in module.\n";

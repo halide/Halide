@@ -415,23 +415,21 @@ define weak_odr <32 x i32> @halide.hexagon.vtmpy.vh.vh.b.b(<32 x i16> %low_v, <3
 declare void @llvm.hexagon.V6.vgathermh(i8*, i32, i32, <16 x i32>)
 declare void @llvm.hexagon.V6.vgathermw(i8*, i32, i32, <16 x i32>)
 
-define weak_odr <32 x i16> @halide.hexagon.vgather.h.h(i16* %dst_base, i32 %dst_index, i16* %src_ptr, i32 %size, <32 x i16> %lut) nounwind uwtable {
-  %lut32 = bitcast <32 x i16> %lut to <16 x i32>
-  %src = ptrtoint i16* %src_ptr to i32
-  %dst_16ptr = getelementptr i16, i16* %dst_base, i32 %dst_index
+define weak_odr void @halide.hexagon.vgather.h.h(i8* %dst_base, i32 %dst_index, i8* %src_ptr, i32 %size, <32 x i16> %index) nounwind uwtable {
+  %index32 = bitcast <32 x i16> %index to <16 x i32>
+  %src = ptrtoint i8* %src_ptr to i32
+  %dst_16base = bitcast i8* %dst_base to i16*
+  %dst_16ptr = getelementptr i16, i16* %dst_16base, i32 %dst_index
   %dst_ptr = bitcast i16* %dst_16ptr to i8*
-  call void @llvm.hexagon.V6.vgathermh(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %lut32)
-  %vec_ptr = bitcast i16* %src_ptr to <32 x i16>*
-  %res = load <32 x i16>, <32 x i16>* %vec_ptr
-  ret <32 x i16> %res
+  call void @llvm.hexagon.V6.vgathermh(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %index32)
+  ret void
 }
 
-define weak_odr <16 x i32> @halide.hexagon.vgather.w.w(i32* %dst_base, i32 %dst_index, i32* %src_ptr, i32 %size, <16 x i32> %lut) nounwind uwtable {
-  %src = ptrtoint i32* %src_ptr to i32
-  %dst_32ptr = getelementptr i32, i32* %dst_base, i32 %dst_index
+define weak_odr void @halide.hexagon.vgather.w.w(i8* %dst_base, i32 %dst_index, i8* %src_ptr, i32 %size, <16 x i32> %index) nounwind uwtable {
+  %src = ptrtoint i8* %src_ptr to i32
+  %dst_32base = bitcast i8* %dst_base to i32*
+  %dst_32ptr = getelementptr i32, i32* %dst_32base, i32 %dst_index
   %dst_ptr = bitcast i32* %dst_32ptr to i8*
-  call void @llvm.hexagon.V6.vgathermw(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %lut)
-  %vec_ptr = bitcast i32* %src_ptr to <16 x i32>*
-  %res = load <16 x i32>, <16 x i32>* %vec_ptr
-  ret <16 x i32> %res
+  call void @llvm.hexagon.V6.vgathermw(i8* %dst_ptr, i32 %src, i32 %size, <16 x i32> %index)
+  ret void
 }

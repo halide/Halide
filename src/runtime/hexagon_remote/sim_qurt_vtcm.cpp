@@ -128,30 +128,33 @@ void setup_tcm() {
     // Mark all VTCM memory as free.
     Node* mb = createNode((void *)VTCM_BASE_ADDRESS, 1 << (10 + page_size));
     addAndMerge(free_blocks, mb);
-    log_printf("Adding 256KB VTCM Page at VA:%x PA:%llx\n", (int)va, pa);
     vtcm_ready = true;
 }
 
 extern "C" {
 
-#define KB *1024
-
-
+// At present we always use single_page_flag = 1 as single_page_flag is
+// mandatory for scatter/gather operations as they require to be contained
+// within a single page of memory. The size will be aligned to the closest
+// possible page size - 4KB / 16KB / 64KB / 256KB
 void* HAP_request_VTCM(unsigned int size, unsigned int single_page_flag) {
-    if (size > 64 KB)
-        size = 256 KB;
-    else if (size > 16 KB)
-        size = 64 KB;
-    else if (size > 4 KB)
-        size = 16 KB;
-    else
-        size = 4 KB;
-
+    // Align size to the closest possible page size - 4KB / 16KB / 64KB / 256KB
+    if (single_page_flag == 1) {
+        unsigned int size_KB = size >> 10;
+        if (size_KB > 64)
+            size_KB = 256;
+        else if (size_KB > 16)
+            size_KB = 64;
+        else if (size_KB > 4)
+            size_KB = 16;
+        else
+            size_KB = 4;
+        size = size_KB << 10;
+    }
     if (!vtcm_ready) setup_tcm();
     // Check if we have enough free memory in VTCM.
     void* addr = allocate(free_blocks, size);
     if (!addr) {
-        log_printf("HAP_request_VTCM returned NULL\n", addr);
         return NULL;
     }
     // Add entry to used_blocks. Don't merge Nodes here.
@@ -164,7 +167,6 @@ int HAP_release_VTCM(void* pVA) {
     // Remove the entry from the used_blocks list.
     Node* mb = findAndRemove(used_blocks, pVA);
     if (!mb) {
-        log_printf("HAP_release_VTCM called on an invalid address %x\n", pVA);
         return -1;
     }
     // Creating nodes in free_blocks gives the opportunity to merge nodes.
