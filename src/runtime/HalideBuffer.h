@@ -1045,7 +1045,7 @@ public:
 
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
-     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T&>.
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
      * Does a runtime assert if the source buffer type is void. */
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
@@ -1076,22 +1076,24 @@ public:
         return *((Buffer<T2, D2> *)this);
     }
 
-    /** as_const<>() is syntactic sugar for .as<const T>(), to avoid the need
+    /** as_const() is syntactic sugar for .as<const T>(), to avoid the need
      * to recapitulate the type argument. */
     // @{
     HALIDE_ALWAYS_INLINE
     Buffer<typename std::add_const<T>::type, D> &as_const() & {
-        return this->as<typename std::add_const<T>::type, D>();
+        // Note that we can skip the assert_can_convert_from(), since T -> const T
+        // conversion is always legal.
+        return *((Buffer<typename std::add_const<T>::type> *)this);
     }
 
     HALIDE_ALWAYS_INLINE
     const Buffer<typename std::add_const<T>::type, D> &as_const() const & {
-        return this->as<typename std::add_const<T>::type, D>();
+        return *((const Buffer<typename std::add_const<T>::type> *)this);
     }
 
     HALIDE_ALWAYS_INLINE
     Buffer<typename std::add_const<T>::type, D> as_const() && {
-        return this->as<typename std::add_const<T>::type, D>();
+        return *((Buffer<typename std::add_const<T>::type> *)this);
     }
     // @}
 
