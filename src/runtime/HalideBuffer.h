@@ -1045,10 +1045,11 @@ public:
 
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
-     * Buffer<const uint8_t>. Does a runtime assert if the source
-     * buffer type is void. */
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T&>.
+     * Does a runtime assert if the source buffer type is void. */
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
+    HALIDE_ALWAYS_INLINE
     Buffer<T2, D2> &as() & {
         Buffer<T2, D>::assert_can_convert_from(*this);
         return *((Buffer<T2, D2> *)this);
@@ -1060,6 +1061,7 @@ public:
      * source buffer type is void. */
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
+    HALIDE_ALWAYS_INLINE
     const Buffer<T2, D2> &as() const &  {
         Buffer<T2, D>::assert_can_convert_from(*this);
         return *((const Buffer<T2, D2> *)this);
@@ -1068,10 +1070,30 @@ public:
     /** Returns this rval Buffer with a different type attached. Does
      * a dynamic type check if the source type is void. */
     template<typename T2, int D2 = D>
+    HALIDE_ALWAYS_INLINE
     Buffer<T2, D2> as() && {
         Buffer<T2, D2>::assert_can_convert_from(*this);
         return *((Buffer<T2, D2> *)this);
     }
+
+    /** as_const<>() is syntactic sugar for .as<const T>(), to avoid the need
+     * to recapitulate the type argument. */
+    // @{
+    HALIDE_ALWAYS_INLINE
+    Buffer<typename std::add_const<T>::type, D> &as_const() & {
+        return this->as<typename std::add_const<T>::type, D>();
+    }
+
+    HALIDE_ALWAYS_INLINE
+    const Buffer<typename std::add_const<T>::type, D> &as_const() const & {
+        return this->as<typename std::add_const<T>::type, D>();
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Buffer<typename std::add_const<T>::type, D> as_const() && {
+        return this->as<typename std::add_const<T>::type, D>();
+    }
+    // @}
 
     /** Conventional names for the first three dimensions. */
     // @{
