@@ -155,7 +155,7 @@ bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 
 bin/%/sim_qurt/sim_qurt.o: sim_qurt.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -O3 -c sim_qurt.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt.cpp -o $@
 
 bin/%/sim_qurt/libsim_qurt.a: bin/%/sim_qurt/sim_qurt.o
 	ar rcs $@ $^
