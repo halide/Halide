@@ -228,7 +228,6 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
             touching_device = d;
         }
 
-
         // Then figure out what to do
         bool needs_device_malloc = (touched_on_device &&
                                     (state.device_allocation_exists != True));
