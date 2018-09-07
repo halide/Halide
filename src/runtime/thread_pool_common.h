@@ -197,14 +197,25 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
 
-        if (owned_job && owned_job->exit_status != 0 && owned_job->active_workers == 0) {
-            while (job != owned_job) {
-                prev_ptr = &job->next_job;
-                job = job->next_job;
+        if (owned_job) {
+            if (owned_job->exit_status != 0) {
+                if (owned_job->active_workers == 0) {
+                    while (job != owned_job) {
+                        prev_ptr = &job->next_job;
+                        job = job->next_job;
+                    }
+                    *prev_ptr = job->next_job;
+                    job->task.extent = 0;
+                    continue; // So loop exit is always in the same place.
+                }
+            } else if (owned_job->parent_job && owned_job->parent_job->exit_status != 0) {
+                owned_job->exit_status = owned_job->parent_job->exit_status;
+                // The wakeup can likely be only done under certain conditions, but it is only happening
+                // in when an error has already occured and it seems more important to ensure reliable
+                // termination than to optimize this path.
+                halide_cond_broadcast(&work_queue.wake_owners);
+                continue;
             }
-            *prev_ptr = job->next_job;
-            job->task.extent = 0;
-            continue; // So loop exit is always in the same place.
         }
 
         dump_job_state();
@@ -355,6 +366,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                                              myjob.task.closure, job);
             }
             halide_mutex_lock(&work_queue.mutex);
+        }
+
+        if (result != 0) {
+            log_message("Saw thread pool saw error from task: " << result);
         }
 
         bool wake_owners = false;
@@ -682,6 +697,8 @@ WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
 }
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
+    // TODO: figure out n == 0 case calls and either early exit or preferably
+    // get rid of those calls and add an assert.
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
     // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
@@ -696,6 +713,8 @@ WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
 }
 
 WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
+    // TODO: figure out n == 0 case calls and either early exit or preferably
+    // get rid of those calls and add an assert.
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     // Decrement and get new value
     int expected;
