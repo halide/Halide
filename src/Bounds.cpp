@@ -1854,7 +1854,6 @@ private:
     }
 
     void visit(const Provide *op) {
-      debug(1) << "Got provide for " << Stmt(op) << ".\n";
         if (consider_provides) {
             if (op->name == func || func.empty()) {
                 Box b(op->args.size());
