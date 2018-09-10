@@ -39,8 +39,8 @@ int test() {
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
+    Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        Target target = get_jit_target_from_environment();
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
         Var yi;
 

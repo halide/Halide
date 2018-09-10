@@ -2067,6 +2067,7 @@ void CodeGen_Hexagon::visit(const Allocate *op) {
         for (size_t i = 0; i < op->extents.size(); i++) {
             size *= op->extents[i];
         }
+        size += allocation_padding(op->type);
         Expr new_expr = Call::make(Handle(), "halide_vtcm_malloc", {size},
                                    Call::Extern);
         string free_function = "halide_vtcm_free";
