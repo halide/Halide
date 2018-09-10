@@ -81,7 +81,7 @@ struct BenchmarkConfig {
     double min_time{0.1};
 
     // Set an absolute upper time limit. Defaults to min_time * 4.
-    double max_time{0.1 * 4};
+    double max_time{0.1 * 100};
 
     // Run at least this many iterations per sample.
     uint64_t min_iters{1};
@@ -93,7 +93,7 @@ struct BenchmarkConfig {
     // seen and the third-best runtime seen is no more than
     // this. Controls accuracy. The closer to zero this gets the more
     // reliable the answer, but the longer it may take to run.
-    double accuracy{0.03};
+    double accuracy{0.01};
 };
 
 struct BenchmarkResult {
