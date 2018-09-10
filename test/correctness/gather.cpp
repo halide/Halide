@@ -5,7 +5,7 @@ using namespace Halide;
 // Implements a simple gather pipeline to make use of VTCM available on v65+
 // hexagon DSP.
 template<typename ITYPE>
-int test() {
+bool test() {
 
     const int W_img = 128;
     const int H_img = 8;
