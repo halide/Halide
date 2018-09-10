@@ -2,6 +2,8 @@
 
 extern "C" {
 
+// Provide an implementation of qurt to redirect to the appropriate
+// simulator calls.
 int qurt_hvx_lock(int mode) {
     SIM_ACQUIRE_HVX;
     if (mode == 0) {
