@@ -59,6 +59,7 @@
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnpackBuffers.h"
+#include "UnsafePromises.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
@@ -322,6 +323,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         s = setup_gpu_vertex_buffer(s);
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
+
+    debug(1) << "Lowering unsafe promises...\n";
+    s = lower_unsafe_promises(s, t);
+    debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);
