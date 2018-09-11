@@ -5,8 +5,8 @@
 #else  // BITS_64
 
 // Debugging utilities for back-end developers:
-#define HALIDE_D3D12_TRACE          (1)
-#define HALIDE_D3D12_DEBUG_LAYER    (1)
+#define HALIDE_D3D12_TRACE          (0)
+#define HALIDE_D3D12_DEBUG_LAYER    (0)
 #define HALIDE_D3D12_DEBUG_SHADERS  (0)
 #define HALIDE_D3D12_PROFILING      (0)
 #define HALIDE_D3D12_PIX            (0)
@@ -1839,6 +1839,31 @@ static void *buffer_contents(d3d12_buffer *buffer) {
             pData = map_buffer(&readback);
             break;
 
+        /*
+        // TODO(marcos): this is probably how these buffer types should be handled:
+        case d3d12_buffer::ReadOnly  :
+        case d3d12_buffer::WriteOnly :
+        case d3d12_buffer::ReadWrite :
+        {
+            D3D12ContextHolder d3d12_context(user_context, true);
+            if (d3d12_context.error != 0) {
+                return NULL;
+            }
+
+            // 1. download data from device (copy to the "readback" staging memory):
+            size_t total_size = buffer->sizeInBytes;
+            size_t dev_byte_offset = buffer->offsetInBytes;  // handle cropping
+            d3d12_buffer *staging = &readback;
+            size_t staging_byte_offset = suballocate(d3d12_context.device, staging, total_size);
+            d3d12compute_buffer_copy(d3d12_context.device, buffer,          staging,
+                                                           dev_byte_offset, staging_byte_offset, total_size);
+            void *staging_data_begin = map_buffer(staging);
+            uint64_t address = reinterpret_cast<uint64_t>(staging_data_begin) + staging_byte_offset;
+            pData = reinterpret_cast<void*>(address);
+            break;
+        }
+        */
+
         case d3d12_buffer::Unknown :
         case d3d12_buffer::ReadWrite :
         default:
@@ -2211,8 +2236,8 @@ static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list 
 
     d3d12_buffer* src = NULL;
     d3d12_buffer *dst = NULL;
-    uint64_t src_byte_offset = xfer->offset;
-    uint64_t dst_byte_offset = xfer->offset;
+    uint64_t src_byte_offset = 0;
+    uint64_t dst_byte_offset = 0;
     uint64_t num_bytes_copy  = xfer->size;
 
     d3d12_buffer *staging = xfer->staging;
@@ -2220,6 +2245,7 @@ static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list 
         case d3d12_buffer::Upload :
             src = staging;
             dst = buffer;
+            src_byte_offset = xfer->offset;
             dst_byte_offset = buffer->offsetInBytes;
             break;
         case d3d12_buffer::ReadBack :
@@ -2227,6 +2253,7 @@ static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list 
             src = buffer;
             dst = staging;
             src_byte_offset = buffer->offsetInBytes;
+            dst_byte_offset = xfer->offset;
             break;
         default :
             TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
@@ -2516,7 +2543,18 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     c.src = reinterpret_cast<uint64_t>(buffer->host) + 0;
     void *staging_base = buffer_contents(staging);
     c.dst = reinterpret_cast<uint64_t>(staging_base) + staging_byte_offset;
-    copy_memory(c, user_context);
+
+    // 'copy_memory()' will do the smart thing and copy slices (disjoint copies
+    // via multiple 'memcpy()' calls), but 'd3d12compute_buffer_copy()' has no
+    // such notion and can only write whole ranges... as such, untouched areas
+    // of the upload staging buffer might leak-in and corrupt the device data;
+    // for now, just use 'memcpy()' to keep things in sync
+    //copy_memory(c, user_context);
+    memcpy(
+        reinterpret_cast<void*>(c.dst),
+        reinterpret_cast<void*>(c.src),
+        total_size
+    );
 
     // 2. upload data to device (through the "upload" staging memory):
     d3d12compute_buffer_copy(d3d12_context.device, staging,             dev_buffer,
@@ -2877,27 +2915,6 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
             }
             err = do_multidimensional_copy(d3d12_context.device, c, src_offset, dst_offset, dimensions);
         } else {
-#if 0
-            if (!from_host) {
-                halide_d3d12compute_copy_to_host(user_context, src);
-                d3d12_buffer *dsrc = peel_buffer(src);
-                c.src = reinterpret_cast<uint64_t>(src->host) + dsrc->offsetInBytes;
-            }
-
-            d3d12_buffer *dst_buffer;
-            if (!to_host) {
-                dst_buffer = peel_buffer(dst);
-                if (from_host) {
-                    c.dst = reinterpret_cast<uint64_t>(dst->host) + dst_buffer->offsetInBytes;
-                }
-            }
-
-            copy_memory(c, user_context);
-
-            if (!to_host) {
-                halide_d3d12compute_copy_to_device(user_context, dst);
-            }
-#else
             if (from_host) {
                 // host-to-device:
                 TRACEPRINT("host-to-device case\n");
@@ -2914,11 +2931,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     c.dst = reinterpret_cast<uint64_t>(dst->host);
                     copy_memory(c, user_context);
                     // 2. sync 'dst->host' buffer with 'dst->device' buffer:
-                    //dst->set_host_dirty();
-                    //if (dst->host_dirty()) {
-                        halide_d3d12compute_copy_to_device(user_context, dst);
-                        //halide_copy_to_device(user_context, dst, dst->device_interface);
-                    //}
+                    halide_d3d12compute_copy_to_device(user_context, dst);
                 } else {
                     TRACEPRINT("dst->host is NULL\n");
                     D3D12ContextHolder d3d12_context (user_context, true);
@@ -2953,10 +2966,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 halide_assert(user_context, (src->device == c.src));
                 if (src->host != NULL) {
                     // 1. sync 'src->device' buffer with 'src->host' buffer:
-                    //if (src->device_dirty()) {
-                        halide_d3d12compute_copy_to_host(user_context, src);
-                        //halide_copy_to_host(user_context, src);
-                    //}
+                    halide_d3d12compute_copy_to_host(user_context, src);
                     // 2. copy 'src->host' buffer to 'dst->host' buffer:
                     // host buffers already account for the beginning of cropped regions
                     c.src = reinterpret_cast<uint64_t>(src->host);
@@ -2984,7 +2994,6 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     halide_assert(user_context, (use_count == 0));
                 }
             }
-#endif
         }
 
         #ifdef DEBUG_RUNTIME
