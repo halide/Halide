@@ -289,7 +289,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_DCVS_v2;
     request.dcvs_v2.dcvs_enable = TRUE;
-    request.dcvs_v2.dcvs_option = HAP_power_dcvs_v2_payload::HAP_DCVS_V2_POWER_SAVER_MODE;
+    request.dcvs_v2.dcvs_option = HAP_DCVS_V2_POWER_SAVER_MODE;
     request.dcvs_v2.set_dcvs_params = TRUE;
     request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
     request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
