@@ -312,7 +312,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling " << module_name << " for " << target.to_string() << "\n";
+    debug(1) << "JIT compiling " << module_name
+             << " for " << target.to_string() << "\n";
 
     std::map<std::string, Symbol> exports;
 
