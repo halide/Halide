@@ -697,12 +697,10 @@ WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
 }
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
-    // TODO: figure out n == 0 case calls and either early exit or preferably
-    // get rid of those calls and add an assert.
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
     // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
-    if (old_val == 0) {
+    if (old_val == 0 && n != 0) { // Don't wake if nothing released.
         // We may have just made a job runnable
         halide_mutex_lock(&work_queue.mutex);
         halide_cond_broadcast(&work_queue.wake_a_team);
@@ -713,8 +711,9 @@ WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
 }
 
 WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
-    // TODO: figure out n == 0 case calls and either early exit or preferably
-    // get rid of those calls and add an assert.
+    if (n == 0) {
+        return true;
+    }
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     // Decrement and get new value
     int expected;
