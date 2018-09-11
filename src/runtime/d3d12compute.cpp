@@ -2928,7 +2928,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 if (dst->host != NULL) {
                     // 1. copy 'src->host' buffer to 'dst->host' buffer:
                     // host buffers already account for the beginning of cropped regions
-                    c.dst = reinterpret_cast<uint64_t>(dst->host);
+                    c.dst = reinterpret_cast<uint64_t>(dst->host) + 0;
                     copy_memory(c, user_context);
                     // 2. sync 'dst->host' buffer with 'dst->device' buffer:
                     halide_d3d12compute_copy_to_device(user_context, dst);
@@ -2941,6 +2941,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     // 1. memcpy from 'src->host' to upload staging buffer
                     size_t total_size = dst->size_in_bytes();
                     d3d12_buffer *staging = &upload;
+                    // host buffers already account for the beginning of cropped regions
                     c.src = reinterpret_cast<uint64_t>(src->host) + 0;
                     size_t staging_byte_offset = suballocate(d3d12_context.device, staging, total_size);
                     void *staging_base = buffer_contents(staging);
@@ -2969,7 +2970,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     halide_d3d12compute_copy_to_host(user_context, src);
                     // 2. copy 'src->host' buffer to 'dst->host' buffer:
                     // host buffers already account for the beginning of cropped regions
-                    c.src = reinterpret_cast<uint64_t>(src->host);
+                    c.src = reinterpret_cast<uint64_t>(src->host) + 0;
                     copy_memory(c, user_context);
                 } else {
                     TRACEPRINT("src->host is NULL\n");
@@ -2987,6 +2988,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     d3d12compute_buffer_copy(d3d12_context.device, dsrc,            staging,
                                                                    src_byte_offset, staging_byte_offset, total_size);
                     // 2. memcpy readback staging buffer to 'dst->host' buffer
+                    // host buffers already account for the beginning of cropped regions
                     c.src = reinterpret_cast<uint64_t>(staging_base) + staging_byte_offset;
                     c.dst = reinterpret_cast<uint64_t>(dst->host) + 0;
                     copy_memory(c, user_context);
