@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
                 uint16_t blur_y = 0;
                 for (int ry = -2; ry <= 2; ry++) {
                     //uint16_t in_rxy = data_in[clamp(x + rx, 0, width - 1)+  width * clamp(y + ry, 0, height - 1) ];
-                    uint16_t in_rxy = data_in[std::max(0, std::min(x + rx, width)) +  width * std::max(0, std::min(y + ry, height))];
+                    uint16_t in_rxy = data_in[std::max(0, std::min(x + rx, width -1)) +  width * std::max(0, std::min(y + ry, height -1))];
                     blur_y += in_rxy * gaussian5[ry + 2];
                 }
                 blur_y += 8;

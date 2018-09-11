@@ -98,8 +98,10 @@ int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engine_id
         if (num != -1) {
             hexagon_dma_pool->dma_engine_list[num].assigned = false;
             hexagon_dma_pool->dma_engine_list[num].used = false;
-            //TODO Call DMAWrapperFinishFrame during write
-            //nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
+            if (hexagon_dma_pool->dma_engine_list[num].engine_addr) {
+                //TODO Call DMAWrapperFinishFrame during write
+		nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
+            }
         }
         virtual_engine_addr->mapped_engines[j] = 0;
     }

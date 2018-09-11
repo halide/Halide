@@ -31,8 +31,8 @@ public:
 
 
         copy(x, y) = input(x, y);
-        Expr bounded_x = max(input.dim(0).min(), min(x, input.dim(0).extent()));
-        Expr bounded_y = max(input.dim(1).min(), min(y, input.dim(1).extent()));
+        Expr bounded_x = max(input.dim(0).min(), min(x, input.dim(0).extent() -1));
+        Expr bounded_y = max(input.dim(1).min(), min(y, input.dim(1).extent() -1));
         copy_bounded(x,y) =  copy(bounded_x, bounded_y); 
 
 

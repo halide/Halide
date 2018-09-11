@@ -2066,7 +2066,7 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(const std::string &name, T
     if (!is_one(size_check)) {
         create_assertion(codegen(size_check),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                    {name, total_size, max_size}, Call::Extern));
+                                    {name, Cast::make(UInt(64), total_size), Cast::make(UInt(64), max_size)}, Call::Extern));
     }
 
     total_size = simplify(total_size);
