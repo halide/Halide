@@ -1,17 +1,19 @@
 #include <Halide.h>
 
+using namespace Halide;
+
 // See https://github.com/halide/Halide/issues/3061
 
 int main(int argc, char** argv) {
-    Halide::Target t = Halide::get_jit_target_from_environment();
+    Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
         printf("This is a GPU-specific test\n");
         return 0;
     }
 
     // Fill input buffer.
-    Halide::Buffer<float> input(2, 2, 3);
-    Halide::Buffer<float> output(2, 2, 3);
+    Buffer<float> input(2, 2, 3);
+    Buffer<float> output(2, 2, 3);
     float *input_data = input.data();
     for (int i = 0; i < 12; ++i) {
         input_data[i] = i;
@@ -19,9 +21,9 @@ int main(int argc, char** argv) {
     input.set_host_dirty();
 
     // Define a function.
-    Halide::Var x("x"), y("y"), c("c"), xo("xo"), xi("xi"), yo("yo"), yi("yi"), co("co"), ci("ci"), n("n");
-    Halide::Func func("func");
-    Halide::RDom r(0, 1, 0, 1);
+    Var x("x"), y("y"), c("c"), xo("xo"), xi("xi"), yo("yo"), yi("yi"), co("co"), ci("ci"), n("n");
+    Func func("func");
+    RDom r(0, 1, 0, 1);
     func(x, y, c) = sum(input(x + r.x, y + r.y, c));
 
     // Schedule.
