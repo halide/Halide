@@ -1911,10 +1911,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
         internal_assert(op->type.bits() != 8);
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits()/op->type.bits();
-        // Cut up the indices into appropriately-sized pieces.
-        vector<Value *> results;
-        string suffix = (op->type.bits() == 16) ? ".h.h" : ".w.w";
-        string name = "halide.hexagon.vgather" + suffix;
+
+        string name = "halide.hexagon.vgather";
+        name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
         llvm::Function *fn = module->getFunction(name);
 
         Value *dst_buffer = codegen(op->args[0]);
@@ -1922,6 +1921,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Value *size = codegen(op->args[3]);
         Value *index = codegen(op->args[4]);
 
+        // Cut up the indices into appropriately-sized pieces.
         for (int start = 0; start < index_lanes; start += intrin_lanes) {
             vector <Value *>args;
             Value *new_index = slice_vector(index, start, intrin_lanes);
