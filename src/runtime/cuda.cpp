@@ -180,6 +180,13 @@ public:
             return;
         }
 
+        // The default acquire_context loads libcuda as a
+        // side-effect. However, if acquire_context has been
+        // overridden, we may still need to load libcuda
+        if (cuInit == NULL) {
+            load_libcuda(user_context);
+        }
+
         halide_assert(user_context, context != NULL);
         halide_assert(user_context, cuInit != NULL);
 
