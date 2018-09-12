@@ -330,8 +330,7 @@ struct Test {
             check("pmulhuw", 4*w, i16_1 / 15);
 
 
-            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=???
-            // is fixed.
+            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38916 is fixed.
             std::cout << "Skipping tests for pcmp\n";
             // check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
             // check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
