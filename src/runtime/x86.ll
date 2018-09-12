@@ -1,3 +1,35 @@
+; Note that this is only used for LLVM 8.0+
+define weak_odr <16 x i8>  @paddusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alwaysinline {
+  %1 = add <16 x i8> %a0, %a1
+  %2 = icmp ugt <16 x i8> %a0, %1
+  %3 = select <16 x i1> %2, <16 x i8> <i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1, i8 -1>, <16 x i8> %1
+  ret <16 x i8> %3
+}
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <8 x i16> @padduswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwaysinline {
+  %1 = add <8 x i16> %a0, %a1
+  %2 = icmp ugt <8 x i16> %a0, %1
+  %3 = select <8 x i1> %2, <8 x i16> <i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1, i16 -1>, <8 x i16> %1
+  ret <8 x i16> %3
+}
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <16 x i8> @psubusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alwaysinline {
+  %1 = icmp ugt <16 x i8> %a0, %a1
+  %2 = select <16 x i1> %1, <16 x i8> %a0, <16 x i8> %a1
+  %3 = sub <16 x i8> %2, %a1
+  ret <16 x i8> %3
+}
+
+; Note that this is only used for LLVM 8.0+
+define weak_odr <8 x i16> @psubuswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwaysinline {
+  %1 = icmp ugt <8 x i16> %a0, %a1
+  %2 = select <8 x i1> %1, <8 x i16> %a0, <8 x i16> %a1
+  %3 = sub <8 x i16> %2, %a1
+  ret <8 x i16> %3
+}
+
 ; Note that this is only used for LLVM 6.0+
 define weak_odr <16 x i8>  @pavgbx16(<16 x i8> %a, <16 x i8> %b) nounwind alwaysinline {
   %1 = zext <16 x i8> %a to <16 x i32>
