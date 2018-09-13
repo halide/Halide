@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "Bounds.h"
+#include "ConciseCasts.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -106,7 +107,7 @@ private:
 
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+        if (t.is_uint() || (t.is_int() && t.bits() <= 16)) {
             interval = Interval(t.min(), t.max());
         } else {
             interval = Interval::everything();
@@ -2004,6 +2005,11 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
     }
 }
 
+void check(Expr e, Expr correct_min, Expr correct_max) {
+    Scope<Interval> scope;
+    check(scope, e, correct_min, correct_max);
+}
+
 void check_constant_bound(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb, true);
@@ -2207,6 +2213,21 @@ void bounds_test() {
         scope.push("y", Interval(make_const(UInt(16), 2), make_const(UInt(16), 4)));
 
         check_constant_bound(scope, x + y, make_const(UInt(16), 12), make_const(UInt(16), 24));
+    }
+
+    // Verify that u32_sat() produces a bounded result
+    {
+        using ConciseCasts::u32;
+        using ConciseCasts::u32_sat;
+
+        Var x;
+        Expr f = cast<float>(Load::make(Float(32), "buf", x, Buffer<>(), Parameter(), const_true()));
+        Expr u = u32_sat(f);
+
+        Expr u32_min = u32(0);
+        Expr u32_max = u32(Expr(0xffffffff));
+        check(u, select(f < 4294967296.f, u32_min, u32_max), u32_max);
+        check_constant_bound(u, u32_min, u32_max);
     }
 
     vector<Expr> input_site_1 = {2*x};
