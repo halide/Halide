@@ -652,6 +652,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         target.set_feature(Target::MSAN, false);
 
         Target one_gpu(target);
+        one_gpu.set_feature(Target::Debug, false);
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
@@ -674,6 +675,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case MetalDebug:
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::Metal);
+            load_metal();
             module_name = "debug_metal";
             break;
         case Metal:
@@ -694,6 +696,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGL);
             module_name = "debug_opengl";
+            load_opengl();
             break;
         case OpenGL:
             one_gpu.set_feature(Target::OpenGL);
@@ -704,6 +707,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "debug_openglcompute";
+            load_opengl();
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
