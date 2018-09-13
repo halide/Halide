@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    if (0) {
         // Test interleave 3 vectors:
         Func planar, interleaved;
         planar(x, y) = Halide::cast<float>( 3 * x + y );

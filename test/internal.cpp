@@ -17,12 +17,13 @@
 #include "Associativity.h"
 #include "Generator.h"
 #include "AutoScheduleUtils.h"
+#include "CopyElision.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
-    IRPrinter::test();
+    /*IRPrinter::test();
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();
@@ -38,7 +39,8 @@ int main(int argc, const char **argv) {
     interval_test();
     associativity_test();
     generator_test();
-    propagate_estimate_test();
+    propagate_estimate_test();*/
+    copy_elision_test();
 
     return 0;
 }

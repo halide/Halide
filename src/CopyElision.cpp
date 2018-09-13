@@ -17,6 +17,117 @@ using std::vector;
 
 namespace {
 
+/** If function 'f' operation only involves pointwise copy from another
+  * function, return the name of the function from which it copies from.
+  * If the function being copied from is a tuple, we have to ensure that 'f'
+  * copies the whole tuple and not only some of the tuple values; otherwise,
+  * treat it as non pointwise copies. For non pointwise copy or if 'f' has
+  * update definitions or is an extern function, return an empty string.
+  */
+string get_pointwise_copy_producer(const Function &f,
+                                   const map<string, Function> &env,
+                                   const map<string, int> &num_callers,
+                                   const set<string> &inlined) {
+
+    if (f.has_update_definition() || f.has_extern_definition() || inlined.count(f.name())) {
+        return "";
+    }
+
+    const vector<Expr> &f_args = f.definition().args();
+
+    string prod;
+    for (int i = 0; i < (int)f.values().size(); ++i) {
+        Expr val = perform_inline(f.values()[i], env, inlined);
+        if (const Call *call = val.as<Call>()) {
+            if (call->call_type == Call::Halide) {
+                // Check if it is a pointwise copy. For tuple, check if 'f'
+                // copies the whole tuple values.
+                if (!prod.empty() && (prod != call->name)) {
+                    debug(4) << "...Function \"" << f.name() << "\" calls multiple "
+                             << "functions: \"" << prod << "\" and \""
+                             << call->name << "\"\n";
+                    return "";
+                }
+                prod = call->name;
+
+                // TODO(psuriana): How should we handle the case when 'prod'
+                // is scheduled to be inlined but not exactly inline-able
+                // (i.e. have update definition or specialization)?
+                if (env.at(prod).schedule().compute_level().is_inlined()) {
+                    debug(4) << "...Function \"" << f.name() << "\" calls \"inlined\" "
+                             << "function: \"" << prod << "\"\n";
+                    return "";
+                }
+
+                // Check if only 'f' calls 'prod'
+                const auto &iter = num_callers.find(prod);
+                if ((iter != num_callers.end()) && (iter->second > 1)) {
+                    debug(4) << "...Function \"" << f.name() << "\" (" << print_function(f)
+                             << ") is pointwise copies but \""
+                             << prod << "\" has multiple callers\n";
+                    return "";
+                }
+
+                Function prod_f = Function(call->func);
+                if (f.dimensions() != prod_f.dimensions()) {
+                    debug(4) << "...Function \"" << f.name() << "\" and \""
+                             << prod_f.name() << "\" have different dimensions ("
+                             << f.dimensions() << " vs " << prod_f.dimensions() << ")\n";
+                    return "";
+                }
+                internal_assert(f_args.size() == call->args.size());
+
+                // TODO(psuriana): If this is a halide_buffer_copy, we can't
+                // simply compare the values() size since it is empty (right
+                // now we don't need to worry about this case, since
+                // we always return if the function has extern definition).
+                // Should we ignore halide_buffer_copy or not?
+                if (f.outputs() != prod_f.outputs()) {
+                    debug(4) << "...Function \"" << f.name() << "\" does not call "
+                             << "the whole tuple values of function \""
+                             << prod_f.name() << "\"(" << f.outputs()
+                             << " vs " << prod_f.outputs() << ")\n"
+                             << "\tcons -> " << print_function(f) << "\n"
+                             << "\tprod -> " << print_function(prod_f) << "\n";
+                    return "";
+                }
+
+                if (i != call->value_index) {
+                    debug(4) << "...Function \"" << f.name() << "\" calls "
+                             << prod_f.name() << "[" << call->value_index
+                             << "] at value index " << i << "\n";
+                    return "";
+                }
+
+                for (int j = 0; j < f.dimensions(); ++j) {
+                    // Check if the call args are equivalent for both the
+                    // RHS ('f') and LHS ('prod_f').
+                    // TODO(psuriana): Handle case for copy with some index shifting
+                    if (!equal(f_args[j], call->args[j])) {
+                        debug(4) << "At arg " << j << ", " << f.name() << " (arg: "
+                                 << f_args[i] << ") != " << prod_f.name()
+                                 << "[" << call->value_index << "] (arg: "
+                                 << call->args[j] << ")\n";
+                        return "";
+                    }
+                }
+            }
+        } else if (!prod.empty()) {
+            debug(4) << "...Function \"" << f.name() << "\" does not call "
+                     << "the whole tuple values of function \""
+                     << prod << "\" or is not a simple copy\n";
+            return "";
+        }
+    }
+
+    if (!prod.empty()) {
+        debug(4) << "...Found pointwise copy -> " << print_function(f) << "\n";
+    }
+    return prod;
+}
+
+} // anonymous namespace
+
 string print_function(const Function &f) {
     std::ostringstream stream;
     stream << f.name() << "(";
@@ -87,250 +198,239 @@ string print_function(const Function &f) {
     return stream.str();
 }
 
-bool var_name_match(string candidate, string var) {
-    internal_assert(var.find('.') == string::npos)
-        << "var_name_match expects unqualified names for the second argument. "
-        << "Name passed: " << var << "\n";
-    return (candidate == var) || Internal::ends_with(candidate, "." + var);
-}
+/** Return all pairs of functions which operation only involves pointwise copy
+  * of another function and the function from which it copies from. Ignore
+  * functions that have updates or are extern functions. */
+map<string, string> get_pointwise_copies(const map<string, Function> &env) {
 
-// Given a copy-elision pair, return true if the producer is computed
-// within the scope of the consumer's buffer.
-bool is_prod_within_cons_realization(const map<string, Function> &env,
-                                     const Function &prod_f,
-                                     const Function &cons_f,
-                                     bool is_cons_output) {
-    const LoopLevel &prod_compute_at = prod_f.schedule().compute_level();
-    if (prod_compute_at.is_inlined()) {
-        // If the producer is inlined (regardless of whether it is legal to be
-        // inlined or not), we should just ignore this.
-        debug(4) << "...Function \"" << cons_f.name() << "\" calls inlined function \""
-                 << prod_f.name() << "\"\n";
-        return false;
+    /*debug(0) << "\n\nGET POINTWISE COPIES:\n";
+    for (const auto &iter : env) {
+        debug(0) << "\t" << print_function(iter.second) << "\n";
     }
-    if (is_cons_output) {
-        // If the consumer is output of the pipeline, the producer is
-        // always within the scope of the consumer's buffer
-        return true;
-    }
+    debug(0) << "\n\n";*/
 
-    // If producer is computed at root and the consumer is not output of
-    // the pipeline, the producer will never be within the scope of the
-    // consumer's buffer
-    if (prod_compute_at.is_root()) {
-        debug(4) << "...Non-output function \"" << cons_f.name() << "\" calls function \""
-                 << prod_f.name() << "\", which is computed at root\n";
-        return false;
-    }
-
-    // TODO(psuriana): Ignore compute_with case for now
-
-    const LoopLevel &cons_store_at = cons_f.schedule().store_level();
-    if (cons_store_at.is_root()) {
-        // Since consumer is stored at root and the producer is not computed at
-        // root, the producer is always within the scope of the consumer's buffer
-        // (Since the producer is not computed at root, it can only be computed
-        // within the consumer scope; otherwise, it is not a valid schedule)
-        return true;
-    }
-
-    if (prod_compute_at.func() == cons_store_at.func()) {
-        // If the prod_compute_at and cons_store_at are at the same function,
-        // the compute loop needs to be within the store loop
-        const vector<Dim> &dims = env.at(prod_compute_at.func()).definition().schedule().dims();
-        const auto &compute_pos = std::find_if(dims.begin(), dims.end(),
-            [&prod_compute_at](const Dim &d) { return var_name_match(d.var, prod_compute_at.var().name()); });
-        const auto &store_pos = std::find_if(dims.begin(), dims.end(),
-            [&cons_store_at](const Dim &d) { return var_name_match(d.var, cons_store_at.var().name()); });
-        internal_assert((compute_pos != dims.end()) && (store_pos != dims.end()));
-        return compute_pos < store_pos;
-    }
-
-    // Keep traversing up the compute level until we find the function at
-    // which the consumer's buffer is realized. If we don't find it, the
-    // producer is not within the scope of the consumer's buffer.
-    bool in_scope = false;
-    for (LoopLevel level = prod_compute_at;
-         !in_scope && !level.is_inlined() && !level.is_root();
-         level = env.at(level.func()).schedule().compute_level()) {
-        if (level.func() == cons_store_at.func()) {
-            in_scope = true;
-        }
-    }
-    return in_scope;
-}
-
-// If there is a potentially valid copy-elision pair, return the name of the
-// function from which it copies from; otherwise, return an empty string.
-string get_elision_pair_candidates(const Function &f,
-                                   bool is_output,
-                                   const map<string, Function> &env,
-                                   const map<string, int> &num_callers,
-                                   const set<string> &inlined) {
-
-    // Ignore the case when 'f' has updates or is an extern function or
-    // is inlined, since in these cases, the copy elision will not be valid.
-    if (f.has_update_definition() || f.has_extern_definition() ||
-        inlined.count(f.name())) {
-        return "";
-    }
-
-    const vector<Expr> &f_args = f.definition().args();
-
-    string prod = "";
-    for (int i = 0; i < (int)f.values().size(); ++i) {
-        // Perform all valid inlining first to get the actual producer-consumer
-        // copy relation. This will ignore functions which are scheduled
-        // inlined but not actually legal to do so (e.g. if the function has
-        // updates or has specializations)
-        Expr val = perform_inline(f.values()[i], env, inlined);
-        if (const Call *call = val.as<Call>()) {
-            if (call->call_type == Call::Halide) {
-                // Check 'f' only calls one function
-                if (!prod.empty() && (prod != call->name)) {
-                    debug(4) << "...Function \"" << f.name() << "\" calls multiple "
-                             << "functions: \"" << prod << "\" and \""
-                             << call->name << "\"\n";
-                    return "";
-                }
-                prod = call->name;
-
-                if (!is_prod_within_cons_realization(env, env.at(prod), f, is_output)) {
-                    debug(4) << "...Not a valid copy-elision pair: computation of Function \""
-                             << prod << "\" is not within the scope of realization of Function \""
-                             << f.name() << "\"\n";
-                    return "";
-                }
-
-                // Check only 'f' calls 'prod'
-                const auto &iter = num_callers.find(prod);
-                if ((iter != num_callers.end()) && (iter->second > 1)) {
-                    debug(4) << "...Function \"" << f.name() << "\" is a simple copy but \""
-                             << prod << "\" has multiple callers\n";
-                    return "";
-                }
-
-                // Check 'f' and 'prod' have the same loop dimensions
-                Function prod_f = Function(call->func);
-                if (f.dimensions() != prod_f.dimensions()) {
-                    debug(4) << "...Function \"" << f.name() << "\" and \""
-                             << prod_f.name() << "\" have different dimensions ("
-                             << f.dimensions() << " vs " << prod_f.dimensions() << ")\n";
-                    return "";
-                }
-                internal_assert(f_args.size() == call->args.size());
-
-                // Check 'f' and 'prod' have the same number of outputs
-                // (or tuple sizes)
-                if (f.outputs() != prod_f.outputs()) {
-                    debug(4) << "...Function \"" << f.name() << "\" does not call "
-                             << "the whole tuple values of function \""
-                             << prod_f.name() << "\"(" << f.outputs()
-                             << " vs " << prod_f.outputs() << ")\n";
-                    return "";
-                }
-
-                // Check f[i] also calls prod[i]
-                if (i != call->value_index) {
-                    debug(4) << "...Function \"" << f.name() << "\" calls "
-                             << prod_f.name() << "[" << call->value_index
-                             << "] at value index " << i << "\n";
-                    return "";
-                }
-
-                for (int j = 0; j < f.dimensions(); ++j) {
-                    // Check if the call args are equivalent for both the
-                    // RHS ('f') and LHS ('prod_f').
-                    // TODO(psuriana): Handle case when copying with index shifting
-                    if (!equal(f_args[j], call->args[j])) {
-                        debug(4) << "At arg " << j << ", " << f.name() << " (arg: "
-                                 << f_args[i] << ") != " << prod_f.name()
-                                 << "[" << call->value_index << "] (arg: "
-                                 << call->args[j] << ")\n";
-                        return "";
-                    }
-                }
-            }
-        } else if (!prod.empty()) {
-            debug(4) << "...Function \"" << f.name() << "\" does not call "
-                     << "the whole tuple values of function \""
-                     << prod << "\" or is not a simple copy\n";
-            return "";
-        }
-    }
-    return prod;
-}
-
-} // anonymous namespace
-
-map<string, string> get_valid_copy_elision_pairs(
-        const vector<Function> &outputs, const map<string, Function> &env) {
-
-    // Figure out the functions being (valid to be) inlined and the number
-    // of callers (excluding calls by itself, e.g. within update stages) of
-    // each functions within 'env'.
+    // We should only consider the case when the function only has 1 caller
     map<string, int> num_callers;
     set<string> inlined;
     for (const auto &caller : env) {
+        debug(4) << "...Function: " << caller.first << ", inlined? "
+                 << caller.second.schedule().compute_level().is_inlined()
+                 << ", can be inlined? " << caller.second.can_be_inlined() << "\n";
         if (caller.second.can_be_inlined() &&
             caller.second.schedule().compute_level().is_inlined()) {
             inlined.insert(caller.first);
         }
         for (const auto &callee : find_direct_calls(caller.second)) {
             if (callee.first != caller.first) {
+                debug(4) << "\t\tadding callee: " << callee.first << "\n";
                 num_callers[callee.first] += 1;
+            } else {
+                debug(4) << "\t\tignoring self callee: " << callee.first << "\n";
             }
         }
     }
 
-    map<string, string> elision_pairs;
+    debug(0) << "\n\nINLINED FUNCTIONS: {";
+    for (const auto &s : inlined) {
+        debug(0) << s << ", ";
+    }
+    debug(0) << "}\n\n";
+
+    debug(0) << "\n\nNUM CALLERS:\n";
+    for (const auto &iter : num_callers) {
+        debug(0) << "\t" << iter.first << ": " << iter.second << "\n";
+    }
+    debug(0) << "\n\n";
+
+    // TODO(psuriana): Need to figure out that the copies are on the same device;
+    // otherwise, it shouldn't have been optimized away
+
+    map<string, string> pointwise_copies;
     for (const auto &iter : env) {
-        Function f = iter.second;
-        bool is_output = false;
-        for (const Function &o : outputs) {
-            is_output = is_output | o.same_as(f);
-        }
-        string copied_from =
-            get_elision_pair_candidates(f, is_output, env, num_callers, inlined);
+        // Ignore inlined function
+        // TODO(psuriana): how should we handle the case when either the producer
+        // or the consumer of the copy-pair is inlined?
+        string copied_from = get_pointwise_copy_producer(iter.second, env, num_callers, inlined); // Producer's name
         if (!copied_from.empty()) {
-            elision_pairs.emplace(f.name(), copied_from);
+            pointwise_copies.emplace(iter.first, copied_from);
         }
     }
 
-    // Simplify elision chaining. The following case {{"out" -> "g"}, {"g" -> "f"}}
-    // will be simplified into {{"out" -> "f"}, {"g" -> ""}}.
+    debug(0) << "\nBEFORE Pointwise copies:\n";
+    for (const auto &p : pointwise_copies) {
+        debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
+        debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
+        debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
+    }
+    debug(0) << "\n\n";
+
+    // TODO(psuriana): Need to simplify copy-chaining
+    // TODO(psuriana): How do you handle the chaining case which involves
+    // halide_buffer_copy?
+    debug(4) << "\n\nTRY SIMPLIFY COPY CHAINING:\n";
     bool fixed = false;
     while (!fixed) {
         fixed = true;
-        for (auto iter = elision_pairs.begin(); iter != elision_pairs.end(); ++iter) {
-            auto other = elision_pairs.find(iter->second);
-            if (other != elision_pairs.end()) {
+        for (auto iter = pointwise_copies.begin(); iter != pointwise_copies.end(); ++iter) {
+            debug(4) << "...Checking cons: " << iter->first << ", prod: " << iter->second << "\n";
+
+            auto other = pointwise_copies.find(iter->second);
+            if (other != pointwise_copies.end()) {
                 iter->second = other->second;
-                other->second = ""; // Set the producer to be empty string
+                debug(4) << "\t\tfind (erasing) chain cons: " << other->first << ", prod: " << other->second << "\n";
+                //pointwise_copies.erase(other);
+                other->second = "";
+                //internal_assert(!pointwise_copies.count(iter->second)) << iter->second << " still in TMP\n";
                 fixed = true;
             }
         }
     }
+    debug(4) << "\n\n";
 
-    debug(0) << "\nElision pairs:\n";
-    for (const auto &p : elision_pairs) {
-        debug(0) << "cons: " << p.first << " (compute: " << env.at(p.first).schedule().store_level().to_string()
-                 << ", store: " << env.at(p.first).schedule().compute_level().to_string()
-                 << ") -> prod: " << p.second;
-        if (!p.second.empty()) {
-            debug(0) << " (compute: " << env.at(p.second).schedule().store_level().to_string()
-                     << ", store: " << env.at(p.second).schedule().compute_level().to_string() << ")";
-        }
-        debug(0) << "\n\tcons: " << print_function(env.at(p.first)) << "\n";
+    /*debug(0) << "\nAFTER Pointwise copies:\n";
+    for (const auto &p : pointwise_copies) {
+        debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
+        debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
         if (p.second.empty()) {
-            debug(0) << "\tprod: NONE";
+            debug(0) << "\t\tprod: NONE\n\n";
         } else {
-            debug(0) << "\tprod: " << print_function(env.at(p.second));
+            debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
         }
     }
-    debug(0) << "\n\n";
+    debug(0) << "\n\n";*/
+    return pointwise_copies;
+}
 
-    return elision_pairs;
+void copy_elision_test() {
+    if (1) {
+        Func tile("tile"), output("output"), f("f"), g("g"), h("h"), in("in");
+        Var x("x"), y("y");
+
+        f(x, y) = x + y;
+        g(x, y) = x - y;
+        h(x, y) = g(x, y);
+        in(x, y) = h(x, y);
+        tile(x, y) = {f(x, y), g(x, y)};
+        output(x, y) = tile(y, x);
+
+        map<string, Function> env;
+        env.emplace(tile.name(), tile.function());
+        env.emplace(output.name(), output.function());
+        env.emplace(f.name(), f.function());
+        env.emplace(g.name(), g.function());
+        env.emplace(h.name(), h.function());
+        env.emplace(in.name(), in.function());
+
+        f.compute_root();
+        g.compute_root();
+        h.compute_root();
+        in.compute_root();
+        tile.compute_root();
+
+        for (auto &iter : env) {
+           iter.second.lock_loop_levels();
+        }
+
+        map<string, string> result = get_pointwise_copies(env);
+        debug(0) << "\nPointwise copies:\n";
+        for (const auto &p : result) {
+            debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
+            debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
+            if (p.second.empty()) {
+                debug(0) << "\t\tprod: NONE\n\n";
+            } else {
+                debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
+            }
+        }
+        debug(0) << "\n";
+    }
+
+    if (1) {
+        Func input("input"), input_copy("input_copy"), work("work"), output("output"), output_copy("output_copy"), g("g");
+        Var x("x"), y("y");
+
+        input(x, y) = x + y;
+        input_copy(x, y) = input(x, y);
+        work(x, y) = input_copy(x, y) * 2;
+        output(x, y) = work(x, y);
+        output_copy(x, y) = output(x, y);
+
+        output.copy_to_device();
+
+        map<string, Function> env;
+        env.emplace(input.name(), input.function());
+        env.emplace(input_copy.name(), input_copy.function());
+        env.emplace(work.name(), work.function());
+        env.emplace(output.name(), output.function());
+        env.emplace(output_copy.name(), output_copy.function());
+
+        input.compute_root();
+        input_copy.compute_root();
+        work.compute_root();
+        output.compute_root();
+
+        for (auto &iter : env) {
+           iter.second.lock_loop_levels();
+        }
+
+        map<string, string> result = get_pointwise_copies(env);
+        debug(0) << "\nPointwise copies:\n";
+        for (const auto &p : result) {
+            debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
+            debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
+            if (p.second.empty()) {
+                debug(0) << "\t\tprod: NONE\n\n";
+            } else {
+                debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
+            }
+        }
+        debug(0) << "\n";
+    }
+
+    if (1) {
+        Func input("input"), input_copy("input_copy"), work("work");
+        Func output("output"), output_copy("output_copy");
+
+        Var x("x"), y("y");
+
+        input(x, y) = x + y;
+        input_copy(x, y) = input(x, y);
+        work(x, y) = input_copy(x, y) * 2;
+        output(x, y) = work(x, y);
+        output_copy(x, y) = output(x, y);
+
+        map<string, Function> env;
+        env.emplace(input.name(), input.function());
+        env.emplace(input_copy.name(), input_copy.function());
+        env.emplace(work.name(), work.function());
+        env.emplace(output.name(), output.function());
+        env.emplace(output_copy.name(), output_copy.function());
+
+        input.compute_root();
+        input_copy.compute_root();
+        work.compute_root();
+        output.compute_root();
+
+        for (auto &iter : env) {
+           iter.second.lock_loop_levels();
+        }
+
+        map<string, string> result = get_pointwise_copies(env);
+        debug(0) << "\nPointwise copies:\n";
+        for (const auto &p : result) {
+            debug(0) << "cons: " << p.first << " -> prod: " << p.second << "\n";
+            debug(0) << "\t\tcons: " << print_function(env.at(p.first)) << "\n";
+            if (p.second.empty()) {
+                debug(0) << "\t\tprod: NONE\n\n";
+            } else {
+                debug(0) << "\t\tprod: " << print_function(env.at(p.second)) << "\n\n";
+            }
+        }
+        debug(0) << "\n";
+    }
+
+
+    std::cout << "Copy elision test passed" << std::endl;
 }
 
 }  // namespace Internal
