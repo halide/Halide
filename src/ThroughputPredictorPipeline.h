@@ -270,7 +270,7 @@ public:
     }
 
     void evaluate_costs() {
-        if (cursor == 0) return;
+        if (cursor == 0 || !pipeline_feat_queue.defined()) return;
 
         set_inputs(pipeline_feat_queue, schedule_feat_queue, num_stages);
         Buffer<float> costs = prediction.realize(cursor);
