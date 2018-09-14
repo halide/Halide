@@ -837,12 +837,12 @@ private:
 
 };
 
-vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool allow_splits, int vector_dim, int vector_size) {
+vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits, int vector_dim, int vector_size) {
     vector<vector<int64_t>> result;
     if (d == -1) {
         result.push_back(vector<int64_t>());
     } else {
-        auto v = generate_tilings(s, d - 1, allow_splits, vector_dim, vector_size);
+        auto v = generate_tilings(s, d - 1, factor, allow_splits, vector_dim, vector_size);
         for (auto t : v) {
             bool is_full = false, is_one = false;
             // Skip trivial tilings
@@ -864,7 +864,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
                     result.push_back(t);
                 }
             } else {
-                for (int outer = 1; outer <= s[d]; outer *= 2) {
+                for (int outer = 1; outer <= s[d]; outer *= factor) {
                     int inner = (s[d] + outer - 1) / outer;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
@@ -872,7 +872,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, bool a
                     t.back() = outer;
                     result.push_back(t);
                 }
-                for (int inner = 1; inner < s[d]; inner *= 2) {
+                for (int inner = 1; inner < s[d]; inner *= factor) {
                     int outer = (s[d] + inner - 1) / inner;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
@@ -956,6 +956,35 @@ struct ScheduleFeatures {
     }
 };
 
+struct Constraints {
+    virtual bool must_root(const FunctionDAG::Node *node) const { return false; }
+    virtual bool must_inline(const FunctionDAG::Node *node) const { return false; }
+    virtual bool may_subtile() const { return true; }
+    virtual bool may_serialize(const FunctionDAG::Node::Stage *stage, int dim) const { return true; }
+    virtual int tiling_factor() const { return 2; }
+};
+
+struct CoarsePassConstraints : public Constraints {
+    const MachineParams &params;
+    CoarsePassConstraints(const MachineParams &p) : params(p) {}
+    bool may_subtile() const override { return false; }
+    int tiling_factor() const override { return params.parallelism; }
+};
+
+struct FinePassConstraints : public Constraints {
+    set<const FunctionDAG::Node *> roots;
+    map<const FunctionDAG::Node::Stage *, int> parallel_dims;
+
+    bool must_root(const FunctionDAG::Node *node) const override {
+        return roots.find(node) != roots.end();
+    }
+
+    bool may_serialize(const FunctionDAG::Node::Stage *stage, int dim) const override {
+        auto it = parallel_dims.find(stage);
+        return (it == parallel_dims.end()) || (it->second != dim);
+    }
+};
+
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
 // gives you children of the state (with costs). The following struct
@@ -1006,7 +1035,7 @@ struct PartialScheduleNode {
             hash_combine(h, store_at.size());
             hash_combine(h, children.size());
             for (uint64_t s : size) {
-                hash_combine(h, s == 1);
+                hash_combine(h, s);
             }
             for (auto c : children) {
                 c->structural_hash(h, depth - 1);
@@ -1582,6 +1611,7 @@ struct PartialScheduleNode {
     // Return all possible ways to compute f in tiles.
     vector<PartialScheduleNode> compute_in_tiles(const FunctionDAG::Node *f,
                                                  const PartialScheduleNode *parent,
+                                                 const Constraints *constraints,
                                                  const MachineParams &params,
                                                  bool in_realization) const {
         vector<PartialScheduleNode> result;
@@ -1626,30 +1656,36 @@ struct PartialScheduleNode {
             result.emplace_back(std::move(r));
         }
 
-        if (f->outgoing_edges.empty()) {
-            // Can't tile outputs
+        if (f->outgoing_edges.empty() || constraints->must_root(f)) {
+            // Not permitted to tile
             return result;
         }
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), !in_realization, vector_dim, innermost ? vector_size : 1);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), constraints->tiling_factor(), !in_realization, vector_dim, innermost ? vector_size : 1);
 
             for (auto t : tilings) {
                 if (parent->is_root()) {
                     const auto &l = stage->loop;
-                    // Skip root-level tilings that provide insufficient parallelism to avoid nested parallelism
-
-                    bool ok = false;
+                    // Skip root-level tilings that provide
+                    // insufficient parallelism to avoid nested
+                    // parallelism, and root-level tilings that would
+                    // force serialization of dimensions we have
+                    // decided to parallelize over in an earlier pass.
+                    bool good = false;
+                    bool bad = false;
                     int total = 1;
                     size_t idx = 0;
                     for (auto s : t) {
-                        if (l[idx++].pure) {
+                        if (l[idx].pure) {
                             total *= s;
-                            ok |= s >= params.parallelism;
+                            good |= s >= params.parallelism;
                         }
+                        bad |= (s < params.parallelism) && (!constraints->may_serialize(stage, idx));
+                        idx++;
                     }
-                    if (!ok || total < params.parallelism) continue;
+                    if (bad || !good || total < params.parallelism) continue;
                 }
 
                 // Skip tilings of the innermost loop that leave too few loop iterations to vectorize well
@@ -1748,7 +1784,7 @@ struct PartialScheduleNode {
                     // loop.
                     PartialScheduleNode store_at_here = std::move(outer);
                     store_at_here.store_at.insert(f);
-                    auto v = inner->compute_in_tiles(f, &store_at_here, params, true);
+                    auto v = inner->compute_in_tiles(f, &store_at_here, constraints, params, true);
                     for (PartialScheduleNode n : v) {
                         store_at_here.children.pop_back();
                         store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
@@ -1775,7 +1811,7 @@ struct PartialScheduleNode {
                     // level, so this would constrain parallelism.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, this, params, store_here);
+                auto v = children[child]->compute_in_tiles(f, this, constraints, params, store_here);
                 for (PartialScheduleNode n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -2058,7 +2094,7 @@ struct State {
                     // the universe to benchmark. We define 'silly' as
                     // doing more than 10x redundant recompute for any one
                     // stage.
-                    // if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
+                    if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
 
                     if (verbose) {
                         debug(0) << "Schedule features for " << p.first->func.name() << " stage " << s << "\n";
@@ -2175,8 +2211,11 @@ struct State {
         return true;
     }
 
+
+
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
+                           const Constraints *constraints,
                            ThroughputPredictorPipeline *throughput_predictor,
                            std::function<void(State *)> &accept_child) {
         internal_assert(root.is_root());
@@ -2209,28 +2248,32 @@ struct State {
 
         int num_children = 0;
 
-        // 1) Inline it
-        if (node->stages.size() == 1 && !node->outgoing_edges.empty()) {
-            auto child = new State(*this);
-            child->root = child->root.inline_func(node);
-            child->num_funcs_scheduled++;
-            if (child->calculate_cost(dag, params, throughput_predictor)) {
-                internal_assert(child->root.computes(node)) << "Failed to inline " << node->func.name() << '\n';
-                num_children++;
-                accept_child(child);
+        if (!constraints->must_root(node)) {
+            // 1) Inline it
+            if (node->stages.size() == 1 && !node->outgoing_edges.empty()) {
+                auto child = new State(*this);
+                child->root = child->root.inline_func(node);
+                child->num_funcs_scheduled++;
+                if (child->calculate_cost(dag, params, throughput_predictor)) {
+                    internal_assert(child->root.computes(node)) << "Failed to inline " << node->func.name() << '\n';
+                    num_children++;
+                    accept_child(child);
+                }
             }
         }
 
-        // 2) Realize it somewhere
-        auto tile_options = root.compute_in_tiles(node, nullptr, params, false);
-        for (PartialScheduleNode n : tile_options) {
-            auto child = new State(*this);
-            child->root = std::move(n);
-            child->num_funcs_scheduled++;
-            if (child->calculate_cost(dag, params, throughput_predictor)) {
-                internal_assert(child->root.computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
-                num_children++;
-                accept_child(child);
+        if (!constraints->must_inline(node)) {
+            // 2) Realize it somewhere
+            auto tile_options = root.compute_in_tiles(node, nullptr, constraints, params, false);
+            for (PartialScheduleNode n : tile_options) {
+                auto child = new State(*this);
+                child->root = std::move(n);
+                child->num_funcs_scheduled++;
+                if (child->calculate_cost(dag, params, throughput_predictor)) {
+                    internal_assert(child->root.computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
+                    num_children++;
+                    accept_child(child);
+                }
             }
         }
 
@@ -2291,11 +2334,12 @@ struct CompareStates {
     }
 };
 
-State optimal_schedule(FunctionDAG &dag,
-                       vector<Function> outputs,
-                       const MachineParams &params,
-                       ThroughputPredictorPipeline *throughput_predictor,
-                       int beam_size) {
+State optimal_schedule_pass(FunctionDAG &dag,
+                            vector<Function> outputs,
+                            const MachineParams &params,
+                            const Constraints *constraints,
+                            ThroughputPredictorPipeline *throughput_predictor,
+                            int beam_size) {
     std::priority_queue<std::shared_ptr<State>,
                         std::vector<std::shared_ptr<State>>,
                         CompareStates> q;
@@ -2341,23 +2385,22 @@ State optimal_schedule(FunctionDAG &dag,
         decltype(q) pending;
         q.swap(pending);
 
-        // Apply cost penalties to the queue according to structural uniqueness
+        // Apply cost penalties to the queue according to structural uniqueness at the root level
         /*
         std::map<uint64_t, int> hashes;
-        for (int depth = 1; depth < 3; depth++) {
+        for (int depth = 1; depth < 1; depth++) {
             hashes.clear();
             while (!pending.empty()) {
                 auto state = pending.top();
                 pending.pop();
                 uint64_t h = state->structural_hash(depth);
-                state->cost *= (1 + 0.01 * hashes[h]);
+                state->cost *= (1 + hashes[h]);
                 hashes[h]++;
                 q.push(state);
             }
             q.swap(pending);
         }
         */
-
 
         int expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
@@ -2389,12 +2432,19 @@ State optimal_schedule(FunctionDAG &dag,
             }
 
             /*
+            if (expanded + 20 >= beam_size) {
+                debug(0) << "\n\n**** End of beam: (" << expanded << "):\n";
+                state->dump();
+            }
+            */
+
+            /*
               debug(0) << "Expanding state:";
               state->dump();
               state->calculate_cost(dag, params, nullptr, true);
             */
 
-            state->generate_children(dag, params, throughput_predictor, enqueue_new_children);
+            state->generate_children(dag, params, constraints, throughput_predictor, enqueue_new_children);
             expanded++;
         }
 
@@ -2407,6 +2457,43 @@ State optimal_schedule(FunctionDAG &dag,
         }
         unevaluated_states.clear();
     }
+}
+
+State optimal_schedule(FunctionDAG &dag,
+                       vector<Function> outputs,
+                       const MachineParams &params,
+                       ThroughputPredictorPipeline *throughput_predictor,
+                       int beam_size) {
+    FinePassConstraints fine;
+    CoarsePassConstraints coarse(params);
+    auto coarse_pass = optimal_schedule_pass(dag, outputs, params, &coarse, throughput_predictor, beam_size);
+
+    debug(0) << "\nCoarse pass result:\n";
+    coarse_pass.dump();
+
+    // Respect which things were compute_root and which axes of those were parallelized for the fine pass
+    debug(0) << "Deriving constraints from coarse pass:\n";
+    for (auto c : coarse_pass.root.children) {
+        fine.roots.insert(c->node);
+        debug(0) << ' ' << c->node->func.name() << " is compute_root\n";
+        int parallel_dim = -1;
+        for (int d = 0; d < (int)(c->size.size()); d++) {
+            if (c->size[d] >= params.parallelism) {
+                parallel_dim = d;
+            }
+        }
+        if (parallel_dim >= 0) {
+            debug(0) << " dimension " << parallel_dim << " of " << c->node->func.name() << " stage " << c->stage_idx << " is parallel\n";
+            fine.parallel_dims[c->stage] = parallel_dim;
+        }
+    }
+
+    auto fine_pass = optimal_schedule_pass(dag, outputs, params, &fine, throughput_predictor, beam_size);
+
+    // It's not necessarily true that the fine_pass, with its larger
+    // branching factor, ends up at a lower total cost than the coarse
+    // pass.
+    return coarse_pass.cost < fine_pass.cost ? coarse_pass : fine_pass;
 }
 
 }
@@ -2853,10 +2940,10 @@ void autoschedule_test() {
         vector<Function> outputs = {p3[N-1].function()};
         FunctionDAG dag(outputs, params, target);
         dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
+        State optimal = optimal_schedule(dag, outputs, params, nullptr, 1); //&throughput_predictor, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        optimal.calculate_cost(dag, params, nullptr, true); //&throughput_predictor, true);
         throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';

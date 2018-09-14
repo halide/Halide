@@ -15,7 +15,7 @@ PIPELINES=100
 SCHEDULES=1
 
 RANDOM_DROPOUT=100
-BEAM_SIZE=20
+BEAM_SIZE=50
 
 # Build the shared things by building one pipeline
 HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=0 HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build
@@ -29,11 +29,13 @@ for ((b=0;b<1;b++)); do
 	P=$((b * $PIPELINES + p))
         STAGES=$(((P % 30) + 10))
 	echo echo Building pipeline $P
-	echo "HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"
+	#echo "HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"
 	echo "HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} make build 2>&1 | grep -v Nothing.to.be.done"        
-        for ((m=0;m<2;m++)); do 
-	    for ((s=0;s<$SCHEDULES;s++)); do
-                echo "HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} make build 2>&1 | grep -v Nothing.to.be.done"
+        for prof in "" "-profile"; do
+            for ((m=0;m<2;m++)); do 
+	        for ((s=0;s<$SCHEDULES;s++)); do
+                    echo "HL_TARGET=host-new_autoscheduler${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} make build 2>&1 | grep -v Nothing.to.be.done"
+                done
             done
         done
     done | xargs -P48 -I{} bash -c "{}"
@@ -43,20 +45,22 @@ for ((b=0;b<1;b++)); do
 	P=$((b * $PIPELINES + p))
         STAGES=$(((P % 30) + 10))
 	echo Benchmarking pipeline $P
-	F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_root_${RANDOM_DROPOUT}_${BEAM_SIZE}_0/times.txt
-	if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_NUM_THREADS=16 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
-	grep '^Time' $F > /dev/null && echo $F >> results/files_root_${b}.txt
+	#F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_root_${RANDOM_DROPOUT}_${BEAM_SIZE}_0/times.txt
+	#if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=root PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_NUM_THREADS=16 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+	#grep '^Time' $F > /dev/null && echo $F >> results/files_root_${b}.txt
 
 	F=bin/host/pipeline_${P}_${STAGES}/schedule_0_${RANDOM_DROPOUT}_${BEAM_SIZE}_0/times.txt
         if [ ! -f $F ]; then HL_TARGET=host HL_SEED=0 PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=0 HL_NUM_THREADS=16 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
         
 	grep '^Time' $F > /dev/null && echo $F >> results/files_master_${b}.txt
-        for ((m=0;m<2;m++)); do
-	    for ((s=0;s<$SCHEDULES;s++)); do
-	        F=bin/host-new_autoscheduler/pipeline_${P}_${STAGES}/schedule_${s}_${RANDOM_DROPOUT}_${BEAM_SIZE}_${m}/times.txt
-                if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=16 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
+        for prof in "" "-profile"; do
+            for ((m=0;m<2;m++)); do
+	        for ((s=0;s<$SCHEDULES;s++)); do
+	            F=bin/host-new_autoscheduler${prof}/pipeline_${P}_${STAGES}/schedule_${s}_${RANDOM_DROPOUT}_${BEAM_SIZE}_${m}/times.txt
+                    if [ ! -f $F ]; then HL_TARGET=host-new_autoscheduler${prof} HL_SEED=$s PIPELINE_SEED=$P PIPELINE_STAGES=$STAGES HL_RANDOM_DROPOUT=${RANDOM_DROPOUT} HL_BEAM_SIZE=${BEAM_SIZE} HL_USE_MANUAL_COST_MODEL=${m} HL_NUM_THREADS=16 numactl --cpunodebind=1 make bench 2>&1 | grep -v "Nothing to be done"; fi
 
-	        grep '^Time' $F > /dev/null && echo $F >> results/files_${b}_${m}.txt
+	            grep '^Time' $F > /dev/null && echo $F >> results/files_${b}_${m}${prof}.txt
+                done
             done
 	done
     done
