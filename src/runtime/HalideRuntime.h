@@ -1585,7 +1585,7 @@ struct halide_profiler_func_stats {
      * for which this has not yet been implemented. If not null,
      * points to an array of length
      * halide_profiler_hardware_counter_end. */
-    halide_profiler_hardware_counter *hardware_counters;
+    struct halide_profiler_hardware_counter *hardware_counters;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
