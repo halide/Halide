@@ -107,7 +107,7 @@ class FoldStorageOfFunction : public IRMutator {
                 Expr no_wraparound = mins[dim] + extents[dim] <= factor;
 
                 Expr valid_min = old_min;
-                if (false && !dynamic_footprint.empty()) {
+                if (!dynamic_footprint.empty()) {
                     // If the footprint is being tracked dynamically, it's
                     // not enough to just check we don't overlap a
                     // fold. We also need to check the min against the
@@ -174,7 +174,7 @@ class InjectFoldingCheck : public IRMutator {
                     // Update valid range based on bounds written to.
                     Box b = box_provided(body, func.name());
                     Expr old_leading_edge =
-                        Load::make(Int(32), head, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true());
 
                     internal_assert(!b.empty());
 
@@ -192,6 +192,8 @@ class InjectFoldingCheck : public IRMutator {
 
                     Stmt update_leading_edge =
                         Store::make(head, new_leading_edge_var, 0, Parameter(), const_true());
+                    Stmt update_next_leading_edge =
+                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true());
 
                     // Check the region being written to in this
                     // iteration lies within the range of coordinates
@@ -221,7 +223,8 @@ class InjectFoldingCheck : public IRMutator {
                     Stmt check_extent =
                         AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
 
-                    Stmt checks = Block::make({check_extent, check_in_valid_range, update_leading_edge});
+                    Stmt checks = Block::make({check_extent, check_in_valid_range,
+                                               update_leading_edge, update_next_leading_edge});
                     if (func.schedule().async()) {
                         Expr to_acquire;
                         if (storage_dim.fold_forward) {
@@ -251,7 +254,7 @@ class InjectFoldingCheck : public IRMutator {
                     body = mutate(op->body);
                 } else {
                     Expr leading_edge =
-                        Load::make(Int(32), tail, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), tail + "_next", 0, Buffer<>(), Parameter(), const_true());
 
                     if (func.schedule().async()) {
                         Expr new_leading_edge;
@@ -272,6 +275,8 @@ class InjectFoldingCheck : public IRMutator {
                             Call::make(Int(32), "halide_semaphore_release", {sema_var, to_release}, Call::Extern);
                         // The consumer is going to get its own forked copy of the footprint, so it needs to update it too.
                         Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true());
+                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true()),
+                                                          update_leading_edge);
                         update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge);
                         update_leading_edge = LetStmt::make(new_leading_edge_name, new_leading_edge, update_leading_edge);
                         body = Block::make(update_leading_edge, body);
@@ -616,8 +621,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             dims_folded.push_back(fold);
             {
                 string head;
-                if (!dynamic_footprint.empty()) {
+                if (!dynamic_footprint.empty() && func.schedule().async()) {
                     head = dynamic_footprint + ".head";
+                } else {
+                    head = dynamic_footprint;
                 }
                 body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, head).mutate(body);
             }
@@ -759,12 +766,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true());
             Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true());
             Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
-            Stmt reset_head = Store::make(dynamic_footprint + ".head", head - step, 0, Parameter(), const_true());
-            Stmt reset_tail = Store::make(dynamic_footprint + ".tail", tail - step, 0, Parameter(), const_true());
+            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true());
+            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true());
             stmt = Block::make({stmt, reset_head, reset_tail});
         }
-
-
     }
 
 public:
@@ -835,11 +840,15 @@ class StorageFolding : public IRMutator2 {
                     init = op->bounds[fold.dim].min + op->bounds[fold.dim].extent - 1;
                 }
                 if (!fold.head.empty()) {
+                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true()), stmt);
+                    stmt = Allocate::make(fold.head + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
                     stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true()), stmt);
                     stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
+                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true()), stmt);
+                    stmt = Allocate::make(fold.tail + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
                     stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true()), stmt);
                     stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
