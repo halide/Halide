@@ -2037,8 +2037,8 @@ struct State {
                 num_stages += p.second.size();
             }
 
-            const int pipeline_feat_size = 399;
-            const int schedule_feat_size = 18;
+            const int pipeline_feat_size = 400;
+            const int schedule_feat_size = 24;
 
             Buffer<float> pipeline_features, schedule_features;
             // Won't actually run anything until we call evaluate_costs...
@@ -2054,11 +2054,14 @@ struct State {
                     const int *pipeline_feats = (const int *)(&(s.features));
 
                     // skip the first 7 features
-                    for (int i = 7; i < pipeline_feat_size; i++) {
+                    for (int i = 7; i < pipeline_feat_size-1; i++) {
                         int x = (i-7)/7;
                         int y = (i-7)%7;
                         pipeline_features(batch_idx, x, y, stage) = pipeline_feats[i];
                     }
+
+                    // add on last pipeline feature for "natural vector width" as last schedule feature
+                    schedule_features(batch_idx, schedule_feat_size, stage) = std::log(pipeline_feats[pipeline_feat_size-1] + 1);
 
                     stage += 1;
                 }
@@ -2077,6 +2080,7 @@ struct State {
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(batch_idx, i, stage) = sched_stats[i];
                     }
+
                     stage += 1;
                 }
             }

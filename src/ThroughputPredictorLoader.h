@@ -84,18 +84,18 @@ Stats load_stats() {
         stats.pipeline_std.transpose(0, 1); // Stored as 7x56, but pipeline will access as 56x7
         internal_assert(halide_internal_weights_pipeline_std_length == (int)stats.pipeline_std.size_in_bytes());
 
-        stats.schedule_mean = Buffer<float>(halide_internal_weights_schedule_mean, 18);
+        stats.schedule_mean = Buffer<float>(halide_internal_weights_schedule_mean, 25);
         internal_assert(halide_internal_weights_schedule_mean_length == (int)stats.schedule_mean.size_in_bytes());
 
-        stats.schedule_std = Buffer<float>(halide_internal_weights_schedule_std, 18);
+        stats.schedule_std = Buffer<float>(halide_internal_weights_schedule_std, 25);
         internal_assert(halide_internal_weights_schedule_std_length == (int)stats.schedule_std.size_in_bytes());
     } else {
         stats.pipeline_mean = buffer_from_file(stats_dir + "/pipeline_mean.data", {7, 56});
         stats.pipeline_mean.transpose(0, 1);
         stats.pipeline_std = buffer_from_file(stats_dir + "/pipeline_std.data", {7, 56});
         stats.pipeline_std.transpose(0, 1);
-        stats.schedule_mean = buffer_from_file(stats_dir + "/schedule_mean.data", {18});
-        stats.schedule_std = buffer_from_file(stats_dir + "/schedule_std.data", {18});
+        stats.schedule_mean = buffer_from_file(stats_dir + "/schedule_mean.data", {25});
+        stats.schedule_std = buffer_from_file(stats_dir + "/schedule_std.data", {25});
     }
     return stats;
 }
@@ -104,7 +104,7 @@ struct WeightShapes {
     int head1_filter[3] = {20, 56, 7};
     int head1_bias[1] = {20};
 
-    int head2_filter[2] = {20, 18};
+    int head2_filter[2] = {20, 25};
     int head2_bias[1] = {20};
 
     int conv1_filter[3] = {40, 40, 3};
@@ -164,7 +164,7 @@ Weights load_weights() {
         weights.head1_bias = Buffer<float>(halide_internal_weights_head1_conv1_bias, 20);
         internal_assert(halide_internal_weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
 
-        weights.head2_filter = Buffer<float>(halide_internal_weights_head2_conv1_weight, 18, 20);
+        weights.head2_filter = Buffer<float>(halide_internal_weights_head2_conv1_weight, 25, 20);
         weights.head2_filter.transpose(0, 1);
         internal_assert(halide_internal_weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
 
@@ -217,7 +217,7 @@ Weights load_weights() {
 
         weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {20});
 
-        weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {18, 20});
+        weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {25, 20});
         weights.head2_filter.transpose(0, 1);
 
         weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {20});
