@@ -221,7 +221,7 @@ public:
 
     void benchmark() {
         const int batch_size = 800;
-        Buffer<float> pipeline_feats(batch_size, 56, 7, 20), schedule_feats(batch_size, 18, 20);
+        Buffer<float> pipeline_feats(batch_size, 56, 7, 20), schedule_feats(batch_size, 25, 20);
         pipeline_feats.fill(0.0f);
         schedule_feats.fill(0.0f);
         set_inputs(pipeline_feats, schedule_feats, 20);
@@ -250,7 +250,7 @@ public:
             // during scheduling.
             int alloc_size = num_stages + (num_stages + 1) / 2;
             pipeline_feat_queue = Buffer<float>(batch_size, 56, 7, alloc_size);
-            schedule_feat_queue = Buffer<float>(batch_size, 18, alloc_size);
+            schedule_feat_queue = Buffer<float>(batch_size, 25, alloc_size);
             pipeline_feat_queue.fill(0.0f);
             schedule_feat_queue.fill(0.0f);
             cost_queue.clear();
