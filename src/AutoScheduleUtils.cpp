@@ -48,10 +48,12 @@ class SubstituteVarEstimates: public IRMutator2 {
 } // anonymous namespace
 
 Expr subsitute_var_estimates(Expr e) {
+    if (!e.defined()) return e;
     return simplify(SubstituteVarEstimates().mutate(e));
 }
 
 Stmt subsitute_var_estimates(Stmt s) {
+    if (!s.defined()) return s;
     return simplify(SubstituteVarEstimates().mutate(s));
 }
 

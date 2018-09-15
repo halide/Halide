@@ -179,6 +179,28 @@ public:
     Expr mutate(const Expr &e) override;
 };
 
+/** A helper function for mutator-like things to mutate regions */
+template<typename Mutator, typename... Args>
+std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args&&... args) {
+    Region new_bounds(bounds.size());
+    bool bounds_changed = false;
+
+    for (size_t i = 0; i < bounds.size(); i++) {
+        Expr old_min = bounds[i].min;
+        Expr old_extent = bounds[i].extent;
+        Expr new_min = mutator->mutate(old_min, std::forward<Args>(args)...);
+        Expr new_extent = mutator->mutate(old_extent, std::forward<Args>(args)...);
+        if (!new_min.same_as(old_min)) {
+            bounds_changed = true;
+        }
+        if (!new_extent.same_as(old_extent)) {
+            bounds_changed = true;
+        }
+        new_bounds[i] = Range(new_min, new_extent);
+    }
+    return {new_bounds, bounds_changed};
+}
+
 }  // namespace Internal
 }  // namespace Halide
 

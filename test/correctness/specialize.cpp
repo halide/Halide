@@ -393,8 +393,8 @@ int main(int argc, char **argv) {
         f(x, y) = im(x, y);
         out(x, y) = f(x, y);
 
-        f.compute_at(out, x).specialize(cond1 && cond2).vectorize(x, 4);
-        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
+        f.compute_at(out, x).specialize(cond1 && cond2).vectorize(x, 4, TailStrategy::RoundUp);
+        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4, TailStrategy::RoundUp);
 
         if_then_else_count = 0;
         CountIfThenElse pass1;
@@ -422,8 +422,8 @@ int main(int argc, char **argv) {
         f(x, y) = im(x, y);
         out(x, y) = f(x, y);
 
-        f.compute_at(out, x).specialize(cond1).vectorize(x, 4);
-        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
+        f.compute_at(out, x).specialize(cond1).vectorize(x, 4, TailStrategy::RoundUp);
+        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4, TailStrategy::RoundUp);
 
         if_then_else_count = 0;
         CountIfThenElse pass2;

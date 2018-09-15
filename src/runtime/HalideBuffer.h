@@ -1045,10 +1045,11 @@ public:
 
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
-     * Buffer<const uint8_t>. Does a runtime assert if the source
-     * buffer type is void. */
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
+     * Does a runtime assert if the source buffer type is void. */
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
+    HALIDE_ALWAYS_INLINE
     Buffer<T2, D2> &as() & {
         Buffer<T2, D>::assert_can_convert_from(*this);
         return *((Buffer<T2, D2> *)this);
@@ -1060,6 +1061,7 @@ public:
      * source buffer type is void. */
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
+    HALIDE_ALWAYS_INLINE
     const Buffer<T2, D2> &as() const &  {
         Buffer<T2, D>::assert_can_convert_from(*this);
         return *((const Buffer<T2, D2> *)this);
@@ -1068,10 +1070,32 @@ public:
     /** Returns this rval Buffer with a different type attached. Does
      * a dynamic type check if the source type is void. */
     template<typename T2, int D2 = D>
+    HALIDE_ALWAYS_INLINE
     Buffer<T2, D2> as() && {
         Buffer<T2, D2>::assert_can_convert_from(*this);
         return *((Buffer<T2, D2> *)this);
     }
+
+    /** as_const() is syntactic sugar for .as<const T>(), to avoid the need
+     * to recapitulate the type argument. */
+    // @{
+    HALIDE_ALWAYS_INLINE
+    Buffer<typename std::add_const<T>::type, D> &as_const() & {
+        // Note that we can skip the assert_can_convert_from(), since T -> const T
+        // conversion is always legal.
+        return *((Buffer<typename std::add_const<T>::type> *)this);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    const Buffer<typename std::add_const<T>::type, D> &as_const() const & {
+        return *((const Buffer<typename std::add_const<T>::type> *)this);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Buffer<typename std::add_const<T>::type, D> as_const() && {
+        return *((Buffer<typename std::add_const<T>::type> *)this);
+    }
+    // @}
 
     /** Conventional names for the first three dimensions. */
     // @{
@@ -1124,6 +1148,19 @@ public:
         return dst;
     }
 
+    /** Make a copy of the Buffer which shares the underlying host and/or device
+     * allocations as the existing Buffer. This is purely syntactic sugar for
+     * cases where you have a const reference to a Buffer but need a temporary
+     * non-const copy (e.g. to make a call into AOT-generated Halide code), and want a terse
+     * inline way to create a temporary. \code
+     * void call_my_func(const Buffer<const uint8_t>& input) {
+     *     my_func(input.alias(), output);
+     * }\endcode
+     */
+    inline Buffer<T, D> alias() const {
+        return *this;
+    }
+
     /** Fill a Buffer with the values at the same coordinates in
      * another Buffer. Restricts itself to coordinates contained
      * within the intersection of the two buffers. If the two Buffers
@@ -1135,6 +1172,7 @@ public:
     */
     template<typename T2, int D2>
     void copy_from(const Buffer<T2, D2> &other) {
+        static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
         assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
         assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
@@ -1818,9 +1856,10 @@ public:
         return all_equal;
     }
 
-    void fill(not_void_T val) {
+    Buffer<T, D> &fill(not_void_T val) {
         set_host_dirty();
         for_each_value([=](T &v) {v = val;});
+        return *this;
     }
 
 private:
@@ -1904,25 +1943,9 @@ private:
             }
         }
     }
-    // @}
 
-public:
-    /** Call a function on every value in the buffer, and the
-     * corresponding values in some number of other buffers of the
-     * same size. The function should take a reference, const
-     * reference, or value of the correct type for each buffer. This
-     * effectively lifts a function of scalars to an element-wise
-     * function of buffers. This produces code that the compiler can
-     * autovectorize. This is slightly cheaper than for_each_element,
-     * because it does not need to track the coordinates.
-     *
-     * Note that constness of Buffers is preserved: a const Buffer<T> (for either
-     * 'this' or the other-buffers arguments) will allow mutation of the
-     * buffer contents, while a Buffer<const T> will not. Attempting to specify
-     * a mutable reference for the lambda argument of a Buffer<const T>
-     * will result in a compilation error. */
     template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
-    void for_each_value(Fn &&f, Args&&... other_buffers) const {
+    void for_each_value_impl(Fn &&f, Args&&... other_buffers) const {
         for_each_value_task_dim<N> *t =
             (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
         for (int i = 0; i <= dimensions(); i++) {
@@ -1973,6 +1996,38 @@ public:
             for_each_value_helper<false>(f, dimensions() - 1, t, begin(), (other_buffers.begin())...);
         }
     }
+    // @}
+
+public:
+    /** Call a function on every value in the buffer, and the
+     * corresponding values in some number of other buffers of the
+     * same size. The function should take a reference, const
+     * reference, or value of the correct type for each buffer. This
+     * effectively lifts a function of scalars to an element-wise
+     * function of buffers. This produces code that the compiler can
+     * autovectorize. This is slightly cheaper than for_each_element,
+     * because it does not need to track the coordinates.
+     *
+     * Note that constness of Buffers is preserved: a const Buffer<T> (for either
+     * 'this' or the other-buffers arguments) will allow mutation of the
+     * buffer contents, while a Buffer<const T> will not. Attempting to specify
+     * a mutable reference for the lambda argument of a Buffer<const T>
+     * will result in a compilation error. */
+    // @{
+    template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
+    HALIDE_ALWAYS_INLINE
+    const Buffer<T, D> &for_each_value(Fn &&f, Args&&... other_buffers) const {
+        for_each_value_impl(f, std::forward<Args>(other_buffers)...);
+        return *this;
+    }
+
+    template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
+    HALIDE_ALWAYS_INLINE
+    Buffer<T, D> &for_each_value(Fn &&f, Args&&... other_buffers) {
+        for_each_value_impl(f, std::forward<Args>(other_buffers)...);
+        return *this;
+    }
+    // @}
 
 private:
 
@@ -2096,8 +2151,19 @@ private:
         assert(dims >= args);
         for_each_element_variadic(0, args - 1, t, std::forward<Fn>(f));
     }
-public:
 
+    template<typename Fn>
+    void for_each_element_impl(Fn &&f) const {
+        for_each_element_task_dim *t =
+            (for_each_element_task_dim *)HALIDE_ALLOCA(dimensions() * sizeof(for_each_element_task_dim));
+        for (int i = 0; i < dimensions(); i++) {
+            t[i].min = dim(i).min();
+            t[i].max = dim(i).max();
+        }
+        for_each_element(0, dimensions(), t, std::forward<Fn>(f));
+    }
+
+public:
     /** Call a function at each site in a buffer. This is likely to be
      * much slower than using Halide code to populate a buffer, but is
      * convenient for tests. If the function has more arguments than the
@@ -2154,16 +2220,21 @@ public:
      \endcode
 
     */
+    // @{
     template<typename Fn>
-    void for_each_element(Fn &&f) const {
-        for_each_element_task_dim *t =
-            (for_each_element_task_dim *)HALIDE_ALLOCA(dimensions() * sizeof(for_each_element_task_dim));
-        for (int i = 0; i < dimensions(); i++) {
-            t[i].min = dim(i).min();
-            t[i].max = dim(i).max();
-        }
-        for_each_element(0, dimensions(), t, std::forward<Fn>(f));
+    HALIDE_ALWAYS_INLINE
+    const Buffer<T, D> &for_each_element(Fn &&f) const {
+        for_each_element_impl(f);
+        return *this;
     }
+
+    template<typename Fn>
+    HALIDE_ALWAYS_INLINE
+    Buffer<T, D> &for_each_element(Fn &&f) {
+        for_each_element_impl(f);
+        return *this;
+    }
+    // @}
 
 private:
     template<typename Fn>
@@ -2187,17 +2258,17 @@ public:
      * stored to the coordinate corresponding to the arguments. */
     template<typename Fn,
              typename = typename std::enable_if<!std::is_arithmetic<typename std::decay<Fn>::type>::value>::type>
-    void fill(Fn &&f) {
+    Buffer<T, D> &fill(Fn &&f) {
         // We'll go via for_each_element. We need a variadic wrapper lambda.
         FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
-        for_each_element(wrapper);
+        return for_each_element(wrapper);
     }
 
     /** Check if an input buffer passed extern stage is a querying
      * bounds. Compared to doing the host pointer check directly,
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
-    bool is_bounds_query() {
+    bool is_bounds_query() const {
         return buf.is_bounds_query();
     }
 
