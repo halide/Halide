@@ -2061,7 +2061,7 @@ struct State {
                     }
 
                     // add on last pipeline feature for "natural vector width" as last schedule feature
-                    schedule_features(batch_idx, schedule_feat_size, stage) = std::log(pipeline_feats[pipeline_feat_size-1] + 1);
+                    schedule_features(batch_idx, schedule_feat_size, stage) = pipeline_feats[pipeline_feat_size-1];
 
                     stage += 1;
                 }
@@ -2604,7 +2604,7 @@ void test_convnet_correctness() {
     }
 
     for (int i = 0; i < n; i++) {
-        for (int j = 0; j < 18; j++) {
+        for (int j = 0; j < 25; j++) {
             for (int k = 0; k < stages; k++) {
                 float val = distribution(generator);
                 schedule_features(i, j, k) = val;
