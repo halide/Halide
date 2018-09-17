@@ -123,8 +123,6 @@ struct PipelineFeatures {
         scalar_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes],       // First col is all zero                  f(y, 2, z*8)
         gather_scatter_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes];            // Not one of the three categories above  f(x, x, sqrt(y))
 
-    int native_vector_size; // The native vector size for the narrowest type used.
-
     // TODO: We should possibly feed these Jacobians directly
     // to the net rather than computing the properties above.
 
@@ -175,8 +173,7 @@ struct PipelineFeatures {
                      << "      Vectorizable:   " << vectorizable_accesses[0][i] << ' ' << vectorizable_accesses[1][i] << ' ' << vectorizable_accesses[2][i] << ' ' << vectorizable_accesses[3][i] << '\n'
                      << "      Strided:        " << strided_accesses[0][i] << ' ' << strided_accesses[1][i] << ' ' << strided_accesses[2][i] << ' ' << strided_accesses[3][i] << '\n'
                      << "      Scalar:         " << scalar_accesses[0][i] << ' ' << scalar_accesses[1][i] << ' ' << scalar_accesses[2][i] << ' ' << scalar_accesses[3][i] << '\n'
-                     << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n'
-                     << "     Native vector size: " << native_vector_size << '\n';
+                     << "      Gather/Scatter: " << gather_scatter_accesses[0][i] << ' ' << gather_scatter_accesses[1][i] << ' ' << gather_scatter_accesses[2][i] << ' ' << gather_scatter_accesses[3][i] << '\n';
         }
     }
 
@@ -271,10 +268,11 @@ struct FunctionDAG {
 
         // A mutator to apply parameter estimates to the expressions
         // we encounter while constructing the graph.
-        class ApplyParamEstimates : public IRMutator {
-            using IRMutator::visit;
+        class ApplyParamEstimates : public IRMutator2 {
+            using IRMutator2::visit;
 
-            void visit(const Variable *op) override {
+            Expr visit(const Variable *op) override {
+                Expr expr;
                 if (op->param.defined()) {
                     if (!op->param.is_buffer()) {
                         expr = op->param.estimate();
@@ -287,10 +285,11 @@ struct FunctionDAG {
                             }
                         }
                     }
+                    internal_assert(expr.defined()) << "Missing estimate for " << op->name << '\n';
+                    return expr;
                 } else {
-                    expr = op;
+                    return op;
                 }
-                internal_assert(expr.defined()) << "Missing estimate for " << op->name << '\n';
             }
         } apply_param_estimates;
 
@@ -793,7 +792,6 @@ struct FunctionDAG {
                     v = common_subexpression_elimination(simplify(v)); // Get things into canonical form
                     v.accept(&featurizer);
                 }
-                stage.features.native_vector_size = stage.vector_size;
             }
         }
     }
@@ -928,6 +926,8 @@ struct ScheduleFeatures {
 
     int64_t rounded_innermost_pure_loop_extent = 0; // Innermost pure loop extend rounded up to the next multiple of the vector size
 
+    int native_vector_size; // The native vector size for the narrowest type used.
+
     void dump() const {
         debug(0) << "    num_realizations:                      " << num_realizations << '\n'
                  << "    num_productions:                       " << num_productions << '\n'
@@ -952,7 +952,8 @@ struct ScheduleFeatures {
                  << "    allocation_bytes_read_per_realization: " << allocation_bytes_read_per_realization << '\n'
                  << "    working_set:                           " << working_set << '\n'
                  << "    vector_size:                           " << vector_size << '\n'
-                 << "    rounded_innermost_pure_loop_extent     " << rounded_innermost_pure_loop_extent << '\n';
+                 << "    rounded_innermost_pure_loop_extent     " << rounded_innermost_pure_loop_extent << '\n'
+                 << "    native_vector_size:                    " << vector_size << '\n';
     }
 };
 
@@ -1187,6 +1188,7 @@ struct PartialScheduleNode {
             feat.inner_parallelism = parallel_tasks;
             feat.outer_parallelism = parallelism;
             feat.vector_size = stage->vector_size;
+            feat.native_vector_size = stage->vector_size;
 
             const auto &bounds = parent->get_bounds(node);
 
@@ -1330,6 +1332,7 @@ struct PartialScheduleNode {
             func_features.resize(1);
             auto &inlined_feat = func_features[0];
             inlined_feat.inlined_calls += p.second * subinstances;
+            inlined_feat.native_vector_size = (int64_t)(stage->vector_size);
             if (inlined_feat.vector_size > 0) {
                 inlined_feat.vector_size = std::min(inlined_feat.vector_size, (int64_t)stage->vector_size);
             } else {
@@ -2037,8 +2040,8 @@ struct State {
                 num_stages += p.second.size();
             }
 
-            const int pipeline_feat_size = 400;
-            const int schedule_feat_size = 24;
+            const int pipeline_feat_size = 399;
+            const int schedule_feat_size = 25;
 
             Buffer<float> pipeline_features, schedule_features;
             // Won't actually run anything until we call evaluate_costs...
@@ -2059,10 +2062,6 @@ struct State {
                         int y = (i-7)%7;
                         pipeline_features(batch_idx, x, y, stage) = pipeline_feats[i];
                     }
-
-                    // add on last pipeline feature for "natural vector width" as last schedule feature
-                    schedule_features(batch_idx, schedule_feat_size, stage) = pipeline_feats[pipeline_feat_size-1];
-
                     stage += 1;
                 }
             }
@@ -2121,7 +2120,7 @@ struct State {
                     compute_cost = per_element_compute_cost * feat.points_computed_total;
 
                     // Figure out vector overcompute
-                    const int native_vector_size = stage.features.native_vector_size;
+                    const int native_vector_size = feat.native_vector_size;
                     const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
                     const double vector_recompute = (double)feat.rounded_innermost_pure_loop_extent / feat.innermost_pure_loop_extent;
 
@@ -2612,8 +2611,6 @@ void test_convnet_correctness() {
         }
     }
 
-    throughput_predictor.evaluate_costs();
-
     FILE *fpipe = fopen("/private/home/karimacma/Halide/pipeline.data", "ab");
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < 56; j++) {
@@ -2628,13 +2625,15 @@ void test_convnet_correctness() {
 
     FILE *fsched = fopen("/private/home/karimacma/Halide/schedule.data", "ab");
     for (int i = 0; i < n; i++) {
-        for (int j = 0; j < 18; j++) {
+        for (int j = 0; j < 25; j++) {
             for (int k = 0; k < stages; k++) {
                 fwrite(&(schedule_features(i,j,k)), sizeof(float), 1, fsched);
             }
         }
     }
     fclose(fsched);
+
+    throughput_predictor.evaluate_costs();
 
     FILE *fpred = fopen("/private/home/karimacma/Halide/prediction.data", "ab");
     for (int i = 0; i < n; i++) {
@@ -2645,6 +2644,7 @@ void test_convnet_correctness() {
 
     FILE *fstages = fopen("/private/home/karimacma/Halide/stages.data", "ab");
     fwrite(&stages, sizeof(int), 1, fstages);
+
     fwrite(&n, sizeof(int), 1, fstages);
     fclose(fstages);
 }
