@@ -190,6 +190,39 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
     }
 }
 
+// Make sure that stages of 'f' are only computed with one function if defined,
+// and that later stages of 'f' should be computed with the same or later
+// stage of 'g' that is computed with the previous stage of 'f'. For example,
+// if f.s0 is computed with g.s1, then f.s1 has to be computed with g.s1 or
+// later stage of 'g'.
+void check_func_stages_compute_with(const Function &f) {
+    string parent = "";
+    int max_stage = -1;
+
+    const LoopLevel &fuse_level = f.definition().schedule().fuse_level().level;
+    if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
+        parent = fuse_level.func();
+        max_stage = fuse_level.stage_index();
+    }
+
+    for (size_t i = 0; i < f.updates().size(); ++i) {
+        const LoopLevel &fuse_level = f.update(i).schedule().fuse_level().level;
+        if (!fuse_level.is_inlined() && !fuse_level.is_root()) {
+            user_assert(parent == fuse_level.func())
+                << "Invalid compute_with: " << f.name() << ".s" << i+1
+                << " is computed with different function (\"" << fuse_level.func()
+                << "\") from the previous stage (" << parent << ")\n";
+            user_assert(fuse_level.stage_index() >= max_stage)
+                << "Invalid compute_with: " << f.name() << ".s" << i+1
+                << " is computed with higher stage " << fuse_level.stage_index()
+                << " of function \"" << fuse_level.func() << "\" than previous stage ("
+                << "stage: " << max_stage << ")\n";
+            parent = fuse_level.func();
+            max_stage = fuse_level.stage_index();
+        }
+    }
+}
+
 } // anonymous namespace
 
 pair<vector<string>, vector<vector<string>>> realization_order(
@@ -202,6 +235,8 @@ pair<vector<string>, vector<vector<string>>> realization_order(
             // Extern function should not be fused.
             continue;
         }
+        check_func_stages_compute_with(iter.second);
+
         populate_fused_pairs_list(iter.first, iter.second.definition(), 0, env);
         for (size_t i = 0; i < iter.second.updates().size(); ++i) {
             populate_fused_pairs_list(iter.first, iter.second.updates()[i], i + 1, env);
