@@ -194,7 +194,14 @@ void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pa
 // and that later stages of 'f' should be computed with the same or later
 // stage of 'g' that is computed with the previous stage of 'f'. For example,
 // if f.s0 is computed with g.s1, then f.s1 has to be computed with g.s1 or
-// later stage of 'g'.
+// later stage of 'g'. On the other hand, if f.s1 is computed with g.s1, f.s0
+// also has to computed with g.s0 or g.s1.
+//
+// TODO(psuriana): This additional constraint is necessary since the current
+// realization_order and schedule_functions are done per function instead of
+// per stage; otherwise, we might encounter a case when the update stage
+// of a function is injected before its initial stage
+// (See /test/error/bad_compute_with_missing_stage).
 void check_func_stages_compute_with(const Function &f) {
     string parent = "";
     int max_stage = -1;

@@ -191,6 +191,21 @@ public:
      * the stage we are calling compute_with on should not have specializations,
      * e.g. f2.compute_with(f1, x) is allowed only if f2 has no specializations.
      *
+     * Given stages of a function 'f', they can only be computed with one
+     * function 'g', and that later stage of 'f' can only be computed with
+     * the same or later stage of 'g' that is computed with the previous stage
+     * of 'f'. Consider the following code:
+     \code
+     f(x, y) = x + y;
+     f(x, y) += 10;
+     g(x, y) = x - y;
+     g(x, y) += 20;
+     \endcode
+     *
+     * For f.update().compute_with(g.update(), y) to be valid, we also need to
+     * compute the initial stage of 'f' with the initial or first update stage
+     * of 'g' (e.g. f.compute_with(g, y) or f.compute_with(g.update(), x))
+     *
      * Given the constraints, this has a variety of uses. Consider the
      * following code:
      \code
