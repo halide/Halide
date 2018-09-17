@@ -46,27 +46,6 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     *stmt = nullptr;
 }
 
-template<typename Mutator>
-pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds) {
-    Region new_bounds(bounds.size());
-    bool bounds_changed = false;
-
-    for (size_t i = 0; i < bounds.size(); i++) {
-        Expr old_min = bounds[i].min;
-        Expr old_extent = bounds[i].extent;
-        Expr new_min = mutator->mutate(old_min);
-        Expr new_extent = mutator->mutate(old_extent);
-        if (!new_min.same_as(old_min)) {
-            bounds_changed = true;
-        }
-        if (!new_extent.same_as(old_extent)) {
-            bounds_changed = true;
-        }
-        new_bounds[i] = Range(new_min, new_extent);
-    }
-    return {new_bounds, bounds_changed};
-}
-
 }  // namespace
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
@@ -623,6 +602,7 @@ Stmt IRMutator2::visit(const Allocate *op) {
 Stmt IRMutator2::visit(const Free *op) {
     return op;
 }
+
 
 Stmt IRMutator2::visit(const Realize *op) {
     Region new_bounds;
