@@ -176,7 +176,8 @@ protected:
         *metadata_t_type,
         *argument_t_type,
         *scalar_value_t_type,
-        *device_interface_t_type;
+        *device_interface_t_type,
+        *pseudostack_slot_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */

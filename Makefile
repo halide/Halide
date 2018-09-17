@@ -717,6 +717,7 @@ RUNTIME_CPP_COMPONENTS = \
   prefetch \
   profiler \
   profiler_inlined \
+  pseudostack \
   qurt_allocator \
   qurt_hvx \
   qurt_init_fini \
