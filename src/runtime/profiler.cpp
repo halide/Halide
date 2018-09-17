@@ -6,10 +6,17 @@
 // be used across many different user_contexts, so nothing it calls
 // can depend on the user context.
 
+#define DEFAULT_COUNTERS 0xc00c003
+
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, NULL};
+    #ifdef HARDWARE_COUNTERS
+    static int fds[halide_profiler_hardware_counter_end] = {0};
+    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, NULL, fds, DEFAULT_COUNTERS};
+    #else
+    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, NULL, NULL, 0};
+    #endif
     return &s;
 }
 }
@@ -45,7 +52,16 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     p->num_allocs = 0;
     p->active_threads_numerator = 0;
     p->active_threads_denominator = 0;
-    p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * sizeof(halide_profiler_func_stats));
+    uint64_t bytes_per_func = sizeof(halide_profiler_func_stats);
+    #ifdef HARDWARE_COUNTERS
+    // Also allocate space to track the hardware counters
+    bytes_per_func += sizeof(halide_profiler_hardware_counter) * halide_profiler_hardware_counter_end;
+    #endif
+    p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * bytes_per_func);
+    #ifdef HARDWARE_COUNTERS
+    halide_profiler_hardware_counter *counters = (halide_profiler_hardware_counter *)(p->funcs + num_funcs);
+    memset(counters, 0, num_funcs * sizeof(halide_profiler_hardware_counter) * halide_profiler_hardware_counter_end);
+    #endif
     if (!p->funcs) {
         free(p);
         return NULL;
@@ -60,13 +76,257 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         p->funcs[i].stack_peak = 0;
         p->funcs[i].active_threads_numerator = 0;
         p->funcs[i].active_threads_denominator = 0;
+        #ifdef HARDWARE_COUNTERS
+        p->funcs[i].hardware_counters = counters + i;
+        #else
+        p->funcs[i].hardware_counters = NULL;
+        #endif
     }
     s->first_free_id += num_funcs;
     s->pipelines = p;
     return p;
 }
 
-WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time, int active_threads) {
+#ifdef HARDWARE_COUNTERS
+WEAK void bill_hardware_counters(halide_profiler_func_stats *f,
+                                 uint64_t active_counters,
+                                 halide_profiler_hardware_counter *before,
+                                 halide_profiler_hardware_counter *after) {
+    if (f->hardware_counters && active_counters) {
+        halide_profiler_hardware_counter *dst = (halide_profiler_hardware_counter *)(f->hardware_counters);
+        halide_profiler_hardware_counter *b = (halide_profiler_hardware_counter *)before;
+        halide_profiler_hardware_counter *a = (halide_profiler_hardware_counter *)after;
+        while (active_counters) {
+            uint64_t i = __builtin_ctzl(active_counters);
+            active_counters &= ~(((uint64_t)1) << i);
+
+            // On a 64-core 4GHz machine, the counters that track
+            // cycles are going to overflow for a pipeline that
+            // runs for more than 2 years, so we don't bother
+            // worrying about overflow of those, but we do discard
+            // the samples where the value overflows.
+            dst[i].enabled += a[i].enabled - b[i].enabled;
+            if (a[i].count > b[i].count) {
+                dst[i].running += a[i].running - b[i].running;
+                dst[i].count += a[i].count - b[i].count;
+            }
+        }
+    }
+}
+
+#if BITS_64
+#define __NR_perf_event_open 298
+#else
+#define __NR_perf_event_open 336
+#endif
+
+extern "C" int syscall(int num, ...);
+extern "C" ssize_t read(int, void *, size_t);
+extern "C" int ioctl(int fd, unsigned long req, ...);
+extern "C" int getpid();
+
+WEAK long perf_event_open(struct perf_event_attr *hw_event, int pid,
+                          int cpu, int group_fd, unsigned long flags) {
+    return syscall(__NR_perf_event_open, hw_event, pid, cpu,
+                   group_fd, flags);
+}
+
+// from perf_events.h
+struct perf_event_attr {
+    uint32_t type;
+    uint32_t size;
+    uint64_t config;
+    union {
+        uint64_t sample_period;
+        uint64_t sample_freq;
+    };
+    uint64_t sample_type;
+    uint64_t read_format;
+    uint64_t
+        disabled       :  1,
+        inherit        :  1,
+        pinned         :  1,
+        exclusive      :  1,
+        exclude_user   :  1,
+        exclude_kernel :  1,
+        exclude_hv     :  1,
+        exclude_idle   :  1,
+        mmap           :  1,
+        comm           :  1,
+        freq           :  1,
+        inherit_stat   :  1,
+        enable_on_exec :  1,
+        task           :  1,
+        watermark      :  1,
+        precise_ip     :  2,
+        mmap_data      :  1,
+        sample_id_all  :  1,
+        exclude_host   :  1,
+        exclude_guest  :  1,
+        exclude_callchain_kernel : 1,
+        exclude_callchain_user   : 1,
+        mmap2          :  1,
+        comm_exec      :  1,
+        use_clockid    :  1,
+        context_switch :  1,
+        __reserved_1   : 37;
+    union {
+        uint32_t wakeup_events;
+        uint32_t wakeup_watermark;
+    };
+    uint32_t bp_type;
+    union {
+        uint64_t bp_addr;
+        uint64_t config1;
+    };
+    union {
+        uint64_t bp_len;
+        uint64_t config2;
+    };
+    uint64_t branch_sample_type;
+    uint64_t sample_regs_user;
+    uint32_t sample_stack_user;
+    int32_t clockid;
+    uint64_t sample_regs_intr;
+    uint32_t aux_watermark;
+    uint32_t __reserved_2;
+};
+
+struct counter_info {
+    const char *name;
+    uint32_t type, config;
+};
+const static counter_info info[halide_profiler_hardware_counter_end] =
+    {{"cpu_cycles"             , 0, 0},
+     {"instructions"           , 0, 1},
+     {"cache_refs"             , 0, 2},
+     {"cache_misses"           , 0, 3},
+     {"branches"               , 0, 4},
+     {"branch_mispredictions"  , 0, 5},
+     {"bus_cycles"             , 0, 6},
+     {"stalled_cycles_frontend", 0, 7},
+     {"stalled_cycles_backend" , 0, 8},
+     {"cpu_clock"              , 1, 0},
+     {"task_clock"             , 1, 1},
+     {"page_faults"            , 1, 2},
+     {"context_switches"       , 1, 3},
+     {"migrations"             , 1, 4},
+     {"l1d_read_accesses"      , 3, 0 | (0 << 8) | (0 << 16)},
+     {"l1d_read_misses"        , 3, 0 | (0 << 8) | (1 << 16)},
+     {"l1d_write_accesses"     , 3, 0 | (1 << 8) | (0 << 16)},
+     {"l1d_write_misses"       , 3, 0 | (1 << 8) | (1 << 16)},
+     {"l1d_prefetch_accesses"  , 3, 0 | (2 << 8) | (0 << 16)},
+     {"l1d_prefetch_misses"    , 3, 0 | (2 << 8) | (1 << 16)},
+     {"l1i_read_accesses"      , 3, 1 | (0 << 8) | (0 << 16)},
+     {"l1i_read_misses"        , 3, 1 | (0 << 8) | (1 << 16)},
+     {"l1i_write_accesses"     , 3, 1 | (1 << 8) | (0 << 16)},
+     {"l1i_write_misses"       , 3, 1 | (1 << 8) | (1 << 16)},
+     {"l1i_prefetch_accesses"  , 3, 1 | (2 << 8) | (0 << 16)},
+     {"l1i_prefetch_misses"    , 3, 1 | (2 << 8) | (1 << 16)},
+     {"llc_read_accesses"      , 3, 2 | (0 << 8) | (0 << 16)},
+     {"llc_read_misses"        , 3, 2 | (0 << 8) | (1 << 16)},
+     {"llc_write_accesses"     , 3, 2 | (1 << 8) | (0 << 16)},
+     {"llc_write_misses"       , 3, 2 | (1 << 8) | (1 << 16)},
+     {"llc_prefetch_accesses"  , 3, 2 | (2 << 8) | (0 << 16)},
+     {"llc_prefetch_misses"    , 3, 2 | (2 << 8) | (1 << 16)},
+     {"dtlb_read_accesses"     , 3, 3 | (0 << 8) | (0 << 16)},
+     {"dtlb_read_misses"       , 3, 3 | (0 << 8) | (1 << 16)},
+     {"dtlb_write_accesses"    , 3, 3 | (1 << 8) | (0 << 16)},
+     {"dtlb_write_misses"      , 3, 3 | (1 << 8) | (1 << 16)},
+     {"dtlb_prefetch_accesses" , 3, 3 | (2 << 8) | (0 << 16)},
+     {"dtlb_prefetch_misses"   , 3, 3 | (2 << 8) | (1 << 16)},
+     {"itlb_read_accesses"     , 3, 4 | (0 << 8) | (0 << 16)},
+     {"itlb_read_misses"       , 3, 4 | (0 << 8) | (1 << 16)},
+     {"itlb_write_accesses"    , 3, 4 | (1 << 8) | (0 << 16)},
+     {"itlb_write_misses"      , 3, 4 | (1 << 8) | (1 << 16)},
+     {"itlb_prefetch_accesses" , 3, 4 | (2 << 8) | (0 << 16)},
+     {"itlb_prefetch_misses"   , 3, 4 | (2 << 8) | (1 << 16)},
+     {"bpu_read_accesses"      , 3, 5 | (0 << 8) | (0 << 16)},
+     {"bpu_read_misses"        , 3, 5 | (0 << 8) | (1 << 16)},
+     {"bpu_write_accesses"     , 3, 5 | (1 << 8) | (0 << 16)},
+     {"bpu_write_misses"       , 3, 5 | (1 << 8) | (1 << 16)},
+     {"bpu_prefetch_accesses"  , 3, 5 | (2 << 8) | (0 << 16)},
+     {"bpu_prefetch_misses"    , 3, 5 | (2 << 8) | (1 << 16)},
+     {"node_read_accesses"     , 3, 6 | (0 << 8) | (0 << 16)},
+     {"node_read_misses"       , 3, 6 | (0 << 8) | (1 << 16)},
+     {"node_write_accesses"    , 3, 6 | (1 << 8) | (0 << 16)},
+     {"node_write_misses"      , 3, 6 | (1 << 8) | (1 << 16)},
+     {"node_prefetch_accesses" , 3, 6 | (2 << 8) | (0 << 16)},
+     {"node_prefetch_misses"   , 3, 6 | (2 << 8) | (1 << 16)}};
+
+WEAK void get_hardware_counters(halide_profiler_state *s,
+                                halide_profiler_hardware_counter *counters) {
+    // The counters may not be initialized
+    if (s->hardware_counter_fds == NULL) return;
+
+    static int pid = -1;
+
+    if (pid < 0) {
+        pid = getpid();
+        // Check the environment variable to set the active mask
+        if (const char *set = getenv("HL_PROFILER_COUNTERS")) {
+            s->active_counters = 0; // Environment variable takes precedence.
+            const char *start = set, *end = set;
+            while (*end) {
+                while (*end && *end != ',') end++;
+                for (int i = 0; i < halide_profiler_hardware_counter_end; i++) {
+                    bool match = true;
+                    for (int j = 0; match && start + j < end; j++) {
+                        match &= (start[j] == info[i].name[j]);
+                    }
+                    if (match) {
+                        s->active_counters |= ((uint64_t)1) << i;
+                    }
+                }
+                start = end+1;
+                end = start;
+            }
+        }
+    }
+
+    uint64_t a = s->active_counters;
+
+    for (int i = 0; i < halide_profiler_hardware_counter_end; i++, a >>= 1) {
+        bool active = ((a & 1) == 1);
+        int *fd = s->hardware_counter_fds + i;
+        halide_profiler_hardware_counter *c = counters + i;
+        if (active) {
+            if (*fd == 0) {
+                // Enable the counter
+                struct perf_event_attr pe = {0};
+                pe.size = sizeof(pe);
+                pe.exclude_kernel = 1;
+                pe.exclude_hv = 1;
+                pe.type = info[i].type;
+                pe.config = info[i].config;
+                pe.read_format = 3; // enabled and running counters in addition to the value, so we can scale
+                *fd = perf_event_open(&pe, pid, -1, -1, 0);
+                ioctl(*fd, 9216, 0); // reset
+                // ioctl(*fd, 9219, 0); // enable (already enabled because pe.disabled == 0)
+            }
+            if (*fd > 0) {
+                read(*fd, c, sizeof(halide_profiler_hardware_counter));
+            }
+        } else if (*fd > 0) {
+            // Disable the counter
+            ioctl(*fd, 9217, 0); // disable
+            close(*fd);
+            *fd = 0;
+        }
+    }
+}
+#else
+WEAK void bill_hardware_counters(halide_profiler_func_stats *,
+                                 uint64_t,
+                                 halide_profiler_hardware_counter *,
+                                 halide_profiler_hardware_counter *) {
+}
+WEAK void get_hardware_counters(halide_profiler_state *,
+                                halide_profiler_hardware_counter *) {
+}
+#endif
+
+WEAK halide_profiler_func_stats *bill_func(halide_profiler_state *s, int func_id, uint64_t time, int active_threads) {
     halide_profiler_pipeline_stats *p_prev = NULL;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
@@ -85,11 +345,12 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time, int ac
             p->samples++;
             p->active_threads_numerator += active_threads;
             p->active_threads_denominator += 1;
-            return;
+            return f;
         }
         p_prev = p;
     }
     // Someone must have called reset_state while a kernel was running. Do nothing.
+    return NULL;
 }
 
 WEAK void sampling_profiler_thread(void *) {
@@ -98,10 +359,16 @@ WEAK void sampling_profiler_thread(void *) {
     // grab the lock
     halide_mutex_lock(&s->lock);
 
-    while (s->current_func != halide_profiler_please_stop) {
+    // Double-buffered log of the hardware counters
+    halide_profiler_hardware_counter counters_buf[2][halide_profiler_hardware_counter_end];
+    halide_profiler_hardware_counter *counters = &counters_buf[0][0];
+    halide_profiler_hardware_counter *counters_now = &counters_buf[1][0];
+    memset(counters_buf, 0, sizeof(counters_buf));
 
+    while (s->current_func != halide_profiler_please_stop) {
         uint64_t t1 = halide_current_time_ns(NULL);
         uint64_t t = t1;
+        get_hardware_counters(s, counters);
         while (1) {
             int func, active_threads;
             if (s->get_remote_profiler_state) {
@@ -113,14 +380,23 @@ WEAK void sampling_profiler_thread(void *) {
                 active_threads = s->active_threads;
             }
             uint64_t t_now = halide_current_time_ns(NULL);
+            get_hardware_counters(s, counters_now);
+
             if (func == halide_profiler_please_stop) {
                 break;
             } else if (func >= 0) {
                 // Assume all time since I was last awake is due to
                 // the currently running func.
-                bill_func(s, func, t_now - t, active_threads);
+                halide_profiler_func_stats *f = bill_func(s, func, t_now - t, active_threads);
+                if (f) {
+                    bill_hardware_counters(f, s->active_counters, counters, counters_now);
+                }
             }
             t = t_now;
+
+            halide_profiler_hardware_counter *tmp = counters;
+            counters = counters_now;
+            counters_now = tmp;
 
             // Release the lock, sleep, reacquire.
             int sleep_ms = s->sleep_time;
@@ -129,6 +405,8 @@ WEAK void sampling_profiler_thread(void *) {
             halide_mutex_lock(&s->lock);
         }
     }
+
+
 
     halide_mutex_unlock(&s->lock);
 }
@@ -280,6 +558,13 @@ WEAK void halide_profiler_memory_free(void *user_context,
     __sync_sub_and_fetch(&f_stats->memory_current, decr);
 }
 
+namespace {
+WEAK double extrapolate_counter(const halide_profiler_hardware_counter *c) {
+    if (c->running == 0) return 0.0;
+    return ((double)(c->count) * c->enabled) / c->running;
+}
+}
+
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
 
     char line_buf[1024];
@@ -364,9 +649,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 if (fs->memory_peak) {
                     cursor += 15;
-                    sstr << " peak: " << fs->memory_peak;
+                    sstr << " heap: " << fs->memory_peak;
                     while (sstr.size() < cursor) sstr << " ";
-                    sstr << " num: " << fs->num_allocs;
+                    sstr << " allocs: " << fs->num_allocs;
                     cursor += 15;
                     while (sstr.size() < cursor) sstr << " ";
                     sstr << " avg: " << alloc_avg;
@@ -377,6 +662,66 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << "\n";
 
                 halide_print(user_context, sstr.str());
+
+                #ifdef HARDWARE_COUNTERS
+                sstr.clear();
+                if (fs->hardware_counters) {
+                    const halide_profiler_hardware_counter *h = fs->hardware_counters;
+                    if (s->active_counters == DEFAULT_COUNTERS) {
+                        const double instructions = extrapolate_counter(h + halide_profiler_hardware_counter_instructions);
+                        const double cpu_cycles = extrapolate_counter(h + halide_profiler_hardware_counter_cpu_cycles);
+                        const uint64_t ipc_times_100 = (uint64_t)((100.0 * instructions) / (cpu_cycles + 1e-20) + 0.5);
+                        const uint64_t ipc_hundreds = ipc_times_100 / 100;
+                        const uint64_t ipc_frac = ipc_times_100 - ipc_hundreds*100;
+                        const uint64_t ipc_tens = ipc_frac / 10;
+                        const uint64_t ipc_ones = ipc_frac % 10;
+                        const double l1_accesses = extrapolate_counter(h + halide_profiler_hardware_counter_l1d_read_accesses);
+                        const double l1_misses = extrapolate_counter(h + halide_profiler_hardware_counter_l1d_read_misses);
+                        const uint64_t l1_hit_rate = 100 - (uint64_t)((100.0 * l1_misses) / (l1_accesses + 1e-20) + 0.5);
+                        const double llc_accesses = extrapolate_counter(h + halide_profiler_hardware_counter_llc_read_accesses);
+                        const double llc_misses = extrapolate_counter(h + halide_profiler_hardware_counter_llc_read_misses);
+                        const uint64_t llc_hit_rate = 100 - (uint64_t)((100.0 * llc_misses) / (llc_accesses + 1e-20) + 0.5);
+
+                        double l1_bytes = l1_accesses * 64.0;
+                        double llc_bytes = llc_accesses * 64.0;
+
+                        l1_bytes /= p->runs;
+                        llc_bytes /= p->runs;
+
+                        const char *suffixes[] = {"B", "K", "M", "G", "T", NULL};
+                        int l1_suffix = 0, llc_suffix = 0;
+                        while (l1_bytes >= 10000 && suffixes[l1_suffix + 1]) {
+                            l1_suffix ++;
+                            l1_bytes /= 1000;
+                        }
+                        while (llc_bytes >= 10000 && suffixes[llc_suffix + 1]) {
+                            llc_suffix ++;
+                            llc_bytes /= 1000;
+                        }
+
+                        sstr << "                      "
+                             << "   IPC: " << ipc_hundreds << "." << ipc_tens << ipc_ones
+                             << "   L1: " << (uint64_t)(l1_bytes + 0.5) << suffixes[l1_suffix] << " (" << l1_hit_rate << "%)"
+                             << "   LLC: " << (uint64_t)(llc_bytes + 0.5) << suffixes[llc_suffix] << " (" << llc_hit_rate << "%)"
+                             << "\n";
+                        halide_print(user_context, sstr.str());
+                    } else {
+                        // Just print the counter values
+                        uint64_t a = s->active_counters;
+                        halide_profiler_hardware_counter *c = (halide_profiler_hardware_counter *)(fs->hardware_counters);
+                        while (a) {
+                            uint64_t i = __builtin_ctzl(a);
+                            a &= ~(((uint64_t)1) << i);
+                            if (s->hardware_counter_fds[i] <= 0) continue;
+                            sstr << "                         " << info[i].name << ": ";
+                            while (sstr.size() < 50) sstr << " ";
+                            sstr << (extrapolate_counter(c + i) / p->runs) << "\n";
+                            halide_print(user_context, sstr.str());
+                            sstr.clear();
+                        }
+                    }
+                }
+                #endif
             }
         }
     }
@@ -395,6 +740,13 @@ WEAK void halide_profiler_reset_unlocked(halide_profiler_state *s) {
         s->pipelines = (halide_profiler_pipeline_stats *)(p->next);
         free(p->funcs);
         free(p);
+    }
+    if (s->hardware_counter_fds) {
+        for (int i = 0; ;i++) {
+            if (s->hardware_counter_fds[i] == 0) break;
+            close(s->hardware_counter_fds[i]);
+            s->hardware_counter_fds[i] = 0;
+        }
     }
     s->first_free_id = 0;
 }

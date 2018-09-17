@@ -124,6 +124,7 @@ DECLARE_CPP_INITMOD(posix_threads_tsan)
 DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
+DECLARE_CPP_INITMOD(profiler_with_hardware_counters)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_init_fini)
@@ -811,6 +812,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 t.os != Target::QuRT) {
                 if (t.os == Target::Windows) {
                     modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+                } else if (t.os == Target::Linux && t.arch == Target::X86) {
+                    modules.push_back(get_initmod_profiler_with_hardware_counters(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_profiler(c, bits_64, debug));
                 }
