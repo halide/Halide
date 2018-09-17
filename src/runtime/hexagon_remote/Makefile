@@ -78,7 +78,8 @@ hosts: \
 remotes: \
 	bin/v60/libhalide_hexagon_remote_skel.so \
 	bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so \
-	bin/v60/hexagon_sim_remote
+	bin/v60/hexagon_sim_remote \
+	bin/v60/libsim_qurt.a
 
 bin/src/halide_hexagon_remote.h bin/src/halide_hexagon_remote_skel.c bin/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $(@D)
@@ -152,6 +153,13 @@ bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
+bin/%/sim_qurt.o: sim_qurt.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt.cpp -o $@
+
+bin/%/libsim_qurt.a: bin/%/sim_qurt.o
+	ar rcs $@ $^
+
 CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
 CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
 INIT           =$(shell $(CXX-v60) -G0 -print-file-name=init.o)
@@ -161,9 +169,9 @@ LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
 FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
 LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
 
-bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o
+bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o bin/%/libsim_qurt.a
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o bin/$*/known_symbols.o $(LIBDL) \
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o bin/$*/known_symbols.o bin/$*/libsim_qurt.a $(LIBDL) \
 	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	--dynamic-linker= -E --force-dynamic
 	#$(CC-$*) -m$* -mG0lib -G0 -ldl -lc -lstandalone -lgcc  $^ $(LIBDL) -o $@

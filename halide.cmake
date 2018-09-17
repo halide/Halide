@@ -499,10 +499,12 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
         trace_loads
         trace_stores
         trace_realizations
+        d3d12compute
         strict_float
         legacy_buffer_wrappers
         tsan
         asan
+        check_unsafe_promises
         new_autoscheduler
     )
     # Synthesize a one-or-two-char abbreviation based on the feature's position

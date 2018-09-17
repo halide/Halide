@@ -336,6 +336,25 @@ int main(int argc, char **argv) {
         // c.for_each_value([&](int c_value, int a_value, int &b_value) { }, a_const, b_const);
     }
 
+    {
+        // Check initializing const buffers via return ref from fill(), etc
+        const int W = 5, H = 4;
+
+        const Buffer<const int> a = Buffer<int>(W, H).fill(1);
+        assert(a.all_equal(1));
+
+        const Buffer<const int> b = Buffer<int>(W, H).for_each_value([](int &value) { value = 2; });
+        assert(b.all_equal(2));
+
+        // for_each_element()'s callback doesn't get the Buffer itself, so we need a named temp here
+        auto c0 = Buffer<int>(W, H);
+        const Buffer<const int> c = c0.for_each_element([&](int x, int y) { c0(x, y) = 3; });
+        assert(c.all_equal(3));
+
+        const Buffer<const int> d = Buffer<int>(W, H).fill([](int x, int y) -> int { return 4; });
+        assert(d.all_equal(4));
+    }
+
     printf("Success!\n");
     return 0;
 }

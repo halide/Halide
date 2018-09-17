@@ -32,7 +32,7 @@ Expr Simplify::visit(const Mod *op, ConstBounds *bounds) {
             rewrite(x % IRMatcher::Indeterminate(), b) ||
             rewrite(IRMatcher::Overflow() % x, a) ||
             rewrite(x % IRMatcher::Overflow(), b) ||
-            rewrite(0 % x, 0, can_prove(x != 0, this)) ||
+            rewrite(0 % x, 0) ||
             (!op->type.is_float() &&
              (rewrite(x % 0, IRMatcher::Indeterminate()) ||
               rewrite(x % 1, 0)))) {
