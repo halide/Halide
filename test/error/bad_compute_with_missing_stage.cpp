@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     input.compute_root();
     f.update().compute_with(g.update(), y);
 
-	Pipeline({f, g}).realize(10, 10);
+    Pipeline({f, g}).realize(10, 10);
 
     return 0;
 }

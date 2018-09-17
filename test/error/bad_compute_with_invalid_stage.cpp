@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     h.compute_with(g.update(), y);
     h.update().compute_with(g, y);
 
-	Pipeline({f, g, h}).realize(10, 10);
+    Pipeline({f, g, h}).realize(10, 10);
 
     return 0;
 }
