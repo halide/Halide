@@ -870,7 +870,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     t.back() = outer;
                     result.push_back(t);
                 }
-                for (int inner = 1; inner < s[d]; inner *= factor) {
+                for (int inner = (d == vector_dim) ? vector_size : 1; inner < s[d]; inner *= factor) {
                     int outer = (s[d] + inner - 1) / inner;
                     if (is_one && outer == 1) continue;
                     if (is_full && outer == s[d]) continue;
@@ -1940,9 +1940,12 @@ struct PartialScheduleNode {
                             }
                             debug(0) << "Splitting " << parent.var.name() << " by " << factor << '\n';
                             if (!parent.var.is_rvar && parent.extent % factor == 0 && stage == 0) {
-                                // TODO: If the actual size doesn't match the estimates, this could make some bad assumptions.
                                 // TODO: Use roundup if this is not the output and the loop nest is not reading any inputs
-                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::RoundUp);
+                                // otherwise must use guardwithif
+                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::Auto);
+                            } else if (stage > 0) {
+                                // Default is RoundUp, but that can create situations that read out of bounds on the input
+                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::GuardWithIf);
                             } else {
                                 s.split(parent.var, outer, inner, (int)factor);
                             }
@@ -2177,7 +2180,7 @@ struct State {
                     if (feat.inlined_calls == 0) {
                         // Estimate the number of cache misses on the data that this writes to and their cost
                         int64_t lines_written_per_realization = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
-                        cache_misses = lines_written_per_realization + feat.bytes_at_realization * 1e-3;
+                        cache_misses = 1e2 * lines_written_per_realization + feat.bytes_at_realization * 1e-3;
                         cache_misses *= feat.num_realizations;
                         //cost_of_miss = std::sqrt(feat.bytes_at_production) * params.balance * 5e-3;
                         cost_of_miss = feat.bytes_at_production * params.balance * 2e-6;
