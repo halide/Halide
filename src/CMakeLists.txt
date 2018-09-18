@@ -71,6 +71,7 @@ set(RUNTIME_CPP
   profiler
   profiler_inlined
   profiler_with_hardware_counters
+  pseudostack
   qurt_allocator
   qurt_hvx
   qurt_init_fini

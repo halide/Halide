@@ -104,7 +104,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         }
     } else {
         // Should have been caught in bound_small_allocations
-        internal_assert(memory_type != MemoryType::Stack);
+        // internal_assert(memory_type != MemoryType::Stack);
         internal_assert(memory_type != MemoryType::Register);
         llvm_size = codegen_allocation_size(name, type, extents, condition);
     }
@@ -178,6 +178,34 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         }
         cur_stack_alloc_total += allocation.stack_bytes;
         debug(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
+    } else if (memory_type == MemoryType::Stack && !new_expr.defined()) {
+        // Stack allocation with a dynamic size
+        Value *slot = create_alloca_at_entry(pseudostack_slot_t_type, 1, true, name + ".pseudostack_slot");
+
+        llvm::Function *malloc_fn = module->getFunction("pseudostack_alloc");
+        internal_assert(malloc_fn) << "Could not find pseudostack_alloc in module\n";
+        #if LLVM_VERSION < 50
+        malloc_fn->setDoesNotAlias(0);
+        #else
+        malloc_fn->setReturnDoesNotAlias();
+        #endif
+
+        llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
+        ++arg_iter;  // skip the user context *
+        slot = builder->CreatePointerCast(slot, arg_iter->getType());
+        ++arg_iter;  // skip the pointer to the stack slot
+        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
+        Value *args[3] = { get_user_context(), slot, llvm_size };
+        Value *call = builder->CreateCall(malloc_fn, args);
+
+        // Fix the type to avoid pointless bitcasts later
+        allocation.ptr = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
+
+        // We register a destructor but don't associate it with the
+        // allocation. We don't actually want to trigger it when we
+        // hit the Free node.
+        llvm::Function *free_fn = module->getFunction("pseudostack_free");
+        register_destructor(free_fn, slot, Always);
     } else {
         if (new_expr.defined()) {
             allocation.ptr = codegen(new_expr);
@@ -252,7 +280,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         free_stack_allocs.push_back(alloc);
         cur_stack_alloc_total -= alloc.stack_bytes;
         debug(4) << "cur_stack_alloc_total -= " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
-    } else {
+    } else if (alloc.destructor_function) {
         internal_assert(alloc.destructor);
         trigger_destructor(alloc.destructor_function, alloc.destructor);
     }
