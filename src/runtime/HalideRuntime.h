@@ -699,6 +699,7 @@ struct halide_device_interface_t {
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
+    int (*compute_capability)(void *user_context, int *major, int *minor);
     const struct halide_device_interface_impl_t *impl;
 };
 
@@ -1115,6 +1116,11 @@ enum halide_error_code_t {
 
     /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
     halide_error_code_bad_dimensions = -43,
+
+    /** An expression that would perform an integer division or modulo
+     * by zero was evaluated. */
+    halide_error_code_integer_division_by_zero = -44,
+
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1193,7 +1199,7 @@ extern int halide_error_no_device_interface(void *user_context);
 extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
-
+extern int halide_error_integer_division_by_zero(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1554,6 +1560,9 @@ struct halide_scalar_value_t {
         double f64;
         void *handle;
     } u;
+    #ifdef __cplusplus
+    HALIDE_ALWAYS_INLINE halide_scalar_value_t() {u.u64 = 0;}
+    #endif
 };
 
 enum halide_argument_kind_t {

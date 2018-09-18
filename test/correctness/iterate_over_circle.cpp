@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     f(x, y) = 0;
 
     // Then iterate over a circle, adding in(x, y) to f.
-    Expr t = cast<int>(ceil(sqrt(10*10 - y*y)));
+    Expr t = cast<int>(ceil(sqrt(max(0, 10*10 - y*y))));
     f(x, y) += select(x > -t && x < t, in(x, y), 0);
 
     in.trace_loads();

@@ -441,6 +441,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         string dynamic_footprint;
 
+        Scope<Interval> bounds;
+        bounds.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+
+        Scope<Interval> steady_bounds;
+        steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
+
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             int dim = (int)(i-1);
@@ -466,14 +472,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr loop_var = Variable::make(Int(32), op->name);
             Expr steady_state = (op->min < loop_var);
 
-            Expr min_steady = simplify(substitute(steady_state, const_true(), min));
-            Expr max_steady = simplify(substitute(steady_state, const_true(), max));
-            Expr min_initial = simplify(substitute(steady_state, const_false(), min));
-            Expr max_initial = simplify(substitute(steady_state, const_false(), max));
-            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1));
-            Expr extent_steady = simplify(max_steady - min_steady + 1);
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min), true, steady_bounds);
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, steady_bounds);
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, bounds);
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, bounds);
+            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
+            Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent));
+            extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
 
@@ -605,11 +611,22 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 if (const_max_extent && *const_max_extent <= max_fold) {
                     factor = static_cast<int>(next_power_of_two(*const_max_extent));
                 } else {
-                    debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
-                             << "extent = " << extent << "\n"
-                             << "max extent = " << max_extent << "\n";
-                    // Try the next dimension
-                    continue;
+                        // Try a little harder to find a bounding power of two
+                        int e = max_fold * 2;
+                        bool success = false;
+                        while (e > 0 && can_prove(extent <= e / 2)) {
+                            success = true;
+                            e /= 2;
+                        }
+                        if (success) {
+                            factor = e;
+                        } else {
+                            debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                                     << "extent = " << extent << "\n"
+                                     << "max extent = " << max_extent << "\n";
+                            // Try the next dimension
+                            continue;
+                        }
                 }
             }
 

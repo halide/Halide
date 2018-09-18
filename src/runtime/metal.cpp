@@ -1111,6 +1111,7 @@ WEAK halide_device_interface_t metal_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &metal_device_interface_impl
 };
 
