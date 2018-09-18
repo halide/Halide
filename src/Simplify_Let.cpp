@@ -211,7 +211,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
 
         if (it->new_value.defined() && info.new_uses > 0) {
             // The new name/value may be used
-            if (info.new_uses == 1) {
+            if (info.new_uses == 1 && is_pure(it->new_value)) {
                 result = mutate_let_body(substitute(it->new_name, it->new_value, result), bounds);
             } else {
                 result = LetOrLetStmt::make(it->new_name, it->new_value, result);
@@ -220,7 +220,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
 
         if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
-            if (info.old_uses == 1) {
+            if (info.old_uses == 1 && remove_dead_lets && is_pure(it->value)) {
                 result = mutate_let_body(substitute(it->op->name, it->value, result), bounds);
             } else {
                 result = LetOrLetStmt::make(it->op->name, it->value, result);
