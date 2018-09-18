@@ -68,10 +68,6 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
-            } else if (max) {
-                var_b = max->b.as<Variable>();
-            } else if (min) {
-                var_b = min->b.as<Variable>();
             } else if (shuffle && shuffle->is_concat() && shuffle->vectors.size() == 2) {
                 var_a = shuffle->vectors[0].as<Variable>();
                 var_b = shuffle->vectors[1].as<Variable>();
@@ -103,10 +99,10 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
             } else if (mod && is_const(mod->b)) {
                 replacement = substitute(f.new_name, Mod::make(new_var, mod->b), replacement);
                 f.new_value = mod->a;
-            } else if (min && (is_const(min->b) || var_b)) {
+            } else if (min && is_const(min->b)) {
                 replacement = substitute(f.new_name, Min::make(new_var, min->b), replacement);
                 f.new_value = min->a;
-            } else if (max && (is_const(max->b) || var_b)) {
+            } else if (max && is_const(max->b)) {
                 replacement = substitute(f.new_name, Max::make(new_var, max->b), replacement);
                 f.new_value = max->a;
             } else if (ramp && is_const(ramp->stride)) {
@@ -148,7 +144,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
         }
 
         if (f.new_value.same_as(f.value)) {
-                // Nothing to substitute
+            // Nothing to substitute
             f.new_value = Expr();
             replacement = Expr();
         } else {
@@ -215,12 +211,20 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
 
         if (it->new_value.defined() && info.new_uses > 0) {
             // The new name/value may be used
-            result = LetOrLetStmt::make(it->new_name, it->new_value, result);
+            if (info.new_uses == 1) {
+                result = mutate_let_body(substitute(it->new_name, it->new_value, result), bounds);
+            } else {
+                result = LetOrLetStmt::make(it->new_name, it->new_value, result);
+            }
         }
 
         if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
-            result = LetOrLetStmt::make(it->op->name, it->value, result);
+            if (info.old_uses == 1) {
+                result = mutate_let_body(substitute(it->op->name, it->value, result), bounds);
+            } else {
+                result = LetOrLetStmt::make(it->op->name, it->value, result);
+            }
         }
 
         const LetOrLetStmt *new_op = result.template as<LetOrLetStmt>();
