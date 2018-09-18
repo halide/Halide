@@ -4,6 +4,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Param<int> p;
+
     const char *names[3] = {"heap", "pseudostack", "stack"};
 
     double t[3];
@@ -15,15 +17,18 @@ int main(int argc, char **argv) {
         g(x) = f(x);
 
         Var xo, xi;
-        g.split(x, xo, xi, 8, TailStrategy::GuardWithIf).vectorize(xi);
+        g.split(x, xo, xi, p, TailStrategy::GuardWithIf);
 
-        f.compute_at(g, xo).vectorize(x, 8);
+        f.compute_at(g, xo);
         if (i != 0) {
             f.store_in(MemoryType::Stack);
         }
         if (i == 2) {
-            f.bound_extent(x, 8);
+            f.bound_extent(x, p);
+            g.specialize(p == 8);
         }
+
+        p.set(8);
 
         Buffer<int> out(1024 * 1024);
         t[i] = Halide::Tools::benchmark([&] {g.realize(out);});
