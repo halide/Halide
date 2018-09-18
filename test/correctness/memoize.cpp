@@ -319,7 +319,7 @@ int main(int argc, char **argv) {
         assert(call_count_with_arg == 4);
     }
 
-    /*{
+    {
         // Test Tuple case
         Param<float> val;
 
@@ -360,7 +360,7 @@ int main(int argc, char **argv) {
             }
         }
         assert(call_count_with_arg == 1);
-    }*/
+    }
 
     {
         // Test cache eviction
@@ -526,7 +526,7 @@ int main(int argc, char **argv) {
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23 + 1));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23 + 1));
             }
         }
 
@@ -537,7 +537,7 @@ int main(int argc, char **argv) {
         result = output.realize(128, 128);
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23 + 1));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23 + 1));
             }
         }
 
@@ -546,7 +546,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    /*\\{
+    {
         // Test out of memory handling.
         Param<float> val;
 
@@ -582,7 +582,7 @@ int main(int argc, char **argv) {
 
                 for (int32_t i = 0; i < 16; i++) {
                     for (int32_t j = 0; j < 16; j++) {
-                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                         assert(out1(i, j) == i);
                     }
                 }
@@ -597,7 +597,7 @@ int main(int argc, char **argv) {
 
                     for (int32_t i = 0; i < 16; i++) {
                         for (int32_t j = 0; j < 16; j++) {
-                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                             assert(out1(i, j) == i);
                         }
                     }
@@ -606,8 +606,9 @@ int main(int argc, char **argv) {
                 }
             }
         }
+
         fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
-    }*/
+    }
 
     fprintf(stderr, "Success!\n");
     return 0;

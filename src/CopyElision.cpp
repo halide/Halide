@@ -178,15 +178,16 @@ string get_elision_pair_candidates(const Function &f,
     const vector<Expr> &f_args = f.definition().args();
 
     string prod = "";
+    int last_index = -1;
     for (int i = 0; i < (int)f.values().size(); ++i) {
         // Perform all valid inlining first to get the actual producer-consumer
         // copy relation. This will ignore functions which are scheduled
         // inlined but not actually legal to do so (e.g. if the function has
         // updates or has specializations)
         Expr val = perform_inline(f.values()[i], env, inlined);
-        debug(0) << "\n\nCHECKING FUNC: " << f.name() << "\n";
+        /*debug(0) << "\n\nCHECKING FUNC: " << f.name() << "\n";
         debug(0) << "\t...value at " << i << " -> " << val << "\n";
-        debug(0) << "\t\t...is a call? " << (val.as<Call>() != nullptr) << "\n";
+        debug(0) << "\t\t...is a call? " << (val.as<Call>() != nullptr) << "\n";*/
         if (const Call *call = val.as<Call>()) {
             if (call->call_type == Call::Halide) {
                 if (f.schedule().memory_type() != env.at(call->name).schedule().memory_type()) {
@@ -232,10 +233,9 @@ string get_elision_pair_candidates(const Function &f,
                 // Check 'f' and 'prod_f' have the same number of outputs
                 // (or tuple sizes)
                 if (f.outputs() != prod_f.outputs()) {
-                    debug(4) << "...Function \"" << f.name() << "\" does not call "
-                             << "the whole tuple values of function \""
-                             << prod_f.name() << "\"(" << f.outputs()
-                             << " vs " << prod_f.outputs() << ")\n";
+                    debug(4) << "...Function \"" << f.name() << "\" and \""
+                             << prod_f.name() << "\" have different output size ("
+                             << f.outputs() << " vs " << prod_f.outputs() << ")\n";
                     return "";
                 }
 
@@ -260,7 +260,18 @@ string get_elision_pair_candidates(const Function &f,
                     }
                 }
 
+                // If the value at this index is a simple copy, check if
+                // the value at previous index is also a simple copy from
+                // the same producer
+                if ((i > 0) && (last_index < 0)) {
+                    debug(4) << "...Function \"" << f.name() << "\" does not call "
+                             << "the whole tuple values of function \""
+                             << prod_f.name() << "\n";
+                    return "";
+                }
+
                 prod = call->name;
+                last_index = call->value_index;
             }
         } else if (!prod.empty()) {
             debug(4) << "...Function \"" << f.name() << "\" does not call "
@@ -276,6 +287,8 @@ string get_elision_pair_candidates(const Function &f,
 
 map<string, string> get_valid_copy_elision_pairs(
         const vector<Function> &outputs, const map<string, Function> &env) {
+
+    debug(0) << "....CALLING get_valid_copy_elision_pairs -> output: " << outputs.size() << ", env: " << env.size() << "\n";
 
     // Figure out the functions being (valid to be) inlined and the number
     // of callers (excluding calls by itself, e.g. within update stages) of
