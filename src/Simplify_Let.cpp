@@ -68,6 +68,10 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
+            } else if (max) {
+                var_b = max->b.as<Variable>();
+            } else if (min) {
+                var_b = min->b.as<Variable>();
             } else if (shuffle && shuffle->is_concat() && shuffle->vectors.size() == 2) {
                 var_a = shuffle->vectors[0].as<Variable>();
                 var_b = shuffle->vectors[1].as<Variable>();
@@ -99,10 +103,10 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ConstBounds *bounds) {
             } else if (mod && is_const(mod->b)) {
                 replacement = substitute(f.new_name, Mod::make(new_var, mod->b), replacement);
                 f.new_value = mod->a;
-            } else if (min && is_const(min->b)) {
+            } else if (min && (is_const(min->b) || var_b)) {
                 replacement = substitute(f.new_name, Min::make(new_var, min->b), replacement);
                 f.new_value = min->a;
-            } else if (max && is_const(max->b)) {
+            } else if (max && (is_const(max->b) || var_b)) {
                 replacement = substitute(f.new_name, Max::make(new_var, max->b), replacement);
                 f.new_value = max->a;
             } else if (ramp && is_const(ramp->stride)) {
