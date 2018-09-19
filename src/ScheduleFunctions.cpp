@@ -780,6 +780,51 @@ bool function_is_already_realized_in_stmt(Function f, Stmt s) {
     return is_realized.result;
 }
 
+// Determine if 'loop_name' is the right level to inject produce/realize node
+// of 'func'. If 'loop_name' is a fused group, we should inject it at the
+// fused parent loop of the group.
+bool is_the_right_level(const map<string, Function> &env,
+                        const LoopLevel &level, const string &loop_name) {
+    if (level.is_root() || level.is_inlined()) {
+        return level.match(loop_name);
+    }
+
+    const Function &f = env.at(level.func());
+    if (f.has_extern_definition()) {
+        return level.match(loop_name);
+    }
+
+    // It's enough to check only the fuse_level on the initial stage of 'f'
+    // since if there is fuse_level defined on later stage, it will be
+    // fused with the same function if defined.
+    const Definition &def = f.definition();
+    const LoopLevel &fuse_level = def.schedule().fuse_level().level;
+    if (fuse_level.is_inlined() || fuse_level.is_root()) {
+        // It isn't fused to anyone
+        return level.match(loop_name);
+    }
+
+    {
+        // Check if it is fused at the level's var
+        const vector<Dim> &dims = def.schedule().dims();
+        const auto &it1 = std::find_if(dims.begin(), dims.end(),
+            [&fuse_level](const Dim &d) { return var_name_match(d.var, fuse_level.var().name()); });
+        internal_assert(it1 != dims.end());
+
+        const auto &it2 = std::find_if(dims.begin(), dims.end(),
+            [&level](const Dim &d) { return var_name_match(d.var, level.var().name()); });
+        internal_assert(it2 != dims.end());
+
+        if (it2 < it1) {
+            // Not fused at level's var
+            return level.match(loop_name);
+        }
+    }
+
+    // Otherwise, check if the 'loop_name' is the fused parent loop
+    return fuse_level.match(loop_name);
+}
+
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
 class InjectRealization : public IRMutator2 {
@@ -795,49 +840,6 @@ public:
           found_compute_level(false), target(t), env(env) {}
 
 private:
-    // Determine if 'loop_name' is the right level to inject produce/realize node
-    // of 'func'. If 'loop_name' is a fused group, we should inject it at the
-    // fused parent loop of the group.
-    bool is_the_right_level(const LoopLevel &level, const string &loop_name) {
-        if (level.is_root() || level.is_inlined()) {
-            return level.match(loop_name);
-        }
-
-        const Function &f = env.at(level.func());
-        if (f.has_extern_definition()) {
-            return level.match(loop_name);
-        }
-
-        //TODO(psuriana): what if there is fuse_level on updates?
-        //const Definition &def = (level.stage_index() == 0) ? f.definition() : f.update(level.stage_index() - 1);
-        const Definition &def = f.definition();
-        const LoopLevel &fuse_level = def.schedule().fuse_level().level;
-        if (fuse_level.is_inlined() || fuse_level.is_root()) {
-            // It isn't fused to anyone
-            return level.match(loop_name);
-        }
-
-        {
-            // Check if it is fused at the level's var
-            const vector<Dim> &dims = def.schedule().dims();
-            const auto &it1 = std::find_if(dims.begin(), dims.end(),
-                [&fuse_level](const Dim &d) { return var_name_match(d.var, fuse_level.var().name()); });
-            internal_assert(it1 != dims.end());
-
-            const auto &it2 = std::find_if(dims.begin(), dims.end(),
-                [&level](const Dim &d) { return var_name_match(d.var, level.var().name()); });
-            internal_assert(it2 != dims.end());
-
-            if (it2 < it1) {
-                // Not fused at level's var
-                return level.match(loop_name);
-            }
-        }
-
-        // Otherwise, check if the 'loop_name' is the fused parent loop
-        return fuse_level.match(loop_name);
-    }
-
     Stmt build_pipeline(Stmt consumer) {
         pair<Stmt, Stmt> realization = build_production(env, func, target);
 
@@ -939,8 +941,8 @@ private:
 
         body = mutate(body);
 
-        if (is_the_right_level(compute_level, for_loop->name)) {
-            debug(3) << "Found compute level (" << compute_level << ") of "
+        if (is_the_right_level(env, compute_level, for_loop->name)) {
+            debug(3) << "Found compute level (" << compute_level.to_string() << ") of "
                      << func.name() << " around node " << for_loop->name << "\n";
             if (!function_is_already_realized_in_stmt(func, body) &&
                 (function_is_used_in_stmt(func, body) || is_output)) {
@@ -949,8 +951,8 @@ private:
             found_compute_level = true;
         }
 
-        if (is_the_right_level(store_level, for_loop->name)) {
-            debug(3) << "Found store level (" << store_level << ") of " << func.name()
+        if (is_the_right_level(env, store_level, for_loop->name)) {
+            debug(3) << "Found store level (" << store_level.to_string() << ") of " << func.name()
                      << " around node " << for_loop->name << "\n";;
             internal_assert(found_compute_level)
                 << "The compute loop level was not found within the store loop level!\n";
@@ -1620,14 +1622,16 @@ private:
 
         body = mutate(body);
 
-        if (compute_level.match(for_loop->name)) {
-            debug(3) << "Found compute level at " << for_loop->name << "\n";
+        if (is_the_right_level(env, compute_level, for_loop->name)) {
+            debug(3) << "Found compute level (" << compute_level.to_string() << ") of "
+                     << group << " around node " << for_loop->name << "\n";
             body = build_pipeline_group(body);
             found_compute_level = true;
         }
 
-        if (store_level.match(for_loop->name)) {
-            debug(3) << "Found store level at " << for_loop->name << "\n";
+        if (is_the_right_level(env, store_level, for_loop->name)) {
+            debug(3) << "Found store level (" << store_level.to_string() << ") of " << group
+                     << " around node " << for_loop->name << "\n";;
             internal_assert(found_compute_level)
                 << "The compute loop level was not found within the store loop level!\n";
             body = build_realize_group(body);
@@ -1886,7 +1890,6 @@ public:
 // intermediate Funcs that somehow made it into the Func DAG can be
 // discarded.
 bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
-
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
