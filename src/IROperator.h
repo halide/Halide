@@ -1940,7 +1940,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args&&... args) 
 inline Expr likely(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::likely,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
+                                {std::move(e)}, Internal::Call::Intrinsic);
 }
 
 /** Equivalent to likely, but only triggers a loop partitioning if
@@ -1948,7 +1948,7 @@ inline Expr likely(Expr e) {
 inline Expr likely_if_innermost(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::likely_if_innermost,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
+                                {std::move(e)}, Internal::Call::Intrinsic);
 }
 
 /** Cast an expression to the halide type corresponding to the C++
