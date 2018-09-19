@@ -197,14 +197,25 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
 
-        if (owned_job && owned_job->exit_status != 0 && owned_job->active_workers == 0) {
-            while (job != owned_job) {
-                prev_ptr = &job->next_job;
-                job = job->next_job;
+        if (owned_job) {
+            if (owned_job->exit_status != 0) {
+                if (owned_job->active_workers == 0) {
+                    while (job != owned_job) {
+                        prev_ptr = &job->next_job;
+                        job = job->next_job;
+                    }
+                    *prev_ptr = job->next_job;
+                    job->task.extent = 0;
+                    continue; // So loop exit is always in the same place.
+                }
+            } else if (owned_job->parent_job && owned_job->parent_job->exit_status != 0) {
+                owned_job->exit_status = owned_job->parent_job->exit_status;
+                // The wakeup can likely be only done under certain conditions, but it is only happening
+                // in when an error has already occured and it seems more important to ensure reliable
+                // termination than to optimize this path.
+                halide_cond_broadcast(&work_queue.wake_owners);
+                continue;
             }
-            *prev_ptr = job->next_job;
-            job->task.extent = 0;
-            continue; // So loop exit is always in the same place.
         }
 
         dump_job_state();
@@ -357,6 +368,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_lock(&work_queue.mutex);
         }
 
+        if (result != 0) {
+            log_message("Saw thread pool saw error from task: " << result);
+        }
+
         bool wake_owners = false;
  
         // If this task failed, set the exit status on the job.
@@ -448,12 +463,21 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     }
 
-    if (job_has_acquires || job_may_block) {
-        log_message("enqueue_work_already_locked adding one to min_threads.");
-        min_threads += 1;
-    }
-    
     if (task_parent == NULL) {
+        // This is here because some top-level jobs may block, but are not accounted for
+        // in any enclosing min_threads count. In order to handle extern stages and such
+        // correctly, we likely need to make the total min_threads for an invocation of
+        // a pipeline a property of the entire thing. This approach works because we use
+        // the increased min_threads count to increase the size of the thread pool. It should
+        // even be safe against reservation races because this is happening under the work
+        // queue lock and that lock will be held into running the job. However that's many
+        // lines of code from here to there and it is not guaranteed this will be the first
+        // job run.
+        if (job_has_acquires || job_may_block) {
+            log_message("enqueue_work_already_locked adding one to min_threads.");
+            min_threads += 1;
+        }
+    
         // Spawn more threads if necessary.
         while (work_queue.threads_created < MAX_THREADS &&
                ((work_queue.threads_created < work_queue.desired_threads_working - 1) ||
@@ -469,8 +493,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
             work_queue.threads_reserved++;
         }
     } else {
-      log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
-        halide_assert(NULL, (min_threads <= (task_parent->task.min_threads - task_parent->threads_reserved)) && "Logic error: thread over commit.\n");
+        log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
+        halide_assert(NULL, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
+                                             task_parent->threads_reserved)) && "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }
@@ -675,7 +700,7 @@ WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
     // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
-    if (old_val == 0) {
+    if (old_val == 0 && n != 0) { // Don't wake if nothing released.
         // We may have just made a job runnable
         halide_mutex_lock(&work_queue.mutex);
         halide_cond_broadcast(&work_queue.wake_a_team);
@@ -686,6 +711,9 @@ WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
 }
 
 WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
+    if (n == 0) {
+        return true;
+    }
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
     // Decrement and get new value
     int expected;

@@ -367,6 +367,7 @@ set(HEADER_FILES
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PurifyIndexMath.h
   PythonExtensionGen.h
   Qualify.h
   Random.h
@@ -525,6 +526,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PrintLoopNest.cpp
   Prefetch.cpp
   Profiling.cpp
+  PurifyIndexMath.cpp
   PythonExtensionGen.cpp
   Qualify.cpp
   RDom.cpp
@@ -539,6 +541,25 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_LT.cpp
+  Simplify_Let.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -568,6 +589,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Ensure that these tools are build first

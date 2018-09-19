@@ -529,6 +529,8 @@ struct Call : public ExprNode<Call> {
         require,
         size_of_halide_buffer_t,
         strict_float,
+        quiet_div,
+        quiet_mod,
         unsafe_promise_clamped;
 
     // We also declare some symbolic names for some of the runtime

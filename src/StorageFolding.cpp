@@ -107,7 +107,7 @@ class FoldStorageOfFunction : public IRMutator {
                 Expr no_wraparound = mins[dim] + extents[dim] <= factor;
 
                 Expr valid_min = old_min;
-                if (false && !dynamic_footprint.empty()) {
+                if (!dynamic_footprint.empty()) {
                     // If the footprint is being tracked dynamically, it's
                     // not enough to just check we don't overlap a
                     // fold. We also need to check the min against the
@@ -174,7 +174,7 @@ class InjectFoldingCheck : public IRMutator {
                     // Update valid range based on bounds written to.
                     Box b = box_provided(body, func.name());
                     Expr old_leading_edge =
-                        Load::make(Int(32), head, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), head + "_next", 0, Buffer<>(), Parameter(), const_true());
 
                     internal_assert(!b.empty());
 
@@ -192,6 +192,8 @@ class InjectFoldingCheck : public IRMutator {
 
                     Stmt update_leading_edge =
                         Store::make(head, new_leading_edge_var, 0, Parameter(), const_true());
+                    Stmt update_next_leading_edge =
+                        Store::make(head + "_next", new_leading_edge_var, 0, Parameter(), const_true());
 
                     // Check the region being written to in this
                     // iteration lies within the range of coordinates
@@ -221,7 +223,8 @@ class InjectFoldingCheck : public IRMutator {
                     Stmt check_extent =
                         AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
 
-                    Stmt checks = Block::make({check_extent, check_in_valid_range, update_leading_edge});
+                    Stmt checks = Block::make({check_extent, check_in_valid_range,
+                                               update_leading_edge, update_next_leading_edge});
                     if (func.schedule().async()) {
                         Expr to_acquire;
                         if (storage_dim.fold_forward) {
@@ -251,7 +254,7 @@ class InjectFoldingCheck : public IRMutator {
                     body = mutate(op->body);
                 } else {
                     Expr leading_edge =
-                        Load::make(Int(32), tail, 0, Buffer<>(), Parameter(), const_true());
+                        Load::make(Int(32), tail + "_next", 0, Buffer<>(), Parameter(), const_true());
 
                     if (func.schedule().async()) {
                         Expr new_leading_edge;
@@ -272,6 +275,8 @@ class InjectFoldingCheck : public IRMutator {
                             Call::make(Int(32), "halide_semaphore_release", {sema_var, to_release}, Call::Extern);
                         // The consumer is going to get its own forked copy of the footprint, so it needs to update it too.
                         Stmt update_leading_edge = Store::make(tail, new_leading_edge_var, 0, Parameter(), const_true());
+                        update_leading_edge = Block::make(Store::make(tail + "_next", new_leading_edge_var, 0, Parameter(), const_true()),
+                                                          update_leading_edge);
                         update_leading_edge = Block::make(Evaluate::make(release_producer), update_leading_edge);
                         update_leading_edge = LetStmt::make(new_leading_edge_name, new_leading_edge, update_leading_edge);
                         body = Block::make(update_leading_edge, body);
@@ -436,6 +441,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         string dynamic_footprint;
 
+        Scope<Interval> bounds;
+        bounds.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+
+        Scope<Interval> steady_bounds;
+        steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
+
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             int dim = (int)(i-1);
@@ -461,14 +472,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr loop_var = Variable::make(Int(32), op->name);
             Expr steady_state = (op->min < loop_var);
 
-            Expr min_steady = simplify(substitute(steady_state, const_true(), min));
-            Expr max_steady = simplify(substitute(steady_state, const_true(), max));
-            Expr min_initial = simplify(substitute(steady_state, const_false(), min));
-            Expr max_initial = simplify(substitute(steady_state, const_false(), max));
-            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1));
-            Expr extent_steady = simplify(max_steady - min_steady + 1);
+            Expr min_steady = simplify(substitute(steady_state, const_true(), min), true, steady_bounds);
+            Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, steady_bounds);
+            Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, bounds);
+            Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, bounds);
+            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
+            Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent));
+            extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
 
@@ -600,11 +611,22 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 if (const_max_extent && *const_max_extent <= max_fold) {
                     factor = static_cast<int>(next_power_of_two(*const_max_extent));
                 } else {
-                    debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
-                             << "extent = " << extent << "\n"
-                             << "max extent = " << max_extent << "\n";
-                    // Try the next dimension
-                    continue;
+                        // Try a little harder to find a bounding power of two
+                        int e = max_fold * 2;
+                        bool success = false;
+                        while (e > 0 && can_prove(extent <= e / 2)) {
+                            success = true;
+                            e /= 2;
+                        }
+                        if (success) {
+                            factor = e;
+                        } else {
+                            debug(3) << "Not folding because extent not bounded by a constant not greater than " << max_fold << "\n"
+                                     << "extent = " << extent << "\n"
+                                     << "max extent = " << max_extent << "\n";
+                            // Try the next dimension
+                            continue;
+                        }
                 }
             }
 
@@ -616,8 +638,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             dims_folded.push_back(fold);
             {
                 string head;
-                if (!dynamic_footprint.empty()) {
+                if (!dynamic_footprint.empty() && func.schedule().async()) {
                     head = dynamic_footprint + ".head";
+                } else {
+                    head = dynamic_footprint;
                 }
                 body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, head).mutate(body);
             }
@@ -759,12 +783,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true());
             Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true());
             Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
-            Stmt reset_head = Store::make(dynamic_footprint + ".head", head - step, 0, Parameter(), const_true());
-            Stmt reset_tail = Store::make(dynamic_footprint + ".tail", tail - step, 0, Parameter(), const_true());
+            Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true());
+            Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true());
             stmt = Block::make({stmt, reset_head, reset_tail});
         }
-
-
     }
 
 public:
@@ -835,11 +857,15 @@ class StorageFolding : public IRMutator2 {
                     init = op->bounds[fold.dim].min + op->bounds[fold.dim].extent - 1;
                 }
                 if (!fold.head.empty()) {
+                    stmt = Block::make(Store::make(fold.head + "_next", init, 0, Parameter(), const_true()), stmt);
+                    stmt = Allocate::make(fold.head + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
                     stmt = Block::make(Store::make(fold.head, init, 0, Parameter(), const_true()), stmt);
                     stmt = Allocate::make(fold.head, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }
                 if (!fold.tail.empty()) {
                     internal_assert(func.schedule().async()) << "Expected a single counter for synchronous folding";
+                    stmt = Block::make(Store::make(fold.tail + "_next", init, 0, Parameter(), const_true()), stmt);
+                    stmt = Allocate::make(fold.tail + "_next", Int(32), MemoryType::Stack, {}, const_true(), stmt);
                     stmt = Block::make(Store::make(fold.tail, init, 0, Parameter(), const_true()), stmt);
                     stmt = Allocate::make(fold.tail, Int(32), MemoryType::Stack, {}, const_true(), stmt);
                 }

@@ -440,6 +440,7 @@ SOURCE_FILES = \
   Prefetch.cpp \
   PrintLoopNest.cpp \
   Profiling.cpp \
+  PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
   Qualify.cpp \
   Random.cpp \
@@ -454,6 +455,25 @@ SOURCE_FILES = \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
   Simplify.cpp \
+  Simplify_Add.cpp \
+  Simplify_And.cpp \
+  Simplify_Call.cpp \
+  Simplify_Cast.cpp \
+  Simplify_Div.cpp \
+  Simplify_EQ.cpp \
+  Simplify_Exprs.cpp \
+  Simplify_LT.cpp \
+  Simplify_Let.cpp \
+  Simplify_Max.cpp \
+  Simplify_Min.cpp \
+  Simplify_Mod.cpp \
+  Simplify_Mul.cpp \
+  Simplify_Not.cpp \
+  Simplify_Or.cpp \
+  Simplify_Select.cpp \
+  Simplify_Shuffle.cpp \
+  Simplify_Stmts.cpp \
+  Simplify_Sub.cpp \
   SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
@@ -592,6 +612,7 @@ HEADER_FILES = \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \
+  PurifyIndexMath.h \
   PythonExtensionGen.h \
   Qualify.h \
   Random.h \
@@ -905,6 +926,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
+$(BUILD_DIR)/Simplify_%.o: $(SRC_DIR)/Simplify_%.cpp $(SRC_DIR)/Simplify_Internal.h $(BUILD_DIR)/llvm_ok
+	@mkdir -p $(@D)
+	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/Simplify_$*.d -MT $@
+
 .PHONY: clean
 clean:
 	rm -rf $(LIB_DIR)
@@ -996,9 +1021,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 
 # https://github.com/halide/Halide/issues/2082
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2093
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_coroutine,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2093
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
@@ -1793,13 +1815,13 @@ endif
 # This is a specialized 'install' for users who need Hexagon support libraries as well.
 install_qc: install $(HEXAGON_RUNTIME_LIBS)
 	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v60 $(PREFIX)/tools
-	cp $(ROOT_DIR)/tools/sim_qurt/libsim_qurt.a $(PREFIX)/lib
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
 	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v60/* $(PREFIX)/lib/v60
 	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
 	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
+	ln -sf $(PREFIX)/lib/v60/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
