@@ -326,8 +326,10 @@ class PredicateLoadStore : public IRMutator2 {
     }
 
     Expr visit(const Call *op) override {
-        // We should not vectorize calls with side-effects
-        valid = valid && op->is_pure();
+        // We should not vectorize calls with side-effects, except for likelies.
+        valid = valid && (op->is_pure() ||
+                          op->is_intrinsic(Call::likely) ||
+                          op->is_intrinsic(Call::likely_if_innermost));
         return IRMutator2::visit(op);
     }
 
@@ -746,7 +748,7 @@ class VectorSubs : public IRMutator2 {
 
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), c->name,
-                                      {all_true}, Call::PureIntrinsic);
+                                      {all_true}, Call::Intrinsic);
 
                 if (!vectorize_predicate) {
                     // We should strip the likelies from the case
@@ -929,7 +931,7 @@ class VectorSubs : public IRMutator2 {
             }
         }
 
-        debug(0) << e << " -> " << result << "\n";
+        debug(4) << e << " -> " << result << "\n";
 
         return result;
     }
