@@ -1478,7 +1478,6 @@ void solve_test() {
     check_solve(min(min(z, x), min(x, y)), min(x, min(y, z)));
     check_solve(min(x + y, x + 5), x + min(y, 5));
 
-    // PR: https://github.com/halide/Halide/pull/3229
     // Check solver with expressions containing division
     check_solve(x + (x*2) / 2, x*2);
     check_solve(x + (x*2 + y) / 2, x*2 + (y / 2));
