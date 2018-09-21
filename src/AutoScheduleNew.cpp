@@ -1871,11 +1871,12 @@ struct PartialScheduleNode {
     void apply(LoopLevel here,
                map<const FunctionDAG::Node::Stage *, FuncVars> &vars_map,
                double num_cores,
+               int depth,
                const PartialScheduleNode *parent) {
         if (is_root()) {
             for (auto &c : children) {
                 Func(c->node->func).compute_root();
-                c->apply(LoopLevel::root(), vars_map, num_cores, this);
+                c->apply(LoopLevel::root(), vars_map, num_cores, 1, this);
             }
         } else {
             auto it = vars_map.find(stage);
@@ -1911,7 +1912,7 @@ struct PartialScheduleNode {
                 for (const auto &p : parent_bounds.region_computed) {
                     bytes *= p.second - p.first + 1;
                 }
-                if (bytes < 64000) {
+                if (bytes < 64000 && depth > 2) {
                     Func(node->func).store_in(MemoryType::Stack);
                 }
             }
@@ -2010,7 +2011,7 @@ struct PartialScheduleNode {
                 if (c->node != node) {
                     Func(c->node->func).compute_at(here);
                 }
-                c->apply(here, vars_map, num_cores, this);
+                c->apply(here, vars_map, num_cores, depth + 1, this);
             }
         }
     }
@@ -2116,6 +2117,12 @@ struct State {
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(batch_idx, i, stage) = sched_stats[i];
+                    }
+
+                    // HACK: The current weights were trained with inlined Funcs not having parallelism features set
+                    if (feat.inlined_calls > 0) {
+                        schedule_features(batch_idx, 8, stage) = 0;
+                        schedule_features(batch_idx, 9, stage) = 0;
                     }
 
                     stage += 1;
@@ -2352,7 +2359,7 @@ struct State {
 
     void apply_schedule(const MachineParams &params) {
         map<const FunctionDAG::Node::Stage *, PartialScheduleNode::FuncVars> vars_map;
-        root.apply(LoopLevel::root(), vars_map, params.parallelism, nullptr);
+        root.apply(LoopLevel::root(), vars_map, params.parallelism, 0, nullptr);
 
         for (auto &p : vars_map) {
             Stage stage(p.first->stage);
