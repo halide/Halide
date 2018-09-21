@@ -245,13 +245,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute)) {
-        debug(1) << "Injecting per-block gpu synchronization...\n";
-        s = fuse_gpu_thread_loops(s);
-        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
-    }
-
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
@@ -271,6 +264,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = vectorize_loops(s, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
+
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute)) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = fuse_gpu_thread_loops(s);
+        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
+    }
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);

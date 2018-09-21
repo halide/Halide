@@ -12,6 +12,7 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  alignment_64
   android_clock
   android_host_cpu_count
   android_io
@@ -69,6 +70,8 @@ set(RUNTIME_CPP
   prefetch
   profiler
   profiler_inlined
+  profiler_with_hardware_counters
+  pseudostack
   qurt_allocator
   qurt_hvx
   qurt_init_fini

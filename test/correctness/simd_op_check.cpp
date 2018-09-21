@@ -308,9 +308,9 @@ struct Test {
             // Add a test with a constant as there was a bug on this.
             check("paddsb",  8*w, i8_sat(i16(i8_1) + i16(3)));
             check("psubsb",  8*w, i8_sat(i16(i8_1) - i16(i8_2)));
+
             check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
             check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
-
             check("paddsw",  4*w, i16_sat(i32(i16_1) + i32(i16_2)));
             check("psubsw",  4*w, i16_sat(i32(i16_1) - i32(i16_2)));
             check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
@@ -330,12 +330,14 @@ struct Test {
             check("pmulhuw", 4*w, i16_1 / 15);
 
 
-            check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
-            check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
-            check("pcmp*w", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
-            check("pcmp*w", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
-            check("pcmp*d", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
-            check("pcmp*d", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+            // TODO: re-enable after LLVM bug https://bugs.llvm.org/show_bug.cgi?id=38916 is fixed.
+            std::cout << "Skipping tests for pcmp\n";
+            // check("pcmp*b", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
+            // check("pcmp*b", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
+            // check("pcmp*w", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
+            // check("pcmp*w", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
+            // check("pcmp*d", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
+            // check("pcmp*d", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
 
             // SSE 1
             check("addps", 2*w, f32_1 + f32_2);

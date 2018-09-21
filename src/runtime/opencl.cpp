@@ -779,10 +779,10 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
-                                  const device_copy &c,
-                                  int64_t src_idx, int64_t dst_idx,
-                                  int d, bool from_host, bool to_host) {
+WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
+                                         const device_copy &c,
+                                         int64_t src_idx, int64_t dst_idx,
+                                         int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -806,11 +806,11 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
             err = clEnqueueCopyBuffer(ctx.cmd_queue, ((device_handle *)c.src)->mem, ((device_handle *)c.dst)->mem,
                                       src_idx + ((device_handle *)c.src)->offset, dst_idx  + ((device_handle *)c.dst)->offset,
                                       c.chunk_size, 0, NULL, NULL);
-        } else if (c.dst != c.src) {
+        } else if ((c.dst + dst_idx) != (c.src + src_idx)) {
             // Could reach here if a user called directly into the
             // opencl API for a device->host copy on a source buffer
             // with device_dirty = false.
-            memcpy((void *)c.dst, (void *)c.src, c.chunk_size);
+            memcpy((void *)(c.dst + dst_idx), (void *)(c.src + src_idx), c.chunk_size);
         }
 
         if (err) {
@@ -820,7 +820,7 @@ WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, ctx, c,
+            int err = opencl_do_multidimensional_copy(user_context, ctx, c,
                                                src_idx + src_off, dst_idx + dst_off,
                                                d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
@@ -841,18 +841,16 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
     halide_assert(user_context, dst_device_interface == NULL ||
                   dst_device_interface == &opencl_device_interface);
 
-    if (src->device_dirty() &&
+    if ((src->device_dirty() || src->host == NULL) &&
         src->device_interface != &opencl_device_interface) {
         halide_assert(user_context, dst_device_interface == &opencl_device_interface);
-        // If the source is not opencl or host memory, ask the source
-        // device interface to copy to dst host memory first.
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        if (err) return err;
-        // Now just copy from src to host
-        src = dst;
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
     }
 
-    bool from_host = !src->device_dirty() && src->host;
+    bool from_host = (src->device_interface != &opencl_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
@@ -881,7 +879,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+        err = opencl_do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
 
         // The reads/writes above are all non-blocking, so empty the command
         // queue before we proceed so that other host code won't write
@@ -1332,6 +1330,7 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &opencl_device_interface_impl
 };
 

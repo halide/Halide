@@ -568,6 +568,7 @@ struct halide_device_interface_t {
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
+    int (*compute_capability)(void *user_context, int *major, int *minor);
     const struct halide_device_interface_impl_t *impl;
 };
 
@@ -1493,6 +1494,76 @@ struct halide_filter_metadata_t {
  * the -profile target flag, which runs a sampling profiler thread
  * alongside the pipeline. */
 
+/** A single hardware counter. A cpu can only track so many
+ * counters at once, so the OS time-multiplexes them. Each counter
+ * includes a value, the number of cycles the counter was enabled,
+ * and the number of cycles the counter was actually tracked. We
+ * can estimate the true count with ((double)count * enabled /
+ * running) */
+struct halide_profiler_hardware_counter {
+    uint64_t count, enabled, running;
+};
+
+typedef enum halide_profiler_hardware_counter_id_t {
+    halide_profiler_hardware_counter_cpu_cycles              = 0, // ** Tracked by default
+    halide_profiler_hardware_counter_instructions            = 1, // ** Tracked by default
+    halide_profiler_hardware_counter_cache_refs              = 2,
+    halide_profiler_hardware_counter_cache_misses            = 3,
+    halide_profiler_hardware_counter_branches                = 4,
+    halide_profiler_hardware_counter_branch_mispredictions   = 5,
+    halide_profiler_hardware_counter_bus_cycles              = 6,
+    halide_profiler_hardware_counter_stalled_cycles_frontend = 7,
+    halide_profiler_hardware_counter_stalled_cycles_backend  = 8,
+    halide_profiler_hardware_counter_cpu_clock               = 9,
+    halide_profiler_hardware_counter_task_clock              = 10,
+    halide_profiler_hardware_counter_page_faults             = 11,
+    halide_profiler_hardware_counter_context_switches        = 12,
+    halide_profiler_hardware_counter_migrations              = 13,
+    halide_profiler_hardware_counter_l1d_read_accesses       = 14, // L1 data cache. ** Tracked by default
+    halide_profiler_hardware_counter_l1d_read_misses         = 15, // ** Tracked by default
+    halide_profiler_hardware_counter_l1d_write_accesses      = 16,
+    halide_profiler_hardware_counter_l1d_write_misses        = 17,
+    halide_profiler_hardware_counter_l1d_prefetch_accesses   = 18,
+    halide_profiler_hardware_counter_l1d_prefetch_misses     = 19,
+    halide_profiler_hardware_counter_l1i_read_accesses       = 20, // L1 instruction cache
+    halide_profiler_hardware_counter_l1i_read_misses         = 21,
+    halide_profiler_hardware_counter_l1i_write_accesses      = 22,
+    halide_profiler_hardware_counter_l1i_write_misses        = 23,
+    halide_profiler_hardware_counter_l1i_prefetch_accesses   = 24,
+    halide_profiler_hardware_counter_l1i_prefetch_misses     = 25,
+    halide_profiler_hardware_counter_llc_read_accesses       = 26, // Last-level cache. ** Tracked by default
+    halide_profiler_hardware_counter_llc_read_misses         = 27, // ** Tracked by default
+    halide_profiler_hardware_counter_llc_write_accesses      = 28,
+    halide_profiler_hardware_counter_llc_write_misses        = 29,
+    halide_profiler_hardware_counter_llc_prefetch_accesses   = 30,
+    halide_profiler_hardware_counter_llc_prefetch_misses     = 31,
+    halide_profiler_hardware_counter_dtlb_read_accesses      = 32, // TLB for data
+    halide_profiler_hardware_counter_dtlb_read_misses        = 33,
+    halide_profiler_hardware_counter_dtlb_write_accesses     = 34,
+    halide_profiler_hardware_counter_dtlb_write_misses       = 35,
+    halide_profiler_hardware_counter_dtlb_prefetch_accesses  = 36,
+    halide_profiler_hardware_counter_dtlb_prefetch_misses    = 37,
+    halide_profiler_hardware_counter_itlb_read_accesses      = 38, // TLB for instructions
+    halide_profiler_hardware_counter_itlb_read_misses        = 39,
+    halide_profiler_hardware_counter_itlb_write_accesses     = 40,
+    halide_profiler_hardware_counter_itlb_write_misses       = 41,
+    halide_profiler_hardware_counter_itlb_prefetch_accesses  = 42,
+    halide_profiler_hardware_counter_itlb_prefetch_misses    = 43,
+    halide_profiler_hardware_counter_bpu_read_accesses       = 44, // Branch-prediction unit
+    halide_profiler_hardware_counter_bpu_read_misses         = 45,
+    halide_profiler_hardware_counter_bpu_write_accesses      = 46,
+    halide_profiler_hardware_counter_bpu_write_misses        = 47,
+    halide_profiler_hardware_counter_bpu_prefetch_accesses   = 48,
+    halide_profiler_hardware_counter_bpu_prefetch_misses     = 49,
+    halide_profiler_hardware_counter_node_read_accesses      = 50, // Memory on another socket on a NUMA machine
+    halide_profiler_hardware_counter_node_read_misses        = 51,
+    halide_profiler_hardware_counter_node_write_accesses     = 52,
+    halide_profiler_hardware_counter_node_write_misses       = 53,
+    halide_profiler_hardware_counter_node_prefetch_accesses  = 54,
+    halide_profiler_hardware_counter_node_prefetch_misses    = 55,
+    halide_profiler_hardware_counter_end                     = 56
+} halide_profiler_hardware_counter_id_t;
+
 /** Per-Func state tracked by the sampling profiler. */
 struct halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
@@ -1517,7 +1588,13 @@ struct halide_profiler_func_stats {
     const char *name;
 
     /** The total number of memory allocation of this Func. */
-    int num_allocs;
+    int64_t num_allocs;
+
+    /** Hardware counters attributable to this Func. null on platforms
+     * for which this has not yet been implemented. If not null,
+     * points to an array of length
+     * halide_profiler_hardware_counter_end. */
+    struct halide_profiler_hardware_counter *hardware_counters;
 };
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
@@ -1566,7 +1643,6 @@ struct halide_profiler_pipeline_stats {
 };
 
 /** The global state of the profiler. */
-
 struct halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
@@ -1597,6 +1673,32 @@ struct halide_profiler_state {
 
     /** Sampling thread reference to be joined at shutdown. */
     struct halide_thread *sampling_thread;
+
+    /** file descriptors used for querying the hardware counters. null
+     * when there is no support for hardware counters. */
+    int *hardware_counter_fds;
+
+    /** The active hardware counters. This is a bit-field in the same
+     * order as halide_profiler_hardware_counter_id_t. cpu_cycles is
+     * the least-significant bit. Defaults to 0xc00c003, which
+     * corresponds to the fields marked as active-by-default
+     * above. The default set only includes a few counters, as the
+     * more you track the less accurate each counter is. To change the
+     * tracked set programmatically, call halide_profiler_get_state
+     * and change this flag. To change the tracked set from the
+     * command line, set the environment variable HL_PROFILER_COUNTERS
+     * to a comma-separated list of the names of the enum
+     * halide_profiler_hardware_counter_id_t, ignoring the
+     * halide_profiler_hardware_counter_ prefix. You can also use a
+     * prefix to enable all counters which start with that
+     * substring. Taken to the extreme, this means that setting
+     * HL_PROFILER_COUNTER="," will print all counters. As an example,
+     * the following would print all counters related to writes to the
+     * L1 data cache, all counters related to the L1 instruction
+     * cache, and the number of misses on the branch prediction unit
+     * cache: HL_PROFILER_COUNTERS="l1d_write,l1i,bpu_read_misses"
+     */
+    uint64_t active_counters;
 };
 
 /** Profiler func ids with special meanings. */

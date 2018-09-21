@@ -22,7 +22,7 @@ void my_print(void *, const char *msg) {
     int val;
 
     //printf("%s", msg);
-    val = sscanf(msg, " g_%d: %fms (%d%%) threads: %f peak: %d num: %d avg: %d",
+    val = sscanf(msg, " g_%d: %fms (%d%%) threads: %f heap: %d allocs: %d avg: %d",
                  &idx, &this_ms, &this_percentage, &this_threads, &this_heap_peak,
                  &this_num_mallocs, &this_malloc_avg);
     if (val == 7) {
@@ -31,7 +31,7 @@ void my_print(void *, const char *msg) {
         malloc_avg = this_malloc_avg;
     }
 
-    val = sscanf(msg, " g_%d: %fms (%d%%) peak: %d num: %d avg: %d",
+    val = sscanf(msg, " g_%d: %fms (%d%%) heap: %d allocs: %d avg: %d",
                  &idx, &this_ms, &this_percentage, &this_heap_peak,
                  &this_num_mallocs, &this_malloc_avg);
     if (val == 6) {
@@ -56,8 +56,8 @@ void my_print(void *, const char *msg) {
 // Return 0 if there is no error found
 int check_error(int exp_heap_peak, int exp_num_mallocs,
                 int exp_malloc_avg, int exp_stack_peak) {
-    /*printf("Memory heap_peak: %d bytes, num_mallocs: %d, malloc_avg: %d, "
-            "stack_peak: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
+    /*printf("Memory heap_heap: %d bytes, num_mallocs: %d, malloc_avg: %d, "
+            "stack_heap: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
     if (heap_peak != exp_heap_peak) {
         printf("Peak heap was %d instead of %d\n", heap_peak, exp_heap_peak);
         return -1;
