@@ -965,14 +965,16 @@ struct Constraints {
     virtual bool may_subtile() const { return true; }
     virtual bool may_parallelize(const FunctionDAG::Node::Stage *stage, int dim) const { return true; }
     virtual int tiling_factor() const { return 2; }
+    virtual int stratify_depth() const {return -1; }
 };
 
 struct CoarsePassConstraints : public Constraints {
     const MachineParams &params;
     CoarsePassConstraints(const MachineParams &p) : params(p) {}
-    bool may_subtile() const override { return false; }
+    bool may_subtile() const override { return true; }
     bool may_inline(const FunctionDAG::Node *node) const override { return false; }
     int tiling_factor() const override { return params.parallelism; }
+    int stratify_depth() const override {return 1; }
 };
 
 struct FinePassConstraints : public Constraints {
@@ -994,6 +996,10 @@ struct FinePassConstraints : public Constraints {
     bool may_parallelize(const FunctionDAG::Node::Stage *stage, int dim) const override {
         auto it = parallel_dims.find(stage);
         return (it != parallel_dims.end()) && (it->second & ((uint64_t)1 << dim));
+    }
+
+    int stratify_depth() const override {
+        return 2;
     }
 };
 
@@ -1034,11 +1040,11 @@ struct PartialScheduleNode {
         h ^= (next + 0x9e3779b9 + (h<<6) + (h>>2));
     }
 
-    // Hash the loop structure (but not the sizes)
+    // Hash the loop structure and sizes up to a fixed depth
     void structural_hash(uint64_t &h, int depth) const {
-        // Ordering constraints on producers and consumers mean we
-        // only need to count the number of children (I think?).
-
+        for (uint64_t s : size) {
+            hash_combine(h, s);
+        }
         if (depth == 0) {
             // Don't distinguish below this depth
             hash_combine(h, funcs_realized_or_inlined());
@@ -1046,9 +1052,6 @@ struct PartialScheduleNode {
             hash_combine(h, inlined.size());
             hash_combine(h, store_at.size());
             hash_combine(h, children.size());
-            for (uint64_t s : size) {
-                hash_combine(h, s);
-            }
             for (auto c : children) {
                 c->structural_hash(h, depth - 1);
             }
@@ -2461,24 +2464,21 @@ State optimal_schedule_pass(FunctionDAG &dag,
 
     for (int i = 0; ; i++) {
         decltype(q) pending;
-        q.swap(pending);
 
-        // Apply cost penalties to the queue according to structural uniqueness at the root level
-        /*
+        // Apply cost penalties to the queue according to structural uniqueness
+        #if 1
         std::map<uint64_t, int> hashes;
-        for (int depth = 1; depth < 1; depth++) {
-            hashes.clear();
-            while (!pending.empty()) {
-                auto state = pending.top();
-                pending.pop();
-                uint64_t h = state->structural_hash(depth);
-                state->cost *= (1 + hashes[h]);
-                hashes[h]++;
-                q.push(state);
-            }
-            q.swap(pending);
+        while (!q.empty()) {
+            auto state = q.top();
+            q.pop();
+            uint64_t h = state->structural_hash(constraints->stratify_depth());
+            state->cost *= (1 + hashes[h]);
+            hashes[h]++;
+            pending.push(state);
         }
-        */
+        #else
+        q.swap(pending);
+        #endif
 
         int expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
@@ -2511,17 +2511,14 @@ State optimal_schedule_pass(FunctionDAG &dag,
 
 
             /*
+
             if (state->num_funcs_scheduled > 0 &&
-                dag.nodes[state->num_funcs_scheduled-1].func.name() == "conv_r_x") {
-                if (true) { //expanded + 20 >= beam_size) {
-                    debug(0) << "\n\n**** End of beam: (" << expanded << "):\n";
-                    state->dump();
-                }
-                if (expanded == 166 || expanded == 167) {
-                    state->calculate_cost(dag, params, nullptr, true);
-                }
-            }
+                dag.nodes[state->num_funcs_scheduled].func.name() == "scan_y") {
             */
+            if (false) {
+                debug(0) << "\n\n**** Beam: (" << expanded << "):\n";
+                state->dump();
+            }
 
             /*
               debug(0) << "Expanding state:";
