@@ -25,7 +25,7 @@ bool use_dlopenbuf = true;
 int init_sim() {
     if (sim) return 0;
 
-    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V60));
+    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V65));
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
