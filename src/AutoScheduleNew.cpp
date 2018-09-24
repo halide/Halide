@@ -235,6 +235,8 @@ struct FunctionDAG {
         int vector_size;
 
         vector<const Edge *> outgoing_edges, incoming_edges;
+
+        bool is_output;
     };
 
     struct Edge {
@@ -452,6 +454,11 @@ struct FunctionDAG {
                     node.vector_size = stage.vector_size;
                 } else {
                     node.vector_size = std::max(node.vector_size, stage.vector_size);
+                }
+
+                node.is_output = false;
+                for (const auto &o : outputs) {
+                    node.is_output |= o.same_as(node.func);
                 }
 
                 node.stages.emplace_back(std::move(stage));
@@ -958,7 +965,7 @@ struct ScheduleFeatures {
 };
 
 struct Constraints {
-    virtual bool must_root(const FunctionDAG::Node *node) const { return false; }
+    virtual bool must_root(const FunctionDAG::Node *node) const { return node->is_output; }
     virtual bool may_root(const FunctionDAG::Node *node) const { return true; }
     virtual bool must_inline(const FunctionDAG::Node *node) const { return false; }
     virtual bool may_inline(const FunctionDAG::Node *node) const { return true; }
@@ -982,7 +989,7 @@ struct FinePassConstraints : public Constraints {
     map<const FunctionDAG::Node::Stage *, uint64_t> parallel_dims;
 
     bool must_root(const FunctionDAG::Node *node) const override {
-        return roots.find(node) != roots.end();
+        return node->is_output || (roots.find(node) != roots.end());
     }
 
     bool may_root(const FunctionDAG::Node *node) const override {
@@ -1392,7 +1399,8 @@ struct PartialScheduleNode {
         }
         Bound bound;
         // Compute the region required
-        if (f->outgoing_edges.empty() && is_root()) {
+        if (f->is_output && is_root()) {
+            internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
             // It's an output.
             // Use the bounds estimate
             bound.iteration_domain_points = 1;
@@ -1557,6 +1565,28 @@ struct PartialScheduleNode {
         return false;
     }
 
+    bool accesses_input_buffer() const {
+        for (const auto &c : children) {
+            if (c->accesses_input_buffer()) return true;
+        }
+        if (is_root()) return false;
+
+        auto check = [&](const FunctionDAG::Node *n) {
+            for (const auto &s : node->stages) {
+                for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
+                    if (s.features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
+                }
+            }
+            return false;
+        };
+
+        if (check(node)) return true;
+        for (auto p : inlined) {
+            if (check(p.first)) return true;
+        }
+        return false;
+    }
+
     bool computes(const FunctionDAG::Node *f) const {
         if (f == node) {
             return true;
@@ -1681,7 +1711,7 @@ struct PartialScheduleNode {
             result.emplace_back(std::move(r));
         }
 
-        if (f->outgoing_edges.empty() || constraints->must_root(f)) {
+        if (f->is_output || constraints->must_root(f)) {
             // Not permitted to compute at tiles of some consumer
             return result;
         }
@@ -1913,6 +1943,10 @@ struct PartialScheduleNode {
                     bytes *= p.second - p.first + 1;
                 }
                 if (bytes < 64000 && depth > 2) {
+                    // If it's probably a small allocation, and it's
+                    // made more than once, use stack-scoped
+                    // storage. Otherwise let the compiler pick heap
+                    // or stack as it likes.
                     Func(node->func).store_in(MemoryType::Stack);
                 }
             }
@@ -1974,16 +2008,25 @@ struct PartialScheduleNode {
                                 outer = RVar(parent.var.name() + "o");
                                 inner = RVar(parent.var.name() + "i");
                             }
-                            debug(0) << "Splitting " << parent.var.name() << " by " << factor << '\n';
-                            if (!parent.var.is_rvar && parent.extent % factor == 0 && stage == 0) {
-                                // TODO: Use roundup if this is not the output and the loop nest is not reading any inputs
-                                // otherwise must use guardwithif
-                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::Auto);
+                            debug(0) << "Splitting " << parent.var.name() << " by " << factor;
+                            if (stage == 0 && !parent.var.is_rvar && !accesses_input_buffer() && !node->is_output) {
+                                // Roundup is lowest overhead,
+                                // provided it doesn't expand the
+                                // bounds read on the input or written
+                                // on the output. However, you can
+                                // only really use it on pure stages
+                                // that don't access the input
+                                // anywhere in their loop nest.
+                                debug(0) << " roundup\n";
+                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::RoundUp);
                             } else if (stage > 0) {
-                                // Default is RoundUp, but that can create situations that read out of bounds on the input
+                                // update stages use guardwithif
+                                debug(0) << " guardwithif\n";
                                 s.split(parent.var, outer, inner, (int)factor, TailStrategy::GuardWithIf);
                             } else {
-                                s.split(parent.var, outer, inner, (int)factor);
+                                // Pure stages that access the input use shiftinwards
+                                debug(0) << " shiftinwards\n";
+                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::ShiftInwards);
                             }
                             v = parent;
                             parent.var = outer;
@@ -2321,7 +2364,7 @@ struct State {
         int num_children = 0;
         if (!constraints->must_root(node) && constraints->may_inline(node)) {
             // 1) Inline it
-            if (node->stages.size() == 1 && !node->outgoing_edges.empty()) {
+            if (node->stages.size() == 1 && !node->is_output) {
                 auto child = new State(*this);
                 child->root = child->root.inline_func(node);
                 child->num_funcs_scheduled++;
@@ -3064,7 +3107,34 @@ void autoschedule_test() {
         throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
+    }
 
+    {
+        Buffer<float> im_a(1024, 1024, "a"), im_b(1024, 1024, "b");
+        im_a.fill(0.0f);
+        im_b.fill(0.0f);
+
+        Func c("c"), a("a"), b("b");
+        Var i, j;
+        a(j, i) = im_a(j, i);  // TODO: Add wrappers to the search space
+        b(j, i) = im_b(j, i);
+        RDom k(0, 1024);
+        c(j, i) += a(k, i) * b(j, k);
+        Func out("out");
+        out(j, i) = c(j, i);
+
+        out.estimate(j, 0, 1024).estimate(i, 0, 1024);
+
+        vector<Function> outputs = {out.function()};
+        FunctionDAG dag(outputs, params, target);
+        dag.dump();
+        State optimal = optimal_schedule(dag, outputs, params, nullptr, 1); //&throughput_predictor, 1);
+
+        debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, &throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
+        optimal.dump();
+        debug(0) << '\n';
     }
 
 }
