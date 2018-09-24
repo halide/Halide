@@ -2146,6 +2146,7 @@ int main(int argc, char **argv) {
     }
 
     if (filter) {
+        printf("Filtering for instructions '%s'\n", filter);
         test.filter = filter;
         num_threads = 1;
     }
