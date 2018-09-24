@@ -1951,6 +1951,23 @@ struct PartialScheduleNode {
                 }
             }
 
+            // Pick a tail strategy for any splits
+            auto tail_strategy = TailStrategy::Auto;
+            if (stage_idx == 0 && !accesses_input_buffer() && !node->is_output) {
+                // Roundup is lowest overhead, provided it doesn't
+                // expand the bounds read on the input or written on
+                // the output. However, you can only really use it on
+                // pure stages that don't access the input anywhere in
+                // their loop nest.
+                tail_strategy = TailStrategy::RoundUp;
+            } else if (stage_idx > 0) {
+                // update stages use guardwithif
+                tail_strategy = TailStrategy::GuardWithIf;
+            } else {
+                // Pure stages that access the input use shiftinwards
+                tail_strategy = TailStrategy::ShiftInwards;
+            }
+
             if (!size.empty()) {
                 if (innermost) {
                     // Find the innermost var, and the innermost pure var
@@ -1981,10 +1998,16 @@ struct PartialScheduleNode {
                             split_factor = 4;
                         }
                         if (split_factor > 1) {
-                            s.vectorize(innermost_pure_var->var, split_factor);
+                            VarOrRVar vec(Var(innermost_pure_var->var.name() + "_vec"));
+                            s.split(innermost_pure_var->var, innermost_pure_var->var, vec, split_factor, tail_strategy)
+                                .vectorize(vec);
+                            FuncVars::FuncVar v = *innermost_pure_var;
+                            v.extent = split_factor;
+                            v.var = vec;
+                            vars.vars.insert(vars.vars.begin(), v);
+                            innermost_pure_var->extent += split_factor - 1;
+                            innermost_pure_var->extent /= split_factor;
                         }
-                        innermost_pure_var->extent += split_factor - 1;
-                        innermost_pure_var->extent /= split_factor;
                     }
                 } else {
                     // Do the implied splits
@@ -2008,26 +2031,8 @@ struct PartialScheduleNode {
                                 outer = RVar(parent.var.name() + "o");
                                 inner = RVar(parent.var.name() + "i");
                             }
-                            debug(0) << "Splitting " << parent.var.name() << " by " << factor;
-                            if (stage == 0 && !parent.var.is_rvar && !accesses_input_buffer() && !node->is_output) {
-                                // Roundup is lowest overhead,
-                                // provided it doesn't expand the
-                                // bounds read on the input or written
-                                // on the output. However, you can
-                                // only really use it on pure stages
-                                // that don't access the input
-                                // anywhere in their loop nest.
-                                debug(0) << " roundup\n";
-                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::RoundUp);
-                            } else if (stage > 0) {
-                                // update stages use guardwithif
-                                debug(0) << " guardwithif\n";
-                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::GuardWithIf);
-                            } else {
-                                // Pure stages that access the input use shiftinwards
-                                debug(0) << " shiftinwards\n";
-                                s.split(parent.var, outer, inner, (int)factor, TailStrategy::ShiftInwards);
-                            }
+                            debug(0) << "Splitting " << parent.var.name() << " by " << factor << "\n";
+                            s.split(parent.var, outer, inner, (int)factor, tail_strategy);
                             v = parent;
                             parent.var = outer;
                             parent.extent = size[i];
