@@ -2062,9 +2062,9 @@ class ScatterGatherGenerator : public IRMutator2 {
             index_span = simplify(index_span);
             // We need to downcast the index values to 16 bit signed. So all the
             // the indices must be less than 1 << 15.
-            // if (!can_prove(index_span < std::numeric_limits<int16_t>::max())) {
-            //     return Expr();
-            // }
+            if (!can_prove(index_span < std::numeric_limits<int16_t>::max())) {
+                return Expr();
+            }
         }
         // Calculate the size of the buffer lut in bytes.
         Expr size = ty.bytes();
@@ -2091,7 +2091,7 @@ class ScatterGatherGenerator : public IRMutator2 {
         if (!alloc || alloc->memory_type != MemoryType::VTCM) {
             return IRMutator2::visit(op);
         }
-        // The destination must be a buffer in VTCM.
+        // The source for a gather must also be a buffer in VTCM.
         if (op->index.as<Ramp>() && op->value.as<Load>()) {
             // Check for vgathers
             Expr dst_base = Variable::make(Handle(), op->name);

@@ -1923,7 +1923,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
         // Cut up the indices into appropriately-sized pieces.
         for (int start = 0; start < index_lanes; start += intrin_lanes) {
-            vector <Value *>args;
+            vector<Value *> args;
             Value *new_index = slice_vector(index, start, intrin_lanes);
             args.push_back(dst_buffer);
             args.push_back(codegen(op->args[1] + start));
