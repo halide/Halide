@@ -236,6 +236,8 @@ struct FunctionDAG {
 
         vector<const Edge *> outgoing_edges, incoming_edges;
 
+        int id; // A unique ID for this node, allocated consecutively starting at zero for each pipeline
+
         bool is_output;
     };
 
@@ -303,6 +305,7 @@ struct FunctionDAG {
         for (size_t i = 0; i < order.size(); i++) {
             Function f = env[order[order.size() - i - 1]];
             nodes[i].func = f;
+            nodes[i].id = (int)i;
             node_map[f] = &nodes[i];
         }
 
@@ -1384,12 +1387,17 @@ struct PartialScheduleNode {
     };
 
     // The total bounds required of the given Func for one representative iteration of this loop. Computed lazily and cached.
-    mutable map<const FunctionDAG::Node *, const Bound> bounds;
+    mutable map<const FunctionDAG::Node *, std::shared_ptr<const Bound>> bounds;
+
+    const Bound &set_bounds(const FunctionDAG::Node *f, Bound &&b) const {
+        return *(bounds.emplace(f, std::shared_ptr<const Bound>(new Bound(std::move(b)))).first->second);
+    }
+
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
         // debug(0) << "get_bounds of " << f.name() << " in loop over " << (is_root() ? "root" : func.name()) << '\n';
         auto it = bounds.find(f);
         if (it != bounds.end()) {
-            return it->second;
+            return *(it->second);
         }
         Bound bound;
         // Compute the region required
@@ -1499,8 +1507,7 @@ struct PartialScheduleNode {
             bound.loops.emplace_back(std::move(loop));
         }
 
-        auto p = bounds.emplace(f, std::move(bound));
-        return p.first->second;
+        return set_bounds(f, std::move(bound));
     }
 
     void dump(string prefix) const {
@@ -1621,7 +1628,7 @@ struct PartialScheduleNode {
     }
 
     void compute_here(const FunctionDAG::Node *f, bool tileable) {
-        auto bounds = get_bounds(f);
+        const auto &bounds = get_bounds(f);
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
             auto node = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode);
             node->node = f;
@@ -1641,7 +1648,7 @@ struct PartialScheduleNode {
                 single_point.loops[s].push_back({l.first, l.first});
             }
             // Leave region required blank inside the computation of a Func
-            node->bounds.emplace(f, std::move(single_point));
+            node->set_bounds(f, std::move(single_point));
             children.emplace_back(std::move(node));
         }
     }
@@ -1761,31 +1768,32 @@ struct PartialScheduleNode {
                 std::swap(inner->bounds, outer.bounds);
                 std::swap(inner->store_at, outer.store_at);
 
-                Bound b = inner->bounds[node];
-                // outer.bounds.emplace(node, inner->bounds[node]);
-                outer.innermost = false;
-                outer.tileable &= constraints->may_subtile();
+                {
+                    Bound b = inner->get_bounds(node);
+                    outer.innermost = false;
+                    outer.tileable &= constraints->may_subtile();
 
-                // Then move factors from the outer loop to the inner loop
-                auto parent_bounds = parent->get_bounds(node);
+                    // Then move factors from the outer loop to the inner loop
+                    auto parent_bounds = parent->get_bounds(node);
 
-                // We're within the computation of a single stage of a
-                // Func, so the bounds should have empty regions and a
-                // single loop nest
-                internal_assert(b.region_required.empty());
-                internal_assert(b.region_computed.empty());
+                    // We're within the computation of a single stage of a
+                    // Func, so the bounds should have empty regions and a
+                    // single loop nest
+                    internal_assert(b.region_required.empty());
+                    internal_assert(b.region_computed.empty());
 
-                for (size_t i = 0; i < t.size(); i++) {
-                    int factor = t[i];
-                    inner->size[i] = (outer.size[i] + factor - 1) / factor;
-                    outer.size[i] = factor;
-                    int64_t min = parent_bounds.loops[stage_idx][i].first;
-                    int64_t extent = parent_bounds.loops[stage_idx][i].second - min + 1;
-                    extent = (extent + factor - 1) / factor;
-                    b.loops[stage_idx][i] = {min, min + extent - 1};
+                    for (size_t i = 0; i < t.size(); i++) {
+                        int factor = t[i];
+                        inner->size[i] = (outer.size[i] + factor - 1) / factor;
+                        outer.size[i] = factor;
+                        int64_t min = parent_bounds.loops[stage_idx][i].first;
+                        int64_t extent = parent_bounds.loops[stage_idx][i].second - min + 1;
+                        extent = (extent + factor - 1) / factor;
+                        b.loops[stage_idx][i] = {min, min + extent - 1};
+                    }
+
+                    outer.set_bounds(node, std::move(b));
                 }
-
-                outer.bounds.emplace(node, b);
 
                 outer.children.push_back(inner);
 
@@ -3013,44 +3021,6 @@ void autoschedule_test() {
         debug(0) << '\n';
     }
 
-    {
-        // A scan in x followed by a downsample in y, with pointwise stuff in between
-        const int N = 3;
-        Buffer<float> a(1024, 1024);
-        Func p1[N], p2[N], p3[N];
-        Func s("scan");
-        Var x, y;
-        p1[0](x, y) = x + y;
-        for (int i = 1; i < N; i++) {
-            p1[i](x, y) = p1[i-1](x, y) + 1;
-        }
-        RDom r(1, 1023);
-        s(x, y) = p1[N-1](x, y);
-        s(r, y) += s(r-1, y);
-        p2[0](x, y) = s(x, y);
-        for (int i = 1; i < N; i++) {
-            p2[i](x, y) = p2[i-1](x, y) + 1;
-        }
-        Func down("downsample");
-        down(x, y) = p2[N-1](x, 2*y);
-        p3[0](x, y) = down(x, y);
-        for (int i = 1; i < N; i++) {
-            p3[i](x, y) = p3[i-1](x, y) + 1;
-        }
-
-        p3[N-1].estimate(x, 0, 1024).estimate(y, 0, 1024);
-
-        vector<Function> outputs = {p3[N-1].function()};
-        FunctionDAG dag(outputs, params, target);
-        dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, nullptr, 1); //&throughput_predictor, 1);
-
-        debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, nullptr, true); //&throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
-        optimal.dump();
-        debug(0) << '\n';
-    }
 
     {
         Func f_u8("f_u8");
@@ -3107,6 +3077,51 @@ void autoschedule_test() {
         throughput_predictor.evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
+    }
+
+    {
+        // A scan in x followed by a downsample in y, with pointwise stuff in between
+        const int N = 3;
+        Buffer<float> a(1024, 1024);
+        Func p1[N], p2[N], p3[N];
+        Func s("scan");
+        Var x, y;
+        p1[0](x, y) = x + y;
+        for (int i = 1; i < N; i++) {
+            p1[i](x, y) = p1[i-1](x, y) + 1;
+        }
+        RDom r(1, 1023);
+        s(x, y) = p1[N-1](x, y);
+        s(r, y) += s(r-1, y);
+        p2[0](x, y) = s(x, y);
+        for (int i = 1; i < N; i++) {
+            p2[i](x, y) = p2[i-1](x, y) + 1;
+        }
+        Func down("downsample");
+        down(x, y) = p2[N-1](x, 2*y);
+        p3[0](x, y) = down(x, y);
+        for (int i = 1; i < N; i++) {
+            p3[i](x, y) = p3[i-1](x, y) + 1;
+        }
+
+        p3[N-1].estimate(x, 0, 1024).estimate(y, 0, 1024);
+
+        vector<Function> outputs = {p3[N-1].function()};
+        FunctionDAG dag(outputs, params, target);
+        dag.dump();
+
+        // This is a good one to benchmark.
+        State optimal;
+
+        double t = Tools::benchmark(3, 1, [&]() {
+                optimal = optimal_schedule(dag, outputs, params, nullptr, 300);
+            });
+
+        debug(0) << "** Optimal schedule:\n";
+        optimal.calculate_cost(dag, params, nullptr, true); //&throughput_predictor, true);
+        throughput_predictor.evaluate_costs();
+        optimal.dump();
+        debug(0) << "Time: " << t << " seconds\n";
     }
 
 }
