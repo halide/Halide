@@ -1381,16 +1381,10 @@ struct PartialScheduleNode {
         // The box over which something is required, touched, and the shape of the loop nest(s)
         vector<pair<int64_t, int64_t>> region_required, region_computed;
         vector<vector<pair<int64_t, int64_t>>> loops;
-
-        // The number of points in the iteration domain. Sum over the
-        // products of the loops. Outside the realization of the Func
-        // it's the minimum number of iteration domain points to
-        // compute the required region. Inside it's the actual.
-        int64_t iteration_domain_points;
     };
 
     // The total bounds required of the given Func for one representative iteration of this loop. Computed lazily and cached.
-    mutable map<const FunctionDAG::Node *, Bound> bounds;
+    mutable map<const FunctionDAG::Node *, const Bound> bounds;
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
         // debug(0) << "get_bounds of " << f.name() << " in loop over " << (is_root() ? "root" : func.name()) << '\n';
         auto it = bounds.find(f);
@@ -1403,7 +1397,6 @@ struct PartialScheduleNode {
             internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
             // It's an output.
             // Use the bounds estimate
-            bound.iteration_domain_points = 1;
             map<string, pair<int64_t, int64_t>> estimates;
             for (auto b : f->func.schedule().estimates()) {
                 int64_t i_min = *as_const_int(b.min);
@@ -1415,7 +1408,6 @@ struct PartialScheduleNode {
                 auto it = estimates.find(f->func.args()[i]);
                 user_assert(it != estimates.end())
                     << "Need an estimate on dimension " << i << " of \"" << f->func.name() << "\"";
-                bound.iteration_domain_points *= it->second.second - it->second.first + 1;
                 bound.region_required.push_back(it->second);
             }
         } else {
@@ -1492,7 +1484,6 @@ struct PartialScheduleNode {
             computed_map[f->region_required[i].min.as<Variable>()->name] = (int)(*imin);
             computed_map[f->region_required[i].max.as<Variable>()->name] = (int)(*imax);
         }
-        bound.iteration_domain_points = 0;
         for (const auto &s : f->stages) {
             vector<pair<int64_t, int64_t>> loop;
             int64_t prod = 1;
@@ -1505,12 +1496,11 @@ struct PartialScheduleNode {
                 loop.push_back({*imin, *imax});
                 prod *= (*imax) - (*imin) + 1;
             }
-            bound.iteration_domain_points += prod;
             bound.loops.emplace_back(std::move(loop));
         }
 
-        bounds[f] = std::move(bound);
-        return bounds[f];
+        auto p = bounds.emplace(f, std::move(bound));
+        return p.first->second;
     }
 
     void dump(string prefix) const {
@@ -1642,7 +1632,6 @@ struct PartialScheduleNode {
             node->tileable = tileable;
             Bound single_point;
             single_point.loops.resize(f->stages.size());
-            single_point.iteration_domain_points = 1;
             for (const auto &l : bounds.loops[s]) {
                 // Initialize the loop nest
                 node->size.push_back(l.second - l.first + 1);
@@ -1652,7 +1641,7 @@ struct PartialScheduleNode {
                 single_point.loops[s].push_back({l.first, l.first});
             }
             // Leave region required blank inside the computation of a Func
-            node->bounds[f] = single_point;
+            node->bounds.emplace(f, std::move(single_point));
             children.emplace_back(std::move(node));
         }
     }
@@ -1667,15 +1656,6 @@ struct PartialScheduleNode {
         internal_assert(constraints);
 
         vector<PartialScheduleNode> result;
-
-        // Is it worth descending into this loop? If we don't end up doing less work, it's pointless.
-        if (false && parent) {
-            int64_t parent_points = parent->get_bounds(f).iteration_domain_points;
-            int64_t in_loop_points = get_bounds(f).iteration_domain_points;
-            if (parent_points <= in_loop_points) {
-                return result;
-            }
-        }
 
         // Figure out which child we can fuse this into
         int child = -1;
@@ -1781,13 +1761,13 @@ struct PartialScheduleNode {
                 std::swap(inner->bounds, outer.bounds);
                 std::swap(inner->store_at, outer.store_at);
 
-                outer.bounds[node] = inner->bounds[node];
+                Bound b = inner->bounds[node];
+                // outer.bounds.emplace(node, inner->bounds[node]);
                 outer.innermost = false;
                 outer.tileable &= constraints->may_subtile();
 
                 // Then move factors from the outer loop to the inner loop
                 auto parent_bounds = parent->get_bounds(node);
-                auto &b = outer.bounds[node];
 
                 // We're within the computation of a single stage of a
                 // Func, so the bounds should have empty regions and a
@@ -1795,12 +1775,7 @@ struct PartialScheduleNode {
                 internal_assert(b.region_required.empty());
                 internal_assert(b.region_computed.empty());
 
-                int64_t old_stage_iteration_domain_points = 1,
-                    new_inner_iteration_domain_points = 1,
-                    new_outer_iteration_domain_points = 1;
-
                 for (size_t i = 0; i < t.size(); i++) {
-                    old_stage_iteration_domain_points *= b.loops[stage_idx][i].second - b.loops[stage_idx][i].first + 1;
                     int factor = t[i];
                     inner->size[i] = (outer.size[i] + factor - 1) / factor;
                     outer.size[i] = factor;
@@ -1808,15 +1783,9 @@ struct PartialScheduleNode {
                     int64_t extent = parent_bounds.loops[stage_idx][i].second - min + 1;
                     extent = (extent + factor - 1) / factor;
                     b.loops[stage_idx][i] = {min, min + extent - 1};
-                    new_outer_iteration_domain_points *= extent;
-                    new_inner_iteration_domain_points *= factor;
                 }
 
-                // The number of points in an iteration domain is inclusive of children
-                new_outer_iteration_domain_points *= new_inner_iteration_domain_points;
-
-                b.iteration_domain_points += new_outer_iteration_domain_points - old_stage_iteration_domain_points;
-                inner->bounds[node].iteration_domain_points = new_inner_iteration_domain_points;
+                outer.bounds.emplace(node, b);
 
                 outer.children.push_back(inner);
 
@@ -2549,26 +2518,24 @@ State optimal_schedule_pass(FunctionDAG &dag,
             if (state->num_funcs_scheduled == (int)dag.nodes.size()) {
                 debug(0) << '\n';
 
-                /*
-                debug(0) << "Optimal state?\n";
-                state->dump();
+                if (false) {
+                    debug(0) << "Optimal state?\n";
+                    state->dump();
 
-                debug(0) << "Rest of queue:\n";
-                while (!pending.empty()) {
-                    pending.top()->calculate_cost(dag, params, nullptr, true);
-                    pending.top()->dump();
-                    pending.pop();
+                    debug(0) << "Rest of queue:\n";
+                    while (!pending.empty()) {
+                        // pending.top()->calculate_cost(dag, params, nullptr, true);
+                        pending.top()->dump();
+                        pending.pop();
+                    }
                 }
-                */
 
                 return *state;
             }
 
-
             /*
-
             if (state->num_funcs_scheduled > 0 &&
-                dag.nodes[state->num_funcs_scheduled].func.name() == "scan_y") {
+                dag.nodes[state->num_funcs_scheduled].func.name() == "downsampled_x") {
             */
             if (false) {
                 debug(0) << "\n\n**** Beam: (" << expanded << "):\n";
