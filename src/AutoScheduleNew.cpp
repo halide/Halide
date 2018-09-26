@@ -204,11 +204,51 @@ struct FunctionDAG {
         // with an IIR without computing the others, for example.
         vector<Interval> region_computed;
 
+        // Expand a region required into a region computed, using the
+        // symbolic intervals above.
+        void required_to_computed(const pair<int64_t, int64_t> *required,
+                                  pair<int64_t, int64_t> *computed) const {
+            map<string, Expr> required_map;
+            for (int i = 0; i < func.dimensions(); i++) {
+                required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].first;
+                required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].second;
+            }
+            for (int i = 0; i < func.dimensions(); i++) {
+                Interval in = region_computed[i];
+                in.min = simplify(substitute(required_map, in.min));
+                in.max = simplify(substitute(required_map, in.max));
+                const int64_t *imin = as_const_int(in.min);
+                const int64_t *imax = as_const_int(in.max);
+                internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
+                computed[i] = std::make_pair(*imin, *imax);
+            }
+        }
+
         struct Loop {
             string var;
             bool pure;
             Expr min, max;
         };
+
+        // Get the loop nest shape as a function of the region computed
+        void loop_nest_for_region(int stage_idx,
+                                  const pair<int64_t, int64_t> *computed,
+                                  pair<int64_t, int64_t> *loop) const {
+            map<string, Expr> computed_map;
+            for (int i = 0; i < func.dimensions(); i++) {
+                computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].first;
+                computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].second;
+            }
+            const auto &s = stages[stage_idx];
+            for (size_t i = 0; i < s.loop.size(); i++) {
+                Expr min = simplify(substitute(computed_map, s.loop[i].min));
+                Expr max = simplify(substitute(computed_map, s.loop[i].max));
+                const int64_t *imin = as_const_int(min);
+                const int64_t *imax = as_const_int(max);
+                internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
+                loop[i] = std::make_pair(*imin, *imax);
+            }
+        }
 
         // One stage of a Func
         struct Stage {
@@ -231,12 +271,13 @@ struct FunctionDAG {
         };
         vector<Stage> stages;
 
+        vector<const Edge *> outgoing_edges, incoming_edges;
+
         // Max vector size across the stages
         int vector_size;
 
-        vector<const Edge *> outgoing_edges, incoming_edges;
-
-        int id; // A unique ID for this node, allocated consecutively starting at zero for each pipeline
+        // A unique ID for this node, allocated consecutively starting at zero for each pipeline
+        int id;
 
         bool is_output;
     };
@@ -248,6 +289,14 @@ struct FunctionDAG {
         // The region required of producer in terms of the variables
         // of the loops of this stage of the consumer.
         vector<Interval> bounds;
+
+        // Given a loop nest of the consumer stage, expand a region
+        // required of the producer to be large enough to include all
+        // points required.
+        void expand_footprint(const pair<int64_t, int64_t> *consumer_loop,
+                              pair<int64_t, int64_t> *producer_required) const {
+
+        }
 
         // The number of calls the consumer makes to the producer, per
         // point in the loop nest of the consumer.
@@ -1475,36 +1524,14 @@ struct PartialScheduleNode {
                 << f->func.dimensions() << '\n';
         }
 
-        // Use the region required and the dag to compute the region computed and the iteration domain
-        map<string, Expr> required_map, computed_map;
-        for (int i = 0; i < f->func.dimensions(); i++) {
-            required_map[f->region_required[i].min.as<Variable>()->name] = (int)bound.region_required[i].first;
-            required_map[f->region_required[i].max.as<Variable>()->name] = (int)bound.region_required[i].second;
-        }
-        for (int i = 0; i < f->func.dimensions(); i++) {
-            Interval in = f->region_computed[i];
-            in.min = simplify(substitute(required_map, in.min));
-            in.max = simplify(substitute(required_map, in.max));
-            const int64_t *imin = as_const_int(in.min);
-            const int64_t *imax = as_const_int(in.max);
-            internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
-            bound.region_computed.push_back({*imin, *imax});
-            computed_map[f->region_required[i].min.as<Variable>()->name] = (int)(*imin);
-            computed_map[f->region_required[i].max.as<Variable>()->name] = (int)(*imax);
-        }
-        for (const auto &s : f->stages) {
-            vector<pair<int64_t, int64_t>> loop;
-            int64_t prod = 1;
-            for (const auto &l : s.loop) {
-                Expr min = simplify(substitute(computed_map, l.min));
-                Expr max = simplify(substitute(computed_map, l.max));
-                const int64_t *imin = as_const_int(min);
-                const int64_t *imax = as_const_int(max);
-                internal_assert(imin && imax) << min << ", " << max << '\n';
-                loop.push_back({*imin, *imax});
-                prod *= (*imax) - (*imin) + 1;
-            }
-            bound.loops.emplace_back(std::move(loop));
+        bound.region_computed.resize(f->func.dimensions());
+        f->required_to_computed(bound.region_required.data(), bound.region_computed.data());
+
+        bound.loops.resize(f->stages.size());
+        for (int i = 0; i < (int)f->stages.size(); i++) {
+            const auto &s = f->stages[i];
+            bound.loops[i].resize(s.loop.size());
+            f->loop_nest_for_region(i, bound.region_computed.data(), bound.loops[i].data());
         }
 
         return set_bounds(f, std::move(bound));
