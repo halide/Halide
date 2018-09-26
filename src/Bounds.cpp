@@ -1596,15 +1596,6 @@ private:
                     }
                 }
             }
-<<<<<<< HEAD
-        }
-
-        if (op->value.type() == type_of<struct halide_buffer_t *>()) {
-            buffer_lets.erase(op->name);
-        }
-    }
-=======
->>>>>>> 31f6dce154fe938b2ed109e315539cf1a9fd9cbf
 
             if (is_let_stmt::value) {
                 let_stmts.pop(it->op->name);
