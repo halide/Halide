@@ -2,6 +2,7 @@
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "IREquality.h"
 #include "IRVisitor.h"
 #include "IRMutator.h"
 #include "OutputImageParam.h"
@@ -202,25 +203,44 @@ struct FunctionDAG {
         // output requires computing other outputs too. You can't
         // really ask for a single output pixel from something blurred
         // with an IIR without computing the others, for example.
-        vector<Interval> region_computed;
+        struct RegionComputedInfo {
+            // The min and max in their full symbolic glory
+            Interval in;
+
+            // Analysis used to accelerate common cases
+            bool equals_required = false, equals_union_of_required_with_constants = false;
+            int64_t c_min = 0, c_max = 0;
+        };
+        vector<RegionComputedInfo> region_computed;
+        bool region_computed_all_common_cases = false;
 
         // Expand a region required into a region computed, using the
         // symbolic intervals above.
         void required_to_computed(const pair<int64_t, int64_t> *required,
                                   pair<int64_t, int64_t> *computed) const {
             map<string, Expr> required_map;
-            for (int i = 0; i < func.dimensions(); i++) {
-                required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].first;
-                required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].second;
+            if (!region_computed_all_common_cases) {
+                for (int i = 0; i < func.dimensions(); i++) {
+                    required_map[region_required[i].min.as<Variable>()->name] = (int)required[i].first;
+                    required_map[region_required[i].max.as<Variable>()->name] = (int)required[i].second;
+                }
             }
             for (int i = 0; i < func.dimensions(); i++) {
-                Interval in = region_computed[i];
-                in.min = simplify(substitute(required_map, in.min));
-                in.max = simplify(substitute(required_map, in.max));
-                const int64_t *imin = as_const_int(in.min);
-                const int64_t *imax = as_const_int(in.max);
-                internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
-                computed[i] = std::make_pair(*imin, *imax);
+                const auto &comp = region_computed[i];
+                if (comp.equals_required) {
+                    computed[i] = required[i];
+                } else if (comp.equals_union_of_required_with_constants) {
+                    computed[i].first = std::min(required[i].first, comp.c_min);
+                    computed[i].second = std::max(required[i].second, comp.c_max);
+                } else {
+                    Expr min = simplify(substitute(required_map, comp.in.min));
+                    Expr max = simplify(substitute(required_map, comp.in.max));
+                    const int64_t *imin = as_const_int(min);
+                    const int64_t *imax = as_const_int(max);
+                    internal_assert(imin && imax) << min << ", " << max << '\n';
+                    computed[i].first = *imin;
+                    computed[i].second = *imax;
+                }
             }
         }
 
@@ -228,25 +248,47 @@ struct FunctionDAG {
             string var;
             bool pure;
             Expr min, max;
+
+            // Common case optimizations:
+
+            // If true, the loop bounds are just the region computed in the given dimension
+            bool equals_region_computed = false;
+            int region_computed_dim = 0;
+
+            // If true, the loop bounds are a constant with the given min and max
+            bool bounds_are_constant = false;
+            int64_t c_min = 0, c_max = 0;
         };
+
 
         // Get the loop nest shape as a function of the region computed
         void loop_nest_for_region(int stage_idx,
                                   const pair<int64_t, int64_t> *computed,
                                   pair<int64_t, int64_t> *loop) const {
-            map<string, Expr> computed_map;
-            for (int i = 0; i < func.dimensions(); i++) {
-                computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].first;
-                computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].second;
-            }
             const auto &s = stages[stage_idx];
+            map<string, Expr> computed_map;
+            if (!s.loop_nest_all_common_cases) {
+                for (int i = 0; i < func.dimensions(); i++) {
+                    computed_map[region_required[i].min.as<Variable>()->name] = (int)computed[i].first;
+                    computed_map[region_required[i].max.as<Variable>()->name] = (int)computed[i].second;
+                }
+            }
+
             for (size_t i = 0; i < s.loop.size(); i++) {
-                Expr min = simplify(substitute(computed_map, s.loop[i].min));
-                Expr max = simplify(substitute(computed_map, s.loop[i].max));
-                const int64_t *imin = as_const_int(min);
-                const int64_t *imax = as_const_int(max);
-                internal_assert(imin && imax) << min << ", " << max << '\n';
-                loop[i] = std::make_pair(*imin, *imax);
+                const auto &l = s.loop[i];
+                if (l.equals_region_computed) {
+                    loop[i] = computed[l.region_computed_dim];
+                } else if (l.bounds_are_constant) {
+                    loop[i].first = l.c_min;
+                    loop[i].second = l.c_max;
+                } else {
+                    Expr min = simplify(substitute(computed_map, l.min));
+                    Expr max = simplify(substitute(computed_map, l.max));
+                    const int64_t *imin = as_const_int(min);
+                    const int64_t *imax = as_const_int(max);
+                    internal_assert(imin && imax) << min << ", " << max << '\n';
+                    loop[i] = std::make_pair(*imin, *imax);
+                }
             }
         }
 
@@ -254,6 +296,7 @@ struct FunctionDAG {
         struct Stage {
             // The loop nest that computes this stage, from innermost out.
             vector<Loop> loop;
+            bool loop_nest_all_common_cases = false;
 
             // The amount of compute done per point evaluated, including the need to generate the call.
             double compute;
@@ -283,12 +326,61 @@ struct FunctionDAG {
     };
 
     struct Edge {
+        struct BoundInfo {
+            // The symbolic expression for the bound in this dimension
+            Expr expr;
+
+            // Below is additional analysis used to evaluate this bound more quickly.
+
+            // Bounds of producer in this dimension is coeff *
+            // consumer->loop[consumer_dim].{min/max} + constant
+            int64_t coeff, constant;
+            int64_t consumer_dim;
+            bool affine, uses_max;
+
+            BoundInfo(const Expr &e, const Node::Stage &consumer) : expr(e) {
+                // TODO: analysis
+                const Add *add = expr.as<Add>();
+                const Mul *mul = add ? add->a.as<Mul>() : expr.as<Mul>();
+                const IntImm *coeff_imm = mul ? mul->b.as<IntImm>() : nullptr;
+                const IntImm *constant_imm = add ? add->b.as<IntImm>() : nullptr;
+                Expr var = (mul ? mul->a :
+                            add ? add->a :
+                            expr);
+
+                if (var.as<Variable>() && (!mul || coeff_imm) && (!add || constant_imm)) {
+                    affine = true;
+                    coeff = mul ? coeff_imm->value : 1;
+                    constant = add ? constant_imm->value : 0;
+                    consumer_dim = -1;
+                    for (int i = 0; i < (int)consumer.loop.size(); i++) {
+                        const auto &in = consumer.loop[i];
+                        if (equal(var, in.min)) {
+                            consumer_dim = i;
+                            uses_max = false;
+                            break;
+                        } else if (equal(var, in.max)) {
+                            consumer_dim = i;
+                            uses_max = true;
+                            break;
+                        }
+                    }
+                    internal_assert(consumer_dim >= 0) << "Could not find consumer loop variable: " << var << "\n";
+                    debug(0) << "Bound is affine: " << e << " == " << var << " * " << coeff << " + " << constant << "\n";
+                } else {
+                    affine = false;
+                    debug(0) << "Bound is non-affine: " << e << "\n";
+                }
+            }
+        };
+        vector<pair<BoundInfo, BoundInfo>> bounds;
+
         FunctionDAG::Node *producer, *consumer;
         int consumer_stage;
 
-        // The region required of producer in terms of the variables
-        // of the loops of this stage of the consumer.
-        vector<Interval> bounds;
+        // The number of calls the consumer makes to the producer, per
+        // point in the loop nest of the consumer.
+        int calls;
 
         // Given a loop nest of the consumer stage, expand a region
         // required of the producer to be large enough to include all
@@ -299,11 +391,13 @@ struct FunctionDAG {
             // Create a map from the symbolic loop variables to the actual loop size
             const auto &symbolic_loop = consumer->stages[consumer_stage].loop;
             map<string, Expr> s;
-            for (size_t i = 0; i < symbolic_loop.size(); i++) {
-                auto p = consumer_loop[i];
-                const string &var = symbolic_loop[i].var;
-                s[consumer->func.name() + "." + var + ".min"] = (int)p.first;
-                s[consumer->func.name() + "." + var + ".max"] = (int)p.second;
+            if (!all_bounds_affine) {
+                for (size_t i = 0; i < symbolic_loop.size(); i++) {
+                    auto p = consumer_loop[i];
+                    const string &var = symbolic_loop[i].var;
+                    s[consumer->func.name() + "." + var + ".min"] = (int)p.first;
+                    s[consumer->func.name() + "." + var + ".max"] = (int)p.second;
+                }
             }
             // Apply that map to the bounds relationship encoded
             // in the edge to expand the bounds of the producer to
@@ -312,21 +406,25 @@ struct FunctionDAG {
                 // Get bounds required of this dimension of the
                 // producer in terms of a symbolic region of the
                 // consumer.
-                Interval in = bounds[i];
-                // Map from symbolic region to concrete region
-                in.min = simplify(substitute(s, in.min));
-                in.max = simplify(substitute(s, in.max));
-                const int64_t *imin = as_const_int(in.min);
-                const int64_t *imax = as_const_int(in.max);
-                internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
-                producer_required[i].first = std::min(producer_required[i].first, *imin);
-                producer_required[i].second = std::max(producer_required[i].second, *imax);
+                auto eval_bound = [&](const BoundInfo &b) {
+                    if (b.affine) {
+                        // Common-case performance optimization
+                        const auto &src_pair = consumer_loop[b.consumer_dim];
+                        int64_t src = b.uses_max ? src_pair.second : src_pair.first;
+                        return src * b.coeff + b.constant;
+                    } else {
+                        Expr e = simplify(substitute(s, b.expr));
+                        const int64_t *i = as_const_int(e);
+                        internal_assert(i) << "Should be constant:" << e << '\n';
+                        return *i;
+                    }
+                };
+                producer_required[i].first = std::min(producer_required[i].first, eval_bound(bounds[i].first));
+                producer_required[i].second = std::max(producer_required[i].second, eval_bound(bounds[i].second));
             }
         }
 
-        // The number of calls the consumer makes to the producer, per
-        // point in the loop nest of the consumer.
-        int calls;
+        bool all_bounds_affine;
     };
 
     vector<Node> nodes;
@@ -423,15 +521,41 @@ struct FunctionDAG {
                 }
 
                 // Figure out the region computed of the stage by taking bounds of the LHS Exprs
+                if (s == 0) {
+                    node.region_computed.resize(consumer.dimensions());
+                }
                 for (int j = 0; j < consumer.dimensions(); j++) {
                     Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope);
-                    in.min = simplify(apply_param_estimates.mutate(in.min));
-                    in.max = simplify(apply_param_estimates.mutate(in.max));
                     if (s == 0) {
-                        node.region_computed.push_back(in);
+                        node.region_computed[j].in = in;
                     } else {
-                        // We take the bounding box over the stages
-                        node.region_computed[j].include(in);
+                        node.region_computed[j].in.include(in);
+                    }
+                }
+                if (s == (int)consumer.updates().size()) {
+                    // Simplify region computed and perform additional
+                    // special-case analysis to make it faster to evaluate.
+                    node.region_computed_all_common_cases = true;
+                    for (int j = 0; j < consumer.dimensions(); j++) {
+                        const auto &req = node.region_required[j];
+                        auto &comp = node.region_computed[j];
+                        comp.in.min = simplify(apply_param_estimates.mutate(comp.in.min));
+                        comp.in.max = simplify(apply_param_estimates.mutate(comp.in.max));
+                        if (equal(comp.in.min, req.min) && equal(comp.in.max, req.max)) {
+                            comp.equals_required = true;
+                        } else {
+                            const Min *min = comp.in.min.as<Min>();
+                            const Max *max = comp.in.max.as<Max>();
+                            const int64_t *min_b = min ? as_const_int(min->b) : nullptr;
+                            const int64_t *max_b = max ? as_const_int(max->b) : nullptr;
+                            if (min_b && max_b && equal(min->a, req.min) && equal(max->a, req.max)) {
+                                comp.equals_union_of_required_with_constants = true;
+                                comp.c_min = *min_b;
+                                comp.c_max = *max_b;
+                            } else {
+                                node.region_computed_all_common_cases = false;
+                            }
+                        }
                     }
                 }
 
@@ -439,6 +563,7 @@ struct FunctionDAG {
 
                 // We'll take any existing reordering, but won't handle existing splits
                 internal_assert(sched.splits().empty());
+                stage.loop_nest_all_common_cases = true;
                 for (const auto &d : sched.dims()) {
                     // Skip synthetic loops like "__outermost"
                     if (!stage_scope.contains(d.var)) continue;
@@ -451,6 +576,33 @@ struct FunctionDAG {
                     l.min = in.min;
                     l.max = in.max;
                     l.pure = !d.is_rvar();
+
+                    // Additional analysis to speed up evaluation of
+                    // common cases. Loop bounds that are just one of
+                    // the dimensions of the symbolic region computed
+                    // are common, as are constant bounds.
+                    l.equals_region_computed = false;
+                    for (int j = 0; j < consumer.dimensions(); j++) {
+                        if (equal(l.min, node.region_computed[j].in.min) &&
+                            equal(l.max, node.region_computed[j].in.max)) {
+                            l.equals_region_computed = true;
+                            l.region_computed_dim = j;
+                            break;
+                        }
+                    }
+
+                    if (!l.equals_region_computed) {
+                        const int64_t *c_min = as_const_int(l.min), *c_max = as_const_int(l.max);
+                        if (c_min && c_max) {
+                            l.bounds_are_constant = true;
+                            l.c_min = *c_min;
+                            l.c_max = *c_max;
+                        } else {
+                            l.bounds_are_constant = false;
+                        }
+                    }
+
+                    stage.loop_nest_all_common_cases &= (l.bounds_are_constant || l.equals_region_computed);
 
                     if (d.var == innermost_storage_dim) {
                         should_vectorize = true;
@@ -550,10 +702,13 @@ struct FunctionDAG {
                         edge.consumer = node_map.at(consumer);
                         edge.consumer_stage = s;
                         edge.producer = node_map.at(env[p.first]);
-                        edge.bounds = p.second.bounds;
-                        for (Interval &i : edge.bounds) {
-                            i.max = simplify(apply_param_estimates.mutate(i.max));
-                            i.min = simplify(apply_param_estimates.mutate(i.min));
+                        edge.all_bounds_affine = true;
+                        for (Interval &i : p.second.bounds) {
+                            Edge::BoundInfo min(simplify(apply_param_estimates.mutate(i.min)), edge.consumer->stages[s]);
+                            Edge::BoundInfo max(simplify(apply_param_estimates.mutate(i.max)), edge.consumer->stages[s]);
+                            edge.bounds.emplace_back(std::move(min), std::move(max));
+                            edge.all_bounds_affine &= edge.bounds.back().first.affine;
+                            edge.all_bounds_affine &= edge.bounds.back().second.affine;
                         }
                         edge.calls = checker.calls[edge.producer->func.name()];
                         edges.emplace_back(std::move(edge));
@@ -889,8 +1044,8 @@ struct FunctionDAG {
                 debug(0) << "    " << i.min << ", " << i.max << '\n';
             }
             debug(0) << "  Region computed: \n";
-            for (const Interval &i : n.region_computed) {
-                debug(0) << "    " << i.min << ", " << i.max << '\n';
+            for (const auto &i : n.region_computed) {
+                debug(0) << "    " << i.in.min << ", " << i.in.max << '\n';
             }
             for (size_t i = 0; i < n.stages.size(); i++) {
                 debug(0) << "  Stage " << i << ":\n";
@@ -904,9 +1059,9 @@ struct FunctionDAG {
             debug(0) << "Edge: " << e.producer->func.name() << " -> " << e.consumer->func.name() << '\n'
                      << "  Footprint: \n";
             int j = 0;
-            for (const Interval &i : e.bounds) {
-                debug(0) << "    Min " << j << ": " << i.min << '\n';
-                debug(0) << "    Max " << j << ": " << i.max << '\n';
+            for (const auto &i : e.bounds) {
+                debug(0) << "    Min " << j << ": " << i.first.expr << '\n';
+                debug(0) << "    Max " << j << ": " << i.second.expr << '\n';
                 j++;
             }
 
