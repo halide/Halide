@@ -2050,10 +2050,10 @@ class ScatterGatherGenerator : public IRMutator2 {
         }
         // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
         // supported yet.
-        if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
+        if (op->index.as<Ramp>() || !is_one(op->predicate) || !ty.is_vector() ||
+            ty.bits() == 8) {
             return Expr();
         }
-
         Expr index = mutate(ty.bytes() * op->index);
         Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
         if (ty.bits() == 16 && index_bounds.is_bounded()) {
