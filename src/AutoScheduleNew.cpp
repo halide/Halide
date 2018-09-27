@@ -245,7 +245,7 @@ struct FunctionDAG {
                 Expr max = simplify(substitute(computed_map, s.loop[i].max));
                 const int64_t *imin = as_const_int(min);
                 const int64_t *imax = as_const_int(max);
-                internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
+                internal_assert(imin && imax) << min << ", " << max << '\n';
                 loop[i] = std::make_pair(*imin, *imax);
             }
         }
@@ -296,6 +296,32 @@ struct FunctionDAG {
         void expand_footprint(const pair<int64_t, int64_t> *consumer_loop,
                               pair<int64_t, int64_t> *producer_required) const {
 
+            // Create a map from the symbolic loop variables to the actual loop size
+            const auto &symbolic_loop = consumer->stages[consumer_stage].loop;
+            map<string, Expr> s;
+            for (size_t i = 0; i < symbolic_loop.size(); i++) {
+                auto p = consumer_loop[i];
+                const string &var = symbolic_loop[i].var;
+                s[consumer->func.name() + "." + var + ".min"] = (int)p.first;
+                s[consumer->func.name() + "." + var + ".max"] = (int)p.second;
+            }
+            // Apply that map to the bounds relationship encoded
+            // in the edge to expand the bounds of the producer to
+            // satisfy the consumer
+            for (int i = 0; i < producer->func.dimensions(); i++) {
+                // Get bounds required of this dimension of the
+                // producer in terms of a symbolic region of the
+                // consumer.
+                Interval in = bounds[i];
+                // Map from symbolic region to concrete region
+                in.min = simplify(substitute(s, in.min));
+                in.max = simplify(substitute(s, in.max));
+                const int64_t *imin = as_const_int(in.min);
+                const int64_t *imax = as_const_int(in.max);
+                internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
+                producer_required[i].first = std::min(producer_required[i].first, *imin);
+                producer_required[i].second = std::max(producer_required[i].second, *imax);
+            }
         }
 
         // The number of calls the consumer makes to the producer, per
@@ -1471,51 +1497,21 @@ struct PartialScheduleNode {
             internal_assert(!f->outgoing_edges.empty())
                 << "No consumers of " << f->func.name()
                 << " at loop over " << (is_root() ? "root" : node->func.name()) << '\n';
+            std::pair<int64_t, int64_t> init {INT64_MAX, INT64_MIN};
+            bound.region_required.resize(f->func.dimensions(), init);
             for (const auto *e : f->outgoing_edges) {
                 // Ignore consumers outside of this loop nest
                 if (!computes(e->consumer)) {
                     continue;
                 }
                 const auto &c_bounds = get_bounds(e->consumer);
-                const auto *c_node = e->consumer;
-                const auto &concrete_loop = c_bounds.loops[e->consumer_stage]; // For the concrete sizes of the loop
-                const auto &symbolic_loop = c_node->stages[e->consumer_stage].loop; // Just for the var names of the loop
-                if (concrete_loop.empty()) {
+                const auto &consumer_loop = c_bounds.loops[e->consumer_stage]; // For the concrete sizes of the loop
+                if (consumer_loop.empty()) {
                     // This consumer loop doesn't occur within this PartialScheduleNode
                     // TODO: Not a good way to encode this. What about deps on scalars?
                     continue;
                 }
-                // Create a map from the symbolic loop variables to the actual loop size
-                map<string, Expr> s;
-                internal_assert(concrete_loop.size() == symbolic_loop.size());
-                for (size_t i = 0; i < concrete_loop.size(); i++) {
-                    auto p = concrete_loop[i];
-                    const string &var = symbolic_loop[i].var;
-                    s[e->consumer->func.name() + "." + var + ".min"] = (int)p.first;
-                    s[e->consumer->func.name() + "." + var + ".max"] = (int)p.second;
-                }
-                // Apply that map to the bounds relationship encoded
-                // in the edge to expand the bounds of the producer to
-                // satisfy the consumer
-                for (int i = 0; i < f->func.dimensions(); i++) {
-                    // Get bounds required of this dimension of the
-                    // producer in terms of a symbolic region of the
-                    // consumer.
-                    Interval in = e->bounds[i];
-                    // Map from symbolic region to concrete region
-                    in.min = simplify(substitute(s, in.min));
-                    in.max = simplify(substitute(s, in.max));
-                    const int64_t *imin = as_const_int(in.min);
-                    const int64_t *imax = as_const_int(in.max);
-                    internal_assert(imin && imax) << in.min << ", " << in.max << '\n';
-                    // Expand the bounds of the producer
-                    if ((size_t)i >= bound.region_required.size()) {
-                        bound.region_required.push_back({*imin, *imax});
-                    } else {
-                        bound.region_required[i].first = std::min(bound.region_required[i].first, *imin);
-                        bound.region_required[i].second = std::max(bound.region_required[i].second, *imax);
-                    }
-                }
+                e->expand_footprint(consumer_loop.data(), bound.region_required.data());
             }
             internal_assert(bound.region_required.size() == (size_t)f->func.dimensions())
                 << is_root() << ' '
