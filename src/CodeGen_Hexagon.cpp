@@ -2061,7 +2061,6 @@ void CodeGen_Hexagon::visit(const NE *op) {
 }
 
 void CodeGen_Hexagon::visit(const Allocate *op) {
-    // TODO: Add assert instead of failing silently.
     if (op->memory_type == MemoryType::VTCM && !op->new_expr.defined()) {
         // Calculate size of allocation.
         Expr size = op->type.bytes();
