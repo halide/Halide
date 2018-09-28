@@ -23,8 +23,8 @@
 # from the SDK that cannot be redistributed with Halide).
 #
 
-HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.1
-HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/HEXAGON_Tools/8.0.10/Tools
+HEXAGON_SDK_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3
+HEXAGON_TOOLS_ROOT ?= ${HOME}/Qualcomm/Hexagon_SDK/3.3.3/tools/HEXAGON_Tools/8.1.05
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
 
@@ -45,9 +45,9 @@ HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 CC-host = ${CXX}
 CXX-host = ${CXX}
 
-CC-v60 = ${HEXAGON_TOOLS_ROOT}/bin/hexagon-clang
-CXX-v60 = ${HEXAGON_TOOLS_ROOT}/bin/hexagon-clang++
-LD-v60 = $(HEXAGON_TOOLS_ROOT)/bin/hexagon-link
+CC-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang
+CXX-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++
+LD-v60 = ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-link
 
 CC-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
 CXX-arm-64-android = ${ANDROID_NDK_ROOT}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
@@ -57,8 +57,8 @@ CC-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/pre
 CXX-arm-32-android = ${ANDROID_NDK_ROOT}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
 CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm
 
-CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
-	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
+CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/Tools/include/iss/ -fPIC \
+	-L${HEXAGON_TOOLS_ROOT}/Tools/lib/iss/ -lwrapper
 
 CCFLAGS-v60 := $(CCFLAGS-v60) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv80_v62 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
@@ -78,7 +78,8 @@ hosts: \
 remotes: \
 	bin/v60/libhalide_hexagon_remote_skel.so \
 	bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so \
-	bin/v60/hexagon_sim_remote
+	bin/v60/hexagon_sim_remote \
+	bin/v60/libsim_qurt.a
 
 bin/src/halide_hexagon_remote.h bin/src/halide_hexagon_remote_skel.c bin/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $(@D)
@@ -152,6 +153,13 @@ bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
+bin/%/sim_qurt.o: sim_qurt.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt.cpp -o $@
+
+bin/%/libsim_qurt.a: bin/%/sim_qurt.o
+	ar rcs $@ $^
+
 CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
 CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
 INIT           =$(shell $(CXX-v60) -G0 -print-file-name=init.o)
@@ -159,11 +167,11 @@ LIB_STANDALONE =$(shell $(CXX-v60) -G0 -print-file-name=libstandalone.a)
 LIB_C          =$(shell $(CXX-v60) -G0 -print-file-name=libc.a)
 LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
 FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
-LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
+LIBDL          =$(HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v60/G0/libdl.a
 
-bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o
+bin/%/hexagon_sim_remote: bin/%/sim_remote.o bin/%/dlib.o bin/%/known_symbols.o bin/%/libsim_qurt.a
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o bin/$*/known_symbols.o $(LIBDL) \
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o bin/$*/dlib.o bin/$*/known_symbols.o bin/$*/libsim_qurt.a $(LIBDL) \
 	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	--dynamic-linker= -E --force-dynamic
 	#$(CC-$*) -m$* -mG0lib -G0 -ldl -lc -lstandalone -lgcc  $^ $(LIBDL) -o $@

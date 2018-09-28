@@ -15,8 +15,10 @@ int main(int argc, char **argv) {
     Func f;
     Var x;
 
-    Expr xf = x/256.0f;
-
+    // Create x scaled down by 256. We're going to intentionally do
+    // something numerically unstable below, so we prevent folding out
+    // the /256, or large powers of x will be inf
+    Expr xf = strict_float(x/256.0f);
 
     {
 

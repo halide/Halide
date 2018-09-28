@@ -72,6 +72,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_fold_factor_too_small,
     (void *)&halide_error_host_is_null,
+    (void *)&halide_error_integer_division_by_zero,
     (void *)&halide_error_out_of_memory,
     (void *)&halide_error_param_too_large_f64,
     (void *)&halide_error_param_too_large_i64,

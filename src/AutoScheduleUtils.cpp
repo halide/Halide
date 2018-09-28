@@ -48,10 +48,12 @@ class SubstituteVarEstimates: public IRMutator2 {
 } // anonymous namespace
 
 Expr subsitute_var_estimates(Expr e) {
+    if (!e.defined()) return e;
     return simplify(SubstituteVarEstimates().mutate(e));
 }
 
 Stmt subsitute_var_estimates(Stmt s) {
+    if (!s.defined()) return s;
     return simplify(SubstituteVarEstimates().mutate(s));
 }
 
@@ -153,7 +155,8 @@ vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds) {
 }
 
 Expr perform_inline(Expr e, const map<string, Function> &env,
-                    const set<string> &inlines) {
+                    const set<string> &inlines,
+                    const vector<string> &order) {
     if (inlines.empty()) {
         return e;
     }
@@ -166,8 +169,24 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // Find all the function calls in the current expression.
         FindAllCalls find;
         inlined_expr.accept(&find);
-        const set<string> &calls = find.funcs_called;
+        const set<string> &calls_unsorted = find.funcs_called;
+
+        vector<string> calls(calls_unsorted.begin(), calls_unsorted.end());
+        // Sort 'calls' based on the realization order in descending order
+        // if provided (i.e. last to be realized comes first).
+        if (!order.empty()) {
+            std::sort(calls.begin(), calls.end(),
+                [&order](const string &lhs, const string &rhs){
+                    const auto &iter_lhs = std::find(order.begin(), order.end(), lhs);
+                    const auto &iter_rhs = std::find(order.begin(), order.end(), rhs);
+                    return iter_lhs > iter_rhs;
+                }
+            );
+        }
+
         // Check if any of the calls are in the set of functions to be inlined.
+        // Inline from the last function to be realized to avoid extra
+        // inlining works.
         for (const auto &call : calls) {
             if (inlines.find(call) != inlines.end()) {
                 Function prod_func = env.at(call);
