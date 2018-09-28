@@ -2,6 +2,7 @@
 #include "CSE.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "IntrusivePtr.h"
 #include "IREquality.h"
 #include "IRVisitor.h"
 #include "IRMutator.h"
@@ -189,6 +190,9 @@ struct FunctionDAG {
     struct Edge;
 
     struct Node {
+        // A pointer back to the owning DAG
+        FunctionDAG *dag;
+
         Function func;
 
         double bytes_per_point;
@@ -319,10 +323,41 @@ struct FunctionDAG {
         // Max vector size across the stages
         int vector_size;
 
-        // A unique ID for this node, allocated consecutively starting at zero for each pipeline
+        // A unique ID for this node, allocated consecutively starting
+        // at zero for each pipeline.
         int id;
 
         bool is_output;
+
+        // We're frequently going to need to make concrete bounds
+        // arrays representing the shapes of bounds required and
+        // computed, and the loop extents, for some particular
+        // candidate schedule, as ints instead of Exprs. It makes
+        // things more efficient if we figure out the memory layout of
+        // those data structures once ahead of time.
+        struct BoundsMemoryLayout {
+            // number of pair<int64_t, int64_t> to allocate
+            int total_size;
+
+            // region_required has size func->dimensions() and comes first in the memory layout
+
+            // region_computed comes next at the following index
+            int computed_offset;
+
+            // the loop for each stage starts at the following index
+            std::vector<int> loop_offset;
+
+            // TODO: consider a memory pool
+
+            void init(const FunctionDAG::Node &n) {
+                computed_offset = n.func.dimensions();
+                total_size = computed_offset + n.func.dimensions();
+                for (const auto &s : n.stages) {
+                    loop_offset.push_back(total_size);
+                    total_size += (int)s.loop.size();
+                }
+            }
+        } bounds_memory_layout;
     };
 
     struct Edge {
@@ -330,16 +365,18 @@ struct FunctionDAG {
             // The symbolic expression for the bound in this dimension
             Expr expr;
 
-            // Below is additional analysis used to evaluate this bound more quickly.
-
-            // Bounds of producer in this dimension is coeff *
-            // consumer->loop[consumer_dim].{min/max} + constant
+            // Fields below are the results of additional analysis
+            // used to evaluate this bound more quickly.
             int64_t coeff, constant;
             int64_t consumer_dim;
             bool affine, uses_max;
 
             BoundInfo(const Expr &e, const Node::Stage &consumer) : expr(e) {
-                // TODO: analysis
+                // Do the analysis to detect if this is a simple case
+                // that can be evaluated more cheaply. Currently this
+                // acceleration recognises affine expressions. In the
+                // future we may consider quasi-affine, or even
+                // piecewise-quasi-affine.
                 const Add *add = expr.as<Add>();
                 const Mul *mul = add ? add->a.as<Mul>() : expr.as<Mul>();
                 const IntImm *coeff_imm = mul ? mul->b.as<IntImm>() : nullptr;
@@ -479,6 +516,7 @@ struct FunctionDAG {
             Function f = env[order[order.size() - i - 1]];
             nodes[i].func = f;
             nodes[i].id = (int)i;
+            nodes[i].dag = this;
             node_map[f] = &nodes[i];
         }
 
@@ -715,6 +753,11 @@ struct FunctionDAG {
                     }
                 }
             }
+        }
+
+        // Initialize the memory layouts for the bounds structs
+        for (auto &n : nodes) {
+            n.bounds_memory_layout.init(n);
         }
 
         for (size_t i = 0; i < edges.size(); i++) {
@@ -1166,7 +1209,7 @@ struct ScheduleFeatures {
 
     int64_t rounded_innermost_pure_loop_extent = 0; // Innermost pure loop extend rounded up to the next multiple of the vector size
 
-    int native_vector_size; // The native vector size for the narrowest type used.
+    int native_vector_size = 0; // The native vector size for the narrowest type used.
 
     void dump() const {
         debug(0) << "    num_realizations:                      " << num_realizations << '\n'
@@ -1194,6 +1237,162 @@ struct ScheduleFeatures {
                  << "    vector_size:                           " << vector_size << '\n'
                  << "    rounded_innermost_pure_loop_extent     " << rounded_innermost_pure_loop_extent << '\n'
                  << "    native_vector_size:                    " << vector_size << '\n';
+    }
+};
+
+// A specialized map from DAG nodes to values of type T. Exploits the
+// node id as a perfect hash.
+template<typename T>
+class NodeMap {
+    using storage_type = std::vector<std::pair<const FunctionDAG::Node *, T>>;
+
+    storage_type storage;
+
+    size_t occupied = 0;
+
+    void bounds_check(int id) const {
+        internal_assert(storage.empty() || id < (int)storage.size()) << id << " out of bounds\n";
+    }
+
+public:
+
+    const T &emplace(const FunctionDAG::Node *n, T &&t) {
+        if (storage.empty()) {
+            storage.resize(n->dag->nodes.size());
+        }
+        bounds_check(n->id);
+        auto &p = storage[n->id];
+        if (!p.first) occupied++;
+        p.first = n;
+        p.second = std::forward<T>(t);
+        return p.second;
+    }
+
+    const T &insert(const FunctionDAG::Node *n, T t) {
+        if (storage.empty()) {
+            storage.resize(n->dag->nodes.size());
+        }
+        bounds_check(n->id);
+        auto &p = storage[n->id];
+        if (!p.first) occupied++;
+        p.first = n;
+        p.second = t;
+        return p.second;
+    }
+
+    const T &get(const FunctionDAG::Node *n) const {
+        internal_assert(!storage.empty()) << "Calling get on empty NodeMap\n";
+        return storage[n->id].second;
+    }
+
+    T &get(const FunctionDAG::Node *n) {
+        internal_assert(!storage.empty()) << "Calling get on empty NodeMap\n";
+        return storage[n->id].second;
+    }
+
+    T &get_or_create(const FunctionDAG::Node *n) {
+        if (storage.empty()) {
+            storage.resize(n->dag->nodes.size());
+        }
+        auto &p = storage[n->id];
+        if (!p.first) {
+            p.first = n;
+            occupied++;
+        }
+        return get(n);
+    }
+
+    size_t size() const {
+        return occupied;
+    }
+
+    bool contains(const FunctionDAG::Node *n) const {
+        bounds_check(n->id);
+        return (!storage.empty()) && (storage[n->id].first != nullptr);
+    }
+
+    struct iterator {
+        pair<const FunctionDAG::Node *, T> *iter, *end;
+
+        void operator++(int) {
+            do {
+                iter++;
+            } while (iter->first == nullptr && iter != end);
+        }
+
+        const FunctionDAG::Node *key() const {
+            return iter->first;
+        }
+
+        T &value() const {
+            return iter->second;
+        }
+
+        bool operator!=(const iterator &other) const {
+            return iter != other.iter;
+        }
+
+        bool operator==(const iterator &other) const {
+            return iter == other.iter;
+        }
+    };
+
+    struct const_iterator {
+        const pair<const FunctionDAG::Node *, T> *iter, *end;
+
+        void operator++(int) {
+            do {
+                iter++;
+            } while (iter->first == nullptr && iter != end);
+        }
+
+        const FunctionDAG::Node *key() const {
+            return iter->first;
+        }
+
+        const T &value() const {
+            return iter->second;
+        }
+
+        bool operator!=(const const_iterator &other) const {
+            return iter != other.iter;
+        }
+
+        bool operator==(const const_iterator &other) const {
+            return iter == other.iter;
+        }
+    };
+
+    iterator begin() {
+        if (storage.empty()) return end();
+        iterator it;
+        it.iter = storage.data();
+        it.end = it.iter + storage.size();
+        if (it.key() == nullptr) it++;
+        internal_assert(it.iter == it.end || it.key());
+        return it;
+    }
+
+    iterator end() {
+        iterator it;
+        it.iter = it.end = storage.data() + storage.size();
+        return it;
+    }
+
+    const_iterator begin() const {
+        if (storage.empty()) return end();
+        const_iterator it;
+        it.iter = storage.data();
+        it.end = it.iter + storage.size();
+        if (it.key() == nullptr) it++;
+        internal_assert(it.iter == it.end || it.key());
+        return it;
+    }
+
+    const_iterator end() const {
+        const_iterator it;
+        it.iter = it.end = storage.data() + storage.size();
+        return it;
     }
 };
 
@@ -1243,6 +1442,67 @@ struct FinePassConstraints : public Constraints {
     }
 };
 
+struct BoundContents;
+
+using Bound = IntrusivePtr<const BoundContents>;
+
+// A concrete set of bounds for a Func. These are created and
+// destroyed very frequently while exploring scheduling options. Much
+// like IR nodes, we treat them as immutable once created and wrapped
+// in a Bound object so that they can be shared safely across
+// scheduling alternatives.
+struct BoundContents {
+    mutable RefCount ref_count;
+    // The box over which something is required, touched, and the shape of the loop nest(s)
+    // vector<pair<int64_t, int64_t>> region_required, region_computed;
+    // vector<vector<pair<int64_t, int64_t>>> loops;
+    const FunctionDAG::Node::BoundsMemoryLayout *layout;
+    vector<pair<int64_t, int64_t>> data;
+    BoundContents(const FunctionDAG::Node *n) {
+        layout = &(n->bounds_memory_layout);
+        data.resize(layout->total_size);
+    }
+
+    BoundContents(const Bound &b) : layout(b->layout), data(b->data) {}
+
+    pair<int64_t, int64_t> &region_required(int i) {
+        return data[i];
+    }
+
+    pair<int64_t, int64_t> &region_computed(int i) {
+        return data[i + layout->computed_offset];
+    }
+
+    pair<int64_t, int64_t> &loops(int i, int j) {
+        return data[j + layout->loop_offset[i]];
+    }
+
+
+    const pair<int64_t, int64_t> &region_required(int i) const {
+        return data[i];
+    }
+
+    const pair<int64_t, int64_t> &region_computed(int i) const {
+        return data[i + layout->computed_offset];
+    }
+
+    const pair<int64_t, int64_t> &loops(int i, int j) const {
+        return data[j + layout->loop_offset[i]];
+    }
+};
+
+
+
+}
+
+template<>
+RefCount &ref_count<BoundContents>(const BoundContents *t) {return t->ref_count;}
+
+template<>
+void destroy<BoundContents>(const BoundContents *t) {delete t;}
+
+namespace {
+
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
 // gives you children of the state (with costs). The following struct
@@ -1252,7 +1512,27 @@ struct FinePassConstraints : public Constraints {
 // loop nest of some Func. If there are no children, it's the
 // innermost set of loops. If there are children, it's a loop over
 // tiles of that Func.
-struct PartialScheduleNode {
+struct LoopNest {
+    mutable RefCount ref_count;
+
+    // The extents of the loops
+    vector<int64_t> size;
+
+    // The nodes inside the loop body
+    vector<IntrusivePtr<const LoopNest>> children;
+
+    // Funcs inlined into this inner loop, and the number of times they are called. Only valid if children is empty.
+    NodeMap<int64_t> inlined;
+
+    // Funcs realized inside this inner loop
+    set<const FunctionDAG::Node *> store_at;
+
+    // The total bounds required of the given Func for one
+    // representative iteration of this loop. Computed lazily and
+    // cached. entries are immutable so that bounds are shared across
+    // different instances.
+    mutable NodeMap<Bound> bounds;
+
     const FunctionDAG::Node *node = nullptr;
     const FunctionDAG::Node::Stage *stage = nullptr;
     int stage_idx = 0;
@@ -1263,17 +1543,18 @@ struct PartialScheduleNode {
     // Are we permitted to tile this loop?
     bool tileable = false;
 
-    // The extents of the loops
-    vector<int64_t> size;
-
-    // The nodes inside the loop body
-    vector<std::shared_ptr<PartialScheduleNode>> children;
-
-    // Funcs inlined into this inner loop, and the number of times they are called. Only valid if children is empty.
-    map<const FunctionDAG::Node *, int64_t> inlined;
-
-    // Funcs realized inside this inner loop
-    set<const FunctionDAG::Node *> store_at;
+    void copy_from(const LoopNest &n) {
+        size = n.size;
+        children = n.children;
+        inlined = n.inlined;
+        store_at = n.store_at;
+        bounds = n.bounds; // TODO: bounds object is larger than necessary much of the time, making this copy slow
+        node = n.node;
+        stage = n.stage;
+        stage_idx = n.stage_idx;
+        innermost = n.innermost;
+        tileable = n.tileable;
+    };
 
     static void hash_combine(uint64_t &h, uint64_t next) {
         // From boost
@@ -1306,29 +1587,29 @@ struct PartialScheduleNode {
         return count;
     }
 
-    void get_compute_sites(map<const FunctionDAG::Node *, const PartialScheduleNode *> &compute_site,
-                           map<const FunctionDAG::Node *, const PartialScheduleNode *> &store_site,
-                           const PartialScheduleNode *parent = nullptr) {
+    void get_compute_sites(NodeMap<const LoopNest *> &compute_site,
+                           NodeMap<const LoopNest *> &store_site,
+                           const LoopNest *parent = nullptr) const {
         for (auto c : children) {
             c->get_compute_sites(compute_site, store_site, this);
         }
         if (parent && node != parent->node) {
-            compute_site[node] = parent;
+            compute_site.insert(node, parent);
         }
         for (auto f : store_at) {
-            store_site[f] = this;
+            store_site.insert(f, this);
         }
     }
 
     void compute_features(const MachineParams &params,
-                          const map<const FunctionDAG::Node *, const PartialScheduleNode *> &compute_site,
-                          const map<const FunctionDAG::Node *, const PartialScheduleNode *> &store_site,
+                          const NodeMap<const LoopNest *> &compute_site,
+                          const NodeMap<const LoopNest *> &store_site,
                           int64_t instances,
                           int64_t parallelism,
-                          const PartialScheduleNode *parent,
-                          const PartialScheduleNode &root,
+                          const LoopNest *parent,
+                          const LoopNest &root,
                           int64_t *working_set,
-                          map<const FunctionDAG::Node *, vector<ScheduleFeatures>> *features) {
+                          NodeMap<vector<ScheduleFeatures>> *features) const {
 
         int64_t working_set_here = 0;
 
@@ -1346,7 +1627,7 @@ struct PartialScheduleNode {
             // Figure out the features at the store_at level
             const auto &bounds = get_bounds(node);
 
-            vector<ScheduleFeatures> &func_features = (*features)[node];
+            vector<ScheduleFeatures> &func_features = features->get_or_create(node);
             if (func_features.empty()) {
                 func_features.resize(node->stages.size());
             }
@@ -1358,19 +1639,20 @@ struct PartialScheduleNode {
                 feat.num_realizations = subinstances;
 
                 feat.points_computed_per_realization = 1;
-                internal_assert(!bounds.loops[s].empty());
-                for (auto p : bounds.loops[s]) {
+                for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
+                    const auto &p = bounds->loops(s, i);
                     feat.points_computed_per_realization *= (p.second - p.first + 1);
                 }
                 feat.points_computed_total = feat.points_computed_per_realization * feat.num_realizations;
 
                 feat.bytes_at_realization = node->bytes_per_point;
-                for (auto p : bounds.region_computed) {
+                for (int i = 0; i < node->func.dimensions(); i++) {
+                    const auto &p = bounds->region_computed(i);
                     feat.bytes_at_realization *= (p.second - p.first) + 1;
                 }
                 int64_t innermost_storage_extent = 1;
-                if (!bounds.region_computed.empty()) {
-                    innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
+                if (node->func.dimensions() > 0) {
+                    innermost_storage_extent = bounds->region_computed(0).second - bounds->region_computed(0).first + 1;
                 }
                 feat.innermost_bytes_at_realization = node->bytes_per_point * innermost_storage_extent;
             }
@@ -1382,24 +1664,26 @@ struct PartialScheduleNode {
             }
 
             // Figure out the root-level features for every Func
-            for (auto &p : *features) {
-                const auto *node = p.first;
-                auto &feat_vec = p.second;
+            for (auto it = features->begin(); it != features->end(); it++) {
+                const auto *node = it.key();
+                auto &feat_vec = it.value();
                 const auto &root_bounds = root.get_bounds(node);
                 int s = 0;
                 for (auto &feat : feat_vec) {
                     feat.bytes_at_root = node->bytes_per_point;
-                    for (auto p : root_bounds.region_computed) {
+                    for (int i = 0; i < node->func.dimensions(); i++) {
+                        const auto &p = root_bounds->region_computed(i);
                         feat.bytes_at_root *= (p.second - p.first) + 1;
                     }
                     int64_t innermost_storage_extent = 1;
-                    if (!root_bounds.region_computed.empty()) {
-                        innermost_storage_extent = root_bounds.region_computed[0].second - root_bounds.region_computed[0].first + 1;
+                    if (node->func.dimensions() > 0) {
+                        innermost_storage_extent = root_bounds->region_computed(0).second - root_bounds->region_computed(0).first + 1;
                     }
                     feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
 
                     feat.points_computed_minimum = 1;
-                    for (auto p : root_bounds.loops[s]) {
+                    for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
+                        const auto &p = root_bounds->loops(s, i);
                         feat.points_computed_minimum *= (p.second - p.first + 1);
                     }
                     s++;
@@ -1413,7 +1697,7 @@ struct PartialScheduleNode {
         int64_t subparallelism = parallel_tasks * parallelism;
 
         // Figure out the features at the compute_at level
-        vector<ScheduleFeatures> &func_features = (*features)[node];
+        vector<ScheduleFeatures> &func_features = features->get_or_create(node);
         if (func_features.empty()) {
             func_features.resize(node->stages.size());
         }
@@ -1447,12 +1731,13 @@ struct PartialScheduleNode {
             const auto &bounds = parent->get_bounds(node);
 
             feat.bytes_at_production = node->bytes_per_point;
-            for (auto p : bounds.region_computed) {
+            for (int i = 0; i < node->func.dimensions(); i++) {
+                const auto &p = bounds->region_computed(i);
                 feat.bytes_at_production *= (p.second - p.first) + 1;
             }
             int64_t innermost_storage_extent = 1;
-            if (!bounds.region_computed.empty()) {
-                innermost_storage_extent = bounds.region_computed[0].second - bounds.region_computed[0].first + 1;
+            if (node->func.dimensions() > 0) {
+                innermost_storage_extent = bounds->region_computed(0).second - bounds->region_computed(0).first + 1;
             }
             feat.innermost_bytes_at_production = node->bytes_per_point * innermost_storage_extent;
         }
@@ -1463,7 +1748,7 @@ struct PartialScheduleNode {
 
         if (at_production) {
             for (const auto *node : store_at) {
-                working_set_here += (*features)[node][0].bytes_at_production;
+                working_set_here += features->get(node)[0].bytes_at_production;
             }
             feat.working_set = working_set_here;
             feat.rounded_innermost_pure_loop_extent = ((feat.innermost_pure_loop_extent + feat.vector_size - 1) / feat.vector_size) * feat.vector_size;
@@ -1474,7 +1759,7 @@ struct PartialScheduleNode {
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
         if (innermost || at_production) {
             // Pick the site at which we will compute the footprint relationship
-            const auto *consumer_store_site = innermost ? parent : store_site.find(node)->second;
+            const auto *consumer_store_site = innermost ? parent : store_site.get(node);
             int consumer_instances = innermost ? instances : feat.num_realizations;
 
             vector<const FunctionDAG::Node *> pending;
@@ -1483,15 +1768,14 @@ struct PartialScheduleNode {
                 const auto &next = pending.back()->incoming_edges;
                 pending.pop_back();
                 for (const auto *e : next) {
-                    auto it = compute_site.find(e->producer);
-                    if (it == compute_site.end()) {
+                    if (!compute_site.contains(e->producer)) {
                         // Producer was inlined, recursively examine its inputs
                         pending.push_back(e->producer);
                         continue;
                     }
 
-                    const auto *producer_compute_site = it->second;
-                    const auto *producer_store_site = store_site.find(e->producer)->second;
+                    const auto *producer_compute_site = compute_site.get(e->producer);
+                    const auto *producer_store_site = store_site.get(e->producer);
                     const auto &bounds = consumer_store_site->get_bounds(e->producer);
                     const auto &producer_compute_bounds = producer_compute_site->get_bounds(e->producer);
                     const auto &producer_store_bounds = producer_store_site->get_bounds(e->producer);
@@ -1503,12 +1787,10 @@ struct PartialScheduleNode {
                     int64_t store_line_footprint = 1;
                     bool discontinuous = false;
 
-                    internal_assert(bounds.region_required.size() == producer_compute_bounds.region_computed.size());
-                    internal_assert(bounds.region_required.size() == producer_store_bounds.region_computed.size());
-                    for (size_t i = 0; i < bounds.region_required.size(); i++) {
-                        auto p = bounds.region_required[i];
-                        auto compute_p = producer_compute_bounds.region_computed[i];
-                        auto store_p = producer_store_bounds.region_required[i];
+                    for (int i = 0; i < node->func.dimensions(); i++) {
+                        auto p = bounds->region_required(i);
+                        auto compute_p = producer_compute_bounds->region_computed(i);
+                        auto store_p = producer_store_bounds->region_required(i);
                         int64_t extent = p.second - p.first + 1;
                         int64_t compute_extent = compute_p.second - compute_p.first + 1;
                         int64_t store_extent = store_p.second - store_p.first + 1;
@@ -1531,7 +1813,7 @@ struct PartialScheduleNode {
 
 
                     int64_t store_instances_per_consumption = 1;
-                    const auto &producer_feat = (*features)[e->producer];
+                    const auto &producer_feat = features->get_or_create(e->producer);
                     if (!producer_feat.empty()) {
                         // The producer's realization is nested inside this Func's realization
                         const int64_t producer_store_instances = producer_feat[0].num_realizations;
@@ -1580,12 +1862,13 @@ struct PartialScheduleNode {
         }
 
         // Track features for inlined Funcs
-        for (auto p : inlined) {
-            auto &f = p.first;
-            vector<ScheduleFeatures> &func_features = (*features)[f];
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            const auto *f = it.key();
+            internal_assert(f);
+            vector<ScheduleFeatures> &func_features = features->get_or_create(f);
             func_features.resize(1);
             auto &inlined_feat = func_features[0];
-            inlined_feat.inlined_calls += p.second * subinstances;
+            inlined_feat.inlined_calls += it.value() * subinstances;
             inlined_feat.native_vector_size = (int64_t)(stage->vector_size);
             if (inlined_feat.vector_size > 0) {
                 inlined_feat.vector_size = std::min(inlined_feat.vector_size, (int64_t)stage->vector_size);
@@ -1610,26 +1893,16 @@ struct PartialScheduleNode {
         return node == nullptr;
     }
 
-    struct Bound {
-        // The box over which something is required, touched, and the shape of the loop nest(s)
-        vector<pair<int64_t, int64_t>> region_required, region_computed;
-        vector<vector<pair<int64_t, int64_t>>> loops;
-    };
-
-    // The total bounds required of the given Func for one representative iteration of this loop. Computed lazily and cached.
-    mutable map<const FunctionDAG::Node *, std::shared_ptr<const Bound>> bounds;
-
     const Bound &set_bounds(const FunctionDAG::Node *f, Bound &&b) const {
-        return *(bounds.emplace(f, std::shared_ptr<const Bound>(new Bound(std::move(b)))).first->second);
+        return bounds.emplace(f, std::move(b));
     }
 
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
         // debug(0) << "get_bounds of " << f.name() << " in loop over " << (is_root() ? "root" : func.name()) << '\n';
-        auto it = bounds.find(f);
-        if (it != bounds.end()) {
-            return *(it->second);
+        if (bounds.contains(f)) {
+            return bounds.get(f);
         }
-        Bound bound;
+        BoundContents *bound = new BoundContents(f);
         // Compute the region required
         if (f->is_output && is_root()) {
             internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
@@ -1646,46 +1919,34 @@ struct PartialScheduleNode {
                 auto it = estimates.find(f->func.args()[i]);
                 user_assert(it != estimates.end())
                     << "Need an estimate on dimension " << i << " of \"" << f->func.name() << "\"";
-                bound.region_required.push_back(it->second);
+                bound->region_required(i) = it->second;
             }
         } else {
             internal_assert(!f->outgoing_edges.empty())
                 << "No consumers of " << f->func.name()
                 << " at loop over " << (is_root() ? "root" : node->func.name()) << '\n';
             std::pair<int64_t, int64_t> init {INT64_MAX, INT64_MIN};
-            bound.region_required.resize(f->func.dimensions(), init);
+            for (int i = 0; i < f->func.dimensions(); i++) {
+                bound->region_required(i) = init;
+            }
             for (const auto *e : f->outgoing_edges) {
                 // Ignore consumers outside of this loop nest
                 if (!computes(e->consumer)) {
                     continue;
                 }
                 const auto &c_bounds = get_bounds(e->consumer);
-                const auto &consumer_loop = c_bounds.loops[e->consumer_stage]; // For the concrete sizes of the loop
-                if (consumer_loop.empty()) {
-                    // This consumer loop doesn't occur within this PartialScheduleNode
-                    // TODO: Not a good way to encode this. What about deps on scalars?
-                    continue;
-                }
-                e->expand_footprint(consumer_loop.data(), bound.region_required.data());
+                const auto *consumer_loop = &(c_bounds->loops(e->consumer_stage, 0)); // For the concrete sizes of the loop
+                e->expand_footprint(consumer_loop, &(bound->region_required(0)));
             }
-            internal_assert(bound.region_required.size() == (size_t)f->func.dimensions())
-                << is_root() << ' '
-                << f->func.name() << ' '
-                << bound.region_required.size() << ' '
-                << f->func.dimensions() << '\n';
         }
 
-        bound.region_computed.resize(f->func.dimensions());
-        f->required_to_computed(bound.region_required.data(), bound.region_computed.data());
+        f->required_to_computed(&(bound->region_required(0)), &(bound->region_computed(0)));
 
-        bound.loops.resize(f->stages.size());
         for (int i = 0; i < (int)f->stages.size(); i++) {
-            const auto &s = f->stages[i];
-            bound.loops[i].resize(s.loop.size());
-            f->loop_nest_for_region(i, bound.region_computed.data(), bound.loops[i].data());
+            f->loop_nest_for_region(i, &(bound->region_computed(0)), &(bound->loops(i, 0)));
         }
 
-        return set_bounds(f, std::move(bound));
+        return set_bounds(f, bound);
     }
 
     void dump(string prefix) const {
@@ -1710,8 +1971,8 @@ struct PartialScheduleNode {
         for (size_t i = children.size(); i > 0; i--) {
             children[i-1]->dump(prefix);
         }
-        for (auto p : inlined) {
-            debug(0) << prefix << "inlined: " << p.first->func.name() << " " << p.second << '\n';
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            debug(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
         }
         /*
         for (auto p : bounds) {
@@ -1732,8 +1993,7 @@ struct PartialScheduleNode {
             if (e->consumer == node && e->consumer_stage == stage_idx) {
                 return true;
             }
-            auto it = inlined.find(e->consumer);
-            if (it != inlined.end()) {
+            if (inlined.contains(e->consumer)) {
                 return true;
             }
         }
@@ -1756,8 +2016,8 @@ struct PartialScheduleNode {
         };
 
         if (check(node)) return true;
-        for (auto p : inlined) {
-            if (check(p.first)) return true;
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            if (check(it.key())) return true;
         }
         return false;
     }
@@ -1766,7 +2026,7 @@ struct PartialScheduleNode {
         if (f == node) {
             return true;
         }
-        if (inlined.count(f)) {
+        if (inlined.contains(f)) {
             return true;
         }
         for (const auto &c : children) {
@@ -1775,14 +2035,14 @@ struct PartialScheduleNode {
         return false;
     }
 
-    // Make a copy of the tree with the given func inlined.
-    PartialScheduleNode inline_func(const FunctionDAG::Node *f) const {
-        PartialScheduleNode result = *this;
-
+    void inline_func(const FunctionDAG::Node *f) {
         // Inline it into the children
-        for (size_t i = 0; i < result.children.size(); i++) {
+        for (size_t i = 0; i < children.size(); i++) {
             if (children[i]->calls(f)) {
-                result.children[i] = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode(children[i]->inline_func(f)));
+                auto new_child = new LoopNest;
+                new_child->copy_from(*children[i]);
+                new_child->inline_func(f);
+                children[i] = IntrusivePtr<const LoopNest>(new_child);
             }
         }
 
@@ -1790,57 +2050,57 @@ struct PartialScheduleNode {
         if (innermost) {
             int64_t calls = 0;
             for (const auto *e : f->outgoing_edges) {
-                auto it = inlined.find(e->consumer);
-                if (it != inlined.end()) {
-                    calls += it->second * e->calls;
+                if (inlined.contains(e->consumer)) {
+                    calls += inlined.get(e->consumer) * e->calls;
                 }
                 if (e->consumer == node) {
                     calls += e->calls;
                 }
             }
             if (calls) {
-                result.inlined[f] = calls;
+                inlined.insert(f, calls);
             }
         }
-        return result;
     }
 
     void compute_here(const FunctionDAG::Node *f, bool tileable) {
         const auto &bounds = get_bounds(f);
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
-            auto node = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode);
+            LoopNest *node = new LoopNest;
             node->node = f;
             node->stage_idx = s;
             node->stage = &f->stages[s];
             node->innermost = true;
             // TODO: rvars are not tileable
             node->tileable = tileable;
-            Bound single_point;
-            single_point.loops.resize(f->stages.size());
-            for (const auto &l : bounds.loops[s]) {
+            BoundContents *single_point = new BoundContents(f);
+            size_t loop_dim = f->stages[s].loop.size();
+            node->size.resize(loop_dim);
+            for (size_t i = 0; i < loop_dim; i++) {
+                const auto &l = bounds->loops(s, i);
                 // Initialize the loop nest
-                node->size.push_back(l.second - l.first + 1);
+                node->size[i] = l.second - l.first + 1;
                 // Pick a representative loop iteration for the inner
                 // loop. With the way tiling is done below, it needs
                 // to be the first loop iteration.
-                single_point.loops[s].push_back({l.first, l.first});
+                single_point->loops(s, i) = {l.first, l.first};
             }
             // Leave region required blank inside the computation of a Func
-            node->set_bounds(f, std::move(single_point));
-            children.emplace_back(std::move(node));
+            node->set_bounds(f, single_point);
+            children.emplace_back(node);
         }
     }
 
     // Return all possible ways to compute f in tiles.
-    vector<PartialScheduleNode> compute_in_tiles(const FunctionDAG::Node *f,
-                                                 const PartialScheduleNode *parent,
-                                                 const Constraints *constraints,
-                                                 const MachineParams &params,
-                                                 bool in_realization) const {
+    vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
+                                                          const LoopNest *parent,
+                                                          const Constraints *constraints,
+                                                          const MachineParams &params,
+                                                          bool in_realization) const {
         internal_assert(f);
         internal_assert(constraints);
 
-        vector<PartialScheduleNode> result;
+        vector<IntrusivePtr<const LoopNest>> result;
 
         // Figure out which child we can fuse this into
         int child = -1;
@@ -1865,15 +2125,15 @@ struct PartialScheduleNode {
             !innermost &&
             (!in_realization || size[vector_dim] == 1)) {
             // Place the computation inside this loop
-            PartialScheduleNode r = *this;
-            r.compute_here(f, is_root() || constraints->may_subtile());
+            LoopNest *r = new LoopNest;
+            r->copy_from(*this);
+            r->compute_here(f, is_root() || constraints->may_subtile());
             if (!in_realization) {
-                r.store_at.insert(f);
+                r->store_at.insert(f);
             } else {
-                r.tileable = false;
+                r->tileable = false;
             }
-
-            result.emplace_back(std::move(r));
+            result.emplace_back(r);
         }
 
         if (f->is_output || constraints->must_root(f)) {
@@ -1906,103 +2166,74 @@ struct PartialScheduleNode {
                     if (!good || total < params.parallelism) continue;
                 }
 
-
-
-                // Skip tilings of the innermost loop that leave too few loop iterations to vectorize well
-                /*
-                if (innermost) {
-                    const auto &l = stage->loop;
-                    int innermost_pure_loop_extent = 1;
-                    int innermost_split_factor = 1;
-                    for (size_t i = 0; i < t.size(); i++) {
-                        if (l[i].pure) {
-                            innermost_pure_loop_extent = size[i];
-                            innermost_split_factor = t[i];
-                            break;
-                        }
-                    }
-                    if (innermost_split_factor > 1 &&
-                        innermost_pure_loop_extent / innermost_split_factor < 64) {
-                        continue;
-                    }
-                }
-                */
-
                 // Tile this loop and place the computation at some coarser granularity
-                PartialScheduleNode outer = *this;
+                LoopNest *inner = new LoopNest, *outer = new LoopNest;
+                inner->node      = outer->node      = node;
+                inner->stage     = outer->stage     = stage;
+                inner->stage_idx = outer->stage_idx = stage_idx;
+                inner->tileable  = outer->tileable  = tileable && constraints->may_subtile();
+
+                outer->size = size;
+                outer->innermost = false;
 
                 // First make an inner loop representing a 1x1x1... tile
-                auto inner = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode);
-                inner->size.resize(outer.size.size(), 1);
-                inner->node = node;
-                inner->stage = stage;
-                inner->stage_idx = stage_idx;
+                inner->size.resize(size.size(), 1);
                 inner->innermost = innermost;
-                inner->tileable = tileable && constraints->may_subtile();
+                inner->children = children;
+                inner->inlined = inlined;
+                inner->bounds = bounds;
+                inner->store_at = store_at;
 
-                // Move the existing children and their bounds to the inner loop
-                std::swap(inner->children, outer.children);
-                std::swap(inner->inlined, outer.inlined);
-                std::swap(inner->bounds, outer.bounds);
-                std::swap(inner->store_at, outer.store_at);
+                // TODO: region_{computed/required} on inner is now
+                // wrong, but it doesn't matter because consumers only
+                // look at the loop in get_bounds. Still, this is
+                // weird.
 
                 {
-                    Bound b = inner->get_bounds(node);
-                    outer.innermost = false;
-                    outer.tileable &= constraints->may_subtile();
+                    BoundContents *b = new BoundContents(inner->get_bounds(node));
 
                     // Then move factors from the outer loop to the inner loop
                     auto parent_bounds = parent->get_bounds(node);
 
-                    // We're within the computation of a single stage of a
-                    // Func, so the bounds should have empty regions and a
-                    // single loop nest
-                    internal_assert(b.region_required.empty());
-                    internal_assert(b.region_computed.empty());
-
                     for (size_t i = 0; i < t.size(); i++) {
                         int factor = t[i];
-                        inner->size[i] = (outer.size[i] + factor - 1) / factor;
-                        outer.size[i] = factor;
-                        int64_t min = parent_bounds.loops[stage_idx][i].first;
-                        int64_t extent = parent_bounds.loops[stage_idx][i].second - min + 1;
+                        inner->size[i] = (outer->size[i] + factor - 1) / factor;
+                        outer->size[i] = factor;
+                        const auto &p = parent_bounds->loops(stage_idx, i);
+                        int64_t min = p.first;
+                        int64_t extent = p.second - min + 1;
                         extent = (extent + factor - 1) / factor;
-                        b.loops[stage_idx][i] = {min, min + extent - 1};
+                        b->loops(stage_idx, i) = {min, min + extent - 1};
                     }
 
-                    outer.set_bounds(node, std::move(b));
+                    outer->set_bounds(node, b);
                 }
 
-                outer.children.push_back(inner);
-
-                // Site the computation inside the outer loop
-                PartialScheduleNode compute_at_here = outer;
-                compute_at_here.compute_here(f, constraints->may_subtile());
                 if (!in_realization) {
-                    compute_at_here.store_at.insert(f);
-                } else {
-                    compute_at_here.tileable = false;
+                    outer->store_at.insert(f);
                 }
-
-                result.emplace_back(std::move(compute_at_here));
 
                 bool may_slide = (!in_realization &&
                                   f->stages.size() == 1);
                 if (may_slide) {
-                    // Also consider just storing here, but computing
-                    // further in. Currently don't have to worry about
-                    // the constraints this places on parallelism, as
-                    // we forced all the parallelism to the outer
-                    // loop.
-                    PartialScheduleNode store_at_here = std::move(outer);
-                    store_at_here.store_at.insert(f);
-                    auto v = inner->compute_in_tiles(f, &store_at_here, constraints, params, true);
-                    for (PartialScheduleNode n : v) {
-                        store_at_here.children.pop_back();
-                        store_at_here.children.emplace_back(new PartialScheduleNode(std::move(n)));
-                        result.push_back(store_at_here);
+                    // Store here, but compute further in. Currently
+                    // don't have to worry about the constraints this
+                    // places on parallelism, as we forced all the
+                    // parallelism to the outer loop.
+                    auto v = inner->compute_in_tiles(f, outer, constraints, params, true);
+                    for (IntrusivePtr<const LoopNest> &n : v) {
+                        LoopNest *store_at_outer_compute_further_in = new LoopNest;
+                        store_at_outer_compute_further_in->copy_from(*outer);
+                        store_at_outer_compute_further_in->children.emplace_back(std::move(n));
+                        result.emplace_back(store_at_outer_compute_further_in);
                     }
                 }
+
+                // Site the computation inside the outer loop
+                outer->children.emplace_back(inner);
+                outer->compute_here(f, constraints->may_subtile());
+                outer->tileable &= !in_realization;
+                result.emplace_back(outer);
             }
         }
 
@@ -2024,16 +2255,17 @@ struct PartialScheduleNode {
                     continue;
                 }
                 auto v = children[child]->compute_in_tiles(f, this, constraints, params, store_here);
-                for (PartialScheduleNode n : v) {
+                for (IntrusivePtr<const LoopNest> &n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
                     // the storage out here.
-                    PartialScheduleNode r = *this;
+                    LoopNest *r = new LoopNest;
+                    r->copy_from(*this);
                     if (store_here) {
-                        r.store_at.insert(f);
+                        r->store_at.insert(f);
                     }
-                    r.children[child] = std::shared_ptr<PartialScheduleNode>(new PartialScheduleNode(n));
-                    result.emplace_back(std::move(r));
+                    r->children[child] = n;
+                    result.emplace_back(r);
                 }
             }
         }
@@ -2057,7 +2289,7 @@ struct PartialScheduleNode {
                map<const FunctionDAG::Node::Stage *, FuncVars> &vars_map,
                double num_cores,
                int depth,
-               const PartialScheduleNode *parent) {
+               const LoopNest *parent) const {
         if (is_root()) {
             for (auto &c : children) {
                 Func(c->node->func).compute_root();
@@ -2075,7 +2307,8 @@ struct PartialScheduleNode {
                     const auto &l = symbolic_loop[i];
                     fv.var = VarOrRVar(l.var, !l.pure);
                     fv.orig = fv.var;
-                    fv.extent = parent_bounds.loops[stage_idx][i].second - parent_bounds.loops[stage_idx][i].first + 1;
+                    const auto &p = parent_bounds->loops(stage_idx, i);
+                    fv.extent = p.second - p.first + 1;
                     fv.outermost = true;
                     fv.parallel = false;
                     fv.exists = true;
@@ -2094,7 +2327,8 @@ struct PartialScheduleNode {
             if (stage_idx == 0 && parent->node != node) {
                 // Pick a memory type
                 double bytes = node->bytes_per_point;
-                for (const auto &p : parent_bounds.region_computed) {
+                for (int i = 0; i < node->func.dimensions(); i++) {
+                    const auto &p = parent_bounds->region_computed(i);
                     bytes *= p.second - p.first + 1;
                 }
                 if (bytes < 64000 && depth > 2) {
@@ -2221,8 +2455,18 @@ struct PartialScheduleNode {
 
 };
 
+}
+
+template<>
+RefCount &ref_count<LoopNest>(const LoopNest *t) {return t->ref_count;}
+
+template<>
+void destroy<LoopNest>(const LoopNest *t) {delete t;}
+
+namespace {
+
 struct State {
-    PartialScheduleNode root;
+    IntrusivePtr<const LoopNest> root;
 
     double cost = 0;
 
@@ -2232,19 +2476,21 @@ struct State {
 
     uint64_t structural_hash(int depth) const {
         uint64_t h = 0;
-        root.structural_hash(h, depth);
+        internal_assert(root.defined());
+        root->structural_hash(h, depth);
         return h;
     }
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
-        map<const FunctionDAG::Node *, const PartialScheduleNode *> compute_site, store_site;
-        map<const FunctionDAG::Node *, vector<ScheduleFeatures>> features;
-        root.get_compute_sites(compute_site, store_site);
-        root.compute_features(params, compute_site, store_site, 1, 1, nullptr, root, nullptr, &features);
+        NodeMap<const LoopNest *> compute_site, store_site;
+        NodeMap<vector<ScheduleFeatures>> features;
+        internal_assert(root.defined());
+        root->get_compute_sites(compute_site, store_site);
+        root->compute_features(params, compute_site, store_site, 1, 1, nullptr, *root, nullptr, &features);
 
         if (verbose) {
             for (const auto &n : dag.nodes) {
-                const auto &sched_feat = features[&n];
+                const auto &sched_feat = features.get_or_create(&n);
                 if (sched_feat.size() < n.stages.size()) {
                     // This Func hasn't been scheduled yet.
                     break;
@@ -2278,8 +2524,8 @@ struct State {
             // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
             int num_stages = 0;
-            for (auto p : features) {
-                num_stages += p.second.size();
+            for (auto it = features.begin(); it != features.end(); it++) {
+                num_stages += it.value().size();
             }
 
             const int pipeline_feat_size = 399;
@@ -2313,7 +2559,8 @@ struct State {
             // load schedule features into input buffer
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
-                const auto &feats = features.at(&n);
+                internal_assert(features.contains(&n));
+                const auto &feats = features.get(&n);
                 for (auto it = feats.rbegin(); it != feats.rend(); it++) {
                     const auto &feat = *it;
                     if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
@@ -2333,9 +2580,9 @@ struct State {
             }
         } else {
             // We have no throughput predictor.
-            for (auto p : features) {
-                for (size_t s = 0; s < p.second.size(); s++) {
-                    const auto &feat = p.second[s];
+            for (auto it = features.begin(); it != features.end(); it++) {
+                for (size_t s = 0; s < it.value().size(); s++) {
+                    const auto &feat = it.value()[s];
                     // Reject silly schedules. They're not even useful for
                     // training data, as they potentially take the age of
                     // the universe to benchmark. We define 'silly' as
@@ -2344,11 +2591,11 @@ struct State {
                     //if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
 
                     if (verbose) {
-                        debug(0) << "Schedule features for " << p.first->func.name() << " stage " << s << "\n";
+                        debug(0) << "Schedule features for " << it.key()->func.name() << " stage " << s << "\n";
                         feat.dump();
                     }
 
-                    auto &stage = p.first->stages[s];
+                    auto &stage = it.key()->stages[s];
                     double compute_cost = 0;
                     const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
                     double per_element_compute_cost = 0;
@@ -2374,7 +2621,7 @@ struct State {
 
                     // Inlining saves a call node, which in our cost
                     // model costs...
-                    const double per_element_compute_cost_of_memcpy = 1 + 2*p.first->func.dimensions();
+                    const double per_element_compute_cost_of_memcpy = 1 + 2*it.key()->func.dimensions();
                     const double per_element_compute_cost_inlined = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
                     const double compute_cost_inlined = per_element_compute_cost_inlined * feat.inlined_calls;
                     compute_cost += compute_cost_inlined;
@@ -2469,7 +2716,7 @@ struct State {
                     double cost_of_working_set = ws * ws * ws * params.balance * feat.num_realizations;
 
                     if (verbose) {
-                        debug(0) << "Cost model for " << p.first->func.name()
+                        debug(0) << "Cost model for " << it.key()->func.name()
                                  << " stage " << s << ": "
                                  << compute_cost << " + "
                                  << memory_load_cost << " + "
@@ -2493,7 +2740,7 @@ struct State {
                            const Constraints *constraints,
                            ThroughputPredictorPipeline *throughput_predictor,
                            std::function<void(State *)> &accept_child) {
-        internal_assert(root.is_root());
+        internal_assert(root.defined() && root->is_root());
 
         if (num_funcs_scheduled == (int)dag.nodes.size()) {
             return;
@@ -2502,12 +2749,12 @@ struct State {
         // Enumerate all legal ways to schedule the next Func
         const FunctionDAG::Node *node = &dag.nodes[num_funcs_scheduled];
         for (const auto *e : node->outgoing_edges) {
-            internal_assert(root.computes(e->consumer))
+            internal_assert(root->computes(e->consumer))
                 << "Partially scheduled code doesn't compute " << e->consumer->func.name()
                 << ", which is one of the consumers of " << node->func.name();
         }
 
-        if (!node->outgoing_edges.empty() && !root.calls(node)) {
+        if (!node->outgoing_edges.empty() && !root->calls(node)) {
             debug(0) << "In state:\n";
             dump();
             debug(0) << node->func.name() << " is consumed by:\n";
@@ -2526,10 +2773,13 @@ struct State {
             // 1) Inline it
             if (node->stages.size() == 1 && !node->is_output) {
                 auto child = new State(*this);
-                child->root = child->root.inline_func(node);
+                LoopNest *new_root = new LoopNest;
+                new_root->copy_from(*root);
+                new_root->inline_func(node);
+                child->root = new_root;
                 child->num_funcs_scheduled++;
                 if (child->calculate_cost(dag, params, throughput_predictor)) {
-                    internal_assert(child->root.computes(node)) << "Failed to inline " << node->func.name() << '\n';
+                    internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                     num_children++;
                     accept_child(child);
                 }
@@ -2538,31 +2788,31 @@ struct State {
 
         if (!constraints->must_inline(node)) {
             // 2) Realize it somewhere
-            auto tile_options = root.compute_in_tiles(node, nullptr, constraints, params, false);
-            for (PartialScheduleNode n : tile_options) {
+            auto tile_options = root->compute_in_tiles(node, nullptr, constraints, params, false);
+            for (IntrusivePtr<const LoopNest> &n : tile_options) {
                 auto child = new State(*this);
                 child->root = std::move(n);
                 child->num_funcs_scheduled++;
                 if (child->calculate_cost(dag, params, throughput_predictor)) {
-                    internal_assert(child->root.computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
+                    internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
                     num_children++;
                     accept_child(child);
                 }
             }
         }
 
-        if (num_children == 0) root.dump("");
+        if (num_children == 0) root->dump("");
         internal_assert(num_children > 0) << "Could not find any legal way to schedule Func " << node->func.name() << '\n';
     }
 
     void dump() const {
         debug(0) << "State with cost " << cost/(1.0e9) << ":\n";
-        root.dump("");
+        root->dump("");
     }
 
     void apply_schedule(const MachineParams &params) {
-        map<const FunctionDAG::Node::Stage *, PartialScheduleNode::FuncVars> vars_map;
-        root.apply(LoopLevel::root(), vars_map, params.parallelism, 0, nullptr);
+        map<const FunctionDAG::Node::Stage *, LoopNest::FuncVars> vars_map;
+        root->apply(LoopLevel::root(), vars_map, params.parallelism, 0, nullptr);
 
         for (auto &p : vars_map) {
             Stage stage(p.first->stage);
@@ -2616,6 +2866,8 @@ struct State {
     }
 };
 
+
+
 int State::cost_calculations = 0;
 
 struct CompareStates {
@@ -2635,7 +2887,10 @@ State optimal_schedule_pass(FunctionDAG &dag,
                         std::vector<std::shared_ptr<State>>,
                         CompareStates> q;
 
-    q.emplace(new State);
+    State *initial = new State;
+    initial->root = new LoopNest;
+
+    q.emplace(initial);
 
     // A progress bar.
     uint32_t counter = 0;
@@ -2677,7 +2932,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
 
         // Apply cost penalties to the queue according to structural uniqueness
         #if 1
-        std::map<uint64_t, int> hashes;
+        std::unordered_map<uint64_t, int> hashes;
         while (!q.empty()) {
             auto state = q.top();
             q.pop();
@@ -2763,7 +3018,7 @@ State optimal_schedule(FunctionDAG &dag,
 
     // Respect which things were compute_root and which axes of those were parallelized for the fine pass
     debug(0) << "Deriving constraints from coarse pass:\n";
-    for (auto c : coarse_pass.root.children) {
+    for (auto c : coarse_pass.root->children) {
         fine.roots.insert(c->node);
         debug(0) << ' ' << c->node->func.name() << " is compute_root\n";
         for (int d = 0; d < (int)(c->size.size()); d++) {
@@ -2974,7 +3229,7 @@ void autoschedule_test() {
         debug(0) << '\n';
 
         optimal.apply_schedule(params);
-        h.realize(1000, 1000);
+        // h.realize(1000, 1000);
 
     }
 
@@ -3009,7 +3264,7 @@ void autoschedule_test() {
         debug(0) << '\n';
 
         optimal.apply_schedule(params);
-        h.realize(1000, 1000);
+        // h.realize(1000, 1000);
     }
 
     {
@@ -3034,7 +3289,7 @@ void autoschedule_test() {
         debug(0) << '\n';
 
         optimal.apply_schedule(params);
-        h.realize(2048, 2048);
+        // h.realize(2048, 2048);
     }
 
     // Smaller footprint stencil -> smaller tiles
@@ -3058,7 +3313,7 @@ void autoschedule_test() {
         debug(0) << '\n';
 
         optimal.apply_schedule(params);
-        h.realize(2048, 2048);
+        // h.realize(2048, 2048);
 
         // optimal.print_predicted_runtimes(dag, params);
     }
