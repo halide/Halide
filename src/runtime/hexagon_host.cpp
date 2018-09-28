@@ -669,6 +669,53 @@ WEAK int halide_hexagon_device_and_host_free(void *user_context, struct halide_b
     return 0;
 }
 
+WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                 const struct halide_device_interface_t *dst_device_interface,
+                                 struct halide_buffer_t *dst) {
+    // We only handle copies to hexagon buffers or to host
+    halide_assert(user_context, dst_device_interface == NULL ||
+                  dst_device_interface == &hexagon_device_interface);
+
+    if ((src->device_dirty() || src->host == NULL) &&
+        src->device_interface != &hexagon_device_interface) {
+        halide_assert(user_context, dst_device_interface == &hexagon_device_interface);
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    bool from_host = (src->device_interface != &hexagon_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != NULL);
+    bool to_host = !dst_device_interface;
+
+    halide_assert(user_context, from_host || src->device);
+    halide_assert(user_context, to_host || dst->device);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+
+    int err = 0;
+
+    // Get the descriptor associated with the ion buffer.
+    if (!from_host) {
+        c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, src));
+    }
+    if (!to_host) {
+        c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, dst));
+    }
+    copy_memory(c, user_context);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return err;
+}
+
 namespace {
 
 WEAK int hexagon_device_crop_from_offset(const struct halide_buffer_t *src, int64_t offset, struct halide_buffer_t *dst) {
@@ -852,7 +899,7 @@ WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_hexagon_copy_to_device,
     halide_hexagon_device_and_host_malloc,
     halide_hexagon_device_and_host_free,
-    halide_default_buffer_copy,
+    halide_hexagon_buffer_copy,
     halide_hexagon_device_crop,
     halide_hexagon_device_slice,
     halide_hexagon_device_release_crop,
@@ -875,6 +922,7 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &hexagon_device_interface_impl
 };
 

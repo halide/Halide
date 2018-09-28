@@ -5,7 +5,9 @@
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeD3D12Compute.h"
 #include "HalideRuntimeQurt.h"
+#include "cpu_features.h"
 
 // This runtime module will contain extern declarations of the Halide
 // API and the types it uses. It's useful for compiling modules that
@@ -70,6 +72,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_fold_factor_too_small,
     (void *)&halide_error_host_is_null,
+    (void *)&halide_error_integer_division_by_zero,
     (void *)&halide_error_out_of_memory,
     (void *)&halide_error_param_too_large_f64,
     (void *)&halide_error_param_too_large_i64,
@@ -188,4 +191,9 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_uint64_to_string,
     (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
+    (void *)&halide_d3d12compute_acquire_context,
+    (void *)&halide_d3d12compute_device_interface,
+    (void *)&halide_d3d12compute_initialize_kernels,
+    (void *)&halide_d3d12compute_release_context,
+    (void *)&halide_d3d12compute_run,
 };

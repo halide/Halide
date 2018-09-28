@@ -554,7 +554,7 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
     }
     for (size_t i = 0; i < args.size(); i++) {
-        internal_assert(args[i].defined()) << "Call of undefined\n";
+        internal_assert(args[i].defined()) << "Call of " << name << " with argument " << i << " undefined.\n";
     }
     if (call_type == Halide) {
         for (size_t i = 0; i < args.size(); i++) {
@@ -876,6 +876,9 @@ Call::ConstString Call::extract_mask_element = "extract_mask_element";
 Call::ConstString Call::require = "require";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 Call::ConstString Call::strict_float = "strict_float";
+Call::ConstString Call::quiet_div = "quiet_div";
+Call::ConstString Call::quiet_mod = "quiet_mod";
+Call::ConstString Call::unsafe_promise_clamped = "unsafe_promise_clamped";
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

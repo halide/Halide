@@ -406,15 +406,38 @@ public:
     HALIDE_BUFFER_FORWARD(device_deallocate)
     HALIDE_BUFFER_FORWARD(device_free)
     HALIDE_BUFFER_FORWARD_CONST(all_equal)
-    HALIDE_BUFFER_FORWARD(fill)
-    HALIDE_BUFFER_FORWARD_CONST(for_each_element)
 
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
     template<typename Fn, typename ...Args>
-    void for_each_value(Fn &&f, Args... other_buffers) {
-        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+    Buffer<T> &for_each_value(Fn &&f, Args... other_buffers) {
+        get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+        return *this;
+    }
+
+    template<typename Fn, typename ...Args>
+    const Buffer<T> &for_each_value(Fn &&f, Args... other_buffers) const {
+        get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...);
+        return *this;
+    }
+
+    template<typename Fn>
+    Buffer<T> &for_each_element(Fn &&f) {
+        get()->for_each_element(std::forward<Fn>(f));
+        return *this;
+    }
+
+    template<typename Fn>
+    const Buffer<T> &for_each_element(Fn &&f) const {
+        get()->for_each_element(std::forward<Fn>(f));
+        return *this;
+    }
+
+    template<typename FnOrValue>
+    Buffer<T> &fill(FnOrValue &&f) {
+        get()->fill(std::forward<FnOrValue>(f));
+        return *this;
     }
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;

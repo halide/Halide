@@ -270,7 +270,14 @@ int two_linear_bounds_test(int index) {
     g.trace_realizations();
 
     run_tracer = false;
-    niters_expected = 99*100;
+    // The first condition means r.x. can be at most 34 (2*34 + 30 =
+    // 98 < 99).  The second condition means r.x must be at least 1,
+    // so there are 34 legal values for r.x.  The second condition
+    // also means that r.y is at least 100 - 34 and at most 99, so
+    // there are also 34 legal values of it. We only actually iterate
+    // over a triangle within this box, but Halide takes bounding
+    // boxes for bounds relationships.
+    niters_expected = 34 * 34;
     niters = 0;
     Buffer<int> im = f.realize(200, 200);
     for (int y = 0; y < im.height(); y++) {

@@ -49,7 +49,9 @@ protected:
     using CodeGen_CPU::get_user_context;
     using CodeGen_CPU::i32_t;
     using CodeGen_CPU::i64_t;
+    using CodeGen_CPU::i16_t;
     using CodeGen_CPU::i8_t;
+    using CodeGen_CPU::type_t_type;
     using CodeGen_CPU::init_module;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::module;

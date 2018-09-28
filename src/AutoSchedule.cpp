@@ -1312,6 +1312,14 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
     for (const auto &f : dep_analysis.env) {
+        if (!pipeline_bounds.count(f.first)) {
+            // If a function does not have a pipeline bound (i.e. it can be
+            // statically proven that no one ever uses it), we should not
+            // consider it during the grouping.
+            debug(5) << "Creating partitioner: ignore function \"" << f.first
+                     << "\" since it has empty pipeline bounds\n";
+            continue;
+        }
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
@@ -2991,10 +2999,10 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     // Perform inlining on the all the values and the args in the stage.
     for (auto &val : def.values()) {
-        val = perform_inline(val, dep_analysis.env, inlines);
+        val = perform_inline(val, dep_analysis.env, inlines, dep_analysis.order);
     }
     for (auto &arg : def.args()) {
-        arg = perform_inline(arg, dep_analysis.env, inlines);
+        arg = perform_inline(arg, dep_analysis.env, inlines, dep_analysis.order);
     }
     def.accept(&find);
 
@@ -3286,6 +3294,11 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
                                     const map<string, Function> &env) {
     set<string> unbounded;
     for (const auto &iter : env) {
+        if (!pipeline_bounds.count(iter.first)) {
+            debug(5) << "...Skip checking function \"" << iter.first
+                     << "\" since it does not have pipeline bounds\n";
+            continue;
+        }
         const Function &f = iter.second;
         if (!f.can_be_inlined() || used_by_extern_func(env, f)) {
             continue;
@@ -3312,7 +3325,7 @@ bool inline_unbounded(const vector<Function> &outputs,
         }
         inlined = true;
         debug(4) << "Function \"" << order[i] << "\" is unbounded\n";
-        for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+        for (int j = i + 1; j < (int)order.size(); ++j) {
             internal_assert(order[i] != order[j]);
             Function f2 = env.at(order[j]);
             debug(5) << "Inline unbounded function \"" << f1.name()
@@ -3420,7 +3433,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.
     debug(2) << "Initializing region costs...\n";
-    RegionCosts costs(env);
+    RegionCosts costs(env, order);
     if (debug::debug_level() >= 3) {
         costs.disp_func_costs();
     }
@@ -3455,7 +3468,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         debug(2) << "Re-computing function value bounds...\n";
         func_val_bounds = compute_function_value_bounds(order, env);
         debug(2) << "Re-initializing region costs...\n";
-        RegionCosts costs(env);
+        RegionCosts costs(env, order);
         debug(2) << "Re-initializing dependence analysis...\n";
         dep_analysis = DependenceAnalysis(env, order, func_val_bounds);
         debug(2) << "Re-computing pipeline bounds...\n";

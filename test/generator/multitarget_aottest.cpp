@@ -43,9 +43,11 @@ bool use_debug_feature() {
 
 static std::atomic<int> can_use_count;
 
-int my_can_use_target_features(uint64_t features) {
+int my_can_use_target_features(int count, const uint64_t *features) {
     can_use_count += 1;
-    if (features & (1ULL << halide_target_feature_debug)) {
+    const int word = halide_target_feature_debug / 64;
+    const int bit = halide_target_feature_debug % 64;
+    if (features[word] & (1ULL << bit)) {
         if (use_debug_feature()) {
             return 1;
         } else {
