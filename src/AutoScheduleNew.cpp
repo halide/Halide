@@ -1242,73 +1242,207 @@ struct ScheduleFeatures {
 
 // A specialized map from DAG nodes to values of type T. Exploits the
 // node id as a perfect hash.
-template<typename T>
+template<typename T, int max_small_size = 4>
 class NodeMap {
     using storage_type = std::vector<std::pair<const FunctionDAG::Node *, T>>;
 
     storage_type storage;
 
-    size_t occupied = 0;
+    int occupied = 0;
 
-    void bounds_check(int id) const {
-        internal_assert(storage.empty() || id < (int)storage.size()) << id << " out of bounds\n";
+    enum {
+        Empty = 0, // No storage allocated
+        Small = 1, // Storage is just an array of key/value pairs
+        Large = 2  // Storage is an array with empty slots, indexed by the 'id' field of each key
+    } state = Empty;
+
+    void upgrade_from_empty_to_small() {
+        storage.resize(max_small_size);
+        state = Small;
+    }
+
+    void upgrade_from_empty_to_large(int n) {
+        storage.resize(n);
+        state = Large;
+    }
+
+    void upgrade_from_small_to_large(int n) {
+        internal_assert(occupied <= max_small_size) << occupied << " " << max_small_size << "\n";
+        storage_type tmp(n);
+        state = Large;
+        tmp.swap(storage);
+        int o = occupied;
+        for (int i = 0; i < o; i++) {
+            emplace_large(tmp[i].first, std::move(tmp[i].second));
+        }
+    }
+
+    // Methods when the map is in the empty state
+    T &emplace_empty(const FunctionDAG::Node *n, T &&t) {
+        upgrade_from_empty_to_small();
+        storage[0].first = n;
+        storage[0].second = std::move(t);
+        occupied = 1;
+        return storage[0].second;
+    }
+
+    const T &get_empty(const FunctionDAG::Node *n) const {
+        internal_error << "Calling get on an empty NodeMap";
+        // Unreachable
+        return storage[0].second;
+    }
+
+    T &get_empty(const FunctionDAG::Node *n) {
+        internal_error << "Calling get on an empty NodeMap";
+        // Unreachable
+        return storage[0].second;
+    }
+
+    T &get_or_create_empty(const FunctionDAG::Node *n) {
+        occupied = 1;
+        return emplace_empty(n, T());
+    }
+
+    bool contains_empty(const FunctionDAG::Node *n) const {
+        return false;
+    }
+
+    // Methods when the map is in the small state
+    int find_index_small(const FunctionDAG::Node *n) const {
+        int i;
+        for (i = 0; i < (int)occupied; i++) {
+            if (storage[i].first == n) return i;
+        }
+        return i;
+    }
+
+    T &emplace_small(const FunctionDAG::Node *n, T &&t) {
+        int idx = find_index_small(n);
+        if (idx >= max_small_size) {
+            upgrade_from_small_to_large((int)(n->dag->nodes.size()));
+            return emplace_large(n, std::move(t));
+        }
+        auto &p = storage[idx];
+        if (p.first == nullptr) {
+            occupied++;
+            p.first = n;
+        }
+        p.second = std::move(t);
+        return p.second;
+    }
+
+    const T &get_small(const FunctionDAG::Node *n) const {
+        int idx = find_index_small(n);
+        return storage[idx].second;
+    }
+
+    T &get_small(const FunctionDAG::Node *n) {
+        int idx = find_index_small(n);
+        return storage[idx].second;
+    }
+
+    T &get_or_create_small(const FunctionDAG::Node *n) {
+        int idx = find_index_small(n);
+        if (idx >= max_small_size) {
+            upgrade_from_small_to_large((int)(n->dag->nodes.size()));
+            return get_or_create_large(n);
+        }
+        auto &p = storage[idx];
+        if (p.first == nullptr) {
+            occupied++;
+            p.first = n;
+        }
+        return p.second;
+    }
+
+    bool contains_small(const FunctionDAG::Node *n) const {
+        int idx = find_index_small(n);
+        return (idx < max_small_size) && (storage[idx].first == n);
+    }
+
+    // Methods when the map is in the large state
+    T &emplace_large(const FunctionDAG::Node *n, T &&t) {
+        auto &p = storage[n->id];
+        if (!p.first) occupied++;
+        p.first = n;
+        p.second = std::move(t);
+        return p.second;
+    }
+
+    const T &get_large(const FunctionDAG::Node *n) const {
+        return storage[n->id].second;
+    }
+
+    T &get_large(const FunctionDAG::Node *n) {
+        return storage[n->id].second;
+    }
+
+    T &get_or_create_large(const FunctionDAG::Node *n) {
+        auto &p = storage[n->id];
+        if (p.first == nullptr) {
+            occupied++;
+            p.first = n;
+        }
+        return storage[n->id].second;
+    }
+
+    bool contains_large(const FunctionDAG::Node *n) const {
+        return storage[n->id].first != nullptr;
     }
 
 public:
 
-    const T &emplace(const FunctionDAG::Node *n, T &&t) {
-        if (storage.empty()) {
-            storage.resize(n->dag->nodes.size());
+    T &emplace(const FunctionDAG::Node *n, T &&t) {
+        switch(state) {
+        case Empty: return emplace_empty(n, std::move(t));
+        case Small: return emplace_small(n, std::move(t));
+        case Large: return emplace_large(n, std::move(t));
         }
-        bounds_check(n->id);
-        auto &p = storage[n->id];
-        if (!p.first) occupied++;
-        p.first = n;
-        p.second = std::forward<T>(t);
-        return p.second;
     }
 
-    const T &insert(const FunctionDAG::Node *n, T t) {
-        if (storage.empty()) {
-            storage.resize(n->dag->nodes.size());
+    T &insert(const FunctionDAG::Node *n, const T &t) {
+        T tmp(t);
+        switch(state) {
+        case Empty: return emplace_empty(n, std::move(tmp));
+        case Small: return emplace_small(n, std::move(tmp));
+        case Large: return emplace_large(n, std::move(tmp));
         }
-        bounds_check(n->id);
-        auto &p = storage[n->id];
-        if (!p.first) occupied++;
-        p.first = n;
-        p.second = t;
-        return p.second;
     }
 
     const T &get(const FunctionDAG::Node *n) const {
-        internal_assert(!storage.empty()) << "Calling get on empty NodeMap\n";
-        return storage[n->id].second;
+        switch(state) {
+        case Empty: return get_empty(n);
+        case Small: return get_small(n);
+        case Large: return get_large(n);
+        }
     }
 
     T &get(const FunctionDAG::Node *n) {
-        internal_assert(!storage.empty()) << "Calling get on empty NodeMap\n";
-        return storage[n->id].second;
+        switch(state) {
+        case Empty: return get_empty(n);
+        case Small: return get_small(n);
+        case Large: return get_large(n);
+        }
     }
 
     T &get_or_create(const FunctionDAG::Node *n) {
-        if (storage.empty()) {
-            storage.resize(n->dag->nodes.size());
+        switch(state) {
+        case Empty: return get_or_create_empty(n);
+        case Small: return get_or_create_small(n);
+        case Large: return get_or_create_large(n);
         }
-        auto &p = storage[n->id];
-        if (!p.first) {
-            p.first = n;
-            occupied++;
+    }
+
+    bool contains(const FunctionDAG::Node *n) const {
+        switch(state) {
+        case Empty: return contains_empty(n);
+        case Small: return contains_small(n);
+        case Large: return contains_large(n);
         }
-        return get(n);
     }
 
     size_t size() const {
         return occupied;
-    }
-
-    bool contains(const FunctionDAG::Node *n) const {
-        bounds_check(n->id);
-        return (!storage.empty()) && (storage[n->id].first != nullptr);
     }
 
     struct iterator {
@@ -1364,7 +1498,7 @@ public:
     };
 
     iterator begin() {
-        if (storage.empty()) return end();
+        if (state == Empty) return end();
         iterator it;
         it.iter = storage.data();
         it.end = it.iter + storage.size();
@@ -3546,7 +3680,7 @@ void autoschedule_test() {
         // This is a good one to benchmark.
         State optimal;
 
-        double t = Tools::benchmark(3, 1, [&]() {
+        double t = Tools::benchmark(10, 1, [&]() {
                 optimal = optimal_schedule(dag, outputs, params, nullptr, 300);
             });
 
