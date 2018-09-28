@@ -30,6 +30,12 @@ extern int pthread_mutex_lock(pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
 extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 
+typedef unsigned int pthread_key_t;
+
+extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void*));
+extern int pthread_setspecific(pthread_key_t key, const void *value);
+extern void *pthread_getspecific(pthread_key_t key);
+
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
@@ -49,6 +55,8 @@ WEAK void *spawn_thread_helper(void *arg) {
 
 extern "C" {
 
+using namespace Halide::Runtime::Internal;
+  
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;

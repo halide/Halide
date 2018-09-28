@@ -8,6 +8,7 @@
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
+#include "AsyncProducers.h"
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
@@ -201,6 +202,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
+
+    debug(1) << "Forking asynchronous producers...\n";
+    s = fork_async_producers(s, env);
+    debug(2) << "Lowering after forking asynchronous producers:\n" << s << '\n';
 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
