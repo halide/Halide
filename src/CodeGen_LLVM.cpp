@@ -2753,20 +2753,14 @@ void CodeGen_LLVM::visit(const Call *op) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->is_intrinsic(Call::quiet_div)) {
         internal_assert(op->args.size() == 2);
-        if (is_zero(op->args[1])) {
-            value = UndefValue::get(llvm_type_of(op->type));
-        } else {
-            Expr equiv = Call::make(op->type, Call::if_then_else, {op->args[1] == 0, undef(op->type), op->args[0] / op->args[1]}, Call::Intrinsic);
-            equiv.accept(this);
-        }
+        internal_assert(!is_zero(op->args[1]));  // shouldn't be inserted unless provably nonzero
+        Expr equiv = Call::make(op->type, Call::if_then_else, {op->args[1] == 0, undef(op->type), op->args[0] / op->args[1]}, Call::Intrinsic);
+        equiv.accept(this);
     } else if (op->is_intrinsic(Call::quiet_mod)) {
         internal_assert(op->args.size() == 2);
-        if (is_zero(op->args[1])) {
-            value = UndefValue::get(llvm_type_of(op->type));
-        } else {
-            Expr equiv = Call::make(op->type, Call::if_then_else, {op->args[1] == 0, undef(op->type), op->args[0] % op->args[1]}, Call::Intrinsic);
-            equiv.accept(this);
-        }
+        internal_assert(!is_zero(op->args[1]));  // shouldn't be inserted unless provably nonzero
+        Expr equiv = Call::make(op->type, Call::if_then_else, {op->args[1] == 0, undef(op->type), op->args[0] % op->args[1]}, Call::Intrinsic);
+        equiv.accept(this);
     } else if (op->is_intrinsic(Call::undef)) {
         value = UndefValue::get(llvm_type_of(op->type));
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
@@ -3229,7 +3223,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                     result = 0;
                     auto after_acquires = skip_acquires(node->first);
                     direct_acquires += after_acquires.second;
-                    
+
                     after_acquires.first.accept(this);
                     total_threads += result;
 
@@ -3280,7 +3274,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                 after_inner_acquires.first.accept(this);
                 result = result + 1;
             }
- 
+
             void visit(const Block *op) {
                 result = 0;
                 op->first.accept(this);
@@ -3406,7 +3400,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             iter->setName("task_parent");
             sym_push("__task_parent", iterator_to_pointer(iter));
         }
-        
+
         // Generate the new function body
         codegen(t.body);
 
