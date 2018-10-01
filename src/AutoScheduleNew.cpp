@@ -1355,14 +1355,12 @@ class PerfectHashMap {
 
     const T &get_empty(const K *n) const {
         internal_error << "Calling get on an empty PerfectHashMap";
-        // Unreachable
-        return storage_bucket(0).second;
+        return unreachable_value();
     }
 
     T &get_empty(const K *n) {
         internal_error << "Calling get on an empty PerfectHashMap";
-        // Unreachable
-        return storage_bucket(0).second;
+        return unreachable_value();
     }
 
     T &get_or_create_empty(const K *n) {
@@ -1466,6 +1464,15 @@ class PerfectHashMap {
         */
     }
 
+    // Helpers used to pacify compilers
+    T &unreachable_value() {
+        return storage_bucket(0).second;
+    }
+
+    const T &unreachable_value() const {
+        return storage_bucket(0).second;
+    }
+
 public:
 
     // Jump straight to the large state
@@ -1481,6 +1488,7 @@ public:
         case Small: return emplace_small(n, std::move(t));
         case Large: return emplace_large(n, std::move(t));
         }
+        return unreachable_value();
     }
 
     T &insert(const K *n, const T &t) {
@@ -1491,6 +1499,7 @@ public:
         case Small: return emplace_small(n, std::move(tmp));
         case Large: return emplace_large(n, std::move(tmp));
         }
+        return unreachable_value();
     }
 
     const T &get(const K *n) const {
@@ -1500,6 +1509,7 @@ public:
         case Small: return get_small(n);
         case Large: return get_large(n);
         }
+        return unreachable_value();
     }
 
     T &get(const K *n) {
@@ -1509,6 +1519,7 @@ public:
         case Small: return get_small(n);
         case Large: return get_large(n);
         }
+        return unreachable_value();
     }
 
     T &get_or_create(const K *n) {
@@ -1518,6 +1529,7 @@ public:
         case Small: return get_or_create_small(n);
         case Large: return get_or_create_large(n);
         }
+        return unreachable_value();
     }
 
     bool contains(const K *n) const {
@@ -1527,6 +1539,7 @@ public:
         case Small: return contains_small(n);
         case Large: return contains_large(n);
         }
+        return false; // Unreachable
     }
 
     size_t size() const {
@@ -2570,6 +2583,7 @@ struct LoopNest {
                 if (innermost) {
                     // Find the innermost var, and the innermost pure var
                     FuncVars::FuncVar *innermost_var = nullptr, *innermost_pure_var = nullptr;
+                    internal_assert(vars.vars.size() >= symbolic_loop.size());
                     for (size_t i = 0; i < symbolic_loop.size(); i++) {
                         if (!vars.vars[i].exists) continue;
                         if (innermost_var == nullptr) {
@@ -2602,9 +2616,9 @@ struct LoopNest {
                             FuncVars::FuncVar v = *innermost_pure_var;
                             v.extent = split_factor;
                             v.var = vec;
-                            vars.vars.insert(vars.vars.begin(), v);
                             innermost_pure_var->extent += split_factor - 1;
                             innermost_pure_var->extent /= split_factor;
+                            vars.vars.insert(vars.vars.begin(), v);
                         }
                     }
                 } else {
@@ -3102,6 +3116,10 @@ public:
         return std::move(storage[sz]);
     }
 
+    const std::unique_ptr<State> &top() {
+        return storage[sz];
+    }
+
     // Re-heapify after modifying costs
     void resort() {
         internal_assert(sz < storage.size());
@@ -3116,17 +3134,16 @@ public:
         return sz;
     }
 
-    std::unique_ptr<State> *begin() {
-        return storage.data();
-    }
-
-    std::unique_ptr<State> *end() {
-        return begin() + sz;
-    }
-
     void swap(StateQueue &other) {
         storage.swap(other.storage);
         std::swap(sz, other.sz);
+    }
+
+    void clear() {
+        for (size_t i = 0; i < sz; i++) {
+            storage[i].reset();
+        }
+        sz = 0;
     }
 };
 
@@ -3138,7 +3155,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
                             int beam_size) {
 
 
-    StateQueue q;
+    StateQueue q, pending;
 
     {
         std::unique_ptr<State> initial{new State};
@@ -3185,25 +3202,27 @@ State optimal_schedule_pass(FunctionDAG &dag,
     };
 
     for (int i = 0; ; i++) {
-        decltype(q) pending;
-
-        // Apply cost penalties to the queue according to structural uniqueness
-        #if 0
         std::unordered_map<uint64_t, int> hashes;
-        // TODO: This is wrong - should iterate in sorted order.
-        for (auto &s : q) {
-            uint64_t h = s->structural_hash(constraints->stratify_depth());
-            s->cost *= (1 + hashes[h]);
-        }
-        q.resort();
-        #endif
-
         q.swap(pending);
 
         expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
 
             std::unique_ptr<State> state{pending.pop()};
+
+            // Apply cost penalties to the queue according to
+            // structural uniqueness.
+            uint64_t h = state->structural_hash(constraints->stratify_depth());
+            int penalty = hashes[h];
+            if (penalty > 0) {
+                state->cost *= penalty + 1;
+                // After penalizing this state, it's no longer the
+                // best, defer it.
+                if (!pending.empty() && state->cost > pending.top()->cost) {
+                    pending.emplace(std::move(state));
+                    continue;
+                }
+            }
 
             if (pending.size() > 1 && random_dropout()) {
                 debug(0) << "Dropping state\n";
@@ -3245,8 +3264,11 @@ State optimal_schedule_pass(FunctionDAG &dag,
             expanded++;
         }
 
-        // Now evaluate all the costs and place them in the priority queue
+        // Drop the other states unconsidered.
+        pending.clear();
+
         if (throughput_predictor) {
+            // Now evaluate all the costs and re-sort them in the priority queue
             throughput_predictor->evaluate_costs();
             q.resort();
         }
@@ -3453,10 +3475,14 @@ void autoschedule_test() {
     Weights w = load_weights();
     Stats stats = load_stats();
 
-    ThroughputPredictorPipeline throughput_predictor(w, stats);
-
     Var x("x"), y("y");
 
+    #if 0
+    ThroughputPredictorPipeline throughput_predictor(w, stats);
+    ThroughputPredictorPipeline *tpp = &throughput_predictor;
+    #else
+    ThroughputPredictorPipeline *tpp = nullptr;
+    #endif
     {
         // In a point-wise pipeline, everything should be fully fused.
         Func f("f"), g("g"), h("h");
@@ -3469,11 +3495,11 @@ void autoschedule_test() {
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
 
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -3504,11 +3530,11 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, cheap_memory, target);
-        State optimal = optimal_schedule(dag, outputs, cheap_memory, &throughput_predictor, beam_size);
+        State optimal = optimal_schedule(dag, outputs, cheap_memory, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -3529,11 +3555,11 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -3553,11 +3579,11 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -3584,10 +3610,10 @@ void autoschedule_test() {
         f[N-1].estimate(x, 0, 2048).estimate(y, 0, 2048);
         vector<Function> outputs = {f[N-1].function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
 
@@ -3605,11 +3631,11 @@ void autoschedule_test() {
 
         vector<Function> outputs = {f.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, beam_size);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -3632,11 +3658,11 @@ void autoschedule_test() {
 
         vector<Function> outputs = {downx.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -3659,13 +3685,13 @@ void autoschedule_test() {
 
         vector<Function> outputs = {g.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 4);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 4);
 
         dag.dump();
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -3694,11 +3720,11 @@ void autoschedule_test() {
         vector<Function> outputs = {after[4].function()};
         FunctionDAG dag(outputs, params, target);
         dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -3724,11 +3750,11 @@ void autoschedule_test() {
         vector<Function> outputs = {f_u64_2.function()};
         FunctionDAG dag(outputs, params, target);
         dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, &throughput_predictor, 1);
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -3752,11 +3778,11 @@ void autoschedule_test() {
         vector<Function> outputs = {out.function()};
         FunctionDAG dag(outputs, params, target);
         dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, nullptr, 1); //&throughput_predictor, 1);
+        State optimal = optimal_schedule(dag, outputs, params, nullptr, 1); //tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, &throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << '\n';
     }
@@ -3800,8 +3826,8 @@ void autoschedule_test() {
             });
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, nullptr, true); //&throughput_predictor, true);
-        throughput_predictor.evaluate_costs();
+        optimal.calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << "Time: " << t << " seconds\n";
     }
