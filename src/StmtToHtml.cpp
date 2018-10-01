@@ -341,6 +341,7 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
+
     void visit(const For *op) {
         scope.push(op->name, unique_id());
         stream << open_div("For");
@@ -379,6 +380,26 @@ private:
         stream << close_div();
         scope.pop(op->name);
     }
+
+    void visit(const Acquire *op) {
+        stream << open_div("Acquire");
+        int id = unique_id();
+        stream << open_span("Matched");
+        stream << open_expand_button(id);
+        stream << keyword("acquire (");
+        stream << close_span();
+        print(op->semaphore);
+        stream << ", ";
+        print(op->count);
+        stream << matched(")");
+        stream << close_expand_button() << " {";
+        stream << open_div("Acquire Indent", id);
+        print(op->body);
+        stream << close_div();
+        stream << matched("}");
+        stream << close_div();
+    }
+
     void visit(const Store *op) {
         stream << open_div("Store WrapLine");
         stream << open_span("Matched");
@@ -521,6 +542,39 @@ private:
         visit_block_stmt(op->rest);
         stream << close_div();
     }
+
+    // We also flatten forks
+    void visit_fork_stmt(Stmt stmt) {
+        if (const Fork *f = stmt.as<Fork>()) {
+            visit_fork_stmt(f->first);
+            visit_fork_stmt(f->rest);
+        } else if (stmt.defined()) {
+            stream << open_div("ForkTask");
+            int id = unique_id();
+            stream << open_expand_button(id);
+            stream << matched("task {");
+            stream << close_expand_button();
+            stream << open_div("ForkTask Indent", id);
+            print(stmt);
+            stream << close_div();
+            stream << matched("}");
+            stream << close_div();
+        }
+    }
+    void visit(const Fork *op) {
+        stream << open_div("Fork");
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << keyword("fork") << " " << matched("{");
+        stream << close_expand_button();
+        stream << open_div("Fork Indent", id);
+        visit_fork_stmt(op->first);
+        visit_fork_stmt(op->rest);
+        stream << close_div();
+        stream << matched("}");
+        stream << close_div();
+    }
+
     void visit(const IfThenElse *op) {
         stream << open_div("IfThenElse");
         int id = unique_id();

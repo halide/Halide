@@ -14,7 +14,6 @@ extern "C" {
 
 // These sizes are large enough for 32-bit and 64-bit
 typedef uint64_t ConditionVariable;
-typedef uint64_t InitOnce;
 typedef void * Thread;
 typedef struct {
     uint64_t buf[5];
