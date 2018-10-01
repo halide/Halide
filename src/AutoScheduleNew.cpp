@@ -197,7 +197,7 @@ struct BoundContents {
 
     pair<int64_t, int64_t> *data() const {
         // This struct is a header
-        return (pair<int64_t, int64_t> *)(this + 1);
+        return (pair<int64_t, int64_t> *)(const_cast<BoundContents *>(this) + 1);
     }
 
     pair<int64_t, int64_t> &region_required(int i) {
