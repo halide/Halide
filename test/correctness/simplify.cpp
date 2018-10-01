@@ -115,9 +115,10 @@ void check_casts() {
     check(cast(Int(64, 3), ramp(x, 2, 3)),
           ramp(cast(Int(64), x), cast(Int(64), 2), 3));
 
-    // Check cancellations can occur through casts
-    check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
-    check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
+    // We do not currently expect cancellations to occur through casts
+    // check(cast(Int(64), x + 1) - cast(Int(64), x), cast(Int(64), 1));
+    // check(cast(Int(64), 1 + x) - cast(Int(64), x), cast(Int(64), 1));
+
     // But only when overflow is undefined for the type
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
@@ -144,13 +145,13 @@ void check_algebra() {
     check((x + 3) + 4, x + 7);
     check(4 + (3 + x), x + 7);
     check((x + 3) + y, (x + y) + 3);
-    check(y + (x + 3), (y + x) + 3);
+    check(y + (x + 3), (x + y) + 3);
     check((3 - x) + x, 3);
     check(x + (3 - x), 3);
-    check(x*y + x*z, x*(y+z));
-    check(x*y + z*x, x*(y+z));
-    check(y*x + x*z, x*(y+z));
-    check(y*x + z*x, x*(y+z));
+    check(x*y + x*z, (y+z)*x);
+    check(x*y + z*x, (y+z)*x);
+    check(y*x + x*z, (y+z)*x);
+    check(y*x + z*x, (y+z)*x);
 
     check(x - 0, x);
     check((x/y) - (x/y), 0);
@@ -171,14 +172,14 @@ void check_algebra() {
     check(x - (0 - y), x + y);
     check(x + (0 - y), x - y);
     check((0 - x) + y, y - x);
-    check(x*y - x*z, x*(y-z));
-    check(x*y - z*x, x*(y-z));
-    check(y*x - x*z, x*(y-z));
-    check(y*x - z*x, x*(y-z));
-    check(x - y*-2, x + y*2);
+    check(x*y - x*z, (y-z)*x);
+    check(x*y - z*x, (y-z)*x);
+    check(y*x - x*z, (y-z)*x);
+    check(y*x - z*x, (y-z)*x);
+    check(x - y*-2, y*2 + x);
     check(x + y*-2, x - y*2);
     check(x*-2 + y, y - x*2);
-    check(xf - yf*-2.0f, xf + y*2.0f);
+    check(xf - yf*-2.0f, y*2.0f + xf);
     check(xf + yf*-2.0f, xf - y*2.0f);
     check(xf*-2.0f + yf, yf - x*2.0f);
 
@@ -191,7 +192,7 @@ void check_algebra() {
     check((x/8)*8 - x, -(x % 8));
     check((x/8)*8 < x + y, 0 < x%8 + y);
     check((x/8)*8 < x - y, y < x%8);
-    check((x/8)*8 < x, 0 < x%8);
+    check((x/8)*8 < x, x%8 != 0);
     check(((x+3)/8)*8 < x + y, 3 < (x+3)%8 + y);
     check(((x+3)/8)*8 < x - y, y < (x+3)%8 + (-3));
     check(((x+3)/8)*8 < x, 3 < (x+3)%8);
@@ -208,81 +209,81 @@ void check_algebra() {
     check(Expr(ramp(3.0f, 4.0f, 5)) * Expr(broadcast(2.0f, 5)), ramp(6.0f, 8.0f, 5));
     check(Expr(broadcast(3, 3)) * Expr(broadcast(2, 3)), broadcast(6, 3));
 
-    check(x*y + x, x*(y + 1));
-    check(x*y - x, x*(y + -1));
-    check(x + x*y, x*(y + 1));
-    check(x - x*y, x*(1 - y));
+    check(x*y + x, (y + 1)*x);
+    check(x*y - x, (y + -1)*x);
+    check(x + x*y, (y + 1)*x);
+    check(x - x*y, (1 - y)*x);
     check(x*y + y, (x + 1)*y);
     check(x*y - y, (x + -1)*y);
     check(y + x*y, (x + 1)*y);
     check(y - x*y, (1 - x)*y);
 
-    check(0/x, 0);
+    check(0/max(x, 1), 0);
     check(x/1, x);
     check(x/x, 1);
-    check((-1)/x, select(x < 0, 1, -1));
+    check((-1)/(x*2 + 1), select(x < 0, 1, -1));
     check(Expr(7)/3, 2);
     check(Expr(6.0f)/2.0f, 3.0f);
     check((x / 3) / 4, x / 12);
     check((x*4)/2, x*2);
     check((x*2)/4, x/2);
-    check((x*4 + y)/2, x*2 + y/2);
+    check((x*(-4))/2, x*(-2));
+    check((x*4 + y)/2, y/2 + x*2);
     check((y + x*4)/2, y/2 + x*2);
-    check((x*4 - y)/2, x*2 + (0 - y)/2);
+    check((x*4 - y)/2, (0 - y)/2 + x*2);
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
-    check((x + (y + 3)/5) + 5, x + (y + 28)/5);
+    check((x + (y + 3)/5) + 5, (y + 28)/5 + x);
     check((x + 8)/2, x/2 + 4);
     check((x - y)*-2, (y - x)*2);
     check((xf - yf)*-2.0f, (yf - xf)*2.0f);
 
-    check(x*3 + y*9, (x + y*3)*3);
+    check(x*3 + y*9, (y*3 + x)*3);
     check(x*9 + y*3, (x*3 + y)*3);
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
-    check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
-    check(((x*4 - y) + z) / 2, x*2 + (z - y)/2);
-    check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
-    check(((x*4 - y) - z) / 2, x*2 + (0 - y - z)/2);
-    check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
-    check(((x + y*4) + z) / 2, y*2 + (x + z)/2);
-    check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
+    check(((x*4 + y) + z) / 2, (y + z)/2 + x*2);
+    check(((x*4 - y) + z) / 2, (z - y)/2 + x*2);
+    check(((x*4 + y) - z) / 2, (y - z)/2 + x*2);
+    check(((x*4 - y) - z) / 2, (0 - y - z)/2 + x*2);
+    check((x + (y*4 + z)) / 2, (x + z)/2 + y*2);
+    check(((x + y*4) + z) / 2, (x + z)/2 + y*2);
+    check((x + (y*4 - z)) / 2, (x - z)/2 + y*2);
     check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
     check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
 
     // Pull out the gcd of the numerator and divisor
-    check((x * 12 + 5) / 9, (x * 4 + 1) / 3);
-    check((x * 12 + 19) / 9, (x * 4) / 3 + 2);
+    check((x * 3 + 5) / 9, (x + 1) / 3);
 
-    // Cancellations in non-const integer divisions
-    check((x*y)/x, y);
-    check((y*x)/x, y);
-    check((x*y + z)/x, y + z/x);
-    check((y*x + z)/x, y + z/x);
-    check((z + x*y)/x, z/x + y);
-    check((z + y*x)/x, z/x + y);
-    check((x*y - z)/x, y + (-z)/x);
-    check((y*x - z)/x, y + (-z)/x);
-    check((z - x*y)/x, z/x - y);
-    check((z - y*x)/x, z/x - y);
+    // Cancellations in integer divisions.
+    check((7*y)/7, y);
+    check((y*7)/7, y);
+    check((7*y + z)/7, z/7 + y);
+    check((y*7 + z)/7, z/7 + y);
+    check((z + 7*y)/7, z/7 + y);
+    check((z + y*7)/7, z/7 + y);
+    check((7*y - z)/7, (-z)/7 + y);
+    check((y*7 - z)/7, (-z)/7 + y);
+    check((z - 7*y)/7, z/7 - y);
+    check((z - y*7)/7, z/7 - y);
 
-    check((x + y)/x, y/x + 1);
-    check((y + x)/x, y/x + 1);
-    check((x - y)/x, (-y)/x + 1);
-    check((y - x)/x, y/x + (-1));
+    check((7 + y)/7, y/7 + 1);
+    check((y + 7)/7, y/7 + 1);
+    check((7 - y)/7, (-y)/7 + 1);
+    check((y - 7)/7, y/7 + (-1));
 
-    check(((x + y) + z)/x, (y + z)/x + 1);
-    check(((y + x) + z)/x, (y + z)/x + 1);
-    check((y + (x + z))/x, (y + z)/x + 1);
-    check((y + (z + x))/x, (y + z)/x + 1);
+    check(((7 + y) + z)/7, (y + z)/7 + 1);
+    check(((y + 7) + z)/7, (y + z)/7 + 1);
+    check((y + (7 + z))/7, (y + z)/7 + 1);
+    check((y + (z + 7))/7, (y + z)/7 + 1);
 
     check(xf / 4.0f, xf * 0.25f);
 
     // Some quaternary rules with cancellations
-    check((x + y) - (z + y), x - z);
     check((x + y) - (y + z), x - z);
-    check((y + x) - (z + y), x - z);
+    check((x + y) - (y + z), x - z);
+    check((y + x) - (y + z), x - z);
     check((y + x) - (y + z), x - z);
 
     check((x - y) - (z - y), x - z);
@@ -310,17 +311,19 @@ void check_algebra() {
     check(x%3 + (x/3)*3, x);
 
     check(((x/3)*3 + y) + x%3, x + y);
-    check(((x/3) + y)*3 + x%3, x + y*3);
+    check(((x/3) + y)*3 + x%3, y*3 + x);
     check((x%3 + y) + (x/3)*3, x + y);
 
-    check((y + x%3) + (x/3)*3, y + x);
-    check((y + (x/3*3)) + x%3, y + x);
+    check((y + x%3) + (x/3)*3, x + y);
+    check((y + (x/3*3)) + x%3, x + y);
     check((y + (x/3))*3 + x%3, y*3 + x);
 
     check(x/2 + x%2, (x + 1)/2);
     check(x%2 + x/2, (x + 1)/2);
     check(((x+1)/2)*2 - x, x%2);
-    check(x - ((x+1)/2)*2, -(x%2));
+    check(((x+2)/3)*3 - x, (-x)%3);
+    check(x - ((x+1)/2)*2, ((x + 1)%2 + -1));
+    check(x - ((x+2)/3)*3, ((x + 2)%3 + -2));
     check((x%2 + 4)/2, 2);
     check((x%2 + 5)/2, x%2 + 2);
 
@@ -364,11 +367,11 @@ void check_algebra() {
     check(2*x + (2*x + y)/5, (x*12 + y)/5);
     check(x + (x - y)/4, (x*5 - y)/4);
     check((x + z) + (y + (x + z))/3, ((x + z)*4 + y)/3);
-    check(x + ((y + w) - x)/2, (x + (y + w))/2);
+    check(x + ((y + w) - x)/2, ((w + y) + x)/2);
     check((x + y)/3 + x, (x*4 + y)/3);
     check((x - y)/4 + x, (x*5 - y)/4);
-    check((y + x)/3 + x, (y + x*4)/3);
-    check((y - x)/3 + x, (y + x*2)/3);
+    check((y + x)/3 + x, (x*4 + y)/3);
+    check((y - x)/3 + x, (x*2 + y)/3);
     check(1 + (1 + y)/2, (y + 3)/2);
     check((y + 1)/2 + 1, (y + 3)/2);
     check((0 - y)/5 + 1, (0 - y)/5 + 1);
@@ -379,7 +382,7 @@ void check_algebra() {
     check(x - (y - x)/6, (x*7 - y + 5)/6);
     check(x - (x + y)/-3, x - (x + y)/-3);
     check((w + x) - ((w + x) - y*z)/-3, (w + x) - ((w + x) - y*z)/-3);
-    check(x - (y + x)/-2, x - (y + x)/-2);
+    check(x - (y + x)/-2, x - (x + y)/-2);
     check(x - (y - x)/-6, x - (y - x)/-6);
     check((x + y)/3 - x, (y - x*2)/3);
     check((x*y - w)/4 - x*y, (x*y*(-3) - w)/4);
@@ -390,8 +393,8 @@ void check_algebra() {
     check(1 - (0 - y)/5, (y + 9)/5);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
-    check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
-          ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+    check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
+          ((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)));
 }
 
 void check_vectors() {
@@ -437,8 +440,8 @@ void check_vectors() {
                            ramp(const_false(), const_true(), 2),
                            broadcast(const_false(), 2)) ==
                     broadcast(const_false(), 2);
-        Expr expected = !(ramp(const_true(), const_true(), 2)) ||
-                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        Expr expected = !(ramp(const_true(), const_true(), 2) &&
+                          ramp(const_false(), const_true(), 2));
         check(test, expected);
     }
 
@@ -447,8 +450,8 @@ void check_vectors() {
                            broadcast(const_true(), 2),
                            ramp(const_false(), const_true(), 2)) ==
                     broadcast(const_false(), 2);
-        Expr expected = (!ramp(const_true(), const_true(), 2)) &&
-                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        Expr expected = !(ramp(const_true(), const_true(), 2) ||
+                          ramp(const_false(), const_true(), 2));
         check(test, expected);
     }
 
@@ -573,9 +576,9 @@ void check_bounds() {
     check(max(cast(Int(8), x), cast(Int(8), -127)), max(cast(Int(8), x), make_const(Int(8), -127)));
 
     // Some quaternary rules with cancellations
-    check((x + y) - (z + y), x - z);
     check((x + y) - (y + z), x - z);
-    check((y + x) - (z + y), x - z);
+    check((x + y) - (y + z), x - z);
+    check((y + x) - (y + z), x - z);
     check((y + x) - (y + z), x - z);
 
     check((x - y) - (z - y), x - z);
@@ -588,13 +591,13 @@ void check_bounds() {
     check(x - min(z, x + y), max(-y, x-z));
     check(x - min(z, y + x), max(-y, x-z));
 
-    check(min(x + y, z) - x, min(y, z-x));
-    check(min(y + x, z) - x, min(y, z-x));
-    check(min(z, x + y) - x, min(y, z-x));
-    check(min(z, y + x) - x, min(y, z-x));
+    check(min(x + y, z) - x, min(z-x, y));
+    check(min(y + x, z) - x, min(z-x, y));
+    check(min(z, x + y) - x, min(z-x, y));
+    check(min(z, y + x) - x, min(z-x, y));
 
-    check(min(x + y, z + y), min(x, z) + y);
-    check(min(y + x, z + y), min(x, z) + y);
+    check(min(x + y, y + z), min(x, z) + y);
+    check(min(y + x, y + z), min(x, z) + y);
     check(min(x + y, y + z), min(x, z) + y);
     check(min(y + x, y + z), min(x, z) + y);
 
@@ -627,36 +630,31 @@ void check_bounds() {
 
     check(min(x/4 + 2, y/4), min(x + 8, y)/4);
     check(max(x/4 + 2, y/4), max(x + 8, y)/4);
-    check(min(x/4, y/4 + 2), min(x, y + 8)/4);
-    check(max(x/4, y/4 + 2), max(x, y + 8)/4);
+    check(min(x/4, y/4 + 2), min(y + 8, x)/4);
+    check(max(x/4, y/4 + 2), max(y + 8, x)/4);
     check(min(x/(-4) + 2, y/(-4)), max(x + -8, y)/(-4));
     check(max(x/(-4) + 2, y/(-4)), min(x + -8, y)/(-4));
-    check(min(x/(-4), y/(-4) + 2), max(x, y + -8)/(-4));
-    check(max(x/(-4), y/(-4) + 2), min(x, y + -8)/(-4));
+    check(min(x/(-4), y/(-4) + 2), max(y + -8, x)/(-4));
+    check(max(x/(-4), y/(-4) + 2), min(y + -8, x)/(-4));
 
     check(min(x*4 + 8, y*4), min(x + 2, y)*4);
     check(max(x*4 + 8, y*4), max(x + 2, y)*4);
-    check(min(x*4, y*4 + 8), min(x, y + 2)*4);
-    check(max(x*4, y*4 + 8), max(x, y + 2)*4);
+    check(min(x*4, y*4 + 8), min(y + 2, x)*4);
+    check(max(x*4, y*4 + 8), max(y + 2, x)*4);
     check(min(x*(-4) + 8, y*(-4)), max(x + -2, y)*(-4));
     check(max(x*(-4) + 8, y*(-4)), min(x + -2, y)*(-4));
-    check(min(x*(-4), y*(-4) + 8), max(x, y + -2)*(-4));
-    check(max(x*(-4), y*(-4) + 8), min(x, y + -2)*(-4));
+    check(min(x*(-4), y*(-4) + 8), max(y + -2, x)*(-4));
+    check(max(x*(-4), y*(-4) + 8), min(y + -2, x)*(-4));
 
     // Min and max of clamped expressions
     check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
     check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
 
     // Additions that cancel a term inside a min or max
-    check(x + min(y - x, z), min(y, z + x));
-    check(x + max(y - x, z), max(y, z + x));
-    check(min(y + (-2), z) + 2, min(y, z + 2));
-    check(max(y + (-2), z) + 2, max(y, z + 2));
-
-    check(x + min(y - x, z), min(y, z + x));
-    check(x + max(y - x, z), max(y, z + x));
-    check(min(y + (-2), z) + 2, min(y, z + 2));
-    check(max(y + (-2), z) + 2, max(y, z + 2));
+    check(x + min(y - x, z), min(x + z, y));
+    check(x + max(y - x, z), max(x + z, y));
+    check(min(y + (-2), z) + 2, min(z + 2, y));
+    check(max(y + (-2), z) + 2, max(z + 2, y));
 
     // Min/Max distributive law
     check(max(max(x, y), max(x, z)), max(max(y, z), x));
@@ -675,9 +673,6 @@ void check_bounds() {
     check(max(x, (x/8)*8), x);
     check(min((x/8)*8, x), (x/8)*8);
     check(min(x, (x/8)*8), (x/8)*8);
-
-    check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
-    check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -711,12 +706,12 @@ void check_bounds() {
     check(max(3, 77 - x), 77 - min(x, 74));
     check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
 
-    check(x - min(x, 2), max(x + -2, 0));
-    check(x - max(x, 2), min(x + -2, 0));
+    check(x - min(x, 2), max(x, 2) + -2);
+    check(x - max(x, 2), min(x, 2) + -2);
     check(min(x, 2) - x, 2 - max(x, 2));
     check(max(x, 2) - x, 2 - min(x, 2));
-    check(x - min(2, x), max(x + -2, 0));
-    check(x - max(2, x), min(x + -2, 0));
+    check(x - min(2, x), max(x, 2) + -2);
+    check(x - max(2, x), min(x, 2) + -2);
     check(min(2, x) - x, 2 - max(x, 2));
     check(max(2, x) - x, 2 - min(x, 2));
 
@@ -746,87 +741,75 @@ void check_bounds() {
     check(min(y, max(min(y, x), z)), min(max(x, z), y));
     check(min(y, max(z, min(y, x))), min(max(x, z), y));
 
+    check(max(min(x, 5), 1) == 1, x <= 1);
+    check(max(min(x, 5), 1) == 3, x == 3);
+    check(max(min(x, 5), 1) == 5, 5 <= x);
+
+    check(min((x*32 + y)*4, x*128 + 127), min(y*4, 127) + x*128);
+    check(min((x*32 + y)*4, x*128 + 4), (min(y, 1) + x*32)*4);
+    check(min((y + x*32)*4, x*128 + 127), min(y*4, 127) + x*128);
+    check(min((y + x*32)*4, x*128 + 4), (min(y, 1) + x*32)*4);
+    check(max((x*32 + y)*4, x*128 + 127), max(y*4, 127) + x*128);
+    check(max((x*32 + y)*4, x*128 + 4), (max(y, 1) + x*32)*4);
+    check(max((y + x*32)*4, x*128 + 127), max(y*4, 127) + x*128);
+    check(max((y + x*32)*4, x*128 + 4), (max(y, 1) + x*32)*4);
+
     {
-        Expr one = broadcast(cast(Int(16), 1), 64);
-        Expr three = broadcast(cast(Int(16), 3), 64);
-        Expr four = broadcast(cast(Int(16), 4), 64);
-        Expr five = broadcast(cast(Int(16), 5), 64);
-        Expr v1 = Variable::make(Int(16).with_lanes(64), "x");
-        Expr v2 = Variable::make(Int(16).with_lanes(64), "y");
+        Expr one = 1;
+        Expr three = 3;
+        Expr four = 4;
+        Expr five = 5;
+        Expr v1 = Variable::make(Int(32), "x");
+        Expr v2 = Variable::make(Int(32), "y");
 
         // Bound: [-4, 4]
-        std::vector<Expr> clamped = {
-            max(min(v1, four), -four),
-            max(-four, min(v1, four)),
-            min(max(v1, -four), four),
-            min(four, max(v1, -four)),
-            clamp(v1, -four, four)
-        };
+        Expr clamped = min(max(v1, -four), four);
 
-        for (size_t i = 0; i < clamped.size(); ++i) {
-            // min(v, 4) where v=[-4, 4] -> v
-            check(min(clamped[i], four), simplify(clamped[i]));
-            // min(v, 5) where v=[-4, 4] -> v
-            check(min(clamped[i], five), simplify(clamped[i]));
-            // min(v, 3) where v=[-4, 4] -> min(v, 3)
-            check(min(clamped[i], three), simplify(min(clamped[i], three)));
-            // min(v, -5) where v=[-4, 4] -> -5
-            check(min(clamped[i], -five), simplify(-five));
-        }
+        // min(v, 4) where v=[-4, 4] -> v
+        check(min(clamped, four), simplify(clamped));
+        // min(v, 5) where v=[-4, 4] -> v
+        check(min(clamped, five), simplify(clamped));
+        // min(v, 3) where v=[-4, 4] -> min(v, 3)
+        check(min(clamped, three), simplify(min(clamped, three)));
+        // min(v, -5) where v=[-4, 4] -> -5
+        check(min(clamped, -five), simplify(-five));
 
-        for (size_t i = 0; i < clamped.size(); ++i) {
-            // max(v, 4) where v=[-4, 4] -> 4
-            check(max(clamped[i], four), simplify(four));
-            // max(v, 5) where v=[-4, 4] -> 5
-            check(max(clamped[i], five), simplify(five));
-            // max(v, 3) where v=[-4, 4] -> max(v, 3)
-            check(max(clamped[i], three), simplify(max(clamped[i], three)));
-            // max(v, -5) where v=[-4, 4] -> v
-            check(max(clamped[i], -five), simplify(clamped[i]));
-        }
+        // max(v, 4) where v=[-4, 4] -> 4
+        check(max(clamped, four), simplify(four));
+        // max(v, 5) where v=[-4, 4] -> 5
+        check(max(clamped, five), simplify(five));
+        // max(v, 3) where v=[-4, 4] -> max(v, 3)
+        check(max(clamped, three), simplify(max(clamped, three)));
+        // max(v, -5) where v=[-4, 4] -> v
+        check(max(clamped, -five), simplify(clamped));
 
-        for (size_t i = 0; i < clamped.size(); ++i) {
-            // max(min(v, 5), -5) where v=[-4, 4] -> v
-            check(max(min(clamped[i], five), -five), simplify(clamped[i]));
-            // max(min(v, 5), 5) where v=[-4, 4] -> 5
-            check(max(min(clamped[i], five), five), simplify(five));
+        // max(min(v, 5), -5) where v=[-4, 4] -> v
+        check(max(min(clamped, five), -five), simplify(clamped));
+        // max(min(v, 5), 5) where v=[-4, 4] -> 5
+        check(max(min(clamped, five), five), simplify(five));
 
-            // max(min(v, -5), -5) where v=[-4, 4] -> -5
-            check(max(min(clamped[i], -five), -five), simplify(-five));
-            // max(min(v, -5), 5) where v=[-4, 4] -> 5
-            check(max(min(clamped[i], -five), five), simplify(five));
-            // max(min(v, -5), 3) where v=[-4, 4] -> 3
-            check(max(min(clamped[2], -five), three), simplify(three));
-        }
+        // max(min(v, -5), -5) where v=[-4, 4] -> -5
+        check(max(min(clamped, -five), -five), simplify(-five));
+        // max(min(v, -5), 5) where v=[-4, 4] -> 5
+        check(max(min(clamped, -five), five), simplify(five));
 
-        // max(min(v, 5), 3) where v=[-4, 4] -> max(v, 3)
-        check(max(min(clamped[2], five), three), simplify(max(clamped[2], three)));
+        // min(v + 1, 4) where v=[-4, 4] -> min(v + 1, 4)
+        check(min(clamped + one, four), simplify(min(clamped + one, four)));
+        // min(v + 1, 5) where v=[-4, 4] -> v + 1
+        check(min(clamped + one, five), simplify(clamped + one));
+        // min(v + 1, -4) where v=[-4, 4] -> -4
+        check(min(clamped + one, -four), simplify(-four));
+        // max(min(v + 1, 4), -4) where v=[-4, 4] -> min(v + 1, 4)
+        check(max(min(clamped + one, four), -four), simplify(min(clamped + one, four)));
 
-        // max(min(v, 5), 3) where v=[-4, 4] -> max(v, 3) -> v=[3, 4]
-        // There is simplification rule that will simplify max(max(min(x, 4), -4), 3)
-        // further into max(min(x, 4), 3)
-        check(max(min(clamped[0], five), three), simplify(max(min(v1, four), three)));
-
-        for (size_t i = 0; i < clamped.size(); ++i) {
-            // min(v + 1, 4) where v=[-4, 4] -> min(v + 1, 4)
-            check(min(clamped[i] + one, four), simplify(min(clamped[i] + one, four)));
-            // min(v + 1, 5) where v=[-4, 4] -> v + 1
-            check(min(clamped[i] + one, five), simplify(clamped[i] + one));
-            // min(v + 1, -4) where v=[-4, 4] -> -4
-            check(min(clamped[i] + one, -four), simplify(-four));
-            // max(min(v + 1, 4), -4) where v=[-4, 4] -> min(v + 1, 4)
-            check(max(min(clamped[i] + one, four), -four), simplify(min(clamped[i] + one, four)));
-        }
-        for (size_t i = 0; i < clamped.size(); ++i) {
-            // max(v + 1, 4) where v=[-4, 4] -> max(v + 1, 4)
-            check(max(clamped[i] + one, four), simplify(max(clamped[i] + one, four)));
-            // max(v + 1, 5) where v=[-4, 4] -> 5
-            check(max(clamped[i] + one, five), simplify(five));
-            // max(v + 1, -4) where v=[-4, 4] -> -v + 1
-            check(max(clamped[i] + one, -four), simplify(clamped[i] + one));
-            // min(max(v + 1, -4), 4) where v=[-4, 4] -> min(v + 1, 4)
-            check(min(max(clamped[i] + one, -four), four), simplify(min(clamped[i] + one, four)));
-        }
+        // max(v + 1, 4) where v=[-4, 4] -> max(v + 1, 4)
+        check(max(clamped + one, four), simplify(max(clamped + one, four)));
+        // max(v + 1, 5) where v=[-4, 4] -> 5
+        check(max(clamped + one, five), simplify(five));
+        // max(v + 1, -4) where v=[-4, 4] -> -v + 1
+        check(max(clamped + one, -four), simplify(clamped + one));
+        // min(max(v + 1, -4), 4) where v=[-4, 4] -> min(v + 1, 4)
+        check(min(max(clamped + one, -four), four), simplify(min(clamped + one, four)));
 
         Expr t1 = clamp(v1, one, four);
         Expr t2 = clamp(v1, -five, -four);
@@ -843,39 +826,39 @@ void check_bounds() {
         // min(min(broadcast(x, n), y), broadcast(z, n))) -> min(y, broadcast(min(x, z), n))
         check(min(min(broadcast(x, 64), yv), broadcast(z, 64)), min(yv, broadcast(min(x, z), 64)));
         // min(broadcast(x, n), min(y, broadcast(z, n)))) -> min(y, broadcast(min(x, z), n))
-        check(min(broadcast(x, 64), min(yv, broadcast(z, 64))), min(yv, broadcast(min(z, x), 64)));
+        check(min(broadcast(x, 64), min(yv, broadcast(z, 64))), min(yv, broadcast(min(x, z), 64)));
         // min(broadcast(x, n), min(broadcast(y, n), z))) -> min(z, broadcast(min(x, y), n))
-        check(min(broadcast(x, 64), min(broadcast(y, 64), zv)), min(zv, broadcast(min(y, x), 64)));
+        check(min(broadcast(x, 64), min(broadcast(y, 64), zv)), min(zv, broadcast(min(x, y), 64)));
 
         // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
         check(max(max(xv, broadcast(y, 64)), broadcast(z, 64)), max(xv, broadcast(max(y, z), 64)));
         // max(max(broadcast(x, n), y), broadcast(z, n))) -> max(y, broadcast(max(x, z), n))
         check(max(max(broadcast(x, 64), yv), broadcast(z, 64)), max(yv, broadcast(max(x, z), 64)));
         // max(broadcast(x, n), max(y, broadcast(z, n)))) -> max(y, broadcast(max(x, z), n))
-        check(max(broadcast(x, 64), max(yv, broadcast(z, 64))), max(yv, broadcast(max(z, x), 64)));
+        check(max(broadcast(x, 64), max(yv, broadcast(z, 64))), max(yv, broadcast(max(x, z), 64)));
         // max(broadcast(x, n), max(broadcast(y, n), z))) -> max(z, broadcast(max(x, y), n))
-        check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(y, x), 64)));
+        check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(x, y), 64)));
     }
 
     // Pull out common addition term inside min/max
     check(min((x + y) + z, x + w), min(y + z, w) + x);
     check(min((y + x) + z, x + w), min(y + z, w) + x);
-    check(min(x + y, (x + z) + w), min(y, z + w) + x);
-    check(min(x + y, (z + x) + w), min(y, z + w) + x);
+    check(min(x + y, (x + z) + w), min(w + z, y) + x);
+    check(min(x + y, (z + x) + w), min(w + z, y) + x);
     check(min(x + (y + z), y + w), min(x + z, w) + y);
     check(min(x + (z + y), y + w), min(x + z, w) + y);
-    check(min(x + y, z + (x + w)), min(y, z + w) + x);
-    check(min(x + y, z + (w + x)), min(y, z + w) + x);
-    check(min(x + y/2 + 13, x + (0 - y)/2), min(y + 26, 0 - y)/2 + x);
+    check(min(x + y, z + (x + w)), min(w + z, y) + x);
+    check(min(x + y, z + (w + x)), min(w + z, y) + x);
+    check(min(x + y/2 + 13, x + (0 - y)/2), min(0 - y, y + 26)/2 + x);
 
     check(max((x + y) + z, x + w), max(y + z, w) + x);
     check(max((y + x) + z, x + w), max(y + z, w) + x);
-    check(max(x + y, (x + z) + w), max(y, z + w) + x);
-    check(max(x + y, (z + x) + w), max(y, z + w) + x);
+    check(max(x + y, (x + z) + w), max(w + z, y) + x);
+    check(max(x + y, (z + x) + w), max(w + z, y) + x);
     check(max(x + (y + z), y + w), max(x + z, w) + y);
     check(max(x + (z + y), y + w), max(x + z, w) + y);
-    check(max(x + y, z + (x + w)), max(y, z + w) + x);
-    check(max(x + y, z + (w + x)), max(y, z + w) + x);
+    check(max(x + y, z + (x + w)), max(w + z, y) + x);
+    check(max(x + y, z + (w + x)), max(w + z, y) + x);
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
     check(min(x, y)*max(x, y), x*y);
@@ -899,7 +882,7 @@ void check_bounds() {
     check(min(max(x, y), min(x, y)), min(x, y));
     check(min(max(x, y), min(y, x)), min(x, y));
     check(min(min(x, y), max(x, y)), min(x, y));
-    check(min(min(y, x), max(x, y)), min(x, y));
+    check(min(min(x, y), max(y, x)), min(x, y));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
@@ -926,20 +909,20 @@ void check_bounds() {
     simplify((min((min(((x*64) + y), (z + -63)) + 31), min((((x*64) + y) + 63), z)) -
               min((min((((x*64) + y) + 63), z) + -31), (min(((x*64) + y), (z + -63)) + 32))));
 
-    check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4 + (-63), -60, 0) + 63);
-    check(min(x * 4, y - 3) - min(x * 4 + 63, y), -3 - clamp(y - x * 4 + (-3), 0, 60));
-    check(min(y, x * 4 + 63) - min(x * 4, y - 3), 63 - clamp(x * 4 - y + 63, 0, 60));
-    check(min(x * 4, y - 3) - min(y, x * 4 + 63), -3 - clamp(y - x * 4 + (-3), 0, 60));
+    check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4, 3, 63));
+    check(min(y, x * 4 + 63) - min(x * 4, y - 3), clamp(y - x * 4, 3, 63));
+    check(min(x * 4, y - 3) - min(x * 4 + 63, y), clamp(x*4 - y, -63, -3));
+    check(min(x * 4, y - 3) - min(y, x * 4 + 63), clamp(x*4 - y, -63, -3));
 
     check(max(x, 63) - max(x, 3), 63 - clamp(x, 3, 63));
-    check(max(x, 3) - max(x, 63), clamp(x, 3, 63) + (-63));
     check(max(63, x) - max(3, x), 63 - clamp(x, 3, 63));
-    check(max(3, x) - max(x, 63), clamp(x, 3, 63) + (-63));
+    check(max(x, 3) - max(x, 63), clamp(x, 3, 63) + -63);
+    check(max(3, x) - max(x, 63), clamp(x, 3, 63) + -63);
 
-    check(max(x * 4 + 63, y) - max(x * 4, y - 3), 3 - clamp(y - x * 4 + (-63), -60, 0));
-    check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4 + (-3), 0, 60) + (-63));
-    check(max(x * 4 + 63, y) - max(y - 3, x * 4), 3 - clamp(y - x * 4 + (-63), -60, 0));
-    check(max(y - 3, x * 4) - max(y, x * 4 + 63), -63 - clamp(x * 4 - y + 3, -60, 0));
+    check(max(x * 4 + 63, y) - max(x * 4, y - 3), clamp(x * 4 - y, -63, -3) + 66);
+    check(max(x * 4 + 63, y) - max(y - 3, x * 4), clamp(x * 4 - y, -63, -3) + 66);
+    check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
+    check(max(y - 3, x * 4) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
 }
 
 void check_boolean() {
@@ -1039,19 +1022,19 @@ void check_boolean() {
     check(x <= 20 || x > 19, t);
     check(x > 19 || x <= 20, t);
     check(x <= 18 || x > 20, x <= 18 || 20 < x);
-    check(x > 20 || x <= 18, 20 < x || x <= 18);
+    check(x > 20 || x <= 18, x <= 18 || 20 < x);
     check(x <= 18 && x > 19, f);
     check(x > 19 && x <= 18, f);
     check(x <= 20 && x > 19, x <= 20 && 19 < x);
-    check(x > 19 && x <= 20, 19 < x && x <= 20);
+    check(x > 19 && x <= 20, x <= 20 && 19 < x);
 
     check(x < 20 || x >= 19, t);
     check(x >= 19 || x < 20, t);
-    check(x < 18 || x >= 20, x < 18 || 20 <= x);
+    check(x < 18 || x >= 20, 20 <= x || x < 18);
     check(x >= 20 || x < 18, 20 <= x || x < 18);
     check(x < 18 && x >= 19, f);
     check(x >= 19 && x < 18, f);
-    check(x < 20 && x >= 19, x < 20 && 19 <= x);
+    check(x < 20 && x >= 19, 19 <= x && x < 20);
     check(x >= 19 && x < 20, 19 <= x && x < 20);
 
     check(x <= 20 || x >= 21, t);
@@ -1064,14 +1047,8 @@ void check_boolean() {
     check(x >= 20 && x <= 20, 20 <= x && x <= 20);
 
     // check for substitution patterns
-    check((b1 == t) && (b1 && b2), (b1 == t) && b2);
-    check((b1 && b2) && (b1 == t), b2 && (b1 == t));
-
-    {
-        Expr i = Variable::make(Int(32), "i");
-        check((i!=2 && (i!=4 && (i!=8 && i!=16))) || (i==16), (i!=2 && (i!=4 && (i!=8))));
-        check((i==16) || (i!=2 && (i!=4 && (i!=8 && i!=16))), (i!=2 && (i!=4 && (i!=8))));
-    }
+    check((b1 == t) && (b1 && b2), b1 && b2);
+    check((b1 && b2) && (b1 == t), b1 && b2);
 
     check(t && (x < 0), x < 0);
     check(f && (x < 0), f);
@@ -1146,7 +1123,7 @@ void check_boolean() {
                            Evaluate::make(z + x - y)),
           IfThenElse::make(x == 4 && y == 5,
                            Evaluate::make(z + 9),
-                           Evaluate::make(z + x - y)));
+                           Evaluate::make(x + z - y)));
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
@@ -1193,23 +1170,6 @@ void check_boolean() {
                            Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
                            Evaluate::make(x+3)));
 
-    // Check conditions involving entire exprs
-    Expr foo = x + 3*y;
-    Expr foo_simple = x + y*3;
-    check(IfThenElse::make(foo == 17,
-                           Evaluate::make(x+foo+1),
-                           Evaluate::make(x+foo+2)),
-          IfThenElse::make(foo_simple == 17,
-                           Evaluate::make(x+18),
-                           Evaluate::make(x+foo_simple+2)));
-
-    check(IfThenElse::make(foo != 17,
-                           Evaluate::make(x+foo+1),
-                           Evaluate::make(x+foo+2)),
-          IfThenElse::make(foo_simple != 17,
-                           Evaluate::make(x+foo_simple+1),
-                           Evaluate::make(x+19)));
-
     // The construct
     //     if (var == expr) then a else b;
     // was being simplified incorrectly, but *only* if var was of type Bool.
@@ -1239,22 +1199,23 @@ void check_boolean() {
     check(max(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
           select(x == 2, max(y*3, y+8), max(y*7, 8)));
 
-    check(select(x == 2, x+1, x+5), x + select(x == 2, 1, 5));
-    check(select(x == 2, x+y, x+z), x + select(x == 2, y, z));
-    check(select(x == 2, y+x, x+z), x + select(x == 2, y, z));
-    check(select(x == 2, y+x, z+x), select(x == 2, y, z) + x);
-    check(select(x == 2, x+y, z+x), x + select(x == 2, y, z));
-    check(select(x == 2, x*2, x*5), x * select(x == 2, 2, 5));
-    check(select(x == 2, x*y, x*z), x * select(x == 2, y, z));
-    check(select(x == 2, y*x, x*z), x * select(x == 2, y, z));
-    check(select(x == 2, y*x, z*x), select(x == 2, y, z) * x);
-    check(select(x == 2, x*y, z*x), x * select(x == 2, y, z));
-    check(select(x == 2, x-y, x-z), x - select(x == 2, y, z));
-    check(select(x == 2, y-x, z-x), select(x == 2, y, z) - x);
-    check(select(x == 2, x+y, x-z), x + select(x == 2, y, 0-z));
-    check(select(x == 2, y+x, x-z), x + select(x == 2, y, 0-z));
-    check(select(x == 2, x-z, x+y), x + select(x == 2, 0-z, y));
-    check(select(x == 2, x-z, y+x), x + select(x == 2, 0-z, y));
+    Expr cond = (x*x == 16);
+    check(select(cond, x+1, x+5), select(cond, 1, 5) + x);
+    check(select(cond, x+y, x+z), select(cond, y, z) + x);
+    check(select(cond, y+x, x+z), select(cond, y, z) + x);
+    check(select(cond, y+x, z+x), select(cond, y, z) + x);
+    check(select(cond, x+y, z+x), select(cond, y, z) + x);
+    check(select(cond, x*2, x*5), select(cond, 2, 5) * x);
+    check(select(cond, x*y, x*z), select(cond, y, z) * x);
+    check(select(cond, y*x, x*z), select(cond, y, z) * x);
+    check(select(cond, y*x, z*x), select(cond, y, z) * x);
+    check(select(cond, x*y, z*x), select(cond, y, z) * x);
+    check(select(cond, x-y, x-z), x - select(cond, y, z));
+    check(select(cond, y-x, z-x), select(cond, y, z) - x);
+    check(select(cond, x+y, x-z), select(cond, y, 0-z) + x);
+    check(select(cond, y+x, x-z), select(cond, y, 0-z) + x);
+    check(select(cond, x-z, x+y), select(cond, 0-z, y) + x);
+    check(select(cond, x-z, y+x), select(cond, 0-z, y) + x);
 
 
     {
@@ -1268,9 +1229,9 @@ void check_boolean() {
         check(select(b[0], x, select(b[1], x, y)),
               select(b[0] || b[1], x, y));
         check(select(b[0], x, select(b[1], y, x)),
-              select(b[0] || !b[1], x, y));
+              select(!b[1] || b[0], x, y));
         check(select(b[0], select(b[1], x, y), x),
-              select(b[0] && !b[1], y, x));
+              select(!b[1] && b[0], y, x));
         check(select(b[0], select(b[1], y, x), x),
               select(b[0] && b[1], y, x));
 
@@ -1280,9 +1241,9 @@ void check_boolean() {
         check(b[0] && (b[0] || b[1]), b[0]);
         check((b[0] || b[1]) && b[0], b[0]);
         check(b[0] && (b[0] && b[1]), b[0] && b[1]);
-        check((b[0] && b[1]) && b[0], b[1] && b[0]);
+        check((b[0] && b[1]) && b[0], b[0] && b[1]);
         check(b[0] || (b[0] || b[1]), b[0] || b[1]);
-        check((b[0] || b[1]) || b[0], b[1] || b[0]);
+        check((b[0] || b[1]) || b[0], b[0] || b[1]);
 
         // A nasty unsimplified boolean Expr seen in the wild
         Expr nasty = ((((((((((((((((((((((((((((((((((((((((((((b[0] && b[1]) || (b[2] && b[1])) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[6]) || (b[2] && b[6]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[3]) || (b[2] && b[3]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[7]) || (b[2] && b[7]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[4]) || (b[2] && b[4]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[8]) || (b[2] && b[8]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[5]) || (b[2] && b[5]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[10]) || (b[2] && b[10]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[9]) || (b[2] && b[9]))) || b[0]) || b[2]);
@@ -1377,136 +1338,6 @@ void check_overflow() {
     }
 }
 
-void check_ind_expr(Expr e, bool expect_error) {
-    Expr e2 = simplify(e);
-    const Call *call = e2.as<Call>();
-    bool is_error = call && call->is_intrinsic(Call::indeterminate_expression);
-    if (expect_error && !is_error) {
-        std::cerr << "Expression should be indeterminate: " << e << " but saw: " << e2 << "\n";
-        exit(1);
-    }
-    else if (!expect_error && is_error) {
-        std::cerr << "Expression should not be indeterminate: " << e << " but saw: " << e2 << "\n";
-        exit(1);
-    }
-}
-
-void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
-    Expr b = cast<bool>(e);
-    Expr t = const_true(), f = const_false();
-    Expr one = cast(e.type(), 1);
-    Expr zero = cast(e.type(), 0);
-
-    check_ind_expr(e, e_is_indeterminate);
-    check_ind_expr(e + e, e_is_indeterminate);
-    check_ind_expr(e - e, e_is_indeterminate);
-    check_ind_expr(e * e, e_is_indeterminate);
-    check_ind_expr(e / e, e_is_zero || e_is_indeterminate);
-    check_ind_expr((1 / e) / e, e_is_zero || e_is_indeterminate);
-    // Expr::operator% asserts if denom is constant zero.
-    if (!is_zero(e)) {
-        check_ind_expr(e % e, e_is_zero || e_is_indeterminate);
-        check_ind_expr((1 / e) % e, e_is_zero || e_is_indeterminate);
-    }
-    check_ind_expr(min(e, one), e_is_indeterminate);
-    check_ind_expr(max(e, one), e_is_indeterminate);
-    check_ind_expr(e == one, e_is_indeterminate);
-    check_ind_expr(one == e, e_is_indeterminate);
-    check_ind_expr(e < one, e_is_indeterminate);
-    check_ind_expr(one < e, e_is_indeterminate);
-    check_ind_expr(!(e == one), e_is_indeterminate);
-    check_ind_expr(!(one == e), e_is_indeterminate);
-    check_ind_expr(!(e < one), e_is_indeterminate);
-    check_ind_expr(!(one < e), e_is_indeterminate);
-    check_ind_expr(b && t, e_is_indeterminate);
-    check_ind_expr(t && b, e_is_indeterminate);
-    check_ind_expr(b || t, e_is_indeterminate);
-    check_ind_expr(t || b, e_is_indeterminate);
-    check_ind_expr(!b, e_is_indeterminate);
-    check_ind_expr(select(b, one, zero), e_is_indeterminate);
-    check_ind_expr(select(t, e, zero), e_is_indeterminate);
-    check_ind_expr(select(f, zero, e), e_is_indeterminate);
-    check_ind_expr(e << one, e_is_indeterminate);
-    check_ind_expr(e >> one, e_is_indeterminate);
-    // Avoid warnings for things like (1 << 2147483647)
-    if (e_is_indeterminate) {
-        check_ind_expr(one << e, e_is_indeterminate);
-        check_ind_expr(one >> e, e_is_indeterminate);
-    }
-    check_ind_expr(one & e, e_is_indeterminate);
-    check_ind_expr(e & one, e_is_indeterminate);
-    check_ind_expr(one | e, e_is_indeterminate);
-    check_ind_expr(e | one, e_is_indeterminate);
-    if (!e.type().is_uint()) {
-        // Avoid warnings
-        check_ind_expr(abs(e), e_is_indeterminate);
-    }
-    check_ind_expr(log(e), e_is_indeterminate);
-    check_ind_expr(sqrt(e), e_is_indeterminate);
-    check_ind_expr(exp(e), e_is_indeterminate);
-    check_ind_expr(pow(e, one), e_is_indeterminate);
-    // pow(x, y) explodes for huge integer y (Issue #1441)
-    if (e_is_indeterminate) {
-        check_ind_expr(pow(one, e), e_is_indeterminate);
-    }
-    check_ind_expr(floor(e), e_is_indeterminate);
-    check_ind_expr(ceil(e), e_is_indeterminate);
-    check_ind_expr(round(e), e_is_indeterminate);
-    check_ind_expr(trunc(e), e_is_indeterminate);
-}
-
-void check_indeterminate() {
-    const int32_t values[] = {
-        int32_t(0x80000000),
-        -2147483647,
-        -2,
-        -1,
-        0,
-        1,
-        2,
-        2147483647,
-    };
-
-    for (int32_t i1 : values) {
-        // reality-check for never-indeterminate values.
-        check_indeterminate_ops(Expr(i1), !i1, false);
-        for (int32_t i2 : values) {
-            {
-                Expr e1(i1), e2(i2);
-                Expr r = (e1 / e2);
-                bool r_is_zero = !i1 || (i2 != 0 && !div_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
-                bool r_is_ind = !i2;
-                check_indeterminate_ops(r, r_is_zero, r_is_ind);
-
-                // Expr::operator% asserts if denom is constant zero.
-                if (!is_zero(e2)) {
-                    Expr m = (e1 % e2);
-                    bool m_is_zero = !i1 || (i2 != 0 && !mod_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
-                    bool m_is_ind = !i2;
-                    check_indeterminate_ops(m, m_is_zero, m_is_ind);
-                }
-            }
-            {
-                uint32_t u1 = (uint32_t)i1;
-                uint32_t u2 = (uint32_t)i2;
-                Expr e1(u1), e2(u2);
-                Expr r = (e1 / e2);
-                bool r_is_zero = !u1 || (u2 != 0 && !div_imp(u1, u2));
-                bool r_is_ind = !u2;
-                check_indeterminate_ops(r, r_is_zero, r_is_ind);
-
-                // Expr::operator% asserts if denom is constant zero.
-                if (!is_zero(e2)) {
-                    Expr m = (e1 % e2);
-                    bool m_is_zero = !u1 || (u2 != 0 && !mod_imp(u1, u2));
-                    bool m_is_ind = !u2;
-                    check_indeterminate_ops(m, m_is_zero, m_is_ind);
-                }
-            }
-        }
-    }
-}
-
 void check_bitwise() {
     Expr x = Var("x");
 
@@ -1551,8 +1382,48 @@ void check_lets() {
 
 }
 
+void check_inv(Expr before) {
+    Expr after = simplify(before);
+    internal_assert(before.same_as(after))
+        << "Expressions should be equal by value and by identity: "
+        << " Before: " << before << "\n"
+        << " After: " << after << "\n";
+}
+
+void check_invariant() {
+    // Check a bunch of expressions *don't* simplify. These should try
+    // and then fail to match every single rule (which should trigger
+    // fuzz testing of each as a side effect). The final expression
+    // should be exactly the same object as the input.
+    for (Type t : {UInt(1), UInt(8), UInt(16), UInt(32), UInt(64),
+                Int(8), Int(16), Int(32), Int(64),
+                Float(32), Float(64)}) {
+        Expr x = Variable::make(t, "x");
+        Expr y = Variable::make(t, "y");
+        Expr z = Variable::make(t, "z");
+        Expr w = Variable::make(t, "w");
+        check_inv(x + y);
+        check_inv(x - y);
+        check_inv(x % y);
+        check_inv(x * y);
+        check_inv(x / y);
+        check_inv(min(x, y));
+        check_inv(max(x, y));
+        check_inv(x == y);
+        check_inv(x != y);
+        check_inv(x < y);
+        check_inv(x <= y);
+        if (t.is_bool()) {
+            check_inv(x && y);
+            check_inv(x || y);
+            check_inv(!x);
+        }
+        check_inv(select(x == y, z, w));
+    }
+}
+
 int main(int argc, char **argv) {
-    check_indeterminate();
+    check_invariant();
     check_casts();
     check_algebra();
     check_vectors();
@@ -1563,7 +1434,6 @@ int main(int argc, char **argv) {
     check_bitwise();
 
     // Miscellaneous cases that don't fit into one of the categories above.
-
     Expr x = Var("x"), y = Var("y");
 
     // Check that constant args to a stringify get combined
@@ -1580,8 +1450,9 @@ int main(int argc, char **argv) {
               Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
-    // This expression doesn't simplify, but it did cause exponential
-    // slowdown at one stage.
+    // This expression is a good stress-test. It caused exponential
+    // slowdown at one point in time, and constant folding leading to
+    // overflow at another.
     {
         Expr e = x;
         for (int i = 0; i < 100; i++) {
@@ -1590,11 +1461,9 @@ int main(int argc, char **argv) {
         check(e, e);
     }
 
-    // These expressions are used to cause infinite recursion.
+    // This expression used to cause infinite recursion.
     check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
-          Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2)));
-    check((ramp(-71, 39, 2)/Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2))) >= Broadcast::make(23, 2),
-          (Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2)) * Broadcast::make(23, 2)) <= ramp(-71, 39, 2));
+          Broadcast::make(-15, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2)));
 
     {
         // Verify that integer types passed to min() and max() are coerced to match

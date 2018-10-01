@@ -393,6 +393,10 @@ public:
     bool memoized() const;
     // @}
 
+    /** Is the production of this Function done asynchronously */
+    bool &async();
+    bool async() const;
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is

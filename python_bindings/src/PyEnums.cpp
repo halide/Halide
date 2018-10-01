@@ -132,10 +132,12 @@ void define_enums(py::module &m) {
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
+        .value("D3D12Compute", Target::Feature::D3D12Compute)
         .value("StrictFloat", Target::Feature::StrictFloat)
         .value("LegacyBufferWrappers", Target::Feature::LegacyBufferWrappers)
         .value("TSAN", Target::Feature::TSAN)
         .value("ASAN", Target::Feature::ASAN)
+        .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

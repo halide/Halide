@@ -1,6 +1,8 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
 
+#include "printer.h"
+
 extern "C" {
 
 extern void *posix_memalign(void **memptr, size_t alignment, size_t size);

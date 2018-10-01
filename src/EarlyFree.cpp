@@ -33,6 +33,19 @@ private:
         loop->body.accept(this);
     }
 
+    void visit(const Fork *fork) {
+        ScopedValue<bool> old_in_loop(in_loop, true);
+        fork->first.accept(this);
+        fork->rest.accept(this);
+    }
+
+    void visit(const Acquire *acq) {
+        acq->semaphore.accept(this);
+        acq->count.accept(this);
+        ScopedValue<bool> old_in_loop(in_loop, true);
+        acq->body.accept(this);
+    }
+
     void visit(const Load *load) {
         if (func == load->name) {
             last_use = containing_stmt;
@@ -77,14 +90,12 @@ private:
         if (in_loop) {
             IRVisitor::visit(block);
         } else {
-            Stmt old_containing_stmt = containing_stmt;
-            containing_stmt = block->first;
+            ScopedValue<Stmt> old_containing_stmt(containing_stmt, block->first);
             block->first.accept(this);
             if (block->rest.defined()) {
                 containing_stmt = block->rest;
                 block->rest.accept(this);
             }
-            containing_stmt = old_containing_stmt;
         }
     }
 };
