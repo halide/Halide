@@ -1791,7 +1791,7 @@ struct LoopNest {
         children = n.children;
         inlined = n.inlined;
         store_at = n.store_at;
-        bounds = n.bounds; // TODO: bounds object is larger than necessary much of the time, making this copy slow
+        bounds = n.bounds;
         node = n.node;
         stage = n.stage;
         stage_idx = n.stage_idx;
@@ -2125,8 +2125,8 @@ struct LoopNest {
         return node == nullptr;
     }
 
-    const Bound &set_bounds(const FunctionDAG::Node *f, Bound &&b) const {
-        return bounds.emplace(f, std::move(b));
+    const Bound &set_bounds(const FunctionDAG::Node *f, std::unique_ptr<BoundContents> &&b) const {
+        return bounds.emplace(f, b.release());
     }
 
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
@@ -2134,7 +2134,7 @@ struct LoopNest {
         if (bounds.contains(f)) {
             return bounds.get(f);
         }
-        BoundContents *bound = new BoundContents(f);
+        std::unique_ptr<BoundContents> bound{new BoundContents(f)};
         // Compute the region required
         if (f->is_output && is_root()) {
             internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
@@ -2168,7 +2168,7 @@ struct LoopNest {
             f->loop_nest_for_region(i, &(bound->region_computed(0)), &(bound->loops(i, 0)));
         }
 
-        return set_bounds(f, bound);
+        return set_bounds(f, std::move(bound));
     }
 
     void dump(string prefix) const {
@@ -2261,10 +2261,10 @@ struct LoopNest {
         // Inline it into the children
         for (size_t i = 0; i < children.size(); i++) {
             if (children[i]->calls(f)) {
-                auto new_child = new LoopNest;
+                std::unique_ptr<LoopNest> new_child{new LoopNest};
                 new_child->copy_from(*children[i]);
                 new_child->inline_func(f);
-                children[i] = IntrusivePtr<const LoopNest>(new_child);
+                children[i] = new_child.release();
             }
         }
 
@@ -2288,14 +2288,14 @@ struct LoopNest {
     void compute_here(const FunctionDAG::Node *f, bool tileable) {
         const auto &bounds = get_bounds(f);
         for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
-            LoopNest *node = new LoopNest;
+            std::unique_ptr<LoopNest> node{new LoopNest};
             node->node = f;
             node->stage_idx = s;
             node->stage = &f->stages[s];
             node->innermost = true;
             // TODO: rvars are not tileable
             node->tileable = tileable;
-            BoundContents *single_point = new BoundContents(f);
+            std::unique_ptr<BoundContents> single_point{new BoundContents(f)};
             size_t loop_dim = f->stages[s].loop.size();
             node->size.resize(loop_dim);
             for (size_t i = 0; i < loop_dim; i++) {
@@ -2308,8 +2308,8 @@ struct LoopNest {
                 single_point->loops(s, i) = {l.first, l.first};
             }
             // Leave region required blank inside the computation of a Func
-            node->set_bounds(f, single_point);
-            children.emplace_back(node);
+            node->set_bounds(f, std::move(single_point));
+            children.emplace_back(node.release());
         }
     }
 
@@ -2347,7 +2347,7 @@ struct LoopNest {
             !innermost &&
             (!in_realization || size[vector_dim] == 1)) {
             // Place the computation inside this loop
-            LoopNest *r = new LoopNest;
+            std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
             r->compute_here(f, is_root() || constraints->may_subtile());
             if (!in_realization) {
@@ -2355,7 +2355,7 @@ struct LoopNest {
             } else {
                 r->tileable = false;
             }
-            result.emplace_back(r);
+            result.emplace_back(r.release());
         }
 
         if (f->is_output || constraints->must_root(f)) {
@@ -2412,7 +2412,7 @@ struct LoopNest {
                 // weird.
 
                 {
-                    BoundContents *b = new BoundContents(inner->get_bounds(node));
+                    std::unique_ptr<BoundContents> b{new BoundContents(inner->get_bounds(node))};
 
                     // Then move factors from the outer loop to the inner loop
                     auto parent_bounds = parent->get_bounds(node);
@@ -2428,7 +2428,7 @@ struct LoopNest {
                         b->loops(stage_idx, i) = {min, min + extent - 1};
                     }
 
-                    outer->set_bounds(node, b);
+                    outer->set_bounds(node, std::move(b));
                 }
 
                 if (!in_realization) {
