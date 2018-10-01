@@ -2165,17 +2165,13 @@ void CodeGen_C::visit(const Call *op) {
             " Halide.\n";
     } else if (op->is_intrinsic(Call::quiet_div)) {
         internal_assert(op->args.size() == 2);
-        if (is_zero(op->args[1])) {
-            user_error << "Division by constant zero in expression: " << Expr(op) << "\n";
-        }
+        internal_assert(!is_zero(op->args[1]));  // shouldn't be inserted unless provably nonzero
         string a = print_expr(op->args[0]);
         string b = print_expr(op->args[1]);
         rhs << "::quiet_div(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::quiet_mod)) {
         internal_assert(op->args.size() == 2);
-        if (is_zero(op->args[1])) {
-            user_error << "Mod by constant zero in expression: " << Expr(op) << "\n";
-        }
+        internal_assert(!is_zero(op->args[1]));  // shouldn't be inserted unless provably nonzero
         string a = print_expr(op->args[0]);
         string b = print_expr(op->args[1]);
         rhs << "::quiet_mod(" << a << ", " << b << ")";
