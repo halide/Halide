@@ -201,6 +201,10 @@ struct FunctionDAG {
         // this Func. Used in the cost above, and in the Edges below.
         vector<Interval> region_required;
 
+        // A concrete region required from a bounds estimate. Only
+        // defined for outputs.
+        vector<pair<int64_t, int64_t>> estimated_region_required;
+
         // The region computed of a Func, in terms of the region
         // required. For simple Funcs this is identical to the
         // region_required. However, in some Funcs computing one
@@ -298,6 +302,9 @@ struct FunctionDAG {
 
         // One stage of a Func
         struct Stage {
+            // The owning Node
+            Node *node;
+
             // The loop nest that computes this stage, from innermost out.
             vector<Loop> loop;
             bool loop_nest_all_common_cases = false;
@@ -314,6 +321,9 @@ struct FunctionDAG {
             // The actual Halide front-end stage object
             Halide::Stage stage;
 
+            // Ids for perfect hashing on stages.
+            int id, max_id;
+
             Stage(Halide::Stage s) : stage(s) {}
         };
         vector<Stage> stages;
@@ -325,7 +335,7 @@ struct FunctionDAG {
 
         // A unique ID for this node, allocated consecutively starting
         // at zero for each pipeline.
-        int id;
+        int id, max_id;
 
         bool is_output;
 
@@ -516,9 +526,12 @@ struct FunctionDAG {
             Function f = env[order[order.size() - i - 1]];
             nodes[i].func = f;
             nodes[i].id = (int)i;
+            nodes[i].max_id = (int)order.size();
             nodes[i].dag = this;
             node_map[f] = &nodes[i];
         }
+
+        int stage_count = 0;
 
         for (size_t i = order.size(); i > 0; i--) {
             Function consumer = env[order[i-1]];
@@ -543,9 +556,12 @@ struct FunctionDAG {
             }
 
             for (int s = 0; s <= (int)consumer.updates().size(); s++) {
+                stage_count++;
+
                 Halide::Stage halide_stage = Func(consumer);
                 if (s > 0) halide_stage = Func(consumer).update(s-1);
                 Node::Stage stage(halide_stage);
+                stage.node = &node;
 
                 const Definition &def = (s == 0) ? consumer.definition() : consumer.update(s - 1);
                 const StageSchedule &sched = def.schedule();
@@ -729,6 +745,23 @@ struct FunctionDAG {
                     node.is_output |= o.same_as(node.func);
                 }
 
+                if (node.is_output) {
+                    // Get the bounds estimate
+                    map<string, pair<int64_t, int64_t>> estimates;
+                    for (auto b : consumer.schedule().estimates()) {
+                        int64_t i_min = *as_const_int(b.min);
+                        int64_t i_extent = *as_const_int(b.extent);
+                        estimates[b.var] = {i_min, i_min + i_extent - 1};
+                    }
+                    // Set the bounds using the estimates
+                    for (int i = 0; i < consumer.dimensions(); i++) {
+                        auto it = estimates.find(consumer.args()[i]);
+                        user_assert(it != estimates.end())
+                            << "Need an estimate on dimension " << i << " of \"" << consumer.name() << "\"";
+                        node.estimated_region_required.push_back(it->second);
+                    }
+                }
+
                 node.stages.emplace_back(std::move(stage));
 
                 // Now create the edges that lead to this func
@@ -758,6 +791,18 @@ struct FunctionDAG {
         // Initialize the memory layouts for the bounds structs
         for (auto &n : nodes) {
             n.bounds_memory_layout.init(n);
+        }
+
+        // Give all the stages unique ids to support perfect hashing of them
+        {
+            int i = 0;
+            for (auto &n : nodes) {
+                for (auto &s : n.stages) {
+                    s.id = i;
+                    s.max_id = stage_count;
+                    i++;
+                }
+            }
         }
 
         for (size_t i = 0; i < edges.size(); i++) {
@@ -1240,15 +1285,37 @@ struct ScheduleFeatures {
     }
 };
 
-// A specialized map from DAG nodes to values of type T. Exploits the
-// node id as a perfect hash.
-template<typename T, int max_small_size = 4>
-class NodeMap {
-    using storage_type = std::vector<std::pair<const FunctionDAG::Node *, T>>;
+// A specialized hash map used in this file. It can only grow, and it
+// requires a perfect hash in the form of "id" and "max_id" fields on
+// each key. If the keys don't all have a consistent max_id, or if you
+// call make_large with the wrong max_id, you get UB. If you think
+// that might be happening, uncomment the assertions below for some
+// extra checking.
+template<typename K, typename T, int max_small_size = 4>
+class PerfectHashMap {
+    using storage_type = std::vector<std::pair<const K *, T>>;
 
     storage_type storage;
 
     int occupied = 0;
+
+    // Equivalent to storage[i], but broken out into a separate method
+    // to allow for bounds checks when debugging this.
+    pair<const K *, T> &storage_bucket(int i) {
+        /*
+        internal_assert(i >= 0 && i < (int)storage.size())
+            << "Out of bounds access: " << i << " " << storage.size() << "\n";
+        */
+        return storage[i];
+    }
+
+    const pair<const K *, T> &storage_bucket(int i) const {
+        /*
+        internal_assert(i >= 0 && i < (int)storage.size())
+            << "Out of bounds access: " << i << " " << storage.size() << "\n";
+        */
+        return storage[i];
+    }
 
     enum {
         Empty = 0, // No storage allocated
@@ -1278,51 +1345,51 @@ class NodeMap {
     }
 
     // Methods when the map is in the empty state
-    T &emplace_empty(const FunctionDAG::Node *n, T &&t) {
+    T &emplace_empty(const K *n, T &&t) {
         upgrade_from_empty_to_small();
-        storage[0].first = n;
-        storage[0].second = std::move(t);
+        storage_bucket(0).first = n;
+        storage_bucket(0).second = std::move(t);
         occupied = 1;
-        return storage[0].second;
+        return storage_bucket(0).second;
     }
 
-    const T &get_empty(const FunctionDAG::Node *n) const {
-        internal_error << "Calling get on an empty NodeMap";
+    const T &get_empty(const K *n) const {
+        internal_error << "Calling get on an empty PerfectHashMap";
         // Unreachable
-        return storage[0].second;
+        return storage_bucket(0).second;
     }
 
-    T &get_empty(const FunctionDAG::Node *n) {
-        internal_error << "Calling get on an empty NodeMap";
+    T &get_empty(const K *n) {
+        internal_error << "Calling get on an empty PerfectHashMap";
         // Unreachable
-        return storage[0].second;
+        return storage_bucket(0).second;
     }
 
-    T &get_or_create_empty(const FunctionDAG::Node *n) {
+    T &get_or_create_empty(const K *n) {
         occupied = 1;
         return emplace_empty(n, T());
     }
 
-    bool contains_empty(const FunctionDAG::Node *n) const {
+    bool contains_empty(const K *n) const {
         return false;
     }
 
     // Methods when the map is in the small state
-    int find_index_small(const FunctionDAG::Node *n) const {
+    int find_index_small(const K *n) const {
         int i;
         for (i = 0; i < (int)occupied; i++) {
-            if (storage[i].first == n) return i;
+            if (storage_bucket(i).first == n) return i;
         }
         return i;
     }
 
-    T &emplace_small(const FunctionDAG::Node *n, T &&t) {
+    T &emplace_small(const K *n, T &&t) {
         int idx = find_index_small(n);
         if (idx >= max_small_size) {
-            upgrade_from_small_to_large((int)(n->dag->nodes.size()));
+            upgrade_from_small_to_large((int)(n->max_id));
             return emplace_large(n, std::move(t));
         }
-        auto &p = storage[idx];
+        auto &p = storage_bucket(idx);
         if (p.first == nullptr) {
             occupied++;
             p.first = n;
@@ -1331,23 +1398,23 @@ class NodeMap {
         return p.second;
     }
 
-    const T &get_small(const FunctionDAG::Node *n) const {
+    const T &get_small(const K *n) const {
         int idx = find_index_small(n);
-        return storage[idx].second;
+        return storage_bucket(idx).second;
     }
 
-    T &get_small(const FunctionDAG::Node *n) {
+    T &get_small(const K *n) {
         int idx = find_index_small(n);
-        return storage[idx].second;
+        return storage_bucket(idx).second;
     }
 
-    T &get_or_create_small(const FunctionDAG::Node *n) {
+    T &get_or_create_small(const K *n) {
         int idx = find_index_small(n);
         if (idx >= max_small_size) {
-            upgrade_from_small_to_large((int)(n->dag->nodes.size()));
+            upgrade_from_small_to_large((int)(n->max_id));
             return get_or_create_large(n);
         }
-        auto &p = storage[idx];
+        auto &p = storage_bucket(idx);
         if (p.first == nullptr) {
             occupied++;
             p.first = n;
@@ -1355,44 +1422,60 @@ class NodeMap {
         return p.second;
     }
 
-    bool contains_small(const FunctionDAG::Node *n) const {
+    bool contains_small(const K *n) const {
         int idx = find_index_small(n);
-        return (idx < max_small_size) && (storage[idx].first == n);
+        return (idx < max_small_size) && (storage_bucket(idx).first == n);
     }
 
     // Methods when the map is in the large state
-    T &emplace_large(const FunctionDAG::Node *n, T &&t) {
-        auto &p = storage[n->id];
+    T &emplace_large(const K *n, T &&t) {
+        auto &p = storage_bucket(n->id);
         if (!p.first) occupied++;
         p.first = n;
         p.second = std::move(t);
         return p.second;
     }
 
-    const T &get_large(const FunctionDAG::Node *n) const {
-        return storage[n->id].second;
+    const T &get_large(const K *n) const {
+        return storage_bucket(n->id).second;
     }
 
-    T &get_large(const FunctionDAG::Node *n) {
-        return storage[n->id].second;
+    T &get_large(const K *n) {
+        return storage_bucket(n->id).second;
     }
 
-    T &get_or_create_large(const FunctionDAG::Node *n) {
-        auto &p = storage[n->id];
+    T &get_or_create_large(const K *n) {
+        auto &p = storage_bucket(n->id);
         if (p.first == nullptr) {
             occupied++;
             p.first = n;
         }
-        return storage[n->id].second;
+        return storage_bucket(n->id).second;
     }
 
-    bool contains_large(const FunctionDAG::Node *n) const {
-        return storage[n->id].first != nullptr;
+    bool contains_large(const K *n) const {
+        return storage_bucket(n->id).first != nullptr;
+    }
+
+    void check_key(const K *n) const {
+        /*
+        internal_assert(n->id >= 0 && n->id < n->max_id)
+            << "Invalid hash key: " << n->id << " " << n->max_id << "\n";
+        internal_assert(state != Large || (int)storage.size() == n->max_id)
+            << "Inconsistent key count: " << n->max_id << " vs " << storage.size() << "\n";
+        */
     }
 
 public:
 
-    T &emplace(const FunctionDAG::Node *n, T &&t) {
+    // Jump straight to the large state
+    void make_large(int n) {
+        if (state == Empty) upgrade_from_empty_to_large(n);
+        else if (state == Small) upgrade_from_small_to_large(n);
+    }
+
+    T &emplace(const K *n, T &&t) {
+        check_key(n);
         switch(state) {
         case Empty: return emplace_empty(n, std::move(t));
         case Small: return emplace_small(n, std::move(t));
@@ -1400,7 +1483,8 @@ public:
         }
     }
 
-    T &insert(const FunctionDAG::Node *n, const T &t) {
+    T &insert(const K *n, const T &t) {
+        check_key(n);
         T tmp(t);
         switch(state) {
         case Empty: return emplace_empty(n, std::move(tmp));
@@ -1409,7 +1493,8 @@ public:
         }
     }
 
-    const T &get(const FunctionDAG::Node *n) const {
+    const T &get(const K *n) const {
+        check_key(n);
         switch(state) {
         case Empty: return get_empty(n);
         case Small: return get_small(n);
@@ -1417,7 +1502,8 @@ public:
         }
     }
 
-    T &get(const FunctionDAG::Node *n) {
+    T &get(const K *n) {
+        check_key(n);
         switch(state) {
         case Empty: return get_empty(n);
         case Small: return get_small(n);
@@ -1425,7 +1511,8 @@ public:
         }
     }
 
-    T &get_or_create(const FunctionDAG::Node *n) {
+    T &get_or_create(const K *n) {
+        check_key(n);
         switch(state) {
         case Empty: return get_or_create_empty(n);
         case Small: return get_or_create_small(n);
@@ -1433,7 +1520,8 @@ public:
         }
     }
 
-    bool contains(const FunctionDAG::Node *n) const {
+    bool contains(const K *n) const {
+        check_key(n);
         switch(state) {
         case Empty: return contains_empty(n);
         case Small: return contains_small(n);
@@ -1446,15 +1534,15 @@ public:
     }
 
     struct iterator {
-        pair<const FunctionDAG::Node *, T> *iter, *end;
+        pair<const K *, T> *iter, *end;
 
         void operator++(int) {
             do {
                 iter++;
-            } while (iter->first == nullptr && iter != end);
+            } while (iter != end && iter->first == nullptr);
         }
 
-        const FunctionDAG::Node *key() const {
+        const K *key() const {
             return iter->first;
         }
 
@@ -1472,15 +1560,15 @@ public:
     };
 
     struct const_iterator {
-        const pair<const FunctionDAG::Node *, T> *iter, *end;
+        const pair<const K *, T> *iter, *end;
 
         void operator++(int) {
             do {
                 iter++;
-            } while (iter->first == nullptr && iter != end);
+            } while (iter != end && iter->first == nullptr);
         }
 
-        const FunctionDAG::Node *key() const {
+        const K *key() const {
             return iter->first;
         }
 
@@ -1530,6 +1618,12 @@ public:
     }
 };
 
+template<typename T>
+using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
+
+template<typename T>
+using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
+
 struct Constraints {
     virtual bool must_root(const FunctionDAG::Node *node) const { return node->is_output; }
     virtual bool may_root(const FunctionDAG::Node *node) const { return true; }
@@ -1552,7 +1646,7 @@ struct CoarsePassConstraints : public Constraints {
 
 struct FinePassConstraints : public Constraints {
     set<const FunctionDAG::Node *> roots;
-    map<const FunctionDAG::Node::Stage *, uint64_t> parallel_dims;
+    StageMap<uint64_t> parallel_dims;
 
     bool must_root(const FunctionDAG::Node *node) const override {
         return node->is_output || (roots.find(node) != roots.end());
@@ -1563,12 +1657,14 @@ struct FinePassConstraints : public Constraints {
     }
 
     void permit_parallelization(const FunctionDAG::Node::Stage *stage, int dim) {
-        parallel_dims[stage] |= ((uint64_t)1) << dim;
+        parallel_dims.get_or_create(stage) |= ((uint64_t)1) << dim;
     }
 
     bool may_parallelize(const FunctionDAG::Node::Stage *stage, int dim) const override {
-        auto it = parallel_dims.find(stage);
-        return (it != parallel_dims.end()) && (it->second & ((uint64_t)1 << dim));
+        if (!parallel_dims.contains(stage)) {
+            return false;
+        }
+        return parallel_dims.get(stage) & ((uint64_t)1 << dim);
     }
 
     int stratify_depth() const override {
@@ -1743,7 +1839,7 @@ struct LoopNest {
                           const LoopNest *parent,
                           const LoopNest &root,
                           int64_t *working_set,
-                          NodeMap<vector<ScheduleFeatures>> *features) const {
+                          StageMap<ScheduleFeatures> *features) const {
 
         int64_t working_set_here = 0;
 
@@ -1761,14 +1857,9 @@ struct LoopNest {
             // Figure out the features at the store_at level
             const auto &bounds = get_bounds(node);
 
-            vector<ScheduleFeatures> &func_features = features->get_or_create(node);
-            if (func_features.empty()) {
-                func_features.resize(node->stages.size());
-            }
-
             for (size_t s = 0; s < node->stages.size(); s++) {
                 // TODO: Lift invariants from this loop. Most of it's the same for every stage.
-                ScheduleFeatures &feat = func_features[s];
+                ScheduleFeatures &feat = features->get_or_create(&(node->stages[s]));
 
                 feat.num_realizations = subinstances;
 
@@ -1799,28 +1890,27 @@ struct LoopNest {
 
             // Figure out the root-level features for every Func
             for (auto it = features->begin(); it != features->end(); it++) {
-                const auto *node = it.key();
-                auto &feat_vec = it.value();
+                const auto *stage = it.key();
+                const auto *node = stage->node;
+                auto &feat = it.value();
                 const auto &root_bounds = root.get_bounds(node);
-                int s = 0;
-                for (auto &feat : feat_vec) {
-                    feat.bytes_at_root = node->bytes_per_point;
-                    for (int i = 0; i < node->func.dimensions(); i++) {
-                        const auto &p = root_bounds->region_computed(i);
-                        feat.bytes_at_root *= (p.second - p.first) + 1;
-                    }
-                    int64_t innermost_storage_extent = 1;
-                    if (node->func.dimensions() > 0) {
-                        innermost_storage_extent = root_bounds->region_computed(0).second - root_bounds->region_computed(0).first + 1;
-                    }
-                    feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
 
-                    feat.points_computed_minimum = 1;
-                    for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
-                        const auto &p = root_bounds->loops(s, i);
-                        feat.points_computed_minimum *= (p.second - p.first + 1);
-                    }
-                    s++;
+                feat.bytes_at_root = node->bytes_per_point;
+                for (int i = 0; i < node->func.dimensions(); i++) {
+                    const auto &p = root_bounds->region_computed(i);
+                    feat.bytes_at_root *= (p.second - p.first) + 1;
+                }
+                int64_t innermost_storage_extent = 1;
+                if (node->func.dimensions() > 0) {
+                    innermost_storage_extent = root_bounds->region_computed(0).second - root_bounds->region_computed(0).first + 1;
+                }
+                feat.innermost_bytes_at_root = node->bytes_per_point * innermost_storage_extent;
+
+                feat.points_computed_minimum = 1;
+                int s = stage - &node->stages[0];
+                for (int i = 0; i < (int)stage->loop.size(); i++) {
+                    const auto &p = root_bounds->loops(s, i);
+                    feat.points_computed_minimum *= (p.second - p.first + 1);
                 }
             }
 
@@ -1831,11 +1921,7 @@ struct LoopNest {
         int64_t subparallelism = parallel_tasks * parallelism;
 
         // Figure out the features at the compute_at level
-        vector<ScheduleFeatures> &func_features = features->get_or_create(node);
-        if (func_features.empty()) {
-            func_features.resize(node->stages.size());
-        }
-        ScheduleFeatures &feat = func_features[stage_idx];
+        ScheduleFeatures &feat = features->get_or_create(stage);
 
         if (innermost) {
             // Figure out the features at the innermost loop cluster level
@@ -1882,7 +1968,7 @@ struct LoopNest {
 
         if (at_production) {
             for (const auto *node : store_at) {
-                working_set_here += features->get(node)[0].bytes_at_production;
+                working_set_here += features->get(&(node->stages[0])).bytes_at_production;
             }
             feat.working_set = working_set_here;
             feat.rounded_innermost_pure_loop_extent = ((feat.innermost_pure_loop_extent + feat.vector_size - 1) / feat.vector_size) * feat.vector_size;
@@ -1947,10 +2033,11 @@ struct LoopNest {
 
 
                     int64_t store_instances_per_consumption = 1;
-                    const auto &producer_feat = features->get_or_create(e->producer);
-                    if (!producer_feat.empty()) {
+                    const auto &producer_feat = features->get_or_create(&(e->producer->stages[0]));
+
+                    if (producer_feat.num_realizations) {
                         // The producer's realization is nested inside this Func's realization
-                        const int64_t producer_store_instances = producer_feat[0].num_realizations;
+                        const int64_t producer_store_instances = producer_feat.num_realizations;
                         if (producer_store_instances > consumer_instances) {
                             store_instances_per_consumption = producer_store_instances / consumer_instances;
                         }
@@ -1999,9 +2086,7 @@ struct LoopNest {
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
             const auto *f = it.key();
             internal_assert(f);
-            vector<ScheduleFeatures> &func_features = features->get_or_create(f);
-            func_features.resize(1);
-            auto &inlined_feat = func_features[0];
+            auto &inlined_feat = features->get_or_create(&(f->stages[0]));
             inlined_feat.inlined_calls += it.value() * subinstances;
             inlined_feat.native_vector_size = (int64_t)(stage->vector_size);
             if (inlined_feat.vector_size > 0) {
@@ -2042,18 +2127,8 @@ struct LoopNest {
             internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
             // It's an output.
             // Use the bounds estimate
-            map<string, pair<int64_t, int64_t>> estimates;
-            for (auto b : f->func.schedule().estimates()) {
-                int64_t i_min = *as_const_int(b.min);
-                int64_t i_extent = *as_const_int(b.extent);
-                estimates[b.var] = {i_min, i_min + i_extent - 1};
-            }
-            // Set the bounds using the estimates
             for (int i = 0; i < f->func.dimensions(); i++) {
-                auto it = estimates.find(f->func.args()[i]);
-                user_assert(it != estimates.end())
-                    << "Need an estimate on dimension " << i << " of \"" << f->func.name() << "\"";
-                bound->region_required(i) = it->second;
+                bound->region_required(i) = f->estimated_region_required[i];
             }
         } else {
             internal_assert(!f->outgoing_edges.empty())
@@ -2109,13 +2184,13 @@ struct LoopNest {
             debug(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
         }
         /*
-        for (auto p : bounds) {
-            debug(0) << prefix << "bounds: " << p.first.name();
-            for (auto d : p.second.region) {
-                debug(0) << " [" << d.first << ", " << d.second << "]";
-            }
-            debug(0) << '\n';
-        }
+          for (auto p : bounds) {
+          debug(0) << prefix << "bounds: " << p.first.name();
+          for (auto d : p.second.region) {
+          debug(0) << " [" << d.first << ", " << d.second << "]";
+          }
+          debug(0) << '\n';
+          }
         */
     }
 
@@ -2617,23 +2692,21 @@ struct State {
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
         NodeMap<const LoopNest *> compute_site, store_site;
-        NodeMap<vector<ScheduleFeatures>> features;
+        StageMap<ScheduleFeatures> features;
+        features.make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(root.defined());
         root->get_compute_sites(compute_site, store_site);
         root->compute_features(params, compute_site, store_site, 1, 1, nullptr, *root, nullptr, &features);
 
         if (verbose) {
             for (const auto &n : dag.nodes) {
-                const auto &sched_feat = features.get_or_create(&n);
-                if (sched_feat.size() < n.stages.size()) {
-                    // This Func hasn't been scheduled yet.
-                    break;
-                }
                 for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
                     const auto &s = n.stages[stage_idx - 1];
+                    if (!features.contains(&s)) break;
+                    const auto &sched_feat = features.get(&s);
                     debug(0) << "YYY ";
                     debug(0) << n.func.name() << ' ' << (stage_idx - 1) << ' ';
-                    const int64_t *sched_stats = (const int64_t *)(&sched_feat[stage_idx - 1]);
+                    const int64_t *sched_stats = (const int64_t *)(&sched_feat);
                     for (size_t i = 0; i < sizeof(ScheduleFeatures) / sizeof(int64_t); i++) {
                         // The schedule-based features are all
                         // naturally multiplicative and have a very
@@ -2657,10 +2730,7 @@ struct State {
         if (throughput_predictor) {
             // for complicated indexing reasons we do zero padding here
             // count number of scheduled stages
-            int num_stages = 0;
-            for (auto it = features.begin(); it != features.end(); it++) {
-                num_stages += it.value().size();
-            }
+            int num_stages = (int)features.size();
 
             const int pipeline_feat_size = 399;
             const int schedule_feat_size = 25;
@@ -2693,10 +2763,9 @@ struct State {
             // load schedule features into input buffer
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
-                internal_assert(features.contains(&n));
-                const auto &feats = features.get(&n);
-                for (auto it = feats.rbegin(); it != feats.rend(); it++) {
-                    const auto &feat = *it;
+                for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+                    internal_assert(features.contains(&*it));
+                    const auto &feat = features.get(&*it);
                     if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
@@ -2715,152 +2784,150 @@ struct State {
         } else {
             // We have no throughput predictor.
             for (auto it = features.begin(); it != features.end(); it++) {
-                for (size_t s = 0; s < it.value().size(); s++) {
-                    const auto &feat = it.value()[s];
-                    // Reject silly schedules. They're not even useful for
-                    // training data, as they potentially take the age of
-                    // the universe to benchmark. We define 'silly' as
-                    // doing more than 10x redundant recompute for any one
-                    // stage.
-                    //if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
+                auto &stage = *(it.key());
+                const auto &feat = it.value();
+                // Reject silly schedules. They're not even useful for
+                // training data, as they potentially take the age of
+                // the universe to benchmark. We define 'silly' as
+                // doing more than 10x redundant recompute for any one
+                // stage.
+                //if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
 
-                    if (verbose) {
-                        debug(0) << "Schedule features for " << it.key()->func.name() << " stage " << s << "\n";
-                        feat.dump();
-                    }
-
-                    auto &stage = it.key()->stages[s];
-                    double compute_cost = 0;
-                    const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
-                    double per_element_compute_cost = 0;
-                    for (size_t i = 0; i < sizeof(stage.features.op_histogram) / sizeof(int); i++) {
-                        per_element_compute_cost += pipeline_feat[i];
-                    }
-
-                    // We can only compute in multiples of the vector size
-                    /*
-                    if (feat.inlined_calls == 0) {
-                        int64_t vectors = (feat.innermost_pure_loop_extent + stage.vector_size - 1) / stage.vector_size;
-                        vectors *= feat.points_computed_total / feat.innermost_pure_loop_extent;
-                        compute_cost = per_element_compute_cost * vectors * stage.vector_size;
-                        // TODO: doesn't capture compute inflation on stages inlined into this one! Need vector overcompute as a feature, probably
-                    }
-                    */
-                    compute_cost = per_element_compute_cost * feat.points_computed_total;
-
-                    // Figure out vector overcompute
-                    const int native_vector_size = feat.native_vector_size;
-                    const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
-                    const double vector_recompute = (double)feat.rounded_innermost_pure_loop_extent / feat.innermost_pure_loop_extent;
-
-                    // Inlining saves a call node, which in our cost
-                    // model costs...
-                    const double per_element_compute_cost_of_memcpy = 1 + 2*it.key()->func.dimensions();
-                    const double per_element_compute_cost_inlined = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
-                    const double compute_cost_inlined = per_element_compute_cost_inlined * feat.inlined_calls;
-                    compute_cost += compute_cost_inlined;
-
-                    compute_cost *= idle_simd_lanes * vector_recompute;
-
-                    if (verbose) {
-                        debug(0) << "idle_simd_lanes = " << idle_simd_lanes << "\n";
-                        debug(0) << "vector_recompute = " << vector_recompute << "\n";
-                    }
-
-                    {
-                        // Few parallel tasks may be a bad idea due to
-                        // waiting for the long pole to finish.  Say
-                        // we have a huge number of tasks relative to
-                        // cores. We'd expect their start times to
-                        // eventually become evenly spaced, which
-                        // means we get a little triangle of idle
-                        // cores with total area 0.5 * task_size *
-                        // num_cores at the end. This bloats the total
-                        // amount of work by:
-                        //   (0.5 * task_size * num_cores + task_size * num_tasks) / (task_size * num_tasks)
-                        // = (0.5 * num_cores + num_tasks) / num_tasks
-
-                        internal_assert(feat.inner_parallelism > 0 && feat.outer_parallelism > 0);
-
-                        const double num_tasks = feat.inner_parallelism;
-                        const double num_cores = (double)params.parallelism / feat.outer_parallelism;
-                        double idle_core_wastage = (0.5 * num_cores + num_tasks) / num_tasks;
-
-                        // Evaluated at num_tasks = num_cores, this
-                        // gives a ridiculous 1.5x multiplier. Our
-                        // argument doesn't hold because the tasks
-                        // start synchronized. Just cap it at 20%
-                        // wastage.
-                        idle_core_wastage = std::min(idle_core_wastage, 1.2);
-
-                        if (verbose) {
-                            debug(0) << "idle_core_wastage_1 = " << idle_core_wastage << "\n";
-                        }
-
-                        // Cores can also be idle if the number of
-                        // tasks is small and not a multiple of the
-                        // number of cores. E.g. 9 tasks on 8 cores
-                        // takes about the same amount of time as 16
-                        // tasks.
-                        idle_core_wastage *= std::ceil(num_tasks / num_cores) * (num_cores / num_tasks);
-
-                        compute_cost *= idle_core_wastage;
-
-                        if (verbose) {
-                            debug(0) << "idle_core_wastage_2 = " << idle_core_wastage << "\n";
-                        }
-                    }
-
-                    double cache_misses = 0, cost_of_miss = 0;
-                    if (feat.inlined_calls == 0) {
-                        // Estimate the number of cache misses on the data that this reads from and their cost
-                        // Cost dominated by lines not bytes due to streaming prefetchers
-                        cache_misses = feat.lines_read_per_realization + feat.bytes_read_per_realization * 1e-3;
-                        cache_misses *= feat.num_realizations;
-                        //int64_t footprint = std::min(feat.allocation_bytes_read_per_realization, feat.bytes_read_per_realization);
-                        int64_t footprint = feat.allocation_bytes_read_per_realization;
-                        //cost_of_miss = std::sqrt(footprint) * params.balance * 5e-3;
-                        cost_of_miss = footprint * params.balance * 1e-6;
-                    }
-
-                    double memory_load_cost = cache_misses * cost_of_miss;
-
-                    cache_misses = cost_of_miss = 0;
-                    if (feat.inlined_calls == 0) {
-                        // Estimate the number of cache misses on the data that this writes to and their cost
-                        int64_t lines_written_per_realization = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
-                        cache_misses = 1e1 * lines_written_per_realization + feat.bytes_at_realization * 1e-2;
-                        cache_misses *= feat.num_realizations;
-                        //cost_of_miss = std::sqrt(feat.bytes_at_production) * params.balance * 5e-3;
-                        cost_of_miss = feat.bytes_at_production * params.balance * 2e-6;
-                    }
-
-                    double memory_store_cost = cache_misses * cost_of_miss;
-
-                    // Penalize writing partial cache lines. Assume a cache line is two simd vectors.
-                    const double native_cache_line_size = native_vector_size * 2;
-                    const double cache_line_wastage = std::max(1.0, native_cache_line_size / feat.innermost_pure_loop_extent);
-                    memory_store_cost *= cache_line_wastage;
-
-                    // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
-                    double cost_of_mallocs = feat.num_realizations * 1e2;
-
-                    // Penalize working sets that start to fall out of cache
-                    double ws = 1e-6 * feat.working_set;
-                    double cost_of_working_set = ws * ws * ws * params.balance * feat.num_realizations;
-
-                    if (verbose) {
-                        debug(0) << "Cost model for " << it.key()->func.name()
-                                 << " stage " << s << ": "
-                                 << compute_cost << " + "
-                                 << memory_load_cost << " + "
-                                 << memory_store_cost << " + "
-                                 << cost_of_mallocs << " + "
-                                 << cost_of_working_set << '\n';
-                    }
-
-                    cost += compute_cost + memory_load_cost + memory_store_cost + cost_of_mallocs + cost_of_working_set;
+                if (verbose) {
+                    debug(0) << "Schedule features for " << stage.stage.name() << "\n";
+                    feat.dump();
                 }
+
+
+                double compute_cost = 0;
+                const int *pipeline_feat = (const int *)(&stage.features.op_histogram[0][0]);
+                double per_element_compute_cost = 0;
+                for (size_t i = 0; i < sizeof(stage.features.op_histogram) / sizeof(int); i++) {
+                    per_element_compute_cost += pipeline_feat[i];
+                }
+
+                // We can only compute in multiples of the vector size
+                /*
+                  if (feat.inlined_calls == 0) {
+                  int64_t vectors = (feat.innermost_pure_loop_extent + stage.vector_size - 1) / stage.vector_size;
+                  vectors *= feat.points_computed_total / feat.innermost_pure_loop_extent;
+                  compute_cost = per_element_compute_cost * vectors * stage.vector_size;
+                  // TODO: doesn't capture compute inflation on stages inlined into this one! Need vector overcompute as a feature, probably
+                  }
+                */
+                compute_cost = per_element_compute_cost * feat.points_computed_total;
+
+                // Figure out vector overcompute
+                const int native_vector_size = feat.native_vector_size;
+                const double idle_simd_lanes = (double)native_vector_size / feat.vector_size;
+                const double vector_recompute = (double)feat.rounded_innermost_pure_loop_extent / feat.innermost_pure_loop_extent;
+
+                // Inlining saves a call node, which in our cost
+                // model costs...
+                const double per_element_compute_cost_of_memcpy = 1 + 2*stage.node->func.dimensions();
+                const double per_element_compute_cost_inlined = std::max(0.0, per_element_compute_cost - per_element_compute_cost_of_memcpy);
+                const double compute_cost_inlined = per_element_compute_cost_inlined * feat.inlined_calls;
+                compute_cost += compute_cost_inlined;
+
+                compute_cost *= idle_simd_lanes * vector_recompute;
+
+                if (verbose) {
+                    debug(0) << "idle_simd_lanes = " << idle_simd_lanes << "\n";
+                    debug(0) << "vector_recompute = " << vector_recompute << "\n";
+                }
+
+                {
+                    // Few parallel tasks may be a bad idea due to
+                    // waiting for the long pole to finish.  Say
+                    // we have a huge number of tasks relative to
+                    // cores. We'd expect their start times to
+                    // eventually become evenly spaced, which
+                    // means we get a little triangle of idle
+                    // cores with total area 0.5 * task_size *
+                    // num_cores at the end. This bloats the total
+                    // amount of work by:
+                    //   (0.5 * task_size * num_cores + task_size * num_tasks) / (task_size * num_tasks)
+                    // = (0.5 * num_cores + num_tasks) / num_tasks
+
+                    internal_assert(feat.inner_parallelism > 0 && feat.outer_parallelism > 0);
+
+                    const double num_tasks = feat.inner_parallelism;
+                    const double num_cores = (double)params.parallelism / feat.outer_parallelism;
+                    double idle_core_wastage = (0.5 * num_cores + num_tasks) / num_tasks;
+
+                    // Evaluated at num_tasks = num_cores, this
+                    // gives a ridiculous 1.5x multiplier. Our
+                    // argument doesn't hold because the tasks
+                    // start synchronized. Just cap it at 20%
+                    // wastage.
+                    idle_core_wastage = std::min(idle_core_wastage, 1.2);
+
+                    if (verbose) {
+                        debug(0) << "idle_core_wastage_1 = " << idle_core_wastage << "\n";
+                    }
+
+                    // Cores can also be idle if the number of
+                    // tasks is small and not a multiple of the
+                    // number of cores. E.g. 9 tasks on 8 cores
+                    // takes about the same amount of time as 16
+                    // tasks.
+                    idle_core_wastage *= std::ceil(num_tasks / num_cores) * (num_cores / num_tasks);
+
+                    compute_cost *= idle_core_wastage;
+
+                    if (verbose) {
+                        debug(0) << "idle_core_wastage_2 = " << idle_core_wastage << "\n";
+                    }
+                }
+
+                double cache_misses = 0, cost_of_miss = 0;
+                if (feat.inlined_calls == 0) {
+                    // Estimate the number of cache misses on the data that this reads from and their cost
+                    // Cost dominated by lines not bytes due to streaming prefetchers
+                    cache_misses = feat.lines_read_per_realization + feat.bytes_read_per_realization * 1e-3;
+                    cache_misses *= feat.num_realizations;
+                    //int64_t footprint = std::min(feat.allocation_bytes_read_per_realization, feat.bytes_read_per_realization);
+                    int64_t footprint = feat.allocation_bytes_read_per_realization;
+                    //cost_of_miss = std::sqrt(footprint) * params.balance * 5e-3;
+                    cost_of_miss = footprint * params.balance * 1e-6;
+                }
+
+                double memory_load_cost = cache_misses * cost_of_miss;
+
+                cache_misses = cost_of_miss = 0;
+                if (feat.inlined_calls == 0) {
+                    // Estimate the number of cache misses on the data that this writes to and their cost
+                    int64_t lines_written_per_realization = feat.bytes_at_realization / feat.innermost_bytes_at_realization;
+                    cache_misses = 1e1 * lines_written_per_realization + feat.bytes_at_realization * 1e-2;
+                    cache_misses *= feat.num_realizations;
+                    //cost_of_miss = std::sqrt(feat.bytes_at_production) * params.balance * 5e-3;
+                    cost_of_miss = feat.bytes_at_production * params.balance * 2e-6;
+                }
+
+                double memory_store_cost = cache_misses * cost_of_miss;
+
+                // Penalize writing partial cache lines. Assume a cache line is two simd vectors.
+                const double native_cache_line_size = native_vector_size * 2;
+                const double cache_line_wastage = std::max(1.0, native_cache_line_size / feat.innermost_pure_loop_extent);
+                memory_store_cost *= cache_line_wastage;
+
+                // Malloc aint free. Small allocations should go on the stack, but this isn't totally reliable.
+                double cost_of_mallocs = feat.num_realizations * 1e2;
+
+                // Penalize working sets that start to fall out of cache
+                double ws = 1e-6 * feat.working_set;
+                double cost_of_working_set = ws * ws * ws * params.balance * feat.num_realizations;
+
+                if (verbose) {
+                    debug(0) << "Cost model for " << stage.stage.name() << " "
+                             << compute_cost << " + "
+                             << memory_load_cost << " + "
+                             << memory_store_cost << " + "
+                             << cost_of_mallocs << " + "
+                             << cost_of_working_set << '\n';
+                }
+
+                cost += compute_cost + memory_load_cost + memory_store_cost + cost_of_mallocs + cost_of_working_set;
             }
         }
         cost_calculations++;
@@ -2873,7 +2940,7 @@ struct State {
                            const MachineParams &params,
                            const Constraints *constraints,
                            ThroughputPredictorPipeline *throughput_predictor,
-                           std::function<void(State *)> &accept_child) {
+                           std::function<void(std::unique_ptr<State> &&)> &accept_child) {
         internal_assert(root.defined() && root->is_root());
 
         if (num_funcs_scheduled == (int)dag.nodes.size()) {
@@ -2906,7 +2973,7 @@ struct State {
         if (!constraints->must_root(node) && constraints->may_inline(node)) {
             // 1) Inline it
             if (node->stages.size() == 1 && !node->is_output) {
-                auto child = new State(*this);
+                std::unique_ptr<State> child{new State(*this)};
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
                 new_root->inline_func(node);
@@ -2915,7 +2982,7 @@ struct State {
                 if (child->calculate_cost(dag, params, throughput_predictor)) {
                     internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                     num_children++;
-                    accept_child(child);
+                    accept_child(std::move(child));
                 }
             }
         }
@@ -2924,13 +2991,13 @@ struct State {
             // 2) Realize it somewhere
             auto tile_options = root->compute_in_tiles(node, nullptr, constraints, params, false);
             for (IntrusivePtr<const LoopNest> &n : tile_options) {
-                auto child = new State(*this);
+                std::unique_ptr<State> child{new State(*this)};
                 child->root = std::move(n);
                 child->num_funcs_scheduled++;
                 if (child->calculate_cost(dag, params, throughput_predictor)) {
                     internal_assert(child->root->computes(node)) << "Failed to inject realization of " << node->func.name() << '\n';
                     num_children++;
-                    accept_child(child);
+                    accept_child(std::move(child));
                 }
             }
         }
@@ -3004,9 +3071,62 @@ struct State {
 
 int State::cost_calculations = 0;
 
-struct CompareStates {
-    bool operator()(const std::shared_ptr<State> &a, const std::shared_ptr<State> &b) const {
-        return a->cost > b->cost;
+// A priority queue of states, sorted according to increasing
+// cost. Never shrinks, to avoid reallocations.
+// Can't use std::priority_queue because it doesn't support unique_ptr.
+class StateQueue {
+private:
+    struct CompareStates {
+        bool operator()(const std::unique_ptr<State> &a, const std::unique_ptr<State> &b) const {
+            return a->cost > b->cost;
+        }
+    };
+
+    std::vector<std::unique_ptr<State>> storage;
+    size_t sz = 0;
+public:
+    void emplace(std::unique_ptr<State> &&x) {
+        if (sz >= storage.size()) {
+            storage.resize(std::max(sz * 2, (size_t)64));
+        }
+        internal_assert(sz < storage.size()) << sz << " " << storage.size() << "\n";
+        storage[sz] = std::move(x);
+        sz++;
+        std::push_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+    }
+
+    std::unique_ptr<State> pop() {
+        internal_assert(sz <= storage.size()) << sz << " " << storage.size() << "\n";
+        std::pop_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+        sz--;
+        return std::move(storage[sz]);
+    }
+
+    // Re-heapify after modifying costs
+    void resort() {
+        internal_assert(sz < storage.size());
+        std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+    }
+
+    bool empty() const {
+        return sz == 0;
+    }
+
+    size_t size() const {
+        return sz;
+    }
+
+    std::unique_ptr<State> *begin() {
+        return storage.data();
+    }
+
+    std::unique_ptr<State> *end() {
+        return begin() + sz;
+    }
+
+    void swap(StateQueue &other) {
+        storage.swap(other.storage);
+        std::swap(sz, other.sz);
     }
 };
 
@@ -3017,27 +3137,28 @@ State optimal_schedule_pass(FunctionDAG &dag,
                             ThroughputPredictorPipeline *throughput_predictor,
                             int beam_size) {
 
-    std::priority_queue<std::shared_ptr<State>,
-                        std::vector<std::shared_ptr<State>>,
-                        CompareStates> q;
 
-    State *initial = new State;
-    initial->root = new LoopNest;
+    StateQueue q;
 
-    q.emplace(initial);
+    {
+        std::unique_ptr<State> initial{new State};
+        initial->root = new LoopNest;
+        q.emplace(std::move(initial));
+    }
 
     // A progress bar.
     uint32_t counter = 0;
     auto tick = [&](double progress) {
         counter++;
-        if (counter & 1023) return;
+        const int bits = 13;
+        if (counter & ((1 << bits) - 1)) return;
         progress *= 78;
         debug(0) << '[';
         for (int j = 0; j < 78; j++) {
             if (j < progress) {
                 debug(0) << '.';
             } else if (j - 1 < progress) {
-                debug(0) << "/-\\|"[(counter >> 10) % 4];
+                debug(0) << "/-\\|"[(counter >> bits) % 4];
             } else {
                 debug(0) << ' ';
             }
@@ -3048,42 +3169,41 @@ State optimal_schedule_pass(FunctionDAG &dag,
         }
     };
 
-    // An unsorted staging area for before costs have been calculated
-    vector<std::shared_ptr<State>> unevaluated_states;
+    int expanded;
 
-    std::function<void(State *)> enqueue_new_children = [&](State *s) {
+    std::function<void(std::unique_ptr<State> &&)> enqueue_new_children =
+        [&](std::unique_ptr<State> &&s) {
 
         //debug(0) << "\n** Generated child: ";
         //s->dump();
         // s->calculate_cost(dag, params, nullptr, true);
 
-        tick(double(s->num_funcs_scheduled) / dag.nodes.size());
-        unevaluated_states.push_back(std::shared_ptr<State>(s));
+        int progress = s->num_funcs_scheduled * beam_size + expanded;
+        size_t max_progress = dag.nodes.size() * beam_size;
+        tick(double(progress) / max_progress);
+        q.emplace(std::move(s));
     };
 
     for (int i = 0; ; i++) {
         decltype(q) pending;
 
         // Apply cost penalties to the queue according to structural uniqueness
-        #if 1
+        #if 0
         std::unordered_map<uint64_t, int> hashes;
-        while (!q.empty()) {
-            auto state = q.top();
-            q.pop();
-            uint64_t h = state->structural_hash(constraints->stratify_depth());
-            state->cost *= (1 + hashes[h]);
-            hashes[h]++;
-            pending.push(state);
+        // TODO: This is wrong - should iterate in sorted order.
+        for (auto &s : q) {
+            uint64_t h = s->structural_hash(constraints->stratify_depth());
+            s->cost *= (1 + hashes[h]);
         }
-        #else
-        q.swap(pending);
+        q.resort();
         #endif
 
-        int expanded = 0;
+        q.swap(pending);
+
+        expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
 
-            auto state = pending.top();
-            pending.pop();
+            std::unique_ptr<State> state{pending.pop()};
 
             if (pending.size() > 1 && random_dropout()) {
                 debug(0) << "Dropping state\n";
@@ -3099,9 +3219,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
 
                     debug(0) << "Rest of queue:\n";
                     while (!pending.empty()) {
-                        // pending.top()->calculate_cost(dag, params, nullptr, true);
-                        pending.top()->dump();
-                        pending.pop();
+                        pending.pop()->dump();
                     }
                 }
 
@@ -3130,11 +3248,8 @@ State optimal_schedule_pass(FunctionDAG &dag,
         // Now evaluate all the costs and place them in the priority queue
         if (throughput_predictor) {
             throughput_predictor->evaluate_costs();
+            q.resort();
         }
-        for (auto s : unevaluated_states) {
-            q.push(s);
-        }
-        unevaluated_states.clear();
     }
 }
 
