@@ -15,6 +15,7 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Halide should always handle this, but check in Debug mode, just in case.
     if (alignment < sizeof(void*)) {
         halide_error(user_context, "halide_default_malloc: alignment is too small\n");
+        return NULL;
     }
 #endif
     void *ptr = NULL;
