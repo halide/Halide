@@ -211,6 +211,10 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
                << "#define HALIDE_" << print_name(guard) << '\n'
                << "#include <stdint.h>\n"
+               << "#if defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n"
+               << "#include <assert.h>\n"
+               << "#include \"HalideRuntime.h\"\n"
+               << "#endif  // defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
                << "// to the Halide pipeline.\n"
@@ -1534,18 +1538,26 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
+
+    std::vector<std::string> arg_names(args.size()), arg_types(args.size());
+    int num_input_buffers = 0;
+
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            stream << "struct halide_buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
+            if (args[i].is_input()) {
+                num_input_buffers++;
+            }
+            arg_names[i] = print_name(args[i].name) + "_buffer";
+            arg_types[i] = "struct halide_buffer_t *";
         } else {
-            stream << print_type(args[i].type, AppendSpace)
-                   << print_name(args[i].name);
+            arg_names[i] = print_name(args[i].name);
+            arg_types[i] = print_type(args[i].type, AppendSpace);
         }
-
-        if (i < args.size()-1) stream << ", ";
+        if (i > 0) {
+            stream << ", ";
+        }
+        stream << arg_types[i] << arg_names[i];
     }
 
     if (is_header()) {
@@ -1590,6 +1602,71 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         // And also the metadata.
         stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
+
+        // Emit an overload that accepts const buffers for inputs (but only
+        // if we have at least one input buffer, and only if the function is
+        // being emitted in NameMangling::CPlusPlus mode)
+        if (num_input_buffers > 0 && name_mangling == NameMangling::CPlusPlus) {
+            // We make this opt-in (via #define HALIDE_ALLOW_CONST_INPUT_BUFFERS=1)
+            // because the inline function requires that HalideRuntime.h be included
+            // first in order to compile.
+            stream << "\n#if defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n";
+            stream << "inline int " << simple_name << "(";
+            for (size_t i = 0; i < args.size(); i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    stream << "const ";
+                }
+                stream << arg_types[i] << arg_names[i];
+            }
+            stream << ") HALIDE_FUNCTION_ATTRS {\n";
+
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    const std::string &n = arg_names[i];
+                    stream << "    assert(!" << n << "->is_bounds_query() && "
+                        "\"The input '" << args[i].name << "' is being passed as a const Buffer to function '" << f.name <<
+                        "', but is being used for bounds query, which needs to mutate some fields of the Buffer. "
+                        "Use a non-const Buffer here instead.\");\n";
+                    stream << "    #ifndef NDEBUG\n";
+                    stream << "    const uint64_t device_" << n << " = " << n << "->device;\n";
+                    stream << "    const uint64_t flags_" << n << " = " << n << "->flags;\n";
+                    stream << "    #endif  // NDEBUG\n";
+                }
+            }
+
+            stream << "    const int " << simple_name << "_result = " << simple_name << "(";
+            for (size_t i = 0; i < args.size(); i++) {
+                if (i > 0) {
+                    stream << ", ";
+                }
+                const std::string &n = arg_names[i];
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    stream << "const_cast<struct halide_buffer_t *>(" << n << ")";
+                } else {
+                    stream << n;
+                }
+            }
+            stream << ");\n";
+
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].is_buffer() && args[i].is_input()) {
+                    const std::string &n = arg_names[i];
+                    stream << "    assert(device_" << n << " == " << n << "->device && "
+                        "\"The device field of '" << args[i].name << "' was mutated illegally inside function '" << f.name << "',"
+                        " but was declared const. Use a non-const Buffer here instead.\");\n";
+                    stream << "    assert(flags_" << n << " == " << n << "->flags && "
+                        "\"The flags field of '" << args[i].name << "' was mutated illegally inside function '" << f.name << "',"
+                        " but was declared const. Use a non-const Buffer here instead.\");\n";
+                }
+            }
+
+            stream << "    return " << simple_name << "_result;\n";
+            stream << "}\n";
+            stream << "#endif  // defined(HALIDE_ALLOW_CONST_INPUT_BUFFERS)\n";
+        }
     }
 
     if (!namespaces.empty()) {
@@ -2028,7 +2105,7 @@ void CodeGen_C::visit(const Call *op) {
         Expr a0 = op->args[0];
         rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(!op->args.empty());
         string arg = print_expr(op->args[0]);
         rhs << "(" << arg << ")";
     } else if (op->is_intrinsic(Call::alloca)) {
