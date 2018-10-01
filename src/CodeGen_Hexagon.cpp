@@ -1906,7 +1906,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    if (op->is_intrinsic("gather")) {
+    if (op->is_intrinsic() && op->name == "gather") {
         internal_assert(op->args.size() == 5);
         internal_assert(op->type.bits() != 8);
         int index_lanes = op->type.lanes();
