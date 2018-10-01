@@ -2165,13 +2165,17 @@ void CodeGen_C::visit(const Call *op) {
             " Halide.\n";
     } else if (op->is_intrinsic(Call::quiet_div)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(!is_zero(op->args[1]));  // shouldn't be inserted unless provably nonzero
+        // Don't bother checking for zero denominator here; the quiet_div
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
         string a = print_expr(op->args[0]);
         string b = print_expr(op->args[1]);
         rhs << "::quiet_div(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::quiet_mod)) {
         internal_assert(op->args.size() == 2);
-        internal_assert(!is_zero(op->args[1]));  // shouldn't be inserted unless provably nonzero
+        // Don't bother checking for zero denominator here; the quiet_mod
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
         string a = print_expr(op->args[0]);
         string b = print_expr(op->args[1]);
         rhs << "::quiet_mod(" << a << ", " << b << ")";
