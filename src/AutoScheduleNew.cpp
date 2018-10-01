@@ -182,6 +182,138 @@ struct PipelineFeatures {
 };
 
 
+// A concrete set of bounds for a Func. These are created and
+// destroyed very frequently while exploring scheduling options, so we
+// have a custom allocator and memory pool. Much like IR nodes, we
+// treat them as immutable once created and wrapped in a Bound object
+// so that they can be shared safely across scheduling alternatives.
+
+struct BoundContents;
+using Bound = IntrusivePtr<const BoundContents>;
+struct BoundContents {
+    mutable RefCount ref_count;
+    struct Layout;
+    const Layout *layout = nullptr;
+
+    pair<int64_t, int64_t> *data() const {
+        // This struct is a header
+        return (pair<int64_t, int64_t> *)(this + 1);
+    }
+
+    pair<int64_t, int64_t> &region_required(int i) {
+        return data()[i];
+    }
+
+    pair<int64_t, int64_t> &region_computed(int i) {
+        return data()[i + layout->computed_offset];
+    }
+
+    pair<int64_t, int64_t> &loops(int i, int j) {
+        return data()[j + layout->loop_offset[i]];
+    }
+
+
+    const pair<int64_t, int64_t> &region_required(int i) const {
+        return data()[i];
+    }
+
+    const pair<int64_t, int64_t> &region_computed(int i) const {
+        return data()[i + layout->computed_offset];
+    }
+
+    const pair<int64_t, int64_t> &loops(int i, int j) const {
+        return data()[j + layout->loop_offset[i]];
+    }
+
+    BoundContents *make_copy() const {
+        auto b = layout->make();
+        size_t bytes = sizeof(data()[0]) * layout->total_size;
+        memcpy(b->data(), data(), bytes);
+        return b;
+    }
+
+    // We're frequently going to need to make these concrete bounds
+    // arrays.  It makes things more efficient if we figure out the memory
+    // layout of those data structures once ahead of time, and make each
+    // individual instance just use that.
+    struct Layout {
+        // number of pair<int64_t, int64_t> to allocate
+        int total_size;
+
+        // region_required has size func->dimensions() and comes first in the memory layout
+
+        // region_computed comes next at the following index
+        int computed_offset;
+
+        // the loop for each stage starts at the following index
+        std::vector<int> loop_offset;
+
+        // A memory pool of free BoundContent objects with this layout
+        mutable std::vector<BoundContents *> pool;
+
+        // All the blocks of memory allocated
+        mutable std::vector<void *> blocks;
+
+        Layout() {}
+
+        ~Layout() {
+            for (auto b : blocks) {
+                free(b);
+            }
+        }
+
+        Layout(const Layout &) = delete;
+        void operator=(const Layout &) = delete;
+        Layout(Layout &&) = delete;
+        void operator=(Layout &&) = delete;
+
+        void allocate_some_more() const {
+            size_t size_of_one = sizeof(BoundContents) + total_size * sizeof(pair<int64_t, int64_t>);
+            const size_t number_per_block = std::max((size_t)8, 4096 / size_of_one); // Make a page of them, or 8, whichever is larger.
+            const size_t bytes_to_allocate = std::max(size_of_one * number_per_block, (size_t)4096);
+            unsigned char *mem = (unsigned char *)malloc(bytes_to_allocate);
+            blocks.push_back(mem);
+            static_assert((sizeof(BoundContents) & 7) == 0, "BoundContents header is not aligned");
+            for (size_t i = 0; i < number_per_block; i++) {
+                BoundContents *b = (BoundContents *)(mem + i * size_of_one);
+                new (b) BoundContents;
+                b->layout = this;
+                pool.push_back(b);
+            }
+            internal_assert(((unsigned char *)(pool[0]) + size_of_one) == (unsigned char *)(pool[1]));
+        }
+
+        // Make a BoundContents object with this layout
+        BoundContents *make() const {
+            if (pool.empty()) {
+                allocate_some_more();
+            }
+            BoundContents *b = pool.back();
+            pool.pop_back();
+            return b;
+        }
+
+        // Release a BoundContents object with this layout back to the pool
+        void release(const BoundContents *b) const {
+            internal_assert(b->layout == this) << "Releasing BoundContents onto the wrong pool!";
+            pool.push_back(const_cast<BoundContents *>(b));
+        }
+    };
+};
+
+}
+
+template<>
+RefCount &ref_count<BoundContents>(const BoundContents *t) {return t->ref_count;}
+
+template<>
+void destroy<BoundContents>(const BoundContents *t) {
+    // Release it back into the memory pool to be reused
+    t->layout->release(t);
+}
+
+namespace {
+
 // A representation of the function DAG. The nodes and edges are both
 // in reverse realization order, so if you want to walk backwards up
 // the DAG, just iterate the nodes or edges in-order.
@@ -339,35 +471,11 @@ struct FunctionDAG {
 
         bool is_output;
 
-        // We're frequently going to need to make concrete bounds
-        // arrays representing the shapes of bounds required and
-        // computed, and the loop extents, for some particular
-        // candidate schedule, as ints instead of Exprs. It makes
-        // things more efficient if we figure out the memory layout of
-        // those data structures once ahead of time.
-        struct BoundsMemoryLayout {
-            // number of pair<int64_t, int64_t> to allocate
-            int total_size;
+        std::unique_ptr<BoundContents::Layout> bounds_memory_layout;
 
-            // region_required has size func->dimensions() and comes first in the memory layout
-
-            // region_computed comes next at the following index
-            int computed_offset;
-
-            // the loop for each stage starts at the following index
-            std::vector<int> loop_offset;
-
-            // TODO: consider a memory pool
-
-            void init(const FunctionDAG::Node &n) {
-                computed_offset = n.func.dimensions();
-                total_size = computed_offset + n.func.dimensions();
-                for (const auto &s : n.stages) {
-                    loop_offset.push_back(total_size);
-                    total_size += (int)s.loop.size();
-                }
-            }
-        } bounds_memory_layout;
+        BoundContents *make_bound() const {
+            return bounds_memory_layout->make();
+        }
     };
 
     struct Edge {
@@ -413,10 +521,10 @@ struct FunctionDAG {
                         }
                     }
                     internal_assert(consumer_dim >= 0) << "Could not find consumer loop variable: " << var << "\n";
-                    debug(0) << "Bound is affine: " << e << " == " << var << " * " << coeff << " + " << constant << "\n";
+                    debug(1) << "Bound is affine: " << e << " == " << var << " * " << coeff << " + " << constant << "\n";
                 } else {
                     affine = false;
-                    debug(0) << "Bound is non-affine: " << e << "\n";
+                    debug(1) << "Bound is non-affine: " << e << "\n";
                 }
             }
         };
@@ -790,7 +898,14 @@ struct FunctionDAG {
 
         // Initialize the memory layouts for the bounds structs
         for (auto &n : nodes) {
-            n.bounds_memory_layout.init(n);
+            n.bounds_memory_layout.reset(new BoundContents::Layout);
+            auto &l = *(n.bounds_memory_layout);
+            l.computed_offset = n.func.dimensions();
+            l.total_size = l.computed_offset + n.func.dimensions();
+            for (const auto &s : n.stages) {
+                l.loop_offset.push_back(l.total_size);
+                l.total_size += (int)s.loop.size();
+            }
         }
 
         // Give all the stages unique ids to support perfect hashing of them
@@ -1685,66 +1800,8 @@ struct FinePassConstraints : public Constraints {
     }
 };
 
-struct BoundContents;
-
-using Bound = IntrusivePtr<const BoundContents>;
-
-// A concrete set of bounds for a Func. These are created and
-// destroyed very frequently while exploring scheduling options. Much
-// like IR nodes, we treat them as immutable once created and wrapped
-// in a Bound object so that they can be shared safely across
-// scheduling alternatives.
-struct BoundContents {
-    mutable RefCount ref_count;
-    // The box over which something is required, touched, and the shape of the loop nest(s)
-    // vector<pair<int64_t, int64_t>> region_required, region_computed;
-    // vector<vector<pair<int64_t, int64_t>>> loops;
-    const FunctionDAG::Node::BoundsMemoryLayout *layout;
-    vector<pair<int64_t, int64_t>> data;
-    BoundContents(const FunctionDAG::Node *n) {
-        layout = &(n->bounds_memory_layout);
-        data.resize(layout->total_size);
-    }
-
-    BoundContents(const Bound &b) : layout(b->layout), data(b->data) {}
-
-    pair<int64_t, int64_t> &region_required(int i) {
-        return data[i];
-    }
-
-    pair<int64_t, int64_t> &region_computed(int i) {
-        return data[i + layout->computed_offset];
-    }
-
-    pair<int64_t, int64_t> &loops(int i, int j) {
-        return data[j + layout->loop_offset[i]];
-    }
 
 
-    const pair<int64_t, int64_t> &region_required(int i) const {
-        return data[i];
-    }
-
-    const pair<int64_t, int64_t> &region_computed(int i) const {
-        return data[i + layout->computed_offset];
-    }
-
-    const pair<int64_t, int64_t> &loops(int i, int j) const {
-        return data[j + layout->loop_offset[i]];
-    }
-};
-
-
-
-}
-
-template<>
-RefCount &ref_count<BoundContents>(const BoundContents *t) {return t->ref_count;}
-
-template<>
-void destroy<BoundContents>(const BoundContents *t) {delete t;}
-
-namespace {
 
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
@@ -2125,8 +2182,8 @@ struct LoopNest {
         return node == nullptr;
     }
 
-    const Bound &set_bounds(const FunctionDAG::Node *f, std::unique_ptr<BoundContents> &&b) const {
-        return bounds.emplace(f, b.release());
+    const Bound &set_bounds(const FunctionDAG::Node *f, BoundContents *b) const {
+        return bounds.emplace(f, b);
     }
 
     const Bound &get_bounds(const FunctionDAG::Node *f) const {
@@ -2134,7 +2191,7 @@ struct LoopNest {
         if (bounds.contains(f)) {
             return bounds.get(f);
         }
-        std::unique_ptr<BoundContents> bound{new BoundContents(f)};
+        auto bound = f->make_bound();
         // Compute the region required
         if (f->is_output && is_root()) {
             internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
@@ -2168,7 +2225,7 @@ struct LoopNest {
             f->loop_nest_for_region(i, &(bound->region_computed(0)), &(bound->loops(i, 0)));
         }
 
-        return set_bounds(f, std::move(bound));
+        return set_bounds(f, bound);
     }
 
     void dump(string prefix) const {
@@ -2295,7 +2352,7 @@ struct LoopNest {
             node->innermost = true;
             // TODO: rvars are not tileable
             node->tileable = tileable;
-            std::unique_ptr<BoundContents> single_point{new BoundContents(f)};
+            auto single_point = f->make_bound();
             size_t loop_dim = f->stages[s].loop.size();
             node->size.resize(loop_dim);
             for (size_t i = 0; i < loop_dim; i++) {
@@ -2408,11 +2465,11 @@ struct LoopNest {
 
                 // TODO: region_{computed/required} on inner is now
                 // wrong, but it doesn't matter because consumers only
-                // look at the loop in get_bounds. Still, this is
+                // look at the loops in get_bounds. Still, this is
                 // weird.
 
                 {
-                    std::unique_ptr<BoundContents> b{new BoundContents(inner->get_bounds(node))};
+                    auto b = inner->get_bounds(node)->make_copy();
 
                     // Then move factors from the outer loop to the inner loop
                     auto parent_bounds = parent->get_bounds(node);
@@ -2428,7 +2485,7 @@ struct LoopNest {
                         b->loops(stage_idx, i) = {min, min + extent - 1};
                     }
 
-                    outer->set_bounds(node, std::move(b));
+                    outer->set_bounds(node, b);
                 }
 
                 if (!in_realization) {
@@ -2742,8 +2799,13 @@ struct State {
 
         // use either deep network or linear model to predict cost
         if (throughput_predictor) {
-            // for complicated indexing reasons we do zero padding here
-            // count number of scheduled stages
+
+            // Perform any quick rejection tests before enqueuing this
+            for (auto it = features.begin(); it != features.end(); it++) {
+                auto &feat = it.value();
+                if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
+            }
+
             int num_stages = (int)features.size();
 
             const int pipeline_feat_size = 399;
@@ -2773,14 +2835,12 @@ struct State {
             }
 
             stage = 0;
-
             // load schedule features into input buffer
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
                 for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
                     internal_assert(features.contains(&*it));
                     const auto &feat = features.get(&*it);
-                    if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
                         schedule_features(batch_idx, i, stage) = sched_stats[i];
@@ -2997,6 +3057,8 @@ struct State {
                     internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                     num_children++;
                     accept_child(std::move(child));
+                } else {
+                    // Discarding state....
                 }
             }
         }
@@ -3167,7 +3229,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
     uint32_t counter = 0;
     auto tick = [&](double progress) {
         counter++;
-        const int bits = 13;
+        const int bits = 11;
         if (counter & ((1 << bits) - 1)) return;
         progress *= 78;
         debug(0) << '[';
@@ -3477,7 +3539,7 @@ void autoschedule_test() {
 
     Var x("x"), y("y");
 
-    #if 0
+    #if 1
     ThroughputPredictorPipeline throughput_predictor(w, stats);
     ThroughputPredictorPipeline *tpp = &throughput_predictor;
     #else
@@ -3815,21 +3877,29 @@ void autoschedule_test() {
         p3[N-1].estimate(x, 0, 1024).estimate(y, 0, 1024);
 
         vector<Function> outputs = {p3[N-1].function()};
+
+        // This is a good one to benchmark. We want to include dag
+        // construction, so we'll redundantly recreate it for every
+        // iteration.
+        int cost_calcs = 0;
+        double t = Tools::benchmark(10, 1, [&]() {
+                State::cost_calculations = 0;
+                FunctionDAG dag(outputs, params, target);
+                optimal_schedule(dag, outputs, params, tpp, 300);
+                cost_calcs = State::cost_calculations;
+            });
+
+        // Now schedule it for real
         FunctionDAG dag(outputs, params, target);
         dag.dump();
-
-        // This is a good one to benchmark.
-        State optimal;
-
-        double t = Tools::benchmark(10, 1, [&]() {
-                optimal = optimal_schedule(dag, outputs, params, nullptr, 300);
-            });
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 300);
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
         optimal.dump();
         debug(0) << "Time: " << t << " seconds\n";
+        debug(0) << "Time per schedule considered: " << (1000000 * t) / cost_calcs << " us\n";
     }
 
 }
