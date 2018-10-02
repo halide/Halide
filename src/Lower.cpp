@@ -8,6 +8,7 @@
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
+#include "AsyncProducers.h"
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
@@ -36,6 +37,7 @@
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
+#include "PurifyIndexMath.h"
 #include "Prefetch.h"
 #include "Profiling.h"
 #include "Qualify.h"
@@ -59,6 +61,7 @@
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnpackBuffers.h"
+#include "UnsafePromises.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
@@ -181,7 +184,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false); // Keep dead lets. Storage flattening needs them.
+    s = simplify(s, false); // Storage folding needs .loop_max symbols
     debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
@@ -199,6 +202,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
+
+    debug(1) << "Forking asynchronous producers...\n";
+    s = fork_async_producers(s, env);
+    debug(2) << "Lowering after forking asynchronous producers:\n" << s << '\n';
 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
@@ -243,13 +250,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute)) {
-        debug(1) << "Injecting per-block gpu synchronization...\n";
-        s = fuse_gpu_thread_loops(s);
-        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
-    }
-
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
@@ -269,6 +269,13 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = vectorize_loops(s, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
+
+    if (t.has_gpu_feature() ||
+        t.has_feature(Target::OpenGLCompute)) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = fuse_gpu_thread_loops(s);
+        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
+    }
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
@@ -322,6 +329,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         s = setup_gpu_vertex_buffer(s);
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
+
+    debug(1) << "Lowering unsafe promises...\n";
+    s = lower_unsafe_promises(s, t);
+    debug(2) << "Lowering after lowering unsafe promises:\n" << s << "\n\n";
 
     s = remove_dead_allocations(s);
     s = remove_trivial_for_loops(s);

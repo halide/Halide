@@ -278,9 +278,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(op->type.is_vector());
 
-        // This has to be underscore as print_name prepends and
-        // underscore to names without one and that results in a name
-        // mismatch of a Load appears as the value of a Let.
+        // This has to be underscore as print_name prepends an underscore to
+        // names without one and that results in a name mismatch if a Load
+        // appears as the value of a Let
         id = unique_name('_');
         cache[rhs.str()] = id;
 

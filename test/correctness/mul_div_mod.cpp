@@ -317,7 +317,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
             RT ri = r(i, j);
             RT correct = BIG(ai)*BIG(bi);
             if (correct != ri && (ecount++) < 10) {
-                std::cerr << ai << "*" << bi << " -> " << ri << " != " << correct << "\n";
+                std::cerr << (int64_t)ai << "*" << (int64_t)bi << " -> " << (int64_t)ri << " != " << (int64_t)correct << "\n";
                 success = false;
             }
 
@@ -553,7 +553,8 @@ int main(int argc, char **argv) {
 
     // Test multiplication
     std::vector<int> mul_vector_widths = { 1 };
-    if (target.has_feature(Target::Metal)) {
+    if (target.has_feature(Target::Metal) ||
+        target.has_feature(Target::D3D12Compute)) {
         for (int i = 2; i <= 4; i *= 2) {
             mul_vector_widths.push_back(i);
         }

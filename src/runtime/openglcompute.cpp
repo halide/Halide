@@ -40,8 +40,12 @@
     GLFUNC(PFNGLMEMORYBARRIERPROC,  MemoryBarrier); \
     GLFUNC(PFNGLSHADERSOURCEPROC, ShaderSource); \
     GLFUNC(PFNGLUNIFORM1IPROC, Uniform1i); \
+    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1ui); \
+    GLFUNC(PFNGLUNIFORM1IPROC, Uniform1f); \
     GLFUNC(PFNGLUNMAPBUFFERPROC, UnmapBuffer); \
-    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram);
+    GLFUNC(PFNGLUSEPROGRAMPROC, UseProgram); \
+    GLFUNC(PFNGLGETACTIVEUNIFORM, GetActiveUniform); \
+    GLFUNC(PFNGLGETUNIFORMLOCATION, GetUniformLocation);
 
 using namespace Halide::Runtime::Internal;
 
@@ -424,7 +428,7 @@ extern "C" {
 WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                        const char *entry_name, int blocksX, int blocksY,
                        int blocksZ, int threadsX, int threadsY, int threadsZ,
-                       int shared_mem_bytes, size_t arg_sizes[], void *args[],
+                       int shared_mem_bytes, halide_type_t arg_types[], void *args[],
                        int8_t arg_is_buffer[], int num_attributes,
                        float *vertex_buffer, int num_coords_dim0,
                        int num_coords_dim1) {
@@ -467,17 +471,75 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
     // Populate uniforms with values passed in arguments.
     // Order of the passed arguments matches what was generated for this kernel.
     int i = 0;
-    while (arg_sizes[i] != 0) {
+    while (arg_types[i].bits != 0) {
         debug(user_context) << "    args " << i
-                            << " " << (int)arg_sizes[i]
+                            << " " << arg_types[i]
                             << " [" << (*((void **)args[i])) << " ...] "
                             << arg_is_buffer[i] << "\n";
         if (arg_is_buffer[i] == 0) {
-            // TODO(aam): Support types other than int
-            int value = *((int *)args[i]);
-            global_state.Uniform1i(i, value);
-            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) {
-                return -1;
+            if (arg_types[i].code == halide_type_int) {
+                int value;
+                if (arg_types[i].bits == 8) {
+                    value = *((int8_t *)args[i]);
+                } else if (arg_types[i].bits == 16) {
+                    value = *((int16_t *)args[i]);
+                } else if (arg_types[i].bits == 32) {
+                    value = *((int32_t *)args[i]);
+                } else {
+                  // error
+                  return -1;
+                }
+                if (arg_types[i].bits <= 16) {
+                    float fp_val = value;
+                    global_state.Uniform1f(i, fp_val);
+                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f (int case)")) {
+                        return -1;
+                    }
+                } else {
+                    global_state.Uniform1i(i, value);
+                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) {
+                        return -1;
+                    }
+                }
+            } else if (arg_types[i].code == halide_type_uint) {
+                unsigned value;
+                if (arg_types[i].bits == 8) {
+                    value = *((uint8_t *)args[i]);
+                } else if (arg_types[i].bits == 16) {
+                    value = *((uint16_t *)args[i]);
+                } else if (arg_types[i].bits == 32) {
+                    value = *((uint32_t *)args[i]);
+                } else {
+                  // error
+                  return -1;
+                }
+                if (arg_types[i].bits <= 16) {
+                    float fp_val = value;
+                    global_state.Uniform1f(i, fp_val);
+                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f (uint case)")) {
+                        return -1;
+                    }
+                } else {
+                    global_state.Uniform1ui(i, value);
+                    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1ui")) {
+                        return -1;
+                    }
+                }
+            } else if (arg_types[i].code == halide_type_float) {
+                float value;
+                if (arg_types[i].bits == 32) {
+                    value = *((float *)args[i]);
+                } else {
+                  // error
+                  return -1;
+                }
+                global_state.Uniform1f(i, value);
+                if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f")) {
+                    return -1;
+                }
+            } else {
+              // error
+              return -1;
             }
         } else {
             uint64_t arg_value = ((halide_buffer_t *)args[i])->device;
@@ -592,8 +654,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         const GLchar* sources = { src };
         const GLint sources_lengths = { (GLint) src_len };
 
-        debug(user_context) << "Compute shader source for " << kernel_name << " :" << src;
-        debug(user_context) << "\n";
+        print(user_context) << "Compute shader source for: " << kernel_name;
+        halide_print(user_context, src);
 
         global_state.ShaderSource(shader, 1, &sources, &sources_lengths);
         if (global_state.CheckAndReportError(user_context, "shader source")) { return -1; }
@@ -642,6 +704,26 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         }
         kernel->program_id = program;
 
+#if DEBUG_RUNTIME
+        GLint i;
+        GLint count;
+
+        GLint size; // size of the variable
+        GLenum type; // type of the variable (float, vec3 or mat4, etc)
+
+        const GLsizei bufSize = 64; // maximum name length
+        GLchar name[bufSize]; // variable name in GLSL
+        GLsizei length; // name length
+        
+        global_state.GetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
+        debug(user_context) << "Active Uniforms: " << count << "\n";
+
+        for (i = 0; i < count; i++) {
+            global_state.GetActiveUniform(program, (GLuint)i, bufSize, &length, &size, &type, name);
+            GLint loc = global_state.GetUniformLocation(program, name);
+            debug(user_context) << "Uniform " << i << " Type: " << type << " Name: " << name << " location: " << loc << "\n";
+        }
+#endif
         src += src_len; // moving on to the next kernel
     }
  #ifdef DEBUG_RUNTIME
@@ -707,6 +789,7 @@ WEAK halide_device_interface_t openglcompute_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &openglcompute_device_interface_impl
 };
 

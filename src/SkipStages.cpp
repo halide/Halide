@@ -47,7 +47,8 @@ public:
     PredicateFinder(const string &b, bool s) : predicate(const_false()),
                                                buffer(b),
                                                varies(false),
-                                               treat_selects_as_guards(s) {}
+                                               treat_selects_as_guards(s),
+                                               in_produce(false) {}
 
 private:
 
@@ -55,8 +56,11 @@ private:
     string buffer;
     bool varies;
     bool treat_selects_as_guards;
+    bool in_produce;
     Scope<> varying;
     Scope<> in_pipeline;
+    Scope<> local_buffers;
+
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -111,10 +115,9 @@ private:
 
     void visit(const ProducerConsumer *op) {
         ScopedBinding<> bind(in_pipeline, op->name);
-        if (op->is_producer) {
-            if (op->name != buffer) {
-                op->body.accept(this);
-            }
+        if (op->is_producer && op->name == buffer) {
+            ScopedValue<bool> sv(in_produce, true);
+            IRVisitor::visit(op);
         } else {
             IRVisitor::visit(op);
         }
@@ -217,9 +220,21 @@ private:
 
         IRVisitor::visit(op);
 
-        if (op->name == buffer || extern_call_uses_buffer(op, buffer)) {
+        if (!in_produce && (op->name == buffer || extern_call_uses_buffer(op, buffer))) {
             predicate = const_true();
         }
+    }
+
+    void visit(const Provide *op) {
+        IRVisitor::visit(op);
+        if (in_produce && op->name != buffer && !local_buffers.contains(op->name)) {
+            predicate = const_true();
+        }
+    }
+
+    void visit(const Realize *op) {
+        ScopedBinding<> bind(local_buffers, op->name);
+        IRVisitor::visit(op);
     }
 
     void visit(const Allocate *op) {
@@ -333,20 +348,32 @@ private:
     }
 
     Stmt visit(const LetStmt *op) override {
-        bool should_pop = false;
-        if (in_vector_loop &&
-            expr_uses_vars(op->value, vector_vars)) {
-            should_pop = true;
-            vector_vars.push(op->name);
+        struct Frame {
+            const LetStmt *op;
+            bool vector_var;
+        };
+        vector<Frame> frames;
+        Stmt result;
+
+        while (op) {
+            bool vector_var = in_vector_loop && expr_uses_vars(op->value, vector_vars);
+            frames.push_back({op, vector_var});
+            if (vector_var) {
+                vector_vars.push(op->name);
+            }
+            result = op->body;
+            op = result.as<LetStmt>();
         }
 
-        Stmt stmt = IRMutator2::visit(op);
+        result = mutate(result);
 
-        if (should_pop) {
-            vector_vars.pop(op->name);
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (it->vector_var) {
+                vector_vars.pop(it->op->name);
+            }
+            result = LetStmt::make(it->op->name, it->op->value, result);
         }
-
-        return stmt;
+        return result;
     }
 
     Stmt visit(const Realize *op) override {

@@ -93,6 +93,7 @@ class RemoveLikelyTags : public IRMutator2 {
 
 // Check if an expression or statement uses a likely tag
 class HasLikelyTag : public IRVisitor {
+protected:
     using IRVisitor::visit;
     void visit(const Call *op) {
         if (op->is_intrinsic(Call::likely)) {
@@ -103,6 +104,15 @@ class HasLikelyTag : public IRVisitor {
     }
 public:
     bool result = false;
+};
+
+class HasUncapturedLikelyTag : public HasLikelyTag {
+    using HasLikelyTag::visit;
+
+    // Any likelies buried inside the following ops are captured the by respective ops
+    void visit(const Select *op) {}
+    void visit(const Min *op) {}
+    void visit(const Max *op) {}
 };
 
 // The goal of loop partitioning is to split loops up into a prologue,
@@ -274,9 +284,24 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Min *op) {
-        IRVisitor::visit(op);
-        bool likely_a = has_likely_tag(op->a);
-        bool likely_b = has_likely_tag(op->b);
+        bool likely_a = has_uncaptured_likely_tag(op->a);
+        bool likely_b = has_uncaptured_likely_tag(op->b);
+
+        // Prefer the side that has an uncaptured top-level likely
+        // call. If neither does, prefer the side that contains any
+        // likely call at all.
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
+        }
+
+        // Don't hunt for simplifications in unlikely paths
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b <= op->a, op, op->b, op->a);
@@ -286,9 +311,20 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Max *op) {
-        IRVisitor::visit(op);
-        bool likely_a = has_likely_tag(op->a);
-        bool likely_b = has_likely_tag(op->b);
+        bool likely_a = has_uncaptured_likely_tag(op->a);
+        bool likely_b = has_uncaptured_likely_tag(op->b);
+
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
+        }
+
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b >= op->a, op, op->b, op->a);
@@ -298,9 +334,22 @@ class FindSimplifications : public IRVisitor {
     }
 
     void visit(const Select *op) {
-        IRVisitor::visit(op);
-        bool likely_t = has_likely_tag(op->true_value);
-        bool likely_f = has_likely_tag(op->false_value);
+        op->condition.accept(this);
+
+        bool likely_t = has_uncaptured_likely_tag(op->true_value);
+        bool likely_f = has_uncaptured_likely_tag(op->false_value);
+
+        if (!likely_t && !likely_f) {
+            likely_t = has_likely_tag(op->true_value);
+            likely_f = has_likely_tag(op->false_value);
+        }
+
+        if (!likely_t) {
+            op->false_value.accept(this);
+        }
+        if (!likely_f) {
+            op->true_value.accept(this);
+        }
 
         if (likely_t && !likely_f) {
             new_simplification(op->condition, op, op->true_value, op->false_value);
@@ -632,8 +681,8 @@ class PartitionLoops : public IRMutator2 {
         }
 
         Stmt stmt;
-        // Bust serial for loops up into three.
-        if (op->for_type == ForType::Serial) {
+        // Bust simple serial for loops up into three.
+        if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
                              op->for_type, op->device_api, simpler_body);
 
@@ -648,9 +697,18 @@ class PartitionLoops : public IRMutator2 {
                 stmt = Block::make(stmt, epilogue);
             }
         } else {
-            // We don't have task parallelism. So for parallel for
-            // loops just put an if-then-else in the loop body. It
-            // should branch-predict to the steady state pretty well.
+            // For parallel for loops we could use a Fork node here,
+            // but that would introduce the more complicated parallel
+            // runtime into code that doesn't use async(), which may
+            // interfere with legacy overrides of
+            // halide_do_par_for. So for parallel for loops just put
+            // an if-then-else in the loop body. It should
+            // branch-predict to the steady state pretty well.
+            //
+            // Simple serial for loops that contain an Acquire node go
+            // into the task system as a single entity, but Block
+            // nodes do not, so we get a flatter task graph if we do
+            // the same trick.
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
@@ -981,6 +1039,12 @@ class LowerLikelyIfInnermost : public IRMutator2 {
 };
 
 }  // namespace
+
+bool has_uncaptured_likely_tag(Expr e) {
+    HasUncapturedLikelyTag h;
+    e.accept(&h);
+    return h.result;
+}
 
 bool has_likely_tag(Expr e) {
     HasLikelyTag h;

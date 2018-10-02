@@ -1277,9 +1277,12 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
                 internal_assert(!output->funcs().empty());
                 for (auto &f : output->funcs()) {
                     user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
-                    Parameter p = f.output_buffer().parameter();
-                    // This must use p.name(), *not* output->name()
-                    get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                    auto output_buffers = f.output_buffers();
+                    for (auto &o : output_buffers) {
+                        Parameter p = o.parameter();
+                        // This must use p.name(), *not* output->name()
+                        get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                    }
                 }
             }
         }

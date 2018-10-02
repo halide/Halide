@@ -1,7 +1,9 @@
 Halide is a programming language designed to make it easier to write
 high-performance image processing code on modern machines. Halide
-currently targets X86, ARM, CUDA, OpenCL, and OpenGL on OS X, Linux,
-and Windows.
+currently targets:
+  * CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC
+  * Operating systems: Linux, Windows, Mac OS X, Android, iOS, Qualcomm QuRT
+  * GPU Compute APIs: CUDA, OpenCL, OpenGL, OpenGL Compute Shaders, Apple Metal, Microsoft Direct X 12
 
 Rather than being a standalone programming language, Halide is
 embedded in C++. This means you write C++ code that builds an
@@ -306,8 +308,8 @@ Planned features:
 
   * Support for integer textures and arithmetic
 
-  * Compute shaders
-
+(Note that OpenGL Compute Shaders are supported with a separate
+OpenGLCompute backend.)
 
 Halide for Hexagon HVX
 ======================

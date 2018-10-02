@@ -59,6 +59,7 @@ typedef void GLvoid;
 #define GL_TEXTURE3 0x84C3
 #define GL_ACTIVE_TEXTURE 0x84E0
 #define GL_TEXTURE_BINDING_2D 0x8069
+#define GL_ACTIVE_UNIFORMS 0x8B86
 
 typedef void (*PFNGLACTIVETEXTUREPROC) (GLenum texture);
 typedef void (*PFNGLBINDTEXTUREPROC)(GLenum target, GLuint texture);
@@ -216,4 +217,10 @@ typedef void (*PFNGLUNMAPBUFFERPROC) (GLenum target);
 typedef void (*PFNGLBINDBUFFERBASEPROC) (GLenum target, GLuint index, GLuint buffer);
 typedef void (*PFNGLDELETEBUFFERSPROC) (GLsizei n, const GLuint* buffers);
 
+typedef void (*PFNGLGETACTIVEUNIFORM)(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name);
+typedef GLint (*PFNGLGETUNIFORMLOCATION)(GLuint program, const GLchar *name);
+
 #endif  // MINI_OPENGL_H
+
+
+

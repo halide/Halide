@@ -2074,18 +2074,21 @@ private:
 
         internal_assert(f.defined());
 
-        const auto &output_types = f.output_types();
-        user_assert(output_types.size() == 1)
-            << "Output " << this->name() << " should have size=1 but saw size=" << output_types.size() << "\n";
-
-        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
-        user_assert(T::can_convert_from(other))
-            << "Cannot assign to the Output \"" << this->name()
-            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+        if (TBase::has_static_halide_type) {
+            Buffer<> other(f.output_types().at(0), nullptr, std::vector<int>(f.dimensions(), 1));
+            user_assert(T::can_convert_from(other))
+                << "Cannot assign to the Output \"" << this->name()
+                << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+        }
 
         if (this->types_defined()) {
-            user_assert(output_types.at(0) == this->type())
-                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+            const auto &my_types = this->types();
+            user_assert(my_types.size() == f.output_types().size())
+                << "Output " << this->name() << " requires a Func with " << my_types.size() << " type(s) but tried to assign one with " << f.output_types().size() << " type(s)\n";
+            for (size_t i = 0; i < my_types.size(); i++) {
+                user_assert(my_types[i] == f.output_types().at(i))
+                    << "Output " << this->name() << " should have type[" << i << "]=" << my_types[i] << " but saw type[" << i << "]=" << f.output_types().at(i) << "\n";
+            }
         }
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
@@ -2100,19 +2103,21 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    static std::vector<Type> my_types() {
-        return TBase::has_static_halide_type ? std::vector<Type>{ TBase::static_halide_type() } : std::vector<Type>{};
+    static std::vector<Type> my_types(const std::vector<Type> &t) {
+        if (TBase::has_static_halide_type) {
+            user_assert(t.empty()) << "Cannot pass a Type argument for an Output<Buffer> with a non-void static type\n";
+            return std::vector<Type>{ TBase::static_halide_type() };
+        }
+        return t;
     }
 
 protected:
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
-        : Super(name, IOKind::Buffer, my_types(), d) {
-        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
+        : Super(name, IOKind::Buffer, my_types(t), d) {
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t = {}, int d = -1)
-        : Super(array_size, name, IOKind::Buffer, my_types(), d) {
-        user_assert(t.empty()) << "You cannot specify a Type argument for Output<Buffer<>>\n";
+        : Super(array_size, name, IOKind::Buffer, my_types(t), d) {
     }
 
     HALIDE_NO_USER_CODE_INLINE std::string get_c_type() const override {

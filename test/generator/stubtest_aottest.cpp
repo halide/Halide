@@ -50,6 +50,8 @@ int main(int argc, char **argv) {
     Buffer<float> array_input1 = make_image<float>(1);
     Buffer<float> typed_buffer_output(kSize, kSize, 3);
     Buffer<float> untyped_buffer_output(kSize, kSize, 3);
+    Buffer<float> tupled_output0(kSize, kSize, 3);
+    Buffer<int32_t> tupled_output1(kSize, kSize, 3);
     Buffer<uint8_t> array_buffer_input0 = make_image<uint8_t>(0);
     Buffer<uint8_t> array_buffer_input1 = make_image<uint8_t>(1);
     Buffer<float> simple_output(kSize, kSize, 3);
@@ -72,6 +74,7 @@ int main(int argc, char **argv) {
         array_output0, array_output1,
         typed_buffer_output,
         untyped_buffer_output,
+        tupled_output0, tupled_output1,
         static_compiled_buffer_output,
         array_buffer_output0, array_buffer_output1
     );
@@ -79,6 +82,8 @@ int main(int argc, char **argv) {
     verify(buffer_input, 1.f, 0, typed_buffer_output);
     verify(buffer_input, 1.f, 0, untyped_buffer_output);
     verify(simple_input, 1.f, 0, simple_output);
+    verify(simple_input, 1.f, 0, tupled_output0);
+    verify(simple_input, 1.f, 1, tupled_output1);
     verify(array_input0, 1.f, 0, simple_output);
     verify(array_input0, 1.25f, 0, tuple_output0);
     verify(array_input0, 1.25f, 33, tuple_output1);

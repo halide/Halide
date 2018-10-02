@@ -26,6 +26,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.has_feature(Target::Debug)) {
+        // Same thing here: the runtime debug adds lots of extra prints,
+        // so counting the number of prints is not useful.
+        printf("Skipping test because runtime debug is active\n");
+        return 0;
+    }
+
     Var x;
 
     {

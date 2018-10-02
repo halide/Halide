@@ -47,7 +47,16 @@ static bool has_legacy_buffers(const LoweredFunc& func) {
 }
 
 static bool can_convert(const LoweredArgument* arg) {
-  if (arg->type.is_handle() || arg->type.is_vector()) {
+  if (arg->type.is_handle()) {
+      if (arg->name == "__user_context") {
+          /* __user_context is a void* pointer to a user supplied memory region.
+           * We allow the Python callee to pass PyObject* pointers to that. */
+          return true;
+      } else {
+          return false;
+      }
+  }
+  if (arg->type.is_vector()) {
       return false;
   }
   if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
@@ -68,10 +77,13 @@ static bool can_convert(const LoweredArgument* arg) {
 
 std::pair<string, string> print_type(const LoweredArgument* arg) {
     // Excluded by can_convert() above:
-    assert(!arg->type.is_handle());
     assert(!arg->type.is_vector());
 
-    if (arg->is_buffer()) {
+    if (arg->type.is_handle()) {
+        /* Handles can be any pointer. However, from Python, all you can pass to
+         * a function is a PyObject*, so we can restrict to that. */
+        return std::make_pair("O", "PyObject*");
+    } else if (arg->is_buffer()) {
         return std::make_pair("O", "PyObject*");
     } else if (arg->type.is_float() && arg->type.bits() == 32) {
         return std::make_pair("f", "float");

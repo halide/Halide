@@ -29,17 +29,21 @@ protected:
 
     std::string mcpu() const;
     std::string mattrs() const;
+    int isa_version;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
 
     llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
                                          const std::string &name,
                                          const std::vector<Type> &arg_types,
-                                         bool broadcast_scalar_word = false);
+                                         int flags);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
                                          std::vector<Type> arg_types,
-                                         bool broadcast_scalar_word = false);
+                                         int flags);
+
+    int is_hvx_v62_or_later() {return (isa_version >= 62);}
+    int is_hvx_v65_or_later() {return (isa_version >= 65);}
 
     using CodeGen_Posix::visit;
 

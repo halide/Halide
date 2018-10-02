@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
     Func out("out");
 
     Type result_type;
-    if (t.has_feature(Target::Metal)) {
+    if (t.has_feature(Target::Metal) ||
+        t.has_feature(Target::D3D12Compute)) {
         result_type = UInt(32);
     } else {
         result_type = UInt(64);
@@ -46,7 +47,9 @@ int main(int argc, char **argv) {
         int off = 0;
         if ((types[i].is_int() || types[i].is_uint())) {
             // Metal does not support 64-bit integers.
-            if (t.has_feature(Target::Metal) &&
+            // neither does D3D12 with SM 5.1.
+            if ((t.supports_device_api(DeviceAPI::Metal) ||
+                 t.supports_device_api(DeviceAPI::D3D12Compute)) &&
                 types[i].bits() >= 64) {
                 continue;
             }
@@ -69,7 +72,8 @@ int main(int argc, char **argv) {
     Buffer<> output = out.realize(23*5);
 
     int result;
-    if (t.has_feature(Target::Metal)) {
+    if (t.has_feature(Target::Metal) ||
+        t.has_feature(Target::D3D12Compute)) {
         result = check_result<uint32_t>(output, n_types - 2, offset);
     } else {
         result = check_result<uint64_t>(output, n_types, offset);

@@ -60,6 +60,12 @@ void *my_get_library_symbol_impl(void *lib, const char *name) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::OpenCL)) {
+        printf("This test requires opencl");
+        return 0;
+    }
+
     // These calls are only available for AOT-compiled code:
     //
     //   halide_set_custom_get_symbol(my_get_symbol_impl);
@@ -77,7 +83,6 @@ int main(int argc, char **argv) {
     Var x, y, xi, yi;
     Func f;
     f(x, y) = cast<int32_t>(x + y);
-    Target target = get_jit_target_from_environment().with_feature(Target::OpenCL);
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
     f.set_error_handler(my_error_handler);
 

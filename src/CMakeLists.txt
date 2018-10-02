@@ -12,6 +12,7 @@ set(RUNTIME_CPP
   aarch64_cpu_features
   alignment_128
   alignment_32
+  alignment_64
   android_clock
   android_host_cpu_count
   android_io
@@ -22,6 +23,7 @@ set(RUNTIME_CPP
   cache
   can_use_target
   cuda
+  d3d12compute
   destructors
   device_interface
   errors
@@ -107,6 +109,7 @@ set (RUNTIME_LL
   x86_avx
   x86_avx2
   x86_sse41
+  d3d12_abi_patch_64
 )
 
 set (RUNTIME_BC
@@ -154,9 +157,11 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
       set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
 
+      # -std=gnu++98 is deliberate; we do NOT want c++11 here,
+      # as we don't want static locals to get thread synchronization stuff.
       add_custom_command(OUTPUT "${LL_D}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                          COMMENT "${SOURCE} -> ${LL_D}"
                          # Make sure that the output of this command also depends
                          # on the header files that ${SOURCE} uses
@@ -165,7 +170,7 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
                         )
       add_custom_command(OUTPUT "${LL}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -std=gnu++98 -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                          COMMENT "${SOURCE} -> ${LL}")
 
       add_custom_command(OUTPUT "${BC_D}"
@@ -233,6 +238,7 @@ set(RUNTIME_HEADER_FILES
   HalideRuntimeMetal.h
   HalideRuntimeOpenGL.h
   HalideRuntimeOpenGLCompute.h
+  HalideRuntimeD3D12Compute.h
   HalideRuntimeQurt.h
   HalideBuffer.h
 )
@@ -257,6 +263,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleUtils.h
   BoundaryConditions.h
@@ -267,6 +274,7 @@ set(HEADER_FILES
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
+  CodeGen_D3D12Compute_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_GPU_Host.h
   CodeGen_Internal.h
@@ -356,6 +364,7 @@ set(HEADER_FILES
   Pipeline.h
   Prefetch.h
   Profiling.h
+  PurifyIndexMath.h
   PythonExtensionGen.h
   Qualify.h
   Random.h
@@ -391,6 +400,7 @@ set(HEADER_FILES
   UniquifyVariableNames.h
   UnpackBuffers.h
   UnrollLoops.h
+  UnsafePromises.h
   Util.h
   Var.h
   VaryingAttributes.h
@@ -422,6 +432,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ApplySplit.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleUtils.cpp
   BoundaryConditions.cpp
@@ -432,6 +443,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
+  CodeGen_D3D12Compute_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_GPU_Host.cpp
   CodeGen_Hexagon.cpp
@@ -511,6 +523,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PrintLoopNest.cpp
   Prefetch.cpp
   Profiling.cpp
+  PurifyIndexMath.cpp
   PythonExtensionGen.cpp
   Qualify.cpp
   RDom.cpp
@@ -525,6 +538,25 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ScheduleFunctions.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
+  Simplify_Add.cpp
+  Simplify_And.cpp
+  Simplify_Call.cpp
+  Simplify_Cast.cpp
+  Simplify_Div.cpp
+  Simplify_EQ.cpp
+  Simplify_Exprs.cpp
+  Simplify_LT.cpp
+  Simplify_Let.cpp
+  Simplify_Max.cpp
+  Simplify_Min.cpp
+  Simplify_Mod.cpp
+  Simplify_Mul.cpp
+  Simplify_Not.cpp
+  Simplify_Or.cpp
+  Simplify_Select.cpp
+  Simplify_Shuffle.cpp
+  Simplify_Stmts.cpp
+  Simplify_Sub.cpp
   SimplifySpecializations.cpp
   SkipStages.cpp
   SlidingWindow.cpp
@@ -544,6 +576,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UniquifyVariableNames.cpp
   UnpackBuffers.cpp
   UnrollLoops.cpp
+  UnsafePromises.cpp
   Util.cpp
   Var.cpp
   VaryingAttributes.cpp
@@ -553,6 +586,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 # Ensure that these tools are build first
@@ -627,6 +661,10 @@ endif()
 
 if (TARGET_METAL)
   target_compile_definitions(Halide PRIVATE "-DWITH_METAL=1")
+endif()
+
+if (TARGET_D3D12COMPUTE)
+  target_compile_definitions(Halide PRIVATE "-DWITH_D3D12=1")
 endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")

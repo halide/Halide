@@ -23,17 +23,19 @@ class IRVisitor;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
 enum class IRNodeType {
+    // Exprs, in order of strength
     IntImm,
     UIntImm,
     FloatImm,
     StringImm,
+    Broadcast,
     Cast,
     Variable,
     Add,
     Sub,
+    Mod,
     Mul,
     Div,
-    Mod,
     Min,
     Max,
     EQ,
@@ -48,22 +50,24 @@ enum class IRNodeType {
     Select,
     Load,
     Ramp,
-    Broadcast,
     Call,
     Let,
+    Shuffle,
+    // Stmts
     LetStmt,
     AssertStmt,
     ProducerConsumer,
     For,
+    Acquire,
     Store,
     Provide,
     Allocate,
     Free,
     Realize,
     Block,
+    Fork,
     IfThenElse,
     Evaluate,
-    Shuffle,
     Prefetch,
 };
 
@@ -151,7 +155,10 @@ struct StmtNode : public BaseStmtNode {
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
 struct IRHandle : public IntrusivePtr<const IRNode> {
+    HALIDE_ALWAYS_INLINE
     IRHandle() : IntrusivePtr<const IRNode>() {}
+
+    HALIDE_ALWAYS_INLINE
     IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
 
     /** Dispatch to the correct visitor method for this node. E.g. if
@@ -174,6 +181,10 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
             return (const T *)ptr;
         }
         return nullptr;
+    }
+
+    IRNodeType node_type() const {
+        return ptr->node_type;
     }
 };
 
@@ -278,9 +289,11 @@ struct StringImm : public ExprNode<StringImm> {
  * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
+    HALIDE_ALWAYS_INLINE
     Expr() : Internal::IRHandle() {}
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
+    HALIDE_ALWAYS_INLINE
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
     /** Make an expression representing numeric constants of various types. */
@@ -299,11 +312,18 @@ struct Expr : public Internal::IRHandle {
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-             Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+    Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+
+    /** Override get() to return a BaseExprNode * instead of an IRNode * */
+    HALIDE_ALWAYS_INLINE
+    const Internal::BaseExprNode *get() const {
+        return (const Internal::BaseExprNode *)ptr;
+    }
 
     /** Get the type of this expression node */
+    HALIDE_ALWAYS_INLINE
     Type type() const {
-        return ((const Internal::BaseExprNode *)ptr)->type;
+        return get()->type;
     }
 };
 
@@ -326,7 +346,8 @@ enum class DeviceAPI {
     GLSL,
     OpenGLCompute,
     Metal,
-    Hexagon
+    Hexagon,
+    D3D12Compute,
 };
 
 /** An array containing all the device apis. Useful for iterating
@@ -339,7 +360,8 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::GLSL,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
-                                     DeviceAPI::Hexagon};
+                                     DeviceAPI::Hexagon,
+                                     DeviceAPI::D3D12Compute};
 
 /** An enum describing different address spaces to be used with Func::store_in. */
 enum class MemoryType {
@@ -394,6 +416,12 @@ enum class ForType {
 struct Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+
+    /** Override get() to return a BaseStmtNode * instead of an IRNode * */
+    HALIDE_ALWAYS_INLINE
+    const BaseStmtNode *get() const {
+        return (const Internal::BaseStmtNode *)ptr;
+    }
 
     /** This lets you use a Stmt as a key in a map of the form
      * map<Stmt, Foo, Stmt::Compare> */

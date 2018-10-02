@@ -343,6 +343,17 @@ Stmt For::make(const std::string &name, Expr min, Expr extent, ForType for_type,
     return node;
 }
 
+Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
+    internal_assert(semaphore.defined()) << "Acquire with undefined semaphore\n";
+    internal_assert(body.defined()) << "Acquire with undefined body\n";
+
+    Acquire *node = new Acquire;
+    node->semaphore = std::move(semaphore);
+    node->count = std::move(count);
+    node->body = std::move(body);
+    return node;
+}
+
 Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
@@ -517,6 +528,25 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
+Stmt Fork::make(Stmt first, Stmt rest) {
+    internal_assert(first.defined()) << "Fork of undefined\n";
+    internal_assert(rest.defined()) << "Fork of undefined\n";
+
+    Fork *node = new Fork;
+
+    if (const Fork *b = first.as<Fork>()) {
+        // Use a canonical fork nesting order
+        node->first = b->first;
+        node->rest  = Fork::make(b->rest, std::move(rest));
+    } else {
+        node->first = std::move(first);
+        node->rest = std::move(rest);
+    }
+
+    return node;
+}
+
+
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.
@@ -554,7 +584,7 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
     }
     for (size_t i = 0; i < args.size(); i++) {
-        internal_assert(args[i].defined()) << "Call of undefined\n";
+        internal_assert(args[i].defined()) << "Call of " << name << " with argument " << i << " undefined.\n";
     }
     if (call_type == Halide) {
         for (size_t i = 0; i < args.size(); i++) {
@@ -744,7 +774,6 @@ bool Shuffle::is_extract_element() const {
     return indices.size() == 1;
 }
 
-
 template<> void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
 template<> void ExprNode<UIntImm>::accept(IRVisitor *v) const { v->visit((const UIntImm *)this); }
 template<> void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
@@ -787,6 +816,8 @@ template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Bl
 template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 template<> void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
+template<> void StmtNode<Acquire>::accept(IRVisitor *v) const { v->visit((const Acquire *)this); }
+template<> void StmtNode<Fork>::accept(IRVisitor *v) const { v->visit((const Fork *)this); }
 
 template<> Expr ExprNode<IntImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const IntImm *)this); }
 template<> Expr ExprNode<UIntImm>::mutate_expr(IRMutator2 *v) const { return v->visit((const UIntImm *)this); }
@@ -831,7 +862,8 @@ template<> Stmt StmtNode<Block>::mutate_stmt(IRMutator2 *v) const { return v->vi
 template<> Stmt StmtNode<IfThenElse>::mutate_stmt(IRMutator2 *v) const { return v->visit((const IfThenElse *)this); }
 template<> Stmt StmtNode<Evaluate>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Evaluate *)this); }
 template<> Stmt StmtNode<Prefetch>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Prefetch *)this); }
-
+template<> Stmt StmtNode<Acquire>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Acquire *)this); }
+template<> Stmt StmtNode<Fork>::mutate_stmt(IRMutator2 *v) const { return v->visit((const Fork *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";
@@ -876,6 +908,9 @@ Call::ConstString Call::extract_mask_element = "extract_mask_element";
 Call::ConstString Call::require = "require";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 Call::ConstString Call::strict_float = "strict_float";
+Call::ConstString Call::quiet_div = "quiet_div";
+Call::ConstString Call::quiet_mod = "quiet_mod";
+Call::ConstString Call::unsafe_promise_clamped = "unsafe_promise_clamped";
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

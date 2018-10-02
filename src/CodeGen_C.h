@@ -110,7 +110,7 @@ protected:
     std::string print_scalarized_expr(Expr e);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
-    std::string print_assignment(Type t, const std::string &rhs);
+    virtual std::string print_assignment(Type t, const std::string &rhs);
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
@@ -201,6 +201,8 @@ protected:
     void visit(const Evaluate *);
     void visit(const Shuffle *);
     void visit(const Prefetch *);
+    void visit(const Fork *);
+    void visit(const Acquire *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 

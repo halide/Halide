@@ -46,27 +46,6 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     *stmt = nullptr;
 }
 
-template<typename Mutator>
-pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds) {
-    Region new_bounds(bounds.size());
-    bool bounds_changed = false;
-
-    for (size_t i = 0; i < bounds.size(); i++) {
-        Expr old_min = bounds[i].min;
-        Expr old_extent = bounds[i].extent;
-        Expr new_min = mutator->mutate(old_min);
-        Expr new_extent = mutator->mutate(old_extent);
-        if (!new_min.same_as(old_min)) {
-            bounds_changed = true;
-        }
-        if (!new_extent.same_as(old_extent)) {
-            bounds_changed = true;
-        }
-        new_bounds[i] = Range(new_min, new_extent);
-    }
-    return {new_bounds, bounds_changed};
-}
-
 }  // namespace
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
@@ -229,6 +208,19 @@ void IRMutator::visit(const For *op) {
     }
 }
 
+void IRMutator::visit(const Acquire *op) {
+    Expr sema = mutate(op->semaphore);
+    Expr count = mutate(op->count);
+    Stmt body = mutate(op->body);
+    if (sema.same_as(op->semaphore) &&
+        body.same_as(op->body) &&
+        count.same_as(op->count)) {
+        stmt = op;
+    } else {
+        stmt = Acquire::make(std::move(sema), std::move(count), std::move(body));
+    }
+}
+
 void IRMutator::visit(const Store *op) {
     Expr predicate = mutate(op->predicate);
     Expr value = mutate(op->value);
@@ -341,6 +333,17 @@ void IRMutator::visit(const Block *op) {
         stmt = op;
     } else {
         stmt = Block::make(std::move(first), std::move(rest));
+    }
+}
+
+void IRMutator::visit(const Fork *op) {
+    Stmt first = mutate(op->first);
+    Stmt rest = mutate(op->rest);
+    if (first.same_as(op->first) &&
+        rest.same_as(op->rest)) {
+        stmt = op;
+    } else {
+        stmt = Fork::make(first, rest);
     }
 }
 
@@ -624,6 +627,7 @@ Stmt IRMutator2::visit(const Free *op) {
     return op;
 }
 
+
 Stmt IRMutator2::visit(const Realize *op) {
     Region new_bounds;
     bool bounds_changed;
@@ -706,6 +710,31 @@ Expr IRMutator2::visit(const Shuffle *op) {
     }
     return Shuffle::make(new_vectors, op->indices);
 }
+
+Stmt IRMutator2::visit(const Fork *op) {
+    Stmt first = mutate(op->first);
+    Stmt rest = mutate(op->rest);
+    if (first.same_as(op->first) &&
+        rest.same_as(op->rest)) {
+        return op;
+    } else {
+        return Fork::make(first, rest);
+    }
+}
+
+Stmt IRMutator2::visit(const Acquire *op) {
+    Expr sema = mutate(op->semaphore);
+    Expr count = mutate(op->count);
+    Stmt body = mutate(op->body);
+    if (sema.same_as(op->semaphore) &&
+        body.same_as(op->body) &&
+        count.same_as(op->count)) {
+        return op;
+    } else {
+        return Acquire::make(std::move(sema), std::move(count), std::move(body));
+    }
+}
+
 
 Stmt IRGraphMutator2::mutate(const Stmt &s) {
     auto iter = stmt_replacements.find(s);

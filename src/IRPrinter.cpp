@@ -97,6 +97,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::Hexagon:
         out << "<Hexagon>";
         break;
+    case DeviceAPI::D3D12Compute:
+        out << "<D3D12Compute>";
+        break;
     }
     return out;
 }
@@ -174,8 +177,10 @@ void IRPrinter::test() {
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
         "  }\n"
         "}\n"
-        "vectorized (x, 0, y) {\n"
-        "  out[x] = (buf((x % 3)) + 1)\n"
+        "consume buf {\n"
+        "  vectorized (x, 0, y) {\n"
+        "    out[x] = (buf((x % 3)) + 1)\n"
+        "  }\n"
         "}\n";
 
     if (source.str() != correct_source) {
@@ -592,18 +597,17 @@ void IRPrinter::visit(const AssertStmt *op) {
 }
 
 void IRPrinter::visit(const ProducerConsumer *op) {
+    do_indent();
     if (op->is_producer) {
-        do_indent();
         stream << "produce " << op->name << " {\n";
-        indent += 2;
-        print(op->body);
-        indent -= 2;
-        do_indent();
-        stream << "}\n";
     } else {
-        print(op->body);
+        stream << "consume " << op->name << " {\n";
     }
-
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+    do_indent();
+    stream << "}\n";
 }
 
 void IRPrinter::visit(const For *op) {
@@ -619,6 +623,20 @@ void IRPrinter::visit(const For *op) {
     print(op->body);
     indent -= 2;
 
+    do_indent();
+    stream << "}\n";
+}
+
+void IRPrinter::visit(const Acquire *op) {
+    do_indent();
+    stream << "acquire (";
+    print(op->semaphore);
+    stream << ", ";
+    print(op->count);
+    stream << ") {\n";
+    indent += 2;
+    print(op->body);
+    indent -= 2;
     do_indent();
     stream << "}\n";
 }
@@ -673,10 +691,14 @@ void IRPrinter::visit(const Allocate *op) {
         print(op->condition);
     }
     if (op->new_expr.defined()) {
-        stream << "\n custom_new { " << op->new_expr << " }";
+        stream << "\n";
+        do_indent();
+        stream << " custom_new { " << op->new_expr << " }";
     }
     if (!op->free_function.empty()) {
-        stream << "\n custom_delete { " << op->free_function << "(<args>); }";
+        stream << "\n";
+        do_indent();
+        stream << " custom_delete { " << op->free_function << "(" << op->name << "); }";
     }
     stream << "\n";
     print(op->body);
@@ -745,7 +767,30 @@ void IRPrinter::visit(const Prefetch *op) {
 
 void IRPrinter::visit(const Block *op) {
     print(op->first);
-    if (op->rest.defined()) print(op->rest);
+    print(op->rest);
+}
+
+void IRPrinter::visit(const Fork *op) {
+    vector<Stmt> stmts;
+    stmts.push_back(op->first);
+    Stmt rest = op->rest;
+    while (const Fork *f = rest.as<Fork>()) {
+        stmts.push_back(f->first);
+        rest = f->rest;
+    }
+    stmts.push_back(rest);
+
+    do_indent();
+    stream << "fork ";
+    for (Stmt s : stmts) {
+        stream << "{\n";
+        indent += 2;
+        print(s);
+        indent -= 2;
+        do_indent();
+        stream << "} ";
+    }
+    stream << "\n";
 }
 
 void IRPrinter::visit(const IfThenElse *op) {

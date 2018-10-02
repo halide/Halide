@@ -1,6 +1,8 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
+#include <stdio.h>
+
 using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
@@ -50,6 +52,14 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
     a_window.copy_from(b);
 
     check_equal(a_window, b_window);
+
+    // Check copying from const to nonconst
+    Buffer<float> a_window_nonconst = b_window.copy();
+    check_equal(a_window_nonconst, b_window);
+
+    // Check copying from const to const
+    Buffer<const float> a_window_const = b_window.copy();
+    check_equal(a_window_const, b_window);
 
     // You don't actually have to crop a.
     a.fill(1.0f);
@@ -201,6 +211,148 @@ int main(int argc, char **argv) {
         for (size_t i = sizeof(halide_buffer_t); i < sizeof(buf); i++) {
             assert(!buf[i]);
         }
+    }
+
+    {
+        // check reset()
+        Buffer<float> a(100, 3, 80);
+
+        assert(a.dimensions() == 3);
+        assert(a.number_of_elements() == 100 * 3 * 80);
+        assert(a.type() == halide_type_of<float>());
+
+        a.reset();
+        assert(a.dimensions() == 0);
+        assert(a.number_of_elements() == 1);
+        assert(a.type() == halide_type_of<float>());
+
+        Buffer<> b(halide_type_of<float>(), 10, 10);
+
+        assert(b.dimensions() == 2);
+        assert(b.number_of_elements() == 10 * 10);
+        assert(b.type() == halide_type_of<float>());
+
+        b.reset();
+        assert(b.dimensions() == 0);
+        assert(b.number_of_elements() == 1);
+        assert(b.type() == halide_type_of<uint8_t>());
+    }
+
+    {
+        // Check for_each_value on a const buffer(s)
+        const int W = 5, H = 4, C = 3;
+        Buffer<int> zero(W, H, C);
+        zero.fill(0);
+
+        const Buffer<int> a = zero.copy();
+        const Buffer<const int> a_const = a;
+        const Buffer<int> b = zero.copy();
+        const Buffer<const int> b_const = b;
+        Buffer<int> c = zero.copy();
+        int counter;
+
+        counter = 0;
+        a.for_each_value([&](const int &a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value, int b_value) { counter += 1; }, b);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value, const int &b_value) { counter += 1; }, b);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](const int &a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value) { counter += 1; });
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value, int b_value) { counter += 1; }, b_const);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value, const int &b_value) { counter += 1; }, b_const);
+        assert(counter == 5 * 4 * 3);
+
+        counter = 0;
+        a.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
+            counter += 1;
+            c_value_ref = 1;
+        }, b, c);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(1));
+
+        counter = 0;
+        c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
+            counter += 1;
+            c_value_ref = 2;
+        }, b, a);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(2));
+
+        counter = 0;
+        a_const.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
+            counter += 1;
+            c_value_ref = 1;
+        }, b_const, c);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(1));
+
+        counter = 0;
+        c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
+            counter += 1;
+            c_value_ref = 2;
+        }, b_const, a_const);
+        assert(counter == 5 * 4 * 3);
+        assert(a.all_equal(0));
+        assert(b.all_equal(0));
+        assert(c.all_equal(2));
+
+        // Won't compile: a_const is const T, can't specify a nonconst ref for value
+        // a_const.for_each_value([&](int &a_value) { });
+
+        // Won't compile: b_const is const, can't specify a nonconst ref for value
+        // a.for_each_value([&](int a_value, int &b_value) { }, b_const);
+
+        // Won't compile: a is const, can't specify a nonconst ref for value
+        // c.for_each_value([&](int c_value, int &a_value, int &b_value) { }, a_const, b);
+
+        // Won't compile: a and b are const, can't specify a nonconst ref for value
+        // c.for_each_value([&](int c_value, int a_value, int &b_value) { }, a_const, b_const);
+    }
+
+    {
+        // Check initializing const buffers via return ref from fill(), etc
+        const int W = 5, H = 4;
+
+        const Buffer<const int> a = Buffer<int>(W, H).fill(1);
+        assert(a.all_equal(1));
+
+        const Buffer<const int> b = Buffer<int>(W, H).for_each_value([](int &value) { value = 2; });
+        assert(b.all_equal(2));
+
+        // for_each_element()'s callback doesn't get the Buffer itself, so we need a named temp here
+        auto c0 = Buffer<int>(W, H);
+        const Buffer<const int> c = c0.for_each_element([&](int x, int y) { c0(x, y) = 3; });
+        assert(c.all_equal(3));
+
+        const Buffer<const int> d = Buffer<int>(W, H).fill([](int x, int y) -> int { return 4; });
+        assert(d.all_equal(4));
     }
 
     printf("Success!\n");

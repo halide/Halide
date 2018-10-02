@@ -1009,28 +1009,13 @@ public:
                     internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f_args[i];
 
-                    if (box[i].is_single_point()){
+                    if (box[i].is_single_point()) {
                         body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                     } else {
                         body = LetStmt::make(var + ".max", box[i].max, body);
                     }
 
                     body = LetStmt::make(var + ".min", box[i].min, body);
-
-                    // The following is also valid, but seems to not simplify as well
-                    /*
-                      string var = stage_name + "." + f_args[i];
-                      Interval in = bounds_of_inner_var(var, body);
-                      if (!in.min.defined() || !in.max.defined()) continue;
-
-                      if (in.max.same_as(in.min)) {
-                          body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                      } else {
-                          body = LetStmt::make(var + ".max", in.max, body);
-                      }
-
-                      body = LetStmt::make(var + ".min", in.min, body);
-                    */
                 }
             }
 
