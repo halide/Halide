@@ -15,7 +15,7 @@ extern "C" DLLEXPORT float call_counter(float x) {
     return x;
 }
 
-HalideExtern_1(float, call_counter, float);
+HalidePureExtern_1(float, call_counter, float);
 
 int main(int argc, char **argv) {
 

@@ -140,6 +140,16 @@ const B &return_second(const A &a, const B &b) {
     return b;
 }
 
+template<typename A, typename B>
+inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
+    return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
+}
+
+template<typename A, typename B>
+inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
+    return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
+}
+
 namespace {
 class HalideFreeHelper {
     typedef void (*FreeFunction)(void *user_context, void *p);
@@ -2151,6 +2161,22 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::quiet_div)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_div
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_div(" << a << ", " << b << ")";
+    } else if (op->is_intrinsic(Call::quiet_mod)) {
+        internal_assert(op->args.size() == 2);
+        // Don't bother checking for zero denominator here; the quiet_mod
+        // implementation will always do a runtime check and return zero
+        // (rather than failing at runtime).
+        string a = print_expr(op->args[0]);
+        string b = print_expr(op->args[1]);
+        rhs << "::quiet_mod(" << a << ", " << b << ")";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -2396,6 +2422,44 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
         stream << "// consume " << op->name << '\n';
     }
     print_stmt(op->body);
+}
+
+void CodeGen_C::visit(const Fork *op) {
+    // TODO: This doesn't actually work with nested tasks
+    do_indent();
+    stream << "#pragma omp parallel\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp single\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->first);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp task\n";
+    open_scope();
+    print_stmt(op->rest);
+    close_scope("");
+    do_indent();
+    stream << "#pragma omp taskwait\n";
+    close_scope("");
+    close_scope("");
+}
+
+void CodeGen_C::visit(const Acquire *op) {
+    string id_sem = print_expr(op->semaphore);
+    string id_count = print_expr(op->count);
+    open_scope();
+    do_indent();
+    stream << "while (!halide_semaphore_try_acquire(" << id_sem << ", " << id_count << "))\n";
+    open_scope();
+    do_indent();
+    stream << "#pragma omp taskyield\n";
+    close_scope("");
+    op->body.accept(this);
+    close_scope("");
 }
 
 void CodeGen_C::visit(const For *op) {

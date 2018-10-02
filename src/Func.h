@@ -2113,6 +2113,24 @@ public:
      */
     Func &memoize();
 
+    /** Produce this Func asynchronously in a separate
+     * thread. Consumers will be run by the task system when the
+     * production is complete. If this Func's store level is different
+     * to its compute level, consumers will be run concurrently,
+     * blocking as necessary to prevent reading ahead of what the
+     * producer has computed. If storage is folded, then the producer
+     * will additionally not be permitted to run too far ahead of the
+     * consumer, to avoid clobbering data that has not yet been
+     * used.
+     *
+     * Take special care when combining this with custom thread pool
+     * implementations, as avoiding deadlock with producer-consumer
+     * parallelism requires a much more sophisticated parallel runtime
+     * than with data parallelism alone. It is strongly recommended
+     * you just use Halide's default thread pool, which guarantees no
+     * deadlock and a bound on the number of threads launched.
+     */
+    Func &async();
 
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to

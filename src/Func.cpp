@@ -1992,6 +1992,12 @@ Func &Func::store_in(MemoryType t) {
     return *this;
 }
 
+Func &Func::async() {
+    invalidate_cache();
+    func.schedule().async() = true;
+    return *this;
+}
+
 Stage Func::specialize(Expr c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0, args()).specialize(c);
