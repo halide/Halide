@@ -2808,33 +2808,15 @@ struct State {
 
             int num_stages = (int)features.size();
 
-            const int pipeline_feat_size = 399;
             const int schedule_feat_size = 25;
 
-            Buffer<float> pipeline_features, schedule_features;
+            Runtime::Buffer<float> schedule_features;
+
             // Won't actually run anything until we call evaluate_costs...
-            int batch_idx = throughput_predictor->enqueue(num_stages, &pipeline_features, &schedule_features, &cost);
+            int batch_idx = throughput_predictor->enqueue(num_stages, &schedule_features, &cost);
 
             // index of current stage whose features we are reading
             int stage = 0;
-            // load pipeline features into input buffer
-            for (const auto &n : dag.nodes) {
-                if (stage >= num_stages) break;
-                for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-                    const auto &s = *it;
-                    const int *pipeline_feats = (const int *)(&(s.features));
-
-                    // skip the first 7 features
-                    for (int i = 7; i < pipeline_feat_size-1; i++) {
-                        int x = (i-7)/7;
-                        int y = (i-7)%7;
-                        pipeline_features(batch_idx, x, y, stage) = pipeline_feats[i];
-                    }
-                    stage += 1;
-                }
-            }
-
-            stage = 0;
             // load schedule features into input buffer
             for (const auto &n : dag.nodes) {
                 if (stage >= num_stages) break;
@@ -3342,6 +3324,33 @@ State optimal_schedule(FunctionDAG &dag,
                        const MachineParams &params,
                        ThroughputPredictorPipeline *throughput_predictor,
                        int beam_size) {
+    // Set the pipeline features
+    const int num_stages = dag.nodes[0].stages[0].max_id; // TODO: Add getter to DAG for this.
+    const int pipeline_feat_size = 56 * 7;
+    Runtime::Buffer<float> pipeline_features(56, 7, num_stages);
+    if (throughput_predictor) {
+        throughput_predictor->reset();
+        static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
+                      sizeof(int) * pipeline_feat_size,
+                      "Incorrect size for pipeline features");
+        int stage = 0;
+        for (const auto &n : dag.nodes) {
+            for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+                const auto &s = *it;
+                const int *pipeline_feats = (const int *)(&(s.features));
+                // skip the first 7 features
+                for (int i = 7; i < pipeline_feat_size; i++) {
+                    int x = (i-7)/7;
+                    int y = (i-7)%7;
+                    pipeline_features(x, y, stage) = pipeline_feats[i];
+                }
+                stage += 1;
+            }
+        }
+        internal_assert(stage == num_stages);
+        throughput_predictor->set_pipeline_features(&pipeline_features);
+    }
+
     FinePassConstraints fine;
     CoarsePassConstraints coarse(params);
     auto coarse_pass = optimal_schedule_pass(dag, outputs, params, &coarse, throughput_predictor, beam_size);
@@ -3455,8 +3464,8 @@ void test_convnet_correctness() {
     int n = 1;
     int stages = 10;
 
-    Halide::Buffer<float> pipeline_features;
-    Halide::Buffer<float> schedule_features;
+    Halide::Runtime::Buffer<float> pipeline_features(56, 7, stages);
+    Halide::Runtime::Buffer<float> schedule_features;
     double cost;
 
     auto w = AutoScheduleModel::load_weights();
@@ -3464,7 +3473,8 @@ void test_convnet_correctness() {
 
     ThroughputPredictorPipeline throughput_predictor(w, stats);
 
-    throughput_predictor.enqueue(10, &pipeline_features, &schedule_features, &cost);
+    throughput_predictor.set_pipeline_features(&pipeline_features);
+    throughput_predictor.enqueue(10, &schedule_features, &cost);
 
     std::default_random_engine generator;
     std::normal_distribution<float> distribution(0.0,1.0);

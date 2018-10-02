@@ -14,7 +14,7 @@ namespace AutoScheduleModel {
 class ThroughputPredictorPipeline {
 public:
 
-    ImageParam pipeline_features{Float(32), 4, "pipeline_features"};
+    ImageParam pipeline_features{Float(32), 3, "pipeline_features"};
     ImageParam schedule_features{Float(32), 3, "schedule_features"};
 
     Stats feature_stats;
@@ -102,18 +102,18 @@ public:
         // reduce over a region that expands to 3x1 convs from the first two stages to the last two stages with zero padding
         RDom r_reduce(0, ( padded_stages + 6 ) / 4);
 
-        normalized_pipeline_features(n, i, j, s) = 0.0f;
+        normalized_pipeline_features(i, j, s) = 0.0f;
         RDom r_s(first_valid, num_stages_param);
-        normalized_pipeline_features(n, i, j, r_s) =
-            (pipeline_features(n, i, j, r_s - first_valid) - feature_stats.pipeline_mean(i, j)) / feature_stats.pipeline_std(i, j);
+        normalized_pipeline_features(i, j, r_s) =
+            (pipeline_features(i, j, r_s - first_valid) - feature_stats.pipeline_mean(i, j)) / feature_stats.pipeline_std(i, j);
 
         normalized_schedule_features(n, i, s) = 0.0f;
         normalized_schedule_features(n, i, r_s) =
             (fast_log(schedule_features(n, i, r_s - first_valid) + 1) - feature_stats.schedule_mean(i)) / feature_stats.schedule_std(i);
 
-        f_head1_conv(n, c, w) = head1_bias(c);
-        f_head1_conv(n, c, w) += head1_filter(c, r_head1.x, r_head1.y) * normalized_pipeline_features(n, r_head1.x, r_head1.y, w);
-        f_head1_relu(n, c, w) = max(0, f_head1_conv(n, c, w));
+        f_head1_conv(c, w) = head1_bias(c);
+        f_head1_conv(c, w) += head1_filter(c, r_head1.x, r_head1.y) * normalized_pipeline_features(r_head1.x, r_head1.y, w);
+        f_head1_relu(c, w) = max(0, f_head1_conv(c, w));
 
         f_head2_conv(n, c, w) = head2_bias(c);
         f_head2_conv(n, c, w) += head2_filter(c, r_head2) * normalized_schedule_features(n, r_head2, w);
@@ -121,16 +121,16 @@ public:
 
         // we want to enforce boundary conditions on f_head1_relu and f_head2_relu because conv1 pads with 1 zero on either
         // side of the width (i.e. final dimension) of its input. We set the valid range of the width from 0 to num_stages.
-        f_head1_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head1_relu, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages}});
+        f_head1_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head1_relu, 0.0f, {{Expr(), Expr()}, {0, padded_stages}});
         f_head2_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head2_relu, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages}});
 
         /***** network trunk *****/
         // first 20 input channels are from head1_relu, next 20 input channels are from head2_relu
         // have to do two stagees for conv1 to convolve over each head's outputs
-        f_conv1_stage1(n, c, w) = bias1(c);
-        f_conv1_stage1(n, c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * f_head1_relu_padded(n, r1_stage1.x, w + r1_stage1.y-1);
+        f_conv1_stage1(c, w) = bias1(c);
+        f_conv1_stage1(c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * f_head1_relu_padded(r1_stage1.x, w + r1_stage1.y-1);
 
-        f_conv1_stage2(n, c, w) = f_conv1_stage1(n, c, w);
+        f_conv1_stage2(n, c, w) = f_conv1_stage1(c, w); // Broadcast the processed pipeline features across the batch
         f_conv1_stage2(n, c, w) += filter1(c, head1_filter.dim(0).extent()+r1_stage2.x, r1_stage2.y) * f_head2_relu_padded(n, r1_stage2.x, w+r1_stage2.y-1);
         f_ReLU1(n, c, w) = max(0, f_conv1_stage2(n, c, w));
 
@@ -188,19 +188,22 @@ public:
 
         prediction(n) = f_reduce(n);
 
-
         // schedule
         Expr batch_size = prediction.output_buffers()[0].dim(0).extent();
         prediction.bound(n, 0, batch_size);
 
         Target t = get_jit_target_from_environment();
-        normalized_pipeline_features.compute_at(prediction, n)
-            .specialize(batch_size >= 8).vectorize(n, 8);
-        normalized_pipeline_features.update().specialize(batch_size >= 8).vectorize(n, 8);
+        // Pipeline features processing
+        normalized_pipeline_features.compute_root().vectorize(i, 8).update().vectorize(i, 8);
         normalized_schedule_features.compute_at(prediction, n)
             .specialize(batch_size >= 8).vectorize(n, 8);
+        f_head1_relu.compute_root().vectorize(c, 8);
+        f_conv1_stage1.compute_root().vectorize(c, 8);
+
+        // TODO: memoize?
+
+        // Schedule features processing
         normalized_schedule_features.update().specialize(batch_size >= 8).vectorize(n, 8);
-        f_head1_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
         f_head2_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
         f_ReLU1.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
         f_ReLU2.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
@@ -221,69 +224,98 @@ public:
 
     void benchmark() {
         const int batch_size = 800;
-        Buffer<float> pipeline_feats(batch_size, 56, 7, 20), schedule_feats(batch_size, 25, 20);
+        Runtime::Buffer<float> pipeline_feats(56, 7, 20), schedule_feats(batch_size, 25, 20);
         pipeline_feats.fill(0.0f);
         schedule_feats.fill(0.0f);
-        set_inputs(pipeline_feats, schedule_feats, 20);
-        Buffer<float> out(batch_size);
+        set_pipeline_features(&pipeline_feats);
+        set_schedule_features(&schedule_feats);
+        set_num_stages(20);
+        Runtime::Buffer<float> out(batch_size);
         auto t = Halide::Tools::benchmark([&]() {prediction.realize(out);});
         debug(0) << "Throughput predictor runtime: " << ((t/batch_size) * 1000000) << " us\n";
     }
 
-    void set_inputs(Buffer<float> pipeline_feats, Buffer<float> schedule_feats, int num_stages) {
-        pipeline_features.set(Buffer<float>(*pipeline_feats.raw_buffer()));
-        schedule_features.set(Buffer<float>(*schedule_feats.raw_buffer()));
+    // N.B: Does not take ownership
+    void set_pipeline_features(Runtime::Buffer<float> *pipeline_feats) {
+        pipeline_features.set(Buffer<float>(*pipeline_feats->raw_buffer()));
+    }
+
+    void set_schedule_features(Runtime::Buffer<float> *schedule_feats) {
+        schedule_features.set(Buffer<float>(*schedule_feats->raw_buffer()));
+    }
+
+    void set_num_stages(int num_stages) {
         num_stages_param.set(num_stages);
     }
 
-    Buffer<float> pipeline_feat_queue, schedule_feat_queue;
-    std::vector<double *> cost_queue;
+    Runtime::Buffer<float> schedule_feat_queue, costs;
+    Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages;
-    int enqueue(int ns, Buffer<float> *pipeline_feats, Buffer<float> *schedule_feats, double *cost) {
+    int enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
         num_stages = ns;
 
+        // We know the most stages that will ever be enqueued from the schedule features
+        internal_assert(pipeline_features.get().defined()) << "Call set_schedule_features before calling enqueue\n";
+        const int max_num_stages = pipeline_features.get().dim(2).extent();
+        internal_assert(num_stages <= max_num_stages)
+            << "schedule features has fewer stages (" << max_num_stages
+            << ") than pipeline features (" << num_stages << ")\n";
+
         const int batch_size = 1024;
-        if (!pipeline_feat_queue.defined() ||
-            num_stages > pipeline_feat_queue.dim(3).extent()) {
-            // Allocate 50% extra space so we only need to reallocate
-            // a logarithmic number of times as the pipeline grows
-            // during scheduling.
-            int alloc_size = num_stages + (num_stages + 1) / 2;
-            pipeline_feat_queue = Buffer<float>(batch_size, 56, 7, alloc_size);
-            schedule_feat_queue = Buffer<float>(batch_size, 25, alloc_size);
-            pipeline_feat_queue.fill(0.0f);
-            schedule_feat_queue.fill(0.0f);
-            cost_queue.clear();
-            cost_queue.resize(batch_size, nullptr);
+        if (!schedule_feat_queue.data() ||
+            num_stages > schedule_feat_queue.dim(2).extent()) {
+            schedule_feat_queue = Runtime::Buffer<float>(batch_size, 25, max_num_stages);
             cursor = 0;
+        }
+
+        if (!costs.data() || !cost_ptrs.data()) {
+            costs = Runtime::Buffer<float>(batch_size);
+            cost_ptrs = Runtime::Buffer<double *>(batch_size);
         }
 
         if (cursor == batch_size) {
             evaluate_costs();
         }
 
-        *pipeline_feats = pipeline_feat_queue;
         *schedule_feats = schedule_feat_queue;
 
-        cost_queue[cursor] = cost;
+        cost_ptrs(cursor) = cost_ptr;
         return cursor++;
     }
 
     void evaluate_costs() {
-        if (cursor == 0 || !pipeline_feat_queue.defined()) return;
+        if (cursor == 0 || !schedule_feat_queue.data()) return;
 
-        set_inputs(pipeline_feat_queue, schedule_feat_queue, num_stages);
-        Buffer<float> costs = prediction.realize(cursor);
+        set_schedule_features(&schedule_feat_queue);
+        set_num_stages(num_stages);
+        Buffer<float> dst(*costs.raw_buffer());
+        prediction.realize(dst);
 
         for (int i = 0; i < cursor; i++) {
-            internal_assert(cost_queue[i]) << "Cost queue entry was null: " << i << "\n";
-            *(cost_queue[i]) = costs(i);
+            internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
+            *(cost_ptrs(i)) = costs(i);
         }
 
-        pipeline_feat_queue.fill(0.0f);
-        schedule_feat_queue.fill(0.0f);
-        std::fill(cost_queue.begin(), cost_queue.end(), nullptr);
         cursor = 0;
+    }
+
+    // Discard any enqueued but unevaluated schedules
+    void reset() {
+        cursor = 0;
+
+        pipeline_features.reset();
+        schedule_features.reset();
+
+        // Useful for debugging, but not strictly necessary
+        if (schedule_feat_queue.data()) {
+            schedule_feat_queue.fill(0.0f);
+        }
+        if (costs.data()) {
+            costs.fill(0.0f);
+        }
+        if (cost_ptrs.data()) {
+            // cost_ptrs.as<uint64_t>().fill(0);
+        }
     }
 
 };
