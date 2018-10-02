@@ -185,9 +185,6 @@ string get_elision_pair_candidates(const Function &f,
         // inlined but not actually legal to do so (e.g. if the function has
         // updates or has specializations)
         Expr val = perform_inline(f.values()[i], env, inlined);
-        /*debug(0) << "\n\nCHECKING FUNC: " << f.name() << "\n";
-        debug(0) << "\t...value at " << i << " -> " << val << "\n";
-        debug(0) << "\t\t...is a call? " << (val.as<Call>() != nullptr) << "\n";*/
         if (const Call *call = val.as<Call>()) {
             if (call->call_type == Call::Halide) {
                 if (f.schedule().memory_type() != env.at(call->name).schedule().memory_type()) {
@@ -288,8 +285,6 @@ string get_elision_pair_candidates(const Function &f,
 map<string, string> get_valid_copy_elision_pairs(
         const vector<Function> &outputs, const map<string, Function> &env) {
 
-    debug(0) << "....CALLING get_valid_copy_elision_pairs -> output: " << outputs.size() << ", env: " << env.size() << "\n";
-
     // Figure out the functions being (valid to be) inlined and the number
     // of callers (excluding calls by itself, e.g. within update stages) of
     // each functions within 'env'.
@@ -335,24 +330,6 @@ map<string, string> get_valid_copy_elision_pairs(
             }
         }
     }
-
-    debug(0) << "\nElision pairs:\n";
-    for (const auto &p : elision_pairs) {
-        debug(0) << "cons: " << p.first << " (compute: " << env.at(p.first).schedule().store_level().to_string()
-                 << ", store: " << env.at(p.first).schedule().compute_level().to_string()
-                 << ") -> prod: " << p.second;
-        if (!p.second.empty()) {
-            debug(0) << " (compute: " << env.at(p.second).schedule().store_level().to_string()
-                     << ", store: " << env.at(p.second).schedule().compute_level().to_string() << ")";
-        }
-        debug(0) << "\n\tcons: " << print_function(env.at(p.first)) << "\n";
-        if (p.second.empty()) {
-            debug(0) << "\tprod: NONE\n";
-        } else {
-            debug(0) << "\tprod: " << print_function(env.at(p.second));
-        }
-    }
-    debug(0) << "\n\n";
 
     return elision_pairs;
 }
