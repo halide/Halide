@@ -142,13 +142,11 @@ const B &return_second(const A &a, const B &b) {
 
 template<typename A, typename B>
 inline auto quiet_div(const A &a, const B &b) -> decltype(a / b) {
-    // Return '0' for the undefined case
     return b == 0 ? static_cast<decltype(a / b)>(0) : (a / b);
 }
 
 template<typename A, typename B>
 inline auto quiet_mod(const A &a, const B &b) -> decltype(a % b) {
-    // Return '0' for the undefined case
     return b == 0 ? static_cast<decltype(a % b)>(0) : (a % b);
 }
 
