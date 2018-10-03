@@ -197,8 +197,8 @@ static T zero_struct() {
     return zero;
 }
 
-#define hashmap_malloc  d3d12_malloc
-#define hashmap_free    d3d12_free
+#define hashmap_malloc(user_context, size)  d3d12_malloc(size)
+#define hashmap_free(user_context, memory)  d3d12_free(memory)
 #include "hashmap.h"
 
 template<typename ID3D12T>
@@ -1582,7 +1582,7 @@ static d3d12_library *new_library_with_source(d3d12_device *device, const char *
     const int blocksize = sizeof(d3d12_library) + source_len;
     d3d12_library *library = (d3d12_library*)d3d12_malloc(blocksize);
     library->cache.inited = false;
-    library->cache.init();
+    library->cache.init(NULL);
     library->source_length = source_len;
     for (size_t i = 0; i < source_len; ++i) {
         library->source[i] = source[i];
