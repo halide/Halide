@@ -2463,11 +2463,6 @@ struct LoopNest {
                 inner->bounds = bounds;
                 inner->store_at = store_at;
 
-                // TODO: region_{computed/required} on inner is now
-                // wrong, but it doesn't matter because consumers only
-                // look at the loops in get_bounds. Still, this is
-                // weird.
-
                 {
                     auto b = inner->get_bounds(node)->make_copy();
 
@@ -2483,6 +2478,24 @@ struct LoopNest {
                         int64_t extent = p.second - min + 1;
                         extent = (extent + factor - 1) / factor;
                         b->loops(stage_idx, i) = {min, min + extent - 1};
+                    }
+
+                    // Region_{computed/required} on outer is now
+                    // wrong, but it doesn't matter because consumers
+                    // only look at the loops in get_bounds. Still,
+                    // this is weird.
+
+                    if (false) {
+                        // Set those values to be random so that results
+                        // are clearly inconsistent across time if we ever
+                        // rely on these.
+                        for (int i = 0; i < node->func.dimensions(); i++) {
+                            // The schedule depends on these!!! Chaos! Madness!
+                            b->region_required(i).first = rand();
+                            b->region_required(i).second = rand();
+                            b->region_computed(i).first = rand();
+                            b->region_computed(i).second = rand();
+                        }
                     }
 
                     outer->set_bounds(node, b);
@@ -2761,6 +2774,10 @@ struct State {
         return h;
     }
 
+    void set_pipeline_features(ThroughputPredictorPipeline *throughput_predictor) {
+
+    }
+
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
         NodeMap<const LoopNest *> compute_site, store_site;
         StageMap<ScheduleFeatures> features;
@@ -2837,6 +2854,7 @@ struct State {
                     stage += 1;
                 }
             }
+            internal_assert(stage == num_stages);
         } else {
             // We have no throughput predictor.
             for (auto it = features.begin(); it != features.end(); it++) {
@@ -3065,7 +3083,7 @@ struct State {
     }
 
     void dump() const {
-        debug(0) << "State with cost " << cost/(1.0e9) << ":\n";
+        debug(0) << "State with cost " << cost << ":\n";
         root->dump("");
     }
 
@@ -3143,12 +3161,12 @@ private:
     std::vector<std::unique_ptr<State>> storage;
     size_t sz = 0;
 public:
-    void emplace(std::unique_ptr<State> &&x) {
+    void emplace(std::unique_ptr<State> &&s) {
         if (sz >= storage.size()) {
             storage.resize(std::max(sz * 2, (size_t)64));
         }
         internal_assert(sz < storage.size()) << sz << " " << storage.size() << "\n";
-        storage[sz] = std::move(x);
+        storage[sz] = std::move(s);
         sz++;
         std::push_heap(storage.begin(), storage.begin() + sz, CompareStates{});
     }
@@ -3164,12 +3182,6 @@ public:
         return storage[sz];
     }
 
-    // Re-heapify after modifying costs
-    void resort() {
-        internal_assert(sz < storage.size());
-        std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
-    }
-
     bool empty() const {
         return sz == 0;
     }
@@ -3183,6 +3195,10 @@ public:
         std::swap(sz, other.sz);
     }
 
+    void resort() {
+        std::make_heap(storage.begin(), storage.begin() + sz, CompareStates{});
+    }
+
     void clear() {
         for (size_t i = 0; i < sz; i++) {
             storage[i].reset();
@@ -3191,6 +3207,33 @@ public:
     }
 };
 
+void configure_pipeline_features(const FunctionDAG &dag,
+                                 ThroughputPredictorPipeline *throughput_predictor) {
+    throughput_predictor->reset();
+    const int pipeline_feat_size = 56 * 7;
+    static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
+                  sizeof(int) * pipeline_feat_size,
+                  "Incorrect size for pipeline features");
+    const int num_stages = dag.nodes[0].stages[0].max_id; // TODO: Add getter to DAG for this.
+    Runtime::Buffer<float> pipeline_features(56, 7, num_stages);
+    int stage = 0;
+    for (const auto &n : dag.nodes) {
+        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
+            const auto &s = *it;
+            const int *pipeline_feats = (const int *)(&(s.features)) + 7;
+            // skip the first 7 features
+            for (int i = 0; i < pipeline_feat_size; i++) {
+                int x = i/7;
+                int y = i%7;
+                pipeline_features(x, y, stage) = pipeline_feats[i];
+            }
+            stage += 1;
+        }
+    }
+    internal_assert(stage == num_stages);
+    throughput_predictor->set_pipeline_features(pipeline_features);
+}
+
 State optimal_schedule_pass(FunctionDAG &dag,
                             vector<Function> outputs,
                             const MachineParams &params,
@@ -3198,6 +3241,9 @@ State optimal_schedule_pass(FunctionDAG &dag,
                             ThroughputPredictorPipeline *throughput_predictor,
                             int beam_size) {
 
+    if (throughput_predictor) {
+        configure_pipeline_features(dag, throughput_predictor);
+    }
 
     StateQueue q, pending;
 
@@ -3235,8 +3281,8 @@ State optimal_schedule_pass(FunctionDAG &dag,
     std::function<void(std::unique_ptr<State> &&)> enqueue_new_children =
         [&](std::unique_ptr<State> &&s) {
 
-        //debug(0) << "\n** Generated child: ";
-        //s->dump();
+        // debug(0) << "\n** Generated child: ";
+        // s->dump();
         // s->calculate_cost(dag, params, nullptr, true);
 
         int progress = s->num_funcs_scheduled * beam_size + expanded;
@@ -3280,7 +3326,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
                     debug(0) << "Optimal state?\n";
                     state->dump();
 
-                    debug(0) << "Rest of queue:\n";
+                    debug(0) << "\nRest of queue:\n";
                     while (!pending.empty()) {
                         pending.pop()->dump();
                     }
@@ -3324,33 +3370,6 @@ State optimal_schedule(FunctionDAG &dag,
                        const MachineParams &params,
                        ThroughputPredictorPipeline *throughput_predictor,
                        int beam_size) {
-    // Set the pipeline features
-    const int num_stages = dag.nodes[0].stages[0].max_id; // TODO: Add getter to DAG for this.
-    const int pipeline_feat_size = 56 * 7;
-    Runtime::Buffer<float> pipeline_features(56, 7, num_stages);
-    if (throughput_predictor) {
-        throughput_predictor->reset();
-        static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                      sizeof(int) * pipeline_feat_size,
-                      "Incorrect size for pipeline features");
-        int stage = 0;
-        for (const auto &n : dag.nodes) {
-            for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-                const auto &s = *it;
-                const int *pipeline_feats = (const int *)(&(s.features));
-                // skip the first 7 features
-                for (int i = 7; i < pipeline_feat_size; i++) {
-                    int x = (i-7)/7;
-                    int y = (i-7)%7;
-                    pipeline_features(x, y, stage) = pipeline_feats[i];
-                }
-                stage += 1;
-            }
-        }
-        internal_assert(stage == num_stages);
-        throughput_predictor->set_pipeline_features(&pipeline_features);
-    }
-
     FinePassConstraints fine;
     CoarsePassConstraints coarse(params);
     auto coarse_pass = optimal_schedule_pass(dag, outputs, params, &coarse, throughput_predictor, beam_size);
@@ -3473,7 +3492,7 @@ void test_convnet_correctness() {
 
     ThroughputPredictorPipeline throughput_predictor(w, stats);
 
-    throughput_predictor.set_pipeline_features(&pipeline_features);
+    throughput_predictor.set_pipeline_features(pipeline_features);
     throughput_predictor.enqueue(10, &schedule_features, &cost);
 
     std::default_random_engine generator;
@@ -3555,7 +3574,7 @@ void autoschedule_test() {
     #else
     ThroughputPredictorPipeline *tpp = nullptr;
     #endif
-    {
+    if (1) {
         // In a point-wise pipeline, everything should be fully fused.
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + y);
@@ -3580,7 +3599,7 @@ void autoschedule_test() {
 
     }
 
-    {
+    if (1) {
         // In a pipeline with huge expensive stencils and low memory costs, nothing should be fused
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + 2*y) * (x + 3*y) * (x + 4*y) * (x + 5*y);
@@ -3614,7 +3633,7 @@ void autoschedule_test() {
         // h.realize(1000, 1000);
     }
 
-    {
+    if (1) {
         // In a pipeline with moderate isotropic stencils, there should be some square tiling
         Func f("f"), h("h");
         f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
@@ -3640,7 +3659,7 @@ void autoschedule_test() {
     }
 
     // Smaller footprint stencil -> smaller tiles
-    {
+    if (1) {
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + 2*y) * (x + 3*y);
         h(x, y) = (f(x-1, y-1) + f(x, y-1) + f(x+1, y-1) +
@@ -3666,7 +3685,7 @@ void autoschedule_test() {
     }
 
     // A stencil chain
-    {
+    if (1) {
         const int N = 8;
         Func f[N];
         f[0](x, y) = (x + y) * (x + 2*y) * (x + 3*y);
@@ -3694,7 +3713,7 @@ void autoschedule_test() {
     }
 
     // An outer product
-    {
+    if (1) {
         Buffer<float> a(2048), b(2048);
         Func f;
         f(x, y) = a(x) * b(y);
@@ -3713,7 +3732,7 @@ void autoschedule_test() {
     }
 
     // A separable downsample that models the start of local_laplacian
-    {
+    if (1) {
         Buffer<float> in(2048, 2048);
         Var k;
         Func orig("orig"), expensive("expensive"), downy("downy"), downx("downx");
@@ -3740,7 +3759,7 @@ void autoschedule_test() {
     }
 
     // A Func with multiple stages, some of which include additional loops
-    {
+    if (1) {
         Buffer<float> a(1024, 1024);
         Func f("multiple_stages"), g("g"), h("h");
         Var x, y;
@@ -3759,7 +3778,7 @@ void autoschedule_test() {
         FunctionDAG dag(outputs, params, target);
         State optimal = optimal_schedule(dag, outputs, params, tpp, 4);
 
-        dag.dump();
+        //dag.dump();
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, tpp, true);
@@ -3768,7 +3787,7 @@ void autoschedule_test() {
         debug(0) << '\n';
     }
 
-    {
+    if (1) {
         // A scan with pointwise stages before and after
         Buffer<float> a(1024, 1024);
         Func before[5];
@@ -3791,7 +3810,7 @@ void autoschedule_test() {
 
         vector<Function> outputs = {after[4].function()};
         FunctionDAG dag(outputs, params, target);
-        dag.dump();
+        //dag.dump();
         State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
@@ -3802,7 +3821,7 @@ void autoschedule_test() {
     }
 
 
-    {
+    if (1) {
         Func f_u8("f_u8");
         Func f_u64_1("f_u64_1");
         Func f_u64_2("f_u64_2");
@@ -3821,7 +3840,7 @@ void autoschedule_test() {
 
         vector<Function> outputs = {f_u64_2.function()};
         FunctionDAG dag(outputs, params, target);
-        dag.dump();
+        //dag.dump();
         State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
@@ -3831,7 +3850,7 @@ void autoschedule_test() {
         debug(0) << '\n';
     }
 
-    {
+    if (1) {
         Buffer<float> im_a(1024, 1024, "a"), im_b(1024, 1024, "b");
         im_a.fill(0.0f);
         im_b.fill(0.0f);
@@ -3849,8 +3868,8 @@ void autoschedule_test() {
 
         vector<Function> outputs = {out.function()};
         FunctionDAG dag(outputs, params, target);
-        dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, nullptr, 1); //tpp, 1);
+        //dag.dump();
+        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
         optimal.calculate_cost(dag, params, tpp, true);
@@ -3859,7 +3878,7 @@ void autoschedule_test() {
         debug(0) << '\n';
     }
 
-    {
+    if (1) {
         // A scan in x followed by a downsample in y, with pointwise stuff in between
         const int N = 3;
         Buffer<float> a(1024, 1024);
@@ -3901,7 +3920,7 @@ void autoschedule_test() {
 
         // Now schedule it for real
         FunctionDAG dag(outputs, params, target);
-        dag.dump();
+        //dag.dump();
         State optimal = optimal_schedule(dag, outputs, params, tpp, 300);
 
         debug(0) << "** Optimal schedule:\n";

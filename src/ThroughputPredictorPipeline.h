@@ -193,6 +193,7 @@ public:
         prediction.bound(n, 0, batch_size);
 
         Target t = get_jit_target_from_environment();
+
         // Pipeline features processing
         normalized_pipeline_features.compute_root().vectorize(i, 8).update().vectorize(i, 8);
         normalized_schedule_features.compute_at(prediction, n)
@@ -218,57 +219,32 @@ public:
             .specialize(batch_size >= 16).parallel(n, 2);
 
         prediction.compile_jit(t);
-
-        benchmark();
     }
 
-    void benchmark() {
-        const int batch_size = 800;
-        Runtime::Buffer<float> pipeline_feats(56, 7, 20), schedule_feats(batch_size, 25, 20);
-        pipeline_feats.fill(0.0f);
-        schedule_feats.fill(0.0f);
-        set_pipeline_features(&pipeline_feats);
-        set_schedule_features(&schedule_feats);
-        set_num_stages(20);
-        Runtime::Buffer<float> out(batch_size);
-        auto t = Halide::Tools::benchmark([&]() {prediction.realize(out);});
-        debug(0) << "Throughput predictor runtime: " << ((t/batch_size) * 1000000) << " us\n";
-    }
-
-    // N.B: Does not take ownership
-    void set_pipeline_features(Runtime::Buffer<float> *pipeline_feats) {
-        pipeline_features.set(Buffer<float>(*pipeline_feats->raw_buffer()));
-    }
-
-    void set_schedule_features(Runtime::Buffer<float> *schedule_feats) {
-        schedule_features.set(Buffer<float>(*schedule_feats->raw_buffer()));
-    }
-
-    void set_num_stages(int num_stages) {
-        num_stages_param.set(num_stages);
-    }
-
-    Runtime::Buffer<float> schedule_feat_queue, costs;
-    Runtime::Buffer<double *> cost_ptrs;
+    Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
+    Runtime::Buffer<intptr_t> cost_ptrs;
     int cursor, num_stages;
+
+    void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats) {
+        pipeline_feat_queue = pipeline_feats;
+    }
+
     int enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
         num_stages = ns;
 
         // We know the most stages that will ever be enqueued from the schedule features
-        internal_assert(pipeline_features.get().defined()) << "Call set_schedule_features before calling enqueue\n";
-        const int max_num_stages = pipeline_features.get().dim(2).extent();
+        internal_assert(pipeline_feat_queue.data()) << "Call set_schedule_features before calling enqueue\n";
+        const int max_num_stages = pipeline_feat_queue.dim(2).extent();
         internal_assert(num_stages <= max_num_stages)
-            << "schedule features has fewer stages (" << max_num_stages
-            << ") than pipeline features (" << num_stages << ")\n";
+            << "schedule features has more stages (" << num_stages
+            << ") than pipeline features (" << max_num_stages << ")\n";
 
         const int batch_size = 1024;
-        if (!schedule_feat_queue.data() ||
-            num_stages > schedule_feat_queue.dim(2).extent()) {
+        if (!schedule_feat_queue.data()) {
+            internal_assert(cursor == 0);
+            internal_assert(!costs.data());
+            internal_assert(!cost_ptrs.data());
             schedule_feat_queue = Runtime::Buffer<float>(batch_size, 25, max_num_stages);
-            cursor = 0;
-        }
-
-        if (!costs.data() || !cost_ptrs.data()) {
             costs = Runtime::Buffer<float>(batch_size);
             cost_ptrs = Runtime::Buffer<double *>(batch_size);
         }
@@ -279,21 +255,38 @@ public:
 
         *schedule_feats = schedule_feat_queue;
 
-        cost_ptrs(cursor) = cost_ptr;
+        cost_ptrs(cursor) = (intptr_t)cost_ptr;
         return cursor++;
     }
 
     void evaluate_costs() {
         if (cursor == 0 || !schedule_feat_queue.data()) return;
 
-        set_schedule_features(&schedule_feat_queue);
-        set_num_stages(num_stages);
+        internal_assert(pipeline_feat_queue.data());
+        internal_assert(schedule_feat_queue.data());
+
+        num_stages_param.set(num_stages);
+
+        Buffer<float> s(*schedule_feat_queue.raw_buffer());
+        s.crop(2, 0, num_stages);
+        // We want the pipeline to be able to read out of bounds of the meaningful stuff a little to add scheduling flexibility...
+        // s.crop(0, 0, cursor);
+
+        schedule_features.set(s);
+
+        Buffer<float> p(*pipeline_feat_queue.raw_buffer());
+        p.crop(2, 0, num_stages);
+
+        pipeline_features.set(p);
+
         Buffer<float> dst(*costs.raw_buffer());
+        dst.crop(0, 0, cursor);
+
         prediction.realize(dst);
 
         for (int i = 0; i < cursor; i++) {
             internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
-            *(cost_ptrs(i)) = costs(i);
+            *((double *)(cost_ptrs(i))) = dst(i);
         }
 
         cursor = 0;
@@ -306,16 +299,10 @@ public:
         pipeline_features.reset();
         schedule_features.reset();
 
-        // Useful for debugging, but not strictly necessary
-        if (schedule_feat_queue.data()) {
-            schedule_feat_queue.fill(0.0f);
-        }
-        if (costs.data()) {
-            costs.fill(0.0f);
-        }
-        if (cost_ptrs.data()) {
-            // cost_ptrs.as<uint64_t>().fill(0);
-        }
+        schedule_feat_queue.reset();
+        pipeline_feat_queue.reset();
+        costs.reset();
+        cost_ptrs.reset();
     }
 
 };
