@@ -1,3 +1,4 @@
+#foo12
 # 'make' builds libHalide.a, the internal test suite, and runs the internal test suite
 # 'make run_tests' builds and runs all the end-to-end tests in the test subdirectory
 # 'make {error,performance}_foo' builds and runs test/{...}/foo.cpp for any
@@ -349,6 +350,7 @@ SOURCE_FILES = \
   ApplySplit.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
+  AsyncProducers.cpp \
   AutoSchedule.cpp \
   AutoScheduleUtils.cpp \
   BoundaryConditions.cpp \
@@ -509,6 +511,7 @@ HEADER_FILES = \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
+  AsyncProducers.h \
   AutoSchedule.h \
   AutoScheduleUtils.h \
   BoundaryConditions.h \
@@ -1015,12 +1018,16 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 # https://github.com/halide/Halide/issues/2082
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
+# https://github.com/halide/Halide/issues/2093
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
 # not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
 # those known to be broken for plausible reasons.
 GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATOR:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/async_parallel.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling_define_extern.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))

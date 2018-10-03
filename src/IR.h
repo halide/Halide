@@ -429,6 +429,17 @@ struct Block : public StmtNode<Block> {
     static const IRNodeType _node_type = IRNodeType::Block;
 };
 
+/** A pair of statements executed concurrently. Both statements are
+ * joined before the Stmt ends. This is the parallel equivalent to
+ * Block. */
+struct Fork : public StmtNode<Fork> {
+    Stmt first, rest;
+
+    static Stmt make(Stmt first, Stmt rest);
+
+    static const IRNodeType _node_type = IRNodeType::Fork;
+};
+
 /** An if-then-else block. 'else' may be undefined. */
 struct IfThenElse : public StmtNode<IfThenElse> {
     Expr condition;
@@ -678,6 +689,16 @@ struct For : public StmtNode<For> {
     }
 
     static const IRNodeType _node_type = IRNodeType::For;
+};
+
+struct Acquire : public StmtNode<Acquire> {
+    Expr semaphore;
+    Expr count;
+    Stmt body;
+
+    static Stmt make(Expr semaphore, Expr count, Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::Acquire;
 };
 
 /** Construct a new vector by taking elements from another sequence of
