@@ -46,12 +46,10 @@ bool test() {
 
         lut_vtcm
             .compute_at(output, Var::outermost())
-            .store_in(MemoryType::VTCM)
             .vectorize(x, vector_size/2);
 
         output_vtcm
             .compute_at(output, y)
-            .store_in(MemoryType::VTCM)
             .vectorize(x, vector_size/2);
 
         output
@@ -59,6 +57,11 @@ bool test() {
             .split(y, y, yi, H_img/2)
             .parallel(y)
             .vectorize(x, vector_size/2);
+
+        if (target.has_feature(Target::HVX_v65)) {
+            lut_vtcm.store_in(MemoryType::VTCM);
+            output_vtcm.store_in(MemoryType::VTCM);
+        }
     }
 
     Buffer<ITYPE> output_buf = output.realize(W_img, H_img);

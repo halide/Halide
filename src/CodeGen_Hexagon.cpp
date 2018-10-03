@@ -2062,6 +2062,9 @@ void CodeGen_Hexagon::visit(const NE *op) {
 
 void CodeGen_Hexagon::visit(const Allocate *op) {
     if (op->memory_type == MemoryType::VTCM && !op->new_expr.defined()) {
+        if (!target.has_feature(Target::HVX_v65)) {
+            user_error << "VTCM store_in requires hvx_v65 target feature.\n";
+        }
         // Calculate size of allocation.
         Expr size = op->type.bytes();
         for (size_t i = 0; i < op->extents.size(); i++) {
