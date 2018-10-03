@@ -2001,6 +2001,113 @@ private:
     }
 };
 
+// Try generating vgathers instead of shuffles.
+// At present, we request VTCM memory with single page allocation flag for all
+// store_in allocations. So it's always safe to generate a vgather.
+// Expressions which generate vgathers are of the form:
+//     out(x) = lut(foo(x))
+// For vgathers out and lut should be in VTCM in a single page.
+class ScatterGatherGenerator : public IRMutator2 {
+    Scope<Interval> bounds;
+    std::unordered_map<string, const Allocate *> allocations;
+
+    using IRMutator2::visit;
+
+    template <typename NodeType, typename T>
+    NodeType visit_let(const T *op) {
+        // We only care about vector lets.
+        if (op->value.type().is_vector()) {
+            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
+        }
+        NodeType node = IRMutator2::visit(op);
+        if (op->value.type().is_vector()) {
+            bounds.pop(op->name);
+        }
+        return node;
+    }
+
+    Expr visit(const Let *op) { return visit_let<Expr>(op); }
+
+    Stmt visit(const LetStmt *op) { return visit_let<Stmt>(op); }
+
+    Stmt visit(const Allocate *op) {
+        // Create a map of the allocation
+        allocations[op->name] = op;
+        return IRMutator2::visit(op);
+    }
+
+    // Try to match expressions of the form:
+    //     out(x) = lut(foo(x))
+    // to generate vgathers. Here, out and lut should have
+    // store_in(MemoryType::VTCM) directive. If a vgather is found return Call
+    // Expr to vgather, otherwise Expr().
+    Expr make_gather(const Load *op, Expr dst_base, Expr dst_index) {
+        Type ty = op->type;
+        const Allocate *alloc = allocations[op->name];
+        // The lut should be in VTCM.
+        if (!alloc || alloc->memory_type != MemoryType::VTCM) {
+            return Expr();
+        }
+        // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
+        // supported yet.
+        if (op->index.as<Ramp>() || !is_one(op->predicate) || !ty.is_vector() ||
+            ty.bits() == 8) {
+            return Expr();
+        }
+        Expr index = mutate(ty.bytes() * op->index);
+        Interval index_bounds = bounds_of_expr_in_scope(index, bounds);
+        if (ty.bits() == 16 && index_bounds.is_bounded()) {
+            Expr index_span = span_of_bounds(index_bounds);
+            index_span = common_subexpression_elimination(index_span);
+            index_span = simplify(index_span);
+            // We need to downcast the index values to 16 bit signed. So all the
+            // the indices must be less than 1 << 15.
+            if (!can_prove(index_span < std::numeric_limits<int16_t>::max())) {
+                return Expr();
+            }
+        }
+        // Calculate the size of the buffer lut in bytes.
+        Expr size = ty.bytes();
+        for (size_t i = 0; i < alloc->extents.size(); i++) {
+            size *= alloc->extents[i];
+        }
+        Expr src = Variable::make(Handle(), op->name);
+        Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
+        dst_index = mutate(dst_index);
+
+        return Call::make(ty, "gather", {dst_base, dst_index, src, size-1, new_index},
+                          Call::Intrinsic);
+    }
+
+    Stmt visit(const Store *op) {
+        // HVX has only 16 or 32-bit gathers. Predicated vgathers are not
+        // supported yet.
+        Type ty = op->value.type();
+        if (!is_one(op->predicate) || !ty.is_vector() || ty.bits() == 8) {
+            return IRMutator2::visit(op);
+        }
+        // To use vgathers, the destination address must be VTCM memory.
+        const Allocate *alloc = allocations[op->name];
+        if (!alloc || alloc->memory_type != MemoryType::VTCM) {
+            return IRMutator2::visit(op);
+        }
+        // The source for a gather must also be a buffer in VTCM.
+        if (op->index.as<Ramp>() && op->value.as<Load>()) {
+            // Check for vgathers
+            Expr dst_base = Variable::make(Handle(), op->name);
+            Expr dst_index = op->index.as<Ramp>()->base;
+            Expr value = make_gather(op->value.as<Load>(), dst_base, dst_index);
+            if (value.defined()) {
+                // Found a vgather.
+                // Function make_gather already mutates all the call arguements,
+                // so no need to mutate again.
+                return Evaluate::make(value);
+            }
+        }
+        return IRMutator2::visit(op);
+    }
+};
+
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -2014,6 +2121,12 @@ Stmt vtmpy_generator(Stmt s) {
     s = substitute_in_all_lets(s);
     s = VtmpyGenerator().mutate(s);
     s = common_subexpression_elimination(s);
+    return s;
+}
+
+Stmt scatter_gather_generator(Stmt s) {
+    // Generate vscatter-vgather instruction if target >= v65
+    s = ScatterGatherGenerator().mutate(s);
     return s;
 }
 

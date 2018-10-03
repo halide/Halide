@@ -721,6 +721,7 @@ RUNTIME_CPP_COMPONENTS = \
   profiler_inlined \
   qurt_allocator \
   qurt_hvx \
+  qurt_hvx_vtcm \
   qurt_init_fini \
   qurt_threads \
   qurt_threads_tsan \
@@ -1816,6 +1817,7 @@ install_qc: install $(HEXAGON_RUNTIME_LIBS)
 	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
 	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
 	ln -sf $(PREFIX)/lib/v60/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
+	ln -sf $(PREFIX)/lib/v60/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't

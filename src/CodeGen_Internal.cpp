@@ -193,6 +193,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
+        "halide_vtcm_malloc",
+        "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
