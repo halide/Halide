@@ -2780,6 +2780,8 @@ struct State {
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
         NodeMap<const LoopNest *> compute_site, store_site;
+        compute_site.make_large(dag.nodes.size());
+        store_site.make_large(dag.nodes.size());
         StageMap<ScheduleFeatures> features;
         features.make_large(dag.nodes[0].stages[0].max_id);
         internal_assert(root.defined());
