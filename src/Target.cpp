@@ -18,7 +18,7 @@
 
 #ifdef  _MSC_VER
 #include <intrin.h>
-#endif  //_MSC_VER
+#endif  // _MSC_VER
 
 namespace Halide {
 

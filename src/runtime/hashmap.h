@@ -13,11 +13,11 @@
 //
 #ifndef hashmap_malloc
 #define hashmap_malloc(user_context, size)  halide_malloc(user_context, size)
-#endif  //hashmap_malloc
+#endif  // hashmap_malloc
 //
 #ifndef hashmap_free
 #define hashmap_free(user_context, memory)  halide_free(user_context, memory)
-#endif  //hashmap_free
+#endif  // hashmap_free
 
 namespace Halide { namespace Runtime { namespace Internal {
 

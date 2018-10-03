@@ -153,7 +153,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 
 #ifndef MAYBE_UNUSED
 #define MAYBE_UNUSED(x) ((void) x)
-#endif  //MAYBE_UNUSED
+#endif  // MAYBE_UNUSED
 
 #if HALIDE_D3D12_RENDERDOC
 #if HALIDE_D3D12_DEBUG_LAYER
@@ -694,7 +694,7 @@ static const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
 WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     halide_assert(user_context, (hbuffer->device == 0));
     if (hbuffer->device != 0) {
-        return -2;
+        return halide_error_code_device_wrap_native_failed;
     }
 
     halide_assert(user_context, (dbuffer->resource != NULL));
@@ -706,7 +706,7 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     dbuffer->format = FindD3D12FormatForHalideType(hbuffer->type);
     if (dbuffer->format == DXGI_FORMAT_UNKNOWN) {
         d3d12_halt("unsupported buffer element type: " << hbuffer->type);
-        return -3;
+        return halide_error_code_device_wrap_native_failed;
     }
 
     dbuffer->halide_type = hbuffer->type;
@@ -2065,7 +2065,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     switch (buffer->type) {
 
         case d3d12_buffer::Constant :
-        case d3d12_buffer::Upload   :
+        case d3d12_buffer::Upload :
             pData = buffer->mapped;
             break;
 
@@ -2076,7 +2076,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
             pData = map_buffer(&readback);
             break;
 
-        case d3d12_buffer::ReadOnly  :
+        case d3d12_buffer::ReadOnly :
         case d3d12_buffer::WriteOnly :
         case d3d12_buffer::ReadWrite :
         {
@@ -2156,7 +2156,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
         device = D3D12CreateSystemDefaultDevice(user_context);
         if (device == NULL) {
             __sync_lock_release(&thread_lock);
-            return -1;
+            return halide_error_code_generic_error;
         }
 
         halide_assert(user_context, (rootSignature == NULL));
@@ -2165,7 +2165,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
             release_object(device);
             device = NULL;
             __sync_lock_release(&thread_lock);
-            return -1;
+            return halide_error_code_generic_error;
         }
 
         halide_assert(user_context, (queue == NULL));
@@ -2175,7 +2175,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
             release_object(device);
             device = NULL;
             __sync_lock_release(&thread_lock);
-            return -1;
+            return halide_error_code_generic_error;
         }
 
         // NOTE(marcos): a small amount of hard-coded staging buffer storage is
@@ -2273,12 +2273,12 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
     d3d12_buffer *d3d12_buf = new_buffer(d3d12_context.device, size);
     if (d3d12_buf == 0) {
         d3d12_halt("D3D12: Failed to allocate buffer of size " << (int64_t)size);
-        return -1;
+        return halide_error_code_device_malloc_failed;
     }
 
     if (0 != wrap_buffer(buf, d3d12_buf)) {
         d3d12_halt("D3D12: unable to wrap halide buffer and D3D12 buffer.");
-        return -1;
+        return halide_error_code_device_wrap_native_failed;
     }
 
     #ifdef DEBUG_RUNTIME
@@ -2344,7 +2344,7 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
         state->library = new_library_with_source(d3d12_context.device, source, source_size);
         if (state->library == 0) {
             d3d12_halt("D3D12Compute: new_library_with_source failed.");
-            return -1;
+            return halide_error_code_out_of_memory;
         }
 
         #ifdef DEBUG_RUNTIME
@@ -2557,7 +2557,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
     halide_assert(user_context, buffer->host && buffer->device);
     if (buffer->dimensions > MAX_COPY_DIMS) {
         halide_assert(user_context, false);
-        return -1;
+        return halide_error_code_copy_to_host_failed;
     }
 
     D3D12ContextHolder d3d12_context(user_context, true);
@@ -2625,13 +2625,13 @@ WEAK int halide_d3d12compute_run(void *user_context,
     d3d12_command_allocator *command_allocator = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
     if (command_allocator == 0) {
         d3d12_halt("D3D12Compute: Could not create compute command allocator.");
-        return -1;
+        return halide_error_code_device_run_failed;
     }
 
     d3d12_compute_command_list *cmdList = new_compute_command_list(device, command_allocator);
     if (cmdList == 0) {
         d3d12_halt("D3D12Compute: Could not create compute command list.");
-        return -1;
+        return halide_error_code_device_run_failed;
     }
 
     halide_assert(user_context, state_ptr);
@@ -2647,7 +2647,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
     if (pipeline_state == 0) {
         d3d12_halt("D3D12Compute: Could not allocate pipeline state.");
         release_object(function);
-        return -1;
+        return halide_error_code_device_run_failed;
     }
     set_compute_pipeline_state(cmdList, pipeline_state, function, binder);
 
@@ -2678,7 +2678,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
         if (!args_buffer) {
             d3d12_halt("D3D12Compute: Could not allocate arguments buffer.");
             release_object(function);
-            return -1;
+            return halide_error_code_device_run_failed;
         }
         uint8_t *args_ptr = (uint8_t*)buffer_contents(&args_buffer);
         size_t offset = 0;
@@ -2808,7 +2808,7 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     // the user ever caches the buffer->host pointer, that would be really bad!
     //
     // Another complicating factor is the fact that the test "cleanup_on_error"
-    // expects hallide_malloc() to be called here to allocate the host buffer.
+    // expects halide_malloc() to be called here to allocate the host buffer.
     // Arguably, the logic behind the "cleanup_on_error" test is flawed, since
     // back-ends are allowed (and encouraged) to have zero-copy behavior.
     //
