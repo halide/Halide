@@ -690,7 +690,7 @@ static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
 }
 
 static const d3d12_buffer *peel_buffer(const struct halide_buffer_t *hbuffer) {
-    return peel_buffer( const_cast<halide_buffer_t*>(hbuffer) );
+    return peel_buffer(const_cast<halide_buffer_t*>(hbuffer));
 }
 
 WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
@@ -2038,7 +2038,7 @@ extern "C" {
 WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    TRACEPRINT( "(user_context: " << user_context << ", buf: " << buf << ")\n" );
+    TRACEPRINT("(user_context: " << user_context << ", buf: " << buf << ")\n");
 
     size_t size = buf->size_in_bytes();
     halide_assert(user_context, size != 0);
@@ -2052,7 +2052,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
         halide_assert(user_context, buf->dim[i].stride > 0);
     }
 
-    TRACEPRINT( "allocating " << *buf << "\n" );
+    TRACEPRINT("allocating " << *buf << "\n");
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -2076,7 +2076,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2085,10 +2085,7 @@ WEAK int halide_d3d12compute_device_malloc(void *user_context, halide_buffer_t *
 WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *buf) {
     TRACELOG;
 
-    TRACEPRINT(
-           "halide_d3d12compute_device_free called on buf "
-        << buf << " device is " << buf->device << "\n"
-    );
+    TRACEPRINT("buf " << buf << " device is " << buf->device << "\n");
 
     if (buf->device == 0) {
         return 0;
@@ -2102,7 +2099,7 @@ WEAK int halide_d3d12compute_device_free(void *user_context, halide_buffer_t *bu
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2145,13 +2142,13 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after_compile = halide_current_time_ns(user_context);
-        TRACEPRINT( "Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n" );
+        TRACEPRINT("Time for halide_d3d12compute_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n");
         #endif
     }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time for halide_d3d12compute_initialize_kernels: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2343,7 +2340,7 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time for halide_d3d12compute_device_sync: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2562,7 +2559,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2607,7 +2604,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2812,7 +2809,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    TRACEPRINT( "Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n" );
+    TRACEPRINT("Time for halide_d3d12compute_device_run: " << (t_after - t_before) / 1.0e6 << " ms\n");
     #endif
 
     return 0;
@@ -2860,8 +2857,8 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
     }
 
     // We only handle copies to d3d12 device or to host
-    halide_assert( user_context, (dst_device_interface == NULL) ||
-                                 (dst_device_interface == &d3d12compute_device_interface) );
+    halide_assert(user_context, (dst_device_interface == NULL) ||
+                                (dst_device_interface == &d3d12compute_device_interface));
 
     if ((src->device_dirty() || src->host == NULL) && 
         src->device_interface != &d3d12compute_device_interface) {
