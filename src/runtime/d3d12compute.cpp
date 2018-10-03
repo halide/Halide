@@ -1813,14 +1813,6 @@ static void *buffer_contents(d3d12_buffer *buffer) {
 
     switch (buffer->type) {
 
-        case d3d12_buffer::ReadOnly :
-            pData = buffer_contents(&readback);
-            break;
-
-        case d3d12_buffer::WriteOnly :
-            pData = buffer_contents(&upload);
-            break;
-
         case d3d12_buffer::Constant :
         case d3d12_buffer::Upload   :
             pData = buffer->mapped;
@@ -1833,12 +1825,13 @@ static void *buffer_contents(d3d12_buffer *buffer) {
             pData = map_buffer(&readback);
             break;
 
-        /*
-        // TODO(marcos): this is probably how these buffer types should be handled:
         case d3d12_buffer::ReadOnly  :
         case d3d12_buffer::WriteOnly :
         case d3d12_buffer::ReadWrite :
         {
+            TRACEPRINT("WARNING: UNCHARTED TERRITORY! THIS CASE IS NOT EXPECTED TO HAPPEN FOR NOW!\n");
+            halide_assert(user_context, false);
+
             D3D12ContextHolder d3d12_context(user_context, true);
             if (d3d12_context.error != 0) {
                 return NULL;
@@ -1856,10 +1849,8 @@ static void *buffer_contents(d3d12_buffer *buffer) {
             pData = reinterpret_cast<void*>(address);
             break;
         }
-        */
 
         case d3d12_buffer::Unknown :
-        case d3d12_buffer::ReadWrite :
         default:
             TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
             halide_assert(user_context, false);
