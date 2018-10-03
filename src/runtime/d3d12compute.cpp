@@ -2820,6 +2820,8 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
 WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
+    return halide_default_device_and_host_malloc(user_context, buffer, &d3d12compute_device_interface);
+#if 0
     int result = halide_d3d12compute_device_malloc(user_context, buffer);
     if (result != 0) {
         return result;
@@ -2835,26 +2837,32 @@ WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct h
     // as necessary and dynamically change buffer->host accordingly. However,
     // if the user ever caches the buffer->host pointer, hell would ensue.
     void *host = d3d12_malloc(buffer->size_in_bytes());
+    // Another complicating factor is the fact that we MUST call hallide_malloc()
+    // to allocate the host buffer, otherwise cleanup_on
+    void *host = halide_malloc(user_context, buffer->size_in_bytes());
     buffer->host = (uint8_t*)host;
     dev_buffer->host_mirror = host;
     TRACEPRINT(
-           "halide_d3d12compute_device_and_host_malloc"
-        << " device = " << (void*)buffer->device
-        << " d3d12_buffer = " << dev_buffer
-        << " host = " << buffer->host << "\n"
+        "device = " << (void*)buffer->device << " | "
+        "d3d12_buffer = " << dev_buffer << " | "
+        "host = " << buffer->host << "\n"
     );
 
     return result;
+#endif
 }
 
 WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
+    return halide_default_device_and_host_free(user_context, buffer, &d3d12compute_device_interface);
+#if 0
     d3d12_buffer *dev_buffer = peel_buffer(buffer);
     halide_assert(user_context, (dev_buffer->host_mirror != NULL));
     halide_assert(user_context, (dev_buffer->host_mirror == (void*)buffer->host));
     halide_d3d12compute_device_free(user_context, buffer);
     buffer->host = NULL;    // <- Halide expects this to be null upon return
     return 0;
+#endif
 }
 
 WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffer_t *src,
