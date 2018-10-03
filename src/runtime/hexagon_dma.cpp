@@ -754,6 +754,7 @@ WEAK halide_device_interface_t hexagon_dma_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
+    NULL,
     &hexagon_dma_device_interface_impl
 };
 
