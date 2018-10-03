@@ -1806,6 +1806,257 @@ static void wait_until_completed(d3d12_compute_command_list *cmdList) {
     }
 }
 
+class D3D12ContextHolder {
+    void *user_context;
+
+    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
+    void save(void *user_context, bool create);
+    void restore();
+
+public:
+    d3d12_device *device;
+    d3d12_command_queue *queue;
+    int error;
+
+    __attribute__((always_inline)) D3D12ContextHolder(void *user_context, bool create) { save(user_context, create); }
+    __attribute__((always_inline)) ~D3D12ContextHolder() { restore(); }
+};
+
+WEAK void D3D12ContextHolder::save(void *user_context_arg, bool create) {
+    user_context = user_context_arg;
+    error = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
+}
+
+WEAK void D3D12ContextHolder::restore() {
+    halide_d3d12compute_release_context(user_context);
+}
+
+static void did_modify_range(d3d12_buffer *buffer, size_t offset, size_t length) {
+    TRACELOG;
+
+    d3d12_buffer::transfer_t *xfer = buffer->xfer;
+    halide_assert(user_context, (xfer != NULL));
+    xfer->offset = offset;
+    xfer->size   = length;
+}
+
+static bool is_buffer_managed(d3d12_buffer *buffer) {
+    return buffer->xfer != NULL;
+}
+
+static void buffer_copy_command(d3d12_copy_command_list *cmdList,
+                                d3d12_buffer *src, d3d12_buffer *dst,
+                                uint64_t src_byte_offset, uint64_t dst_byte_offset,
+                                uint64_t num_bytes_copy) {
+    TRACELOG;
+
+    ID3D12Resource *pSrcBuffer = src->resource;
+    ID3D12Resource *pDstBuffer = dst->resource;
+
+    D3D12_RESOURCE_BARRIER src_barrier = {};
+    {
+        src_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        src_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        src_barrier.Transition.pResource = pSrcBuffer;
+        src_barrier.Transition.Subresource = 0;
+        src_barrier.Transition.StateBefore = src->state;
+        src_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        if (src->state == D3D12_RESOURCE_STATE_GENERIC_READ) {
+            halide_assert(user_context, src->type == d3d12_buffer::Upload);
+            src_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+        } else {
+            halide_assert(user_context, src->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+    }
+
+    D3D12_RESOURCE_BARRIER dst_barrier = {};
+    {
+        dst_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        dst_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        dst_barrier.Transition.pResource = pDstBuffer;
+        dst_barrier.Transition.Subresource = 0;
+        dst_barrier.Transition.StateBefore = dst->state;
+        dst_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+        if (dst->state == D3D12_RESOURCE_STATE_COPY_DEST) {
+            halide_assert(user_context, dst->type == d3d12_buffer::ReadBack);
+        } else {
+            halide_assert(user_context, dst->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        }
+    }
+
+    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &src_barrier);
+    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &dst_barrier);
+
+    UINT64 SrcOffset = src_byte_offset;
+    UINT64 DstOffset = dst_byte_offset;
+    UINT64 NumBytes = num_bytes_copy;
+
+    (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
+
+    swap(src_barrier.Transition.StateBefore, src_barrier.Transition.StateAfter);  // restore resource state
+    swap(dst_barrier.Transition.StateBefore, dst_barrier.Transition.StateAfter);  // restore resource state
+
+    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &src_barrier);
+    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
+        (*cmdList)->ResourceBarrier(1, &dst_barrier);
+}
+
+static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
+    TRACELOG;
+
+    d3d12_buffer::transfer_t *xfer = buffer->xfer;
+    halide_assert(user_context, (xfer != NULL));
+
+    d3d12_buffer *src = NULL;
+    d3d12_buffer *dst = NULL;
+    uint64_t src_byte_offset = 0;
+    uint64_t dst_byte_offset = 0;
+    uint64_t num_bytes_copy = xfer->size;
+
+    d3d12_buffer *staging = xfer->staging;
+    switch (staging->type) {
+    case d3d12_buffer::Upload:
+        src = staging;
+        dst = buffer;
+        src_byte_offset = xfer->offset;
+        dst_byte_offset = buffer->offsetInBytes;
+        break;
+    case d3d12_buffer::ReadBack:
+        unmap_buffer(staging);
+        src = buffer;
+        dst = staging;
+        src_byte_offset = buffer->offsetInBytes;
+        dst_byte_offset = xfer->offset;
+        break;
+    default:
+        TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int) buffer->type << "\n");
+        halide_assert(user_context, false);
+        break;
+    }
+
+    TRACEPRINT("--- "
+               << (void *) buffer << " | " << buffer->halide_type << " | "
+               << src_byte_offset << " : " << dst_byte_offset << " : " << num_bytes_copy
+               << "\n");
+
+    buffer_copy_command(cmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes_copy);
+}
+
+static void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer *dev_buffer) {
+    TRACELOG;
+
+    // NOTE(marcos): a copy/dma command list would be ideal here, but it would
+    // also require a dedicated copy command queue to submit it... for now just
+    // use the main compute queue and issue copies via compute command lists.
+    //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
+
+    static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
+    d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
+    d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
+    if (dev_buffer != NULL) {
+        if (is_buffer_managed(dev_buffer)) {
+            synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
+        }
+    }
+    commit_command_list(blitCmdList);
+    wait_until_completed(blitCmdList);
+
+    if (dev_buffer != NULL) {
+        if (dev_buffer->xfer != NULL) {
+            // for now, we expect to have been the only one with pending transfer on the staging buffer:
+            d3d12_buffer *staging_buffer = dev_buffer->xfer->staging;
+            uint64_t use_count = __atomic_sub_fetch(&staging_buffer->ref_count, 1, __ATOMIC_SEQ_CST);
+            halide_assert(user_context, (use_count == 0));
+            dev_buffer->xfer = NULL;
+        }
+    }
+
+    release_object(blitCmdList);
+    release_object(sync_command_allocator);
+}
+
+static int d3d12compute_buffer_copy(d3d12_device *device,
+                                    d3d12_buffer *src,
+                                    d3d12_buffer *dst,
+                                    uint64_t src_byte_offset,
+                                    uint64_t dst_byte_offset,
+                                    uint64_t num_bytes) {
+    TRACELOG;
+
+    halide_assert(user_context, device);
+    halide_assert(user_context, src);
+    halide_assert(user_context, dst);
+    halide_assert(user_context, (src->type != d3d12_buffer::Unknown));
+    halide_assert(user_context, (dst->type != d3d12_buffer::Unknown));
+    // constant buffers are only used internally (Halide never expose them)
+    // (uploads to constant buffers are managed automatically by Map/Unmap)
+    halide_assert(user_context, (src->type != d3d12_buffer::Constant));
+    halide_assert(user_context, (dst->type != d3d12_buffer::Constant));
+
+    halide_assert(user_context, num_bytes > 0);
+
+    if (src->type == d3d12_buffer::Upload) {
+        // host-to-device via staging buffer:
+        halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
+        halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
+        halide_assert(user_context, (dst->xfer == NULL));
+        // TODO: assert that offsets and sizes are within bounds
+        d3d12_buffer::transfer_t xfer = { };
+            xfer.staging = src;
+            xfer.offset  = 0;
+            xfer.size    = 0;
+        dst->xfer = &xfer;
+        did_modify_range(dst, src_byte_offset, num_bytes);
+        d3d12compute_device_sync_internal(device, dst);
+        return 0;
+    }
+
+    if (dst->type == d3d12_buffer::ReadBack) {
+        // device-to-host via staging buffer:
+        halide_assert(user_context, (src->type != d3d12_buffer::Upload));
+        halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
+        halide_assert(user_context, (dst->xfer == NULL));
+        // TODO: assert that offsets and sizes are within bounds
+        d3d12_buffer::transfer_t xfer = { };
+            xfer.staging = dst;
+            xfer.offset  = 0;
+            xfer.size    = 0;
+        src->xfer = &xfer;
+        // issue copy command from device to staging memory
+        did_modify_range(src, dst_byte_offset, num_bytes);
+        d3d12compute_device_sync_internal(device, src);
+        return 0;
+    }
+
+    // device-to-device:
+    halide_assert(user_context, (src->type != d3d12_buffer::Upload));
+    halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
+    halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
+    halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
+
+    // ReadWrite, ReadOnly and WriteOnly are shader usage hints, not copy hints
+    // (there's no need to worry about them during device-to-device transfers)
+
+    // TODO(marcos): this command list allocation is overkill: needs refactoring
+
+    static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
+    d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
+    d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
+
+    buffer_copy_command(blitCmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes);
+
+    commit_command_list(blitCmdList);
+    wait_until_completed(blitCmdList);
+
+    release_object(blitCmdList);
+    release_object(sync_command_allocator);
+
+    return 0;
+}
+
 static void *buffer_contents(d3d12_buffer *buffer) {
     TRACELOG;
 
@@ -1950,35 +2201,6 @@ WEAK int halide_d3d12compute_release_context(void *user_context) {
 }
 
 } // extern "C"
-
-namespace Halide { namespace Runtime { namespace Internal { namespace D3D12Compute {
-
-class D3D12ContextHolder {
-    void *user_context;
-
-    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
-    void save(void *user_context, bool create);
-    void restore();
-
-public:
-    d3d12_device *device;
-    d3d12_command_queue *queue;
-    int error;
-
-    __attribute__((always_inline)) D3D12ContextHolder(void *user_context, bool create) { save(user_context, create); }
-    __attribute__((always_inline)) ~D3D12ContextHolder() { restore(); }
-};
-
-WEAK void D3D12ContextHolder::save(void *user_context_arg, bool create) {
-    user_context = user_context_arg;
-    error = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
-}
-
-WEAK void D3D12ContextHolder::restore() {
-    halide_d3d12compute_release_context(user_context);
-}
-
-}}}} // namespace Halide::Runtime::Internal::D3D12Compute
 
 static const char* d3d12_debug_dump() {
     TRACELOG;
@@ -2141,116 +2363,6 @@ WEAK int halide_d3d12compute_initialize_kernels(void *user_context, void **state
 
 namespace {
 
-static void did_modify_range(d3d12_buffer *buffer, size_t offset, size_t length) {
-    TRACELOG;
-
-    d3d12_buffer::transfer_t *xfer = buffer->xfer;
-    halide_assert(user_context, (xfer != NULL));
-    xfer->offset = offset;
-    xfer->size   = length;
-}
-
-static void buffer_copy_command(d3d12_copy_command_list *cmdList,
-                                d3d12_buffer *src, d3d12_buffer *dst,
-                                uint64_t src_byte_offset, uint64_t dst_byte_offset,
-                                uint64_t num_bytes_copy) {
-    TRACELOG;
-
-    ID3D12Resource *pSrcBuffer = src->resource;
-    ID3D12Resource *pDstBuffer = dst->resource;
-
-    D3D12_RESOURCE_BARRIER src_barrier = { };
-    {
-        src_barrier.Type  = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        src_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        src_barrier.Transition.pResource   = pSrcBuffer;
-        src_barrier.Transition.Subresource = 0;
-        src_barrier.Transition.StateBefore = src->state;
-        src_barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        if (src->state == D3D12_RESOURCE_STATE_GENERIC_READ) {
-            halide_assert(user_context, src->type == d3d12_buffer::Upload);
-            src_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-        } else {
-            halide_assert(user_context, src->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        }
-    }
-
-    D3D12_RESOURCE_BARRIER dst_barrier = { };
-    {
-        dst_barrier.Type  = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        dst_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        dst_barrier.Transition.pResource   = pDstBuffer;
-        dst_barrier.Transition.Subresource = 0;
-        dst_barrier.Transition.StateBefore = dst->state;
-        dst_barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
-        if (dst->state == D3D12_RESOURCE_STATE_COPY_DEST) {
-            halide_assert(user_context, dst->type == d3d12_buffer::ReadBack);
-        } else {
-            halide_assert(user_context, dst->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        }
-    }
-
-    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
-        (*cmdList)->ResourceBarrier(1, &src_barrier);
-    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
-        (*cmdList)->ResourceBarrier(1, &dst_barrier);
-
-    UINT64 SrcOffset = src_byte_offset;
-    UINT64 DstOffset = dst_byte_offset;
-    UINT64 NumBytes  = num_bytes_copy;
-
-    (*cmdList)->CopyBufferRegion(pDstBuffer, DstOffset, pSrcBuffer, SrcOffset, NumBytes);
-
-    swap(src_barrier.Transition.StateBefore, src_barrier.Transition.StateAfter);  // restore resource state
-    swap(dst_barrier.Transition.StateBefore, dst_barrier.Transition.StateAfter);  // restore resource state
-
-    if (src_barrier.Transition.StateBefore != src_barrier.Transition.StateAfter)
-        (*cmdList)->ResourceBarrier(1, &src_barrier);
-    if (dst_barrier.Transition.StateBefore != dst_barrier.Transition.StateAfter)
-        (*cmdList)->ResourceBarrier(1, &dst_barrier);
-}
-
-static void synchronize_host_and_device_buffer_contents(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
-    TRACELOG;
-
-    d3d12_buffer::transfer_t *xfer = buffer->xfer;
-    halide_assert(user_context, (xfer != NULL));
-
-    d3d12_buffer* src = NULL;
-    d3d12_buffer *dst = NULL;
-    uint64_t src_byte_offset = 0;
-    uint64_t dst_byte_offset = 0;
-    uint64_t num_bytes_copy  = xfer->size;
-
-    d3d12_buffer *staging = xfer->staging;
-    switch (staging->type) {
-        case d3d12_buffer::Upload :
-            src = staging;
-            dst = buffer;
-            src_byte_offset = xfer->offset;
-            dst_byte_offset = buffer->offsetInBytes;
-            break;
-        case d3d12_buffer::ReadBack :
-            unmap_buffer(staging);
-            src = buffer;
-            dst = staging;
-            src_byte_offset = buffer->offsetInBytes;
-            dst_byte_offset = xfer->offset;
-            break;
-        default :
-            TRACEPRINT("UNSUPPORTED BUFFER TYPE: " << (int)buffer->type << "\n");
-            halide_assert(user_context, false);
-            break;
-    }
-
-    TRACEPRINT("--- "
-        << (void*)buffer << " | " << buffer->halide_type << " | "
-        << src_byte_offset << " : " << dst_byte_offset << " : " << num_bytes_copy
-        << "\n");
-
-    buffer_copy_command(cmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes_copy);
-}
-
 static void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buffer) {
     TRACELOG;
 
@@ -2262,43 +2374,6 @@ static void compute_barrier(d3d12_copy_command_list *cmdList, d3d12_buffer *buff
     }
 
     (*cmdList)->ResourceBarrier(1, &barrier);
-}
-
-static bool is_buffer_managed(d3d12_buffer *buffer) {
-    return buffer->xfer != NULL;
-}
-
-static void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer *dev_buffer) {
-    TRACELOG;
-
-    // NOTE(marcos): a copy/dma command list would be ideal here, but it would
-    // also require a dedicated copy command queue to submit it... for now just
-    // use the main compute queue and issue copies via compute command lists.
-    //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
-
-    static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
-    d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
-    d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
-    if (dev_buffer != NULL) {
-        if (is_buffer_managed(dev_buffer)) {
-            synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
-        }
-    }
-    commit_command_list(blitCmdList);
-    wait_until_completed(blitCmdList);
-
-    if (dev_buffer != NULL) {
-        if (dev_buffer->xfer != NULL) {
-            // for now, we expect to have been the only one with pending transfer on the staging buffer:
-            d3d12_buffer *staging_buffer = dev_buffer->xfer->staging;
-            uint64_t use_count = __atomic_sub_fetch(&staging_buffer->ref_count, 1, __ATOMIC_SEQ_CST);
-            halide_assert(user_context, (use_count == 0));
-            dev_buffer->xfer = NULL;
-        }
-    }
-
-    release_object(blitCmdList);
-    release_object(sync_command_allocator);
 }
 
 static void halide_d3d12compute_device_sync_internal(d3d12_device *device, struct halide_buffer_t *buffer) {
@@ -2385,85 +2460,6 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
 }
 
 namespace {
-
-static int d3d12compute_buffer_copy(d3d12_device *device,
-                                    d3d12_buffer *src,
-                                    d3d12_buffer *dst,
-                                    uint64_t src_byte_offset,
-                                    uint64_t dst_byte_offset,
-                                    uint64_t num_bytes) {
-    TRACELOG;
-
-    halide_assert(user_context, device);
-    halide_assert(user_context, src);
-    halide_assert(user_context, dst);
-    halide_assert(user_context, (src->type != d3d12_buffer::Unknown));
-    halide_assert(user_context, (dst->type != d3d12_buffer::Unknown));
-    // constant buffers are only used internally (Halide never expose them)
-    // (uploads to constant buffers are managed automatically by Map/Unmap)
-    halide_assert(user_context, (src->type != d3d12_buffer::Constant));
-    halide_assert(user_context, (dst->type != d3d12_buffer::Constant));
-
-    halide_assert(user_context, num_bytes > 0);
-
-    if (src->type == d3d12_buffer::Upload) {
-        // host-to-device via staging buffer:
-        halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
-        halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
-        halide_assert(user_context, (dst->xfer == NULL));
-        // TODO: assert that offsets and sizes are within bounds
-        d3d12_buffer::transfer_t xfer = { };
-            xfer.staging = src;
-            xfer.offset  = 0;
-            xfer.size    = 0;
-        dst->xfer = &xfer;
-        did_modify_range(dst, src_byte_offset, num_bytes);
-        d3d12compute_device_sync_internal(device, dst);
-        return 0;
-    }
-
-    if (dst->type == d3d12_buffer::ReadBack) {
-        // device-to-host via staging buffer:
-        halide_assert(user_context, (src->type != d3d12_buffer::Upload));
-        halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
-        halide_assert(user_context, (dst->xfer == NULL));
-        // TODO: assert that offsets and sizes are within bounds
-        d3d12_buffer::transfer_t xfer = { };
-            xfer.staging = dst;
-            xfer.offset  = 0;
-            xfer.size    = 0;
-        src->xfer = &xfer;
-        // issue copy command from device to staging memory
-        did_modify_range(src, dst_byte_offset, num_bytes);
-        d3d12compute_device_sync_internal(device, src);
-        return 0;
-    }
-
-    // device-to-device:
-    halide_assert(user_context, (src->type != d3d12_buffer::Upload));
-    halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
-    halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
-    halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
-
-    // ReadWrite, ReadOnly and WriteOnly are shader usage hints, not copy hints
-    // (there's no need to worry about them during device-to-device transfers)
-
-    // TODO(marcos): this command list allocation is overkill: needs refactoring
-
-    static const D3D12_COMMAND_LIST_TYPE Type = HALIDE_D3D12_COMMAND_LIST_TYPE;
-    d3d12_command_allocator *sync_command_allocator = new_command_allocator<Type>(device);
-    d3d12_compute_command_list *blitCmdList = new_command_list<Type>(device, sync_command_allocator);
-
-    buffer_copy_command(blitCmdList, src, dst, src_byte_offset, dst_byte_offset, num_bytes);
-
-    commit_command_list(blitCmdList);
-    wait_until_completed(blitCmdList);
-
-    release_object(blitCmdList);
-    release_object(sync_command_allocator);
-
-    return 0;
-}
 
 static int do_multidimensional_copy(d3d12_device *device, const device_copy &c,
                                     uint64_t src_offset,  uint64_t dst_offset,  int dimensions) {
