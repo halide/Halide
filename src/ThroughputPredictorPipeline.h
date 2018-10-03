@@ -222,7 +222,7 @@ public:
     }
 
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
-    Runtime::Buffer<intptr_t> cost_ptrs;
+    Runtime::Buffer<double *> cost_ptrs;
     int cursor, num_stages;
 
     void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats) {
@@ -240,13 +240,15 @@ public:
             << ") than pipeline features (" << max_num_stages << ")\n";
 
         const int batch_size = 1024;
-        if (!schedule_feat_queue.data()) {
+        if (!schedule_feat_queue.data() ||
+            schedule_feat_queue.dim(2).extent() < max_num_stages) {
             internal_assert(cursor == 0);
-            internal_assert(!costs.data());
-            internal_assert(!cost_ptrs.data());
             schedule_feat_queue = Runtime::Buffer<float>(batch_size, 25, max_num_stages);
-            costs = Runtime::Buffer<float>(batch_size);
-            cost_ptrs = Runtime::Buffer<double *>(batch_size);
+            if (!costs.data()) {
+                internal_assert(!cost_ptrs.data());
+                costs = Runtime::Buffer<float>(batch_size);
+                cost_ptrs = Runtime::Buffer<double *>(batch_size);
+            }
         }
 
         if (cursor == batch_size) {
@@ -255,7 +257,7 @@ public:
 
         *schedule_feats = schedule_feat_queue;
 
-        cost_ptrs(cursor) = (intptr_t)cost_ptr;
+        cost_ptrs(cursor) = cost_ptr;
         return cursor++;
     }
 
@@ -286,7 +288,7 @@ public:
 
         for (int i = 0; i < cursor; i++) {
             internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
-            *((double *)(cost_ptrs(i))) = dst(i);
+            *(cost_ptrs(i)) = dst(i);
         }
 
         cursor = 0;
@@ -296,6 +298,9 @@ public:
     void reset() {
         cursor = 0;
 
+        /*
+          // Keep the memory around
+
         pipeline_features.reset();
         schedule_features.reset();
 
@@ -303,6 +308,7 @@ public:
         pipeline_feat_queue.reset();
         costs.reset();
         cost_ptrs.reset();
+        */
     }
 
 };
