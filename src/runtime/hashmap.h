@@ -6,10 +6,15 @@
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
+// By default, hashmap_malloc() and hashmap_free() simply wrap around
+// halide_malloc() and halide_free(), respectively. It is possible to
+// override the implementation by providing the corresponding #define
+// prior to including "hashmap.h":
+//
 #ifndef hashmap_malloc
 #define hashmap_malloc(user_context, size)  halide_malloc(user_context, size)
 #endif  //hashmap_malloc
-
+//
 #ifndef hashmap_free
 #define hashmap_free(user_context, memory)  halide_free(user_context, memory)
 #endif  //hashmap_free

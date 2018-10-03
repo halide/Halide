@@ -153,7 +153,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 
 #ifndef MAYBE_UNUSED
 #define MAYBE_UNUSED(x) ((void) x)
-#endif//MAYBE_UNUSED
+#endif  //MAYBE_UNUSED
 
 #if HALIDE_D3D12_RENDERDOC
 #if HALIDE_D3D12_DEBUG_LAYER
@@ -460,11 +460,10 @@ struct d3d12_buffer {
         ReadBack
     } type;
 
-    // UNSAFE to keep a pointer to a 'halide_buffer_t' since it is a POD type
-    // that can be re-assigned / re-scoped outside of this runtime module...
-    //halide_buffer_t *halide;
-    // keeping a copy of it is a bit overkill, so we'll use a flag:
-    bool halide;
+    // NOTE(marcos): it's UNSAFE to cache a pointer to a 'halide_buffer_t' here
+    // since it is a POD type that can be re-assigned/re-scoped outside of this
+    // runtime module.
+
     halide_type_t halide_type;
 
     struct transfer_t {
@@ -685,7 +684,6 @@ static d3d12_buffer *peel_buffer(struct halide_buffer_t *hbuffer) {
     halide_assert(user_context, (hbuffer->device_interface == &d3d12compute_device_interface));
     d3d12_buffer *dbuffer = reinterpret_cast<d3d12_buffer*>(hbuffer->device);
     halide_assert(user_context, (dbuffer != NULL));
-    halide_assert(user_context, (dbuffer->halide));
     return dbuffer;
 }
 
@@ -700,7 +698,6 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
     }
 
     halide_assert(user_context, (dbuffer->resource != NULL));
-    halide_assert(user_context, (!dbuffer->halide));
 
     dbuffer->offset = 0;
     dbuffer->offsetInBytes = 0;
@@ -712,7 +709,6 @@ WEAK int wrap_buffer(struct halide_buffer_t *hbuffer, d3d12_buffer *dbuffer) {
         return -3;
     }
 
-    dbuffer->halide = (hbuffer != NULL);
     dbuffer->halide_type = hbuffer->type;
     hbuffer->device = reinterpret_cast<uint64_t>(dbuffer);
     halide_assert(user_context, (hbuffer->device_interface == NULL));
@@ -731,7 +727,6 @@ WEAK int unwrap_buffer(struct halide_buffer_t *buf) {
 
     d3d12_buffer *dbuffer = peel_buffer(buf);
 
-    dbuffer->halide = false;
     dbuffer->halide_type = halide_type_t();
     buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
@@ -1694,7 +1689,6 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             // NOTE(marcos): constant buffers are only used internally by the
             // runtime; users cannot create, control or access them, so it is
             // expected that no halide_buffer_t will be associated with them:
-            halide_assert(user_context, !input_buffer->halide);
             halide_assert(user_context,  input_buffer->format == DXGI_FORMAT_UNKNOWN);
 
             ID3D12Resource *pResource = input_buffer->resource;
@@ -1741,7 +1735,7 @@ WEAK void set_input_buffer(d3d12_binder *binder, d3d12_buffer *input_buffer, uin
             MAYBE_UNUSED(SizeInBytes);
 
             TRACEPRINT("--- [" << index << "] : "
-                << (void*)input_buffer << " | " << (void*)input_buffer->halide << " | "
+                << (void*)input_buffer << " | " << " | "
                 << FirstElement << " : " << NumElements << " : " << SizeInBytes
                 << "\n");
 
@@ -3025,10 +3019,10 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
 
     TRACEPRINT(
            "--- "
-        << (void*)old_handle  << " | " << (void*)old_handle->halide << " | "
+        << (void*)old_handle  << " | " << " | "
         << old_handle->offset << " : " << old_handle->elements << " : " << old_handle->sizeInBytes
         << "   ->   "
-        << (void*)new_handle  << " | " << (void*)new_handle->halide << " | "
+        << (void*)new_handle  << " | " << " | "
         << new_handle->offset << " : " << new_handle->elements << " : " << new_handle->sizeInBytes
         << "\n"
     );
