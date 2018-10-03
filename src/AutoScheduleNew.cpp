@@ -2774,10 +2774,6 @@ struct State {
         return h;
     }
 
-    void set_pipeline_features(ThroughputPredictorPipeline *throughput_predictor) {
-
-    }
-
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, ThroughputPredictorPipeline *throughput_predictor,  bool verbose = false) {
         NodeMap<const LoopNest *> compute_site, store_site;
         compute_site.make_large(dag.nodes.size());
