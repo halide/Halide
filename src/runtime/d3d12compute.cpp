@@ -2820,49 +2820,31 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
 WEAK int halide_d3d12compute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
+    // NOTE(marcos): it would be nice to have some "zero-copy" behavior here by
+    // allocating the device memory and MapBuffering it to the host memory, but
+    // sadly, even with a "dedicated" d3d12 staging heap just for this buffer,
+    // d3d12 has no bi-directional system memory heap (a sigle resource that is
+    // capable of both upload and readback). One possible workaround is to just
+    // suballocate from two common heaps (one used for uploads and another for
+    // readbacks) and dynamically change buffer->host accordingly. However, if
+    // the user ever caches the buffer->host pointer, that would be really bad!
+    //
+    // Another complicating factor is the fact that the test "cleanup_on_error"
+    // expects hallide_malloc() to be called here to allocate the host buffer.
+    // Arguably, the logic behind the "cleanup_on_error" test is flawed, since
+    // back-ends are allowed (and encouraged) to have zero-copy behavior.
+    //
+    // Since we can't really have proper zero-copy behavior with d3d12 on halide
+    // it's best we just defer this routine to the default implementation, which
+    // is virtually identical to what we had before here anyway, except that it
+    // will actually end up calling halide_malloc() for the host memory.
     return halide_default_device_and_host_malloc(user_context, buffer, &d3d12compute_device_interface);
-#if 0
-    int result = halide_d3d12compute_device_malloc(user_context, buffer);
-    if (result != 0) {
-        return result;
-    }
-
-    d3d12_buffer *dev_buffer = peel_buffer(buffer);
-    halide_assert(user_context, (buffer->host == NULL));
-    halide_assert(user_context, (dev_buffer->host_mirror == NULL));
-    // NOTE(marcos): a dedicated d3d12 staging heap just for this buffer would
-    // be ideal in order to avoid redundant memory copies, but sadly d3d12 has
-    // no bi-directional heap (a sigle resource for both upload and readback).
-    // A workaround would be to suballocate from shared upload/readback heaps
-    // as necessary and dynamically change buffer->host accordingly. However,
-    // if the user ever caches the buffer->host pointer, hell would ensue.
-    void *host = d3d12_malloc(buffer->size_in_bytes());
-    // Another complicating factor is the fact that we MUST call hallide_malloc()
-    // to allocate the host buffer, otherwise cleanup_on
-    void *host = halide_malloc(user_context, buffer->size_in_bytes());
-    buffer->host = (uint8_t*)host;
-    dev_buffer->host_mirror = host;
-    TRACEPRINT(
-        "device = " << (void*)buffer->device << " | "
-        "d3d12_buffer = " << dev_buffer << " | "
-        "host = " << buffer->host << "\n"
-    );
-
-    return result;
-#endif
 }
 
 WEAK int halide_d3d12compute_device_and_host_free(void *user_context, struct halide_buffer_t *buffer) {
     TRACELOG;
+    // NOTE(marcos): see notes on "halide_d3d12compute_device_and_host_malloc()".
     return halide_default_device_and_host_free(user_context, buffer, &d3d12compute_device_interface);
-#if 0
-    d3d12_buffer *dev_buffer = peel_buffer(buffer);
-    halide_assert(user_context, (dev_buffer->host_mirror != NULL));
-    halide_assert(user_context, (dev_buffer->host_mirror == (void*)buffer->host));
-    halide_d3d12compute_device_free(user_context, buffer);
-    buffer->host = NULL;    // <- Halide expects this to be null upon return
-    return 0;
-#endif
 }
 
 WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffer_t *src,
