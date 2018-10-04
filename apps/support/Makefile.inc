@@ -5,6 +5,9 @@ IMAGES ?= ../images
 HL_TARGET ?= host
 UNAME ?= $(shell uname)
 
+# This pulls in the definition of HALIDE_SYSTEM_LIBS
+include $(HALIDE_DISTRIB_PATH)/halide_config.make
+
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
 LDFLAGS += -lz -lole32 -lkernel32 -lpsapi -luuid -Wl,--stack,8388608
@@ -41,29 +44,6 @@ LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
 GENERATOR_DEPS ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.a $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
-
-LLVM_CONFIG ?= llvm-config
-HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --link-static --system-libs)
-
-ifeq ($(UNAME), Linux)
-# llvm-config doesn't always report -ltinfo in the system-libs. Detect it by seeing if llvm-config links to it.
-HALIDE_SYSTEM_LDFLAGS += $(shell ldd `which $(LLVM_CONFIG)` | grep libtinfo > /dev/null && echo -ltinfo)
-endif
-
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags) $(HALIDE_SYSTEM_LDFLAGS)
-
-LLVM_CONFIG ?= llvm-config
-LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
-LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
-
-ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
-LLVM_SHARED_LIBS =
-else
-LLVM_STATIC_LIBS =
-LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
-endif
-
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
