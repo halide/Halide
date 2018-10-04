@@ -27,10 +27,10 @@ int main(int argc, char **argv) {
     ImageParam input(type_of<int16_t>(), 2);
 
     Func input_cpy("input_cpy");
-    input_cpy(x, y) = input(x, y);
+    input_cpy(x, y) = input(x, y) + 1;
 
     Func input_cpy_2;
-    input_cpy_2(x, y) = input_cpy(x, y);
+    input_cpy_2(x, y) = input_cpy(x, y) + 1;
 
     Func sum_stage;
     sum_stage(x, y) = (input_cpy_2(x, y - 4)+
@@ -40,10 +40,10 @@ int main(int argc, char **argv) {
                        input_cpy_2(x,y));
 
     Func sum_stage_cpy;
-    sum_stage_cpy(x, y) = sum_stage(x, y);
+    sum_stage_cpy(x, y) = sum_stage(x, y) + 1;
 
     Func sum_stage_cpy_2;
-    sum_stage_cpy_2(x, y) = sum_stage_cpy(x, y);
+    sum_stage_cpy_2(x, y) = sum_stage_cpy(x, y) + 1;
 
 
     // bound the output to a fixed size

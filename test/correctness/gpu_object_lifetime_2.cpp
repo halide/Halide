@@ -29,8 +29,8 @@ int main(int argc, char *argv[]) {
         // Verify that internal buffers are released.
         Func f, g, h;
         f(x) = x;
-        g(x) = f(x);
-        h(x) = g(x);
+        g(x) = f(x) + 1;
+        h(x) = g(x) + 1;
 
         f.compute_root();
         g.compute_root();
