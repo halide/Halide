@@ -332,7 +332,11 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator2 {
     // leaf.
 
     Stmt visit(const For *op) override {
-        // All copies happen at the same loop level as the allocation
+        // All copies happen at the same loop level as the allocation.
+        return do_copies(op);
+    }
+
+    Stmt visit(const Fork *op) override {
         return do_copies(op);
     }
 

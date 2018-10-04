@@ -80,12 +80,14 @@ protected:
     virtual void visit(const AssertStmt *);
     virtual void visit(const ProducerConsumer *);
     virtual void visit(const For *);
+    virtual void visit(const Acquire *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
     virtual void visit(const Allocate *);
     virtual void visit(const Free *);
     virtual void visit(const Realize *);
     virtual void visit(const Block *);
+    virtual void visit(const Fork *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
@@ -164,6 +166,8 @@ protected:
     virtual Stmt visit(const IfThenElse *);
     virtual Stmt visit(const Evaluate *);
     virtual Stmt visit(const Prefetch *);
+    virtual Stmt visit(const Acquire *);
+    virtual Stmt visit(const Fork *);
 };
 
 /** A mutator that caches and reapplies previously-done mutations, so

@@ -25,7 +25,7 @@ extern "C" void my_free(void *, void *) {
 }
 
 int main(int argc, char **argv) {
-    Var x, y;
+    /*Var x, y;
 
     {
         Func f, g;
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
             printf("f was called %d times instead of %d times\n", count, 34);
             return -1;
         }
-    }
+    }*/
 
     printf("Success!\n");
     return 0;

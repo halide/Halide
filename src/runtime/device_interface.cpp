@@ -505,9 +505,9 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
                                    (src->host == NULL || !src->host_dirty());
     const bool to_device = dst_device_interface != NULL;
     const bool to_host = dst_device_interface == NULL;
-    const bool from_host_valid = src->host != NULL &&
-                                 (!src->device_dirty() || (src->device_interface == NULL));
     const bool from_host_exists = src->host != NULL;
+    const bool from_host_valid = from_host_exists &&
+                                 (!src->device_dirty() || (src->device_interface == NULL));
     const bool to_host_exists = dst->host != NULL;
 
     // If a device to device copy is requested, try to do it directly.

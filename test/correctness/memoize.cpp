@@ -79,7 +79,7 @@ void record_error(void *user_context, const char *msg) {
 
 int main(int argc, char **argv) {
 
-    /*{
+    {
         call_count = 0;
         Func count_calls;
         count_calls.define_extern("count_calls", {}, UInt(8), 2);
@@ -87,14 +87,14 @@ int main(int argc, char **argv) {
         Func f, f_memoized;
         f_memoized() = count_calls(0, 0);
         f_memoized.compute_root().memoize();
-        f() = f_memoized();
+        f() = f_memoized() + 1;
         f_memoized.compute_root().memoize();
 
         Buffer<uint8_t> result1 = f.realize();
         Buffer<uint8_t> result2 = f.realize();
 
-        assert(result1(0) == 42);
-        assert(result2(0) == 42);
+        assert(result1(0) == 43);
+        assert(result2(0) == 43);
 
         assert(call_count == 1);
     }
@@ -299,7 +299,7 @@ int main(int argc, char **argv) {
         Var x;
 
         f(x) = count_calls(x, 0) + cast<uint8_t>(x);
-        g(x) = f(x);
+        g(x) = f(x) + 1;
         h(x) = g(4) + g(index);
 
         f.compute_root().memoize();
@@ -309,13 +309,13 @@ int main(int argc, char **argv) {
         index.set(2);
         Buffer<uint8_t> out1 = h.realize(1);
 
-        assert(out1(0) == (uint8_t)(2 * 23 + 4 + 2));
+        assert(out1(0) == (uint8_t)(2 * (23 + 1) + 4 + 2));
         assert(call_count_with_arg == 3);
 
         index.set(4);
         out1 = h.realize(1);
 
-        assert(out1(0) == (uint8_t)(2 * 23 + 4 + 4));
+        assert(out1(0) == (uint8_t)(2 * (23 + 1) + 4 + 4));
         assert(call_count_with_arg == 4);
     }
 
@@ -520,13 +520,13 @@ int main(int argc, char **argv) {
         }
         stage[3].compute_root().memoize();
         Func output;
-        output(_) = stage[3](_);
+        output(_) = stage[3](_) + 1;
         val.set(23.0f);
         Buffer<uint8_t> result = output.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23 + 1));
             }
         }
 
@@ -537,14 +537,13 @@ int main(int argc, char **argv) {
         result = output.realize(128, 128);
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23 + 1));
             }
         }
 
         for (int i = 0; i < 4; i++) {
             fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
-
     }
 
     {
@@ -583,7 +582,7 @@ int main(int argc, char **argv) {
 
                 for (int32_t i = 0; i < 16; i++) {
                     for (int32_t j = 0; j < 16; j++) {
-                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                         assert(out1(i, j) == i);
                     }
                 }
@@ -598,7 +597,7 @@ int main(int argc, char **argv) {
 
                     for (int32_t i = 0; i < 16; i++) {
                         for (int32_t j = 0; j < 16; j++) {
-                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                             assert(out1(i, j) == i);
                         }
                     }
@@ -609,7 +608,7 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
-    }*/
+    }
 
     fprintf(stderr, "Success!\n");
     return 0;

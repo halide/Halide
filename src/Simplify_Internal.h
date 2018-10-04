@@ -246,6 +246,8 @@ public:
     Stmt visit(const Realize *op);
     Stmt visit(const Prefetch *op);
     Stmt visit(const Free *op);
+    Stmt visit(const Acquire *op);
+    Stmt visit(const Fork *op);
 };
 
 }

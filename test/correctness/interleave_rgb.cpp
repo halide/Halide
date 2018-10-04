@@ -5,7 +5,7 @@ using namespace Halide;
 
 template <typename T>
 bool test_interleave() {
-    Var x("x"), y("y"), c("c");
+    /*Var x("x"), y("y"), c("c");
 
     Func input("input");
     input(x, y, c) = cast<T>(x * 3 + y * 5 + c);
@@ -45,7 +45,7 @@ bool test_interleave() {
                 }
             }
         }
-    }
+    }*/
     return true;
 }
 

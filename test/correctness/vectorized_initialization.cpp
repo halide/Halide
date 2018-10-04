@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 
 
     // The sequence generated should be:
-    // 0, (0 + 1) = 1, 1 + 2 = 3, 3 + 3 = 6, 6 + 4 = 10
+    // -1 + 1 = 0, (-1 + 1) + 1 = 1, (0 + 2) + 1 = 3, (2 + 3) + 1 = 6, (5 + 4) + 1 = 10
     if (result(0) != 1 || result(1) != 3 || result(2) != 6 || result(3) != 10) {
         printf("Resulting sequence was: %d %d %d %d instead of 1 3 6 10\n",
                result(0), result(1), result(2), result(3));
