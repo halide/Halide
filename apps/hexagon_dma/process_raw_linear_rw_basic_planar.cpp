@@ -3,17 +3,22 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "pipeline_raw_linear_rw_basic_planar.h"
+#include "pipeline_raw_linear_rw_fold_planar.h"
+#include "pipeline_raw_linear_rw_async_planar.h"
+#include "pipeline_raw_linear_rw_split_planar.h"
+#include "pipeline_raw_linear_rw_split_fold_planar.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
+    if (argc < 4) {
         printf("Usage: %s width height\n", argv[0]);
         return 0;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
+    const char *str = argv[3];
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
 
@@ -46,9 +51,35 @@ int main(int argc, char **argv) {
                              reinterpret_cast<uint64_t>(data_out));
     halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine, false, halide_hexagon_fmt_RawData);
 
-    int result = pipeline_raw_linear_rw_basic_planar(input, output);
-    if (result != 0) {
-        printf("pipeline failed! %d\n", result);
+    if (!strcmp(str,"basic")) {
+        int result = pipeline_raw_linear_rw_basic_planar(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else if (!strcmp(str,"fold")) {
+        int result = pipeline_raw_linear_rw_fold_planar(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else if (!strcmp(str,"async")) {
+        int result = pipeline_raw_linear_rw_async_planar(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    }  else if (!strcmp(str,"split")) {
+        int result = pipeline_raw_linear_rw_split_planar(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else if (!strcmp(str,"split_fold")) {
+        int result = pipeline_raw_linear_rw_split_fold_planar(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else {
+        printf("Incorrect input Correct options: basic, fold, async, split, split_fold\n");
+        free(data_in);
+        return -1;
     }
 
     for (int z=0; z < 4; z++) {

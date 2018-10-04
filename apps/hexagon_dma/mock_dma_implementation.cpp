@@ -110,6 +110,11 @@ int HAP_cache_unlock(void *vaddr_ptr) {
     return 1;
 }
 
+int32 nDmaWrapper_PowerVoting(uint32 cornercase) {
+    printf("In nDmaWrapper_PowerVoting %d \n", cornercase);
+    return 0;
+}
+
 t_DmaWrapper_DmaEngineHandle hDmaWrapper_AllocDma(void) {
     dma_handle_t *handle = (dma_handle_t *)malloc(sizeof(dma_handle_t));
     handle->ptr = NULL;

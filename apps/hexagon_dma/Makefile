@@ -7,6 +7,9 @@ include ../support/Makefile.inc
 # using the make-standalone-toolchain.sh script:
 #$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
 #$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
+
+#to run the specialized tests optional arguments are
+#$(BIN)/process_nv12_linear_ro_basic-host  width height option( where option is pipeline basic, fold, async, split, split_fold ) 
 CXX-host ?= $(CXX)
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
 CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
@@ -22,18 +25,18 @@ LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 LDFLAGS-arm-64-profile-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
+OPTION := none
 
 BIN ?= bin
 
 all: $(BIN)/process-host  $(BIN)/process_err-host $(BIN)/process_blur-host \
-     $(BIN)/process_nv12_linear_ro_async-host  $(BIN)/process_nv12_linear_ro_basic-host $(BIN)/process_nv12_linear_ro_fold-host $(BIN)/process_nv12_linear_ro_split-host $(BIN)/process_nv12_linear_ro_split_fold-host \
-     $(BIN)/process_nv12_linear_rw_async-host  $(BIN)/process_nv12_linear_rw_basic-host $(BIN)/process_nv12_linear_rw_fold-host $(BIN)/process_nv12_linear_rw_split-host $(BIN)/process_nv12_linear_rw_split_fold-host \
-     $(BIN)/process_p010_linear_ro_async-host  $(BIN)/process_p010_linear_ro_basic-host $(BIN)/process_p010_linear_ro_fold-host $(BIN)/process_p010_linear_ro_split-host $(BIN)/process_p010_linear_ro_split_fold-host \
-     $(BIN)/process_p010_linear_rw_async-host  $(BIN)/process_p010_linear_rw_basic-host $(BIN)/process_p010_linear_rw_fold-host $(BIN)/process_p010_linear_rw_split-host $(BIN)/process_p010_linear_rw_split_fold-host \
-     $(BIN)/process_raw_linear_ro_async_interleaved-host $(BIN)/process_raw_linear_ro_basic_interleaved-host $(BIN)/process_raw_linear_ro_fold_interleaved-host $(BIN)/process_raw_linear_ro_split_interleaved-host \
-     $(BIN)/process_raw_linear_ro_split_fold_interleaved-host $(BIN)/process_raw_linear_ro_async_planar-host $(BIN)/process_raw_linear_ro_basic_planar-host $(BIN)/process_raw_linear_ro_fold_planar-host \
-     $(BIN)/process_raw_linear_ro_split_fold_planar-host $(BIN)/process_raw_linear_ro_split_planar-host $(BIN)/process_raw_linear_rw_async_planar-host $(BIN)/process_raw_linear_rw_split_fold_planar-host \
-     $(BIN)/process_raw_linear_rw_basic_planar-host $(BIN)/process_raw_linear_rw_fold_planar-host $(BIN)/process_raw_linear_rw_split_planar-host
+     $(BIN)/process_nv12_linear_ro_basic-host \
+     $(BIN)/process_nv12_linear_rw_basic-host \
+     $(BIN)/process_p010_linear_ro_basic-host \
+     $(BIN)/process_p010_linear_rw_basic-host \
+     $(BIN)/process_raw_linear_ro_basic_interleaved-host \
+     $(BIN)/process_raw_linear_ro_basic_planar-host \
+     $(BIN)/process_raw_linear_rw_basic_planar-host
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
@@ -44,106 +47,22 @@ $(BIN)/pipeline_err: pipeline_err.cpp $(GENERATOR_DEPS)
 $(BIN)/pipeline_blur: pipeline_blur.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_ro_async: pipeline_nv12_linear_ro_async.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_nv12_linear_ro_basic: pipeline_nv12_linear_ro_basic.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_ro_fold: pipeline_nv12_linear_ro_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_ro_split: pipeline_nv12_linear_ro_split.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_ro_split_fold: pipeline_nv12_linear_ro_split_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_rw_async: pipeline_nv12_linear_rw_async.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_nv12_linear_rw_basic: pipeline_nv12_linear_rw_basic.cpp $(GENERATOR_DEPS)
 	mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_rw_fold: pipeline_nv12_linear_rw_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_rw_split: pipeline_nv12_linear_rw_split.cpp $(GENERATOR_DEPS)
-	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_nv12_linear_rw_split_fold: pipeline_nv12_linear_rw_split_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_ro_async: pipeline_p010_linear_ro_async.cpp $(GENERATOR_DEPS)
-	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_p010_linear_ro_basic: pipeline_p010_linear_ro_basic.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_ro_fold: pipeline_p010_linear_ro_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_ro_split: pipeline_p010_linear_ro_split.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_ro_split_fold: pipeline_p010_linear_ro_split_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_rw_async: pipeline_p010_linear_rw_async.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_p010_linear_rw_basic: pipeline_p010_linear_rw_basic.cpp $(GENERATOR_DEPS)
-	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_rw_fold: pipeline_p010_linear_rw_fold.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_rw_split: pipeline_p010_linear_rw_split.cpp $(GENERATOR_DEPS)
-	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_p010_linear_rw_split_fold: pipeline_p010_linear_rw_split_fold.cpp $(GENERATOR_DEPS)
-	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_async_interleaved: pipeline_raw_linear_ro_async_interleaved.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_raw_linear_ro_basic_interleaved: pipeline_raw_linear_ro_basic_interleaved.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_fold_interleaved: pipeline_raw_linear_ro_fold_interleaved.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_split_interleaved: pipeline_raw_linear_ro_split_interleaved.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_split_fold_interleaved: pipeline_raw_linear_ro_split_fold_interleaved.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_async_planar: pipeline_raw_linear_ro_async_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_raw_linear_ro_basic_planar: pipeline_raw_linear_ro_basic_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_fold_planar: pipeline_raw_linear_ro_fold_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_split_planar: pipeline_raw_linear_ro_split_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_split_fold_planar: pipeline_raw_linear_ro_split_fold_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_rw_async_planar: pipeline_raw_linear_rw_async_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_rw_fold_planar: pipeline_raw_linear_rw_fold_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_rw_split_planar: pipeline_raw_linear_rw_split_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_rw_split_fold_planar: pipeline_raw_linear_rw_split_fold_planar.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_raw_linear_rw_basic_planar: pipeline_raw_linear_rw_basic_planar.cpp $(GENERATOR_DEPS)
@@ -159,111 +78,111 @@ $(BIN)/%/pipeline_err.o: $(BIN)/pipeline_err
 $(BIN)/%/pipeline_blur.o: $(BIN)/pipeline_blur
 	@mkdir -p $(@D)
 	$^ -g dma_pipeline_blur -o $(BIN)/$* -e o,h,html -f pipeline_blur target=host-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_ro_async.o: $(BIN)/pipeline_nv12_linear_ro_async
+$(BIN)/%/pipeline_nv12_linear_ro_async.o: $(BIN)/pipeline_nv12_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_ro_async -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_async target=$*-hexagon_dma
+	$^ -g pipeline_nv12_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_async target=$*-hexagon_dma options=async
 $(BIN)/%/pipeline_nv12_linear_ro_basic.o: $(BIN)/pipeline_nv12_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_basic target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_ro_fold.o: $(BIN)/pipeline_nv12_linear_ro_fold
+	$^ -g pipeline_nv12_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_basic target=$*-hexagon_dma options=none 
+$(BIN)/%/pipeline_nv12_linear_ro_fold.o: $(BIN)/pipeline_nv12_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_ro_fold -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_fold target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_ro_split.o: $(BIN)/pipeline_nv12_linear_ro_split
+	$^ -g pipeline_nv12_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_fold target=$*-hexagon_dma options=fold
+$(BIN)/%/pipeline_nv12_linear_ro_split.o: $(BIN)/pipeline_nv12_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_ro_split -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_split target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_ro_split_fold.o: $(BIN)/pipeline_nv12_linear_ro_split_fold
+	$^ -g pipeline_nv12_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_split target=$*-hexagon_dma options=split
+$(BIN)/%/pipeline_nv12_linear_ro_split_fold.o: $(BIN)/pipeline_nv12_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_ro_split_fold -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_split_fold target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_rw_async.o: $(BIN)/pipeline_nv12_linear_rw_async
+	$^ -g pipeline_nv12_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_ro_split_fold target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_nv12_linear_rw_async.o: $(BIN)/pipeline_nv12_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_rw_async -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_async target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_rw_fold.o: $(BIN)/pipeline_nv12_linear_rw_fold
+	$^ -g pipeline_nv12_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_async target=$*-hexagon_dma options=async
+$(BIN)/%/pipeline_nv12_linear_rw_fold.o: $(BIN)/pipeline_nv12_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_rw_fold -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_fold target=$*-hexagon_dma
+	$^ -g pipeline_nv12_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_fold target=$*-hexagon_dma options=fold
 $(BIN)/%/pipeline_nv12_linear_rw_basic.o: $(BIN)/pipeline_nv12_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_basic target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_rw_split.o: $(BIN)/pipeline_nv12_linear_rw_split
+	$^ -g pipeline_nv12_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_basic target=$*-hexagon_dma options=none
+$(BIN)/%/pipeline_nv12_linear_rw_split.o: $(BIN)/pipeline_nv12_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_rw_split -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_split target=$*-hexagon_dma
-$(BIN)/%/pipeline_nv12_linear_rw_split_fold.o: $(BIN)/pipeline_nv12_linear_rw_split_fold
+	$^ -g pipeline_nv12_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_split target=$*-hexagon_dma options=split
+$(BIN)/%/pipeline_nv12_linear_rw_split_fold.o: $(BIN)/pipeline_nv12_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_nv12_linear_rw_split_fold -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_split_fold target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_ro_async.o: $(BIN)/pipeline_p010_linear_ro_async
+	$^ -g pipeline_nv12_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_nv12_linear_rw_split_fold target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_p010_linear_ro_async.o: $(BIN)/pipeline_p010_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_ro_async -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_async target=$*-hexagon_dma
+	$^ -g pipeline_p010_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_async target=$*-hexagon_dma options=async
 $(BIN)/%/pipeline_p010_linear_ro_basic.o: $(BIN)/pipeline_p010_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_basic target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_ro_fold.o: $(BIN)/pipeline_p010_linear_ro_fold
+	$^ -g pipeline_p010_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_basic target=$*-hexagon_dma options=none
+$(BIN)/%/pipeline_p010_linear_ro_fold.o: $(BIN)/pipeline_p010_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_ro_fold -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_fold target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_ro_split_fold.o: $(BIN)/pipeline_p010_linear_ro_split_fold
+	$^ -g pipeline_p010_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_fold target=$*-hexagon_dma options=fold
+$(BIN)/%/pipeline_p010_linear_ro_split_fold.o: $(BIN)/pipeline_p010_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_ro_split_fold -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_split_fold target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_ro_split.o: $(BIN)/pipeline_p010_linear_ro_split
+	$^ -g pipeline_p010_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_split_fold target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_p010_linear_ro_split.o: $(BIN)/pipeline_p010_linear_ro_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_ro_split -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_split target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_rw_async.o: $(BIN)/pipeline_p010_linear_rw_async
+	$^ -g pipeline_p010_linear_ro_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_ro_split target=$*-hexagon_dma options=split
+$(BIN)/%/pipeline_p010_linear_rw_async.o: $(BIN)/pipeline_p010_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_rw_async -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_async target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_rw_fold.o: $(BIN)/pipeline_p010_linear_rw_fold
+	$^ -g pipeline_p010_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_async target=$*-hexagon_dma options=async
+$(BIN)/%/pipeline_p010_linear_rw_fold.o: $(BIN)/pipeline_p010_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_rw_fold -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_fold target=$*-hexagon_dma
+	$^ -g pipeline_p010_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_fold target=$*-hexagon_dma options=fold
 $(BIN)/%/pipeline_p010_linear_rw_basic.o: $(BIN)/pipeline_p010_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_basic target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_rw_split.o: $(BIN)/pipeline_p010_linear_rw_split
+	$^ -g pipeline_p010_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_basic target=$*-hexagon_dma options=none
+$(BIN)/%/pipeline_p010_linear_rw_split.o: $(BIN)/pipeline_p010_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_rw_split -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_split target=$*-hexagon_dma
-$(BIN)/%/pipeline_p010_linear_rw_split_fold.o: $(BIN)/pipeline_p010_linear_rw_split_fold
+	$^ -g pipeline_p010_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_split target=$*-hexagon_dma options=split
+$(BIN)/%/pipeline_p010_linear_rw_split_fold.o: $(BIN)/pipeline_p010_linear_rw_basic
 	@mkdir -p $(@D)
-	$^ -g pipeline_p010_linear_rw_split_fold -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_split_fold target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o: $(BIN)/pipeline_raw_linear_ro_async_interleaved
+	$^ -g pipeline_p010_linear_rw_basic -o $(BIN)/$* -e o,h,html -f pipeline_p010_linear_rw_split_fold target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_async_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_async_interleaved target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_async_planar.o: $(BIN)/pipeline_raw_linear_ro_async_planar
+	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_async_interleaved target=$*-hexagon_dma options=async
+$(BIN)/%/pipeline_raw_linear_ro_async_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_async_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_async_planar target=$*-hexagon_dma
+	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_async_planar target=$*-hexagon_dma options=async
 $(BIN)/%/pipeline_raw_linear_ro_basic_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_basic_interleaved target=$*-hexagon_dma
+	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_basic_interleaved target=$*-hexagon_dma options=none
 $(BIN)/%/pipeline_raw_linear_ro_basic_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_basic_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_fold_interleaved
+	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_basic_planar target=$*-hexagon_dma options=none
+$(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_fold_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_fold_interleaved target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_fold_planar.o: $(BIN)/pipeline_raw_linear_ro_fold_planar
+	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_fold_interleaved target=$*-hexagon_dma options=fold
+$(BIN)/%/pipeline_raw_linear_ro_fold_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_fold_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_fold_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o: $(BIN)/pipeline_raw_linear_ro_split_interleaved
+	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_fold_planar target=$*-hexagon_dma options=fold
+$(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_split_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_interleaved target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_split_planar.o: $(BIN)/pipeline_raw_linear_ro_split_planar
+	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_interleaved target=$*-hexagon_dma options=split
+$(BIN)/%/pipeline_raw_linear_ro_split_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_split_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_split_fold_interleaved
+	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_planar target=$*-hexagon_dma options=split
+$(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_split_fold_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_fold_interleaved target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_ro_split_fold_planar.o: $(BIN)/pipeline_raw_linear_ro_split_fold_planar
+	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_fold_interleaved target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_raw_linear_ro_split_fold_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_split_fold_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_fold_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_rw_async_planar.o: $(BIN)/pipeline_raw_linear_rw_async_planar
+	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_fold_planar target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_raw_linear_rw_async_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_async_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_async_planar target=$*-hexagon_dma
+	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_async_planar target=$*-hexagon_dma options=async
 $(BIN)/%/pipeline_raw_linear_rw_basic_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_basic_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_rw_fold_planar.o: $(BIN)/pipeline_raw_linear_rw_fold_planar
+	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_basic_planar target=$*-hexagon_dma options=none
+$(BIN)/%/pipeline_raw_linear_rw_fold_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_fold_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_fold_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_rw_split_fold_planar.o: $(BIN)/pipeline_raw_linear_rw_split_fold_planar
+	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_fold_planar target=$*-hexagon_dma options=fold
+$(BIN)/%/pipeline_raw_linear_rw_split_fold_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_split_fold_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_split_fold_planar target=$*-hexagon_dma
-$(BIN)/%/pipeline_raw_linear_rw_split_planar.o: $(BIN)/pipeline_raw_linear_rw_split_planar
+	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_split_fold_planar target=$*-hexagon_dma options=split_fold
+$(BIN)/%/pipeline_raw_linear_rw_split_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
 	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_split_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_split_planar target=$*-hexagon_dma
+	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_split_planar target=$*-hexagon_dma options=split
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline.o -o $(BIN)/process-$* $(LDFLAGS-$*)
@@ -271,79 +190,24 @@ $(BIN)/process_err-%: process_err.cpp $(BIN)/%/pipeline_err.o mock_dma_implement
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_err.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_err.o -o $(BIN)/process_err-$* $(LDFLAGS-$*)
 $(BIN)/process_blur-%: process_blur.cpp $(BIN)/%/pipeline_blur.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_blur.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_blur.o -o $(BIN)/process_blur-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_ro_async-%: process_nv12_linear_ro_async.cpp $(BIN)/%/pipeline_nv12_linear_ro_async.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_ro_async.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_ro_async.o -o $(BIN)/process_nv12_linear_ro_async-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_ro_basic-%: process_nv12_linear_ro_basic.cpp $(BIN)/%/pipeline_nv12_linear_ro_basic.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_ro_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_ro_basic.o -o $(BIN)/process_nv12_linear_ro_basic-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_ro_fold-%: process_nv12_linear_ro_fold.cpp $(BIN)/%/pipeline_nv12_linear_ro_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_ro_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_ro_fold.o -o $(BIN)/process_nv12_linear_ro_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_ro_split-%: process_nv12_linear_ro_split.cpp $(BIN)/%/pipeline_nv12_linear_ro_split.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_ro_split.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_ro_split.o -o $(BIN)/process_nv12_linear_ro_split-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_ro_split_fold-%: process_nv12_linear_ro_split_fold.cpp $(BIN)/%/pipeline_nv12_linear_ro_split_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_ro_split_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_ro_split_fold.o -o $(BIN)/process_nv12_linear_ro_split_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_rw_async-%: process_nv12_linear_rw_async.cpp $(BIN)/%/pipeline_nv12_linear_rw_async.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_rw_async.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_rw_async.o -o $(BIN)/process_nv12_linear_rw_async-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_rw_basic-%: process_nv12_linear_rw_basic.cpp $(BIN)/%/pipeline_nv12_linear_rw_basic.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_rw_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_rw_basic.o -o $(BIN)/process_nv12_linear_rw_basic-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_rw_fold-%: process_nv12_linear_rw_fold.cpp $(BIN)/%/pipeline_nv12_linear_rw_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_rw_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_rw_fold.o -o $(BIN)/process_nv12_linear_rw_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_rw_split-%: process_nv12_linear_rw_split.cpp $(BIN)/%/pipeline_nv12_linear_rw_split.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_rw_split.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_rw_split.o -o $(BIN)/process_nv12_linear_rw_split-$* $(LDFLAGS-$*)
-$(BIN)/process_nv12_linear_rw_split_fold-%: process_nv12_linear_rw_split_fold.cpp $(BIN)/%/pipeline_nv12_linear_rw_split_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_rw_split_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_rw_split_fold.o -o $(BIN)/process_nv12_linear_rw_split_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_ro_async-%: process_p010_linear_ro_async.cpp $(BIN)/%/pipeline_p010_linear_ro_async.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_ro_async.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_ro_async.o -o $(BIN)/process_p010_linear_ro_async-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_ro_basic-%: process_p010_linear_ro_basic.cpp $(BIN)/%/pipeline_p010_linear_ro_basic.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_ro_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_ro_basic.o -o $(BIN)/process_p010_linear_ro_basic-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_ro_fold-%: process_p010_linear_ro_fold.cpp $(BIN)/%/pipeline_p010_linear_ro_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_ro_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_ro_fold.o -o $(BIN)/process_p010_linear_ro_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_ro_split-%: process_p010_linear_ro_split.cpp $(BIN)/%/pipeline_p010_linear_ro_split.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_ro_split.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_ro_split.o -o $(BIN)/process_p010_linear_ro_split-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_ro_split_fold-%: process_p010_linear_ro_split_fold.cpp $(BIN)/%/pipeline_p010_linear_ro_split_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_ro_split_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_ro_split_fold.o -o $(BIN)/process_p010_linear_ro_split_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_rw_async-%: process_p010_linear_rw_async.cpp $(BIN)/%/pipeline_p010_linear_rw_async.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_async.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_async.o -o $(BIN)/process_p010_linear_rw_async-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_rw_basic-%: process_p010_linear_rw_basic.cpp $(BIN)/%/pipeline_p010_linear_rw_basic.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_basic.o -o $(BIN)/process_p010_linear_rw_basic-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_rw_fold-%: process_p010_linear_rw_fold.cpp $(BIN)/%/pipeline_p010_linear_rw_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_fold.o -o $(BIN)/process_p010_linear_rw_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_rw_split-%: process_p010_linear_rw_split.cpp $(BIN)/%/pipeline_p010_linear_rw_split.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_split.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_split.o -o $(BIN)/process_p010_linear_rw_split-$* $(LDFLAGS-$*)
-$(BIN)/process_p010_linear_rw_split_fold-%: process_p010_linear_rw_split_fold.cpp $(BIN)/%/pipeline_p010_linear_rw_split_fold.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_split_fold.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_split_fold.o -o $(BIN)/process_p010_linear_rw_split_fold-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_async_interleaved-%: process_raw_linear_ro_async_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_async_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_async_interleaved.o -o $(BIN)/process_raw_linear_ro_async_interleaved-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_basic_interleaved-%: process_raw_linear_ro_basic_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_basic_interleaved.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_basic_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_basic_interleaved.o -o $(BIN)/process_raw_linear_ro_basic_interleaved-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_fold_interleaved-%: process_raw_linear_ro_fold_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_fold_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_fold_interleaved.o -o $(BIN)/process_raw_linear_ro_fold_interleaved-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_split_interleaved-%: process_raw_linear_ro_split_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_split_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_split_interleaved.o -o $(BIN)/process_raw_linear_ro_split_interleaved-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_split_fold_interleaved-%: process_raw_linear_ro_split_fold_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_split_fold_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_split_fold_interleaved.o -o $(BIN)/process_raw_linear_ro_split_fold_interleaved-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_async_planar-%: process_raw_linear_ro_async_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_async_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_async_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_async_planar.o -o $(BIN)/process_raw_linear_ro_async_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_basic_planar-%: process_raw_linear_ro_basic_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_basic_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_basic_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_basic_planar.o -o $(BIN)/process_raw_linear_ro_basic_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_fold_planar-%: process_raw_linear_ro_fold_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_fold_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_fold_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_fold_planar.o -o $(BIN)/process_raw_linear_ro_fold_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_split_planar-%: process_raw_linear_ro_split_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_split_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_split_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_split_planar.o -o $(BIN)/process_raw_linear_ro_split_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_split_fold_planar-%: process_raw_linear_ro_split_fold_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_split_fold_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_split_fold_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_split_fold_planar.o -o $(BIN)/process_raw_linear_ro_split_fold_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_rw_async_planar-%: process_raw_linear_rw_async_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_async_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_async_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_async_planar.o -o $(BIN)/process_raw_linear_rw_async_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_rw_basic_planar-%: process_raw_linear_rw_basic_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_basic_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_basic_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_basic_planar.o -o $(BIN)/process_raw_linear_rw_basic_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_rw_fold_planar-%: process_raw_linear_rw_fold_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_fold_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_fold_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_fold_planar.o -o $(BIN)/process_raw_linear_rw_fold_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_rw_split_planar-%: process_raw_linear_rw_split_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_split_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_split_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_split_planar.o -o $(BIN)/process_raw_linear_rw_split_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_rw_split_fold_planar-%: process_raw_linear_rw_split_fold_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_split_fold_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_split_fold_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_split_fold_planar.o -o $(BIN)/process_raw_linear_rw_split_fold_planar-$* $(LDFLAGS-$*)
+$(BIN)/process_nv12_linear_ro_basic-%: process_nv12_linear_ro_basic.cpp $(BIN)/%/pipeline_nv12_linear_ro_basic.o $(BIN)/%/pipeline_nv12_linear_ro_fold.o $(BIN)/%/pipeline_nv12_linear_ro_async.o $(BIN)/%/pipeline_nv12_linear_ro_split.o $(BIN)/%/pipeline_nv12_linear_ro_split_fold.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_ro_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_ro_basic.o $(BIN)/$*/pipeline_nv12_linear_ro_fold.o $(BIN)/$*/pipeline_nv12_linear_ro_async.o $(BIN)/$*/pipeline_nv12_linear_ro_split.o $(BIN)/$*/pipeline_nv12_linear_ro_split_fold.o -o $(BIN)/process_nv12_linear_ro_basic-$* $(LDFLAGS-$*)
+$(BIN)/process_nv12_linear_rw_basic-%: process_nv12_linear_rw_basic.cpp $(BIN)/%/pipeline_nv12_linear_rw_basic.o $(BIN)/%/pipeline_nv12_linear_rw_async.o $(BIN)/%/pipeline_nv12_linear_rw_fold.o $(BIN)/%/pipeline_nv12_linear_rw_split.o $(BIN)/%/pipeline_nv12_linear_rw_split_fold.o  mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_nv12_linear_rw_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_nv12_linear_rw_basic.o $(BIN)/$*/pipeline_nv12_linear_rw_fold.o $(BIN)/$*/pipeline_nv12_linear_rw_async.o $(BIN)/$*/pipeline_nv12_linear_rw_split.o $(BIN)/$*/pipeline_nv12_linear_rw_split_fold.o -o $(BIN)/process_nv12_linear_rw_basic-$* $(LDFLAGS-$*)
+$(BIN)/process_p010_linear_ro_basic-%: process_p010_linear_ro_basic.cpp $(BIN)/%/pipeline_p010_linear_ro_basic.o $(BIN)/%/pipeline_p010_linear_ro_basic.o $(BIN)/%/pipeline_p010_linear_ro_fold.o $(BIN)/%/pipeline_p010_linear_ro_async.o $(BIN)/%/pipeline_p010_linear_ro_split.o $(BIN)/%/pipeline_p010_linear_ro_split_fold.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_ro_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_ro_basic.o $(BIN)/$*/pipeline_p010_linear_ro_fold.o $(BIN)/$*/pipeline_p010_linear_ro_async.o $(BIN)/$*/pipeline_p010_linear_ro_split.o $(BIN)/$*/pipeline_p010_linear_ro_split_fold.o -o $(BIN)/process_p010_linear_ro_basic-$* $(LDFLAGS-$*)
+$(BIN)/process_p010_linear_rw_basic-%: process_p010_linear_rw_basic.cpp $(BIN)/%/pipeline_p010_linear_rw_basic.o $(BIN)/%/pipeline_p010_linear_rw_fold.o $(BIN)/%/pipeline_p010_linear_rw_async.o $(BIN)/%/pipeline_p010_linear_rw_split.o $(BIN)/%/pipeline_p010_linear_rw_split_fold.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_basic.o $(BIN)/$*/pipeline_p010_linear_rw_fold.o $(BIN)/$*/pipeline_p010_linear_rw_async.o $(BIN)/$*/pipeline_p010_linear_rw_split.o $(BIN)/$*/pipeline_p010_linear_rw_split_fold.o -o $(BIN)/process_p010_linear_rw_basic-$* $(LDFLAGS-$*)
+$(BIN)/process_raw_linear_ro_basic_interleaved-%: process_raw_linear_ro_basic_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_basic_interleaved.o mock_dma_implementation.cpp $(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o $(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o $(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o $(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_basic_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_basic_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_fold_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_async_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_split_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_split_fold_interleaved.o -o $(BIN)/process_raw_linear_ro_basic_interleaved-$* $(LDFLAGS-$*)
+$(BIN)/process_raw_linear_ro_basic_planar-%: process_raw_linear_ro_basic_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_basic_planar.o  $(BIN)/%/pipeline_raw_linear_ro_fold_planar.o  $(BIN)/%/pipeline_raw_linear_ro_async_planar.o  $(BIN)/%/pipeline_raw_linear_ro_split_planar.o  $(BIN)/%/pipeline_raw_linear_ro_split_fold_planar.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_basic_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_basic_planar.o  $(BIN)/$*/pipeline_raw_linear_ro_fold_planar.o   $(BIN)/$*/pipeline_raw_linear_ro_async_planar.o   $(BIN)/$*/pipeline_raw_linear_ro_split_planar.o   $(BIN)/$*/pipeline_raw_linear_ro_split_fold_planar.o  -o $(BIN)/process_raw_linear_ro_basic_planar-$* $(LDFLAGS-$*)
+$(BIN)/process_raw_linear_rw_basic_planar-%: process_raw_linear_rw_basic_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_basic_planar.o $(BIN)/%/pipeline_raw_linear_rw_fold_planar.o $(BIN)/%/pipeline_raw_linear_rw_async_planar.o $(BIN)/%/pipeline_raw_linear_rw_split_planar.o $(BIN)/%/pipeline_raw_linear_rw_split_fold_planar.o mock_dma_implementation.cpp
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_basic_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_basic_planar.o $(BIN)/$*/pipeline_raw_linear_rw_fold_planar.o $(BIN)/$*/pipeline_raw_linear_rw_async_planar.o $(BIN)/$*/pipeline_raw_linear_rw_split_planar.o $(BIN)/$*/pipeline_raw_linear_rw_split_fold_planar.o  -o $(BIN)/process_raw_linear_rw_basic_planar-$* $(LDFLAGS-$*)
 
 run-host: $(BIN)/process-host
 	$(BIN)/process-host 2048 1024
+
 
 clean:
 	rm -rf $(BIN)

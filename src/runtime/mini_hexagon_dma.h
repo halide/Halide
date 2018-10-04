@@ -27,6 +27,18 @@ __inline static int align(int x,int a) {
 
 HALIDE_HEXAGON_ENUM { QURT_EOK = 0 };
 
+
+/*!
+ * Power Corner vote
+ */
+#define PW_MIN_SVS 0
+#define PW_SVS2 1
+#define PW_SVS 2
+#define PW_SVS_L1 3
+#define PW_NORMAL 4
+#define PW_NORMAL_L1 5
+#define PW_TURBO 6
+
 /*!
  * Format IDs
  */
@@ -324,18 +336,23 @@ typedef HALIDE_HEXAGON_ENUM {
    */
   extern int32 nDmaWrapper_DmaTransferSetup(t_DmaWrapper_DmaEngineHandle hDmaHandle, t_StDmaWrapper_DmaTransferSetup* stpDmaTransferParm);
 
-  /** @example dma_memcpy.c
-   *  Copies one region of memory to another.
-   *  @example dma_memcpy.h
-   *  @example dma_memcpy_test.c
+  /*!
+   * @brief       DMA power voting based on Cornercase
+   *
+   * @description DMA power voting
+   *
+   * @input       cornercase:
+   *				#define PW_MIN_SVS 0
+   *				#define PW_SVS2 1
+   *				#define PW_SVS 2
+   *				#define PW_SVS_L1 3
+   *				#define PW_NORMAL 4
+   *				#define PW_NORMAL_L1 5
+   *				#define PW_TURBO 6
+   * @return      Success: OK
+   * @n           Failure: ERR
    */
-
-  /** @example dma_blend.c
-   *  DMA Blend App. Will read 2 frames from DDR, blend them and output
-   *  the result to DDR.
-   *  @example dma_blend.h
-   *  @example dma_blend_test.c
-   */
+   extern int32 nDmaWrapper_PowerVoting(uint32 cornercase);
 
 
 #ifdef __cplusplus

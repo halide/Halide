@@ -699,7 +699,9 @@ WEAK int halide_device_release_crop(void *user_context,
         ScopedMutexLock lock(&device_copy_mutex);
         const struct halide_device_interface_t *interface = buf->device_interface;
         int result = interface->impl->device_release_crop(user_context, buf);
+        buf->device = 0;
         interface->impl->release_module();
+        buf->device_interface = NULL;
         return result;
     }
     return 0;

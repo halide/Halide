@@ -4,17 +4,22 @@
 #include <stdlib.h>
 #include "halide_benchmark.h"
 #include "pipeline_nv12_linear_ro_basic.h"
+#include "pipeline_nv12_linear_ro_async.h"
+#include "pipeline_nv12_linear_ro_fold.h"
+#include "pipeline_nv12_linear_ro_split.h"
+#include "pipeline_nv12_linear_ro_split_fold.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: %s width height\n", argv[0]);
+    if (argc < 4) {
+        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]);
         return 0;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
+    const char* str = argv[3];
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
     
@@ -33,7 +38,6 @@ int main(int argc, char **argv) {
 
     Halide::Runtime::Buffer<uint8_t> input_y = input.cropped(1, 0, height);    // Luma plane only
     Halide::Runtime::Buffer<uint8_t> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
-
 
     input_uv.embed(2, 0);
     input_uv.raw_buffer()->dim[2].extent = 2;
@@ -67,13 +71,38 @@ int main(int argc, char **argv) {
     output_uv.raw_buffer()->dim[0].stride = 2;
     output_uv.raw_buffer()->dim[0].extent = width / 2;
 
+    if (!strcmp(str,"basic")) {
+        int result = pipeline_nv12_linear_ro_basic(input_y, input_uv, output_y, output_uv);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+   } else if (!strcmp(str,"fold")) {
+        int result = pipeline_nv12_linear_ro_fold(input_y, input_uv, output_y, output_uv);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+   } else if (!strcmp(str,"async")) {
+        int result = pipeline_nv12_linear_ro_async(input_y, input_uv, output_y, output_uv);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+   } else if (!strcmp(str,"split")) {
+        int result = pipeline_nv12_linear_ro_split(input_y, input_uv, output_y, output_uv);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+   } else if (!strcmp(str,"split_fold")) {
+        int result = pipeline_nv12_linear_ro_split_fold(input_y, input_uv, output_y, output_uv);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+   } else {
+        printf("Incorrect input Correct options: basic, fold, async, split, split_fold\n");
+        free(data_in);
+        return -1;
+   }
 
-    int result = pipeline_nv12_linear_ro_basic(input_y, input_uv, output_y, output_uv);
-    if (result != 0) {
-        printf("pipeline failed! %d\n", result);
-    }
-
-    for (int y = 0; y < 1.5 * height; y++) {
+   for (int y = 0; y < 1.5 * height; y++) {
         for (int x = 0; x < width; x++) {
             uint8_t correct = data_in[x + y * width] * 2;
             if (correct != output(x, y)) {

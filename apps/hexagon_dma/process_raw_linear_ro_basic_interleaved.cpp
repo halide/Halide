@@ -4,18 +4,22 @@
 #include <stdlib.h>
 #include "halide_benchmark.h"
 #include "pipeline_raw_linear_ro_basic_interleaved.h"
+#include "pipeline_raw_linear_ro_fold_interleaved.h"
+#include "pipeline_raw_linear_ro_async_interleaved.h"
+#include "pipeline_raw_linear_ro_split_interleaved.h"
+#include "pipeline_raw_linear_ro_split_fold_interleaved.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "HalideBuffer.h"
-#include "../../src/runtime/mini_hexagon_dma.h"
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
+    if (argc < 4) {
         printf("Usage: %s width height\n", argv[0]);
         return 0;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
+    const char *str = argv[3];
 
     // Fill the input buffer with random data. This is just a plain old memory buffer
     const int buf_size = width * height * 4;
@@ -49,9 +53,35 @@ int main(int argc, char **argv) {
 
     printf("before pipeline\n");
 
-    int result = pipeline_raw_linear_ro_basic_interleaved(input, output);
-    if (result != 0) {
-        printf("pipeline failed! %d\n", result);
+    if (!strcmp(str,"basic")) {
+        int result = pipeline_raw_linear_ro_basic_interleaved(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else if (!strcmp(str,"fold")) {
+        int result = pipeline_raw_linear_ro_fold_interleaved(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else if (!strcmp(str,"async")) {
+        int result = pipeline_raw_linear_ro_async_interleaved(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    }  else if (!strcmp(str,"split")) {
+        int result = pipeline_raw_linear_ro_split_interleaved(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else if (!strcmp(str,"split_fold")) {
+        int result = pipeline_raw_linear_ro_split_fold_interleaved(input, output);
+        if (result != 0) {
+            printf("pipeline failed! %d\n", result);
+        }
+    } else {
+        printf("Incorrect input Correct options: basic, fold, async, split, split_fold\n");
+        free(data_in);
+        return -1;
     }
 
     for (int y=0; y < height; y++) {

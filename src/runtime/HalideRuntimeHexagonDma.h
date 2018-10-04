@@ -26,8 +26,21 @@ typedef enum {
     halide_hexagon_fmt_NV124R_UV
 } halide_hexagon_image_fmt_t;
 
+/*!
+ * typedef enums for power cornercase votes
+ */
+typedef enum {
+    halide_hexagon_dma_power_min_svs,
+    halide_hexagon_dma_power_svs2,
+    halide_hexagon_dma_power_svs,
+    halide_hexagon_dma_power_svs_l1,
+    halide_hexagon_dma_power_normal,
+    halide_hexagon_dma_power_normal_l1,
+    halide_hexagon_dma_power_turbo
+} halide_hexagon_dma_power_votes_t;
+
 /** \file
- *  Routines specific to the Halide Hexagon host-side runtime.
+ *  Routines specific to the Halide Hexagon DMA host-side runtime.
  */
 
 extern const struct halide_device_interface_t *halide_hexagon_dma_device_interface();
@@ -53,14 +66,25 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
 
 /** Before a buffer can be used in a copy operation (i.e. a DMA
  * operation), it must have a DMA engine allocated. */
-///@{
 extern int halide_hexagon_dma_allocate_engine(void *user_context, void ** dma_engine);
+
+/** After a user program ends it is necessary to free up resources */
 extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
+
+/** Prepares a buffer for DMA Read Operation */
 extern int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
+
+/* Prepares a buffer for DMA Write operation */
 extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                                        void *dma_engine, bool is_ubwc, halide_hexagon_image_fmt_t fmt);
+
+/* Frees up DMA Resources associated with the buffer */
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
+
+/* DMA Power Voting based on corner case */
+extern int halide_hexagon_dma_power_voting(void *user_context, halide_hexagon_dma_power_votes_t cornercase);
+
 ///@}
 
 #ifdef __cplusplus
