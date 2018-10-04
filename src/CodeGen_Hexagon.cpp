@@ -309,6 +309,12 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
 
+    if (target.has_feature(Target::HVX_v65)) {
+        // Generate vscatter-vgathers before optimize_hexagon_shuffles.
+        debug(1) << "Looking for vscatter-vgather...\n";
+        body = scatter_gather_generator(body);
+    }
+
     debug(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
     const int lut_alignment = 64;
@@ -1900,6 +1906,35 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
+    if (op->is_intrinsic() && op->name == "gather") {
+        internal_assert(op->args.size() == 5);
+        internal_assert(op->type.bits() != 8);
+        int index_lanes = op->type.lanes();
+        int intrin_lanes = native_vector_bits()/op->type.bits();
+
+        string name = "halide.hexagon.vgather";
+        name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        llvm::Function *fn = module->getFunction(name);
+
+        Value *dst_buffer = codegen(op->args[0]);
+        Value *src_ptr = codegen(op->args[2]);
+        Value *size = codegen(op->args[3]);
+        Value *index = codegen(op->args[4]);
+
+        // Cut up the indices into appropriately-sized pieces.
+        for (int start = 0; start < index_lanes; start += intrin_lanes) {
+            vector<Value *> args;
+            Value *new_index = slice_vector(index, start, intrin_lanes);
+            args.push_back(dst_buffer);
+            args.push_back(codegen(op->args[1] + start));
+            args.push_back(src_ptr);
+            args.push_back(size);
+            args.push_back(new_index);
+            value = builder->CreateCall(fn, args);
+        }
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -2020,6 +2055,29 @@ void CodeGen_Hexagon::visit(const NE *op) {
         Expr eq = Not::make(EQ::make(op->a, op->b));
         eq = eliminate_bool_vectors(eq);
         eq.accept(this);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
+}
+
+void CodeGen_Hexagon::visit(const Allocate *op) {
+    if (op->memory_type == MemoryType::VTCM && !op->new_expr.defined()) {
+        if (!target.has_feature(Target::HVX_v65)) {
+            user_error << "VTCM store_in requires hvx_v65 target feature.\n";
+        }
+        // Calculate size of allocation.
+        Expr size = op->type.bytes();
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            size *= op->extents[i];
+        }
+        size += allocation_padding(op->type);
+        Expr new_expr = Call::make(Handle(), "halide_vtcm_malloc", {size},
+                                   Call::Extern);
+        string free_function = "halide_vtcm_free";
+        Stmt new_alloc = Allocate::make(op->name, op->type, op->memory_type,
+                                        op->extents, op->condition, op->body,
+                                        new_expr, free_function);
+        new_alloc.accept(this);
     } else {
         CodeGen_Posix::visit(op);
     }
