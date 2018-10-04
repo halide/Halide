@@ -1639,7 +1639,7 @@ TEST_APPS=\
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
 		echo Testing app $${APP}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP} || exit 1 ; \
+		make -C $(ROOT_DIR)/apps/$${APP} test LLVM_CONFIG=$(realpath $(LLVM_CONFIG)) CLANG=$(realpath $(CLANG)) HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP} || exit 1 ; \
 	done
 
 # Bazel depends on the distrib archive being built
