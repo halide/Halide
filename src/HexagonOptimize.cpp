@@ -2223,6 +2223,8 @@ class SyncronizationBarriers : public IRMutator2 {
     }
 
 public:
+    using IRMutator2::mutate;
+
     Stmt mutate(const Stmt &s) {
         curr = &s;
         Stmt new_s = IRMutator2::mutate(s);
