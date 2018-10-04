@@ -935,6 +935,7 @@ clean:
 	rm -rf $(INCLUDE_DIR)
 	rm -rf $(DOC_DIR)
 	rm -rf $(DISTRIB_DIR)
+	rm -rf $(ROOT_DIR)/apps/*/bin
 
 .SECONDARY:
 
@@ -1639,7 +1640,10 @@ TEST_APPS=\
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
 		echo Testing app $${APP}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP} || exit 1 ; \
+		make -C $(ROOT_DIR)/apps/$${APP} test \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
+			|| exit 1 ; \
 	done
 
 # Bazel depends on the distrib archive being built
@@ -1803,6 +1807,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(PREFIX)/share/halide/tools
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
@@ -1835,7 +1840,8 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(ROOT_DIR)/README*.md \
 						   $(ROOT_DIR)/bazel/* \
 						   $(BUILD_DIR)/halide_config.bzl \
-						   $(BUILD_DIR)/halide_config.cmake \
+               $(BUILD_DIR)/halide_config.cmake \
+               $(BUILD_DIR)/halide_config.make \
 						   $(ROOT_DIR)/halide.cmake
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
@@ -1864,6 +1870,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
@@ -1890,6 +1897,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
 		halide/tools/halide_image_info.h \
+		halide/tools/halide_malloc_trace.h \
 		halide/tools/halide_trace_config.h
 	rm -rf halide
 
