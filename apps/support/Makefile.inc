@@ -1,5 +1,4 @@
-HALIDE_BIN_PATH ?= ../..
-HALIDE_SRC_PATH ?= ../..
+HALIDE_DISTRIB_PATH ?= ../../distrib
 LDFLAGS ?=
 BIN ?= ./bin
 IMAGES ?= ../images
@@ -16,8 +15,8 @@ endif
 CXX ?= g++
 GXX ?= g++
 
-CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
+CFLAGS += -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
+CXXFLAGS += -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
@@ -39,12 +38,11 @@ LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
-LIB_HALIDE = $(HALIDE_BIN_PATH)/lib/libHalide.a
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
-GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
+GENERATOR_DEPS ?= $(HALIDE_DISTRIB_PATH)/lib/libHalide.a $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 LLVM_CONFIG ?= llvm-config
-LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --link-static --system-libs)
 
 ifeq ($(UNAME), Linux)
@@ -106,13 +104,13 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
 
-$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
+$(BIN)/RunGen.o: $(HALIDE_DISTRIB_PATH)/tools/RunGen.cpp
 	@mkdir -p $(@D)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_DISTRIB_PATH)/tools/RunGenStubs.cpp
 	$(CXX) $(CXXFLAGS) -I$(BIN) -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
