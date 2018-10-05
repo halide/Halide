@@ -758,7 +758,8 @@ WEAK int halide_hexagon_dma_power_voting(void *user_context, halide_hexagon_dma_
         case halide_hexagon_dma_power_turbo:
             return nDmaWrapper_PowerVoting(PW_TURBO);
         default:
-            return -1;
+            error(user_context) << "halide_hexagon_dma_power_voting power mode not found \n";
+            return halide_error_code_generic_error;
     }
 }
 

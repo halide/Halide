@@ -21,32 +21,30 @@ int main(int argc, char **argv) {
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
 
-    // Fill the input buffer with random data. This is just a plain old memory buffer
+    // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = width * height;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
 
+    // Setup Halide input buffer with the test buffer
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, height);
 
-
-    // Give the input the buffer we want to DMA from.
+    // DMA_step 1: Assign buffer to DMA interface
     input.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_in));
     input.set_device_dirty();
 
-    // In order to actually do a DMA transfer, we need to allocate a
-    // DMA engine.
+    // DMA_step 2: Allocate a DMA engine
     void *dma_engine = nullptr;
     halide_hexagon_dma_allocate_engine(nullptr, &dma_engine);
 
-    // We then need to prepare for copying to host. Attempting to copy
-    // to host without doing this is an error.
-    // The Last parameter 0 indicate DMA Read
+    // DMA_step 3: Associate buffer to DMA engine, and prepare for copying to host (DMA read)
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input, dma_engine, false, halide_hexagon_fmt_RawData);
 
+    // Setup Halide output buffer
     Halide::Runtime::Buffer<uint8_t> output(width, height);
 
     int result = pipeline(input, output);
@@ -54,7 +52,7 @@ int main(int argc, char **argv) {
         printf("pipeline failed! %d\n", result);
     }
 
-    output.copy_to_host();
+    // verify result by comparing to expected values
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint8_t correct = data_in[x + y*width ] * 2;
@@ -66,10 +64,11 @@ int main(int argc, char **argv) {
         }
     }
 
+    // DMA_step 4: Buffer is processed, disassociate buffer from DMA engine
+    //             Optional goto DMA_step 0 for processing more buffers
     halide_hexagon_dma_unprepare(nullptr, input);
 
-    // We're done with the DMA engine, release it. This would also be
-    // done automatically by device_free.
+    // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
     free(data_in);

@@ -37,8 +37,8 @@ public:
         Var tx("tx"), ty("ty");
 
         // Break the output into tiles.
-        const int tile_width = 8;
-        const int tile_height = 4;
+        const int tile_width = 128;
+        const int tile_height = 32;
   
         // tweak stride/extent to handle UV deinterleaving
         input_uv.dim(0).set_stride(2);
@@ -49,10 +49,8 @@ public:
         // Schedule the copy to be computed at tiles with a
         // circular buffer of two tiles.
         switch ((UserOptions)options) {
-
             case UserOptions::Basic:
-            default: {
-
+            default:
                 output_y.compute_root()
                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -71,8 +69,7 @@ public:
                        .copy_to_host()
                        .reorder_storage(c, x, y);
             break;
-            }
-            case UserOptions::Fold: {
+            case UserOptions::Fold:
                 output_y.compute_root()
                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -92,8 +89,7 @@ public:
                        .reorder_storage(c, x, y)
                        .fold_storage(x, tile_width * 2);
             break;
-            }
-            case UserOptions::Async: {
+            case UserOptions::Async:
                 output_y.compute_root()
                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -113,9 +109,7 @@ public:
                        .reorder_storage(c, x, y)
                        .fold_storage(x, tile_width * 2);
             break;
-            }
             case UserOptions::Split: {
-
                 Expr fac = output_y.dim(1).extent()/2;
                 Var yo, yi;
                 output_y.split(y, yo, yi, fac);
@@ -143,10 +137,9 @@ public:
                        .bound(c, 0, 2)
                        .copy_to_host()
                        .reorder_storage(c, x, y);
-            break;
             }
+            break;
             case UserOptions::Split_Fold: {
-
                 Expr fac = output_y.dim(1).extent()/2;
                 Var yo, yi;
                 output_y.split(y, yo, yi, fac);
@@ -176,8 +169,8 @@ public:
                        .copy_to_host()
                        .reorder_storage(c, x, y)
                        .fold_storage(x, tile_width * 2);
-                break;
             }
+            break;
         }
     }
 };

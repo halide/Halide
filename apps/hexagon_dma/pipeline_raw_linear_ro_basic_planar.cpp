@@ -33,14 +33,12 @@ public:
         Var ta("ta"), tb("tb");
 
         // Break the output into tiles.
-        const int tile_width = 256;
-        const int tile_height = 128;
+        const int tile_width = 128;
+        const int tile_height = 32;
 
         switch ((UserOptions)options) {
-
             case UserOptions::Basic:
-            default: {
-
+            default:
                 output.compute_root()
                       .tile(x, y, tx, ty, ta, tb, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -48,9 +46,7 @@ public:
                     .store_at(output, tx)
                     .copy_to_host();
             break;
-            }
-            case UserOptions::Fold: {
-
+            case UserOptions::Fold:
                 output.compute_root()
                       .tile(x, y, tx, ty, ta, tb, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -59,9 +55,7 @@ public:
                     .copy_to_host()
                     .fold_storage(x, tile_width * 2);
             break;
-            }
-            case UserOptions::Async: {
-
+            case UserOptions::Async:
                 output.compute_root()
                       .tile(x, y, tx, ty, ta, tb, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -70,36 +64,35 @@ public:
                     .copy_to_host().async()
                     .fold_storage(x, tile_width * 2);
             break;
-            }
             case  UserOptions::Split: {
                 Expr fac = output.dim(1).extent()/2;
                 Var yo, yi;
                 output.split(y, yo, yi, fac);
 
                 output.compute_root()
-                        .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                        .parallel(yo);
+                      .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                      .parallel(yo);
 
                 copy.compute_at(output, tx)
                     .store_at(output, ty)
                     .copy_to_host();
-            break;
             }
+            break;
             case  UserOptions::Split_Fold: {
                 Expr fac = output.dim(1).extent()/2;
                 Var yo, yi;
                 output.split(y, yo, yi, fac);
 
                 output.compute_root()
-                        .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                        .parallel(yo);
+                      .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                      .parallel(yo);
 
                 copy.compute_at(output, tx)
                     .store_at(output, ty)
                     .copy_to_host()
                     .fold_storage(x, tile_width * 2);
-            break;
             }
+            break;
         }
     }
 };

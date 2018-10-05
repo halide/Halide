@@ -6,6 +6,7 @@ class DmaPipeline : public Generator<DmaPipeline> {
 public:
     Input<Buffer<uint8_t>> input{"input", 3};
     Output<Buffer<uint8_t>> output{"output", 3};
+
     enum class UserOptions { Basic, Fold, Async, Split, Split_Fold };
     GeneratorParam<UserOptions> options{"options",
             /* default value */
@@ -35,12 +36,12 @@ public:
         Var ta("ta"), tb("tb");
 
         // Break the output into tiles.
-        const int tile_width = 256;
-        const int tile_height = 128;
+        const int tile_width = 128;
+        const int tile_height = 32;
+
         switch ((UserOptions)options) {
             case UserOptions::Basic:
-            default: {
-
+            default:
                 output.compute_root()
                       .reorder(c, x, y)
                       .bound(c, 0, 4)
@@ -52,8 +53,7 @@ public:
                     .copy_to_host()
                     .reorder_storage(c, x, y);
             break;
-            }
-            case UserOptions::Fold: {
+            case UserOptions::Fold:
                 output.compute_root()
                       .reorder(c, x, y)
                       .bound(c, 0, 4)
@@ -66,8 +66,7 @@ public:
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             break;
-            }
-            case UserOptions::Async: {
+            case UserOptions::Async:
                 output.compute_root()
                       .reorder(c, x, y)
                       .bound(c, 0, 4)
@@ -80,7 +79,6 @@ public:
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             break;
-            }
             case UserOptions::Split: {
                 Expr fac = output.dim(1).extent()/2;
                 Var yo, yi;
@@ -96,8 +94,8 @@ public:
                     .bound(c, 0, 4)
                     .copy_to_host()
                     .reorder_storage(c, x, y);
-            break;
             }
+            break;
             case UserOptions::Split_Fold: {
                 Expr fac = output.dim(1).extent()/2;
                 Var yo, yi;
@@ -114,8 +112,8 @@ public:
                     .copy_to_host()
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
-            break;
             }
+            break;
         }
     }
 };

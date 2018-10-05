@@ -31,14 +31,12 @@ public:
         Var tx("tx"), ty("ty");
 
         // Break the output into tiles.
-        const int tile_width = 64;
+        const int tile_width = 128;
         const int tile_height = 32;
 
         switch ((UserOptions)options) {
-
             case UserOptions::Basic:
-            default: {
-
+            default:
                 output.compute_root()
                       .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
                 Stage(output).set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -51,9 +49,7 @@ public:
                 output_copy.compute_at(output, tx)
                            .copy_to_device();
             break;
-            }
-            case UserOptions::Fold: {
-
+            case UserOptions::Fold:
                 output.compute_root()
                       .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
                 Stage(output).set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -67,9 +63,7 @@ public:
                 output_copy.compute_at(output, tx)
                            .copy_to_device();
             break;
-            }
-            case UserOptions::Async: {
-
+            case UserOptions::Async:
                 output.compute_root()
                       .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
                 Stage(output).set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -83,14 +77,13 @@ public:
                 output_copy.compute_at(output, tx)
                            .copy_to_device();
             break;
-            }
             case UserOptions::Split: {
-                 Expr fac = output.dim(1).extent()/2;
-                 Var yo, yi;
-                 output.split(y, yo, yi, fac);
-                 output.compute_root()
-                       .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                       .parallel(yo);
+                Expr fac = output.dim(1).extent()/2;
+                Var yo, yi;
+                output.split(y, yo, yi, fac);
+                output.compute_root()
+                      .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                      .parallel(yo);
 
                 Stage(output).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
@@ -101,15 +94,15 @@ public:
 
                 output_copy.compute_at(output, tx)
                            .copy_to_device();
-            break;
             }
+            break;
             case UserOptions::Split_Fold: {
-                 Expr fac = output.dim(1).extent()/2;
-                 Var yo, yi;
-                 output.split(y, yo, yi, fac);
-                 output.compute_root()
-                       .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                       .parallel(yo);
+                Expr fac = output.dim(1).extent()/2;
+                Var yo, yi;
+                output.split(y, yo, yi, fac);
+                output.compute_root()
+                      .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                      .parallel(yo);
 
                 Stage(output).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
@@ -121,11 +114,10 @@ public:
 
                 output_copy.compute_at(output, tx)
                            .copy_to_device();
-            break;
             }
+            break;
         }
     }
-
 };
 
 HALIDE_REGISTER_GENERATOR(DmaPipeline, pipeline_raw_linear_rw_basic_planar)

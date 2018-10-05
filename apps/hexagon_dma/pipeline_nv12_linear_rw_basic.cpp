@@ -44,97 +44,17 @@ public:
         Var tx("tx"), ty("ty");
 
         // Break the output into tiles.
-        int tile_width = 64;
-        int tile_height = 32;
+        const int tile_width = 128;
+        const int tile_height = 32;
 
-          // tweak stride/extent to handle UV deinterleaving
+        // tweak stride/extent to handle UV deinterleaving
         input_uv.dim(0).set_stride(2);
         input_uv.dim(2).set_stride(1).set_bounds(0, 2);
         output_uv.dim(0).set_stride(2);
         output_uv.dim(2).set_stride(1).set_bounds(0, 2);
 
         switch ((UserOptions)options) {
-
-            case UserOptions::Basic: {
-
-                output_y.compute_root()
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
-
-                output_uv.compute_root()
-                 .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
-                 .bound(c, 0, 2)
-                 .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
-
-                input_copy_y.compute_at(output_y, tx)
-                            .copy_to_host();
-
-                Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
-
-                work_y.compute_at(output_y, tx);
-
-                output_copy_y.compute_at(output_y, tx)
-                         .copy_to_device();
-
-                input_copy_uv.compute_at(output_uv, tx)
-                         .bound(c, 0, 2)
-                         .copy_to_host()
-                         .reorder_storage(c, x, y);
-
-                Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
-
-                work_uv.compute_at(output_uv, tx)
-                       .bound(c, 0, 2)
-                       .reorder_storage(c, x, y);
-
-                output_copy_uv.compute_at(output_uv, tx)
-                          .bound(c, 0, 2)
-                          .copy_to_device()
-                          .reorder_storage(c, x, y);
-
-                break;
-            }
-            case UserOptions::Fold: {
-                tile_width = 256;
-                tile_height = 64;
-                output_y.compute_root()
-                    .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
-
-                output_uv.compute_root()
-                 .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
-                 .bound(c, 0, 2)
-                 .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
-
-                input_copy_y.compute_at(output_y, tx)
-                        .copy_to_host()
-                        .fold_storage(x, tile_width * 2);
-
-                Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
-
-                work_y.compute_at(output_y, tx);
-
-                output_copy_y.compute_at(output_y, tx)
-                         .copy_to_device();
-
-                input_copy_uv.compute_at(output_uv, tx)
-                         .bound(c, 0, 2)
-                         .copy_to_host()
-                         .reorder_storage(c, x, y)
-                         .fold_storage(x, tile_width * 2);
-
-                Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
-
-                work_uv.compute_at(output_uv, tx)
-                       .bound(c, 0, 2)
-                       .reorder_storage(c, x, y);
-
-                output_copy_uv.compute_at(output_uv, tx)
-                          .bound(c, 0, 2)
-                          .copy_to_device()
-                          .reorder_storage(c, x, y);
-
-                break;
-            }
-            case UserOptions::Async: {
+            case UserOptions::Basic:
                 output_y.compute_root()
                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -144,8 +64,7 @@ public:
                          .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_copy_y.compute_at(output_y, tx)
-                        .copy_to_host().async()
-                        .fold_storage(x, tile_width * 2);
+                            .copy_to_host();
 
                 Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
@@ -155,10 +74,9 @@ public:
                              .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
-                         .bound(c, 0, 2)
-                         .copy_to_host().async()
-                         .reorder_storage(c, x, y)
-                         .fold_storage(x, tile_width * 2);
+                             .bound(c, 0, 2)
+                             .copy_to_host()
+                             .reorder_storage(c, x, y);
 
                 Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
@@ -167,48 +85,119 @@ public:
                        .reorder_storage(c, x, y);
 
                 output_copy_uv.compute_at(output_uv, tx)
-                          .bound(c, 0, 2)
-                          .copy_to_device()
-                          .reorder_storage(c, x, y);
+                              .bound(c, 0, 2)
+                              .copy_to_device()
+                              .reorder_storage(c, x, y);
+            break;
+            case UserOptions::Fold:
+                output_y.compute_root()
+                        .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
-               break;
-            }
+                output_uv.compute_root()
+                         .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+                         .bound(c, 0, 2)
+                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+
+                input_copy_y.compute_at(output_y, tx)
+                            .copy_to_host()
+                            .fold_storage(x, tile_width * 2);
+
+                Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
+
+                work_y.compute_at(output_y, tx);
+
+                output_copy_y.compute_at(output_y, tx)
+                             .copy_to_device();
+
+                input_copy_uv.compute_at(output_uv, tx)
+                             .bound(c, 0, 2)
+                             .copy_to_host()
+                             .reorder_storage(c, x, y)
+                             .fold_storage(x, tile_width * 2);
+
+                Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
+
+                work_uv.compute_at(output_uv, tx)
+                       .bound(c, 0, 2)
+                       .reorder_storage(c, x, y);
+
+                output_copy_uv.compute_at(output_uv, tx)
+                              .bound(c, 0, 2)
+                              .copy_to_device()
+                              .reorder_storage(c, x, y);
+            break;
+            case UserOptions::Async:
+                output_y.compute_root()
+                        .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+
+                output_uv.compute_root()
+                         .reorder(c, x, y)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+                         .bound(c, 0, 2)
+                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+
+                input_copy_y.compute_at(output_y, tx)
+                            .copy_to_host().async()
+                            .fold_storage(x, tile_width * 2);
+
+                Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
+
+                work_y.compute_at(output_y, tx);
+
+                output_copy_y.compute_at(output_y, tx)
+                             .copy_to_device();
+
+                input_copy_uv.compute_at(output_uv, tx)
+                             .bound(c, 0, 2)
+                             .copy_to_host().async()
+                             .reorder_storage(c, x, y)
+                             .fold_storage(x, tile_width * 2);
+
+                Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
+
+                work_uv.compute_at(output_uv, tx)
+                       .bound(c, 0, 2)
+                       .reorder_storage(c, x, y);
+
+                output_copy_uv.compute_at(output_uv, tx)
+                              .bound(c, 0, 2)
+                              .copy_to_device()
+                              .reorder_storage(c, x, y);
+            break;
             case UserOptions::Split: {
-                 Expr fac = output_y.dim(1).extent()/2;
-                 Var yo, yi;
-                 output_y.split(y, yo, yi, fac);
+                Expr fac = output_y.dim(1).extent()/2;
+                Var yo, yi;
+                output_y.split(y, yo, yi, fac);
 
-                 output_y
-                  .compute_root()
-                  .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                  .parallel(yo);
+                output_y.compute_root()
+                        .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                        .parallel(yo);
 
-                 Expr facx = output_uv.dim(1).extent()/2;
-                 Var yox, yix;
-                 output_uv.split(y, yox, yix, facx);
+                Expr facx = output_uv.dim(1).extent()/2;
+                Var yox, yix;
+                output_uv.split(y, yox, yix, facx);
 
-                 output_uv.compute_root()
-                          .reorder(c, x, yox)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
-                          .bound(c, 0, 2)
-                          .tile(x, yix, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                          .parallel(yox);
+                output_uv.compute_root()
+                         .reorder(c, x, yox)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+                         .bound(c, 0, 2)
+                         .tile(x, yix, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                         .parallel(yox);
 
                 input_copy_y.compute_at(output_y, tx)
-                        .store_at(output_y, tx)
-                        .copy_to_host();
+                            .store_at(output_y, tx)
+                            .copy_to_host();
 
                 Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
                 work_y.compute_at(output_y, tx);
 
                 output_copy_y.compute_at(output_y, tx)
-                         .copy_to_device();
+                             .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
-                         .store_at(output_uv, tx)
-                         .bound(c, 0, 2)
-                         .copy_to_host()
-                         .reorder_storage(c, x, y);
+                             .store_at(output_uv, tx)
+                             .bound(c, 0, 2)
+                             .copy_to_host()
+                             .reorder_storage(c, x, y);
 
                 Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
@@ -217,50 +206,48 @@ public:
                        .reorder_storage(c, x, y);
 
                 output_copy_uv.compute_at(output_uv, tx)
-                          .bound(c, 0, 2)
-                          .copy_to_device()
-                          .reorder_storage(c, x, y);
-
-            break;
+                              .bound(c, 0, 2)
+                              .copy_to_device()
+                              .reorder_storage(c, x, y);
             }
+            break;
             case UserOptions::Split_Fold: {
-                 Expr fac = output_y.dim(1).extent()/2;
-                 Var yo, yi;
-                 output_y.split(y, yo, yi, fac);
+                Expr fac = output_y.dim(1).extent()/2;
+                Var yo, yi;
+                output_y.split(y, yo, yi, fac);
 
-                 output_y
-                  .compute_root()
-                  .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                  .parallel(yo);
+                output_y.compute_root()
+                        .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                        .parallel(yo);
 
-                 Expr facx = output_uv.dim(1).extent()/2;
-                 Var yox, yix;
-                 output_uv.split(y, yox, yix, facx);
+                Expr facx = output_uv.dim(1).extent()/2;
+                Var yox, yix;
+                output_uv.split(y, yox, yix, facx);
 
-                 output_uv.compute_root()
-                          .reorder(c, x, yox)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
-                          .bound(c, 0, 2)
-                          .tile(x, yix, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-                          .parallel(yox);
+                output_uv.compute_root()
+                         .reorder(c, x, yox)   // to handle UV interleave, with 'c' inner most loop, as DMA'd into buffer
+                         .bound(c, 0, 2)
+                         .tile(x, yix, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
+                         .parallel(yox);
 
                 input_copy_y.compute_at(output_y, tx)
-                        .store_at(output_y, tx)
-                        .copy_to_host().async()
-                        .fold_storage(x, tile_width * 2);
+                            .store_at(output_y, tx)
+                            .copy_to_host().async()
+                            .fold_storage(x, tile_width * 2);
 
                 Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
                 work_y.compute_at(output_y, tx);
 
                 output_copy_y.compute_at(output_y, tx)
-                         .copy_to_device();
+                             .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
-                         .store_at(output_uv, tx)
-                         .bound(c, 0, 2)
-                         .copy_to_host().async()
-                         .reorder_storage(c, x, y)
-                         .fold_storage(x, tile_width * 2);
+                             .store_at(output_uv, tx)
+                             .bound(c, 0, 2)
+                             .copy_to_host().async()
+                             .reorder_storage(c, x, y)
+                             .fold_storage(x, tile_width * 2);
 
                 Stage(output_uv).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
@@ -269,12 +256,11 @@ public:
                        .reorder_storage(c, x, y);
 
                 output_copy_uv.compute_at(output_uv, tx)
-                          .bound(c, 0, 2)
-                          .copy_to_device()
-                          .reorder_storage(c, x, y);
-
-            break;
+                              .bound(c, 0, 2)
+                              .copy_to_device()
+                              .reorder_storage(c, x, y);
             }
+            break;
         }
     }
 };
