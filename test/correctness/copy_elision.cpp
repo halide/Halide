@@ -26,7 +26,6 @@ int test_0() {
 
     // TODO(psuriana): Also need to check the IR calls
 
-    Buffer<int> out_img = g.realize(10, 10);
     out_img.for_each_element([&](int x, int y) {
             int expected = x + y + 5;
             if (out_img(x, y) != expected) {
@@ -246,7 +245,7 @@ int test_7() {
         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
     Stage s = output_copy;
-    s.set_dim_device_api(tx, DeviceAPI::HexagonDma);
+    s.set_dim_device_api(tx, DeviceAPI::OpenCL);
 
     input_copy
         .compute_at(output_copy, tx)
@@ -261,7 +260,7 @@ int test_7() {
     input.set(img);
 
     Target t = get_jit_target_from_environment();
-    output_copy.compile_jit(t.with_feature(Target::HexagonDma));
+    output_copy.compile_jit(t.with_feature(Target::OpenCL));
     Buffer<uint8_t> out_img = output_copy.realize(W, H);
 
     out_img.for_each_element([&](int x, int y) {
@@ -315,6 +314,7 @@ int test_9() {
                 abort();
             }
         });
+>>>>>>> a3a41bb3eda101eb07f9351bb97bca68ec69fb91
     return 0;
 }
 

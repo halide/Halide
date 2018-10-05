@@ -49,9 +49,7 @@ class AllocationInference : public IRMutator2 {
         Stmt new_body = mutate(op->body);
         Stmt stmt = Realize::make(op->name, op->types, op->memory_type, op->bounds, op->condition, new_body);
 
-        //TODO Not sure which is the correct one to use here
-        // internal_assert(b.size() == op->bounds.size()) << b.size() << " " << op->bounds.size() << "\n";
-        internal_assert(b.empty() || (b.size() == op->bounds.size()));
+        internal_assert(b.empty() || (b.size() == op->bounds.size())) << b.size() << " " << op->bounds.size() << "\n";
 
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension

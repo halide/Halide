@@ -2065,11 +2065,9 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     int native_bits = native_vector_bits();
     int native_bytes = native_bits / 8;
 
-    // We assume halide_malloc for the platform returns
-    // buffers aligned to at least the native vector
-    // width. (i.e. 16-byte alignment on arm, and 32-byte
-    // alignment on x86), so this is the maximum alignment we
-    // can infer based on the index alone.
+    // We assume halide_malloc for the platform returns buffers
+    // aligned to at least the native vector width. So this is the
+    // maximum alignment we can infer based on the index alone.
 
     // Boost the alignment if possible, up to the native vector width.
     ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
@@ -3022,7 +3020,12 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
                                                 0, name);
     ArrayRef<unsigned char> data_array((const unsigned char *)&data[0], data.size());
     global->setInitializer(ConstantDataArray::get(*context, data_array));
-    global->setAlignment(32);
+    size_t alignment = 32;
+    size_t native_vector_bytes = (size_t)(native_vector_bits() / 8);
+    if (data.size() > alignment && native_vector_bytes > alignment) {
+        alignment = native_vector_bytes;
+    }
+    global->setAlignment((unsigned)alignment);
 
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
@@ -3226,7 +3229,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                     result = 0;
                     auto after_acquires = skip_acquires(node->first);
                     direct_acquires += after_acquires.second;
-                    
+
                     after_acquires.first.accept(this);
                     total_threads += result;
 
@@ -3277,7 +3280,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                 after_inner_acquires.first.accept(this);
                 result = result + 1;
             }
- 
+
             void visit(const Block *op) {
                 result = 0;
                 op->first.accept(this);
@@ -3403,7 +3406,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             iter->setName("task_parent");
             sym_push("__task_parent", iterator_to_pointer(iter));
         }
-        
+
         // Generate the new function body
         codegen(t.body);
 

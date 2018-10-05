@@ -4,6 +4,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    return 0;
+}
+
+int main0(int argc, char **argv) {
 
     //int W = 64*3, H = 64*3;
     const int W = 128, H = 48;

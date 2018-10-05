@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         Param<int> p;
 
         f(x) = x;
-        g(x) = f(x);
+        g(x) = f(x) + 1;
         g.split(x, xo, xi, p);
 
         // We need p elements of f per split of g. This could create a
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         Var x, xo, xi;
 
         f(x) = x;
-        g(x) = f(x);
+        g(x) = f(x) + 1;
         g.split(x, xo, xi, 8, TailStrategy::GuardWithIf);
 
         f.compute_at(g, xo);
