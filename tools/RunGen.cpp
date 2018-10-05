@@ -646,19 +646,21 @@ Buffer<> load_input(const std::string &pathname,
         memset(b.data(), 0, b.size_in_bytes());
         return b;
     } else if (v[0] == "identity") {
-      auto shape = parse_extents(v[1]);
-      // Make a binary buffer with diagonal elements set to true. Diagonal
-      // elements are those whose first two dimensions are equal.
-      const int num_dim = shape.size();
-      std::vector<int> sizes(num_dim);
-      for (int i = 0; i < num_dim; ++i) sizes[i] = shape[i].extent;
-      Buffer<bool> binary(sizes);
-      binary.for_each_element([&](const int *pos) {
-        binary(pos) = (num_dim >= 2) ? (pos[0] == pos[1]) : (pos[0] == 0);
-      });
-      // Convert the binary buffer to the required type, so true becomes 1.
-      return Halide::Tools::ImageTypeConversion::convert_image(binary,
-                                                               metadata.type);
+        auto shape = parse_extents(v[1]);
+        // Make a binary buffer with diagonal elements set to true. Diagonal
+        // elements are those whose first two dimensions are equal.
+        const int num_dim = shape.size();
+        std::vector<int> sizes(num_dim);
+        for (int i = 0; i < num_dim; ++i) {
+            sizes[i] = shape[i].extent;
+        }
+        Buffer<bool> binary(sizes);
+        binary.for_each_element([&](const int *pos) {
+            binary(pos) = (num_dim >= 2) ? (pos[0] == pos[1]) : (pos[0] == 0);
+        });
+        // Convert the binary buffer to the required type, so true becomes 1.
+        return Halide::Tools::ImageTypeConversion::convert_image(binary,
+                                                                 metadata.type);
     }
 
     // TODO: add random options.
