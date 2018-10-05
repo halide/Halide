@@ -16,7 +16,7 @@ there is an implicit `name.rungen` rule that generates an executable that wraps
 the Generator library:
 
 ```
-# In addition to defining a static library named "local_laplacian", this rule 
+# In addition to defining a static library named "local_laplacian", this rule
 # also implicitly defines an executable target named "local_laplacian.rungen"
 halide_library(
     local_laplacian
@@ -115,13 +115,21 @@ Generator, and inits every element to zero:
 $ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:[123,456,3] levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
 ```
 
+There's also a `random:SEED:[]` pseudo-file, which fills the image with uniform
+noise based on a specific random-number seed:
+
+```
+# Input is a 3-dimensional image with extent 123, 456, and 3
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=random:42:[123,456,3] levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
+```
+
 ## Benchmarking
 
 To run a benchmark, use the `--benchmark` flag:
 
 ```
 # When you specify the --benchmark flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --benchmark input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 
+$ ./bin/local_laplacian.rungen --benchmark input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
 Benchmark for local_laplacian produces best case of 0.0494629 sec/iter, over 3 blocks of 10 iterations.
 Best output throughput is 39.9802 mpix/sec.
 ```
@@ -140,7 +148,7 @@ high-water-mark of CPU memory usage.
 
 ```
 # When you specify the --track_memory flag, outputs become optional.
-$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1 
+$ ./bin/local_laplacian.rungen --track_memory input=zero:[1920,1080,3] levels=8 alpha=1 beta=1
 Maximum Halide memory: 82688420 bytes for output of 1.97754 mpix.
 ```
 
