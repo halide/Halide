@@ -24,7 +24,7 @@ UNAME = $(shell uname)
 
 $(BIN)/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o $@ $(LDFLAGS) $(LLVM_SHARED_LIBS) $(HALIDE_SYSTEM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 bench_16x16: $(BIN)/bench_fft
 	$(BIN)/bench_fft 16 16 $(BIN)/
@@ -40,7 +40,7 @@ bench_64x64: $(BIN)/bench_fft
 
 $(BIN)/fft.generator: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
 $(BIN)/fft_forward_r2c.a: $(BIN)/fft.generator
@@ -61,7 +61,7 @@ $(BIN)/fft_inverse_c2c.a: $(BIN)/fft.generator
 
 $(BIN)/fft_aot_test: fft_aot_test.cpp $(BIN)/fft_forward_r2c.a $(BIN)/fft_inverse_c2r.a $(BIN)/fft_forward_c2c.a $(BIN)/fft_inverse_c2c.a
 	@mkdir -p $(@D)
-	$(CXX) -I$(BIN) -I$(HALIDE_DISTRIB_PATH)/include/ -std=c++11 $^ -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
+	$(CXX) -I$(BIN) -I$(HALIDE_DISTRIB_PATH)/include/ -std=c++11 $^ -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 clean:
 	rm -rf $(BIN)
