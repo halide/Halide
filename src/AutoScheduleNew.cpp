@@ -23,6 +23,7 @@
 #include <chrono>
 #include <iostream>
 #include <random>
+#include <unordered_set>
 
 // TODO: overview of algorithm
 
@@ -1752,57 +1753,6 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
-struct Constraints {
-    virtual bool must_root(const FunctionDAG::Node *node) const { return node->is_output; }
-    virtual bool may_root(const FunctionDAG::Node *node) const { return true; }
-    virtual bool must_inline(const FunctionDAG::Node *node) const { return false; }
-    virtual bool may_inline(const FunctionDAG::Node *node) const { return true; }
-    virtual bool may_subtile() const { return true; }
-    virtual bool may_parallelize(const FunctionDAG::Node::Stage *stage, int dim) const { return true; }
-    virtual int tiling_factor() const { return 2; }
-    virtual int stratify_depth() const {return -1; }
-};
-
-struct CoarsePassConstraints : public Constraints {
-    const MachineParams &params;
-    CoarsePassConstraints(const MachineParams &p) : params(p) {}
-    bool may_subtile() const override { return true; }
-    bool may_inline(const FunctionDAG::Node *node) const override { return false; }
-    int tiling_factor() const override { return params.parallelism; }
-    int stratify_depth() const override {return 1; }
-};
-
-struct FinePassConstraints : public Constraints {
-    set<const FunctionDAG::Node *> roots;
-    StageMap<uint64_t> parallel_dims;
-
-    bool must_root(const FunctionDAG::Node *node) const override {
-        return node->is_output || (roots.find(node) != roots.end());
-    }
-
-    bool may_root(const FunctionDAG::Node *node) const override {
-        return roots.find(node) != roots.end();
-    }
-
-    void permit_parallelization(const FunctionDAG::Node::Stage *stage, int dim) {
-        parallel_dims.get_or_create(stage) |= ((uint64_t)1) << dim;
-    }
-
-    bool may_parallelize(const FunctionDAG::Node::Stage *stage, int dim) const override {
-        if (!parallel_dims.contains(stage)) {
-            return false;
-        }
-        return parallel_dims.get(stage) & ((uint64_t)1 << dim);
-    }
-
-    int stratify_depth() const override {
-        return 2;
-    }
-};
-
-
-
-
 // We're going to do a tree search over possible schedules to find an
 // optimal one. A tree search requires a state, and a function that
 // gives you children of the state (with costs). The following struct
@@ -1862,19 +1812,26 @@ struct LoopNest {
     }
 
     // Hash the loop structure and sizes up to a fixed depth
-    void structural_hash(uint64_t &h, int depth) const {
-        for (uint64_t s : size) {
-            hash_combine(h, s);
-        }
+    void structural_hash(uint64_t &h, int depth, int parallelism) const {
         if (depth == 0) {
-            // Don't distinguish below this depth
+            for (int64_t s : size) {
+                hash_combine(h, (int)s >= parallelism);
+            }
+            hash_combine(h, funcs_realized_or_inlined());
+        } else if (depth == 1) {
+            for (int64_t s : size) {
+                hash_combine(h, s);
+            }
             hash_combine(h, funcs_realized_or_inlined());
         } else {
+            for (int64_t s : size) {
+                hash_combine(h, s);
+            }
             hash_combine(h, inlined.size());
             hash_combine(h, store_at.size());
             hash_combine(h, children.size());
             for (auto c : children) {
-                c->structural_hash(h, depth - 1);
+                c->structural_hash(h, depth - 2, parallelism);
             }
         }
     }
@@ -2373,11 +2330,9 @@ struct LoopNest {
     // Return all possible ways to compute f in tiles.
     vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                           const LoopNest *parent,
-                                                          const Constraints *constraints,
                                                           const MachineParams &params,
                                                           bool in_realization) const {
         internal_assert(f);
-        internal_assert(constraints);
 
         vector<IntrusivePtr<const LoopNest>> result;
 
@@ -2400,13 +2355,12 @@ struct LoopNest {
             while (vector_dim < (int)l.size() && !l[vector_dim].pure) vector_dim++;
         }
 
-        if ((!is_root() || constraints->may_root(f)) &&
-            !innermost &&
+        if (!innermost &&
             (!in_realization || size[vector_dim] == 1)) {
             // Place the computation inside this loop
             std::unique_ptr<LoopNest> r{new LoopNest};
             r->copy_from(*this);
-            r->compute_here(f, is_root() || constraints->may_subtile());
+            r->compute_here(f, true);
             if (!in_realization) {
                 r->store_at.insert(f);
             } else {
@@ -2415,14 +2369,14 @@ struct LoopNest {
             result.emplace_back(r.release());
         }
 
-        if (f->is_output || constraints->must_root(f)) {
+        if (f->is_output) {
             // Not permitted to compute at tiles of some consumer
             return result;
         }
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), constraints->tiling_factor(), !in_realization, vector_dim, innermost ? vector_size : 1);
+            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization, vector_dim, innermost ? vector_size : 1);
 
             for (auto t : tilings) {
                 if (parent->is_root()) {
@@ -2432,17 +2386,15 @@ struct LoopNest {
                     // parallelism, and root-level tilings that would
                     // force serialization of dimensions we have
                     // decided to parallelize over in an earlier pass.
-                    bool good = true;
                     int total = 1;
                     size_t idx = 0;
                     for (auto s : t) {
                         if (l[idx].pure) {
                             total *= s;
                         }
-                        good &= (s == 1) || constraints->may_parallelize(stage, idx);
                         idx++;
                     }
-                    if (!good || total < params.parallelism) continue;
+                    if (total < params.parallelism) continue;
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
@@ -2450,7 +2402,7 @@ struct LoopNest {
                 inner->node      = outer->node      = node;
                 inner->stage     = outer->stage     = stage;
                 inner->stage_idx = outer->stage_idx = stage_idx;
-                inner->tileable  = outer->tileable  = tileable && constraints->may_subtile();
+                inner->tileable  = outer->tileable  = tileable;
 
                 outer->size = size;
                 outer->innermost = false;
@@ -2512,7 +2464,7 @@ struct LoopNest {
                     // don't have to worry about the constraints this
                     // places on parallelism, as we forced all the
                     // parallelism to the outer loop.
-                    auto v = inner->compute_in_tiles(f, outer, constraints, params, true);
+                    auto v = inner->compute_in_tiles(f, outer, params, true);
                     for (IntrusivePtr<const LoopNest> &n : v) {
                         LoopNest *store_at_outer_compute_further_in = new LoopNest;
                         store_at_outer_compute_further_in->copy_from(*outer);
@@ -2523,7 +2475,7 @@ struct LoopNest {
 
                 // Site the computation inside the outer loop
                 outer->children.emplace_back(inner);
-                outer->compute_here(f, constraints->may_subtile());
+                outer->compute_here(f, true);
                 outer->tileable &= !in_realization;
                 result.emplace_back(outer);
             }
@@ -2546,7 +2498,7 @@ struct LoopNest {
                     // level, so this would constrain parallelism.
                     continue;
                 }
-                auto v = children[child]->compute_in_tiles(f, this, constraints, params, store_here);
+                auto v = children[child]->compute_in_tiles(f, this, params, store_here);
                 for (IntrusivePtr<const LoopNest> &n : v) {
                     // (Only valid if one child calls f) Push the
                     // computation into the child. Possibly leaving
@@ -2759,18 +2711,19 @@ void destroy<LoopNest>(const LoopNest *t) {delete t;}
 namespace {
 
 struct State {
+    mutable RefCount ref_count;
     IntrusivePtr<const LoopNest> root;
-
+    IntrusivePtr<const State> parent;
     double cost = 0;
-
     int num_funcs_scheduled = 0;
+    bool penalized = false;
 
     static int cost_calculations;
 
-    uint64_t structural_hash(int depth) const {
+    uint64_t structural_hash(int depth, int parallelism) const {
         uint64_t h = 0;
         internal_assert(root.defined());
-        root->structural_hash(h, depth);
+        root->structural_hash(h, depth, parallelism);
         return h;
     }
 
@@ -3006,13 +2959,19 @@ struct State {
         return true;
     }
 
-
+    IntrusivePtr<State> make_child() const {
+        State *s = new State;
+        s->parent = this;
+        s->root = root;
+        s->cost = cost;
+        s->num_funcs_scheduled = num_funcs_scheduled;
+        return s;
+    }
 
     void generate_children(const FunctionDAG &dag,
                            const MachineParams &params,
-                           const Constraints *constraints,
                            ThroughputPredictorPipeline *throughput_predictor,
-                           std::function<void(std::unique_ptr<State> &&)> &accept_child) {
+                           std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
 
         if (num_funcs_scheduled == (int)dag.nodes.size()) {
@@ -3042,15 +3001,16 @@ struct State {
         }
 
         int num_children = 0;
-        if (!constraints->must_root(node) && constraints->may_inline(node)) {
+        {
             // 1) Inline it
             if (node->stages.size() == 1 && !node->is_output) {
-                std::unique_ptr<State> child{new State(*this)};
+                auto child = make_child();
                 LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
                 new_root->inline_func(node);
                 child->root = new_root;
                 child->num_funcs_scheduled++;
+                // TODO: filter children here instead of calculating the cost of children we don't want.
                 if (child->calculate_cost(dag, params, throughput_predictor)) {
                     internal_assert(child->root->computes(node)) << "Failed to inline " << node->func.name() << '\n';
                     num_children++;
@@ -3061,11 +3021,11 @@ struct State {
             }
         }
 
-        if (!constraints->must_inline(node)) {
+        {
             // 2) Realize it somewhere
-            auto tile_options = root->compute_in_tiles(node, nullptr, constraints, params, false);
+            auto tile_options = root->compute_in_tiles(node, nullptr, params, false);
             for (IntrusivePtr<const LoopNest> &n : tile_options) {
-                std::unique_ptr<State> child{new State(*this)};
+                auto child = make_child();
                 child->root = std::move(n);
                 child->num_funcs_scheduled++;
                 if (child->calculate_cost(dag, params, throughput_predictor)) {
@@ -3145,21 +3105,31 @@ struct State {
 
 int State::cost_calculations = 0;
 
+}
+
+template<>
+RefCount &ref_count<State>(const State *t) {return t->ref_count;}
+
+template<>
+void destroy<State>(const State *t) {delete t;}
+
+namespace {
+
 // A priority queue of states, sorted according to increasing
 // cost. Never shrinks, to avoid reallocations.
 // Can't use std::priority_queue because it doesn't support unique_ptr.
 class StateQueue {
 private:
     struct CompareStates {
-        bool operator()(const std::unique_ptr<State> &a, const std::unique_ptr<State> &b) const {
+        bool operator()(const IntrusivePtr<State> &a, const IntrusivePtr<State> &b) const {
             return a->cost > b->cost;
         }
     };
 
-    std::vector<std::unique_ptr<State>> storage;
+    std::vector<IntrusivePtr<State>> storage;
     size_t sz = 0;
 public:
-    void emplace(std::unique_ptr<State> &&s) {
+    void emplace(IntrusivePtr<State> &&s) {
         if (sz >= storage.size()) {
             storage.resize(std::max(sz * 2, (size_t)64));
         }
@@ -3169,15 +3139,15 @@ public:
         std::push_heap(storage.begin(), storage.begin() + sz, CompareStates{});
     }
 
-    std::unique_ptr<State> pop() {
+    IntrusivePtr<State> pop() {
         internal_assert(sz <= storage.size()) << sz << " " << storage.size() << "\n";
         std::pop_heap(storage.begin(), storage.begin() + sz, CompareStates{});
         sz--;
         return std::move(storage[sz]);
     }
 
-    const std::unique_ptr<State> &top() {
-        return storage[sz];
+    const IntrusivePtr<State> &top() {
+        return storage[0];
     }
 
     bool empty() const {
@@ -3199,7 +3169,7 @@ public:
 
     void clear() {
         for (size_t i = 0; i < sz; i++) {
-            storage[i].reset();
+            storage[i] = IntrusivePtr<State>{};
         }
         sz = 0;
     }
@@ -3232,12 +3202,13 @@ void configure_pipeline_features(const FunctionDAG &dag,
     throughput_predictor->set_pipeline_features(pipeline_features);
 }
 
-State optimal_schedule_pass(FunctionDAG &dag,
-                            vector<Function> outputs,
-                            const MachineParams &params,
-                            const Constraints *constraints,
-                            ThroughputPredictorPipeline *throughput_predictor,
-                            int beam_size) {
+IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
+                                          vector<Function> outputs,
+                                          const MachineParams &params,
+                                          ThroughputPredictorPipeline *throughput_predictor,
+                                          int beam_size,
+                                          int pass_idx,
+                                          std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (throughput_predictor) {
         configure_pipeline_features(dag, throughput_predictor);
@@ -3246,7 +3217,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
     StateQueue q, pending;
 
     {
-        std::unique_ptr<State> initial{new State};
+        IntrusivePtr<State> initial{new State};
         initial->root = new LoopNest;
         q.emplace(std::move(initial));
     }
@@ -3276,16 +3247,20 @@ State optimal_schedule_pass(FunctionDAG &dag,
 
     int expanded;
 
-    std::function<void(std::unique_ptr<State> &&)> enqueue_new_children =
-        [&](std::unique_ptr<State> &&s) {
+    std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
+        [&](IntrusivePtr<State> &&s) {
 
         // debug(0) << "\n** Generated child: ";
         // s->dump();
         // s->calculate_cost(dag, params, nullptr, true);
 
+        internal_assert(s->num_funcs_scheduled == s->parent->num_funcs_scheduled + 1);
+
         int progress = s->num_funcs_scheduled * beam_size + expanded;
         size_t max_progress = dag.nodes.size() * beam_size;
         tick(double(progress) / max_progress);
+        s->penalized = false;
+
         q.emplace(std::move(s));
     };
 
@@ -3293,27 +3268,44 @@ State optimal_schedule_pass(FunctionDAG &dag,
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
 
+        internal_assert(!pending.empty());
+
         expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
 
-            std::unique_ptr<State> state{pending.pop()};
+            IntrusivePtr<State> state {pending.pop()};
 
             // Apply cost penalties to the queue according to
             // structural uniqueness.
-            uint64_t h = state->structural_hash(constraints->stratify_depth());
-            int penalty = hashes[h];
-            if (penalty > 0) {
-                state->cost *= penalty + 1;
-                // After penalizing this state, it's no longer the
-                // best, defer it.
-                if (!pending.empty() && state->cost > pending.top()->cost) {
-                    pending.emplace(std::move(state));
-                    continue;
+            if (!state->penalized) {
+                uint64_t h2 = state->structural_hash(pass_idx + 2, params.parallelism);
+                uint64_t h0 = state->structural_hash(pass_idx, params.parallelism);
+                int penalty = ++hashes[h2];
+                if (pass_idx > 0 && !permitted_hashes.count(h0)) {
+                    // It's possible to get yourself into a state
+                    // where the only things in the beam that match
+                    // the hash were quick-rejected due to details not
+                    // captured in the hash, so we apply a huge
+                    // penalty, but leave the impermissible state in
+                    // the beam.
+                    // debug(0) << "\nImpermissible hash " << pass_idx << " at " << state->num_funcs_scheduled << " " << h0 << ":\n";
+                    // state->dump();
+                    penalty += 10;
+                }
+                if (penalty > 1) {
+                    state->penalized = true;
+                    state->cost *= penalty;
+                    // After penalizing this state, it's no longer the
+                    // best, defer it.
+                    if (!pending.empty() && state->cost > pending.top()->cost) {
+                        pending.emplace(std::move(state));
+                        continue;
+                    }
                 }
             }
 
             if (pending.size() > 1 && random_dropout()) {
-                debug(0) << "Dropping state\n";
+                // debug(0) << "Dropping state\n";
                 continue;
             }
 
@@ -3330,7 +3322,16 @@ State optimal_schedule_pass(FunctionDAG &dag,
                     }
                 }
 
-                return *state;
+                const State *s = state.get();
+                while (s) {
+                    uint64_t h1 = s->structural_hash(pass_idx + 1, params.parallelism);
+                    // debug(0) << "\nPermitting hash " << pass_idx + 1 << " " << s->num_funcs_scheduled << " " << h1 << ": ";
+                    // s->dump();
+                    permitted_hashes.insert(h1);
+                    s = s->parent.get();
+                }
+
+                return state;
             }
 
             /*
@@ -3348,7 +3349,7 @@ State optimal_schedule_pass(FunctionDAG &dag,
               state->calculate_cost(dag, params, nullptr, true);
             */
 
-            state->generate_children(dag, params, constraints, throughput_predictor, enqueue_new_children);
+            state->generate_children(dag, params, throughput_predictor, enqueue_new_children);
             expanded++;
         }
 
@@ -3363,39 +3364,26 @@ State optimal_schedule_pass(FunctionDAG &dag,
     }
 }
 
-State optimal_schedule(FunctionDAG &dag,
-                       vector<Function> outputs,
-                       const MachineParams &params,
-                       ThroughputPredictorPipeline *throughput_predictor,
-                       int beam_size) {
-    FinePassConstraints fine;
-    CoarsePassConstraints coarse(params);
-    auto coarse_pass = optimal_schedule_pass(dag, outputs, params, &coarse, throughput_predictor, beam_size);
+IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
+                                     vector<Function> outputs,
+                                     const MachineParams &params,
+                                     ThroughputPredictorPipeline *throughput_predictor,
+                                     int beam_size) {
 
-    debug(0) << "\nCoarse pass result:\n";
-    coarse_pass.dump();
+    IntrusivePtr<State> best;
 
-    // Respect which things were compute_root and which axes of those were parallelized for the fine pass
-    debug(0) << "Deriving constraints from coarse pass:\n";
-    for (auto c : coarse_pass.root->children) {
-        fine.roots.insert(c->node);
-        debug(0) << ' ' << c->node->func.name() << " is compute_root\n";
-        for (int d = 0; d < (int)(c->size.size()); d++) {
-            if (c->size[d] > 1) {
-                fine.permit_parallelization(c->stage, d);
-            }
+    std::unordered_set<uint64_t> permitted_hashes;
+    for (int i = 0; i < 5; i++) {
+        auto pass = optimal_schedule_pass(dag, outputs, params, throughput_predictor, beam_size, i, permitted_hashes);
+        debug(0) << "\nPass " << i << " result:\n";
+        pass->dump();
+
+        if (i == 0 || pass->cost < best->cost) {
+            best = pass;
         }
     }
 
-    auto fine_pass = optimal_schedule_pass(dag, outputs, params, &fine, throughput_predictor, beam_size);
-
-    debug(0) << "\nFine pass result:\n";
-    fine_pass.dump();
-
-    // It's not necessarily true that the fine_pass, with its larger
-    // branching factor, ends up at a lower total cost than the coarse
-    // pass.
-    return coarse_pass.cost < fine_pass.cost ? coarse_pass : fine_pass;
+    return best;
 }
 
 }
@@ -3438,14 +3426,14 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
         tp = nullptr;
     }
 
-    State optimal;
+    IntrusivePtr<State> optimal;
 
     if (time_limit) {
         // Use a fixed running time
         auto start = std::chrono::steady_clock::now();
         for (size_t beam_size = 1; ; beam_size *= 2) {
-            State s = optimal_schedule(dag, outputs, params, tp, beam_size);
-            if (beam_size == 1 || s.cost < optimal.cost) {
+            auto s = optimal_schedule(dag, outputs, params, tp, beam_size);
+            if (beam_size == 1 || s->cost < optimal->cost) {
                 optimal = s;
             }
             auto t = std::chrono::steady_clock::now();
@@ -3462,16 +3450,16 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
     debug(0) << "Cost evaluated this many times: " << State::cost_calculations << '\n';
 
     debug(0) << "** Optimal schedule:\n";
-    optimal.dump();
+    optimal->dump();
 
     // Just to get the debugging prints to fire
-    optimal.calculate_cost(dag, params, tp, true);
+    optimal->calculate_cost(dag, params, tp, true);
 
     // Apply the schedules
-    optimal.apply_schedule(params);
+    optimal->apply_schedule(params);
 
     // Print out the predicted runtime of each Func, so we can compare them to a profile
-    // optimal.print_predicted_runtimes(params);
+    // optimal->print_predicted_runtimes(params);
 
 
     return "";
@@ -3584,15 +3572,15 @@ void autoschedule_test() {
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
 
-        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 8); //beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(params);
+        optimal->apply_schedule(params);
         // h.realize(1000, 1000);
 
     }
@@ -3619,15 +3607,15 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, cheap_memory, target);
-        State optimal = optimal_schedule(dag, outputs, cheap_memory, tpp, beam_size);
+        auto optimal = optimal_schedule(dag, outputs, cheap_memory, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(params);
+        optimal->apply_schedule(params);
         // h.realize(1000, 1000);
     }
 
@@ -3644,15 +3632,15 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(params);
+        optimal->apply_schedule(params);
         // h.realize(2048, 2048);
     }
 
@@ -3668,18 +3656,18 @@ void autoschedule_test() {
 
         vector<Function> outputs = {h.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
 
-        optimal.apply_schedule(params);
+        optimal->apply_schedule(params);
         // h.realize(2048, 2048);
 
-        // optimal.print_predicted_runtimes(dag, params);
+        // optimal->print_predicted_runtimes(dag, params);
     }
 
     // A stencil chain
@@ -3699,14 +3687,14 @@ void autoschedule_test() {
         f[N-1].estimate(x, 0, 2048).estimate(y, 0, 2048);
         vector<Function> outputs = {f[N-1].function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 1);
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
 
-        // optimal.apply_schedule(params);
+        // optimal->apply_schedule(params);
         // f[N-1].realize(2048, 2048);
     }
 
@@ -3720,12 +3708,12 @@ void autoschedule_test() {
 
         vector<Function> outputs = {f.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, beam_size);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
     }
 
@@ -3747,12 +3735,12 @@ void autoschedule_test() {
 
         vector<Function> outputs = {downx.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
     }
 
@@ -3774,14 +3762,14 @@ void autoschedule_test() {
 
         vector<Function> outputs = {g.function()};
         FunctionDAG dag(outputs, params, target);
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 4);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 4);
 
         //dag.dump();
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
     }
 
@@ -3809,12 +3797,12 @@ void autoschedule_test() {
         vector<Function> outputs = {after[4].function()};
         FunctionDAG dag(outputs, params, target);
         //dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
     }
 
@@ -3839,12 +3827,12 @@ void autoschedule_test() {
         vector<Function> outputs = {f_u64_2.function()};
         FunctionDAG dag(outputs, params, target);
         //dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
     }
 
@@ -3867,12 +3855,12 @@ void autoschedule_test() {
         vector<Function> outputs = {out.function()};
         FunctionDAG dag(outputs, params, target);
         //dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 1);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 1);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << '\n';
     }
 
@@ -3919,12 +3907,12 @@ void autoschedule_test() {
         // Now schedule it for real
         FunctionDAG dag(outputs, params, target);
         //dag.dump();
-        State optimal = optimal_schedule(dag, outputs, params, tpp, 300);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 300);
 
         debug(0) << "** Optimal schedule:\n";
-        optimal.calculate_cost(dag, params, tpp, true);
+        optimal->calculate_cost(dag, params, tpp, true);
         if (tpp) tpp->evaluate_costs();
-        optimal.dump();
+        optimal->dump();
         debug(0) << "Time: " << t << " seconds\n";
         debug(0) << "Time per schedule considered: " << (1000000 * t) / cost_calcs << " us\n";
     }
