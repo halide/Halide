@@ -369,11 +369,22 @@ public:
 class InitializeSemaphores : public IRMutator2 {
     using IRMutator2::visit;
 
+    const Type sema_type = type_of<halide_semaphore_t *>();
+
     Stmt visit(const LetStmt *op) {
-        Stmt body = mutate(op->body);
-        if (op->value.type() == type_of<halide_semaphore_t *>()) {
-            vector<pair<string, Expr>> lets;
+        vector<const LetStmt *> frames;
+
+        // Find first op that is of sema_type
+        while (op && op->value.type() != sema_type) {
+            frames.push_back(op);
+            op = op->body.as<LetStmt>();
+        }
+
+        Stmt body;
+        if (op) {
+            body = mutate(op->body);
             // Peel off any enclosing lets
+            vector<pair<string, Expr>> lets;
             Expr value = op->value;
             while (const Let *l = value.as<Let>()) {
                 lets.emplace_back(l->name, l->value);
@@ -383,22 +394,32 @@ class InitializeSemaphores : public IRMutator2 {
             if (call && call->name == "halide_make_semaphore") {
                 internal_assert(call->args.size() == 1);
 
-                Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), op->name);
+                Expr sema_var = Variable::make(sema_type, op->name);
                 Expr sema_init = Call::make(Int(32), "halide_semaphore_init",
                                             {sema_var, call->args[0]}, Call::Extern);
-                Expr sema_allocate = Call::make(type_of<halide_semaphore_t *>(), Call::alloca,
+                Expr sema_allocate = Call::make(sema_type, Call::alloca,
                                                 {(int)sizeof(halide_semaphore_t)}, Call::Intrinsic);
-                Stmt stmt = Block::make(Evaluate::make(sema_init), body);
-                stmt = LetStmt::make(op->name, sema_allocate, stmt);
+                body = Block::make(Evaluate::make(sema_init), std::move(body));
+                body = LetStmt::make(op->name, std::move(sema_allocate), std::move(body));
 
                 // Re-wrap any other lets
                 for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                    stmt = LetStmt::make(it->first, it->second, stmt);
+                    body = LetStmt::make(it->first, it->second, std::move(body));
                 }
-                return stmt;
+            }
+        } else {
+            body = mutate(frames.back()->body);
+        }
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            Expr value = mutate((*it)->value);
+            if (value.same_as((*it)->value) && body.same_as((*it)->body)) {
+                body = *it;
+            } else {
+                body = LetStmt::make((*it)->name, std::move(value), std::move(body));
             }
         }
-        return LetStmt::make(op->name, op->value, body);
+        return body;
     }
 
     Expr visit(const Call *op) {
