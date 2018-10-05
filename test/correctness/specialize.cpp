@@ -366,9 +366,9 @@ int main(int argc, char **argv) {
         Func f, g, h, out;
         Var x;
         f(x) = im(x);
-        g(x) = f(x) + 1;
-        h(x) = g(x) + 1;
-        out(x) = h(x) + 1;
+        g(x) = f(x);
+        h(x) = g(x);
+        out(x) = h(x);
 
         Expr w = out.output_buffer().dim(0).extent();
         out.output_buffer().dim(0).set_min(0);

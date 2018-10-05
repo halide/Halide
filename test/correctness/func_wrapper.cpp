@@ -18,7 +18,7 @@ int calling_wrapper_no_op_test() {
     {
         Func f("f"), g("g");
         f(x, y) = x + y;
-        g(x, y) = f(x, y) + 1;
+        g(x, y) = f(x, y);
 
         // Calling wrap on the same Func for the same Func multiple times should
         // return the same wrapper
@@ -35,7 +35,7 @@ int calling_wrapper_no_op_test() {
     {
         Func f("f"), g("g");
         f(x, y) = x + y;
-        g(x, y) = f(x, y) + 1;
+        g(x, y) = f(x, y);
 
         // Should return the same global wrapper
         Func wrapper1 = f.in();
@@ -49,10 +49,10 @@ int calling_wrapper_no_op_test() {
     {
         Func d("d"), e("e"), f("f"), g("g"), h("h");
         d(x, y) = x + y;
-        e(x, y) = d(x, y) + 1;
-        f(x, y) = d(x, y) + 1;
-        g(x, y) = d(x, y) + 1;
-        h(x, y) = d(x, y) + 1;
+        e(x, y) = d(x, y);
+        f(x, y) = d(x, y);
+        g(x, y) = d(x, y);
+        h(x, y) = d(x, y);
 
         Func wrapper1 = d.in({e, f, g});
         Func wrapper2 = d.in({g, f, e});
@@ -70,7 +70,7 @@ int func_wrapper_test() {
     Var x("x"), y("y");
 
     f(x) = x;
-    g(x, y) = f(x) + 1;
+    g(x, y) = f(x);
 
     Func wrapper = f.in(g).compute_root();
     f.compute_root();
@@ -103,9 +103,9 @@ int multiple_funcs_sharing_wrapper_test() {
     Var x("x"), y("y");
 
     f(x) = x;
-    g1(x, y) = f(x) + 1;
-    g2(x, y) = f(x) + 1;
-    g3(x, y) = f(x) + 1;
+    g1(x, y) = f(x);
+    g2(x, y) = f(x);
+    g3(x, y) = f(x);
 
     f.compute_root();
     Func f_wrapper = f.in({g1, g2}).compute_root();
@@ -151,7 +151,7 @@ int global_wrapper_test() {
     Var x("x"), y("y");
 
     f(x, y) = x + y;
-    g(x, y) = f(x, y) + 1;
+    g(x, y) = f(x, y);
     h(x, y) = g(x, y) + f(x, y);
 
     Var xi("xi"), yi("yi"), t("t");
@@ -191,7 +191,7 @@ int update_defined_after_wrapper_test() {
     Var x("x"), y("y");
 
     f(x, y) = x + y;
-    g(x, y) = f(x, y) + 1;
+    g(x, y) = f(x, y);
 
     Func wrapper = f.in(g);
 
@@ -314,7 +314,7 @@ int global_and_custom_wrapper_test() {
     Var x("x"), y("y");
 
     f(x) = x;
-    g(x, y) = f(x) + 1;
+    g(x, y) = f(x);
     result(x, y) = f(x) + g(x, y);
 
     Func f_in_g = f.in(g).compute_at(g, x);
@@ -354,9 +354,9 @@ int wrapper_depend_on_mutated_func_test() {
     Var x("x"), y("y");
 
     e(x, y) = x + y;
-    f(x, y) = e(x, y) + 1;
-    g(x, y) = f(x, y) + 1;
-    h(x, y) = g(x, y) + 1;
+    f(x, y) = e(x, y);
+    g(x, y) = f(x, y);
+    h(x, y) = g(x, y);
 
     Var xo("xo"), xi("xi");
     e.compute_root();
@@ -399,7 +399,7 @@ int wrapper_on_wrapper_test() {
     Var x("x"), y("y");
 
     e(x, y) = x + y;
-    f(x, y) = e(x, y) + 1;
+    f(x, y) = e(x, y);
     g(x, y) = f(x, y) + e(x, y);
     Func f_in_g = f.in(g).compute_root();
     Func f_in_f_in_g = f.in(f_in_g).compute_root();
@@ -490,7 +490,7 @@ int two_fold_wrapper_test() {
     input(x, y) = 2*x + 3*y;
     input.compute_root();
 
-    output(x, y) = input(y, x) + 1;
+    output(x, y) = input(y, x);
 
     Var xi("xi"), yi("yi");
     output.tile(x, y, xi, yi, 8, 8);
@@ -528,7 +528,7 @@ int multi_folds_wrapper_test() {
     f(x, y) = 2*x + 3*y;
     f.compute_root();
 
-    g(x, y) = f(y, x) + 1;
+    g(x, y) = f(y, x);
 
     Var xi("xi"), yi("yi");
     g.compute_root().tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
@@ -575,7 +575,7 @@ int multi_folds_wrapper_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    /*printf("Running calling wrap no op test\n");
+    printf("Running calling wrap no op test\n");
     if (calling_wrapper_no_op_test() != 0) {
         return -1;
     }
@@ -633,7 +633,7 @@ int main(int argc, char **argv) {
     printf("Running multi folds wrapper test\n");
     if (multi_folds_wrapper_test() != 0) {
         return -1;
-    }*/
+    }
 
     printf("Success!\n");
     return 0;

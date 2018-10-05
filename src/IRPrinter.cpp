@@ -97,11 +97,10 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::Hexagon:
         out << "<Hexagon>";
         break;
-    case DeviceAPI::D3D12Compute:
-        out << "<D3D12Compute>";
-        break;
     case DeviceAPI::HexagonDma:
         out << "<HexagonDma>";
+    case DeviceAPI::D3D12Compute:
+        out << "<D3D12Compute>";
         break;
     }
     return out;
@@ -574,9 +573,6 @@ void IRPrinter::visit(const Call *op) {
     }
     print_list(op->args);
     stream << ")";
-    if (op->func.defined() && Function(op->func).values().size() > 1) {
-        stream << "[" << op->value_index << "]";
-    }
 }
 
 void IRPrinter::visit(const Let *op) {

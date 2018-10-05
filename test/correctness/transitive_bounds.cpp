@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x;
     f(x) = x;
-    g(x) = f(x) + 1;
+    g(x) = f(x);
 
     g.bound(x, 0, 4);
 

@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x, y;
     f(x, y) = x + y;
-    g(x, y) = f(x, y) * 2;
+    g(x, y) = f(x, y);
 
     // We're vectorizing f, but it's only required over an extent of
     // one, because it's innermost.

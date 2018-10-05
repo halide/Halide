@@ -324,9 +324,7 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
 
 } // anonymous namespace
 
-RegionCosts::RegionCosts(const map<string, Function> &_env,
-                         const vector<string> &_order)
-        : env(_env), order(_order) {
+RegionCosts::RegionCosts(const map<string, Function> &_env) : env(_env) {
     for (const auto &kv : env) {
         // Pre-compute the function costs without any inlining.
         func_cost[kv.first] = get_func_cost(kv.second);
@@ -444,7 +442,7 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
     } else {
         Definition def = get_stage_definition(curr_f, stage);
         for (const auto &e : def.values()) {
-            Expr inlined_expr = perform_inline(e, env, inlines, order);
+            Expr inlined_expr = perform_inline(e, env, inlines);
             inlined_expr = simplify(inlined_expr);
 
             map<string, Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
@@ -555,8 +553,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
     return load_costs;
 }
 
-Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
-                                      const set<string> &inlines) {
+Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<string> &inlines) {
     if (f.has_extern_definition()) {
         return Cost();
     }
@@ -566,7 +563,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
     Cost cost(0, 0);
 
     for (const auto &e : def.values()) {
-        Expr inlined_expr = perform_inline(e, env, inlines, order);
+        Expr inlined_expr = perform_inline(e, env, inlines);
         inlined_expr = simplify(inlined_expr);
 
         Cost expr_cost = compute_expr_cost(inlined_expr);
@@ -581,7 +578,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
 
     if (!f.is_pure()) {
         for (const auto &arg : def.args()) {
-            Expr inlined_arg = perform_inline(arg, env, inlines, order);
+            Expr inlined_arg = perform_inline(arg, env, inlines);
             inlined_arg = simplify(inlined_arg);
 
             Cost expr_cost = compute_expr_cost(inlined_arg);
@@ -642,7 +639,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
         }
     }
 
-    vector<string> top_order = topological_order(outs, env);
+    vector<string> order = topological_order(outs, env);
 
     Expr working_set_size = make_zero(Int(64));
     Expr curr_size = make_zero(Int(64));
@@ -660,7 +657,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
         }
     }
 
-    for (const auto &f : top_order) {
+    for (const auto &f : order) {
         if (regions.find(f) != regions.end()) {
             curr_size += get_element(func_sizes, f);
         }

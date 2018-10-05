@@ -1036,7 +1036,7 @@ int self_assignment_rfactor_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    /*printf("Running self assignment rfactor test\n");
+    printf("Running self assignment rfactor test\n");
     if (self_assignment_rfactor_test() != 0) {
         return -1;
     }
@@ -1190,7 +1190,7 @@ int main(int argc, char **argv) {
     printf("Running argmin rfactor test\n");
     if (argmin_rfactor_test() != 0) {
         return -1;
-    }*/
+    }
 
     printf("Success!\n");
     return 0;

@@ -84,12 +84,9 @@ DimBounds get_stage_bounds(Function f, int stage_num, const DimBounds &pure_boun
 std::vector<DimBounds> get_stage_bounds(Function f, const DimBounds &pure_bounds);
 
 /** Recursively inline all the functions in the set 'inlines' into the
- * expression 'e' and return the resulting expression. If 'order' is
- * passed, inlining will be done in the reverse order of function realization
- * to avoid extra inlining works. */
+ * expression 'e' and return the resulting expression. */
 Expr perform_inline(Expr e, const std::map<std::string, Function> &env,
-                    const std::set<std::string> &inlines = std::set<std::string>(),
-                    const std::vector<std::string> &order = std::vector<std::string>());
+                    const std::set<std::string> &inlines = std::set<std::string>());
 
 /** Return all functions that are directly called by a function stage (f, stage). */
 std::set<std::string> get_parents(Function f, int stage);

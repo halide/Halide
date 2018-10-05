@@ -25,7 +25,7 @@ bool use_dlopenbuf = true;
 int init_sim() {
     if (sim) return 0;
 
-    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V65));
+    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V60));
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
@@ -494,9 +494,5 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = 1;
     return 0;
 }
-DLLEXPORT
-int halide_hexagon_remote_profiler_set_current_func(int current_func) {
-    profiler_current_func = current_func;
-    return 0;
-}
+
 }  // extern "C"

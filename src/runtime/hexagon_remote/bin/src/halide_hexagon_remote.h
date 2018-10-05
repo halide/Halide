@@ -43,7 +43,6 @@ __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_run_v2)(halide_hexa
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_release_library)(halide_hexagon_remote_handle_t module_ptr) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_poll_log)(char* log, int logLen, int* read_size) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_poll_profiler_state)(int* func, int* threads) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_profiler_set_current_func)(int current_func) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_set_performance_mode)(int mode) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_set_performance)(int set_mips, unsigned int mipsPerThread, unsigned int mipsTotal, int set_bus_bw, unsigned int bwMegabytesPerSec, unsigned int busbwUsagePercentage, int set_latency, int latency) __QAIC_HEADER_ATTRIBUTE;
 #ifdef __cplusplus

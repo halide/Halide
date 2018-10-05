@@ -21,14 +21,14 @@ int main(int argc, char **argv) {
     f.compute_root().vectorize(x, 4);
     f.update();
 
-    g(x) = f(x) + 1;
+    g(x) = f(x);
     Buffer<int> result = g.realize(4);
 
 
     // The sequence generated should be:
-    // -1 + 1 = 0, (-1 + 1) + 1 = 1, (0 + 2) + 1 = 3, (2 + 3) + 1 = 6, (5 + 4) + 1 = 10
-    if (result(0) != 1 || result(1) != 3 || result(2) != 6 || result(3) != 10) {
-        printf("Resulting sequence was: %d %d %d %d instead of 1 3 6 10\n",
+    // -1, (-1 + 1) = 0, 0 + 2 = 2, 2 + 3 = 5, 5 + 4 = 9
+    if (result(0) != 0 || result(1) != 2 || result(2) != 5 || result(3) != 9) {
+        printf("Resulting sequence was: %d %d %d %d instead of 0 2 5 9\n",
                result(0), result(1), result(2), result(3));
         return -1;
     }

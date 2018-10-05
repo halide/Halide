@@ -77,10 +77,10 @@ int main(int argc, char **argv) {
         f.compute_root();
         f.update().split(x, xo, xi, 4).split(xi, xio, xii, 6);
         Func g;
-        g(x) = f(x) + 1;
+        g(x) = f(x);
         Buffer<int> result = g.realize(32);
         for (int i = 0; i < result.width(); i++) {
-            int correct = i + 2;
+            int correct = i + 1;
             int actual = result(i);
             if (actual != correct) {
                 printf("result(%d) = %d instead of %d\n", i, actual, correct);

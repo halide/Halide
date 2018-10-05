@@ -34,8 +34,6 @@ interface halide_hexagon_remote
 
     // Retrieve the current profiling Func ID
     long poll_profiler_state(rout long func, rout long threads);
-    // Set the current_func being profiled
-    long profiler_set_current_func(in long current_func);
 
     // Set a performance target.
     long set_performance_mode(in long mode);

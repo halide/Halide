@@ -2999,10 +2999,10 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     Definition def = get_stage_definition(stg.func, stg.stage_num);
     // Perform inlining on the all the values and the args in the stage.
     for (auto &val : def.values()) {
-        val = perform_inline(val, dep_analysis.env, inlines, dep_analysis.order);
+        val = perform_inline(val, dep_analysis.env, inlines);
     }
     for (auto &arg : def.args()) {
-        arg = perform_inline(arg, dep_analysis.env, inlines, dep_analysis.order);
+        arg = perform_inline(arg, dep_analysis.env, inlines);
     }
     def.accept(&find);
 
@@ -3433,7 +3433,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.
     debug(2) << "Initializing region costs...\n";
-    RegionCosts costs(env, order);
+    RegionCosts costs(env);
     if (debug::debug_level() >= 3) {
         costs.disp_func_costs();
     }
@@ -3468,7 +3468,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         debug(2) << "Re-computing function value bounds...\n";
         func_val_bounds = compute_function_value_bounds(order, env);
         debug(2) << "Re-initializing region costs...\n";
-        RegionCosts costs(env, order);
+        RegionCosts costs(env);
         debug(2) << "Re-initializing dependence analysis...\n";
         dep_analysis = DependenceAnalysis(env, order, func_val_bounds);
         debug(2) << "Re-computing pipeline bounds...\n";

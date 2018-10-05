@@ -289,7 +289,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_DCVS_v2;
     request.dcvs_v2.dcvs_enable = TRUE;
-    request.dcvs_v2.dcvs_option = HAP_DCVS_V2_POWER_SAVER_MODE;
+    request.dcvs_v2.dcvs_option = HAP_power_dcvs_v2_payload::HAP_DCVS_V2_POWER_SAVER_MODE;
     request.dcvs_v2.set_dcvs_params = TRUE;
     request.dcvs_v2.dcvs_params.min_corner = HAP_DCVS_VCORNER_DISABLE;
     request.dcvs_v2.dcvs_params.max_corner = HAP_DCVS_VCORNER_DISABLE;
@@ -385,10 +385,7 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     *threads = halide_profiler_get_state()->active_threads;
     return 0;
 }
-int halide_hexagon_remote_profiler_set_current_func(int current_func) {
-    halide_profiler_get_state()->current_func = current_func;
-    return 0;
-}
+
 halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state hvx_profiler_state;
     return &hvx_profiler_state;

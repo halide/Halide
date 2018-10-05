@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    /*Var x;
+    Var x;
     const int size = 100;
 
     // Try a nest of highly connection funcs all marked inline.
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     f(x) = e[e.size()-1];
 
-    f.realize(10);*/
+    f.realize(10);
 
     printf("Success!\n");
     return 0;

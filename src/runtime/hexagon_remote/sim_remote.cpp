@@ -84,9 +84,9 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-__attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
-
 }  // extern "C"
+
+__attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...

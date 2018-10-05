@@ -41,9 +41,6 @@ struct Cost {
 struct RegionCosts {
     /** An environment map which contains all functions in the pipeline. */
     std::map<std::string, Function> env;
-    /** Realization order of functions in the pipeline. The first function to
-     * be realized comes first. */
-    std::vector<std::string> order;
     /** A map containing the cost of computing a value in each stage of a
      * function. The number of entries in the vector is equal to the number of
      * stages in the function. */
@@ -133,10 +130,8 @@ struct RegionCosts {
     void disp_func_costs();
 
     /** Construct a region cost object for the pipeline. 'env' is a map of all
-     * functions in the pipeline. 'order' is the realization order of functions
-     * in the pipeline. The first function to be realized comes first. */
-    RegionCosts(const std::map<std::string, Function> &env,
-                const std::vector<std::string> &order);
+     * functions in the pipeline.*/
+    RegionCosts(const std::map<std::string, Function> &env);
 };
 
 /** Return true if the cost of inlining a function is equivalent to the

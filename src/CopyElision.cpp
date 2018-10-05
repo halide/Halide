@@ -178,7 +178,6 @@ string get_elision_pair_candidates(const Function &f,
     const vector<Expr> &f_args = f.definition().args();
 
     string prod = "";
-    int last_index = -1;
     for (int i = 0; i < (int)f.values().size(); ++i) {
         // Perform all valid inlining first to get the actual producer-consumer
         // copy relation. This will ignore functions which are scheduled
@@ -187,12 +186,6 @@ string get_elision_pair_candidates(const Function &f,
         Expr val = perform_inline(f.values()[i], env, inlined);
         if (const Call *call = val.as<Call>()) {
             if (call->call_type == Call::Halide) {
-                if (f.schedule().memory_type() != env.at(call->name).schedule().memory_type()) {
-                    // Ignore call if they have different memory types
-                    debug(4) << "...Ignore \"" << call->name << "\" since it is at "
-                             << "different memory than \"" << f.name() << "\"\n";
-                    continue;
-                }
                 // Check 'f' only calls one function
                 if (!prod.empty() && (prod != call->name)) {
                     debug(4) << "...Function \"" << f.name() << "\" calls multiple "
@@ -200,25 +193,25 @@ string get_elision_pair_candidates(const Function &f,
                              << call->name << "\"\n";
                     return "";
                 }
+                prod = call->name;
 
-                Function prod_f = Function(call->func);
-
-                if (!is_prod_within_cons_realization(env, env.at(prod_f.name()), f, is_output)) {
+                if (!is_prod_within_cons_realization(env, env.at(prod), f, is_output)) {
                     debug(4) << "...Not a valid copy-elision pair: computation of Function \""
-                             << prod_f.name() << "\" is not within the scope of realization of Function \""
+                             << prod << "\" is not within the scope of realization of Function \""
                              << f.name() << "\"\n";
                     return "";
                 }
 
-                // Check only 'f' calls 'prod_f'
-                const auto &iter = num_callers.find(prod_f.name());
+                // Check only 'f' calls 'prod'
+                const auto &iter = num_callers.find(prod);
                 if ((iter != num_callers.end()) && (iter->second > 1)) {
                     debug(4) << "...Function \"" << f.name() << "\" is a simple copy but \""
-                             << prod_f.name() << "\" has multiple callers\n";
+                             << prod << "\" has multiple callers\n";
                     return "";
                 }
 
-                // Check 'f' and 'prod_f' have the same loop dimensions
+                // Check 'f' and 'prod' have the same loop dimensions
+                Function prod_f = Function(call->func);
                 if (f.dimensions() != prod_f.dimensions()) {
                     debug(4) << "...Function \"" << f.name() << "\" and \""
                              << prod_f.name() << "\" have different dimensions ("
@@ -227,16 +220,17 @@ string get_elision_pair_candidates(const Function &f,
                 }
                 internal_assert(f_args.size() == call->args.size());
 
-                // Check 'f' and 'prod_f' have the same number of outputs
+                // Check 'f' and 'prod' have the same number of outputs
                 // (or tuple sizes)
                 if (f.outputs() != prod_f.outputs()) {
-                    debug(4) << "...Function \"" << f.name() << "\" and \""
-                             << prod_f.name() << "\" have different output size ("
-                             << f.outputs() << " vs " << prod_f.outputs() << ")\n";
+                    debug(4) << "...Function \"" << f.name() << "\" does not call "
+                             << "the whole tuple values of function \""
+                             << prod_f.name() << "\"(" << f.outputs()
+                             << " vs " << prod_f.outputs() << ")\n";
                     return "";
                 }
 
-                // Check f[i] also calls prod_f[i]
+                // Check f[i] also calls prod[i]
                 if (i != call->value_index) {
                     debug(4) << "...Function \"" << f.name() << "\" calls "
                              << prod_f.name() << "[" << call->value_index
@@ -256,19 +250,6 @@ string get_elision_pair_candidates(const Function &f,
                         return "";
                     }
                 }
-
-                // If the value at this index is a simple copy, check if
-                // the value at previous index is also a simple copy from
-                // the same producer
-                if ((i > 0) && (last_index < 0)) {
-                    debug(4) << "...Function \"" << f.name() << "\" does not call "
-                             << "the whole tuple values of function \""
-                             << prod_f.name() << "\n";
-                    return "";
-                }
-
-                prod = call->name;
-                last_index = call->value_index;
             }
         } else if (!prod.empty()) {
             debug(4) << "...Function \"" << f.name() << "\" does not call "
@@ -330,6 +311,24 @@ map<string, string> get_valid_copy_elision_pairs(
             }
         }
     }
+
+    debug(0) << "\nElision pairs:\n";
+    for (const auto &p : elision_pairs) {
+        debug(0) << "cons: " << p.first << " (compute: " << env.at(p.first).schedule().store_level().to_string()
+                 << ", store: " << env.at(p.first).schedule().compute_level().to_string()
+                 << ") -> prod: " << p.second;
+        if (!p.second.empty()) {
+            debug(0) << " (compute: " << env.at(p.second).schedule().store_level().to_string()
+                     << ", store: " << env.at(p.second).schedule().compute_level().to_string() << ")";
+        }
+        debug(0) << "\n\tcons: " << print_function(env.at(p.first)) << "\n";
+        if (p.second.empty()) {
+            debug(0) << "\tprod: NONE";
+        } else {
+            debug(0) << "\tprod: " << print_function(env.at(p.second));
+        }
+    }
+    debug(0) << "\n\n";
 
     return elision_pairs;
 }

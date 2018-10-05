@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Var x("x");
 
     f(x) = x;
-    g(x) = f(x) + 1;
+    g(x) = f(x);
     h(x) = g(x) + g(x+1);
 
     Var xo("xo"), xi("xi");

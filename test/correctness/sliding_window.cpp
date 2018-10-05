@@ -25,7 +25,7 @@ extern "C" void my_free(void *, void *) {
 }
 
 int main(int argc, char **argv) {
-    /*Var x, y;
+    Var x, y;
 
     {
         Func f, g;
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
         Func f, g, h;
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x-1);
-        h(x) = g(x) + 1;
+        h(x) = g(x);
 
         f.store_root().compute_at(g, x);
         g.compute_at(h, x);
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         Var c;
         f(x, c) = call_counter(x, c);
         g(x, c) = f(x + 1, c) - f(x, c);
-        h(x, c) = g(x, c) + 1;
+        h(x, c) = g(x, c);
 
         f.store_root()
             .compute_at(h, x)
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
             printf("f was called %d times instead of %d times\n", count, 34);
             return -1;
         }
-    }*/
+    }
 
     printf("Success!\n");
     return 0;
