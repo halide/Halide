@@ -1813,24 +1813,49 @@ struct LoopNest {
 
     // Hash the loop structure and sizes up to a fixed depth
     void structural_hash(uint64_t &h, int depth, int parallelism) const {
-        if (depth == 0) {
-            for (int64_t s : size) {
-                hash_combine(h, (int)s >= parallelism);
+        if (depth < 0) return;
+
+        // Which Funcs are store_at this level?
+        for (const auto *n : store_at) {
+            hash_combine(h, n->id);
+        }
+
+        hash_combine(h, -1);
+
+        // Which Funcs are compute_at this level?
+        for (const auto &c : children) {
+            hash_combine(h, c->stage->id);
+        }
+
+        // Add a barrier to ensure that moving something from the last
+        // compute_at to the first inlined doesn't result in the same
+        // hash.
+        hash_combine(h, -1);
+
+        // Which Funcs are inlined at this level?
+        for (auto it = inlined.begin(); it != inlined.end(); it++) {
+            hash_combine(h, it.key()->id);
+        }
+
+        hash_combine(h, -1);
+
+        if (depth > 0) {
+            // What are their loop sizes?
+            for (const auto &c : children) {
+                for (int64_t s : c->size) {
+                    if (depth == 1) {
+                        // Just take the most significant bit: is it more
+                        // or less than the parallelism factor.
+                        s = s >= parallelism ? 1 : 0;
+                    }
+                    hash_combine(h, s);
+                }
             }
-            hash_combine(h, funcs_realized_or_inlined());
-        } else if (depth == 1) {
-            for (int64_t s : size) {
-                hash_combine(h, s);
-            }
-            hash_combine(h, funcs_realized_or_inlined());
-        } else {
-            for (int64_t s : size) {
-                hash_combine(h, s);
-            }
-            hash_combine(h, inlined.size());
-            hash_combine(h, store_at.size());
-            hash_combine(h, children.size());
-            for (auto c : children) {
+        }
+
+        if (depth > 1) {
+            // Descend into children
+            for (const auto &c : children) {
                 c->structural_hash(h, depth - 2, parallelism);
             }
         }
@@ -2721,7 +2746,7 @@ struct State {
     static int cost_calculations;
 
     uint64_t structural_hash(int depth, int parallelism) const {
-        uint64_t h = 0;
+        uint64_t h = num_funcs_scheduled;
         internal_assert(root.defined());
         root->structural_hash(h, depth, parallelism);
         return h;
@@ -3278,9 +3303,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // Apply cost penalties to the queue according to
             // structural uniqueness.
             if (!state->penalized) {
-                uint64_t h2 = state->structural_hash(pass_idx + 2, params.parallelism);
-                uint64_t h0 = state->structural_hash(pass_idx, params.parallelism);
-                int penalty = ++hashes[h2];
+                uint64_t h1 = state->structural_hash(pass_idx + 1, params.parallelism);
+                uint64_t h0 = state->structural_hash(pass_idx - 1, params.parallelism);
+                int penalty = ++hashes[h1];
                 if (pass_idx > 0 && !permitted_hashes.count(h0)) {
                     // It's possible to get yourself into a state
                     // where the only things in the beam that match
@@ -3322,16 +3347,21 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                     }
                 }
 
-                const State *s = state.get();
-                while (s) {
-                    uint64_t h1 = s->structural_hash(pass_idx + 1, params.parallelism);
-                    // debug(0) << "\nPermitting hash " << pass_idx + 1 << " " << s->num_funcs_scheduled << " " << h1 << ": ";
-                    // s->dump();
-                    permitted_hashes.insert(h1);
-                    s = s->parent.get();
+                auto best = state;
+
+                // Bless the reasonable stuff in the beam as permissible states to visit again
+                while (state->cost <= 2 * best->cost) {
+                    const State *s = state.get();
+                    while (s) {
+                        uint64_t h1 = s->structural_hash(pass_idx, params.parallelism);
+                        permitted_hashes.insert(h1);
+                        s = s->parent.get();
+                    }
+                    if (pending.empty()) break;
+                    state = pending.pop();
                 }
 
-                return state;
+                return best;
             }
 
             /*
