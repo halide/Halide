@@ -69,7 +69,8 @@ public:
                 Stage(output).set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
                 input_copy.compute_at(output, tx)
-                          .copy_to_host().async()
+                          .copy_to_host()
+                          .async()
                           .fold_storage(x, tile_width * 2);
 
                 work.compute_at(output, tx);
@@ -108,6 +109,7 @@ public:
 
                 input_copy.compute_at(output, tx)
                           .copy_to_host()
+                          .async()
                           .fold_storage(x, tile_width * 2);
 
                 work.compute_at(output, tx);

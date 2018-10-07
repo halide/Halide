@@ -136,7 +136,8 @@ public:
                          .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_copy_y.compute_at(output_y, tx)
-                            .copy_to_host().async()
+                            .copy_to_host()
+                            .async()
                             .fold_storage(x, tile_width * 2);
 
                 Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -148,7 +149,8 @@ public:
 
                 input_copy_uv.compute_at(output_uv, tx)
                              .bound(c, 0, 2)
-                             .copy_to_host().async()
+                             .copy_to_host()
+                             .async()
                              .reorder_storage(c, x, y)
                              .fold_storage(x, tile_width * 2);
 
@@ -233,6 +235,7 @@ public:
                 input_copy_y.compute_at(output_y, tx)
                             .store_at(output_y, tx)
                             .copy_to_host()
+                            .async()
                             .fold_storage(x, tile_width * 2);
 
                 Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -246,6 +249,7 @@ public:
                              .store_at(output_uv, tx)
                              .bound(c, 0, 2)
                              .copy_to_host()
+                             .async()
                              .reorder_storage(c, x, y)
                              .fold_storage(x, tile_width * 2);
 

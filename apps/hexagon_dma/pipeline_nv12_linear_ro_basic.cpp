@@ -80,7 +80,8 @@ public:
 
                 copy_y.compute_at(output_y, tx)
                       .store_at(output_y, ty)
-                      .copy_to_host().fold_storage(x, tile_width * 2) ;
+                      .copy_to_host()
+                      .fold_storage(x, tile_width * 2);
 
                 copy_uv.compute_at(output_uv, tx)
                        .store_at(output_uv, ty)
@@ -100,12 +101,15 @@ public:
 
                 copy_y.compute_at(output_y, tx)
                       .store_at(output_y, ty)
-                      .copy_to_host().async().fold_storage(x, tile_width * 2) ;
+                      .copy_to_host()
+                      .async()
+                      .fold_storage(x, tile_width * 2);
 
                 copy_uv.compute_at(output_uv, tx)
                        .store_at(output_uv, ty)
                        .bound(c, 0, 2)
-                       .copy_to_host().async()
+                       .copy_to_host()
+                       .async()
                        .reorder_storage(c, x, y)
                        .fold_storage(x, tile_width * 2);
             break;
@@ -161,12 +165,14 @@ public:
                 copy_y.compute_at(output_y, tx)
                       .store_at(output_y, ty)
                       .copy_to_host()
+                      .async()
                       .fold_storage(x, tile_width * 2);
 
                 copy_uv.compute_at(output_uv, tx)
                        .store_at(output_uv, ty)
                        .bound(c, 0, 2)
                        .copy_to_host()
+                       .async()
                        .reorder_storage(c, x, y)
                        .fold_storage(x, tile_width * 2);
             }

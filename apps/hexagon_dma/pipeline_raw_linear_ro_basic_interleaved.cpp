@@ -75,7 +75,8 @@ public:
                 copy.compute_at(output, tx)
                     .store_at(output, tx)
                     .bound(c, 0, 4)
-                    .copy_to_host().async()
+                    .copy_to_host()
+                    .async()
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             break;
@@ -110,6 +111,7 @@ public:
                     .store_at(output, ty)
                     .bound(c, 0, 4)
                     .copy_to_host()
+                    .async()
                     .reorder_storage(c, x, y)
                     .fold_storage(x, tile_width * 2);
             }

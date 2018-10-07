@@ -61,7 +61,8 @@ public:
 
                 copy.compute_at(output, tx)
                     .store_at(output, tx)
-                    .copy_to_host().async()
+                    .copy_to_host()
+                    .async()
                     .fold_storage(x, tile_width * 2);
             break;
             case  UserOptions::Split: {
@@ -90,6 +91,7 @@ public:
                 copy.compute_at(output, tx)
                     .store_at(output, ty)
                     .copy_to_host()
+                    .async()
                     .fold_storage(x, tile_width * 2);
             }
             break;
