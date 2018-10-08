@@ -2796,7 +2796,7 @@ struct State {
             // Perform any quick rejection tests before enqueuing this
             for (auto it = features.begin(); it != features.end(); it++) {
                 auto &feat = it.value();
-                if (feat.points_computed_total + feat.inlined_calls > 10*feat.points_computed_minimum) return false;
+                if (feat.points_computed_total + feat.inlined_calls > 1.5 * feat.points_computed_minimum) return false;
             }
 
             int num_stages = (int)features.size();
