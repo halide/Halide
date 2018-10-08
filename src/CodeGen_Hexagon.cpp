@@ -1940,7 +1940,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         int intrin_lanes = native_vector_bits()/op->type.bits();
 
         string name = "halide.hexagon.vscatter";
-        name += (op->is_intrinsic("scatter_acc")) ? "_acc" : "";
+        name += (op->name == "scatter_acc") ? "_acc" : "";
         name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
         llvm::Function *fn = module->getFunction(name);
 
@@ -1949,7 +1949,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Value *index = codegen(op->args[2]);
         Value *val = codegen(op->args[3]);
 
-        vector<Value *> args(4);
+        Value* args[4];
         args[0] = src_ptr;
         args[1] = size;
         // Cut up the indices into appropriately-sized pieces.

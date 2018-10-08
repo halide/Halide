@@ -2085,16 +2085,17 @@ class ScatterGatherGenerator : public IRMutator2 {
     // Checks if the Store node can be replaced with a scatter_accumulate.
     // If yes, return new_value to be used for scatter-accumulate, else return
     // the input parameter value.
-    Expr make_scatter_acc(string name, Expr index, Expr value) {
-        Expr lhs = Load::make(value.type(), name, index, Buffer<>(),
-                              Parameter(), const_true(value.type().lanes()));
-        Expr wild = Variable::make(value.type(), "*");
+    Expr is_scatter_acc(const Store *op) {
+        Expr lhs = Load::make(op->value.type(), op->name, op->index, Buffer<>(),
+                              Parameter(), const_true(op->value.type().lanes()));
+        Expr wild = Variable::make(op->value.type(), "*");
         vector<Expr> matches;
-        if (expr_match(lhs + wild, value, matches) || expr_match(wild + lhs, value, matches)) {
+        if (expr_match(lhs + wild, op->value, matches) ||
+            expr_match(wild + lhs, op->value, matches)) {
             // Scatter accumulate found.
             return matches[0];
         }
-        return value;
+        return op->value;
     }
 
     Stmt visit(const Store *op) {
@@ -2132,7 +2133,7 @@ class ScatterGatherGenerator : public IRMutator2 {
             size *= alloc->extents[i];
         }
         // Check for scatter-acc.
-        Expr value = make_scatter_acc(op->name, op->index, op->value);
+        Expr value = is_scatter_acc(op);
         string intrinsic = "scatter";
         if (!value.same_as(op->value)) {
             // It's a scatter-accumulate
