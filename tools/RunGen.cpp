@@ -9,6 +9,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -632,10 +633,53 @@ Buffer<> load_input_from_file(const std::string &pathname,
     return b;
 }
 
+template<typename T>
+struct FillWithRandom {
+public:
+    void operator()(Buffer<> &b_dynamic, int seed) {
+        Buffer<T> b = b_dynamic;
+        std::mt19937 rng(seed);
+        fill(b, rng);
+    }
+
+private:
+    template<typename T2 = T, typename std::enable_if<std::is_integral<T2>::value && !std::is_same<T2, bool>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<T2> dis;
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = dis(rng);
+        });
+    }
+
+    template<typename T2 = T, typename std::enable_if<std::is_floating_point<T2>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_real_distribution<T2> dis(0.0, 1.0);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = dis(rng);
+        });
+    }
+
+    template<typename T2 = T, typename std::enable_if<std::is_same<T2, bool>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<int> dis(0, 1);
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = dis(rng);
+        });
+    }
+
+    template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
+    void fill(Buffer<T2> &b, std::mt19937 &rng) {
+        std::uniform_int_distribution<intptr_t> dis;
+        b.for_each_value([&rng, &dis](T2 &value) {
+            value = reinterpret_cast<T2>(dis(rng));
+        });
+    }
+};
+
 Buffer<> load_input(const std::string &pathname,
                     const halide_filter_argument_t &metadata) {
     std::vector<std::string> v = split_string(pathname, ":");
-    if (v.size() != 2 || v[0].size() == 1) {
+    if (v.size() == 1 || v[0].size() == 1) {
         return load_input_from_file(pathname, metadata);
     }
 
@@ -661,9 +705,22 @@ Buffer<> load_input(const std::string &pathname,
         // Convert the binary buffer to the required type, so true becomes 1.
         return Halide::Tools::ImageTypeConversion::convert_image(binary,
                                                                  metadata.type);
+    } else if (v[0] == "random") {
+        int seed;
+        if (!parse_scalar(v[1], &seed)) {
+            fail() << "Invalid value for seed";
+        }
+        auto shape = parse_extents(v[2]);
+        const int num_dim = shape.size();
+        std::vector<int> sizes(num_dim);
+        for (int i = 0; i < num_dim; ++i) {
+            sizes[i] = shape[i].extent;
+        }
+        Buffer<> b(metadata.type, sizes);
+        dynamic_type_dispatch<FillWithRandom>(metadata.type, b, seed);
+        return b;
     }
 
-    // TODO: add random options.
     // TODO: add granger-rainbow.
     // TODO: add gradients.
 
@@ -785,6 +842,15 @@ Arguments:
         This input should be an image with the given extents, where diagonal
         elements are set to one of the appropriate type, and the rest are zero.
         Diagonal elements are those whose first two coordinates are equal.
+
+        random:SEED:[NUM,NUM,...]
+
+        This input should be an image with the given extents, and all elements
+        set to a random value of the appropriate type. The random values will
+        be constructed using the mt19937_64 engine, using the given seed;
+        all floating point values will be in a uniform distribution between
+        0.0 and 1.0, while integral values will be uniform across the entire
+        range of the type.
 
         (We anticipate adding other pseudo-file inputs in the future, e.g.
         various random distributions, gradients, rainbows, etc.)
