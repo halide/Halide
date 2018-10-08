@@ -1831,15 +1831,6 @@ WEAK void D3D12ContextHolder::restore() {
     halide_d3d12compute_release_context(user_context);
 }
 
-static void did_modify_range(d3d12_buffer *buffer, size_t offset, size_t length) {
-    TRACELOG;
-
-    d3d12_buffer::transfer_t *xfer = buffer->xfer;
-    halide_assert(user_context, (xfer != NULL));
-    xfer->offset = offset;
-    xfer->size   = length;
-}
-
 static bool is_buffer_managed(d3d12_buffer *buffer) {
     return buffer->xfer != NULL;
 }
@@ -2002,14 +1993,13 @@ static int d3d12compute_buffer_copy(d3d12_device *device,
         // host-to-device via staging buffer:
         halide_assert(user_context, (dst->type != d3d12_buffer::Upload));
         halide_assert(user_context, (dst->type != d3d12_buffer::ReadBack));
-        halide_assert(user_context, (dst->xfer == NULL));
         // TODO: assert that offsets and sizes are within bounds
         d3d12_buffer::transfer_t xfer = { };
-            xfer.staging = src;
-            xfer.offset  = 0;
-            xfer.size    = 0;
+        xfer.staging = src;
+        xfer.offset  = src_byte_offset;
+        xfer.size    = num_bytes;
+        halide_assert(user_context, (dst->xfer == NULL));
         dst->xfer = &xfer;
-        did_modify_range(dst, src_byte_offset, num_bytes);
         d3d12compute_device_sync_internal(device, dst);
         return 0;
     }
@@ -2018,15 +2008,13 @@ static int d3d12compute_buffer_copy(d3d12_device *device,
         // device-to-host via staging buffer:
         halide_assert(user_context, (src->type != d3d12_buffer::Upload));
         halide_assert(user_context, (src->type != d3d12_buffer::ReadBack));
-        halide_assert(user_context, (dst->xfer == NULL));
         // TODO: assert that offsets and sizes are within bounds
         d3d12_buffer::transfer_t xfer = { };
-            xfer.staging = dst;
-            xfer.offset  = 0;
-            xfer.size    = 0;
+        xfer.staging = dst;
+        xfer.offset  = dst_byte_offset;
+        xfer.size    = num_bytes;
+        halide_assert(user_context, (src->xfer == NULL));
         src->xfer = &xfer;
-        // issue copy command from device to staging memory
-        did_modify_range(src, dst_byte_offset, num_bytes);
         d3d12compute_device_sync_internal(device, src);
         return 0;
     }
