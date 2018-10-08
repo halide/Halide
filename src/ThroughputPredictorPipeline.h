@@ -248,24 +248,23 @@ void load_weights(Weights &weights) {
 }
 
 class ThroughputPredictorPipeline {
-public:
     Weights weights;
     Stats stats;
+    Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
+    Runtime::Buffer<double *> cost_ptrs;
+    int cursor, num_stages;
+public:
 
     ThroughputPredictorPipeline() {
         load_weights(weights);
         load_stats(stats);
     }
 
-    Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
-    Runtime::Buffer<double *> cost_ptrs;
-    int cursor, num_stages;
-
     void set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats) {
         pipeline_feat_queue = pipeline_feats;
     }
 
-    int enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
+    void enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
         num_stages = ns;
 
         // We know the most stages that will ever be enqueued from the schedule features
@@ -291,10 +290,10 @@ public:
             evaluate_costs();
         }
 
-        *schedule_feats = schedule_feat_queue;
-
+        *schedule_feats = schedule_feat_queue.sliced(0, cursor);
         cost_ptrs(cursor) = cost_ptr;
-        return cursor++;
+
+        cursor++;
     }
 
     void evaluate_costs() {
@@ -321,8 +320,6 @@ public:
                                         weights.conv5_filter, weights.conv5_bias,
                                         weights.conv6_filter, weights.conv6_bias,
                                         dst);
-
-
 
         for (int i = 0; i < cursor; i++) {
             internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";

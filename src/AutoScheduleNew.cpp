@@ -2806,7 +2806,7 @@ struct State {
             Runtime::Buffer<float> schedule_features;
 
             // Won't actually run anything until we call evaluate_costs...
-            int batch_idx = throughput_predictor->enqueue(num_stages, &schedule_features, &cost);
+            throughput_predictor->enqueue(num_stages, &schedule_features, &cost);
 
             // index of current stage whose features we are reading
             int stage = 0;
@@ -2818,13 +2818,13 @@ struct State {
                     const auto &feat = features.get(&*it);
                     const int64_t *sched_stats = (const int64_t *)(&feat);
                     for (int i = 0; i < schedule_feat_size; i++) {
-                        schedule_features(batch_idx, i, stage) = sched_stats[i];
+                        schedule_features(i, stage) = sched_stats[i];
                     }
 
                     // HACK: The current weights were trained with inlined Funcs not having parallelism features set
                     if (feat.inlined_calls > 0) {
-                        schedule_features(batch_idx, 8, stage) = 0;
-                        schedule_features(batch_idx, 9, stage) = 0;
+                        schedule_features(8, stage) = 0;
+                        schedule_features(9, stage) = 0;
                     }
 
                     stage += 1;
