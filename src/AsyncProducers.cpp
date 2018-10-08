@@ -383,7 +383,7 @@ class InitializeSemaphores : public IRMutator2 {
         Stmt body;
         if (op) {
             body = mutate(op->body);
-            // Peel off any enclosing lets
+            // Peel off any enclosing let expressions from the value
             vector<pair<string, Expr>> lets;
             Expr value = op->value;
             while (const Let *l = value.as<Let>()) {
