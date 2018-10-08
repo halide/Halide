@@ -807,6 +807,10 @@ WEIGHTS_COMPONENTS = \
 WEIGHTS = $(WEIGHTS_COMPONENTS:%=$(BUILD_DIR)/weights_%.o)
 OBJECTS += $(WEIGHTS)
 
+BUILTIN_GENERATORS = $(SRC_DIR)/CostModelGenerator.cpp
+BUILTIN_PIPELINES = halide_autoscheduler_cost_model
+BUILTIN_PIPELINE_OBJECTS = ${BUILTIN_PIPELINES:%=$(BUILD_DIR)/builtin_pipeline/%.o} $(BIN_DIR)/host/runtime.o
+
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
 ifneq (,$(WITH_HEXAGON))
@@ -820,13 +824,13 @@ endif
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
-$(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
+$(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES) $(BUILTIN_PIPELINE_OBJECTS)
 	# Determine the relevant object files from llvm with a dummy
 	# compilation. Passing -t to the linker gets it to list which
 	# object files in which archives it uses to resolve
 	# symbols. We only care about the libLLVM ones.
 	@mkdir -p $(@D)
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1| egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) $(BUILTIN_PIPELINE_OBJECTS) -Wl,-t $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) 2>&1| egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
 	# if the list has changed since the previous build, or there
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
@@ -841,17 +845,25 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	mv list.new list; \
 	fi
 
-$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/list
-	# Archive together all the halide and llvm object files
+# libHalideStage1 includes none of the builtin pipelines and no llvm object files
+$(BUILD_DIR)/libHalideStage1.a: $(OBJECTS) $(INITIAL_MODULES) 
+	# Archive together all the halide object files
 	@mkdir -p $(@D)
-	@rm -f $(LIB_DIR)/libHalide.a
+	@rm -f $@
 	# ar breaks on MinGW with all objects at the same time.
-	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
-	ranlib $(LIB_DIR)/libHalide.a
+	echo $(OBJECTS) $(INITIAL_MODULES) | xargs -n200 ar q $@
+	ranlib $@
 
-$(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
+# The full libHalide appends the builtin pipelines and the necessary llvm object files to libHalideStage1
+$(LIB_DIR)/libHalide.a: $(BUILD_DIR)/libHalideStage1.a $(BUILTIN_PIPELINE_OBJECTS) $(BUILD_DIR)/llvm_objects/list
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	cp $(BUILD_DIR)/libHalideStage1.a $@
+	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILTIN_PIPELINE_OBJECTS) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $@
+	ranlib $@
+
+$(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(BUILTIN_PIPELINE_OBJECTS) $(INITIAL_MODULES)
+	@mkdir -p $(@D)
+	$(CXX) -shared $(OBJECTS) $(BUILTIN_PIPELINE_OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -936,6 +948,18 @@ $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvid
 
 $(BUILD_DIR)/weights_%.cpp: $(BIN_DIR)/binary2cpp $(WEIGHTS_DIR)/%.data
 	./$(BIN_DIR)/binary2cpp halide_internal_weights_$* < $(WEIGHTS_DIR)/$*.data > $@
+
+$(BUILD_DIR)/builtin_pipeline/%.o: $(BIN_DIR)/builtin_pipelines.generator
+	@mkdir -p $(@D)
+	$< -o $(BUILD_DIR)/builtin_pipeline -g $* -e h,o target=host-no_runtime 
+
+$(BUILD_DIR)/builtin_pipeline/stubs.o: $(SRC_DIR)/BuiltinPipelineStubs.cpp
+	@mkdir -p $(@D)
+	$(CXX) -std=c++11 -c $< -o $@
+
+$(BIN_DIR)/builtin_pipelines.generator: $(BUILD_DIR)/GenGen.o $(INCLUDE_DIR)/Halide.h $(BUILTIN_GENERATORS) $(BUILD_DIR)/libHalideStage1.a $(BUILD_DIR)/builtin_pipeline/stubs.o
+	@mkdir -p $(@D)
+	$(CXX) $< $(TEST_CXX_FLAGS) -I $(INCLUDE_DIR) $(BUILTIN_GENERATORS) $(BUILD_DIR)/libHalideStage1.a $(BUILD_DIR)/builtin_pipeline/stubs.o -o $@ $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)
@@ -1108,15 +1132,13 @@ $(BUILD_DIR)/GenGen.o: $(ROOT_DIR)/tools/GenGen.cpp $(INCLUDE_DIR)/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -o $@
 
-# Make an empty generator for generating runtimes.
-$(BIN_DIR)/runtime.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
-	@mkdir -p $(@D)
-	$(CXX) $< $(TEST_LD_FLAGS) -o $@
-
 # Generate a standalone runtime for a given target string
-$(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
+$(BIN_DIR)/%/runtime.a: $(BIN_DIR)/builtin_pipelines.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -r runtime -o $(CURDIR)/$(BIN_DIR)/$* target=$*
+
+$(BIN_DIR)/%/runtime.o: $(BIN_DIR)/%/runtime.a
+	F=$$(ar t $< | tail -n1); ar x $< $$F ; mv $$F $@
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)

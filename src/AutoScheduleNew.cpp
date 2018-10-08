@@ -12,9 +12,9 @@
 #include "Substitute.h"
 #include "Util.h"
 #include "PartitionLoops.h"
+#include "../tools/halide_benchmark.h"
 
 #include "ThroughputPredictorPipeline.h"
-#include "ThroughputPredictorLoader.h"
 
 #include <set>
 #include <queue>
@@ -3447,10 +3447,7 @@ std::string generate_schedules_new(const std::vector<Function> &outputs,
 
     dag.dump();
 
-    auto w = AutoScheduleModel::load_weights();
-    auto stats = AutoScheduleModel::load_stats();
-
-    ThroughputPredictorPipeline throughput_predictor(w, stats);
+    ThroughputPredictorPipeline throughput_predictor;
     ThroughputPredictorPipeline *tp = &throughput_predictor;
     if (get_env_variable("HL_USE_MANUAL_COST_MODEL") == "1") {
         tp = nullptr;
@@ -3503,10 +3500,7 @@ void test_convnet_correctness() {
     Halide::Runtime::Buffer<float> schedule_features;
     double cost;
 
-    auto w = AutoScheduleModel::load_weights();
-    auto stats = AutoScheduleModel::load_stats();
-
-    ThroughputPredictorPipeline throughput_predictor(w, stats);
+    ThroughputPredictorPipeline throughput_predictor;
 
     throughput_predictor.set_pipeline_features(pipeline_features);
     throughput_predictor.enqueue(10, &schedule_features, &cost);
@@ -3579,13 +3573,10 @@ void autoschedule_test() {
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");
 
-    Weights w = load_weights();
-    Stats stats = load_stats();
-
     Var x("x"), y("y");
 
     #if 1
-    ThroughputPredictorPipeline throughput_predictor(w, stats);
+    ThroughputPredictorPipeline throughput_predictor;
     ThroughputPredictorPipeline *tpp = &throughput_predictor;
     #else
     ThroughputPredictorPipeline *tpp = nullptr;
@@ -3927,17 +3918,17 @@ void autoschedule_test() {
         // construction, so we'll redundantly recreate it for every
         // iteration.
         int cost_calcs = 0;
-        double t = Tools::benchmark(10, 1, [&]() {
+        double t = Tools::benchmark(3, 1, [&]() {
                 State::cost_calculations = 0;
                 FunctionDAG dag(outputs, params, target);
-                optimal_schedule(dag, outputs, params, tpp, 300);
+                optimal_schedule(dag, outputs, params, tpp, 50);
                 cost_calcs = State::cost_calculations;
             });
 
         // Now schedule it for real
         FunctionDAG dag(outputs, params, target);
         //dag.dump();
-        auto optimal = optimal_schedule(dag, outputs, params, tpp, 300);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 50);
 
         debug(0) << "** Optimal schedule:\n";
         optimal->calculate_cost(dag, params, tpp, true);

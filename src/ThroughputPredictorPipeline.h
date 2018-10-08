@@ -1,224 +1,260 @@
 #include <algorithm>
+#include <fstream>
 
 #include "Buffer.h"
 #include "Generator.h"
 #include "BoundaryConditions.h"
-#include "ThroughputPredictorLoader.h"
 #include "Type.h"
-#include "../tools/halide_benchmark.h"
+
+extern "C" int halide_autoscheduler_cost_model(int,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *,
+                                               halide_buffer_t *);
+
+extern "C" float halide_internal_weights_pipeline_mean[];
+extern "C" int halide_internal_weights_pipeline_mean_length;
+extern "C" float halide_internal_weights_pipeline_std[];
+extern "C" int halide_internal_weights_pipeline_std_length;
+extern "C" float halide_internal_weights_schedule_mean[];
+extern "C" int halide_internal_weights_schedule_mean_length;
+extern "C" float halide_internal_weights_schedule_std[];
+extern "C" int halide_internal_weights_schedule_std_length;
+
+extern "C" float halide_internal_weights_head1_conv1_bias[];
+extern "C" int halide_internal_weights_head1_conv1_bias_length;
+extern "C" float halide_internal_weights_head1_conv1_weight[];
+extern "C" int halide_internal_weights_head1_conv1_weight_length;
+extern "C" float halide_internal_weights_head2_conv1_bias[];
+extern "C" int halide_internal_weights_head2_conv1_bias_length;
+extern "C" float halide_internal_weights_head2_conv1_weight[];
+extern "C" int halide_internal_weights_head2_conv1_weight_length;
+extern "C" float halide_internal_weights_trunk_conv1_bias[];
+extern "C" int halide_internal_weights_trunk_conv1_bias_length;
+extern "C" float halide_internal_weights_trunk_conv1_weight[];
+extern "C" int halide_internal_weights_trunk_conv1_weight_length;
+extern "C" float halide_internal_weights_trunk_conv2_bias[];
+extern "C" int halide_internal_weights_trunk_conv2_bias_length;
+extern "C" float halide_internal_weights_trunk_conv2_weight[];
+extern "C" int halide_internal_weights_trunk_conv2_weight_length;
+extern "C" float halide_internal_weights_trunk_conv3_bias[];
+extern "C" int halide_internal_weights_trunk_conv3_bias_length;
+extern "C" float halide_internal_weights_trunk_conv3_weight[];
+extern "C" int halide_internal_weights_trunk_conv3_weight_length;
+extern "C" float halide_internal_weights_trunk_conv4_bias[];
+extern "C" int halide_internal_weights_trunk_conv4_bias_length;
+extern "C" float halide_internal_weights_trunk_conv4_weight[];
+extern "C" int halide_internal_weights_trunk_conv4_weight_length;
+extern "C" float halide_internal_weights_trunk_conv5_bias[];
+extern "C" int halide_internal_weights_trunk_conv5_bias_length;
+extern "C" float halide_internal_weights_trunk_conv5_weight[];
+extern "C" int halide_internal_weights_trunk_conv5_weight_length;
+extern "C" float halide_internal_weights_trunk_conv6_bias[];
+extern "C" int halide_internal_weights_trunk_conv6_bias_length;
+extern "C" float halide_internal_weights_trunk_conv6_weight[];
+extern "C" int halide_internal_weights_trunk_conv6_weight_length;
+
 
 namespace Halide {
 namespace Internal {
 namespace AutoScheduleModel {
 
+Runtime::Buffer<float> buffer_from_file(const std::string &filename, const std::vector<int> &shape) {
+    Runtime::Buffer<float> buf(shape);
+    assert_file_exists(filename);
+
+    std::ifstream i(filename.c_str());
+    i.read((char *)(buf.data()), buf.size_in_bytes());
+
+    return buf;
+}
+
+struct Stats {
+    Runtime::Buffer<float> pipeline_mean;
+    Runtime::Buffer<float> pipeline_std;
+    Runtime::Buffer<float> schedule_mean;
+    Runtime::Buffer<float> schedule_std;
+};
+
+void load_stats(Stats &stats) {
+    std::string stats_dir = get_env_variable("HL_WEIGHTS_DIR");
+    if (stats_dir.empty()) {
+        stats.pipeline_mean = Runtime::Buffer<float>(halide_internal_weights_pipeline_mean, 7, 56);
+        stats.pipeline_mean.transpose(0, 1); // Stored as 7x56, but pipeline will access as 56x7
+        internal_assert(halide_internal_weights_pipeline_mean_length == (int)stats.pipeline_mean.size_in_bytes());
+
+        stats.pipeline_std = Runtime::Buffer<float>(halide_internal_weights_pipeline_std, 7, 56);
+        stats.pipeline_std.transpose(0, 1); // Stored as 7x56, but pipeline will access as 56x7
+        internal_assert(halide_internal_weights_pipeline_std_length == (int)stats.pipeline_std.size_in_bytes());
+
+        stats.schedule_mean = Runtime::Buffer<float>(halide_internal_weights_schedule_mean, 25);
+        internal_assert(halide_internal_weights_schedule_mean_length == (int)stats.schedule_mean.size_in_bytes());
+
+        stats.schedule_std = Runtime::Buffer<float>(halide_internal_weights_schedule_std, 25);
+        internal_assert(halide_internal_weights_schedule_std_length == (int)stats.schedule_std.size_in_bytes());
+    } else {
+        stats.pipeline_mean = buffer_from_file(stats_dir + "/pipeline_mean.data", {7, 56});
+        stats.pipeline_mean.transpose(0, 1);
+        stats.pipeline_std = buffer_from_file(stats_dir + "/pipeline_std.data", {7, 56});
+        stats.pipeline_std.transpose(0, 1);
+        stats.schedule_mean = buffer_from_file(stats_dir + "/schedule_mean.data", {25});
+        stats.schedule_std = buffer_from_file(stats_dir + "/schedule_std.data", {25});
+    }
+}
+
+struct Weights {
+    Runtime::Buffer<float> head1_filter;
+    Runtime::Buffer<float> head1_bias;
+
+    Runtime::Buffer<float> head2_filter;
+    Runtime::Buffer<float> head2_bias;
+
+    Runtime::Buffer<float> conv1_filter;
+    Runtime::Buffer<float> conv1_bias;
+
+    Runtime::Buffer<float> conv2_filter;
+    Runtime::Buffer<float> conv2_bias;
+
+    Runtime::Buffer<float> conv3_filter;
+    Runtime::Buffer<float> conv3_bias;
+
+    Runtime::Buffer<float> conv4_filter;
+    Runtime::Buffer<float> conv4_bias;
+
+    Runtime::Buffer<float> conv5_filter;
+    Runtime::Buffer<float> conv5_bias;
+
+    Runtime::Buffer<float> conv6_filter;
+    Runtime::Buffer<float> conv6_bias;
+};
+
+void load_weights(Weights &weights) {
+    std::string weights_dir = get_env_variable("HL_WEIGHTS_DIR");
+    if (weights_dir.empty()) {
+        weights.head1_filter = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_weight, 7, 56, 20);
+        weights.head1_filter.transpose(0, 2);
+        internal_assert(halide_internal_weights_head1_conv1_weight_length == (int)weights.head1_filter.size_in_bytes());
+
+        weights.head1_bias = Runtime::Buffer<float>(halide_internal_weights_head1_conv1_bias, 20);
+        internal_assert(halide_internal_weights_head1_conv1_bias_length == (int)weights.head1_bias.size_in_bytes());
+
+        weights.head2_filter = Runtime::Buffer<float>(halide_internal_weights_head2_conv1_weight, 25, 20);
+        weights.head2_filter.transpose(0, 1);
+        internal_assert(halide_internal_weights_head2_conv1_weight_length == (int)weights.head2_filter.size_in_bytes());
+
+        weights.head2_bias = Runtime::Buffer<float>(halide_internal_weights_head2_conv1_bias, 20);
+        internal_assert(halide_internal_weights_head2_conv1_bias_length == (int)weights.head2_bias.size_in_bytes());
+
+        weights.conv1_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv1_weight, 3, 40, 40);
+        weights.conv1_filter.transpose(0, 2);
+        internal_assert(halide_internal_weights_trunk_conv1_weight_length == (int)weights.conv1_filter.size_in_bytes());
+
+        weights.conv1_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv1_bias, 40);
+        internal_assert(halide_internal_weights_trunk_conv1_bias_length == (int)weights.conv1_bias.size_in_bytes());
+
+        weights.conv2_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv2_weight, 3, 40, 40);
+        weights.conv2_filter.transpose(0, 2);
+        internal_assert(halide_internal_weights_trunk_conv2_weight_length == (int)weights.conv2_filter.size_in_bytes());
+
+        weights.conv2_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv2_bias, 40);
+        internal_assert(halide_internal_weights_trunk_conv2_bias_length == (int)weights.conv2_bias.size_in_bytes());
+
+        weights.conv3_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv3_weight, 3, 40, 80);
+        weights.conv3_filter.transpose(0, 2);
+        internal_assert(halide_internal_weights_trunk_conv3_weight_length == (int)weights.conv3_filter.size_in_bytes());
+
+        weights.conv3_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv3_bias, 80);
+        internal_assert(halide_internal_weights_trunk_conv3_bias_length == (int)weights.conv3_bias.size_in_bytes());
+
+        weights.conv4_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv4_weight, 3, 80, 120);
+        weights.conv4_filter.transpose(0, 2);
+        internal_assert(halide_internal_weights_trunk_conv4_weight_length == (int)weights.conv4_filter.size_in_bytes());
+
+        weights.conv4_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv4_bias, 120);
+        internal_assert(halide_internal_weights_trunk_conv4_bias_length == (int)weights.conv4_bias.size_in_bytes());
+
+        weights.conv5_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv5_weight, 3, 120, 160);
+        weights.conv5_filter.transpose(0, 2);
+        internal_assert(halide_internal_weights_trunk_conv5_weight_length == (int)weights.conv5_filter.size_in_bytes());
+
+        weights.conv5_bias = Runtime::Buffer<float>(halide_internal_weights_trunk_conv5_bias, 160);
+        internal_assert(halide_internal_weights_trunk_conv5_bias_length == (int)weights.conv5_bias.size_in_bytes());
+
+        weights.conv6_filter = Runtime::Buffer<float>(halide_internal_weights_trunk_conv6_weight, 160);
+        internal_assert(halide_internal_weights_trunk_conv6_weight_length == (int)weights.conv6_filter.size_in_bytes());
+
+        weights.conv6_bias = Runtime::Buffer<float>::make_scalar(halide_internal_weights_trunk_conv6_bias);
+        internal_assert(halide_internal_weights_trunk_conv6_bias_length == (int)weights.conv6_bias.size_in_bytes());
+    } else {
+        weights.head1_filter = buffer_from_file(weights_dir + "/head1_conv1_weight.data", {7, 56, 20});
+        weights.head1_filter.transpose(0, 2);
+
+        weights.head1_bias = buffer_from_file(weights_dir + "/head1_conv1_bias.data", {20});
+
+        weights.head2_filter = buffer_from_file(weights_dir + "/head2_conv1_weight.data", {25, 20});
+        weights.head2_filter.transpose(0, 1);
+
+        weights.head2_bias = buffer_from_file(weights_dir + "/head2_conv1_bias.data", {20});
+
+        weights.conv1_filter = buffer_from_file(weights_dir + "/trunk_conv1_weight.data", {3, 40, 40});
+        weights.conv1_filter.transpose(0, 2);
+
+        weights.conv1_bias = buffer_from_file(weights_dir + "/trunk_conv1_bias.data", {40});
+
+        weights.conv2_filter = buffer_from_file(weights_dir + "/trunk_conv2_weight.data", {3, 40, 40});
+        weights.conv2_filter.transpose(0, 2);
+
+        weights.conv2_bias = buffer_from_file(weights_dir + "/trunk_conv2_bias.data", {40});
+
+        weights.conv3_filter = buffer_from_file(weights_dir + "/trunk_conv3_weight.data", {3, 40, 80});
+        weights.conv3_filter.transpose(0, 2);
+
+        weights.conv3_bias = buffer_from_file(weights_dir + "/trunk_conv3_bias.data", {80});
+
+        weights.conv4_filter = buffer_from_file(weights_dir + "/trunk_conv4_weight.data", {3, 80, 120});
+        weights.conv4_filter.transpose(0, 2);
+
+        weights.conv4_bias = buffer_from_file(weights_dir + "/trunk_conv4_bias.data", {120});
+
+        weights.conv5_filter = buffer_from_file(weights_dir + "/trunk_conv5_weight.data", {3, 120, 160});
+        weights.conv5_filter.transpose(0, 2);
+
+        weights.conv5_bias = buffer_from_file(weights_dir + "/trunk_conv5_bias.data", {160});
+
+        weights.conv6_filter = buffer_from_file(weights_dir + "/trunk_conv6_weight.data", {160});
+
+        weights.conv6_bias = buffer_from_file(weights_dir + "/trunk_conv6_bias.data", {});
+
+    }
+}
+
 class ThroughputPredictorPipeline {
 public:
+    Weights weights;
+    Stats stats;
 
-    ImageParam pipeline_features{Float(32), 3, "pipeline_features"};
-    ImageParam schedule_features{Float(32), 3, "schedule_features"};
-
-    Stats feature_stats;
-
-    Param<int> num_stages_param;
-
-    Buffer<float> head1_filter;
-    Buffer<float> head1_bias;
-
-    Buffer<float> head2_filter;
-    Buffer<float> head2_bias;
-
-    Buffer<float> filter1;
-    Buffer<float> bias1;
-    Buffer<float> filter2;
-    Buffer<float> bias2;
-    Buffer<float> filter3;
-    Buffer<float> bias3;
-    Buffer<float> filter4;
-    Buffer<float> bias4;
-    Buffer<float> filter5;
-    Buffer<float> bias5;
-    Buffer<float> filter6;
-    Buffer<float> bias6;
-
-    Func f_head1_conv{"f_head1_conv"}, f_head2_conv{"f_head2_conv"};
-    Func f_head1_relu{"f_head1_relu"}, f_head2_relu{"f_head2_relu"};
-    Func f_head1_relu_padded{"f_head1_relu_padded"}, f_head2_relu_padded{"f_head2_relu_padded"};
-
-    Func f_conv1_stage1{"f_conv1_stage1"}, f_conv1_stage2{"f_conv1_stage2"};
-    Func f_conv2{"f_conv2"}, f_conv3{"f_conv3"}, f_conv4{"f_conv4"}, f_conv5{"f_conv5"}, f_conv6{"f_conv6"};
-    Func f_ReLU1{"f_ReLU1"}, f_relu1_padded{"f_relu1_padded"};
-    Func f_ReLU2{"f_ReLU2"}, f_relu2_padded{"f_relu2_padded"};
-    Func f_ReLU3{"f_ReLU3"}, f_relu3_padded{"f_relu3_padded"};
-    Func f_ReLU4{"f_ReLU4"}, f_relu4_padded{"f_relu4_padded"};
-    Func f_ReLU5{"f_ReLU5"}, f_relu5_padded{"f_relu5_padded"};
-    Func f_ReLU6{"f_ReLU6"}, f_relu6_padded{"f_relu6_padded"};
-    Func f_pool3{"f_pool3"}, f_pool3_padded{"f_pool3_padded"};
-    Func f_pool4{"f_pool4"}, f_pool4_padded{"f_pool4_padded"};
-    Func f_reduce{"f_reduce"}, prediction{"prediction"};
-    Func normalized_pipeline_features{"normalized_pipeline_features"};
-    Func normalized_schedule_features{"normalized_schedule_features"};
-
-    ThroughputPredictorPipeline(Weights weights, Stats stats) :
-        feature_stats(stats),
-        head1_filter(weights.head1_filter), head1_bias(weights.head1_bias),
-        head2_filter(weights.head2_filter), head2_bias(weights.head2_bias),
-        filter1(weights.conv1_filter), bias1(weights.conv1_bias),
-        filter2(weights.conv2_filter), bias2(weights.conv2_bias),
-        filter3(weights.conv3_filter), bias3(weights.conv3_bias),
-        filter4(weights.conv4_filter), bias4(weights.conv4_bias),
-        filter5(weights.conv5_filter), bias5(weights.conv5_bias),
-        filter6(weights.conv6_filter), bias6(weights.conv6_bias) {
-
-        Expr padded_stages = max(num_stages_param, 22);
-        Expr first_valid = max(0, (padded_stages - num_stages_param)/2);
-
-        Var c("c"), w("w"), n("n"), i("i"), j("j"), s("s");
-
-        RDom r_head1(head1_filter.dim(1).min(), head1_filter.dim(1).extent(),
-                     head1_filter.dim(2).min(), head1_filter.dim(2).extent());
-
-        RDom r_head2(head2_filter.dim(1).min(), head2_filter.dim(1).extent());
-
-        RDom r1_stage1(head1_filter.dim(0).min(), head1_filter.dim(0).extent(),
-                       filter1.dim(2).min(), filter1.dim(2).extent());
-
-        RDom r1_stage2(head2_filter.dim(0).min(), head2_filter.dim(0).extent(),
-                       filter1.dim(2).min(), filter1.dim(2).extent());
-
-        RDom r2(filter2.dim(1).min(), filter2.dim(1).extent(),
-                filter2.dim(2).min(), filter2.dim(2).extent());
-
-        RDom r3(filter3.dim(1).min(), filter3.dim(1).extent(),
-                filter3.dim(2).min(), filter3.dim(2).extent());
-
-        RDom r4(filter4.dim(1).min(), filter4.dim(1).extent(),
-                filter4.dim(2).min(), filter4.dim(2).extent());
-
-        RDom r5(filter5.dim(1).min(), filter5.dim(1).extent(),
-                filter5.dim(2).min(), filter5.dim(2).extent());
-
-        RDom r6(filter6.dim(0).min(), filter6.dim(0).extent());
-
-        // reduce over a region that expands to 3x1 convs from the first two stages to the last two stages with zero padding
-        RDom r_reduce(0, ( padded_stages + 6 ) / 4);
-
-        normalized_pipeline_features(i, j, s) = 0.0f;
-        RDom r_s(first_valid, num_stages_param);
-        normalized_pipeline_features(i, j, r_s) =
-            (pipeline_features(i, j, r_s - first_valid) - feature_stats.pipeline_mean(i, j)) / feature_stats.pipeline_std(i, j);
-
-        normalized_schedule_features(n, i, s) = 0.0f;
-        normalized_schedule_features(n, i, r_s) =
-            (fast_log(schedule_features(n, i, r_s - first_valid) + 1) - feature_stats.schedule_mean(i)) / feature_stats.schedule_std(i);
-
-        f_head1_conv(c, w) = head1_bias(c);
-        f_head1_conv(c, w) += head1_filter(c, r_head1.x, r_head1.y) * normalized_pipeline_features(r_head1.x, r_head1.y, w);
-        f_head1_relu(c, w) = max(0, f_head1_conv(c, w));
-
-        f_head2_conv(n, c, w) = head2_bias(c);
-        f_head2_conv(n, c, w) += head2_filter(c, r_head2) * normalized_schedule_features(n, r_head2, w);
-        f_head2_relu(n, c, w) = max(0, f_head2_conv(n, c, w));
-
-        // we want to enforce boundary conditions on f_head1_relu and f_head2_relu because conv1 pads with 1 zero on either
-        // side of the width (i.e. final dimension) of its input. We set the valid range of the width from 0 to num_stages.
-        f_head1_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head1_relu, 0.0f, {{Expr(), Expr()}, {0, padded_stages}});
-        f_head2_relu_padded = Halide::BoundaryConditions::constant_exterior(f_head2_relu, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages}});
-
-        /***** network trunk *****/
-        // first 20 input channels are from head1_relu, next 20 input channels are from head2_relu
-        // have to do two stagees for conv1 to convolve over each head's outputs
-        f_conv1_stage1(c, w) = bias1(c);
-        f_conv1_stage1(c, w) += filter1(c, r1_stage1.x, r1_stage1.y) * f_head1_relu_padded(r1_stage1.x, w + r1_stage1.y-1);
-
-        f_conv1_stage2(n, c, w) = f_conv1_stage1(c, w); // Broadcast the processed pipeline features across the batch
-        f_conv1_stage2(n, c, w) += filter1(c, head1_filter.dim(0).extent()+r1_stage2.x, r1_stage2.y) * f_head2_relu_padded(n, r1_stage2.x, w+r1_stage2.y-1);
-        f_ReLU1(n, c, w) = max(0, f_conv1_stage2(n, c, w));
-
-        // set boundary conditions for f_ReLU1
-        f_relu1_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU1, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages}});
-
-        f_conv2(n, c, w) = bias2(c);
-        f_conv2(n, c, w) += filter2(c, r2.x, r2.y) * f_relu1_padded(n, r2.x, w+r2.y-1);
-
-        f_ReLU2(n, c, w) = max(0, f_conv2(n, c, w));
-
-        // set boundary conditions for f_ReLU2
-        f_relu2_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU2, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages}});
-
-        f_conv3(n, c, w) = bias3(c);
-        f_conv3(n, c, w) += filter3(c, r3.x, r3.y) * f_relu2_padded(n, r3.x, w+r3.y-1);
-        f_ReLU3(n, c, w) = max(0, f_conv3(n, c, w));
-
-        // set boundary conditions for f_ReLU3
-        f_relu3_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU3, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages}});
-
-        f_pool3(n, c, w) = 0.5f * (f_relu3_padded(n, c, w*2-1) + f_relu3_padded(n, c, w*2));
-
-        // set boundary conditions for f_pool3
-        f_pool3_padded = Halide::BoundaryConditions::constant_exterior(f_pool3, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages/2 + 1}});
-
-        f_conv4(n, c, w) = bias4(c);
-        f_conv4(n, c, w) += filter4(c, r4.x, r4.y) * f_pool3_padded(n, r4.x, w+r4.y-1);
-        f_ReLU4(n, c, w) = max(0, f_conv4(n, c, w));
-
-        // set boundary conditions for f_ReLU4
-        f_relu4_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU4, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, padded_stages/2 + 1}});
-
-        f_pool4(n, c, w) = 0.5f * (f_relu4_padded(n, c, w*2-1) + f_relu4_padded(n, c, w*2));
-
-        // set boundary conditions for f_pool4
-        f_pool4_padded = Halide::BoundaryConditions::constant_exterior(f_pool4, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, (padded_stages+6) / 4}});
-
-        f_conv5(n, c, w) = bias5(c);
-        f_conv5(n, c, w) += filter5(c, r5.x, r5.y) * f_pool4_padded(n, r5.x, w+r5.y-1);
-        f_ReLU5(n, c, w) = max(0, f_conv5(n, c, w));
-
-        // set boundary conditions for f_ReLU5
-        f_relu5_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU5, 0.0f, {{Expr(), Expr()}, {Expr(), Expr()}, {0, (padded_stages+6) / 4}});
-
-        f_conv6(n, w) = bias6();
-        f_conv6(n, w) += filter6(r6) * f_relu5_padded(n, r6, w);
-        f_ReLU6(n, w) = max(0, f_conv6(n, w));
-
-        // set boundary conditions for f_ReLU5
-        f_relu6_padded = Halide::BoundaryConditions::constant_exterior(f_ReLU6, 0.0f, {{Expr(), Expr()}, {0, (padded_stages+6) / 4}});
-
-        f_reduce(n) = 0.0f;
-        f_reduce(n) += f_relu6_padded(n, r_reduce);
-
-        prediction(n) = f_reduce(n);
-
-        // schedule
-        Expr batch_size = prediction.output_buffers()[0].dim(0).extent();
-        prediction.bound(n, 0, batch_size);
-
-        Target t = get_jit_target_from_environment();
-
-        // Pipeline features processing
-        normalized_pipeline_features.compute_root().vectorize(i, 8).update().vectorize(i, 8);
-        normalized_schedule_features.compute_at(prediction, n)
-            .specialize(batch_size >= 8).vectorize(n, 8);
-        f_head1_relu.compute_root().vectorize(c, 8);
-        f_conv1_stage1.compute_root().vectorize(c, 8);
-
-        // TODO: memoize?
-
-        // Schedule features processing
-        normalized_schedule_features.update().specialize(batch_size >= 8).vectorize(n, 8);
-        f_head2_relu.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_ReLU1.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_ReLU2.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_ReLU3.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_pool3.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_ReLU4.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_pool4.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_ReLU5.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        f_ReLU6.compute_at(prediction, n).specialize(batch_size >= 8).vectorize(n, 8);
-        prediction.compute_root()
-            .specialize(batch_size >= 8).vectorize(n, 8)
-            .specialize(batch_size >= 16).parallel(n, 2);
-
-        prediction.compile_jit(t);
+    ThroughputPredictorPipeline() {
+        load_weights(weights);
+        load_stats(stats);
     }
 
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs;
@@ -267,24 +303,26 @@ public:
         internal_assert(pipeline_feat_queue.data());
         internal_assert(schedule_feat_queue.data());
 
-        num_stages_param.set(num_stages);
+        Runtime::Buffer<float> dst = costs.cropped(0, 0, cursor);
 
-        Buffer<float> s(*schedule_feat_queue.raw_buffer());
-        s.crop(2, 0, num_stages);
-        // We want the pipeline to be able to read out of bounds of the meaningful stuff a little to add scheduling flexibility...
-        // s.crop(0, 0, cursor);
+        halide_autoscheduler_cost_model(num_stages,
+                                        pipeline_feat_queue,
+                                        schedule_feat_queue,
+                                        stats.pipeline_mean,
+                                        stats.pipeline_std,
+                                        stats.schedule_mean,
+                                        stats.schedule_std,
+                                        weights.head1_filter, weights.head1_bias,
+                                        weights.head2_filter, weights.head2_bias,
+                                        weights.conv1_filter, weights.conv1_bias,
+                                        weights.conv2_filter, weights.conv2_bias,
+                                        weights.conv3_filter, weights.conv3_bias,
+                                        weights.conv4_filter, weights.conv4_bias,
+                                        weights.conv5_filter, weights.conv5_bias,
+                                        weights.conv6_filter, weights.conv6_bias,
+                                        dst);
 
-        schedule_features.set(s);
 
-        Buffer<float> p(*pipeline_feat_queue.raw_buffer());
-        p.crop(2, 0, num_stages);
-
-        pipeline_features.set(p);
-
-        Buffer<float> dst(*costs.raw_buffer());
-        dst.crop(0, 0, cursor);
-
-        prediction.realize(dst);
 
         for (int i = 0; i < cursor; i++) {
             internal_assert(cost_ptrs(i)) << "Cost queue entry was null: " << i << "\n";
@@ -297,18 +335,6 @@ public:
     // Discard any enqueued but unevaluated schedules
     void reset() {
         cursor = 0;
-
-        /*
-          // Keep the memory around
-
-        pipeline_features.reset();
-        schedule_features.reset();
-
-        schedule_feat_queue.reset();
-        pipeline_feat_queue.reset();
-        costs.reset();
-        cost_ptrs.reset();
-        */
     }
 
 };
