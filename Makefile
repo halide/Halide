@@ -858,7 +858,7 @@ $(BUILD_DIR)/libHalideStage1.a: $(OBJECTS) $(INITIAL_MODULES)
 $(LIB_DIR)/libHalide.a: $(BUILD_DIR)/libHalideStage1.a $(BUILTIN_PIPELINE_OBJECTS) $(BUILD_DIR)/llvm_objects/list
 	@mkdir -p $(@D)
 	cp $(BUILD_DIR)/libHalideStage1.a $@
-	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILTIN_PIPELINE_OBJECTS) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $@
+	echo $(BUILTIN_PIPELINE_OBJECTS) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $@
 	ranlib $@
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(BUILTIN_PIPELINE_OBJECTS) $(INITIAL_MODULES)
