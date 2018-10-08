@@ -32,6 +32,7 @@ typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
 typedef int (*remote_release_library_fn)(halide_hexagon_handle_t);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
+typedef int (*remote_profiler_set_current_func_fn)(int);
 typedef int (*remote_power_fn)();
 typedef int (*remote_power_mode_fn)(int);
 typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int);
@@ -46,6 +47,7 @@ WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_library_fn remote_release_library = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
+WEAK remote_profiler_set_current_func_fn remote_profiler_set_current_func = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
 WEAK remote_power_perf_fn remote_set_performance = NULL;
@@ -142,6 +144,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // These symbols are optional.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_profiler_set_current_func", remote_profiler_set_current_func, /* required */ false);
 
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
@@ -364,6 +367,9 @@ WEAK int halide_hexagon_run(void *user_context,
     // will be billed to the calling Func.
     if (remote_poll_profiler_state) {
         halide_profiler_get_state()->get_remote_profiler_state = get_remote_profiler_state;
+        if (remote_profiler_set_current_func) {
+            remote_profiler_set_current_func(halide_profiler_get_state()->current_func);
+        }
     }
 
     // Call the pipeline on the device side.

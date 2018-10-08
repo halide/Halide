@@ -3229,7 +3229,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                     result = 0;
                     auto after_acquires = skip_acquires(node->first);
                     direct_acquires += after_acquires.second;
-                    
+
                     after_acquires.first.accept(this);
                     total_threads += result;
 
@@ -3280,7 +3280,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
                 after_inner_acquires.first.accept(this);
                 result = result + 1;
             }
- 
+
             void visit(const Block *op) {
                 result = 0;
                 op->first.accept(this);
@@ -3406,7 +3406,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
             iter->setName("task_parent");
             sym_push("__task_parent", iterator_to_pointer(iter));
         }
-        
+
         // Generate the new function body
         codegen(t.body);
 

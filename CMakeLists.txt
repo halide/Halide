@@ -430,6 +430,7 @@ foreach(F mex_halide.m
           halide_image.h
           halide_image_io.h
           halide_image_info.h
+          halide_malloc_trace.h
           halide_trace_config.h)
   install(FILES "${HALIDE_BASE_DIR}/tools/${F}"
           DESTINATION tools)
