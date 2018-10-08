@@ -62,7 +62,7 @@ int test() {
         Var yi;
 
         f
-            .compute_at(g, yi)
+            .compute_at(g, Var::outermost())
             .vectorize(x, vector_size/2);
 
         f
