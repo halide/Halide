@@ -681,8 +681,8 @@ class PartitionLoops : public IRMutator2 {
         }
 
         Stmt stmt;
-        // Bust serial for loops up into three.
-        if (op->for_type == ForType::Serial) {
+        // Bust simple serial for loops up into three.
+        if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
             stmt = For::make(op->name, min_steady, max_steady - min_steady,
                              op->for_type, op->device_api, simpler_body);
 
@@ -697,9 +697,18 @@ class PartitionLoops : public IRMutator2 {
                 stmt = Block::make(stmt, epilogue);
             }
         } else {
-            // We don't have task parallelism. So for parallel for
-            // loops just put an if-then-else in the loop body. It
-            // should branch-predict to the steady state pretty well.
+            // For parallel for loops we could use a Fork node here,
+            // but that would introduce the more complicated parallel
+            // runtime into code that doesn't use async(), which may
+            // interfere with legacy overrides of
+            // halide_do_par_for. So for parallel for loops just put
+            // an if-then-else in the loop body. It should
+            // branch-predict to the steady state pretty well.
+            //
+            // Simple serial for loops that contain an Acquire node go
+            // into the task system as a single entity, but Block
+            // nodes do not, so we get a flatter task graph if we do
+            // the same trick.
             Expr loop_var = Variable::make(Int(32), op->name);
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {

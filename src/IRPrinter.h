@@ -143,12 +143,14 @@ protected:
     void visit(const AssertStmt *);
     void visit(const ProducerConsumer *);
     void visit(const For *);
+    void visit(const Acquire *);
     void visit(const Store *);
     void visit(const Provide *);
     void visit(const Allocate *);
     void visit(const Free *);
     void visit(const Realize *);
     void visit(const Block *);
+    void visit(const Fork *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Shuffle *);

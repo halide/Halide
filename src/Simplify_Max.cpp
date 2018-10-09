@@ -127,6 +127,11 @@ Expr Simplify::visit(const Max *op, ConstBounds *bounds) {
                rewrite(max(y + x, x), max(y, 0) + x) ||
                rewrite(max(x + y, x), x + max(y, 0)) ||
 
+               rewrite(max((x*c0 + y)*c1, x*c2 + z), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
+               rewrite(max((y + x*c0)*c1, x*c2 + z), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
+               rewrite(max((x*c0 + y)*c1, z + x*c2), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
+               rewrite(max((y + x*c0)*c1, z + x*c2), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
+
                rewrite(max(max(x + y, z), x + w), max(x + max(y, w), z)) ||
                rewrite(max(max(z, x + y), x + w), max(x + max(y, w), z)) ||
                rewrite(max(max(x + y, z), w + x), max(x + max(y, w), z)) ||

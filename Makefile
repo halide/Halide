@@ -352,6 +352,7 @@ SOURCE_FILES = \
   ApplySplit.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
+  AsyncProducers.cpp \
   AutoSchedule.cpp \
   AutoScheduleNew.cpp \
   AutoScheduleUtils.cpp \
@@ -513,6 +514,7 @@ HEADER_FILES = \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
+  AsyncProducers.h \
   AutoSchedule.h \
   AutoScheduleNew.h \
   AutoScheduleUtils.h \
@@ -726,6 +728,7 @@ RUNTIME_CPP_COMPONENTS = \
   pseudostack \
   qurt_allocator \
   qurt_hvx \
+  qurt_hvx_vtcm \
   qurt_init_fini \
   qurt_threads \
   qurt_threads_tsan \
@@ -992,6 +995,7 @@ clean:
 	rm -rf $(INCLUDE_DIR)
 	rm -rf $(DOC_DIR)
 	rm -rf $(DISTRIB_DIR)
+	rm -rf $(ROOT_DIR)/apps/*/bin
 
 .SECONDARY:
 
@@ -1074,12 +1078,16 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 # https://github.com/halide/Halide/issues/2082
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
+# https://github.com/halide/Halide/issues/2093
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
 # not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
 # those known to be broken for plausible reasons.
 GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATOR:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/async_parallel.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling_define_extern.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
@@ -1687,7 +1695,10 @@ TEST_APPS=\
 test_apps: distrib
 	@for APP in $(TEST_APPS); do \
 		echo Testing app $${APP}... ; \
-		make -C $(ROOT_DIR)/apps/$${APP} test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) BIN=$(CURDIR)/$(BIN_DIR)/apps/$${APP} || exit 1 ; \
+		make -C $(ROOT_DIR)/apps/$${APP} test \
+			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+			BIN=$(ROOT_DIR)/apps/$${APP}/bin \
+			|| exit 1 ; \
 	done
 
 # Bazel depends on the distrib archive being built
@@ -1851,6 +1862,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(PREFIX)/share/halide/tools
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
@@ -1865,6 +1877,7 @@ install_qc: install $(HEXAGON_RUNTIME_LIBS)
 	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
 	ln -sf $(PREFIX)/lib/v60/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
 	ln -sf $(PREFIX)/lib/v60/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
+	ln -sf $(PREFIX)/lib/v60/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
@@ -1882,7 +1895,8 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(ROOT_DIR)/README*.md \
 						   $(ROOT_DIR)/bazel/* \
 						   $(BUILD_DIR)/halide_config.bzl \
-						   $(BUILD_DIR)/halide_config.cmake \
+               $(BUILD_DIR)/halide_config.cmake \
+               $(BUILD_DIR)/halide_config.make \
 						   $(ROOT_DIR)/halide.cmake
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
@@ -1911,6 +1925,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
@@ -1937,6 +1952,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
 		halide/tools/halide_image_info.h \
+		halide/tools/halide_malloc_trace.h \
 		halide/tools/halide_trace_config.h
 	rm -rf halide
 

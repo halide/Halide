@@ -745,6 +745,15 @@ void check_bounds() {
     check(max(min(x, 5), 1) == 3, x == 3);
     check(max(min(x, 5), 1) == 5, 5 <= x);
 
+    check(min((x*32 + y)*4, x*128 + 127), min(y*4, 127) + x*128);
+    check(min((x*32 + y)*4, x*128 + 4), (min(y, 1) + x*32)*4);
+    check(min((y + x*32)*4, x*128 + 127), min(y*4, 127) + x*128);
+    check(min((y + x*32)*4, x*128 + 4), (min(y, 1) + x*32)*4);
+    check(max((x*32 + y)*4, x*128 + 127), max(y*4, 127) + x*128);
+    check(max((x*32 + y)*4, x*128 + 4), (max(y, 1) + x*32)*4);
+    check(max((y + x*32)*4, x*128 + 127), max(y*4, 127) + x*128);
+    check(max((y + x*32)*4, x*128 + 4), (max(y, 1) + x*32)*4);
+
     {
         Expr one = 1;
         Expr three = 3;

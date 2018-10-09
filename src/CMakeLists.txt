@@ -74,6 +74,7 @@ set(RUNTIME_CPP
   pseudostack
   qurt_allocator
   qurt_hvx
+  qurt_hvx_vtcm
   qurt_init_fini
   qurt_threads
   qurt_threads_tsan
@@ -265,6 +266,7 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AsyncProducers.h
   AutoSchedule.h
   AutoScheduleNew.h  
   AutoScheduleUtils.h
@@ -433,6 +435,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ApplySplit.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AsyncProducers.cpp
   AutoSchedule.cpp
   AutoScheduleNew.cpp
   AutoScheduleUtils.cpp

@@ -128,6 +128,7 @@ DECLARE_CPP_INITMOD(profiler_with_hardware_counters)
 DECLARE_CPP_INITMOD(pseudostack)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(qurt_hvx)
+DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
 DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
@@ -672,6 +673,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
+                modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -856,6 +858,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else if (t.has_feature(Target::HVX_128)) {
                     modules.push_back(get_initmod_hvx_128_ll(c));
                 }
+                if (t.has_feature(Target::HVX_v65)) {
+                    modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
+                                                                debug));
+                }
+
             } else {
                 modules.push_back(get_initmod_prefetch(c, bits_64, debug));
             }

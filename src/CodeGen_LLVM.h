@@ -177,7 +177,10 @@ protected:
         *argument_t_type,
         *scalar_value_t_type,
         *device_interface_t_type,
-        *pseudostack_slot_t_type;
+        *pseudostack_slot_t_type,
+        *semaphore_t_type,
+        *semaphore_acquire_t_type,
+        *parallel_task_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -256,6 +259,24 @@ protected:
     // @{
     void create_assertion(llvm::Value *condition, Expr message, llvm::Value *error_code = nullptr);
     // @}
+
+    /** Codegen a call to do_parallel_tasks */
+    struct ParallelTask {
+        Stmt body;
+        struct SemAcquire {
+            Expr semaphore;
+            Expr count;
+        };
+        std::vector<SemAcquire> semaphores;
+        std::string loop_var;
+        Expr min, extent;
+        Expr serial;
+        std::string name;
+    };
+    int task_depth;
+    void get_parallel_tasks(Stmt s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
+    void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
+    void do_as_parallel_task(Stmt s);
 
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
@@ -342,8 +363,10 @@ protected:
     virtual void visit(const AssertStmt *);
     virtual void visit(const ProducerConsumer *);
     virtual void visit(const For *);
+    virtual void visit(const Acquire *);
     virtual void visit(const Store *);
     virtual void visit(const Block *);
+    virtual void visit(const Fork *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);

@@ -795,61 +795,6 @@ public:
           found_compute_level(false), target(t), env(env) {}
 
 private:
-    // Determine if 'loop_name' is the right level to inject produce/realize node
-    // of 'func'. If 'loop_name' is a fused group, we should inject it at the
-    // fused parent loop of the group.
-    bool is_the_right_level(const string &loop_name) {
-        if (loop_name == LoopLevel::root().lock().to_string()) {
-            return true;
-        }
-
-        vector<string> v = split_string(loop_name, ".");
-        internal_assert(v.size() > 2);
-        const string &func_name = v[0];
-        const string &var = v[v.size()-1];
-
-        int stage = -1;
-        for (size_t i = 1; i < v.size() - 1; ++i) {
-            if (v[i].substr(0, 1) == "s") {
-                string str = v[i].substr(1, v[i].size() - 1);
-                bool has_only_digits = (str.find_first_not_of( "0123456789" ) == string::npos);
-                if (has_only_digits) {
-                    stage = atoi(str.c_str());
-                }
-            }
-        }
-        internal_assert(stage >= 0);
-
-        const auto &it = env.find(func_name);
-        internal_assert(it != env.end());
-        const Function &f = it->second;
-        internal_assert(stage <= (int)f.updates().size());
-
-        if (f.has_extern_definition()) {
-            return true;
-        }
-
-        const Definition &def = (stage == 0) ? f.definition() : f.update(stage - 1);
-        const LoopLevel &fuse_level = def.schedule().fuse_level().level;
-        if (fuse_level.is_inlined() || fuse_level.is_root()) {
-            // It isn't fused to anyone
-            return true;
-        } else {
-            // Need to find out if it is fused at 'var'
-            const vector<Dim> &dims = def.schedule().dims();
-            const auto &it1 = std::find_if(dims.begin(), dims.end(),
-                [&fuse_level](const Dim &d) { return var_name_match(d.var, fuse_level.var().name()); });
-            internal_assert(it1 != dims.end());
-
-            const auto &it2 = std::find_if(dims.begin(), dims.end(),
-                [&var](const Dim &d) { return var_name_match(d.var, var); });
-            internal_assert(it2 != dims.end());
-
-            return it2 < it1;
-        }
-        return false;
-    }
-
     Stmt build_pipeline(Stmt consumer) {
         pair<Stmt, Stmt> realization = build_production(env, func, target);
 
@@ -951,7 +896,7 @@ private:
 
         body = mutate(body);
 
-        if (compute_level.match(for_loop->name) && is_the_right_level(for_loop->name)) {
+        if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
             if (!function_is_already_realized_in_stmt(func, body) &&
                 (function_is_used_in_stmt(func, body) || is_output)) {
@@ -960,7 +905,7 @@ private:
             found_compute_level = true;
         }
 
-        if (store_level.match(for_loop->name) && is_the_right_level(for_loop->name) && found_compute_level) {
+        if (store_level.match(for_loop->name)) {
             debug(3) << "Found store level\n";
 
             if (!function_is_already_realized_in_stmt(func, body) &&

@@ -212,12 +212,12 @@ struct FuncScheduleContents {
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
-    bool memoized;
     MemoryType memory_type;
+    bool memoized, async;
 
     FuncScheduleContents() :
         store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-        memoized(false), memory_type(MemoryType::Auto) {};
+        memory_type(MemoryType::Auto), memoized(false), async(false) {};
 
     // Pass an IRMutator2 through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator2 *mutator) {
@@ -326,8 +326,9 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
-    copy.contents->memoized = contents->memoized;
     copy.contents->memory_type = contents->memory_type;
+    copy.contents->memoized = contents->memoized;
+    copy.contents->async = contents->async;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -339,6 +340,14 @@ FuncSchedule FuncSchedule::deep_copy(
     return copy;
 }
 
+MemoryType FuncSchedule::memory_type() const {
+    return contents->memory_type;
+}
+
+MemoryType &FuncSchedule::memory_type() {
+    return contents->memory_type;
+}
+
 bool &FuncSchedule::memoized() {
     return contents->memoized;
 }
@@ -347,12 +356,12 @@ bool FuncSchedule::memoized() const {
     return contents->memoized;
 }
 
-MemoryType FuncSchedule::memory_type() const {
-    return contents->memory_type;
+bool &FuncSchedule::async() {
+    return contents->async;
 }
 
-MemoryType &FuncSchedule::memory_type() {
-    return contents->memory_type;
+bool FuncSchedule::async() const {
+    return contents->async;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

@@ -389,12 +389,14 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::AssertStmt:
     case IRNodeType::ProducerConsumer:
     case IRNodeType::For:
+    case IRNodeType::Acquire:
     case IRNodeType::Store:
     case IRNodeType::Provide:
     case IRNodeType::Allocate:
     case IRNodeType::Free:
     case IRNodeType::Realize:
     case IRNodeType::Block:
+    case IRNodeType::Fork:
     case IRNodeType::IfThenElse:
     case IRNodeType::Evaluate:
     case IRNodeType::Prefetch:
