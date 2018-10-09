@@ -451,12 +451,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op)
     // __shared[x] is always uint(32): must reinterpret/pack bits...
     if (op->name == "__shared") {
         internal_assert(value_type.bits() <= 32);
-        Type promoted = value_type.with_bits(32);
-                ostringstream rhs;
+        ostringstream rhs;
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
             << " = "
-            << print_reinterpret(promoted, op->value)
+            << print_reinterpret(UInt(32), op->value)
             << ";\n";
         do_indent();
         stream << rhs.str();
