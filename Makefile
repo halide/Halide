@@ -816,7 +816,7 @@ BUILTIN_PIPELINE_TARGET = host-no_runtime
 UNAME_M = $(shell uname -m)
 ifeq ($(UNAME_M), x86_64)
 # We may want to compile libHalide on one x86 platform and use it on another (e.g. for distributions)
-BUILTIN_PIPELINE_TARGET = x86-64-no_runtime,x86-64-avx-no_runtime,x86-64-avx2-no_runtime
+BUILTIN_PIPELINE_TARGET = x86-64-avx2-no_runtime,x86-64-avx-no_runtime,x86-64-no_runtime
 endif
 
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
