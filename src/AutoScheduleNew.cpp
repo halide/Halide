@@ -1964,6 +1964,14 @@ struct LoopNest {
                     const auto &p = root_bounds->loops(s, i);
                     feat.points_computed_minimum *= (p.second - p.first + 1);
                 }
+
+                if (node->stages.size() == 1 && !node->is_output) {
+                    int64_t points_computed_minimum_if_inlined = 0;
+                    for (auto *e : node->outgoing_edges) {
+                        points_computed_minimum_if_inlined += features->get(&(e->consumer->stages[e->consumer_stage])).points_computed_minimum * e->calls;
+                    }
+                    feat.points_computed_minimum = std::min(feat.points_computed_minimum, points_computed_minimum_if_inlined);
+                }
             }
 
             return;
@@ -3060,9 +3068,6 @@ struct State {
                 }
             }
         }
-
-        if (num_children == 0) root->dump("");
-        internal_assert(num_children > 0) << "Could not find any legal way to schedule Func " << node->func.name() << '\n';
     }
 
     void dump() const {
@@ -3938,6 +3943,32 @@ void autoschedule_test() {
         debug(0) << "Time per schedule considered: " << (1000000 * t) / cost_calcs << " us\n";
     }
 
+
+    if (1) {
+        // A gather that only uses a small portion of a potentially
+        // large LUT. The number of points computed should be less
+        // than points computed minimum, and the LUT should be
+        // inlined, even if it's really expensive.
+        Func lut("lut");
+        Var x;
+        lut(x) = (x + 1) * (x + 2) * (x + 3) * (x + 4) * (x + 5) * (x + 6);
+
+        Func idx("idx");
+        idx(x) = x * (10000 - x);
+
+        Func out("out");
+        out(x) = lut(clamp(idx(x), 0, 100000));
+
+        out.estimate(x, 0, 10);
+
+        vector<Function> outputs = {out.function()};
+        FunctionDAG dag(outputs, params, target);
+        auto optimal = optimal_schedule(dag, outputs, params, tpp, 50);
+        debug(0) << "** Optimal schedule:\n";
+        optimal->calculate_cost(dag, params, tpp, true);
+        if (tpp) tpp->evaluate_costs();
+        optimal->dump();
+    }
 }
 
 }
