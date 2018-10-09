@@ -809,15 +809,18 @@ WEIGHTS_COMPONENTS = \
 WEIGHTS = $(WEIGHTS_COMPONENTS:%=$(BUILD_DIR)/weights_%.o)
 OBJECTS += $(WEIGHTS)
 
-BUILTIN_GENERATORS = $(SRC_DIR)/CostModelGenerator.cpp
-BUILTIN_PIPELINES = halide_autoscheduler_cost_model
-BUILTIN_PIPELINE_STATIC_LIBS = ${BUILTIN_PIPELINES:%=$(BUILD_DIR)/builtin_pipeline/%.a} $(BIN_DIR)/host/runtime.a
 BUILTIN_PIPELINE_TARGET = host-no_runtime
+BUILTIN_RUNTIME_TARGET = host
 UNAME_M = $(shell uname -m)
 ifeq ($(UNAME_M), x86_64)
 # We may want to compile libHalide on one x86 platform and use it on another (e.g. for distributions)
 BUILTIN_PIPELINE_TARGET = x86-64-avx2-no_runtime,x86-64-avx-no_runtime,x86-64-no_runtime
+BUILTIN_RUNTIME_TARGET = x86-64
 endif
+
+BUILTIN_GENERATORS = $(SRC_DIR)/CostModelGenerator.cpp
+BUILTIN_PIPELINES = halide_autoscheduler_cost_model
+BUILTIN_PIPELINE_STATIC_LIBS = ${BUILTIN_PIPELINES:%=$(BUILD_DIR)/builtin_pipeline/%.a} $(BIN_DIR)/$(BUILTIN_RUNTIME_TARGET)/runtime.a
 
 # Add the Hexagon simulator to the rpath on Linux. (Not supported elsewhere, so no else cases.)
 ifeq ($(UNAME), Linux)
@@ -853,24 +856,14 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES) $(BUILTIN_PIPELINE
 	mv list.new list; \
 	fi
 
-# libHalideStage1 includes none of the builtin pipelines and no llvm object files
-$(BUILD_DIR)/libHalideStage1.a: $(OBJECTS) $(INITIAL_MODULES) 
-	# Archive together all the halide object files
+$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILTIN_PIPELINE_STATIC_LIBS) $(BUILD_DIR)/llvm_objects/list
 	@mkdir -p $(@D)
-	@rm -f $@
-	# ar breaks on MinGW with all objects at the same time.
-	echo $(OBJECTS) $(INITIAL_MODULES) | xargs -n200 ar q $@
-	ranlib $@
-
-# The full libHalide appends the builtin pipelines and the necessary llvm object files to libHalideStage1
-$(LIB_DIR)/libHalide.a: $(BUILD_DIR)/libHalideStage1.a $(BUILTIN_PIPELINE_STATIC_LIBS) $(BUILD_DIR)/llvm_objects/list
-	@mkdir -p $(@D)
+	rm -f $@ # We'll be using ar q, so we must ensure the file doesn't already exist
 	@mkdir -p $(BUILD_DIR)/builtin_pipeline/objects
-	cp $(BUILD_DIR)/libHalideStage1.a $@
 	rm -f $(BUILD_DIR)/builtin_pipeline/objects/*
 	cd $(BUILD_DIR)/builtin_pipeline/objects && \
 	for F in $(BUILTIN_PIPELINE_STATIC_LIBS); do ar -x $(CURDIR)/$$F $$( ar -t $(CURDIR)/$$F | grep '[.]o$$' ); done
-	echo $(BUILD_DIR)/builtin_pipeline/objects/*.o $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $@
+	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/builtin_pipeline/objects/*.o $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $@
 	ranlib $@
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(BUILTIN_PIPELINE_STATIC_LIBS) $(INITIAL_MODULES)
@@ -965,13 +958,11 @@ $(BUILD_DIR)/builtin_pipeline/%.a: $(BIN_DIR)/builtin_pipelines.generator
 	@mkdir -p $(@D)
 	$< -o $(BUILD_DIR)/builtin_pipeline -g $* -e static_library target=$(BUILTIN_PIPELINE_TARGET)
 
-$(BUILD_DIR)/builtin_pipeline/stubs.o: $(SRC_DIR)/BuiltinPipelineStubs.cpp
+# We need this generator to build libHalide, so it can't link to
+# it. Instead it links to all the constituent object files.
+$(BIN_DIR)/builtin_pipelines.generator: $(BUILD_DIR)/GenGen.o $(BUILTIN_GENERATORS) $(OBJECTS) $(INITIAL_MODULES) 
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -c $< -o $@
-
-$(BIN_DIR)/builtin_pipelines.generator: $(BUILD_DIR)/GenGen.o $(INCLUDE_DIR)/Halide.h $(BUILTIN_GENERATORS) $(BUILD_DIR)/libHalideStage1.a $(BUILD_DIR)/builtin_pipeline/stubs.o
-	@mkdir -p $(@D)
-	$(CXX) $< $(TEST_CXX_FLAGS) -I $(INCLUDE_DIR) $(BUILTIN_GENERATORS) $(BUILD_DIR)/libHalideStage1.a $(BUILD_DIR)/builtin_pipeline/stubs.o -o $@ $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $^ -o $@ $(LLVM_STATIC_LIBS) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS)
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)

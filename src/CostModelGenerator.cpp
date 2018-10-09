@@ -1,4 +1,13 @@
-#include "Halide.h"
+// We directly include the headers from the Halide source tree to
+// avoid a build dependency on Halide.h
+#include "BoundaryConditions.h"
+#include "InlineReductions.h"
+#include "Generator.h"
+
+// Define the pipeline that we'll be producing as a nullptr, because
+// we're going to be linking to most libHalide with that pipeline
+// missing
+extern "C" void *halide_autoscheduler_cost_model = nullptr;
 
 using namespace Halide;
 
