@@ -669,6 +669,14 @@ public:
         halide_set_custom_print(rungen_halide_print);
     }
 
+    int argument_kind(const std::string &name) const {
+        auto it = args.find(name);
+        if (it == args.end()) {
+            return -1;
+        }
+        return it->second.metadata->kind;
+    }
+
     void parse_one(const std::string &name,
                    const std::string &value,
                    std::set<std::string> *seen_args) {

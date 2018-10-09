@@ -250,8 +250,8 @@ Logger log() {
     return { do_log_cout, do_log_info, do_log_warn, do_log_fail };
 }
 
-}
-}
+}  // namespace RunGen
+}  // namespace Halide
 
 int main(int argc, char **argv) {
     if (argc <= 1) {
