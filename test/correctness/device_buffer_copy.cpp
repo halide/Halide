@@ -193,6 +193,19 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Test copy device to host no dest host -- confirm error not segfault.\n");
+    {
+        Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(hexagon_rpc);
+        assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+        halide_buffer_t no_host_dst = *gpu_buf1.raw_buffer();
+        no_host_dst.host = nullptr;
+
+        Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(hexagon_rpc, 256000);
+        assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+        assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf2, nullptr, &no_host_dst) == halide_error_code_host_is_null);
+    }
+
     // Test copying between different device APIs. Probably will not
     // run on test infrastructure as we do not configure more than one
     // GPU API at a time. For now, special case CUDA and OpenCL as these are
@@ -327,9 +340,22 @@ int main(int argc, char **argv) {
 
             for (int i = 0; i < 128; i++) {
                 for (int j = 0; j < 128; j++) {
-                    assert(gpu_buf1(i, j) == (i + j * 256 + 256000));
+                    assert(gpu_buf1(i, j) == (i + j * 256));
                 }
             }
+        }
+
+        printf("Test cross device copy device to host with no dest host.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+            halide_buffer_t no_host_dst = *gpu_buf2.raw_buffer();
+            no_host_dst.host = nullptr;
+
+            assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, nullptr, &no_host_dst) == halide_error_code_host_is_null);
         }
     }
     
