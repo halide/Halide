@@ -490,6 +490,18 @@ private:
     static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
+    static bool should_sort_slices(vector<MulExpr> &mpys) {
+        for (MulExpr &m : mpys) {
+            const Shuffle *shuffle = m.first.as<Shuffle>();
+            if (!shuffle) {
+                return false;
+            }
+            if (!shuffle->is_slice()) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     Expr visit(const Add *op) override {
         // vmpa, vdmpy, and vrmpy instructions are hard to match with
@@ -514,8 +526,16 @@ private:
             }
 
             if (mpy_count > 0 && mpys.size() == 4) {
-                // TODO: It's possible that permuting the order of the
+                // It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering slices
+                // in the ascending order of their start lanes.
+                if (should_sort_slices(mpys)) {
+                    std::stable_sort(mpys.begin(), mpys.end(),
+                                     [&](const MulExpr &m1, const MulExpr &m2) {
+                                         return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+                                     });
+                }
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 a0123 = simplify(a0123);
 
@@ -554,8 +574,16 @@ private:
 
             // TODO: suffix = ".vub.vb"
             if (mpy_count > 0 && mpys.size() == 4) {
-                // TODO: It's possible that permuting the order of the
+                // It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering slices
+                // in the ascending order of their start lanes.
+                if (should_sort_slices(mpys)) {
+                    std::stable_sort(mpys.begin(), mpys.end(),
+                                     [&](const MulExpr &m1, const MulExpr &m2) {
+                                         return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+                                     });
+                }
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
@@ -601,6 +629,16 @@ private:
                 vdmpy_suffix = ".vh.b";
             }
             if (mpy_count > 0 && mpys.size() == 2) {
+                // It's possible that permuting the order of the
+                // multiply operands can simplify the shuffle away.
+                // So, give yourself a fighting chance by ordering slices
+                // in the ascending order of their start lanes.
+                if (should_sort_slices(mpys)) {
+                    std::stable_sort(mpys.begin(), mpys.end(),
+                                     [&](const MulExpr &m1, const MulExpr &m2) {
+                                         return m1.first.as<Shuffle>()->slice_begin() < m2.first.as<Shuffle>()->slice_begin();
+                                     });
+                }
                 Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
                 a01 = simplify(a01);
                 // TODO: This requires the operands to be in a
