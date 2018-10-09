@@ -99,6 +99,7 @@ public:
                          .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_copy_y.compute_at(output_y, tx)
+                            .store_at(output_y, ty) 
                             .copy_to_host()
                             .fold_storage(x, tile_width * 2);
 
@@ -110,6 +111,7 @@ public:
                              .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
+                             .store_at(output_uv, ty)
                              .bound(c, 0, 2)
                              .copy_to_host()
                              .reorder_storage(c, x, y)
@@ -136,6 +138,7 @@ public:
                          .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_copy_y.compute_at(output_y, tx)
+                            .store_at(output_y, ty) 
                             .copy_to_host()
                             .async()
                             .fold_storage(x, tile_width * 2);
@@ -148,6 +151,7 @@ public:
                              .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
+                             .store_at(output_uv, ty)
                              .bound(c, 0, 2)
                              .copy_to_host()
                              .async()
@@ -185,7 +189,7 @@ public:
                          .parallel(yox);
 
                 input_copy_y.compute_at(output_y, tx)
-                            .store_at(output_y, tx)
+                            .store_at(output_y, ty)
                             .copy_to_host();
 
                 Stage(output_y).set_dim_device_api(tx, DeviceAPI::HexagonDma);
@@ -196,7 +200,7 @@ public:
                              .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
-                             .store_at(output_uv, tx)
+                             .store_at(output_uv, ty)
                              .bound(c, 0, 2)
                              .copy_to_host()
                              .reorder_storage(c, x, y);
@@ -233,7 +237,7 @@ public:
                          .parallel(yox);
 
                 input_copy_y.compute_at(output_y, tx)
-                            .store_at(output_y, tx)
+                            .store_at(output_y, ty)
                             .copy_to_host()
                             .async()
                             .fold_storage(x, tile_width * 2);
@@ -246,7 +250,7 @@ public:
                              .copy_to_device();
 
                 input_copy_uv.compute_at(output_uv, tx)
-                             .store_at(output_uv, tx)
+                             .store_at(output_uv, ty)
                              .bound(c, 0, 2)
                              .copy_to_host()
                              .async()

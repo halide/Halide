@@ -24,8 +24,10 @@ int main(int argc, char **argv) {
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = width * height;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
+    uint8_t *data_out = (uint8_t *)malloc(buf_size);
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] = ((uint8_t)rand()) >> 1;
+        data_out[i] = 0;
     }
 
     // Setup Halide input buffer with the test buffer
@@ -46,6 +48,11 @@ int main(int argc, char **argv) {
 
     // Setup Halide output buffer
     Halide::Runtime::Buffer<uint8_t> output(width, height);
+    output.set_device_dirty();
+    output.device_wrap_native(halide_hexagon_dma_device_interface(),
+                             reinterpret_cast<uint64_t>(data_out));
+    halide_hexagon_dma_prepare_for_copy_to_device(nullptr, output, dma_engine, false, halide_hexagon_fmt_RawData);
+
 
     int result = pipeline(input, output);
     if (result != 0) {
@@ -56,7 +63,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint8_t correct = data_in[x + y*width ] * 2;
-            if (correct != output(x, y)) {
+            if (correct != data_out[x + y*width]) {
                 static int cnt = 0;
                 printf("Mismatch at x=%d y=%d : %d != %d\n", x, y, correct, output(x, y));
                 if (++cnt > 20) abort();
@@ -67,11 +74,13 @@ int main(int argc, char **argv) {
     // DMA_step 4: Buffer is processed, disassociate buffer from DMA engine
     //             Optional goto DMA_step 0 for processing more buffers
     halide_hexagon_dma_unprepare(nullptr, input);
+    halide_hexagon_dma_unprepare(nullptr, output);
 
     // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
 
     free(data_in);
+    free(data_out);
 
     printf("Success!\n");
     return 0;

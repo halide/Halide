@@ -12,11 +12,14 @@ public:
 
         // We need a wrapper for the output so we can schedule the
         // multiply update in tiles.
-        Func copy("copy");
+        Func input_copy("copy");
+        Func output_copy("copy");
+        Func work("copy");
 
-        copy(x, y) = input(x, y);
-
-        output(x, y) = copy(x, y) * 2;
+        input_copy(x, y) = input(x, y);
+        work(x, y) = input_copy(x, y) * 2;
+        output_copy(x, y) = work(x, y);
+        output(x, y) = output_copy(x, y);
 
         Var tx("tx"), ty("ty");
 
@@ -26,19 +29,22 @@ public:
 
         Expr fac = output.dim(1).extent()/2;
 
-        Var yo, yi;
-
-        output.split(y, yo, yi, fac);
 
         output.compute_root()
-              .tile(x, yi, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp)
-              .parallel(yo);
+              .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
+        Stage(output)
+            .set_dim_device_api(tx, DeviceAPI::HexagonDma);
 
         // Schedule the copy to be computed at tiles with a
         // circular buffer of two tiles.
-        copy.compute_at(output, tx)
-            .store_at(output, tx)
-            .copy_to_host();
+        input_copy.compute_at(output, tx)
+                  .copy_to_host();
+
+        work.compute_at(output, tx);
+
+        output_copy.compute_at(output, tx)
+                   .copy_to_device();
+
     }
 
 };

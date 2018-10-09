@@ -29,19 +29,14 @@ OPTION := none
 
 BIN ?= bin
 
-all: $(BIN)/process-host  $(BIN)/process_err-host $(BIN)/process_blur-host \
+all: $(BIN)/process-host  $(BIN)/process_blur-host \
      $(BIN)/process_nv12_linear_ro_basic-host \
      $(BIN)/process_nv12_linear_rw_basic-host \
      $(BIN)/process_p010_linear_ro_basic-host \
      $(BIN)/process_p010_linear_rw_basic-host \
      $(BIN)/process_raw_linear_ro_basic_interleaved-host \
-     $(BIN)/process_raw_linear_ro_basic_planar-host \
-     $(BIN)/process_raw_linear_rw_basic_planar-host
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_err: pipeline_err.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 $(BIN)/pipeline_blur: pipeline_blur.cpp $(GENERATOR_DEPS)
@@ -62,19 +57,10 @@ $(BIN)/pipeline_p010_linear_rw_basic: pipeline_p010_linear_rw_basic.cpp $(GENERA
 $(BIN)/pipeline_raw_linear_ro_basic_interleaved: pipeline_raw_linear_ro_basic_interleaved.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_ro_basic_planar: pipeline_raw_linear_ro_basic_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
-$(BIN)/pipeline_raw_linear_rw_basic_planar: pipeline_raw_linear_rw_basic_planar.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/pipeline.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
 	$^ -g dma_pipeline -o $(BIN)/$* -e o,h,html -f pipeline target=$*-hexagon_dma
-$(BIN)/%/pipeline_err.o: $(BIN)/pipeline_err
-	@mkdir -p $(@D)
-	$^ -g dma_pipeline_err -o $(BIN)/$* -e o,h,html -f pipeline_err target=$*-hexagon_dma
 $(BIN)/%/pipeline_blur.o: $(BIN)/pipeline_blur
 	@mkdir -p $(@D)
 	$^ -g dma_pipeline_blur -o $(BIN)/$* -e o,h,html -f pipeline_blur target=host-hexagon_dma
@@ -141,53 +127,21 @@ $(BIN)/%/pipeline_p010_linear_rw_split_fold.o: $(BIN)/pipeline_p010_linear_rw_ba
 $(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
 	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_async_interleaved target=$*-hexagon_dma options=async
-$(BIN)/%/pipeline_raw_linear_ro_async_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_async_planar target=$*-hexagon_dma options=async
 $(BIN)/%/pipeline_raw_linear_ro_basic_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
 	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_basic_interleaved target=$*-hexagon_dma options=none
-$(BIN)/%/pipeline_raw_linear_ro_basic_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_basic_planar target=$*-hexagon_dma options=none
 $(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
 	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_fold_interleaved target=$*-hexagon_dma options=fold
-$(BIN)/%/pipeline_raw_linear_ro_fold_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_fold_planar target=$*-hexagon_dma options=fold
 $(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
 	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_interleaved target=$*-hexagon_dma options=split
-$(BIN)/%/pipeline_raw_linear_ro_split_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_planar target=$*-hexagon_dma options=split
 $(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o: $(BIN)/pipeline_raw_linear_ro_basic_interleaved
 	@mkdir -p $(@D)
 	$^ -g pipeline_raw_linear_ro_basic_interleaved -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_fold_interleaved target=$*-hexagon_dma options=split_fold
-$(BIN)/%/pipeline_raw_linear_ro_split_fold_planar.o: $(BIN)/pipeline_raw_linear_ro_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_ro_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_ro_split_fold_planar target=$*-hexagon_dma options=split_fold
-$(BIN)/%/pipeline_raw_linear_rw_async_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_async_planar target=$*-hexagon_dma options=async
-$(BIN)/%/pipeline_raw_linear_rw_basic_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_basic_planar target=$*-hexagon_dma options=none
-$(BIN)/%/pipeline_raw_linear_rw_fold_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_fold_planar target=$*-hexagon_dma options=fold
-$(BIN)/%/pipeline_raw_linear_rw_split_fold_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_split_fold_planar target=$*-hexagon_dma options=split_fold
-$(BIN)/%/pipeline_raw_linear_rw_split_planar.o: $(BIN)/pipeline_raw_linear_rw_basic_planar
-	@mkdir -p $(@D)
-	$^ -g pipeline_raw_linear_rw_basic_planar -o $(BIN)/$* -e o,h,html -f pipeline_raw_linear_rw_split_planar target=$*-hexagon_dma options=split
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline.o -o $(BIN)/process-$* $(LDFLAGS-$*)
-$(BIN)/process_err-%: process_err.cpp $(BIN)/%/pipeline_err.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_err.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_err.o -o $(BIN)/process_err-$* $(LDFLAGS-$*)
 $(BIN)/process_blur-%: process_blur.cpp $(BIN)/%/pipeline_blur.o mock_dma_implementation.cpp
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_blur.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_blur.o -o $(BIN)/process_blur-$* $(LDFLAGS-$*)
 $(BIN)/process_nv12_linear_ro_basic-%: process_nv12_linear_ro_basic.cpp $(BIN)/%/pipeline_nv12_linear_ro_basic.o $(BIN)/%/pipeline_nv12_linear_ro_fold.o $(BIN)/%/pipeline_nv12_linear_ro_async.o $(BIN)/%/pipeline_nv12_linear_ro_split.o $(BIN)/%/pipeline_nv12_linear_ro_split_fold.o mock_dma_implementation.cpp
@@ -200,10 +154,6 @@ $(BIN)/process_p010_linear_rw_basic-%: process_p010_linear_rw_basic.cpp $(BIN)/%
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_p010_linear_rw_basic.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_p010_linear_rw_basic.o $(BIN)/$*/pipeline_p010_linear_rw_fold.o $(BIN)/$*/pipeline_p010_linear_rw_async.o $(BIN)/$*/pipeline_p010_linear_rw_split.o $(BIN)/$*/pipeline_p010_linear_rw_split_fold.o -o $(BIN)/process_p010_linear_rw_basic-$* $(LDFLAGS-$*)
 $(BIN)/process_raw_linear_ro_basic_interleaved-%: process_raw_linear_ro_basic_interleaved.cpp $(BIN)/%/pipeline_raw_linear_ro_basic_interleaved.o mock_dma_implementation.cpp $(BIN)/%/pipeline_raw_linear_ro_fold_interleaved.o $(BIN)/%/pipeline_raw_linear_ro_split_interleaved.o $(BIN)/%/pipeline_raw_linear_ro_split_fold_interleaved.o $(BIN)/%/pipeline_raw_linear_ro_async_interleaved.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_basic_interleaved.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_basic_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_fold_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_async_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_split_interleaved.o $(BIN)/$*/pipeline_raw_linear_ro_split_fold_interleaved.o -o $(BIN)/process_raw_linear_ro_basic_interleaved-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_ro_basic_planar-%: process_raw_linear_ro_basic_planar.cpp $(BIN)/%/pipeline_raw_linear_ro_basic_planar.o  $(BIN)/%/pipeline_raw_linear_ro_fold_planar.o  $(BIN)/%/pipeline_raw_linear_ro_async_planar.o  $(BIN)/%/pipeline_raw_linear_ro_split_planar.o  $(BIN)/%/pipeline_raw_linear_ro_split_fold_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_ro_basic_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_ro_basic_planar.o  $(BIN)/$*/pipeline_raw_linear_ro_fold_planar.o   $(BIN)/$*/pipeline_raw_linear_ro_async_planar.o   $(BIN)/$*/pipeline_raw_linear_ro_split_planar.o   $(BIN)/$*/pipeline_raw_linear_ro_split_fold_planar.o  -o $(BIN)/process_raw_linear_ro_basic_planar-$* $(LDFLAGS-$*)
-$(BIN)/process_raw_linear_rw_basic_planar-%: process_raw_linear_rw_basic_planar.cpp $(BIN)/%/pipeline_raw_linear_rw_basic_planar.o $(BIN)/%/pipeline_raw_linear_rw_fold_planar.o $(BIN)/%/pipeline_raw_linear_rw_async_planar.o $(BIN)/%/pipeline_raw_linear_rw_split_planar.o $(BIN)/%/pipeline_raw_linear_rw_split_fold_planar.o mock_dma_implementation.cpp
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process_raw_linear_rw_basic_planar.cpp mock_dma_implementation.cpp $(BIN)/$*/pipeline_raw_linear_rw_basic_planar.o $(BIN)/$*/pipeline_raw_linear_rw_fold_planar.o $(BIN)/$*/pipeline_raw_linear_rw_async_planar.o $(BIN)/$*/pipeline_raw_linear_rw_split_planar.o $(BIN)/$*/pipeline_raw_linear_rw_split_fold_planar.o  -o $(BIN)/process_raw_linear_rw_basic_planar-$* $(LDFLAGS-$*)
 
 run-host: $(BIN)/process-host
 	$(BIN)/process-host 2048 1024
