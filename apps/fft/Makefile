@@ -22,7 +22,7 @@ UNAME = $(shell uname)
 # 	LDFLAGS += -Wl,-stack_size -Wl,0x100000
 # endif
 
-$(BIN)/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
+$(BIN)/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 

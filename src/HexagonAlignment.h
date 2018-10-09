@@ -32,6 +32,9 @@ public:
         const Ramp *ramp = index.as<Ramp>();
         if (ramp) {
             index = ramp->base;
+        } else if (index.type().is_vector()) {
+            debug(3) << "Is Unaligned\n";
+            return false;
         }
         // If this is a parameter, the base_alignment should be
         // host_alignment. Otherwise, this is an internal buffer,
