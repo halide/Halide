@@ -119,6 +119,14 @@ Similarly, you can create identity images where only the diagonal elements are
 1-s (rest are 0-s) by invoking `identity:[]`. Diagonal elements are defined as
 those whose first two coordinates are equal.
 
+There's also a `random:SEED:[]` pseudo-file, which fills the image with uniform
+noise based on a specific random-number seed:
+
+```
+# Input is a 3-dimensional image with extent 123, 456, and 3
+$ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=random:42:[123,456,3] levels=8 alpha=1 beta=1 local_laplacian=/tmp/out.png
+```
+
 ## Benchmarking
 
 To run a benchmark, use the `--benchmark` flag:
