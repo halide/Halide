@@ -312,6 +312,25 @@ int main(int argc, char **argv) {
                 printf("Cross device with no host buffers case is not handled. Ignoring (correct) error.\n");
             }
         }
+
+        printf("Test cross device copy device to host.\n");
+        {
+            Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(false, 0, DeviceAPI::CUDA);
+            assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+            Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(false, 256000, DeviceAPI::OpenCL);
+            assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+            assert(gpu_buf1.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf1, nullptr, gpu_buf2) == 0);
+            gpu_buf1.set_device_dirty();
+            gpu_buf1.copy_to_host();
+
+            for (int i = 0; i < 128; i++) {
+                for (int j = 0; j < 128; j++) {
+                    assert(gpu_buf1(i, j) == (i + j * 256 + 256000));
+                }
+            }
+        }
     }
     
     printf("Success!\n");
