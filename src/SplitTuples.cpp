@@ -21,7 +21,7 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         IRVisitor::visit(call);
         if ((call->call_type == Call::Halide) && call->func.defined()) {
             func_value_indices[call->name].insert(call->value_index);
@@ -33,7 +33,7 @@ public:
 class UsesExternImage : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         if (c->call_type == Call::Image) {
             result = true;
         } else {

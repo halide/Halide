@@ -255,7 +255,7 @@ namespace {
 class FindSharedAllocations : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         op->body.accept(this);
         if (starts_with(op->name, "__shared_")) {
             allocs.push_back(op);

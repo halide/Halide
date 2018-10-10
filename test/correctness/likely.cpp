@@ -13,14 +13,14 @@ class Counter : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         IRVisitor::visit(op);
         if (op->name == func) {
             store_count++;
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == "sin_f32") {
             sin_count++;
