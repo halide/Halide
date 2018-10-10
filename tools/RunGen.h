@@ -139,7 +139,7 @@ inline bool IOCheckFail(bool condition, const char* msg) {
 }
 
 inline std::vector<std::string> split_string(const std::string &source,
-                                      const std::string &delim) {
+                                             const std::string &delim) {
     std::vector<std::string> elements;
     size_t start = 0;
     size_t found = 0;
@@ -375,10 +375,12 @@ inline bool dims_in_range_are_trivial(const Buffer<> &b, int first, int last) {
 
 // Add or subtract dimensions to the given buffer to match dims_needed,
 // emitting warnings if we do so.
-inline Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, const int dims_needed, Buffer<> b) {
+inline Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name,
+                                   const int dims_needed, Buffer<> b) {
     const int dims_actual = b.dimensions();
     if (dims_actual > dims_needed) {
-        // Warn that we are ignoring dimensions, but only if at least one of the ignored dimensions has extent > 1
+        // Warn that we are ignoring dimensions, but only if at least one of the
+        // ignored dimensions has extent > 1
         if (!dims_in_range_are_trivial(b, dims_needed, dims_actual - 1)) {
             warn() << "Image for " << title << " \"" << name << "\" has "
                  << dims_actual << " dimensions, but only the first "
@@ -519,30 +521,19 @@ struct ArgData {
             auto shape = parse_extents(v[1]);
             // Make a binary buffer with diagonal elements set to true. Diagonal
             // elements are those whose first two dimensions are equal.
-            const int num_dim = shape.size();
-            std::vector<int> sizes(num_dim);
-            for (int i = 0; i < num_dim; ++i) {
-                sizes[i] = shape[i].extent;
-            }
-            Buffer<bool> binary(sizes);
-            binary.for_each_element([&](const int *pos) {
-                binary(pos) = (num_dim >= 2) ? (pos[0] == pos[1]) : (pos[0] == 0);
+            Buffer<bool> b = allocate_buffer(halide_type_of<bool>(), shape);
+            b.for_each_element([&b](const int *pos) {
+                b(pos) = (b.dimensions() >= 2) ? (pos[0] == pos[1]) : (pos[0] == 0);
             });
             // Convert the binary buffer to the required type, so true becomes 1.
-            return Halide::Tools::ImageTypeConversion::convert_image(binary,
-                                                                     metadata->type);
+            return Halide::Tools::ImageTypeConversion::convert_image(b, metadata->type);
         } else if (v[0] == "random") {
             int seed;
             if (!parse_scalar(v[1], &seed)) {
                 fail() << "Invalid value for seed";
             }
             auto shape = parse_extents(v[2]);
-            const int num_dim = shape.size();
-            std::vector<int> sizes(num_dim);
-            for (int i = 0; i < num_dim; ++i) {
-                sizes[i] = shape[i].extent;
-            }
-            Buffer<> b(metadata->type, sizes);
+            Buffer<> b = allocate_buffer(metadata->type, shape);
             dynamic_type_dispatch<FillWithRandom>(metadata->type, b, seed);
             return b;
         } else {
