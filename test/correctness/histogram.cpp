@@ -50,13 +50,13 @@ bool test() {
             .compute_at(g, Var::outermost())
             .vectorize(x, vector_size);
 
-        hist
-            .update(0)
-            .allow_race_conditions()
-            .vectorize(r.x, vector_size);
-
         if (target.has_feature(Target::HVX_v65)) {
             hist.store_in(MemoryType::VTCM);
+
+            hist
+                .update(0)
+                .allow_race_conditions()
+                .vectorize(r.x, vector_size);
         }
     } else {
         hist.compute_root();
@@ -66,7 +66,7 @@ bool test() {
 
     for (int i = 10; i < 138; i++) {
         if (histogram(i-10) != reference_hist[i]) {
-            printf("Error: bucket %d is %d instead of %d\n", i, histogram(i), reference_hist[i]);
+            printf("Error: bucket %d is %d instead of %d\n", i, histogram(i-10), reference_hist[i]);
             return false;
         }
     }
