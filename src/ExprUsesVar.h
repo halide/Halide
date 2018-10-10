@@ -27,46 +27,46 @@ class ExprUsesVars : public IRGraphVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         visit_name(op->name);
     }
 
-    void visit(const Load *op) {
-        visit_name(op->name);
-        IRGraphVisitor::visit(op);
-    }
-
-    void visit(const Store *op) {
+    void visit(const Load *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const Call *op) {
+    void visit(const Store *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const Provide *op) {
+    void visit(const Call *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const Provide *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const LetStmt *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const Realize *op) {
+    void visit(const Let *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Realize *op) override {
+        visit_name(op->name);
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const Allocate *op) override {
         visit_name(op->name);
         IRGraphVisitor::visit(op);
     }

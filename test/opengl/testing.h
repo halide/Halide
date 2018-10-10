@@ -47,7 +47,7 @@ auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::dec
                 }
             }
         });
-    } catch (err) {
+    } catch (err&) {
         return false;
     }
     return true;
@@ -70,7 +70,7 @@ auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::dec
                 throw err();
             }
         });
-    } catch (err) {
+    } catch (err&) {
         return false;
     }
     return true;

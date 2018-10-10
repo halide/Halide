@@ -14,7 +14,7 @@ class CollectPrefetches : public IRVisitor {
 private:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::prefetch)) {
             prefetches.push_back(op->args);
         }

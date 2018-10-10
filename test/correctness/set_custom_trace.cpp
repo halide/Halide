@@ -12,7 +12,7 @@ protected:
     std::string producer;
     std::string consumer;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             if (op->name == "f") {
                 if (producer != "g") {
