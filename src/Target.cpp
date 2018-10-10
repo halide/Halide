@@ -16,6 +16,10 @@
 #include <sys/auxv.h>
 #endif
 
+#ifdef  _MSC_VER
+#include <intrin.h>
+#endif  // _MSC_VER
+
 namespace Halide {
 
 using std::string;
