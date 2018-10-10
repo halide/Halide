@@ -1,6 +1,7 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
+
 #include "DeviceInterface.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
