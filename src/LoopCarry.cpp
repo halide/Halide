@@ -92,7 +92,7 @@ class FindLoads : public IRGraphVisitor {
     // one run to the next.
     set<const Load *> found;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (found.count(op) == 0) {
             found.insert(op);
             result.push_back(op);
