@@ -424,7 +424,8 @@ install(DIRECTORY tutorial
 # ---- Tools
 foreach(F mex_halide.m
           GenGen.cpp
-          RunGen.cpp
+          RunGen.h
+          RunGenMain.cpp
           RunGenStubs.cpp
           halide_benchmark.h
           halide_image.h
