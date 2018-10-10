@@ -15,16 +15,16 @@ int main(int argc, char **argv) {
     int ret = 0;
 
     if (argc < 4) {
-        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]); 
+        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]);
         return ret;
     }
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
-    const char* str = argv[3];
+    const char *str = argv[3];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
-    const int buf_size = width * height * 1.5;
+    const int buf_size = (width * height * 3) / 2;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
     uint8_t *data_out = (uint8_t *)malloc(buf_size);
     // Creating the Input Data so that we can catch if there are any Errors in DMA
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     input_uv.raw_buffer()->dim[0].extent = width / 2;
 
     // Setup Halide output buffer
-    Halide::Runtime::Buffer<uint8_t> output(width, (height * 1.5));
+    Halide::Runtime::Buffer<uint8_t> output(width, (3*height) / 2);
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);               // Luma plane only
     Halide::Runtime::Buffer<uint8_t> output_uv = output.cropped(1, height, (height / 2));   // Chroma plane only, with reduced height
 
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
                              reinterpret_cast<uint64_t>(data_in));
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
- 
+
     output_y.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_out));
     output_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
     }
     else {
         // verify result by comparing to expected values
-        for (int y = 0; y < 1.5 * height; y++) {
+        for (int y = 0; y < (3*height) / 2; y++) {
             for (int x = 0; x < width; x++) {
                 uint8_t correct = data_in[x + y * width] * 2;
                 uint8_t result = data_out[x + y * width] ;

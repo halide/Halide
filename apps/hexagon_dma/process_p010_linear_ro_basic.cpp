@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
-    const char* str = argv[3];
+    const char *str = argv[3];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = (width * height * 3) / 2;
@@ -30,9 +30,10 @@ int main(int argc, char **argv) {
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] =  ((uint16_t)rand()) >> 1;
     }
-    Halide::Runtime::Buffer<uint16_t> input(nullptr, width, (3 * height) / 2);
 
     // Setup Halide input buffer with the test buffer
+    Halide::Runtime::Buffer<uint16_t> input_validation(data_in, width, height, 2);
+    Halide::Runtime::Buffer<uint16_t> input(nullptr, width, (3*height) / 2);
     Halide::Runtime::Buffer<uint16_t> input_y = input.cropped(1, 0, height);            // Luma plane only
     Halide::Runtime::Buffer<uint16_t> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
 
@@ -45,9 +46,9 @@ int main(int argc, char **argv) {
 
     // DMA_step 1: Assign buffer to DMA interface
     input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
-                               reinterpret_cast<uint64_t>(data_in));
+                             reinterpret_cast<uint64_t>(data_in));
     input_uv.device_wrap_native(halide_hexagon_dma_device_interface(),
-                                reinterpret_cast<uint64_t>(data_in));
+                             reinterpret_cast<uint64_t>(data_in));
     input_y.set_device_dirty();
     input_uv.set_device_dirty();
 
@@ -116,7 +117,7 @@ int main(int argc, char **argv) {
 
     // DMA_step 5: Processing is completed and ready to exit, deallocate the DMA engine
     halide_hexagon_dma_deallocate_engine(nullptr, dma_engine);
- 
+
     free(data_in);
 
     return ret;

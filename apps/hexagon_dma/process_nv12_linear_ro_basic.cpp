@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 
     const int width = atoi(argv[1]);
     const int height = atoi(argv[2]);
-    const char* str = argv[3];
+    const char *str = argv[3];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = (width * height * 3) / 2;
@@ -34,7 +34,6 @@ int main(int argc, char **argv) {
     // Setup Halide input buffer with the test buffer
     Halide::Runtime::Buffer<uint8_t> input_validation(data_in, width, height, 2);
     Halide::Runtime::Buffer<uint8_t> input(nullptr, width, (3*height) / 2);
-
     Halide::Runtime::Buffer<uint8_t> input_y = input.cropped(1, 0, height);             // Luma plane only
     Halide::Runtime::Buffer<uint8_t> input_uv = input.cropped(1, height, height / 2);   // Chroma plane only, with reduced height
 
@@ -62,7 +61,7 @@ int main(int argc, char **argv) {
     halide_hexagon_dma_prepare_for_copy_to_host(nullptr, input_uv, dma_engine, false, halide_hexagon_fmt_NV12_UV);
 
     // Setup Halide output buffer
-    Halide::Runtime::Buffer<uint8_t> output(width, (height * 1.5));
+    Halide::Runtime::Buffer<uint8_t> output(width, (3*height) / 2);
     Halide::Runtime::Buffer<uint8_t> output_y = output.cropped(1, 0, height);               // Luma plane only
     Halide::Runtime::Buffer<uint8_t> output_uv = output.cropped(1, height, (height / 2));   // Chroma plane only, with reduced height
 
@@ -98,7 +97,7 @@ int main(int argc, char **argv) {
     }
     else {
         // verify result by comparing to expected values
-        for (int y = 0; y < 1.5 * height; y++) {
+        for (int y = 0; y < (3*height) / 2; y++) {
             for (int x = 0; x < width; x++) {
                 uint8_t correct = data_in[x + y * width] * 2;
                 if (correct != output(x, y)) {

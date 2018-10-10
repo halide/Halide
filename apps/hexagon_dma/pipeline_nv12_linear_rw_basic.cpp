@@ -55,6 +55,7 @@ public:
 
         switch ((UserOptions)options) {
             case UserOptions::Basic:
+            default:
                 output_y.compute_root()
                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 

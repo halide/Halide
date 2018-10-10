@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     int ret = 0;
 
     if (argc < 4) {
-        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]); 
+        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]);
         return ret;
     }
 
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     const char *str = argv[3];
 
     // Fill the input buffer with random test data. This is just a plain old memory buffer
-    const int buf_size = width * height * 1.5;
+    const int buf_size = (width * height * 3) / 2;
     uint16_t *data_in = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
     uint16_t *data_out = (uint16_t *)malloc(buf_size * sizeof(uint16_t));
     // Creating the Input Data so that we can catch if there are any Errors in DMA
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     input_uv.raw_buffer()->dim[0].extent = width / 2;
 
     // Setup Halide output buffer
-    Halide::Runtime::Buffer<uint16_t> output(width, (height * 1.5));
+    Halide::Runtime::Buffer<uint16_t> output(width, (3*height) / 2);
     Halide::Runtime::Buffer<uint16_t> output_y = output.cropped(1, 0, height);    // Luma plane only
     Halide::Runtime::Buffer<uint16_t> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
@@ -56,10 +56,9 @@ int main(int argc, char **argv) {
     output_uv.raw_buffer()->dimensions = 3;
     output_uv.raw_buffer()->dim[2].extent = 2;
     output_uv.raw_buffer()->dim[2].stride = 1;
-
     output_uv.raw_buffer()->dim[0].stride = 2;
     output_uv.raw_buffer()->dim[0].extent = width / 2;
-    
+
     // DMA_step 1: Assign buffer to DMA interface
     input_y.device_wrap_native(halide_hexagon_dma_device_interface(),
                              reinterpret_cast<uint64_t>(data_in));
@@ -110,7 +109,7 @@ int main(int argc, char **argv) {
     }
     else {
         // verify result by comparing to expected values
-        for (int y = 0; y < 1.5 * height; y++) {
+        for (int y = 0; y < (3*height) / 2; y++) {
             for (int x = 0; x < width; x++) {
                 uint16_t correct = data_in[x + y * width] * 2;
                 uint16_t result = data_out[x + y * width] ;

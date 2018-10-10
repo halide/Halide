@@ -46,8 +46,6 @@ public:
         output_uv.dim(0).set_stride(2);
         output_uv.dim(2).set_stride(1).set_bounds(0, 2);
 
-        // Schedule the copy to be computed at tiles with a
-        // circular buffer of two tiles.
         switch ((UserOptions)options) {
             case UserOptions::Basic:
             default:

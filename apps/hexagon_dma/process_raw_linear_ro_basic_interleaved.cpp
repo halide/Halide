@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     int ret = 0;
 
     if (argc < 4) {
-        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]); 
+        printf("Usage: %s width height func {basic, fold, async, split, split_fold} \n", argv[0]);
         return ret;
     }
 
@@ -26,6 +26,7 @@ int main(int argc, char **argv) {
     // Fill the input buffer with random test data. This is just a plain old memory buffer
     const int buf_size = width * height * 4;
     uint8_t *data_in = (uint8_t *)malloc(buf_size);
+    // Creating the Input Data so that we can catch if there are any Errors in DMA
     for (int i = 0; i < buf_size;  i++) {
         data_in[i] = ((uint8_t)rand()) >> 1;
     }
@@ -50,8 +51,6 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> output(width, height, 4);
 
     output = output.make_interleaved(width, height, 4);
-
-    printf("before pipeline\n");
 
     if (!strcmp(str,"basic")) {
         printf("Basic pipeline\n");

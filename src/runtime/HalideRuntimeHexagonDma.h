@@ -2,6 +2,8 @@
 #define HALIDE_HALIDERUNTIMEHEXAGONDMA_H
 
 #include "HalideRuntime.h"
+#include "HalideRuntimeHexagonHost.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,18 +28,6 @@ typedef enum {
     halide_hexagon_fmt_NV124R_UV
 } halide_hexagon_image_fmt_t;
 
-/*!
- * typedef enums for power cornercase votes
- */
-typedef enum {
-    halide_hexagon_dma_power_min_svs,
-    halide_hexagon_dma_power_svs2,
-    halide_hexagon_dma_power_svs,
-    halide_hexagon_dma_power_svs_l1,
-    halide_hexagon_dma_power_normal,
-    halide_hexagon_dma_power_normal_l1,
-    halide_hexagon_dma_power_turbo
-} halide_hexagon_dma_power_votes_t;
 
 /** \file
  *  Routines specific to the Halide Hexagon DMA host-side runtime.
@@ -83,7 +73,7 @@ extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, str
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 
 /* DMA Power Voting based on corner case */
-extern int halide_hexagon_dma_power_voting(void *user_context, halide_hexagon_dma_power_votes_t cornercase);
+extern int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon_power_mode_t cornercase);
 
 ///@}
 

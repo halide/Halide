@@ -739,24 +739,25 @@ WEAK int halide_hexagon_dma_device_release(void *user_context) {
     return 0;
 }
 
-WEAK int halide_hexagon_dma_power_voting(void *user_context, halide_hexagon_dma_power_votes_t cornercase) {
+WEAK int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon_power_mode_t cornercase) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_power_voting (user_context: " << user_context << ")\n";
     switch(cornercase) {
-        case halide_hexagon_dma_power_min_svs:
-            return nDmaWrapper_PowerVoting(PW_MIN_SVS);
-        case halide_hexagon_dma_power_svs2:
+        case halide_hexagon_power_low_2:
+            //return nDmaWrapper_PowerVoting(PW_MIN_SVS);
             return nDmaWrapper_PowerVoting(PW_SVS2);
-        case halide_hexagon_dma_power_svs:
+        case halide_hexagon_power_low:
             return nDmaWrapper_PowerVoting(PW_SVS);
-        case halide_hexagon_dma_power_svs_l1:
+        case halide_hexagon_power_low_plus:
             return nDmaWrapper_PowerVoting(PW_SVS_L1);
-        case halide_hexagon_dma_power_normal:
+        case halide_hexagon_power_nominal:
             return nDmaWrapper_PowerVoting(PW_NORMAL);
-        case halide_hexagon_dma_power_normal_l1:
+        case halide_hexagon_power_nominal_plus:
             return nDmaWrapper_PowerVoting(PW_NORMAL_L1);
-        case halide_hexagon_dma_power_turbo:
+        case halide_hexagon_power_turbo:
             return nDmaWrapper_PowerVoting(PW_TURBO);
+        case halide_hexagon_power_default:
+            return nDmaWrapper_PowerVoting(~PW_SVS);
         default:
             error(user_context) << "halide_hexagon_dma_power_voting power mode not found \n";
             return halide_error_code_generic_error;

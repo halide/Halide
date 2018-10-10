@@ -55,6 +55,7 @@ public:
 
         switch ((UserOptions)options) {
             case UserOptions::Basic:
+            default:
                 output_y.compute_root()
                         .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
@@ -99,7 +100,7 @@ public:
                          .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_copy_y.compute_at(output_y, tx)
-                            .store_at(output_y, ty) 
+                            .store_at(output_y, ty)
                             .copy_to_host()
                             .fold_storage(x, tile_width * 2);
 
@@ -138,7 +139,7 @@ public:
                          .tile(x, y, tx, ty, x, y, tile_width, tile_height, TailStrategy::RoundUp);
 
                 input_copy_y.compute_at(output_y, tx)
-                            .store_at(output_y, ty) 
+                            .store_at(output_y, ty)
                             .copy_to_host()
                             .async()
                             .fold_storage(x, tile_width * 2);
