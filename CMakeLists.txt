@@ -206,11 +206,14 @@ else()
 endif()
 
 if (NOT MSVC)
-    add_compile_options(-Wall
-                        -Wno-unused-function
-                        -Wcast-qual
-                        -Woverloaded-virtual
-                        -Wignored-qualifiers)
+  add_compile_options(-Wall
+                      -Wno-unused-function
+                      -Wcast-qual
+                      -Woverloaded-virtual
+                      -Wignored-qualifiers)
+  if (CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.1)
+    add_compile_options(-Wsuggest-override)
+  endif()
   if (WARNINGS_AS_ERRORS)
     add_compile_options(-Werror)
   endif()
