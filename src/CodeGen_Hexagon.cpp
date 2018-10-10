@@ -200,7 +200,7 @@ private:
     //
     // When we move up to the enclosing scope we substitute the value of uses_hvx
     // into the IR that should convert the conditionals to constants.
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         if (op->for_type == ForType::Parallel) {
             bool old_uses_hvx = uses_hvx;
             uses_hvx = false;
@@ -263,19 +263,19 @@ private:
         }
         return IRMutator2::visit(op);
     }
-    Expr visit(const Variable *op) {
+    Expr visit(const Variable *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
     }
-    Expr visit(const Ramp *op) {
+    Expr visit(const Ramp *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
     }
-    Expr visit(const Broadcast *op) {
+    Expr visit(const Broadcast *op) override {
         uses_hvx = uses_hvx || op->lanes > 1;
         return op;
     }
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
         return op;
     }

@@ -184,17 +184,17 @@ class DetermineAllocStride : public IRVisitor {
         return Expr();
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         ScopedBinding<Expr> bind(dependent_vars, op->name, warp_stride(op->value));
         IRVisitor::visit(op);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         ScopedBinding<Expr> bind(dependent_vars, op->name, warp_stride(op->value));
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->name == alloc) {
             if (single_thread) {
                 single_stores.push_back(op->index);
@@ -205,14 +205,14 @@ class DetermineAllocStride : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == alloc) {
             loads.push_back(op->index);
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // When things drop down to a single thread, we have different constraints, so notice that.
         if (equal(op->condition, Variable::make(Int(32), lane_var) < 1)) {
             bool old_single_thread = single_thread;
@@ -227,7 +227,7 @@ class DetermineAllocStride : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         ScopedBinding<Interval>
             bind_bounds_if(is_const(op->min) && is_const(op->extent),
                            bounds, op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
@@ -766,12 +766,12 @@ class HoistWarpShuffles : public IRMutator2 {
 class HasLaneLoop : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         result = result || op->for_type == ForType::GPULane;
         IRVisitor::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         result = result || op->memory_type == MemoryType::Register;
         IRVisitor::visit(op);
     }

@@ -741,14 +741,14 @@ namespace {
 class AllAccessConstant : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == buf && !is_const(op->index)) {
             result = false;
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->name == buf && !is_const(op->index)) {
             result = false;
         }

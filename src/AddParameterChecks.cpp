@@ -19,7 +19,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->param.defined()) {
             params[op->name] = op->param;
         }
