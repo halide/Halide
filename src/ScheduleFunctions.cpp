@@ -43,19 +43,6 @@ std::ostream& operator<<(std::ostream& out, const std::vector<Function>& v) {
     return out;
 }
 
-Stmt operator>>(const Stmt& s1, const Stmt& s2)
-{
-    bool s1_is_op = !is_no_op(s1);
-    bool s2_is_op = !is_no_op(s2);
-    if (s1_is_op && s2_is_op) {
-        return Block::make(s1, s2);
-    } else if (s1_is_op) {
-        return s1;
-    } else {
-        return s2;
-    }
-}
-
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -598,15 +585,31 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             Stmt mark_shape =
                     Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                               {shape, shape_size}, Call::Extern));
-            mark_buffer = mark_buffer >> mark_shape;
-            annotate = annotate >> mark_buffer;
+
+            bool mark_buffer_is_op = !is_no_op(mark_buffer);
+            bool mark_shape_is_op = !is_no_op(mark_shape);
+            if (mark_buffer_is_op && mark_shape_is_op) {
+                mark_buffer = Block::make(mark_buffer, mark_shape);
+            } else if (!mark_buffer_is_op) {
+                mark_buffer = mark_shape;
+            }
+
+            if (!is_no_op(annotate)) {
+                annotate = Block::make(annotate, mark_buffer);
+            } else {
+                annotate = mark_buffer;
+            }
         }
         for (const auto &buffer: buffers_contents_to_annotate) {
             // Return type is really 'void', but no way to represent that in our IR.
             // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
             Stmt mark_contents = Evaluate::make(
                     Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
-            annotate = annotate >> mark_contents;
+            if (!is_no_op(annotate)) {
+                annotate = Block::make(annotate, mark_contents);
+            } else {
+                annotate = mark_contents;
+            }
         }
     }
 
@@ -659,7 +662,9 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
         check = LetStmt::make(let.first, let.second, check);
     }
 
-    check = annotate >> check;
+    if (!is_no_op(annotate)) {
+        check = Block::make(annotate, check);
+    }
 
     // Add the dummy outermost loop.
     string outermost = f.name() + ".s0." + Var::outermost().name();
@@ -695,7 +700,12 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
                                         {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
-            body = AssertStmt::make(check, error_msg) >> body;
+            const Stmt &assertStmt = AssertStmt::make(check, error_msg);
+            if (is_no_op(body)) {
+                body = assertStmt;
+            } else {
+                body = Block::make(assertStmt, body);
+            }
         }
     }
 
@@ -772,7 +782,13 @@ private:
         Stmt body = mutate(for_loop->body);
 
         if (level.match(for_loop->name)) {
-            body = body >> injected_stmt;
+            bool body_is_op = !is_no_op(body);
+            bool injected_stmt_is_op = !is_no_op(injected_stmt);
+            if (body_is_op && injected_stmt_is_op) {
+                body = Block::make(body, injected_stmt);
+            } else if (injected_stmt_is_op) {
+                body = injected_stmt;
+            }
             found_level = true;
         }
 
@@ -798,7 +814,14 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
         return root;
     }
     if (level.is_inlined() || level.is_root()) {
-        return root >> injected;
+        bool root_is_op = !is_no_op(root);
+        bool injected_is_op = !is_no_op(injected);
+        if (root_is_op && injected_is_op) {
+            return Block::make(root, injected);
+        } else if (root_is_op) {
+            return root;
+        }
+        return injected;
     }
     InjectStmt injector(injected, level);
     root = injector.mutate(root);
@@ -1482,7 +1505,15 @@ private:
             }
         }
 
-        return producer >> consumer;
+        bool producer_is_op = !is_no_op(producer);
+        bool consumer_is_op = !is_no_op(consumer);
+        if (producer_is_op && consumer_is_op) {
+            return Block::make(producer, consumer);
+        } else if (producer_is_op) {
+            return producer;
+        } else {
+            return consumer;
+        }
     }
 
 };
